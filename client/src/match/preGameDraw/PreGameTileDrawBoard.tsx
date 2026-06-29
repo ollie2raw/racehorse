@@ -19,12 +19,6 @@ export function PreGameTileDrawBoard({
   isPlayerPickEnabled,
   onTileTap,
 }: PreGameTileDrawBoardProps) {
-  console.log('[PreGameTileDrawBoard] render', {
-    phase: drawState.phase,
-    isPlayerPickEnabled,
-    youPick: drawState.currentRound.you,
-    botPick: drawState.currentRound.bot,
-  });
   const tileOrderKey = drawState.tiles.map((slot) => slot.id).join('|');
   const scatterById = useMemo(
     // eslint-disable-next-line react-hooks/preserve-manual-memoization -- tileOrderKey intentionally narrows drawState.tiles
@@ -88,10 +82,7 @@ export function PreGameTileDrawBoard({
                 highlight={pickable}
                 disabled={!pickable}
                 className="pre-game-draw-tile"
-                onClick={pickable ? () => {
-                  console.log('[PreGameTileDrawBoard] Client: onClick fired for slot:', slot.id);
-                  onTileTap(slot.id);
-                } : undefined}
+                onClick={pickable ? () => onTileTap(slot.id) : undefined}
               />
             </div>
           );

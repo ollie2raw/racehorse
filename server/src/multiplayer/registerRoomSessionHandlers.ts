@@ -1404,24 +1404,14 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
 
     socket.on('game:pregame_draw_pick', (payload?: { slotId?: string }) => {
       const slotId = payload?.slotId;
-      const playerSeatId = socket.data?.seatId;
       const roomCode = socket.data?.roomId;
-      console.log('[Server] game:pregame_draw_pick event received:', { slotId, playerSeatId, roomCode, socketId: socket.id });
       if (!slotId) return;
-      if (!playerSeatId || !roomCode) {
-        console.warn('[Server] game:pregame_draw_pick rejected due to missing playerSeatId or roomCode');
-        return;
-      }
+      if (!roomCode) return;
 
       withRoomGameplayLock(roomCode, async () => {
         const room = getRoom(roomCode);
+        const playerSeatId = resolveActorSeatId(roomCode, socket);
         const preGameDraw = room.preGameDraw;
-        console.log('[Server] game:pregame_draw_pick lock acquired:', {
-          roomCode,
-          hasPreGameDraw: Boolean(preGameDraw),
-          preGameDrawPhase: preGameDraw?.phase,
-          alreadyPicked: preGameDraw ? preGameDraw.picks[playerSeatId] !== null : undefined,
-        });
         if (!preGameDraw) return;
         if (preGameDraw.picks[playerSeatId] !== null) return;
 
