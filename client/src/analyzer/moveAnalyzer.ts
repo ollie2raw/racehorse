@@ -712,9 +712,9 @@ export function analyzeMoveLogDeferred(
 
 export function loadGameAnalysisHistory(): StoredAnalysisItem[] {
   if (typeof window === 'undefined') return [];
-  const raw = window.localStorage.getItem(ANALYSIS_HISTORY_KEY);
-  if (!raw) return [];
   try {
+    const raw = window.localStorage.getItem(ANALYSIS_HISTORY_KEY);
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(

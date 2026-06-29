@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { predictFritzGlickoUpdate } from './predictFritzGlickoUpdate';
-import { DEFAULT_RATING, FRITZ_STANDARD_ID, FRITZ_ROOKIE_ID } from './glicko2';
+import { FRITZ_STANDARD_ID, FRITZ_ROOKIE_ID } from './glicko2';
 
 describe('predictFritzGlickoUpdate', () => {
   const defaultInput = {

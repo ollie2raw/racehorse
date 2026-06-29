@@ -12,18 +12,14 @@ describe('compareMovesFeedback', () => {
     mobility = 5,
     denial = 0,
   ): BotChoice => ({
-    move: { tile: dummyTile, side: 'left' },
+    move: { tile: dummyTile, position: 'left' as const } as any,
     score,
     breakdown: {
       immediate: immediatePoints,
       replyRisk,
       mobility,
       denial,
-      scoreTrackDistance: 0,
-      openEndsDensity: 0,
-      boardSymmetry: 0,
-      skunkDenialBonus: 0,
-    },
+    } as any,
   });
 
   it('1. returns Best move when isExpected is true', () => {
@@ -65,14 +61,9 @@ describe('compareMovesFeedback', () => {
     const bestMove = createDummyMove(100, 15);
     const result = compareMovesFeedback(userMove, bestMove, false);
     expect(result.rating).toBe('Missed best move');
-    const possible = [
-      `That works, and you got 5-point move. But the 5-5 would have scored 15, which is a huge swing for the round!`,
-      `Nice play, you got 5 points. If you'd played the 5-5, you could have walked away with 15!`,
-      `You found 5 points, but there was a 15-point move with the 5-5 that would have really put you ahead.`
-    ];
     // In feedback.ts, formatTile format is 'high-low' which for 5,5 is '5-5'. 
     // And userBreakdown.immediate is printed.
-    // Let's assert against the actual generated structures.
+    // Assert against the actual generated structures.
     const expectedMatches = result.text.includes('5-5') && result.text.includes('15') && result.text.includes('5');
     expect(expectedMatches).toBe(true);
   });

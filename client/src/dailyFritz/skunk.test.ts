@@ -5,9 +5,8 @@ import {
   getSetSkunkBadgeFromLeaderboardRow,
   getSetSkunkBadge,
   getSkunkOverlayCopy,
-  DAILY_FRITZ_SKUNK_THRESHOLD,
 } from './skunk';
-import type { DailyFritzLeaderboardRow, DailyFritzSetResult, DailyFritzSetGameResult } from './api';
+import type { DailyFritzSetResult, DailyFritzSetGameResult } from './api';
 
 describe('skunk detection and messaging', () => {
   describe('isDailyFritzSkunk', () => {
@@ -136,7 +135,7 @@ describe('skunk detection and messaging', () => {
 
   describe('getSetSkunkBadgeFromLeaderboardRow', () => {
     it('14. returns null for row with no games or no skunks', () => {
-      const row: DailyFritzLeaderboardRow = {
+      const row: any = {
         userId: '1',
         username: 'user',
         glickoRating: 1000,
@@ -151,7 +150,7 @@ describe('skunk detection and messaging', () => {
     });
 
     it('15. returns correct badge from leaderboard row', () => {
-      const row: DailyFritzLeaderboardRow = {
+      const row: any = {
         userId: '1',
         username: 'user',
         glickoRating: 1000,

@@ -10,22 +10,25 @@ function assertEqual<T>(actual: T, expected: T, label: string): void {
 
 function installEmptyLocalStorage(): void {
   const store: Record<string, string> = {};
-  (globalThis as typeof globalThis & { window: Window }).window = {
-    localStorage: {
-      getItem: (key: string) => (key in store ? store[key] : null),
-      setItem: (key: string, value: string) => {
-        store[key] = value;
-      },
-      removeItem: (key: string) => {
-        delete store[key];
-      },
-      clear: () => {
-        for (const key of Object.keys(store)) delete store[key];
-      },
-      key: () => null,
-      length: 0,
+  const mockLocalStorage = {
+    getItem: (key: string) => (key in store ? store[key] : null),
+    setItem: (key: string, value: string) => {
+      store[key] = value;
     },
-  } as unknown as Window;
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      for (const key of Object.keys(store)) delete store[key];
+    },
+    key: () => null,
+    length: 0,
+  };
+  Object.defineProperty(window, 'localStorage', {
+    value: mockLocalStorage,
+    writable: true,
+    configurable: true,
+  });
 }
 
 import { readFileSync } from 'node:fs';

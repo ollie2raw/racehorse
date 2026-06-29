@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { tileListEquals, getBoardEnds, getBoardTileCount, findPlacedTile } from './boardSessionUtils';
-import type { GameState, Tile } from '../types';
 
 describe('tileListEquals', () => {
   it('returns true for two empty lists', () => {
@@ -59,7 +58,7 @@ describe('getBoardEnds', () => {
       mainLine: [],
       hubDoubles: [],
     };
-    expect(getBoardEnds(board)).toEqual([5, 3]);
+    expect(getBoardEnds(board as any)).toEqual([5, 3]);
   });
 
   it('returns actual ends when left and right are identical', () => {
@@ -71,14 +70,14 @@ describe('getBoardEnds', () => {
       mainLine: [],
       hubDoubles: [],
     };
-    expect(getBoardEnds(board)).toEqual([6, 6]);
+    expect(getBoardEnds(board as any)).toEqual([6, 6]);
   });
 });
 
 describe('getBoardTileCount', () => {
   it('returns 0 for empty board', () => {
     const emptyBoard = { mainLine: [], hubDoubles: [], leftEnd: -1, rightEnd: -1, leftEndIsDouble: false, rightEndIsDouble: false };
-    expect(getBoardTileCount(emptyBoard)).toBe(0);
+    expect(getBoardTileCount(emptyBoard as any)).toBe(0);
   });
 
   // --- NEW CASES ---
@@ -94,7 +93,7 @@ describe('getBoardTileCount', () => {
       ],
       hubDoubles: [],
     };
-    expect(getBoardTileCount(board)).toBe(2);
+    expect(getBoardTileCount(board as any)).toBe(2);
   });
 
   it('returns correct count when hubDoubles and branches have tiles', () => {
@@ -124,7 +123,7 @@ describe('getBoardTileCount', () => {
       ],
     };
     // 1 on mainLine, 1 in branch 0, 2 in branch 1 = 4 total
-    expect(getBoardTileCount(board)).toBe(4);
+    expect(getBoardTileCount(board as any)).toBe(4);
   });
 
   it('handles null/undefined fields in branches and mainLine gracefully', () => {
@@ -147,7 +146,7 @@ describe('getBoardTileCount', () => {
       ],
     };
     // The function counts array lengths directly without filtering null elements, but does not throw.
-    expect(getBoardTileCount(board)).toBe(2);
+    expect(getBoardTileCount(board as any)).toBe(2);
   });
 });
 
@@ -162,7 +161,7 @@ describe('findPlacedTile', () => {
   };
 
   it('1. returns null when boards are identical and empty', () => {
-    expect(findPlacedTile(emptyBoard, emptyBoard)).toBeNull();
+    expect(findPlacedTile(emptyBoard as any, emptyBoard as any)).toBeNull();
   });
 
   it('2. returns newly placed tile on mainLine', () => {
@@ -171,7 +170,7 @@ describe('findPlacedTile', () => {
       ...emptyBoard,
       mainLine: [{ tile: { low: 4, high: 4 }, side: 'left' as const }],
     };
-    expect(findPlacedTile(prevBoard, nextBoard)).toEqual({ low: 4, high: 4 });
+    expect(findPlacedTile(prevBoard as any, nextBoard as any)).toEqual({ low: 4, high: 4 });
   });
 
   it('3. returns null when board states have identical tiles', () => {
@@ -183,7 +182,7 @@ describe('findPlacedTile', () => {
       ...emptyBoard,
       mainLine: [{ tile: { low: 4, high: 4 }, side: 'left' as const }],
     };
-    expect(findPlacedTile(prevBoard, nextBoard)).toBeNull();
+    expect(findPlacedTile(prevBoard as any, nextBoard as any)).toBeNull();
   });
 
   it('4. finds newly placed duplicate tile when previous already had one of them', () => {
@@ -198,7 +197,7 @@ describe('findPlacedTile', () => {
         { tile: { low: 4, high: 4 }, side: 'right' as const },
       ],
     };
-    expect(findPlacedTile(prevBoard, nextBoard)).toEqual({ low: 4, high: 4 });
+    expect(findPlacedTile(prevBoard as any, nextBoard as any)).toEqual({ low: 4, high: 4 });
   });
 
   it('5. returns newly placed tile inside a hub double branch', () => {
@@ -232,7 +231,7 @@ describe('findPlacedTile', () => {
         },
       ],
     };
-    expect(findPlacedTile(prevBoard, nextBoard)).toEqual({ low: 5, high: 2 });
+    expect(findPlacedTile(prevBoard as any, nextBoard as any)).toEqual({ low: 5, high: 2 });
   });
 
   it('6. ignores null/undefined tile placements gracefully', () => {
@@ -241,6 +240,6 @@ describe('findPlacedTile', () => {
       ...emptyBoard,
       mainLine: [null as any],
     };
-    expect(findPlacedTile(prevBoard, nextBoard)).toBeNull();
+    expect(findPlacedTile(prevBoard as any, nextBoard as any)).toBeNull();
   });
 });
