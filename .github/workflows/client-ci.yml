@@ -48,3 +48,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Bundle size check
+        run: npm run build && npm run size-check
