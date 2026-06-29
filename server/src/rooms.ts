@@ -13,6 +13,7 @@ import {
   canDraw,
 } from './game/engine';
 import { drawAudit } from './multiplayer/drawAudit';
+import { ServerPregameDrawState, initMultiplayerPregameDraw } from './multiplayer/preGameDraw';
 import { computePlayScore, simulatePlacement } from './game/scoring';
 import type { GhostMoveLogEntry } from './ghost/service';
 import {
@@ -76,6 +77,8 @@ export type Room = {
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
   /** One-shot: socket ids that auto-passed this resolution (cleared after `state:update`). */
   pendingAutoPassNotice?: string[];
+  preGameDraw?: ServerPregameDrawState | null;
+  preGameDrawTimer?: NodeJS.Timeout | null;
 };
 
 export type DrawAnimationStep = {
@@ -463,10 +466,48 @@ function resolveForcedDrawAtomically(
   return { state: current, animationSteps, stoppedReason: 'locked_no_pass' };
 }
 
-export async function startGame(
+export function isPregameDrawEligible(room: Room): boolean {
+  const tilesPerPlayer = room.config.tilesPerPlayer ?? 7;
+  return tilesPerPlayer === 7;
+}
+
+export function createPreGameDrawShellMatch(players: string[], config?: Partial<Config>): GameState {
+  const state0 = createInitialState(players, config);
+  return {
+    ...state0,
+    handOver: true,
+  };
+}
+
+export async function initiatePregameDrawOrStart(
   code: string,
   io: Server,
   options: { allowRestart?: boolean } = {},
+): Promise<Room> {
+  const room = getRoom(code);
+  if (!isPregameDrawEligible(room)) {
+    return startGame(code, io, options);
+  }
+
+  if (room.preGameDrawTimer) {
+    clearTimeout(room.preGameDrawTimer);
+    room.preGameDrawTimer = null;
+  }
+
+  room.preGameDraw = initMultiplayerPregameDraw(room.players);
+  room.state = createPreGameDrawShellMatch(room.players, room.config);
+  room.matchStartReady.clear();
+  room.rematchReady.clear();
+  room.nextHandReady.clear();
+
+  notifyLiveRoomStateCommitted(room);
+  return room;
+}
+
+export async function startGame(
+  code: string,
+  io: Server,
+  options: { allowRestart?: boolean; customDeck?: Tile[]; startingPlayerId?: string } = {},
 ): Promise<Room> {
   const room = getRoom(code);
   if (room.abandonedAt) {
@@ -481,6 +522,12 @@ export async function startGame(
     throw new Error('Game is already in progress.');
   }
 
+  room.preGameDraw = null;
+  if (room.preGameDrawTimer) {
+    clearTimeout(room.preGameDrawTimer);
+    room.preGameDrawTimer = null;
+  }
+
   // Clear any stale async sequences from a previous game so they cannot
   // corrupt the new game's state via dangling Promise closures.
   if (nextHandStartsByRoom.has(code)) {
@@ -493,7 +540,7 @@ export async function startGame(
   // Create fresh game state (either first start or restart after stale state)
   room.asyncStateVersion += 1;
   const state0 = createInitialState(room.players, room.config);
-  const state1 = startNewHand(state0);
+  const state1 = startNewHand(state0, options.customDeck, options.startingPlayerId);
   room.state = state1;
   assertTileCountInvariant(room.state, `startGame:${code}`);
   assertValidGameState(room.state, `startGame:${code}`);
@@ -544,6 +591,11 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   }
 
   // Start new hand
+  room.preGameDraw = null;
+  if (room.preGameDrawTimer) {
+    clearTimeout(room.preGameDrawTimer);
+    room.preGameDrawTimer = null;
+  }
   room.asyncStateVersion += 1;
   const state1 = startNewHand(room.state);
   room.state = state1;

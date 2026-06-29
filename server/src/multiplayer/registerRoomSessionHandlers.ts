@@ -11,6 +11,7 @@ import {
   peekRoom,
   readyForNextHand,
   startGame,
+  initiatePregameDrawOrStart,
   type Room,
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
@@ -1367,7 +1368,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
               players: [...lockedRoom.players],
             },
           });
-          await startGame(lockedRoom.code, io, { allowRestart: true });
+          await initiatePregameDrawOrStart(lockedRoom.code, io, { allowRestart: true });
         });
 
         const roomAfterRematch = getRoom(roomCode);
@@ -1384,6 +1385,123 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         const message = err instanceof Error ? err.message : 'unknown error';
         cb?.({ ok: false, error: message });
       }
+    });
+
+    socket.on('game:pregame_draw_pick', (payload?: { slotId?: string }) => {
+      const slotId = payload?.slotId;
+      if (!slotId) return;
+
+      const playerSeatId = socket.data?.seatId;
+      const roomCode = socket.data?.roomId;
+      if (!playerSeatId || !roomCode) return;
+
+      withRoomGameplayLock(roomCode, async () => {
+        const room = getRoom(roomCode);
+        const preGameDraw = room.preGameDraw;
+        if (!preGameDraw) return;
+        if (preGameDraw.picks[playerSeatId] !== null) return;
+
+        const slot = preGameDraw.tiles.find((t) => t.id === slotId);
+        if (!slot || slot.outOfPlay || slot.revealed) return;
+
+        // Record the pick
+        slot.revealed = true;
+        slot.pickedBy = playerSeatId;
+        preGameDraw.picks[playerSeatId] = {
+          slotId,
+          tile: slot.tile,
+          pipSum: slot.tile.low + slot.tile.high,
+        };
+
+        const players = room.players;
+        const opponentSeatId = players.find((id) => id !== playerSeatId) ?? '';
+        const ownPick = preGameDraw.picks[playerSeatId];
+        const oppPick = preGameDraw.picks[opponentSeatId];
+
+        const bothPicked = ownPick !== null && oppPick !== null;
+
+        if (bothPicked) {
+          // Both have picked! Compare pips.
+          if (ownPick.pipSum === oppPick.pipSum) {
+            // It's a tie!
+            preGameDraw.phase = 'showing-tie';
+            broadcastStateUpdate(roomCode);
+
+            // Schedule tie-hold redraw
+            if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
+            room.preGameDrawTimer = setTimeout(() => {
+              withRoomGameplayLock(roomCode, async () => {
+                const innerRoom = getRoom(roomCode);
+                const innerDraw = innerRoom.preGameDraw;
+                if (!innerDraw || innerDraw.phase !== 'showing-tie') return;
+
+                // Eliminate the 2 picked tiles
+                innerDraw.tiles.forEach((t) => {
+                  if (t.revealed) {
+                    t.outOfPlay = true;
+                    t.revealed = false;
+                  }
+                });
+                innerDraw.picks = Object.fromEntries(innerRoom.players.map((pid) => [pid, null]));
+                innerDraw.phase = 'pick-player';
+                broadcastStateUpdate(roomCode);
+              });
+            }, 800);
+          } else {
+            // We have a winner!
+            const winnerSeatId = ownPick.pipSum > oppPick.pipSum ? playerSeatId : opponentSeatId;
+            preGameDraw.winnerId = winnerSeatId;
+            preGameDraw.phase = 'showing-reveal';
+            broadcastStateUpdate(roomCode);
+
+            // Stagger timeouts to resolved then done/startGame
+            if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
+            room.preGameDrawTimer = setTimeout(() => {
+              withRoomGameplayLock(roomCode, async () => {
+                const innerRoom = getRoom(roomCode);
+                const innerDraw = innerRoom.preGameDraw;
+                if (!innerDraw || innerDraw.phase !== 'showing-reveal') return;
+
+                innerDraw.phase = 'showing-result';
+                broadcastStateUpdate(roomCode);
+
+                if (innerRoom.preGameDrawTimer) clearTimeout(innerRoom.preGameDrawTimer);
+                innerRoom.preGameDrawTimer = setTimeout(() => {
+                  withRoomGameplayLock(roomCode, async () => {
+                    const finalRoom = getRoom(roomCode);
+                    const finalDraw = finalRoom.preGameDraw;
+                    if (!finalDraw || finalDraw.phase !== 'showing-result') return;
+
+                    // Remaining deck (excluding the 2 picked tiles)
+                    const remainingDeck = finalDraw.tiles
+                      .filter((t) => !t.revealed && !t.outOfPlay)
+                      .map((t) => t.tile);
+
+                    // Clear preGameDraw properties before starting game to avoid loops
+                    if (finalRoom.preGameDrawTimer) {
+                      clearTimeout(finalRoom.preGameDrawTimer);
+                      finalRoom.preGameDrawTimer = null;
+                    }
+                    finalRoom.preGameDraw = null;
+
+                    // Deal hand 1 and start gameplay!
+                    await startGame(roomCode, io, {
+                      customDeck: remainingDeck,
+                      startingPlayerId: winnerSeatId,
+                      allowRestart: true,
+                    });
+                    broadcastStateUpdate(roomCode);
+                  });
+                }, 1000);
+              });
+            }, 2000);
+          }
+        } else {
+          // Only one player picked, wait for opponent
+          preGameDraw.phase = 'pick-opponent';
+          broadcastStateUpdate(roomCode);
+        }
+      });
     });
 
     socket.on('player:dragging', (code: unknown, payload?: { dragging?: boolean }) => {

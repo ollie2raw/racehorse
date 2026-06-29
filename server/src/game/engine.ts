@@ -267,14 +267,20 @@ export function createInitialState(players: string[], config?: Partial<Config>):
   };
 }
 
-export function startNewHand(state: GameState): GameState {
+export function startNewHand(
+  state: GameState,
+  customDeck?: Tile[],
+  startingPlayerId?: string,
+): GameState {
   if (state.gameOver) {
     throw new Error('Game is over. Cannot start a new hand.');
   }
 
   const cfg = state.config;
   const handNumber = state.handNumber + 1;
-  const allTiles = shuffle(generateFullSet(cfg.maxPips));
+  const allTiles = customDeck
+    ? customDeck.map((t) => ({ low: t.low, high: t.high }))
+    : shuffle(generateFullSet(cfg.maxPips));
 
   // Deal hands
   const players: Record<string, PlayerState> = {};
@@ -291,7 +297,9 @@ export function startNewHand(state: GameState): GameState {
   const deadTiles = remaining.slice(remaining.length - cfg.deadTileCount);
 
   // Starting player rotates by hand number (1-indexed → 0-indexed)
-  const startingIndex = (handNumber - 1) % state.playerIds.length;
+  const startingIndex = startingPlayerId
+    ? state.playerIds.indexOf(startingPlayerId)
+    : (handNumber - 1) % state.playerIds.length;
 
   return {
     ...state,

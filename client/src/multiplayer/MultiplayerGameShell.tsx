@@ -271,6 +271,8 @@ function MultiplayerGameShellComponent({
     roomSocketSyncParams,
     setDrawStepMyHand,
     setDrawStepOpponentHandCount,
+    preGameDraw,
+    onPregameTileTap,
   } = liveMatch;
 
   useRoomSocketSync(roomSocketSyncParams);
@@ -960,6 +962,8 @@ function MultiplayerGameShellComponent({
       startGame,
       actionError,
       isRoomHost,
+      preGameDraw,
+      onPregameTileTap,
     };
   }, [
     actionError,
@@ -1014,6 +1018,8 @@ function MultiplayerGameShellComponent({
     showLeaveConfirm,
     startGame,
     state,
+    preGameDraw,
+    onPregameTileTap,
   ]);
 
   const bridge = useMemo(

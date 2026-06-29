@@ -28,6 +28,8 @@ import {
 } from '../components/handOver/handOverCopy';
 import TileRack from '../components/TileRack';
 import GameOverModal from '../components/GameOverModal';
+import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
+import type { PreGameDrawState } from './preGameDraw/preGameDrawLogic';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from '../components/RoomReactions';
 import TournamentMatchHud from '../tournament/TournamentMatchHud';
 import { tournamentStageShortLabel } from '../tournament/displayNames';
@@ -148,6 +150,8 @@ export type LiveMatchScreenProps = {
   onAbandonedPrimary: () => void;
   onAbandonedSecondary: () => void;
   onAbandonedDismiss: () => void;
+  preGameDraw?: PreGameDrawState | null;
+  onPregameTileTap?: (tileId: string) => void;
 };
 
 // ─── Hand View ───────────────────────────────────────────────
@@ -511,6 +515,8 @@ export function LiveMatchScreen({
   onAbandonedPrimary,
   onAbandonedSecondary,
   onAbandonedDismiss,
+  preGameDraw,
+  onPregameTileTap,
 }: LiveMatchScreenProps) {
   const showGameOverOverlay = Boolean(state?.gameOver);
 
@@ -751,12 +757,45 @@ export function LiveMatchScreen({
                     left: '50%',
                     top: '50%',
                     transform: 'translate(-50%, -50%)',
-                    display: isHandActive || tournamentMatch ? 'flex' : 'none',
+                    display: (isHandActive || tournamentMatch || (state.handNumber === 0 && !!preGameDraw)) ? 'flex' : 'none',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {tournamentMatch ? (
+                  {state.handNumber === 0 && preGameDraw ? (
+                    (() => {
+                      let label = '';
+                      let tone = 'your-turn';
+                      const phase = preGameDraw.phase as string;
+                      const { winner, currentRound } = preGameDraw;
+                      if (phase === 'showing-tie') {
+                        label = 'Tie — tap again';
+                        tone = 'your-turn';
+                      } else if (phase === 'showing-reveal' || phase === 'showing-result' || phase === 'resolved') {
+                        if (winner === 'you') {
+                          label = 'You go first';
+                          tone = 'your-turn';
+                        } else if (winner === 'bot') {
+                          label = `${opponentName} goes first`;
+                          tone = 'opp-turn';
+                        } else {
+                          label = 'Tie — tap again';
+                          tone = 'your-turn';
+                        }
+                      } else if (currentRound.you) {
+                        label = `Waiting for ${opponentName}…`;
+                        tone = 'opp-turn';
+                      } else {
+                        label = 'Tap a tile to draw';
+                        tone = 'your-turn';
+                      }
+                      return (
+                        <span className={`wl-turn-label ${tone}`}>
+                          {label}
+                        </span>
+                      );
+                    })()
+                  ) : tournamentMatch ? (
                     <TournamentMatchHud
                       round={tournamentMatch.round}
                       turnLabel={
@@ -916,37 +955,49 @@ export function LiveMatchScreen({
                       </div>
                     }
                   >
-                  <Board
-                    ref={boardRef}
-                    showZoomTray={false}
-                    board={boardForDisplay}
-                    legalMoves={boardLegalMoves}
-                    selectedTile={boardSelectedTile}
-                    lastPlayedTile={lastPlayedTile}
-                    onPositionClick={onPositionClick}
-                    tileSize={84}
-                    showOpenEndGlow={boardShowOpenEndGlow}
-                  />
+                  {state.handNumber === 0 && preGameDraw ? (
+                    <PreGameTileDrawBoard
+                      drawState={preGameDraw}
+                      isPlayerPickEnabled={preGameDraw.phase === 'pick-player' && !preGameDraw.currentRound.you}
+                      onTileTap={onPregameTileTap || (() => {})}
+                    />
+                  ) : (
+                    <Board
+                      ref={boardRef}
+                      showZoomTray={false}
+                      board={boardForDisplay}
+                      legalMoves={boardLegalMoves}
+                      selectedTile={boardSelectedTile}
+                      lastPlayedTile={lastPlayedTile}
+                      onPositionClick={onPositionClick}
+                      tileSize={84}
+                      showOpenEndGlow={boardShowOpenEndGlow}
+                    />
+                  )}
                   </ErrorBoundary>
                 </>
               }
               handDock={
-                <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
-                  <div className="tray-rail">
-                    <div className="tray-center" ref={trayCenterRef}>
-                      <HandView
-                        hand={myHand}
-                        selectedTile={handSelectedTile}
-                        onSelect={onHandTileSelect}
-                        isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
-                        legalMoves={legalMoves}
-                        tileSize={handTileSize}
-                        compactStacked={handCompactStacked}
-                        drawPulseIndex={drawPulseIndex}
-                      />
+                state.handNumber === 0 && preGameDraw ? (
+                  <div className="hand-area wl-hand-area pre-game-draw-hand-dock" data-ui="tray" aria-hidden="true" />
+                ) : (
+                  <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
+                    <div className="tray-rail">
+                      <div className="tray-center" ref={trayCenterRef}>
+                        <HandView
+                          hand={myHand}
+                          selectedTile={handSelectedTile}
+                          onSelect={onHandTileSelect}
+                          isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
+                          legalMoves={legalMoves}
+                          tileSize={handTileSize}
+                          compactStacked={handCompactStacked}
+                          drawPulseIndex={drawPulseIndex}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )
               }
             />
 

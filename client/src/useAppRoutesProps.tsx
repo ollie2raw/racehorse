@@ -168,6 +168,8 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
         handReveal: source.handReveal,
         handRevealAutoProgress: source.handRevealAutoProgress,
         flyingTiles: source.flyingTiles,
+        preGameDraw: source.preGameDraw,
+        onPregameTileTap: source.onPregameTileTap,
       },
       postGameView: {
         canUseRematch: source.canUseRematch,

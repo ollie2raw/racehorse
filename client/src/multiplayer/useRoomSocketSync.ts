@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
+import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 import { projectMultiplayerGameState } from './boardSnapshotGuards';
 import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
@@ -61,6 +62,7 @@ type FlatRoomSocketSyncParams = {
   setState: Dispatch<SetStateAction<GameState | null>>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
+  setPreGameDraw: Dispatch<SetStateAction<PreGameDrawState | null>>;
   setOptimisticPlayedTile: Dispatch<SetStateAction<Tile | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
@@ -334,6 +336,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       params.setOptimisticPlayedTile(null);
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
+      params.setPreGameDraw(payload.preGameDraw ?? null);
 
       const autoPassIds = Array.isArray(payload.recentAutoPasses) ? payload.recentAutoPasses : [];
       if (autoPassIds.length > 0) {

@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import type { BoardHandle } from '../components';
 import type { GameState, Move, PlacementPosition, Tile } from '../types';
+import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 import type { MatchFoundPayload } from '../matchmaking/types';
 import type { TournamentMatchContext } from '../match/session/useTournamentMatchSession';
 import type {
@@ -106,6 +107,8 @@ export type MultiplayerLiveMatchView = {
   handReveal: HandEndedPayload | null;
   handRevealAutoProgress: number;
   flyingTiles: { x: number; y: number; toX: number; toY: number; id: number }[];
+  preGameDraw: PreGameDrawState | null;
+  onPregameTileTap: (tileId: string) => void;
 };
 
 export type MultiplayerPostGameView = {
@@ -255,6 +258,8 @@ export default function MultiplayerModeController({
     handReveal,
     handRevealAutoProgress,
     flyingTiles,
+    preGameDraw,
+    onPregameTileTap,
   } = liveMatchView;
 
   const {
@@ -438,6 +443,8 @@ export default function MultiplayerModeController({
             myHand={myHand}
             handSelectedTile={handSelectedTile}
             onHandTileSelect={handleTileTap}
+            preGameDraw={preGameDraw}
+            onPregameTileTap={onPregameTileTap}
             legalMoves={legalMoves}
             handTileSize={handTileSize}
             handCompactStacked={handCompactStacked}

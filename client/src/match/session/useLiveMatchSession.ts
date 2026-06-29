@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
+import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
 import { tileEquals } from '../../game/tileUtils';
 import { projectMultiplayerGameState } from '../../multiplayer/boardSnapshotGuards';
 import { drawAudit, nextDrawRequestId } from '../../multiplayer/drawAudit';
@@ -99,6 +100,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const [boneyardDisplayCount, setBoneyardDisplayCount] = useState<number | null>(null);
   const [drawStepMyHand, setDrawStepMyHand] = useState<Tile[] | null>(null);
+  const [preGameDraw, setPreGameDraw] = useState<PreGameDrawState | null>(null);
   const [drawStepActorId, setDrawStepActorId] = useState<string | null>(null);
   const [drawStepOpponentHandCount, setDrawStepOpponentHandCount] = useState<number | null>(null);
   const [drawSequenceActive, setDrawSequenceActive] = useState(false);
@@ -192,6 +194,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     setDrawStepMyHand(null);
     setDrawStepActorId(null);
     setDrawStepOpponentHandCount(null);
+    setPreGameDraw(null);
     setFlyingTiles([]);
   }, [setDrawSequenceActiveBoth]);
 
@@ -270,6 +273,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
         setCanDraw,
         setOpponentDisconnected,
         setOpponentDisconnectMessage,
+        setPreGameDraw,
         setDrawSequenceActiveBoth,
         setDrawStepMyHand,
         setDrawStepActorId,
@@ -980,6 +984,11 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     };
   }, []);
 
+  const onPregameTileTap = useCallback((tileId: string) => {
+    if (!socket) return;
+    socket.emit('game:pregame_draw_pick', { slotId: tileId });
+  }, [socket]);
+
   return {
     state,
     setState,
@@ -1010,6 +1019,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     flyingTiles,
     setFlyingTiles,
     drawSequenceActive,
+    preGameDraw,
     opponentDragging,
     setOpponentDragging,
     opponentDisconnected,
@@ -1070,6 +1080,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     emitDraggingState,
     isGameplayActionBlocked,
     handleTileTap,
+    onPregameTileTap,
     setDrawSequenceActiveBoth,
     flashLastPlayed,
     applyJoinResponseGameState,

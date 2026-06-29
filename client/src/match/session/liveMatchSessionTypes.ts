@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
+import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
 import type { MoveEntry } from '../../analyzer/moveLogger';
 import type { RoomAckResponse } from '../../multiplayer/roomTransport';
 import { useRoomSocketSync, type StateUpdatePayload } from '../../multiplayer/useRoomSocketSync';
@@ -97,6 +98,8 @@ export type LiveMatchSessionApi = {
   setOpponentDisconnected: Dispatch<SetStateAction<boolean>>;
   opponentDisconnectMessage: string;
   setOpponentDisconnectMessage: Dispatch<SetStateAction<string>>;
+  preGameDraw: PreGameDrawState | null;
+  onPregameTileTap: (tileId: string) => void;
   lastPlayedTile: Tile | null;
   boneyardDisplayCount: number | null;
   setBoneyardDisplayCount: Dispatch<SetStateAction<number | null>>;

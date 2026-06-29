@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { PrivateRoomCreateSettings, RoomAckResponse } from './roomTransport';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import type { GameState, Move, Tile } from '../types';
+import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 import type { AppMode } from '../types';
 
 type RoomEventMeta = {
@@ -17,6 +18,7 @@ export type StateUpdatePayload = {
   legalMoves?: Move[];
   canDraw?: boolean;
   eventMeta?: RoomEventMeta | null;
+  preGameDraw?: PreGameDrawState | null;
   /** Authoritative lobby flag from server — do not infer from local state shape. */
   matchStarted?: boolean;
   /** Set with `state` when the server aggregated a forced-draw chain after a PLAY. */
@@ -340,6 +342,7 @@ export type MultiplayerRoomSyncUiRuntime = {
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setOpponentDisconnected: Dispatch<SetStateAction<boolean>>;
   setOpponentDisconnectMessage: Dispatch<SetStateAction<string>>;
+  setPreGameDraw: Dispatch<SetStateAction<PreGameDrawState | null>>;
   setDrawSequenceActiveBoth: (value: boolean) => void;
   setDrawStepMyHand: Dispatch<SetStateAction<Tile[] | null>>;
   setDrawStepActorId: Dispatch<SetStateAction<string | null>>;

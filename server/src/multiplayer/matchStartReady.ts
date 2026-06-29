@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { getRoom, startGame, type Room } from '../rooms';
+import { getRoom, initiatePregameDrawOrStart, type Room } from '../rooms';
 
 export type MatchStartDeps = {
   broadcastStateUpdate: (roomCode: string) => void;
@@ -36,7 +36,7 @@ export async function tryStartMatchIfReady(
     return { started: false, waitingFor: missing };
   }
 
-  const startedRoom = await startGame(roomCode, io);
+  const startedRoom = await initiatePregameDrawOrStart(roomCode, io);
   room.matchStartReady.clear();
   deps.broadcastStateUpdate(startedRoom.code);
   return { started: true };

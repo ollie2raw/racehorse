@@ -23,6 +23,7 @@ import {
 } from './roomLivePersistence';
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
+import { maskPregameDrawForRecipient } from './preGameDraw';
 
 function drawAuditUpdateEmitted(roomCode: string, reason: string): void {
   drawAudit('update-emitted', {
@@ -767,6 +768,9 @@ export function broadcastStateUpdate(roomCode: string): void {
         you: recipientPlayerId ?? undefined,
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: true,
+        preGameDraw: room.preGameDraw && recipientPlayerId
+          ? maskPregameDrawForRecipient(room.preGameDraw, recipientPlayerId, room.players)
+          : undefined,
         ...(pendingForcedDraw
           ? {
               forcedDrawCount: pendingForcedDraw.count,

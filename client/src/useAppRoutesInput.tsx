@@ -136,6 +136,8 @@ export function useAppRoutesInput(source: UseAppRoutesInputSource): UseAppRoutes
       setActionError: source.setActionError,
       mpSubView: source.mpSubView,
       startGame: source.startGame,
+      preGameDraw: source.preGameDraw,
+      onPregameTileTap: source.onPregameTileTap,
       myHandle: source.myHandle,
       homeRatingLabel: source.homeRatingLabel,
       activeHomeMode: source.activeHomeMode,

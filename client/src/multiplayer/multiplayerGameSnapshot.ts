@@ -2,6 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { BoardHandle } from '../components';
 import type { GameState, Move, Tile } from '../types';
 import type { PlacementPosition } from '../types';
+import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -82,6 +83,8 @@ export type MultiplayerGameRouteProps = {
   startGame: () => Promise<void>;
   actionError: string;
   isRoomHost: boolean;
+  preGameDraw: PreGameDrawState | null;
+  onPregameTileTap: (tileId: string) => void;
 };
 
 export type MultiplayerGameSnapshot = {
@@ -145,6 +148,8 @@ export const EMPTY_ROUTE_PROPS: MultiplayerGameRouteProps = {
   startGame: async () => {},
   actionError: '',
   isRoomHost: false,
+  preGameDraw: null,
+  onPregameTileTap: () => {},
 };
 
 const EMPTY_SNAPSHOT: MultiplayerGameSnapshot = {
