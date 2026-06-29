@@ -43,5 +43,8 @@ jobs:
       - name: Behavior tests
         run: npm run test:all
 
+      - name: E2E tests
+        run: npx playwright install chromium --with-deps && npm run e2e
+
       - name: Build
         run: npm run build
