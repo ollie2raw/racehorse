@@ -958,7 +958,10 @@ export function LiveMatchScreen({
                   {state.handNumber === 0 && preGameDraw ? (
                     <PreGameTileDrawBoard
                       drawState={preGameDraw}
-                      isPlayerPickEnabled={preGameDraw.phase === 'pick-player' && !preGameDraw.currentRound.you}
+                      isPlayerPickEnabled={
+                        (preGameDraw.phase === 'pick-player' || preGameDraw.phase === 'pick-opponent') &&
+                        !preGameDraw.currentRound.you
+                      }
                       onTileTap={onPregameTileTap || (() => {})}
                     />
                   ) : (
