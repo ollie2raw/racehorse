@@ -439,7 +439,7 @@ export function clearSocketRematchReady(roomCode: string | undefined, socketId: 
 }
 
 export function buildHandEndedPayload(room: Room, playerId: string) {
-  if (!room.state) return null;
+  if (!room.state || room.preGameDraw) return null;
   const opponentId = room.state.playerIds.find((id) => id !== playerId) ?? null;
   const opponentHand = opponentId ? (room.state.players[opponentId]?.hand ?? []) : [];
   const myHand = room.state.players[playerId]?.hand ?? [];

@@ -790,6 +790,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       Boolean(state?.handOver) &&
       !state?.gameOver &&
       !handReveal &&
+      !preGameDraw &&
       handRevealShownRef.current !== state?.handNumber &&
       Boolean(joinedRoom) &&
       socket?.connected;
@@ -809,10 +810,10 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
         console.warn('[hand:ready] recovery failed:', error instanceof Error ? error.message : error);
       }
     });
-  }, [state?.handOver, state?.gameOver, state?.handNumber, handReveal, joinedRoom, socket, showToast]);
+  }, [state?.handOver, state?.gameOver, state?.handNumber, handReveal, preGameDraw, joinedRoom, socket, showToast]);
 
   useEffect(() => {
-    if (!inGame || !state || state.gameOver || !state.handOver) return;
+    if (!inGame || !state || state.gameOver || !state.handOver || preGameDraw) return;
     if (handRevealShownRef.current === state.handNumber) return;
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     handRevealShownRef.current = state.handNumber;
@@ -827,10 +828,10 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       });
     }, 1400);
     return () => window.clearTimeout(tid);
-  }, [inGame, state, you]);
+  }, [inGame, state, you, preGameDraw]);
 
   useEffect(() => {
-    if (!handReveal || !state || state.gameOver || !state.handOver) return;
+    if (!handReveal || !state || state.gameOver || !state.handOver || preGameDraw) return;
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     const nextYourRemaining = state.players[you]?.hand ?? [];
     const nextOpponentRemaining = opponentIdFromState
@@ -851,7 +852,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
           }
         : prev,
     );
-  }, [handReveal, state, you]);
+  }, [handReveal, state, you, preGameDraw]);
 
   useEffect(() => {
     if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
