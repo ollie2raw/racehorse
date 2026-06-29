@@ -783,6 +783,7 @@ export function broadcastStateUpdate(roomCode: string): void {
       if (
         room.state.handOver &&
         !room.state.gameOver &&
+        !room.preGameDraw &&
         room.lastHandEndedNotifiedHand !== room.state.handNumber
       ) {
         room.lastHandEndedNotifiedHand = room.state.handNumber;

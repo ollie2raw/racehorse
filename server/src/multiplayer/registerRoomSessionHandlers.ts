@@ -546,7 +546,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         }
       }
 
-      if (room.state) {
+      if (room.state && !room.preGameDraw) {
         if (room.state.handOver && !room.state.gameOver) {
           const payload = buildHandEndedPayload(room, joinedPlayerSeatId);
           if (payload) {
@@ -1114,26 +1114,41 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           playerSeatId,
           matchStartReady: [...roomAfterReady.matchStartReady],
         });
-        const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
-        if (startResult.started) {
-          const started = getRoom(roomCode);
-          if (started.scheduledTournamentMatchId) {
-            const readyUserId = handlerDeps.normalizeUserId(socket.data?.userId);
-            await promoteScheduledMatchToInProgress(
-              started.scheduledTournamentMatchId,
-              defaultEnginePersistence,
-              new Date().toISOString(),
-              readyUserId,
-            );
+        const isPrivate = !roomAfterReady.matchmakingMatchId && !roomAfterReady.scheduledTournamentMatchId;
+        if (!isPrivate) {
+          const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
+          if (startResult.started) {
+            const started = getRoom(roomCode);
+            if (started.scheduledTournamentMatchId) {
+              const readyUserId = handlerDeps.normalizeUserId(socket.data?.userId);
+              await promoteScheduledMatchToInProgress(
+                started.scheduledTournamentMatchId,
+                defaultEnginePersistence,
+                new Date().toISOString(),
+                readyUserId,
+              );
+            }
+            handlerDeps.notifyRoomPlayersInGame(roomCode);
+            await handlerDeps.onAfterMatchStarted(started);
           }
-          handlerDeps.notifyRoomPlayersInGame(roomCode);
-          await handlerDeps.onAfterMatchStarted(started);
+          cb?.({
+            ok: true,
+            started: startResult.started,
+            waitingFor: startResult.waitingFor ?? [],
+          });
+        } else {
+          const roster = getRoomRoster(roomCode).length > 0
+            ? getRoomRoster(roomCode)
+            : getRoomPlayersWithFallback(roomCode, roomAfterReady.players);
+          io.to(roomCode).emit('room:update', {
+            players: roster,
+          });
+          cb?.({
+            ok: true,
+            started: false,
+            waitingFor: roomAfterReady.players.filter((id) => !roomAfterReady.matchStartReady.has(id)),
+          });
         }
-        cb?.({
-          ok: true,
-          started: startResult.started,
-          waitingFor: startResult.waitingFor ?? [],
-        });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'unknown error';
         console.log('[player:ready] ERROR', { roomCode, socketId: socket.id, error: message });
