@@ -101,6 +101,9 @@ function MultiplayerGameShellComponent({
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
+  const prevOpponentHandLenRef = useRef(0);
+  const prevForcedDrawActiveRef = useRef(false);
+  const localFlyingTileIdRef = useRef(0);
   const boardRef = useRef<BoardHandle>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const matchRecordKeyRef = useRef('');
@@ -220,6 +223,8 @@ function MultiplayerGameShellComponent({
     rematchReadyIds,
     setRematchReadyIds,
     flyingTiles,
+    setFlyingTiles,
+    drawSequenceActive,
     opponentDragging,
     setOpponentDragging,
     opponentDisconnected,
@@ -500,6 +505,113 @@ function MultiplayerGameShellComponent({
     prevMyHandLenRef.current = myHand.length;
     setDrawPulseIndex(null);
   }, [inGame, myHand.length, setDrawPulseIndex]);
+
+  useEffect(() => {
+    const timers: number[] = [];
+
+    if (!inGame || !state) {
+      prevMyHandLenRef.current = 0;
+      prevOpponentHandLenRef.current = 0;
+      return;
+    }
+
+    const isForcedDrawActive = drawSequenceActive;
+    const wasForcedDrawActive = prevForcedDrawActiveRef.current;
+    prevForcedDrawActiveRef.current = isForcedDrawActive;
+
+    const currentMyHandLen = myHand.length;
+    const currentOppHandLen = opponentTileCount;
+
+    const prevMyHandLen = prevMyHandLenRef.current;
+    const prevOppHandLen = prevOpponentHandLenRef.current;
+
+    if (prevMyHandLen === 0 && prevOppHandLen === 0) {
+      prevMyHandLenRef.current = currentMyHandLen;
+      prevOpponentHandLenRef.current = currentOppHandLen;
+      return;
+    }
+
+    if (isForcedDrawActive || wasForcedDrawActive) {
+      prevMyHandLenRef.current = currentMyHandLen;
+      prevOpponentHandLenRef.current = currentOppHandLen;
+      return;
+    }
+
+    if (currentMyHandLen > prevMyHandLen) {
+      const drawnCount = currentMyHandLen - prevMyHandLen;
+      for (let i = 0; i < drawnCount; i++) {
+        const t = window.setTimeout(() => {
+          if (!boneyardRef.current || !handAreaRef.current) return;
+          playDrawSound(isMutedRef.current);
+          const from = boneyardRef.current.getBoundingClientRect();
+          const to = handAreaRef.current.getBoundingClientRect();
+          const id = ++localFlyingTileIdRef.current;
+          setFlyingTiles((prevTiles) => [
+            ...(prevTiles || []),
+            {
+              x: from.left + from.width / 2,
+              y: from.top + from.height / 2,
+              toX: to.left + to.width / 2,
+              toY: to.top + to.height / 2,
+              id,
+            },
+          ]);
+          const ftRemove = window.setTimeout(() => {
+            setFlyingTiles((prevTiles) => (prevTiles || []).filter((tile) => tile.id !== id));
+          }, 520);
+          timers.push(ftRemove);
+        }, i * 150);
+        timers.push(t);
+      }
+    }
+
+    if (currentOppHandLen > prevOppHandLen) {
+      const drawnCount = currentOppHandLen - prevOppHandLen;
+      for (let i = 0; i < drawnCount; i++) {
+        const t = window.setTimeout(() => {
+          if (!boneyardRef.current || !opponentPillRef.current) return;
+          playDrawSound(isMutedRef.current);
+          const from = boneyardRef.current.getBoundingClientRect();
+          const to = opponentPillRef.current.getBoundingClientRect();
+          const id = ++localFlyingTileIdRef.current;
+          setFlyingTiles((prevTiles) => [
+            ...(prevTiles || []),
+            {
+              x: from.left + from.width / 2,
+              y: from.top + from.height / 2,
+              toX: to.left + to.width / 2,
+              toY: to.top + to.height / 2,
+              id,
+            },
+          ]);
+          const ftRemove = window.setTimeout(() => {
+            setFlyingTiles((prevTiles) => (prevTiles || []).filter((tile) => tile.id !== id));
+          }, 520);
+          timers.push(ftRemove);
+        }, i * 150);
+        timers.push(t);
+      }
+    }
+
+    prevMyHandLenRef.current = currentMyHandLen;
+    prevOpponentHandLenRef.current = currentOppHandLen;
+
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [
+    inGame,
+    state,
+    myHand.length,
+    opponentTileCount,
+    drawSequenceActive,
+    setFlyingTiles,
+    playDrawSound,
+    boneyardRef,
+    handAreaRef,
+    opponentPillRef,
+    isMutedRef,
+  ]);
 
   useEffect(() => {
     if (!state) {
