@@ -987,6 +987,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   }, []);
 
   const onPregameTileTap = useCallback((tileId: string) => {
+    console.log('[useLiveMatchSession] Client: Emitting pregame pick for slot', tileId, 'socket connected:', socket?.connected);
     if (!socket) return;
     socket.emit('game:pregame_draw_pick', { slotId: tileId });
   }, [socket]);
