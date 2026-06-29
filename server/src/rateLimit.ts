@@ -67,16 +67,20 @@ export function createRateLimitMiddleware(
   limiter: InMemoryRateLimiter,
   rule: RateLimitRule,
   scope: string,
+  getUserId?: (req: Request) => string | null,
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const result = limiter.take(`${scope}:${requestIp(req)}`, rule);
+    const userId = getUserId?.(req) ?? null;
+    const key = userId
+      ? `${scope}:user:${userId}`
+      : `${scope}:ip:${requestIp(req)}`;
+    const result = limiter.take(key, rule);
     res.setHeader('X-RateLimit-Limit', String(rule.max));
     res.setHeader('X-RateLimit-Remaining', String(result.remaining));
     if (result.allowed) {
       next();
       return;
     }
-
     res.setHeader('Retry-After', retryAfterSeconds(result.retryAfterMs));
     res.status(429).json({ error: 'rate_limited', retryAfterMs: result.retryAfterMs });
   };

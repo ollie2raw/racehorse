@@ -283,7 +283,12 @@ app.use(express.json({ limit: '2mb' }));
 const restRateLimiter = new InMemoryRateLimiter({ windowMs: 5 * 60_000, max: 600 });
 const socketRateLimiter = new InMemoryRateLimiter({ windowMs: 60_000, max: 600 });
 const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api');
-const dailySubmitLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 90 }, 'rest:daily');
+const dailySubmitLimit = createRateLimitMiddleware(
+  restRateLimiter,
+  { windowMs: 5 * 60_000, max: 90 },
+  'rest:daily',
+  getUserIdFromAuthHeaderSync,
+);
 const adminLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:admin');
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 
@@ -305,6 +310,23 @@ app.use('/league', restApiLimit);
 app.use('/bot-matches', restApiLimit);
 app.use('/api/social', socialRouter);
 app.use('/api/profile', socialRouter);
+
+function getUserIdFromAuthHeaderSync(req: express.Request): string | null {
+  const authHeader = typeof req.headers.authorization === 'string'
+    ? req.headers.authorization.trim() : '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1]?.trim();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf-8');
+    const payload = JSON.parse(payloadJson) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
