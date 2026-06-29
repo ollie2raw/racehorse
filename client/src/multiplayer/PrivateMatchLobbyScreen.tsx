@@ -268,6 +268,7 @@ export default function PrivateMatchLobbyScreen({
   const [guestRankedLoading, setGuestRankedLoading] = useState(false);
   const [guestRating, setGuestRating] = useState<number | null>(null);
   const [guestWinStreak, setGuestWinStreak] = useState<number | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   const onBackClick = phase === 'room' ? onLeaveRoom : onBackHome;
 
@@ -520,29 +521,33 @@ export default function PrivateMatchLobbyScreen({
     </div>
   );
 
-  const invitePlayerBlock = (
+  const handleCopyInviteLink = () => {
+    onCopyInviteLink();
+    setCopiedInvite(true);
+    setTimeout(() => {
+      setCopiedInvite(false);
+    }, 2000);
+  };
+
+  const invitePlayerBlock = (isRoomHost || phase === 'room') ? (
     <div className="pml-section-invite-block">
-      <div className="pml-section-label">4. Invite player</div>
-      <div className="pml-invite-actions-strip">
-        <div className="pml-invite-cell pml-invite-cell--compound">
-          <div className="pml-invite-row">
-            <input
-              className="pml-invite-input"
-              placeholder="Enter username or email…"
-              disabled
-              aria-disabled="true"
-            />
-            <Button variant="secondary" size="sm" type="button" disabled className="pml-invite-inline-btn">
-              Invite
-            </Button>
+      {isRoomHost && (
+        <>
+          <div className="pml-section-label">4. Invite player</div>
+          <div className="pml-invite-actions-strip">
+            <div className="pml-invite-cell pml-invite-cell--copy">
+              <Button
+                variant="outline"
+                type="button"
+                className="pml-invite-copy-full"
+                onClick={handleCopyInviteLink}
+              >
+                {copiedInvite ? 'Copied!' : 'Copy invite link'}
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="pml-invite-cell pml-invite-cell--copy">
-          <Button variant="outline" type="button" className="pml-invite-copy-full" onClick={onCopyInviteLink}>
-            Copy invite link
-          </Button>
-        </div>
-      </div>
+        </>
+      )}
       {phase === 'room' ? (
         <div className="pml-invite-leave-row">
           <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
@@ -551,7 +556,7 @@ export default function PrivateMatchLobbyScreen({
         </div>
       ) : null}
     </div>
-  );
+  ) : null;
 
   return (
     <div className="pml-root pml-mp-bridge multiplayer-hub">
