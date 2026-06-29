@@ -28,7 +28,7 @@ type AppRoutesGamePropsHostProps = {
 export function AppRoutesGamePropsHost({ source }: AppRoutesGamePropsHostProps) {
   const gameSnapshot = useSyncExternalStore(subscribeGameSnapshot, getGameSnapshot, getGameSnapshot);
   const routeProps =
-    gameSnapshot.hasState || gameSnapshot.inGame
+    source.joinedRoom
       ? gameSnapshot.routeProps
       : { ...EMPTY_ROUTE_PROPS, isRoomHost: source.fallbackIsRoomHost };
 
