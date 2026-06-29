@@ -20,7 +20,7 @@ import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { abandonLocalBotMatch, startLocalBotMatch } from './botMatchApi';
-import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
+import { buildPlayableTileKeys } from '../utils/handTileLegality';
 import { logger } from '../utils/logger';
 import type { Move, PlacementPosition, Tile } from '../types';
 import {
@@ -109,6 +109,7 @@ import { BotPivotalReviewPortal } from './BotPivotalReviewPortal';
 import { BotReviewSummaryPortal } from './BotReviewSummaryPortal';
 import { BotGameOverModal } from './BotGameOverModal';
 import { BotGuidedMatchPanel } from './BotGuidedMatchPanel';
+import { BotHandTray } from './BotHandTray';
 import { isBotPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
 import { tileEquals, asPlayMoves, findMoveForSelection, sumTilePips } from '../game/tileUtils';
 import {
@@ -5680,87 +5681,38 @@ export default function BotMatchScreen({
   const handTray = preGameDrawActive && preGameDraw.drawState ? (
     <div className="hand-area wl-hand-area pre-game-draw-hand-dock" data-ui="tray" aria-hidden="true" />
   ) : (
-    <div
-      className="hand-area wl-hand-area"
-      data-ui="tray"
-    >
-      <div className="tray-rail">
-        <div className="tray-center" ref={handAreaRef}>
-            <div
-              className={`hand-container ${
-                handCompactStacked ? 'is-stacked' : ''
-              } ${normalHandRows.length > 1 ? 'has-multiple-rows' : 'has-single-row'}`}
-            >
-              {normalHandRows.map((row, rowIdx) => (
-                <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
-                  {row.map((tile, idx) => {
-                    const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                    const showLegality = handActive && !botTurn && !drawSequenceActive;
-                    const { highlight: legalityHighlight, unplayable: isUnplayable } = getHandTileLegality(
-                      tile,
-                      showLegality,
-                      playableTileKeys,
-                    );
-                    const playable = legalityHighlight;
-                    const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
-                    const tileKey = `${tile.low}-${tile.high}`;
-                    const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
-                    const guidedClass = isGuidedMode && playable
-                      ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
-                      : '';
-                    const isRecommendedLessonTile =
-                      showCoachedRecommendation &&
-                      lessonRecommendedTileKey != null &&
-                      lessonRecommendedTileKey === toTileKey(tile);
-                    const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
-                    return (
-                      <div
-                        key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}${isRecommendedLessonTile ? ' is-recommended' : ''}`}
-                      >
-                        {isGuidedMode && playable && guidedPts > 0 && (
-                          <span className="guided-score-badge">+{guidedPts}</span>
-                        )}
-                        <DominoTile
-                          tile={tile}
-                          size={handTileSize}
-                          rotation={0}
-                          className={[
-                            baseClass,
-                            guidedClass,
-                            isRecommendedLessonTile ? 'is-coached-recommended' : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' ')}
-                          selected={selected}
-                          highlight={legalityHighlight}
-                          unplayable={isUnplayable}
-                          disabled={!handActive || botTurn || drawSequenceActive}
-                          onClick={() => {
-                            if (isDailyFritzMode) {
-                              traceDailyFritzEvent('[input] tile click', {
-                                tile: toTileKey(tile),
-                                playable,
-                                handActive,
-                                botTurn,
-                                drawSequenceActive,
-                              });
-                            }
-                            if (!handActive || botTurn) return;
-                            if (!playable) return;
-                            setSelectedTile(tile);
-                            setSelectedController('you');
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-    </div>
+    <BotHandTray
+      normalHandRows={normalHandRows}
+      handTileSize={handTileSize}
+      handCompactStacked={handCompactStacked}
+      selectedTile={selectedTile}
+      handActive={handActive}
+      botTurn={botTurn}
+      drawSequenceActive={drawSequenceActive}
+      drawPulseIndex={drawPulseIndex}
+      playableTileKeys={playableTileKeys}
+      isGuidedMode={isGuidedMode}
+      guidedScoringTiles={guidedScoringTiles}
+      showCoachedRecommendation={showCoachedRecommendation}
+      lessonRecommendedTileKey={lessonRecommendedTileKey}
+      handAreaRef={handAreaRef}
+      playerHand={match.players.you.hand}
+      onTileClick={(tile, playable) => {
+        if (isDailyFritzMode) {
+          traceDailyFritzEvent('[input] tile click', {
+            tile: toTileKey(tile),
+            playable,
+            handActive,
+            botTurn,
+            drawSequenceActive,
+          });
+        }
+        if (!handActive || botTurn) return;
+        if (!playable) return;
+        setSelectedTile(tile);
+        setSelectedController('you');
+      }}
+    />
   );
 
   const boardStageInner = (
