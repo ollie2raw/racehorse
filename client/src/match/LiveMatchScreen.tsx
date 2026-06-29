@@ -956,17 +956,26 @@ export function LiveMatchScreen({
                     }
                   >
                   {state.handNumber === 0 && preGameDraw ? (
-                    <PreGameTileDrawBoard
-                      drawState={preGameDraw}
-                      isPlayerPickEnabled={
-                        !preGameDraw.currentRound?.you &&
-                        (preGameDraw.phase as string) !== 'showing-tie' &&
-                        (preGameDraw.phase as string) !== 'showing-reveal' &&
-                        (preGameDraw.phase as string) !== 'showing-result' &&
-                        preGameDraw.phase !== 'resolved'
-                      }
-                      onTileTap={onPregameTileTap || (() => {})}
-                    />
+                    (() => {
+                      console.log('[PREGAME-RENDER] isPlayerPickEnabled:', 
+                        !preGameDraw?.currentRound?.you,
+                        'phase:', preGameDraw?.phase,
+                        'currentRound:', JSON.stringify(preGameDraw?.currentRound)
+                      );
+                      return (
+                        <PreGameTileDrawBoard
+                          drawState={preGameDraw}
+                          isPlayerPickEnabled={
+                            !preGameDraw.currentRound?.you &&
+                            (preGameDraw.phase as string) !== 'showing-tie' &&
+                            (preGameDraw.phase as string) !== 'showing-reveal' &&
+                            (preGameDraw.phase as string) !== 'showing-result' &&
+                            preGameDraw.phase !== 'resolved'
+                          }
+                          onTileTap={onPregameTileTap || (() => {})}
+                        />
+                      );
+                    })()
                   ) : (
                     <Board
                       ref={boardRef}

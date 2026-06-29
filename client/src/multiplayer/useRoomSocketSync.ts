@@ -334,6 +334,10 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
+      console.log('[PREGAME-CLIENT] setPreGameDraw called with:', 
+        JSON.stringify(payload.preGameDraw?.currentRound),
+        'phase:', payload.preGameDraw?.phase
+      );
       params.setPreGameDraw(payload.preGameDraw ?? null);
 
       const autoPassIds = Array.isArray(payload.recentAutoPasses) ? payload.recentAutoPasses : [];

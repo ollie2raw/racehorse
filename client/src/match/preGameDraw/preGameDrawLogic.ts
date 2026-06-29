@@ -5,6 +5,10 @@ export type PreGameDrawPlayer = 'you' | 'bot';
 export type PreGameDrawPhase =
   | 'pick-player'
   | 'pick-opponent'
+  | 'showing-tie'
+  | 'showing-reveal'
+  | 'showing-result'
+  | 'done'
   | 'resolved';
 
 export interface PreGameDrawTileSlot {

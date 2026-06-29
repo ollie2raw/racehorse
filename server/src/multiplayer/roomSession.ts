@@ -768,9 +768,17 @@ export function broadcastStateUpdate(roomCode: string): void {
         you: recipientPlayerId ?? undefined,
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: true,
-        preGameDraw: room.preGameDraw && recipientPlayerId
-          ? maskPregameDrawForRecipient(room.preGameDraw, recipientPlayerId, room.players)
-          : undefined,
+        preGameDraw: (() => {
+          if (room.preGameDraw && recipientPlayerId) {
+            console.log('[PREGAME-DEBUG] broadcasting to socket', connectionId, 
+              'recipientPlayerId:', recipientPlayerId,
+              'picks:', JSON.stringify(room.preGameDraw?.picks),
+              'currentRound.you will be:', room.preGameDraw?.picks[recipientPlayerId ?? ''] ?? null
+            );
+            return maskPregameDrawForRecipient(room.preGameDraw, recipientPlayerId, room.players);
+          }
+          return undefined;
+        })(),
         ...(pendingForcedDraw
           ? {
               forcedDrawCount: pendingForcedDraw.count,
