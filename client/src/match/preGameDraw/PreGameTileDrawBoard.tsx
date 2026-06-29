@@ -34,7 +34,7 @@ export function PreGameTileDrawBoard({
     [drawState.tiles],
   );
 
-  const hasRevealedTiles = drawState.tiles.some((slot) => slot.revealed && !slot.outOfPlay);
+  const hasRevealedTiles = !!drawState.currentRound?.you;
 
   return (
     <div
