@@ -105,7 +105,7 @@ export function maskPregameDrawForRecipient(
           pipSum: youPick.pipSum,
         }
       : null,
-    bot: botPick && bothPicked
+    bot: botPick
       ? {
           player: 'bot' as const,
           tileId: botPick.slotId,
@@ -123,12 +123,8 @@ export function maskPregameDrawForRecipient(
   return {
     phase: preGameDraw.phase,
     tiles: preGameDraw.tiles.map((slot) => {
-      // Reveal the slot:
-      // - If it was picked by you
-      // - If it was picked by opponent AND both have picked
-      const isRevealed =
-        (slot.pickedBy === youId) ||
-        (bothPicked && slot.pickedBy === botId);
+      // Reveal the slot immediately if anyone has picked it
+      const isRevealed = slot.pickedBy !== null;
 
       return {
         id: slot.id,

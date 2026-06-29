@@ -1415,14 +1415,17 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         if (!preGameDraw) return;
         if (preGameDraw.picks[playerSeatId] !== null) return;
 
-        const slot = preGameDraw.tiles.find((t) => t.id === slotId);
-        if (!slot || slot.outOfPlay || slot.revealed) return;
+        let slot = preGameDraw.tiles.find((t) => t.id === slotId);
+        if (!slot || slot.outOfPlay || slot.revealed) {
+          slot = preGameDraw.tiles.find((t) => !t.revealed && !t.outOfPlay);
+        }
+        if (!slot) return;
 
         // Record the pick
         slot.revealed = true;
         slot.pickedBy = playerSeatId;
         preGameDraw.picks[playerSeatId] = {
-          slotId,
+          slotId: slot.id,
           tile: slot.tile,
           pipSum: slot.tile.low + slot.tile.high,
         };

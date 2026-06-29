@@ -690,7 +690,7 @@ export function LiveMatchScreen({
                   const opponentPoints = handReveal.pointsAwarded.opponent;
                   const winner =
                     youPoints > opponentPoints ? 'you' : opponentPoints > youPoints ? 'opponent' : 'none';
-                  const pointsAwarded = Math.max(youPoints, 0);
+                  const pointsAwarded = Math.max(youPoints, opponentPoints, 0);
                   const yourCount = handReveal.yourRemainingTiles.length;
                   const oppCount = handReveal.opponentRemainingTiles.length;
                   const whoWentOutRaw =

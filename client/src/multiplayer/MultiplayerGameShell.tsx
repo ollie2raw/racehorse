@@ -488,22 +488,25 @@ function MultiplayerGameShellComponent({
   }, [myHand.length, trayCenterRef]);
 
   useEffect(() => {
-    if (!inGame) {
+    if (!inGame || state?.handOver || state?.gameOver) {
       prevMyHandLenRef.current = 0;
       setDrawPulseIndex(null);
       return;
     }
 
     if (myHand.length > prevMyHandLenRef.current) {
-      setDrawPulseIndex(myHand.length - 1);
-      const timer = setTimeout(() => setDrawPulseIndex(null), 360);
-      prevMyHandLenRef.current = myHand.length;
-      return () => clearTimeout(timer);
+      // Only trigger draw pulse if we are drawing single tiles, not dealing starting hand
+      if (prevMyHandLenRef.current > 0 && myHand.length - prevMyHandLenRef.current === 1) {
+        setDrawPulseIndex(myHand.length - 1);
+        const timer = setTimeout(() => setDrawPulseIndex(null), 420);
+        prevMyHandLenRef.current = myHand.length;
+        return () => clearTimeout(timer);
+      }
     }
 
     prevMyHandLenRef.current = myHand.length;
     setDrawPulseIndex(null);
-  }, [inGame, myHand.length, setDrawPulseIndex]);
+  }, [inGame, myHand.length, state?.handOver, state?.gameOver, setDrawPulseIndex]);
 
 
   useEffect(() => {

@@ -818,13 +818,18 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     handRevealShownRef.current = state.handNumber;
     const tid = window.setTimeout(() => {
-      setHandReveal({
-        handNumber: state.handNumber,
-        yourRemainingTiles: state.players[you]?.hand ?? [],
-        opponentRemainingTiles: opponentIdFromState
-          ? (state.players[opponentIdFromState]?.hand ?? [])
-          : [],
-        pointsAwarded: { you: 0, opponent: 0 },
+      setHandReveal((prev) => {
+        if (prev && prev.handNumber === state.handNumber) {
+          return prev;
+        }
+        return {
+          handNumber: state.handNumber,
+          yourRemainingTiles: state.players[you]?.hand ?? [],
+          opponentRemainingTiles: opponentIdFromState
+            ? (state.players[opponentIdFromState]?.hand ?? [])
+            : [],
+          pointsAwarded: { you: 0, opponent: 0 },
+        };
       });
     }, 1400);
     return () => window.clearTimeout(tid);

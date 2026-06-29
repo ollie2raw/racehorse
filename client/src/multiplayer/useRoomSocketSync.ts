@@ -21,7 +21,7 @@ import type {
 export type { StateUpdatePayload } from './multiplayerRuntime';
 
 /** Per-step stagger; chain runs to completion before final hand is shown. */
-const FORCED_DRAW_STAGGER_MS = 72;
+const FORCED_DRAW_STAGGER_MS = 240;
 const FORCED_DRAW_FLY_MS = 1800;
 
 function isActiveGameplayState(state: GameState | null): boolean {
@@ -497,6 +497,12 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           return;
         }
 
+        if (params.stateRef.current?.handOver || params.stateRef.current?.gameOver) {
+          clearPendingDrawAnimationTimers();
+          params.setFlyingTiles([]);
+          return;
+        }
+
         const chainId = payload.drawChainId ?? payload.sequence;
         if (chainId === lastForcedDrawAnimationSequence) {
           drawAudit('animation-start', {
@@ -557,6 +563,11 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         payload.steps.forEach((step, index) => {
           const stepTimer = window.setTimeout(() => {
             try {
+              if (params.stateRef.current?.handOver || params.stateRef.current?.gameOver) {
+                clearPendingDrawAnimationTimers();
+                params.setFlyingTiles([]);
+                return;
+              }
               params.playDrawSound(params.isMutedRef.current);
               params.setBoneyardDisplayCount(step.boneyardCount);
 
