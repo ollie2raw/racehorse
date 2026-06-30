@@ -180,6 +180,7 @@ export default function MultiplayerModeController({
     roomReactions,
     sendRoomChat,
     sendRoomEmote,
+    sendFriendChallenge,
   } = useMultiplayerLobbyActionsContext();
   const { setMpSubView, setRoomCode } = roomActionsUi;
 
@@ -404,6 +405,7 @@ export default function MultiplayerModeController({
                   : null
               }
               lobbyError={lobbyError}
+              sendFriendChallenge={sendFriendChallenge}
             />
           </Suspense>
         )

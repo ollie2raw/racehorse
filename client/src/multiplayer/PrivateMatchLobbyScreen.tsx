@@ -18,6 +18,14 @@ import { IconFlame, IconPlus, IconUserBust } from './MultiplayerDuelIcons';
 import { MultiplayerHubFeatureStrip } from './MultiplayerHubFeatureStrip';
 import { MultiplayerTwoColumnPvLayout } from './MultiplayerTwoColumnPvLayout';
 import type { RoomPlayer } from './multiplayerRuntime';
+import { fetchFriendsWithPresence } from '../social/socialApi';
+import type { FriendWithPresence } from '../social/socialApi';
+import {
+  challengeButtonLabel,
+  isChallengeButtonDisabled,
+  type FriendChallengeTarget,
+  type SendFriendChallengeResult,
+} from './friendChallenge';
 
 type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
@@ -78,6 +86,7 @@ export interface PrivateMatchLobbyScreenProps {
   } | null;
   /** Lobby-level error from start/join (e.g. waiting_for_ready). */
   lobbyError?: string;
+  sendFriendChallenge?: (target: FriendChallengeTarget) => Promise<SendFriendChallengeResult>;
 }
 
 function LockIcon() {
@@ -259,6 +268,7 @@ export default function PrivateMatchLobbyScreen({
   socket = null,
   pendingChallenge = null,
   lobbyError = '',
+  sendFriendChallenge,
 }: PrivateMatchLobbyScreenProps) {
   const [lobbyTab, setLobbyTab] = useState<'create' | 'join'>('create');
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
@@ -269,6 +279,64 @@ export default function PrivateMatchLobbyScreen({
   const [guestRating, setGuestRating] = useState<number | null>(null);
   const [guestWinStreak, setGuestWinStreak] = useState<number | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [friends, setFriends] = useState<FriendWithPresence[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [showFriendPicker, setShowFriendPicker] = useState(false);
+  const [creatingUserId, setCreatingUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showFriendPicker || !isRatedEligible) return;
+    setFriendsLoading(true);
+    setFriendsError(null);
+    fetchFriendsWithPresence()
+      .then((res) => {
+        if (res.error) {
+          setFriendsError(res.error);
+        } else {
+          const onlineFriends = res.friends.filter((f) => f.presence_status === 'online');
+          setFriends(onlineFriends);
+        }
+      })
+      .catch((err) => {
+        setFriendsError(err instanceof Error ? err.message : 'Failed to load friends.');
+      })
+      .finally(() => {
+        setFriendsLoading(false);
+      });
+  }, [showFriendPicker, isRatedEligible]);
+
+  const handleSendChallenge = async (friend: FriendWithPresence) => {
+    if (!sendFriendChallenge) return;
+    setCreatingUserId(friend.userId);
+    try {
+      const res = await sendFriendChallenge({
+        userId: friend.userId,
+        username: friend.username,
+        presenceStatus: friend.presence_status,
+      });
+      if (!res.ok) {
+        const errMsg = res.error === 'unreachable' ? 'Friend is unreachable.' : 'Failed to send challenge.';
+        alert(errMsg);
+      }
+    } catch {
+      alert('An error occurred while sending the challenge.');
+    } finally {
+      setCreatingUserId(null);
+    }
+  };
+
+  const getChallengeState = (friend: FriendWithPresence) => {
+    if (creatingUserId === friend.userId) return 'creating';
+    if (
+      pendingChallenge &&
+      (pendingChallenge.friendUsername === friend.username ||
+        pendingChallenge.friendUsername.replace(/^@+/, '') === friend.username.replace(/^@+/, ''))
+    ) {
+      return 'pending';
+    }
+    return 'idle';
+  };
 
   const onBackClick = phase === 'room' ? onLeaveRoom : onBackHome;
 
@@ -534,7 +602,7 @@ export default function PrivateMatchLobbyScreen({
       {isRoomHost && (
         <>
           <div className="pml-section-label">4. Invite player</div>
-          <div className="pml-invite-actions-strip">
+          <div className="pml-invite-actions-strip" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div className="pml-invite-cell pml-invite-cell--copy">
               <Button
                 variant="outline"
@@ -545,6 +613,88 @@ export default function PrivateMatchLobbyScreen({
                 {copiedInvite ? 'Copied!' : 'Copy invite link'}
               </Button>
             </div>
+
+            {isRatedEligible && (
+              <div className="pml-invite-cell pml-invite-cell--friends" style={{ position: 'relative', width: '100%' }}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="pml-invite-copy-full"
+                  onClick={() => setShowFriendPicker(prev => !prev)}
+                >
+                  {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
+                </Button>
+
+                {showFriendPicker && (
+                  <div
+                    className="pml-friend-picker-dropdown"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      width: '100%',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      background: 'rgba(7, 9, 16, 0.98)',
+                      border: '1px solid rgba(226, 176, 72, 0.2)',
+                      borderRadius: '8px',
+                      marginTop: '4px',
+                      zIndex: 100,
+                      padding: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+                    }}
+                  >
+                    {friendsLoading && (
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
+                        Loading online friends…
+                      </div>
+                    )}
+                    {friendsError && (
+                      <div style={{ fontSize: '12px', color: '#EF4444', padding: '6px' }}>
+                        {friendsError}
+                      </div>
+                    )}
+                    {!friendsLoading && !friendsError && friends.length === 0 && (
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '6px' }}>
+                        No friends online right now.
+                      </div>
+                    )}
+                    {!friendsLoading && !friendsError && friends.map((friend) => {
+                      const cState = getChallengeState(friend);
+                      return (
+                        <div
+                          key={friend.userId}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '4px 6px',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f2eee8' }}>
+                            @{friend.username}
+                          </span>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
+                            disabled={isChallengeButtonDisabled(cState, friend.presence_status)}
+                            onClick={() => handleSendChallenge(friend)}
+                          >
+                            {challengeButtonLabel(cState)}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
