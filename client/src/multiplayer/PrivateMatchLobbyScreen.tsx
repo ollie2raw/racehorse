@@ -331,7 +331,8 @@ export default function PrivateMatchLobbyScreen({
         setFriendsError(err instanceof Error ? err.message : 'Failed to load friends.');
         setFriendsLoading(false);
       });
-  }, [showFriendPicker, isRatedEligible, socket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFriendPicker, isRatedEligible]);
 
   const handleSendChallenge = async (friend: FriendWithPresence) => {
     if (!sendFriendChallenge) return;
@@ -629,7 +630,7 @@ export default function PrivateMatchLobbyScreen({
       {isRoomHost && (
         <>
           <div className="pml-section-label">4. Invite player</div>
-          <div className="pml-invite-actions-strip" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="pml-invite-actions-strip">
             <div className="pml-invite-cell pml-invite-cell--copy">
               <Button
                 variant="outline"
@@ -641,57 +642,55 @@ export default function PrivateMatchLobbyScreen({
               </Button>
             </div>
             {isRatedEligible && (
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Button
-                  variant="outline"
-                  type="button"
-                  className="pml-invite-copy-full"
-                  onClick={() => setShowFriendPicker(prev => !prev)}
-                >
-                  {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
-                </Button>
-
-                {showFriendPicker && (
-                  <div className="pml-friend-picker-dropdown">
-                    {friendsLoading && (
-                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
-                        Loading online friends…
-                      </div>
-                    )}
-                    {friendsError && (
-                      <div style={{ fontSize: '12px', color: '#EF4444', padding: '6px' }}>
-                        {friendsError}
-                      </div>
-                    )}
-                    {!friendsLoading && !friendsError && friends.length === 0 && (
-                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '6px' }}>
-                        No friends online right now.
-                      </div>
-                    )}
-                    {!friendsLoading && !friendsError && friends.map((friend) => {
-                      const cState = getChallengeState(friend);
-                      return (
-                        <div key={friend.userId} className="pml-friend-row">
-                          <span className="pml-friend-row__name">
-                            @{friend.username}
-                          </span>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                            disabled={isChallengeButtonDisabled(cState, friend.presence_status)}
-                            onClick={() => handleSendChallenge(friend)}
-                          >
-                            {challengeButtonLabel(cState)}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <Button
+                variant="outline"
+                type="button"
+                className="pml-invite-copy-full"
+                onClick={() => setShowFriendPicker(prev => !prev)}
+              >
+                {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
+              </Button>
             )}
           </div>
+
+          {isRatedEligible && showFriendPicker && (
+            <div className="pml-friend-picker-dropdown">
+              {friendsLoading && (
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
+                  Loading online friends…
+                </div>
+              )}
+              {friendsError && (
+                <div style={{ fontSize: '12px', color: '#EF4444', padding: '6px' }}>
+                  {friendsError}
+                </div>
+              )}
+              {!friendsLoading && !friendsError && friends.length === 0 && (
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '6px' }}>
+                  No friends online right now.
+                </div>
+              )}
+              {!friendsLoading && !friendsError && friends.map((friend) => {
+                const cState = getChallengeState(friend);
+                return (
+                  <div key={friend.userId} className="pml-friend-row">
+                    <span className="pml-friend-row__name">
+                      @{friend.username}
+                    </span>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
+                      disabled={isChallengeButtonDisabled(cState, friend.presence_status)}
+                      onClick={() => handleSendChallenge(friend)}
+                    >
+                      {challengeButtonLabel(cState)}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
       {phase === 'room' ? (
