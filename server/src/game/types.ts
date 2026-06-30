@@ -155,6 +155,7 @@ export interface GameState {
   readonly winnerId: string | null;
   readonly consecutivePasses: number;
   readonly sequence: number;
+  readonly handStarters?: readonly string[];
 }
 
 // ─── Position Utilities ──────────────────────────────────────

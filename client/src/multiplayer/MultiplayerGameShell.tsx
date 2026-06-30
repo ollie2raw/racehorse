@@ -530,9 +530,25 @@ function MultiplayerGameShellComponent({
 
     const prevBoardCount = getBoardTileCount(prev.board);
     const nextBoardCount = getBoardTileCount(state.board);
-    let action: MoveEntry['action'] = 'pass';
-    if (nextBoardCount > prevBoardCount) action = 'place';
-    else if ((state.boneyard?.length ?? 0) < (prev.boneyard?.length ?? 0)) action = 'draw';
+    const prevBoneyardCount = prev.boneyard?.length ?? 0;
+    const nextBoneyardCount = state.boneyard?.length ?? 0;
+    const prevHandLen = prev.players[actorId]?.hand?.length ?? 0;
+    const nextHandLen = state.players[actorId]?.hand?.length ?? 0;
+
+    let action: MoveEntry['action'] | null = null;
+    if (nextBoardCount > prevBoardCount) {
+      action = 'place';
+    } else if (nextBoneyardCount < prevBoneyardCount) {
+      action = 'draw';
+    } else if (
+      state.currentPlayerIndex !== prev.currentPlayerIndex &&
+      prevHandLen === nextHandLen
+    ) {
+      action = 'pass';
+    }
+
+    if (!action) return;
+
     if (action === 'place') {
       flashLastPlayed(findPlacedTile(prev.board, state.board));
     }
@@ -730,7 +746,7 @@ function MultiplayerGameShellComponent({
   }, [multiplayerMoveLog]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const handCompactStacked = myHand.length > 9;
+  const handCompactStacked = myHand.length > 8;
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;

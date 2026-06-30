@@ -75,7 +75,10 @@ export function useMultiplayerPresentation({
     if (actorId !== you && nextBoardCount === prevBoardCount) {
       if (nextBoneyardLen < prevBoneyardLen) {
         showScoreLikeToast(`${opponentName} drew a tile`, 'opp');
-      } else if (state.currentPlayerIndex !== prev.currentPlayerIndex) {
+      } else if (
+        state.currentPlayerIndex !== prev.currentPlayerIndex &&
+        (prev.players[actorId]?.hand?.length ?? 0) === (state.players[actorId]?.hand?.length ?? 0)
+      ) {
         showScoreLikeToast(`${opponentName} passed`, 'opp');
       }
     }

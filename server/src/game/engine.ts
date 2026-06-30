@@ -264,6 +264,7 @@ export function createInitialState(players: string[], config?: Partial<Config>):
     winnerId: null,
     consecutivePasses: 0,
     sequence: 0,
+    handStarters: [],
   };
 }
 
@@ -296,10 +297,20 @@ export function startNewHand(
   const boneyard = remaining;
   const deadTiles = remaining.slice(remaining.length - cfg.deadTileCount);
 
-  // Starting player rotates by hand number (1-indexed → 0-indexed)
-  const startingIndex = startingPlayerId
-    ? state.playerIds.indexOf(startingPlayerId)
-    : (handNumber - 1) % state.playerIds.length;
+  // Starting player rotates by hand number (1-indexed → 0-indexed) or alternates from previous actual starter
+  let startingIndex = 0;
+  if (startingPlayerId) {
+    startingIndex = state.playerIds.indexOf(startingPlayerId);
+  } else if (state.handStarters && state.handStarters.length > 0) {
+    const lastStarter = state.handStarters[state.handStarters.length - 1];
+    const lastStarterIndex = state.playerIds.indexOf(lastStarter);
+    startingIndex = (lastStarterIndex + 1) % state.playerIds.length;
+  } else {
+    startingIndex = (handNumber - 1) % state.playerIds.length;
+  }
+
+  const starterId = state.playerIds[startingIndex];
+  const handStarters = [...(state.handStarters || []), starterId];
 
   return {
     ...state,
@@ -313,6 +324,7 @@ export function startNewHand(
     handOver: false,
     consecutivePasses: 0,
     sequence: state.sequence + 1,
+    handStarters,
   };
 }
 

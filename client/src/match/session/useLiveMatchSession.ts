@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
 } from 'react';
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
 import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
@@ -88,7 +89,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   const [state, setState] = useState<GameState | null>(null);
   const [legalMoves, setLegalMoves] = useState<Move[]>([]);
   const [canDraw, setCanDraw] = useState(false);
-  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [selectedTile, setSelectedTileRaw] = useState<Tile | null>(null);
   const [pendingUiAction, setPendingUiAction] = useState<
     null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
   >(null);
@@ -112,7 +113,15 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
 
   const stateRef = useRef<GameState | null>(state);
   const legalMovesRef = useRef<Move[]>(legalMoves);
-  const selectedTileRef = useRef<Tile | null>(selectedTile);
+  const selectedTileRef = useRef<Tile | null>(null);
+
+  const setSelectedTile = useCallback((value: SetStateAction<Tile | null>) => {
+    const nextVal = typeof value === 'function'
+      ? (value as (prev: Tile | null) => Tile | null)(selectedTileRef.current)
+      : value;
+    selectedTileRef.current = nextVal;
+    setSelectedTileRaw(nextVal);
+  }, []);
   const pendingActionRef = useRef(false);
   const pendingGameplayActionRef = useRef<{
     kind: 'play' | 'draw' | 'pass';
@@ -148,10 +157,6 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   useEffect(() => {
     legalMovesRef.current = legalMoves;
   }, [legalMoves]);
-
-  useEffect(() => {
-    selectedTileRef.current = selectedTile;
-  }, [selectedTile]);
 
   useEffect(() => {
     youRef.current = you;
