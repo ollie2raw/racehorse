@@ -1,4 +1,13 @@
 import './loadEnv';
+import * as Sentry from '@sentry/node';
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  enabled: process.env.NODE_ENV === 'production' && Boolean(process.env.SENTRY_DSN),
+  environment: process.env.NODE_ENV ?? 'development',
+  release: process.env.RENDER_GIT_COMMIT ?? process.env.npm_package_version ?? 'dev',
+  tracesSampleRate: 0.2,
+});
 import fs from 'node:fs';
 import express from 'express';
 import cors, { type CorsOptions } from 'cors';
@@ -5503,9 +5512,11 @@ function notifyClientsOfProcessShutdown(signal: string): void {
 process.once('SIGTERM', () => notifyClientsOfProcessShutdown('SIGTERM'));
 process.once('SIGINT', () => notifyClientsOfProcessShutdown('SIGINT'));
 process.on('unhandledRejection', (reason) => {
+  Sentry.captureException(reason);
   console.error('[process] unhandledRejection', getProcessErrorLogPayload(reason));
 });
 process.on('uncaughtException', (error) => {
+  Sentry.captureException(error);
   console.error('[process] uncaughtException', getProcessErrorLogPayload(error));
 });
 
