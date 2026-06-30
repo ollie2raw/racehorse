@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { AppMode } from '../types';
 import type { PrivateRoomCreateSettings } from './roomTransport';
 import type { Socket } from 'socket.io-client';
@@ -284,6 +285,55 @@ export default function PrivateMatchLobbyScreen({
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [creatingUserId, setCreatingUserId] = useState<string | null>(null);
+
+  const buttonWrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({ display: 'none' });
+
+  useEffect(() => {
+    if (!showFriendPicker || !buttonWrapperRef.current) {
+      setDropdownStyle({ display: 'none' });
+      return;
+    }
+
+    const updatePosition = () => {
+      if (!buttonWrapperRef.current) return;
+      const rect = buttonWrapperRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+        zIndex: 9999,
+      });
+    };
+
+    updatePosition();
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [showFriendPicker]);
+
+  useEffect(() => {
+    if (!showFriendPicker) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        dropdownRef.current?.contains(e.target as Node) ||
+        buttonWrapperRef.current?.contains(e.target as Node)
+      ) {
+        return;
+      }
+      setShowFriendPicker(false);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showFriendPicker]);
 
   useEffect(() => {
     if (!showFriendPicker || !isRatedEligible) return;
@@ -638,20 +688,20 @@ export default function PrivateMatchLobbyScreen({
                 {copiedInvite ? 'Copied!' : 'Copy invite link'}
               </Button>
             </div>
-
             {isRatedEligible && (
               <div style={{ position: 'relative', width: '100%' }}>
-                <Button
-                  variant="outline"
-                  type="button"
-                  className="pml-invite-copy-full"
-                  onClick={() => setShowFriendPicker(prev => !prev)}
-                >
-                  {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
-                </Button>
-
-                {showFriendPicker && (
-                  <div className="pml-friend-picker-dropdown">
+                <div ref={buttonWrapperRef} style={{ width: '100%' }}>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="pml-invite-copy-full"
+                    onClick={() => setShowFriendPicker(prev => !prev)}
+                  >
+                    {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
+                  </Button>
+                </div>
+                {showFriendPicker && createPortal(
+                  <div ref={dropdownRef} className="pml-friend-picker-dropdown" style={dropdownStyle}>
                     {friendsLoading && (
                       <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
                         Loading online friends…
@@ -686,7 +736,8 @@ export default function PrivateMatchLobbyScreen({
                         </div>
                       );
                     })}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}
