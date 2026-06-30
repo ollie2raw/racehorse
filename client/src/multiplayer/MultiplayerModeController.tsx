@@ -515,15 +515,34 @@ export default function MultiplayerModeController({
             aria-label="Match abandoned"
             className="rh-leave-overlay"
           >
-            <div className="rh-leave-card">
-              <h2 className="rh-leave-modal__title">{abandonedMatchNotice.title}</h2>
-              <p className="rh-leave-modal__copy">{abandonedMatchNotice.detail}</p>
-              <div className="rh-leave-modal__buttons" style={{ justifyContent: 'center' }}>
+            <div
+              className="rh-leave-card"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <h2 className="rh-leave-modal__title" style={{ margin: '0 0 10px' }}>
+                {abandonedMatchNotice.title}
+              </h2>
+              <p className="rh-leave-modal__copy" style={{ margin: '0 auto 24px' }}>
+                {abandonedMatchNotice.detail}
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  width: '100%',
+                  maxWidth: '200px',
+                }}
+              >
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="primary"
                   size="lg"
-                  className="rh-leave-modal__btn rh-leave-modal__btn--leave"
+                  className="rh-leave-modal__btn rh-leave-modal__btn--cancel"
                   onClick={() => {
                     setAppMode('home');
                     setAbandonedMatchNotice(null);

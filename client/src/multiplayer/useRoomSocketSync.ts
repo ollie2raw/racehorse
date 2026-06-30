@@ -704,7 +704,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         if (payload?.abandonedUserId === params.authUserId) return;
         params.setAbandonedMatchNotice?.({
           context: payload.isTournament ? 'tournament' : 'multiplayer',
-          title: 'Opponent Left',
+          title: 'Opponent Left the Game',
           detail: payload.message || `${payload.abandonedUsername || 'Opponent'} left the game`,
           tournamentId: payload.tournamentId ?? null,
         });
