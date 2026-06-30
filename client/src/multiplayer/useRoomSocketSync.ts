@@ -21,7 +21,7 @@ import type {
 export type { StateUpdatePayload } from './multiplayerRuntime';
 
 /** Per-step stagger; chain runs to completion before final hand is shown. */
-const FORCED_DRAW_STAGGER_MS = 240;
+const FORCED_DRAW_STAGGER_MS = 500;
 const FORCED_DRAW_FLY_MS = 1800;
 
 function isActiveGameplayState(state: GameState | null): boolean {
@@ -356,7 +356,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           clearTimeout(params.drawSequenceTimeoutRef.current);
           params.drawSequenceTimeoutRef.current = null;
         }
-        params.setDrawSequenceActiveBoth(false);
+        params.setDrawSequenceActiveBoth(true);
         const youId = params.youRef.current;
         const fullHand = nextState.players[youId]?.hand ?? [];
         const drawnCount = payload.forcedDrawCount ?? 0;
@@ -382,6 +382,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         params.setDrawStepMyHand(null);
 
         if (opponentForcedRevealPending && nextState) {
+          params.setDrawSequenceActiveBoth(true);
           const drawnCount = payload.forcedDrawCount ?? 0;
           const opponentId = payload.forcedDrawActorId!;
           const finalCount =
@@ -394,6 +395,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         } else {
           clearDrawPreview(params);
           params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
+          params.setDrawSequenceActiveBoth(false);
         }
       }
 
@@ -534,7 +536,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         }
 
         const ownForcedDraw = payload.playerId === params.youRef.current;
-        params.setDrawSequenceActiveBoth(false);
+        params.setDrawSequenceActiveBoth(true);
         params.setDrawStepActorId(payload.playerId);
 
         if (ownForcedDraw) {
@@ -559,6 +561,17 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         } else {
           params.setDrawStepMyHand(null);
           params.pendingForcedHandRevealRef.current = null;
+          const opponentId = payload.playerId;
+          const finalCount =
+            params.stateRef.current?.handCounts?.[opponentId] ??
+            params.stateRef.current?.players[opponentId]?.hand?.length ??
+            0;
+          params.setDrawStepOpponentHandCount(Math.max(0, finalCount - payload.steps.length));
+          if (payload.steps[0]) {
+            params.setBoneyardDisplayCount(
+              payload.steps[0].boneyardCount + payload.steps.length,
+            );
+          }
         }
 
         const chainDurationMs =
@@ -642,6 +655,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           params.setDrawStepOpponentHandCount(null);
           params.setBoneyardDisplayCount(null);
           params.setFlyingTiles([]);
+          params.setDrawSequenceActiveBoth(false);
         }, chainDurationMs);
       },
     );
