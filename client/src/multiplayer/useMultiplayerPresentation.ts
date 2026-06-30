@@ -45,6 +45,7 @@ export function useMultiplayerPresentation({
   const prevMyHandLenRef = useRef<number>(0);
   const prevOpponentHandLenRef = useRef<number>(0);
   const localFlyingTileIdRef = useRef<number>(0);
+  const lastHandNumberRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!state) {
@@ -102,6 +103,7 @@ export function useMultiplayerPresentation({
     if (!state) {
       prevMyHandLenRef.current = 0;
       prevOpponentHandLenRef.current = 0;
+      lastHandNumberRef.current = null;
       return;
     }
 
@@ -109,6 +111,16 @@ export function useMultiplayerPresentation({
     const currentOppHandLen = opponentTileCount;
     const prevMyHandLen = prevMyHandLenRef.current;
     const prevOppHandLen = prevOpponentHandLenRef.current;
+
+    const currentHandNumber = state.handNumber;
+    const isNewHand = lastHandNumberRef.current !== null && lastHandNumberRef.current !== currentHandNumber;
+    lastHandNumberRef.current = currentHandNumber;
+
+    if (isNewHand) {
+      prevMyHandLenRef.current = currentMyHandLen;
+      prevOpponentHandLenRef.current = currentOppHandLen;
+      return;
+    }
 
     if (prevMyHandLen === 0 && prevOppHandLen === 0) {
       prevMyHandLenRef.current = currentMyHandLen;
