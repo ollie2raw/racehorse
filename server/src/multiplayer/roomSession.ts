@@ -614,6 +614,12 @@ export function maskStateForRecipient(state: GameState, recipientPlayerId: strin
   const canRevealAll = state.handOver || state.gameOver;
   const masked: GameState = {
     ...state,
+    boneyard: canRevealAll
+      ? state.boneyard
+      : state.boneyard.map(() => ({ high: -1, low: -1 })),
+    deadTiles: canRevealAll
+      ? state.deadTiles
+      : state.deadTiles.map(() => ({ high: -1, low: -1 })),
     players: Object.fromEntries(
       state.playerIds.map((pid) => {
         const ps = state.players[pid];

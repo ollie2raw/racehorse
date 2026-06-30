@@ -72,11 +72,13 @@ describe('Fritz rating processing', () => {
     expect(Math.round(result.delta)).toBeGreaterThan(0);
     expect(result.newRating).toBeGreaterThan(DEFAULT_RATING);
 
-    const rankedGamePatch = mockedSupabaseFetch.mock.calls.find(
-      ([path, init]) => path === '/rest/v1/ranked_games?id=eq.game-1' && init?.method === 'PATCH',
+    const rpcCall = mockedSupabaseFetch.mock.calls.find(
+      ([path, init]) => path === '/rest/v1/rpc/commit_glicko_game_update' && init?.method === 'POST',
     );
-    expect(rankedGamePatch).toBeTruthy();
-    expect(JSON.parse(String(rankedGamePatch?.[1]?.body)).delta).toBeGreaterThan(0);
+    expect(rpcCall).toBeTruthy();
+    const body = JSON.parse(String(rpcCall?.[1]?.body));
+    expect(body.p_game_id).toBe('game-1');
+    expect(body.p_delta).toBeGreaterThan(0);
   });
 
   it('applies almost no penalty for an expected loss to a far stronger Fritz Master', () => {

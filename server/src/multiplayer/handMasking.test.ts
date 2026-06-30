@@ -27,6 +27,20 @@ describe('hand masking security', () => {
     expect(counts.playerB).toBe(state.players.playerB.hand.length);
   });
 
+  it('masks boneyard and deadTiles during active play', () => {
+    const state = startNewHand(createInitialState(['playerA', 'playerB']));
+    expect(state.boneyard.length).toBeGreaterThan(0);
+    expect(state.deadTiles.length).toBeGreaterThan(0);
+
+    const forA = maskStateForRecipient(state, 'playerA');
+    expect(forA.boneyard.length).toBe(state.boneyard.length);
+    expect(forA.deadTiles.length).toBe(state.deadTiles.length);
+
+    // Verify all boneyard and deadTiles items are anonymized
+    expect(forA.boneyard.every(tile => tile.high === -1 && tile.low === -1)).toBe(true);
+    expect(forA.deadTiles.every(tile => tile.high === -1 && tile.low === -1)).toBe(true);
+  });
+
   it('reveals all hands on handOver before gameOver ends', () => {
     const state = startNewHand(createInitialState(['playerA', 'playerB']));
     state.handOver = true;

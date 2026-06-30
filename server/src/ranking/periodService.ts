@@ -117,39 +117,22 @@ async function commitProcessedGame(
   const newPeakRating = Math.max(profile.peak_rating || 0, result.newRating);
   const delta = result.newRating - profile.glicko_rating;
 
-  await supabaseFetch(`/rest/v1/profiles?id=eq.${profile.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      glicko_rating: result.newRating,
-      glicko_rd: result.newRD,
-      glicko_vol: result.newVol,
-      glicko_last_period: processedAt,
-      provisional: newGamesPlayed < 20,
-      peak_rating: newPeakRating,
-      ranked_games_played: newGamesPlayed,
-    }),
-  });
-
-  await supabaseFetch(`/rest/v1/ranked_games?id=eq.${game.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      rating_after: result.newRating,
-      rd_after: result.newRD,
-      delta,
-    }),
-  });
-
-  await supabaseFetch(`/rest/v1/rating_periods`, {
+  await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
     method: 'POST',
     body: JSON.stringify({
-      user_id: profile.id,
-      rating_before: profile.glicko_rating,
-      rating_after: result.newRating,
-      rd_before: profile.glicko_rd,
-      rd_after: result.newRD,
-      vol_before: profile.glicko_vol,
-      vol_after: result.newVol,
-      processed_at: processedAt,
+      p_profile_id: profile.id,
+      p_glicko_rating: result.newRating,
+      p_glicko_rd: result.newRD,
+      p_glicko_vol: result.newVol,
+      p_glicko_last_period: processedAt,
+      p_provisional: newGamesPlayed < 20,
+      p_peak_rating: newPeakRating,
+      p_ranked_games_played: newGamesPlayed,
+      p_game_id: game.id,
+      p_delta: delta,
+      p_rating_before: profile.glicko_rating,
+      p_rd_before: profile.glicko_rd,
+      p_vol_before: profile.glicko_vol,
     }),
   });
 
