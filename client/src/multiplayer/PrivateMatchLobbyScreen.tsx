@@ -615,7 +615,7 @@ export default function PrivateMatchLobbyScreen({
             </div>
 
             {isRatedEligible && (
-              <div className="pml-invite-cell pml-invite-cell--friends" style={{ position: 'relative', width: '100%' }}>
+              <div style={{ position: 'relative', width: '100%' }}>
                 <Button
                   variant="outline"
                   type="button"
