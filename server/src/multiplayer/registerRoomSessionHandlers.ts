@@ -78,7 +78,7 @@ type ForfeitLeavingPlayer = {
  * Marks a match as forfeited. No-op when already abandoned or game over.
  * Does not remove the seat — leaveTrackedRoom does that after forfeit.
  */
-async function applyActiveMatchForfeit(
+export async function applyActiveMatchForfeit(
   io: Server,
   socket: Socket,
   roomCode: string,

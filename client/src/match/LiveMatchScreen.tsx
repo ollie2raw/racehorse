@@ -59,12 +59,7 @@ type ScoreToastState = {
   visible: boolean;
 } | null;
 
-type AbandonedMatchNotice = {
-  context: 'tournament' | 'multiplayer';
-  title: string;
-  detail: string;
-  tournamentId?: string | null;
-};
+
 
 export type LiveMatchScreenProps = {
   visible: boolean;
@@ -146,10 +141,6 @@ export type LiveMatchScreenProps = {
   onLeaveConfirmDismiss: () => void;
   leaveModalIsTournament: boolean;
   onConfirmLeaveMatch: () => void;
-  abandonedMatchNotice: AbandonedMatchNotice | null;
-  onAbandonedPrimary: () => void;
-  onAbandonedSecondary: () => void;
-  onAbandonedDismiss: () => void;
   preGameDraw?: PreGameDrawState | null;
   onPregameTileTap?: (tileId: string) => void;
 };
@@ -511,10 +502,6 @@ export function LiveMatchScreen({
   onLeaveConfirmDismiss,
   leaveModalIsTournament,
   onConfirmLeaveMatch,
-  abandonedMatchNotice,
-  onAbandonedPrimary,
-  onAbandonedSecondary,
-  onAbandonedDismiss,
   preGameDraw,
   onPregameTileTap,
 }: LiveMatchScreenProps) {
@@ -536,21 +523,6 @@ export function LiveMatchScreen({
             onLeave={onConfirmLeaveMatch}
           />
         )}
-        {abandonedMatchNotice ? (
-          <GameOverModal
-            open
-            ariaLabel="Match abandoned"
-            matchKind="multiplayer"
-            title={abandonedMatchNotice.title}
-            subtitle={abandonedMatchNotice.detail}
-            scores={[]}
-            primaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Back to Bracket' : 'Back to Multiplayer'}
-            onPrimary={onAbandonedPrimary}
-            secondaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Tournament Lobby' : 'Home'}
-            onSecondary={onAbandonedSecondary}
-            onClose={onAbandonedDismiss}
-          />
-        ) : null}
       </>
     );
   }
@@ -1051,21 +1023,6 @@ export function LiveMatchScreen({
         />
       )}
 
-      {abandonedMatchNotice ? (
-        <GameOverModal
-          open
-          ariaLabel="Match abandoned"
-          matchKind="multiplayer"
-          title={abandonedMatchNotice.title}
-          subtitle={abandonedMatchNotice.detail}
-          scores={[]}
-          primaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Back to Bracket' : 'Back to Multiplayer'}
-          onPrimary={onAbandonedPrimary}
-          secondaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Tournament Lobby' : 'Home'}
-          onSecondary={onAbandonedSecondary}
-          onClose={onAbandonedDismiss}
-        />
-      ) : null}
     </>
   );
 }

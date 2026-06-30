@@ -12,6 +12,9 @@ import type {
   MultiplayerControllerLobbySnapshot,
 } from './multiplayerRuntime';
 import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyController';
+import { Button } from '../components/primitives';
+import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import '../components/leaveGameModal.css';
 
 const MatchmakingScreen = React.lazy(() => import('../matchmaking/MatchmakingScreen'));
 const PrivateMatchLobbyScreen = React.lazy(() => import('./PrivateMatchLobbyScreen'));
@@ -35,7 +38,7 @@ type HandEndedPayload = {
   handWinnerId?: string | null;
 };
 
-type AbandonedMatchNotice = {
+export type AbandonedMatchNotice = {
   context: 'tournament' | 'multiplayer';
   title: string;
   detail: string;
@@ -287,8 +290,6 @@ export default function MultiplayerModeController({
     tournamentOpponentLabel,
     navigateAfterTournamentMatch,
     currentTournamentContext,
-    setActiveTournamentId,
-    setTournamentSubView,
   } = tournamentPassthroughView;
 
   return (
@@ -491,27 +492,6 @@ export default function MultiplayerModeController({
               setShowLeaveConfirm(false);
               void abandonCurrentMatch();
             }}
-            abandonedMatchNotice={abandonedMatchNotice}
-            onAbandonedPrimary={() => {
-              if (abandonedMatchNotice?.context === 'tournament' && abandonedMatchNotice.tournamentId) {
-                setActiveTournamentId(abandonedMatchNotice.tournamentId);
-                setTournamentSubView('bracket');
-                setAppMode('tournament');
-              } else {
-                setAppMode('multiplayer');
-              }
-              setAbandonedMatchNotice(null);
-            }}
-            onAbandonedSecondary={() => {
-              if (abandonedMatchNotice?.context === 'tournament') {
-                setTournamentSubView('hub');
-                setAppMode('tournament');
-              } else {
-                setAppMode('home');
-              }
-              setAbandonedMatchNotice(null);
-            }}
-            onAbandonedDismiss={() => setAbandonedMatchNotice(null)}
           />
         </Suspense>
       ) : null}
@@ -526,6 +506,35 @@ export default function MultiplayerModeController({
             }}
           />
         </Suspense>
+      ) : null}
+      {abandonedMatchNotice ? (
+        <GameOverlayPortal>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Match abandoned"
+            className="rh-leave-overlay"
+          >
+            <div className="rh-leave-card">
+              <h2 className="rh-leave-modal__title">{abandonedMatchNotice.title}</h2>
+              <p className="rh-leave-modal__copy">{abandonedMatchNotice.detail}</p>
+              <div className="rh-leave-modal__buttons" style={{ justifyContent: 'center' }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  className="rh-leave-modal__btn rh-leave-modal__btn--leave"
+                  onClick={() => {
+                    setAppMode('home');
+                    setAbandonedMatchNotice(null);
+                  }}
+                >
+                  Go Home
+                </Button>
+              </div>
+            </div>
+          </div>
+        </GameOverlayPortal>
       ) : null}
     </>
   );

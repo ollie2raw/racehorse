@@ -83,6 +83,7 @@ function MultiplayerGameShellComponent({
   applyRoomEventMeta,
   shellBridgeRef,
   sharedGameplayRefs,
+  setAbandonedMatchNotice,
 }: MultiplayerGameShellProps) {
   const { roomRecoveryState, isRecoveringConnection, setRoomRecoveryState, setRoomRecoveryMessage } =
     connectionRecovery;
@@ -270,7 +271,13 @@ function MultiplayerGameShellComponent({
     onPregameTileTap,
   } = liveMatch;
 
-  useRoomSocketSync(roomSocketSyncParams);
+  const extendedSocketSyncParams = React.useMemo(() => ({
+    ...roomSocketSyncParams,
+    authUserId: authUser?.id ?? null,
+    setAbandonedMatchNotice,
+  }), [roomSocketSyncParams, authUser?.id, setAbandonedMatchNotice]);
+
+  useRoomSocketSync(extendedSocketSyncParams);
 
 
 

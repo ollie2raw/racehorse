@@ -100,4 +100,12 @@ export type MultiplayerGameShellProps = {
     handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
     rematchAwaitingStateRef: MutableRefObject<boolean>;
   };
+  setAbandonedMatchNotice: Dispatch<SetStateAction<AbandonedMatchNotice | null>>;
+};
+
+export type AbandonedMatchNotice = {
+  context: 'tournament' | 'multiplayer';
+  title: string;
+  detail: string;
+  tournamentId?: string | null;
 };

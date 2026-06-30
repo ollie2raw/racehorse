@@ -79,6 +79,7 @@ export type Room = {
   pendingAutoPassNotice?: string[];
   preGameDraw?: ServerPregameDrawState | null;
   preGameDrawTimer?: NodeJS.Timeout | null;
+  disconnectExpiries?: Record<string, number>;
 };
 
 export type DrawAnimationStep = {
@@ -221,6 +222,7 @@ export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {
     abandonedByUserId: null,
     abandonedWinnerUserId: null,
     abandonedReason: undefined,
+    disconnectExpiries: {},
     ...createRoomEventState(),
   };
   appendRoomEvent(room, {
@@ -261,6 +263,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     ghostTurnIndex: 0,
     matchLogged: false,
     leadTracker: null,
+    disconnectExpiries: {},
     ...createRoomEventState(),
   };
   appendRoomEvent(room, {

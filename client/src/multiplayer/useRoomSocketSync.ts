@@ -40,6 +40,13 @@ type RoomEventMeta = {
   eventCount?: number;
 };
 
+export type AbandonedMatchNotice = {
+  context: 'tournament' | 'multiplayer';
+  title: string;
+  detail: string;
+  tournamentId?: string | null;
+};
+
 export type UseRoomSocketSyncParams = {
   socket: Socket | null;
   syncRuntime: MultiplayerRoomSyncRuntime;
@@ -48,6 +55,8 @@ export type UseRoomSocketSyncParams = {
   setState: Dispatch<SetStateAction<GameState | null>>;
   setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
   roomPlayersRef: MutableRefObject<RoomPlayer[]>;
+  authUserId?: string | null;
+  setAbandonedMatchNotice?: Dispatch<SetStateAction<AbandonedMatchNotice | null>>;
 };
 
 type FlatRoomSocketSyncParams = {
@@ -102,6 +111,8 @@ type FlatRoomSocketSyncParams = {
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
   setError: Dispatch<SetStateAction<string>>;
+  authUserId: string | null;
+  setAbandonedMatchNotice: Dispatch<SetStateAction<AbandonedMatchNotice | null>> | null;
 };
 
 function flattenRoomSocketSyncParams(params: UseRoomSocketSyncParams): FlatRoomSocketSyncParams {
@@ -115,6 +126,8 @@ function flattenRoomSocketSyncParams(params: UseRoomSocketSyncParams): FlatRoomS
     setPlayers: params.setPlayers,
     roomPlayersRef: params.roomPlayersRef,
     ...params.syncDom,
+    authUserId: params.authUserId ?? null,
+    setAbandonedMatchNotice: params.setAbandonedMatchNotice ?? null,
   };
 }
 
@@ -679,6 +692,25 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       params.setOpponentDisconnectMessage('Opponent did not return in time.');
     });
 
+    const onRoomMatchAbandoned = wrapSocketHandler(
+      'room:match_abandoned',
+      (payload: {
+        abandonedUserId: string;
+        abandonedUsername: string;
+        message: string;
+        tournamentId?: string | null;
+        isTournament?: boolean;
+      }) => {
+        if (payload?.abandonedUserId === params.authUserId) return;
+        params.setAbandonedMatchNotice?.({
+          context: payload.isTournament ? 'tournament' : 'multiplayer',
+          title: 'Opponent Left',
+          detail: payload.message || `${payload.abandonedUsername || 'Opponent'} left the game`,
+          tournamentId: payload.tournamentId ?? null,
+        });
+      },
+    );
+
     socket.on('friend:invited', onFriendInvited);
     socket.on('friend:invite:error', onFriendInviteError);
     socket.on('room:update', onRoomUpdate);
@@ -689,6 +721,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     socket.on('player:disconnected', onPlayerDisconnected);
     socket.on('player:reconnected', onPlayerReconnected);
     socket.on('player:reconnect_timeout', onPlayerReconnectTimeout);
+    socket.on('room:match_abandoned', onRoomMatchAbandoned);
 
     return () => {
       params.resyncFlushRef.current = null;
@@ -702,6 +735,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       socket.off('player:disconnected', onPlayerDisconnected);
       socket.off('player:reconnected', onPlayerReconnected);
       socket.off('player:reconnect_timeout', onPlayerReconnectTimeout);
+      socket.off('room:match_abandoned', onRoomMatchAbandoned);
       clearPendingDrawAnimationTimers();
     };
   }, [inputParams]);

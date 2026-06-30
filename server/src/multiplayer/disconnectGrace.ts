@@ -58,6 +58,12 @@ export function onActivePlayerSocketDisconnect(
 export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatId: string): void {
   const hadGrace = graceTimersByRoom.has(roomCode);
   clearDisconnectGrace(roomCode);
+  try {
+    const room = getRoom(roomCode);
+    if (room.disconnectExpiries) {
+      room.disconnectExpiries[playerSeatId] = 0;
+    }
+  } catch {}
   if (hadGrace) {
     io.to(roomCode).emit('player:reconnected', { playerId: playerSeatId });
   }
@@ -97,6 +103,39 @@ async function handleDisconnectGraceExpired(
         disconnectedPlayerSeatId,
         legalMoveTypes: legalMoves.map((m) => m.type),
       });
+    }
+
+    if (!room.disconnectExpiries) {
+      room.disconnectExpiries = {};
+    }
+    const currentCount = (room.disconnectExpiries[disconnectedPlayerSeatId] || 0) + 1;
+    room.disconnectExpiries[disconnectedPlayerSeatId] = currentCount;
+
+    if (currentCount >= 2) {
+      const { getRoomRoster, getRoomPlayersWithFallback } = require('./roomSession');
+      const { applyActiveMatchForfeit } = require('./registerRoomSessionHandlers');
+
+      const rosterCached = getRoomRoster(roomCode);
+      const roster =
+        rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(roomCode, room.players);
+      const abandoningPlayer = roster.find((p: any) => p.id === disconnectedPlayerSeatId) ?? {
+        id: disconnectedPlayerSeatId,
+        socketId: '',
+        username: 'Opponent',
+        userId: null,
+      };
+
+      const mockSocket = {
+        id: abandoningPlayer.socketId || '',
+        data: {
+          userId: abandoningPlayer.userId,
+          username: abandoningPlayer.username,
+        },
+      } as any;
+
+      await applyActiveMatchForfeit(io, mockSocket, roomCode, abandoningPlayer);
+      broadcast(roomCode);
+      return;
     }
 
     io.to(roomCode).emit('player:reconnect_timeout', { playerId: disconnectedPlayerSeatId });

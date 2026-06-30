@@ -1557,6 +1557,7 @@ export default function App() {
             applyRoomEventMeta={applyRoomEventMeta}
             shellBridgeRef={gameShellBridgeRef}
             sharedGameplayRefs={sharedGameplayRefs}
+            setAbandonedMatchNotice={setAbandonedMatchNotice}
           />
         </ErrorBoundary>
       ) : null}
