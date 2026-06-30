@@ -195,26 +195,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       }
     };
 
-    const onFriendInvited = wrapSocketHandler(
-      'friend:invited',
-      (payload: {
-        inviteId?: string;
-        fromUsername: string;
-        fromUserId?: string | null;
-        roomCode: string;
-        inviteUrl: string;
-        matchSummary?: string;
-      }) => {
-        params.setFriendInvite({
-          inviteId: String(payload.inviteId ?? `${Date.now()}-${payload.roomCode}`),
-          fromUsername: payload.fromUsername,
-          fromUserId: payload.fromUserId ?? null,
-          roomCode: payload.roomCode,
-          inviteUrl: payload.inviteUrl,
-          matchSummary: payload.matchSummary ?? '7-Tile · First to 60 · Untimed',
-        });
-      },
-    );
+
 
     const onFriendInviteError = wrapSocketHandler('friend:invite:error', () => {
       params.showToast('Invite failed: room not found', 2000);
@@ -711,7 +692,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       },
     );
 
-    socket.on('friend:invited', onFriendInvited);
+
     socket.on('friend:invite:error', onFriendInviteError);
     socket.on('room:update', onRoomUpdate);
     socket.on('room:request_ready', onRoomRequestReady);
@@ -725,7 +706,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
     return () => {
       params.resyncFlushRef.current = null;
-      socket.off('friend:invited', onFriendInvited);
+
       socket.off('friend:invite:error', onFriendInviteError);
       socket.off('room:update', onRoomUpdate);
       socket.off('room:request_ready', onRoomRequestReady);

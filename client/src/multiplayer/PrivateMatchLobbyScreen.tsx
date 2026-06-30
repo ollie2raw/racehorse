@@ -651,27 +651,7 @@ export default function PrivateMatchLobbyScreen({
                 </Button>
 
                 {showFriendPicker && (
-                  <div
-                    className="pml-friend-picker-dropdown"
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      width: '100%',
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      background: 'rgba(7, 9, 16, 0.98)',
-                      border: '1px solid rgba(226, 176, 72, 0.2)',
-                      borderRadius: '8px',
-                      marginTop: '4px',
-                      zIndex: 100,
-                      padding: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
-                    }}
-                  >
+                  <div className="pml-friend-picker-dropdown">
                     {friendsLoading && (
                       <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
                         Loading online friends…
@@ -690,18 +670,8 @@ export default function PrivateMatchLobbyScreen({
                     {!friendsLoading && !friendsError && friends.map((friend) => {
                       const cState = getChallengeState(friend);
                       return (
-                        <div
-                          key={friend.userId}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '4px 6px',
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f2eee8' }}>
+                        <div key={friend.userId} className="pml-friend-row">
+                          <span className="pml-friend-row__name">
                             @{friend.username}
                           </span>
                           <Button

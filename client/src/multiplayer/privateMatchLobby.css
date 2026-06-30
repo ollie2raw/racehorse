@@ -2395,3 +2395,58 @@
   min-height: 0;
   flex: 0 0 0;
 }
+
+/* ─── Friend Picker Dropstyle Restyling ──────────────────────────────────── */
+.pml-friend-picker-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(7, 9, 16, 0.98);
+  border: 1px solid rgba(226, 176, 72, 0.25);
+  border-radius: 8px;
+  margin-top: 4px;
+  z-index: 100;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+
+.pml-friend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.pml-friend-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.pml-friend-row__name {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Give the "Invited" disabled button state a muted gold/brass look */
+.pml-friend-row .rh-btn:disabled,
+.pml-friend-row button:disabled {
+  background: rgba(226, 176, 72, 0.08) !important;
+  color: rgba(226, 176, 72, 0.7) !important;
+  border: 1px solid rgba(226, 176, 72, 0.2) !important;
+  box-shadow: none !important;
+  cursor: default;
+  opacity: 0.9;
+}

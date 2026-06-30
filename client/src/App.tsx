@@ -958,9 +958,31 @@ export default function App() {
         return null;
       });
     };
+
+    const onFriendInvited = (payload: {
+      inviteId?: string;
+      fromUsername: string;
+      fromUserId?: string | null;
+      roomCode: string;
+      inviteUrl: string;
+      matchSummary?: string;
+    }) => {
+      setFriendInvite({
+        inviteId: String(payload.inviteId ?? `${Date.now()}-${payload.roomCode}`),
+        fromUsername: payload.fromUsername,
+        fromUserId: payload.fromUserId ?? null,
+        roomCode: payload.roomCode,
+        inviteUrl: payload.inviteUrl,
+        matchSummary: payload.matchSummary ?? '7-Tile · First to 60 · Untimed',
+      });
+    };
+
     socket.on('friend:invite:declined', onDeclined);
+    socket.on('friend:invited', onFriendInvited);
+
     return () => {
       socket.off('friend:invite:declined', onDeclined);
+      socket.off('friend:invited', onFriendInvited);
     };
   }, [showToast, socket]);
 
