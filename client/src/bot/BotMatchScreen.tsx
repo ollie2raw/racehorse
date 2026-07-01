@@ -1924,10 +1924,6 @@ export default function BotMatchScreen({
   }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
 
   useEffect(() => {
-    matchRef.current = match;
-  }, [match]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
     const win = window as typeof window & {
       __dailyFritzProfileActive?: boolean;
