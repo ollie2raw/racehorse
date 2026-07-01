@@ -250,6 +250,7 @@ import {
 } from '../match/preGameDraw/preGameDrawLogic';
 import { usePreGameDraw, type PreGameDrawCompletePayload } from '../match/preGameDraw/usePreGameDraw';
 import '../match/preGameDraw/preGameDraw.css';
+import { useBotMatchWindowEvents } from './useBotMatchWindowEvents';
 
 export default function BotMatchScreen({
   onBack,
@@ -752,6 +753,7 @@ export default function BotMatchScreen({
 
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
+  useBotMatchWindowEvents({ isDailyFritzMode, showFullCoachTip, setShowFullCoachTip });
   // Daily Fritz deferred for post-game review — see postGameReviewPolicy.ts
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isPlayVsFritzGameOver =
@@ -1923,26 +1925,6 @@ export default function BotMatchScreen({
     setMatchStartGlickoRating(Number(currentGlickoRating));
   }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const win = window as typeof window & {
-      __dailyFritzProfileActive?: boolean;
-      __dailyFritzProfile?: Record<string, unknown>;
-      __dailyFritzInteractionTrace?: Array<Record<string, unknown>>;
-    };
-    if (isDailyFritzMode) {
-      win.__dailyFritzProfileActive = true;
-      win.__dailyFritzProfile ??= {};
-      win.__dailyFritzInteractionTrace ??= [];
-    } else {
-      win.__dailyFritzProfileActive = false;
-    }
-    return () => {
-      if (win.__dailyFritzProfileActive) {
-        win.__dailyFritzProfileActive = false;
-      }
-    };
-  }, [isDailyFritzMode]);
 
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzStorageKey || typeof window === 'undefined') return;
@@ -5653,14 +5635,6 @@ export default function BotMatchScreen({
     setShowFullCoachTip(false);
   }, [lessonCoachVm?.stepIndex]);
 
-  useEffect(() => {
-    if (!showFullCoachTip) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowFullCoachTip(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showFullCoachTip]);
 
   if (!match || !match.players || !match.players.you || !match.players.bot) {
     return (
