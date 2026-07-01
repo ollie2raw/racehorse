@@ -5522,6 +5522,8 @@ process.on('uncaughtException', (error) => {
 
 const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
+Sentry.setupExpressErrorHandler(app);
+
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {
     console.error(
