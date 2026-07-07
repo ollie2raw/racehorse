@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Socket } from 'socket.io-client';
 import {
@@ -19,6 +19,7 @@ import {
   type PresenceStatus,
   type PublicProfile,
 } from '../social/socialApi';
+import { friendsSocketScopeRef } from './friendsSocketScope';
 import './friendsScreen.css';
 
 interface FriendsScreenProps {
@@ -32,6 +33,7 @@ interface FriendsScreenProps {
   onCopyInviteLink: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
   onCreatePrivateRoom?: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
   onViewProfile?: (username: string) => void;
+  onSpectate?: (roomCode: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function PresenceDot({ status }: { status: PresenceStatus }) {
@@ -87,13 +89,19 @@ function friendRequestsEqual(a: FriendRequestRecord[], b: FriendRequestRecord[])
   return true;
 }
 
-const EMPTY_PRESENCE_MAP = new Map<string, PresenceStatus>();
+const EMPTY_PRESENCE_MAP = new Map<string, { status: PresenceStatus; roomCode: string | null }>();
 
-function presenceMapsEqual(a: Map<string, PresenceStatus>, b: Map<string, PresenceStatus>): boolean {
+function presenceMapsEqual(
+  a: Map<string, { status: PresenceStatus; roomCode: string | null }>,
+  b: Map<string, { status: PresenceStatus; roomCode: string | null }>
+): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
   for (const [key, value] of a) {
-    if (b.get(key) !== value) return false;
+    const other = b.get(key);
+    if (!other || other.status !== value.status || other.roomCode !== value.roomCode) {
+      return false;
+    }
   }
   return true;
 }
@@ -178,19 +186,21 @@ export default function FriendsScreen({
   onCopyInviteLink,
   onCreatePrivateRoom,
   onViewProfile,
+  onSpectate,
 }: FriendsScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRecord[]>([]);
   const [incoming, setIncoming] = useState<FriendRequestRecord[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequestRecord[]>([]);
-  const [presenceMap, setPresenceMap] = useState<Map<string, PresenceStatus>>(new Map());
+  const [presenceMap, setPresenceMap] = useState<Map<string, { status: PresenceStatus; roomCode: string | null }>>(new Map());
   const [query, setQuery] = useState('');
   const [selectedFriend, setSelectedFriend] = useState<FriendRecord | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<FeedItem[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [copiedFriendId, setCopiedFriendId] = useState<string | null>(null);
+  const copiedFriendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isVisible, setIsVisible] = useState(
     typeof document === 'undefined' ? true : document.visibilityState === 'visible',
   );
@@ -212,13 +222,13 @@ export default function FriendsScreen({
     const result = await fetchFriendsWithPresence();
     if (!result.error) {
       const friendUserIds = new Set(friends.map((friend) => friend.userId));
-      const map = new Map<string, PresenceStatus>();
+      const map = new Map<string, { status: PresenceStatus; roomCode: string | null }>();
       for (const friend of friends) {
-        map.set(friend.userId, 'offline');
+        map.set(friend.userId, { status: 'offline', roomCode: null });
       }
       for (const f of result.friends) {
         if (friendUserIds.has(f.userId)) {
-          map.set(f.userId, f.presence_status);
+          map.set(f.userId, { status: f.presence_status, roomCode: f.current_mode });
         }
       }
       setPresenceMap((current) => (presenceMapsEqual(current, map) ? current : map));
@@ -234,6 +244,15 @@ export default function FriendsScreen({
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copiedFriendTimerRef.current) {
+        clearTimeout(copiedFriendTimerRef.current);
+        copiedFriendTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -262,7 +281,10 @@ export default function FriendsScreen({
   }, [friends.length, isVisible, open, refreshPresence, user]);
 
   useEffect(() => {
-    if (!open || !socket || !isVisible || friends.length === 0) return;
+    if (!open || !socket || !isVisible || friends.length === 0) {
+      friendsSocketScopeRef.current.presence = null;
+      return;
+    }
     const friendUserIds = friends.map((f) => f.userId);
     const checkPresence = () => {
       if (!isVisible) return;
@@ -273,18 +295,35 @@ export default function FriendsScreen({
         setPresenceMap((prev) => {
           const next = new Map(prev);
           for (const id of friendUserIds) {
-            const nextStatus = set.has(id) ? 'online' : 'offline';
-            if (next.get(id) !== nextStatus) {
-              next.set(id, nextStatus);
+            const nextStatus: PresenceStatus = set.has(id) ? 'online' : 'offline';
+            const current = next.get(id);
+            if (!current || current.status !== nextStatus) {
+              next.set(id, { status: nextStatus, roomCode: current?.roomCode ?? null });
             }
           }
           return presenceMapsEqual(prev, next) ? prev : next;
         });
       });
     };
+    const handlePresenceUpdate = (userId: string, status: string) => {
+      setPresenceMap((prev) => {
+        const next = new Map(prev);
+        const presenceStatus: PresenceStatus = status === 'online' || status === 'in_game' ? status : 'offline';
+        const current = next.get(userId);
+        if (!current || current.status !== presenceStatus) {
+          next.set(userId, { status: presenceStatus, roomCode: current?.roomCode ?? null });
+        }
+        return presenceMapsEqual(prev, next) ? prev : next;
+      });
+    };
+    friendsSocketScopeRef.current.presence = {
+      onConnect: checkPresence,
+      onPresenceUpdate: handlePresenceUpdate,
+    };
     checkPresence();
-    socket.on('connect', checkPresence);
-    return () => { socket.off('connect', checkPresence); };
+    return () => {
+      friendsSocketScopeRef.current.presence = null;
+    };
   }, [friends, isVisible, open, socket]);
 
   const handleSelectFriend = useCallback(async (friend: FriendRecord) => {
@@ -314,7 +353,7 @@ export default function FriendsScreen({
 
   const onlineCount = useMemo(
     () => friends.filter((f) => {
-      const s = displayPresenceMap.get(f.userId);
+      const s = displayPresenceMap.get(f.userId)?.status ?? 'offline';
       return s === 'online' || s === 'in_game';
     }).length,
     [friends, displayPresenceMap],
@@ -324,7 +363,7 @@ export default function FriendsScreen({
   if (!open) return null;
 
   return (
-    <div className="friends-page" role="dialog" aria-modal="true" aria-label="Friends">
+    <div className={`friends-page${selectedFriend ? ' has-selection' : ''}`} role="dialog" aria-modal="true" aria-label="Friends">
       <header className="friends-page-topbar">
         <div className="friends-page-brand">RACEHORSE</div>
         <button type="button" className="friends-page-back rh-back-button" onClick={onClose}>
@@ -418,7 +457,9 @@ export default function FriendsScreen({
               )}
               <div className="friends-page-list">
                 {friends.map((friend) => {
-                  const presenceStatus = displayPresenceMap.get(friend.userId) ?? 'offline';
+                  const presenceInfo = displayPresenceMap.get(friend.userId);
+                  const presenceStatus = presenceInfo?.status ?? 'offline';
+                  const roomCode = presenceInfo?.roomCode ?? null;
                   const isSelected = selectedFriend?.id === friend.id;
                   return (
                     <button
@@ -437,34 +478,55 @@ export default function FriendsScreen({
                         </div>
                       </div>
                       <div className="friends-page-row__actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="friends-page-action-btn friends-page-action-btn--invite"
-                          style={{ opacity: presenceStatus !== 'offline' ? 1 : 0.5 }}
-                          onClick={async () => {
-                            if (!socket?.connected) return;
-                            let roomInfo;
-                            if (!joinedRoom) {
-                              const created = await onCreatePrivateRoom?.();
-                              if (!created?.ok || !created?.roomCode) { showToast('Unable to create room.', 2000); return; }
-                              roomInfo = created;
-                            } else {
-                              roomInfo = await onCopyInviteLink();
-                            }
-                            if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) { showToast('Create a room first.', 2000); return; }
-                            socket.emit('friend:invite', {
-                              toUserId: friend.userId,
-                              fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
-                              roomCode: roomInfo.roomCode,
-                              inviteUrl: roomInfo.inviteUrl,
-                            });
-                            onClose();
-                            setCopiedFriendId(friend.id);
-                            setTimeout(() => { setCopiedFriendId((prev) => (prev === friend.id ? null : prev)); }, 2000);
-                          }}
-                        >
-                          {copiedFriendId === friend.id ? 'Sent!' : 'Invite'}
-                        </button>
+                        {presenceStatus === 'in_game' && roomCode && onSpectate ? (
+                          <button
+                            type="button"
+                            className="friends-page-action-btn friends-page-action-btn--invite"
+                            onClick={async () => {
+                              const res = await onSpectate(roomCode);
+                              if (res?.ok) {
+                                onClose();
+                              }
+                            }}
+                          >
+                            Spectate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="friends-page-action-btn friends-page-action-btn--invite"
+                            style={{ opacity: presenceStatus !== 'offline' ? 1 : 0.5 }}
+                            onClick={async () => {
+                              if (!socket?.connected) return;
+                              let roomInfo;
+                              if (!joinedRoom) {
+                                const created = await onCreatePrivateRoom?.();
+                                if (!created?.ok || !created?.roomCode) { showToast('Unable to create room.', 2000); return; }
+                                roomInfo = created;
+                              } else {
+                                roomInfo = await onCopyInviteLink();
+                              }
+                              if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) { showToast('Create a room first.', 2000); return; }
+                              socket.emit('friend:invite', {
+                                toUserId: friend.userId,
+                                fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
+                                roomCode: roomInfo.roomCode,
+                                inviteUrl: roomInfo.inviteUrl,
+                              });
+                              onClose();
+                              setCopiedFriendId(friend.id);
+                              if (copiedFriendTimerRef.current) {
+                                clearTimeout(copiedFriendTimerRef.current);
+                              }
+                              copiedFriendTimerRef.current = setTimeout(() => {
+                                setCopiedFriendId((prev) => (prev === friend.id ? null : prev));
+                                copiedFriendTimerRef.current = null;
+                              }, 2000);
+                            }}
+                          >
+                            {copiedFriendId === friend.id ? 'Sent!' : 'Invite'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="friends-page-action-btn friends-page-action-btn--danger"
@@ -510,6 +572,13 @@ export default function FriendsScreen({
 
           {selectedFriend && !profileLoading && selectedProfile && (
             <div className="friends-page-preview">
+              <button
+                type="button"
+                className="friends-page-preview-back-btn"
+                onClick={() => setSelectedFriend(null)}
+              >
+                ← Back to Friends List
+              </button>
               {/* Avatar + name */}
               <div className="friends-page-preview-hero">
                 <div className="friends-page-preview-avatar">
@@ -518,7 +587,7 @@ export default function FriendsScreen({
                 <div className="friends-page-preview-identity">
                   <span className="friends-page-preview-username">{selectedProfile.username}</span>
                   {(() => {
-                    const s = displayPresenceMap.get(selectedFriend.userId) ?? 'offline';
+                    const s = displayPresenceMap.get(selectedFriend.userId)?.status ?? 'offline';
                     const color = s === 'online' ? 'var(--tier-rookie)' : s === 'in_game' ? 'var(--tier-elite)' : 'var(--text-dim)';
                     const label = s === 'online' ? 'Online' : s === 'in_game' ? 'In Game' : 'Offline';
                     return (
@@ -622,7 +691,17 @@ export default function FriendsScreen({
                     View Full Profile
                   </button>
                 )}
-                {selectedProfile.presence.status !== 'offline' && (
+                {selectedProfile.presence.status === 'in_game' && selectedProfile.presence.current_mode && onSpectate ? (
+                  <button type="button" className="friends-page-preview-btn friends-page-preview-btn--primary"
+                    onClick={async () => {
+                      const res = await onSpectate(selectedProfile.presence.current_mode!);
+                      if (res?.ok) {
+                        onClose();
+                      }
+                    }}>
+                    Spectate Match
+                  </button>
+                ) : selectedProfile.presence.status !== 'offline' ? (
                   <button type="button" className="friends-page-preview-btn"
                     onClick={async () => {
                       const f = selectedFriend;
@@ -646,7 +725,7 @@ export default function FriendsScreen({
                     }}>
                     Challenge
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           )}

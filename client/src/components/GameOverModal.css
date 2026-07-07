@@ -39,6 +39,10 @@
 
 .rh-go-card {
   width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -483,3 +487,138 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   PHASE AC TASK 3 — GAME OVER MODAL & REMATCH ANIMATIONS
+   ───────────────────────────────────────────────────────────── */
+
+@keyframes rh-go-backdrop-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rh-go-card-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rh-go {
+  animation: rh-go-backdrop-fade-in 0.35s ease-out forwards;
+}
+
+.rh-go-card {
+  animation: rh-go-card-slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
+  opacity: 0;
+}
+
+/* Pulse kicker dot keyframes */
+@keyframes kicker-glow-gold {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(231, 182, 74, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(231, 182, 74, 0.55), 0 0 16px rgba(231, 182, 74, 0.8);
+  }
+}
+
+@keyframes kicker-glow-blue {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(78, 145, 247, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(78, 145, 247, 0.55), 0 0 16px rgba(78, 145, 247, 0.8);
+  }
+}
+
+@keyframes kicker-glow-red {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(245, 126, 126, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 126, 126, 0.35), 0 0 16px rgba(245, 126, 126, 0.7);
+  }
+}
+
+.rh-go--tone-gold .game-over-kicker::before {
+  animation: kicker-glow-gold 2s infinite ease-in-out;
+}
+
+.rh-go--tone-blue .game-over-kicker::before {
+  animation: kicker-glow-blue 2s infinite ease-in-out;
+}
+
+.rh-go--tone-red .game-over-kicker::before {
+  animation: kicker-glow-red 2s infinite ease-in-out;
+}
+
+/* Title thematic glow text-shadows */
+.rh-go--tone-gold .victory-title {
+  text-shadow: 0 0 24px rgba(231, 182, 74, 0.25);
+}
+
+.rh-go--tone-blue .victory-title {
+  text-shadow: 0 0 24px rgba(78, 145, 247, 0.28);
+}
+
+.rh-go--tone-red .victory-title {
+  text-shadow: 0 0 24px rgba(245, 126, 126, 0.2);
+}
+
+/* Rematch waiting indicator */
+.rh-go-waiting {
+  margin: 0;
+  color: #ffd67a !important; /* Gold warning tone matches lobby status indicators */
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.rh-go-waiting::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: rematch-dot-pulse 1s infinite alternate;
+}
+
+@keyframes rematch-dot-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 1;
+    box-shadow: 0 0 10px currentColor;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-go,
+  .rh-go-card,
+  .rh-go--tone-gold .game-over-kicker::before,
+  .rh-go--tone-blue .game-over-kicker::before,
+  .rh-go--tone-red .game-over-kicker::before,
+  .rh-go-waiting::before {
+    animation: none !important;
+  }
+  .rh-go-card {
+    opacity: 1;
+  }
+}
+

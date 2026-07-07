@@ -7,10 +7,8 @@ import type { GameState, Move, PlacementPosition, Tile } from '../types';
 import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 import type { MatchFoundPayload } from '../matchmaking/types';
 import type { TournamentMatchContext } from '../match/session/useTournamentMatchSession';
-import type {
-  MultiplayerControllerConnectionBundle,
-  MultiplayerControllerLobbySnapshot,
-} from './multiplayerRuntime';
+import type { MultiplayerControllerConnectionBundle } from './runtime/connectionRuntime';
+import type { MultiplayerControllerLobbySnapshot } from './runtime/roomRuntime';
 import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyController';
 import { Button } from '../components/primitives';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
@@ -414,85 +412,107 @@ export default function MultiplayerModeController({
       {(isConnected || isRecoveringConnection) && joinedRoom && state ? (
         <Suspense fallback={<ScreenLoader label="Loading Match…" />}>
           <LiveMatchScreen
-            visible={Boolean((isConnected || isRecoveringConnection) && joinedRoom && state)}
-            state={state}
-            you={you}
-            opponentId={opponentId}
-            opponentName={opponentName}
-            myName={myName}
-            myScore={myScore}
-            opponentScore={opponentScore}
-            opponentTileCount={opponentTileCount}
-            isMyTurn={isMyTurn}
-            isHandActive={isHandActive}
-            hudScorePulse={hudScorePulse}
-            hudRightLabel={hudRightLabel}
-            hudRightScore={hudRightScore}
-            hudRightScorePulse={hudRightScorePulse}
-            opponentPillRef={opponentPillRef}
-            boneyardRef={boneyardRef}
-            boneyardCount={boneyardCount}
-            openEndsSum={openEndsSum}
-            boardRef={boardRef}
-            handAreaRef={handAreaRef}
-            trayCenterRef={trayCenterRef}
-            confettiCanvasRef={confettiCanvasRef}
-            boardForDisplay={boardForDisplay}
-            boardLegalMoves={boardLegalMoves}
-            boardSelectedTile={boardSelectedTile}
-            lastPlayedTile={lastPlayedTile}
-            boardShowOpenEndGlow={boardShowOpenEndGlow}
-            onPositionClick={play}
-            myHand={myHand}
-            handSelectedTile={handSelectedTile}
-            onHandTileSelect={handleTileTap}
-            preGameDraw={preGameDraw}
-            onPregameTileTap={onPregameTileTap}
-            legalMoves={legalMoves}
-            handTileSize={handTileSize}
-            handCompactStacked={handCompactStacked}
-            drawPulseIndex={drawPulseIndex}
-            scoreToast={scoreToast}
-            scoreTrackOpen={scoreTrackOpen}
-            onScoreTrackOpenChange={setScoreTrackOpen}
-            roomReactions={roomReactions}
-            onSendRoomChat={sendRoomChat}
-            onSendRoomEmote={sendRoomEmote}
-            isMuted={isMuted}
-            onToggleMute={() => setIsMuted((prev) => !prev)}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={toggleFullscreen}
-            opponentDisconnected={opponentDisconnected}
-            opponentDisconnectMessage={opponentDisconnectMessage}
-            roomRecoveryState={roomRecoveryState}
-            roomRecoveryMessage={roomRecoveryMessage}
-            onRetryRoomRecovery={retryRoomRecovery}
-            winTarget={state?.config?.winningScore ?? 60}
-            tournamentMatch={tournamentMatch}
-            consumedTournamentGameOverMatchIds={consumedTournamentGameOverMatchIds}
-            tournamentMyLabel={tournamentMyLabel}
-            tournamentOpponentLabel={tournamentOpponentLabel}
-            onTournamentViewBracket={() => navigateAfterTournamentMatch('bracket')}
-            onTournamentViewFinalResult={() => navigateAfterTournamentMatch('result')}
-            onTournamentReturnToHub={() => navigateAfterTournamentMatch('hub')}
-            canUseRematch={canUseRematch}
-            rematchRequested={rematchRequested}
-            rematchWaitingText={rematchWaitingText}
-            onRematch={requestRematch}
-            onPostGame={handlePostGame}
-            players={players}
-            multiplayerRatingSummary={multiplayerRatingSummary}
-            onOpenMultiplayerAnalyzer={openMultiplayerAnalyzer}
-            handReveal={handReveal}
-            handRevealAutoProgress={handRevealAutoProgress}
-            flyingTiles={flyingTiles}
-            showLeaveConfirm={showLeaveConfirm}
-            onRequestLeaveConfirm={() => setShowLeaveConfirm(true)}
-            onLeaveConfirmDismiss={() => setShowLeaveConfirm(false)}
-            leaveModalIsTournament={Boolean(currentTournamentContext)}
-            onConfirmLeaveMatch={() => {
-              setShowLeaveConfirm(false);
-              void abandonCurrentMatch();
+            shell={{
+              visible: Boolean((isConnected || isRecoveringConnection) && joinedRoom && state),
+              state,
+              flyingTiles,
+              scoreToast,
+            }}
+            identity={{
+              you,
+              opponentId,
+              opponentName,
+              myName,
+              players,
+            }}
+            hud={{
+              myScore,
+              opponentScore,
+              opponentTileCount,
+              isMyTurn,
+              isHandActive,
+              hudScorePulse,
+              hudRightLabel,
+              hudRightScore,
+              hudRightScorePulse,
+              boneyardCount,
+              openEndsSum,
+              winTarget: state?.config?.winningScore ?? 60,
+            }}
+            board={{
+              opponentPillRef,
+              boneyardRef,
+              boardRef,
+              handAreaRef,
+              trayCenterRef,
+              confettiCanvasRef,
+              boardForDisplay,
+              boardLegalMoves,
+              boardSelectedTile,
+              lastPlayedTile,
+              boardShowOpenEndGlow,
+              onPositionClick: play,
+            }}
+            hand={{
+              myHand,
+              handSelectedTile,
+              onHandTileSelect: handleTileTap,
+              legalMoves,
+              handTileSize,
+              handCompactStacked,
+              drawPulseIndex,
+            }}
+            chrome={{
+              scoreTrackOpen,
+              onScoreTrackOpenChange: setScoreTrackOpen,
+              roomReactions,
+              onSendRoomChat: sendRoomChat,
+              onSendRoomEmote: sendRoomEmote,
+              isMuted,
+              onToggleMute: () => setIsMuted((prev) => !prev),
+              isFullscreen,
+              onToggleFullscreen: toggleFullscreen,
+            }}
+            connection={{
+              opponentDisconnected,
+              opponentDisconnectMessage,
+              roomRecoveryState,
+              roomRecoveryMessage,
+              onRetryRoomRecovery: retryRoomRecovery,
+            }}
+            tournament={{
+              tournamentMatch,
+              consumedTournamentGameOverMatchIds,
+              tournamentMyLabel,
+              tournamentOpponentLabel,
+              onTournamentViewBracket: () => navigateAfterTournamentMatch('bracket'),
+              onTournamentViewFinalResult: () => navigateAfterTournamentMatch('result'),
+              onTournamentReturnToHub: () => navigateAfterTournamentMatch('hub'),
+            }}
+            postGame={{
+              canUseRematch,
+              rematchRequested,
+              rematchWaitingText,
+              onRematch: requestRematch,
+              onPostGame: handlePostGame,
+              multiplayerRatingSummary,
+              onOpenMultiplayerAnalyzer: openMultiplayerAnalyzer,
+              handReveal,
+              handRevealAutoProgress,
+            }}
+            leave={{
+              showLeaveConfirm,
+              onRequestLeaveConfirm: () => setShowLeaveConfirm(true),
+              onLeaveConfirmDismiss: () => setShowLeaveConfirm(false),
+              leaveModalIsTournament: Boolean(currentTournamentContext),
+              onConfirmLeaveMatch: () => {
+                setShowLeaveConfirm(false);
+                void abandonCurrentMatch();
+              },
+            }}
+            preGameDraw={{
+              preGameDraw,
+              onPregameTileTap,
             }}
           />
         </Suspense>
@@ -503,6 +523,7 @@ export default function MultiplayerModeController({
           <MatchFoundOverlay
             payload={overlayPayload}
             yourUsername={authProfile?.username ?? 'Guest'}
+            yourUserId={authUser?.id}
             onComplete={() => {
               setOverlayPayload(null);
             }}

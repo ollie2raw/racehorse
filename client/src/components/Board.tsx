@@ -16,76 +16,12 @@ import { tileEquals } from '../game/tileUtils';
 import { isDouble } from '../bot/botEngine';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { isRenderableNonNullBoard } from '../multiplayer/boardSnapshotGuards';
-
-type DailyFritzMetric = {
-  count: number;
-  totalMs: number;
-  maxMs: number;
-};
-
-function traceDailyFritzBoardEvent(
-  tag: string,
-  payload: Record<string, unknown>,
-): void {
-  if (typeof window === 'undefined') return;
-  const timestamp =
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? Number(performance.now().toFixed(2))
-      : Date.now();
-  const entry = { tag, timestamp, ...payload };
-  const win = window as typeof window & {
-    __dailyFritzInteractionTrace?: Array<Record<string, unknown>>;
-  };
-  const bucket = (win.__dailyFritzInteractionTrace ??= []);
-  bucket.push(entry);
-  if (bucket.length > 400) {
-    bucket.splice(0, bucket.length - 400);
-  }
-  console.log(tag, entry);
-}
-
-function traceCameraDebug(
-  tag: string,
-  payload: Record<string, unknown>,
-): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (window.localStorage.getItem('BOARD_CAMERA_DEBUG') !== '1') return;
-  } catch {
-    return;
-  }
-  const timestamp =
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? Number(performance.now().toFixed(2))
-      : Date.now();
-  console.log(tag, { ...payload, timestamp });
-}
-
-function recordDailyFritzBoardMetric(
-  name: 'boardRenderCount' | 'computeLayout',
-  value: number,
-): void {
-  if (typeof window === 'undefined') return;
-  const win = window as typeof window & {
-    __dailyFritzProfileActive?: boolean;
-    __dailyFritzProfile?: {
-      boardRenderCount?: number;
-      metrics?: Record<string, DailyFritzMetric>;
-    };
-  };
-  if (!win.__dailyFritzProfileActive) return;
-  const profile = (win.__dailyFritzProfile ??= {});
-  if (name === 'boardRenderCount') {
-    profile.boardRenderCount = (profile.boardRenderCount ?? 0) + value;
-    return;
-  }
-  const metrics = (profile.metrics ??= {});
-  const current = metrics[name] ?? { count: 0, totalMs: 0, maxMs: 0 };
-  current.count += 1;
-  current.totalMs += value;
-  current.maxMs = Math.max(current.maxMs, value);
-  metrics[name] = current;
-}
+import {
+  recordDailyFritzBoardMetric,
+  recordDailyFritzLayoutDebug,
+  traceCameraDebug,
+  traceDailyFritzBoardEvent,
+} from './boardDiagnostics';
 
 // ─── Layout Constants ────────────────────────────────────────
 
@@ -557,6 +493,17 @@ function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean
   return true;
 }
 
+function cameraStatesEqual(
+  a: { x: number; y: number; scale: number },
+  b: { x: number; y: number; scale: number },
+): boolean {
+  return (
+    Math.abs(a.x - b.x) < 0.5 &&
+    Math.abs(a.y - b.y) < 0.5 &&
+    Math.abs(a.scale - b.scale) < 0.001
+  );
+}
+
 function BoardComponent(
   {
     board,
@@ -647,7 +594,7 @@ function BoardComponent(
         typeof performance !== 'undefined' && typeof performance.now === 'function'
           ? Number(performance.now().toFixed(2))
           : Date.now();
-      const entry = {
+      recordDailyFritzLayoutDebug({
         tag: '[layout-debug]',
         timestamp,
         handNumber,
@@ -664,16 +611,7 @@ function BoardComponent(
           maxY: Number(layout.maxY.toFixed(2)),
         },
         zoomScale: Number(camera.scale.toFixed(3)),
-      };
-      const win = window as typeof window & {
-        __dailyFritzLayoutDebug?: Array<Record<string, unknown>>;
-      };
-      const bucket = (win.__dailyFritzLayoutDebug ??= []);
-      bucket.push(entry);
-      if (bucket.length > 300) {
-        bucket.splice(0, bucket.length - 300);
-      }
-      console.log('[layout-debug]', entry);
+      });
     },
     [boardTileCount, camera.scale, gameOver, handNumber, handOver, openEndPositions],
   );
@@ -744,7 +682,8 @@ function BoardComponent(
       y: 0,
       scale: 1,
     });
-    setCamera({ x: 0, y: 0, scale: 1 });
+    const resetCamera = { x: 0, y: 0, scale: 1 };
+    setCamera((prev) => (cameraStatesEqual(prev, resetCamera) ? prev : resetCamera));
   }, [resetSignature]);
 
   // Convert layout units to pixels
@@ -851,7 +790,8 @@ function BoardComponent(
       y: Number(cameraY.toFixed(1)),
       scale: Number(fitScale.toFixed(3)),
     });
-    setCamera({ x: 0, y: cameraY, scale: fitScale });
+    const nextCamera = { x: 0, y: cameraY, scale: fitScale };
+    setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
   }
 
   // Single authoritative camera auto-fit: respond to layout and container size.
@@ -881,7 +821,6 @@ function BoardComponent(
 
     const observer = new ResizeObserver(() => {
       runFit();
-      fitCameraToContainer('resize-observer');
     });
     observer.observe(container);
 
@@ -1031,7 +970,9 @@ function BoardComponent(
           return (
             <div
               key={lt.key}
-              className="board-tile-wrapper"
+              className={`board-tile-wrapper ${
+                lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile) ? 'is-last-played' : ''
+              }`.trim()}
               style={{
                 position: 'absolute',
                 left: `calc(50% + ${x}px)`,
@@ -1087,35 +1028,14 @@ function BoardComponent(
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                const target = e.target instanceof HTMLElement ? e.target : null;
-                const currentTarget = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
-                console.log('[board-zone-click]', {
-                  position: zone.position,
-                  selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
-                  hasOnPositionClick: typeof onPositionClick === 'function',
-                  pointerTargetInfo: {
-                    targetTag: target?.tagName ?? null,
-                    targetClass: target?.className ?? null,
-                    currentTargetTag: currentTarget?.tagName ?? null,
-                    currentTargetClass: currentTarget?.className ?? null,
-                    targetPointerEvents:
-                      target && typeof window !== 'undefined' ? window.getComputedStyle(target).pointerEvents : null,
-                    currentTargetPointerEvents:
-                      currentTarget && typeof window !== 'undefined'
-                        ? window.getComputedStyle(currentTarget).pointerEvents
-                        : null,
-                  },
-                });
                 if (profileDailyFritz) {
                   traceDailyFritzBoardEvent('[input] placement click', {
                     position: zone.position,
                   });
                 }
                 if (typeof onPositionClick !== 'function') {
-                  console.log('[board-zone-blocked] reason = missing-onPositionClick');
                   return;
                 }
-                console.log('[board-zone-forward]', { position: zone.position });
                 onPositionClick(zone.position);
               }}
               data-lane={zone.lane}

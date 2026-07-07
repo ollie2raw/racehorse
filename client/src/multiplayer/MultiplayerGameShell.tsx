@@ -14,7 +14,7 @@ import {
   snapshotBoardState,
   cloneBoardState,
   toTileTuple,
-} from '../analyzer/moveLogger';
+} from '../game/moveLogger';
 import {
   assertDisplayedOpenCountMatchesCanonical,
   computeOpenEndsSum,
@@ -28,13 +28,13 @@ import {
   getBoardEnds,
   getBoardTileCount,
 } from '../match/boardSessionUtils';
-import {
-  normalizeRoomPlayers,
-  type MultiplayerLiveMatchRecoveryRuntime,
-  type MultiplayerLiveMatchRoomRuntime,
-  type MultiplayerRoomRecoverySetters,
-  type MultiplayerSessionRefsRuntime,
-} from './multiplayerRuntime';
+import { normalizeRoomPlayers } from './protocol';
+import type {
+  MultiplayerLiveMatchRecoveryRuntime,
+  MultiplayerRoomRecoverySetters,
+} from './runtime/recoveryRuntime';
+import type { MultiplayerLiveMatchRoomRuntime } from './runtime/roomRuntime';
+import type { MultiplayerSessionRefsRuntime } from './runtime/gameplayRuntime';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import {
   playMatchLoseSound,
@@ -48,7 +48,7 @@ import {
   type MultiplayerGameSnapshot,
 } from './multiplayerGameSnapshot';
 import type {
-  MultiplayerGameShellBridge,
+  MultiplayerShellDelegates,
   MultiplayerGameShellProps,
 } from './multiplayerGameShellTypes';
 
@@ -73,7 +73,9 @@ function MultiplayerGameShellComponent({
   tournamentMatch,
   tournamentOpponentLabel,
   rejoinInFlightRef,
-  joinedRoomRef,
+  sessionRuntime,
+  schedulePlayerReadyRef,
+  trySchedulePlayerReadyRef,
   maxSequenceRef,
   roomPlayersRef,
   resyncInFlightRef,
@@ -81,7 +83,7 @@ function MultiplayerGameShellComponent({
   resyncFlushRef,
   fetchGameState,
   applyRoomEventMeta,
-  shellBridgeRef,
+  shellDelegatesRef,
   sharedGameplayRefs,
   setAbandonedMatchNotice,
 }: MultiplayerGameShellProps) {
@@ -113,12 +115,6 @@ function MultiplayerGameShellComponent({
   const multiplayerRatingRefreshKeyRef = useRef('');
   const previousMultiplayerGameOverRef = useRef(false);
 
-  const isSeatedPlayerRef = useRef(false);
-  const matchStartedRef = useRef(false);
-  const playerReadyEmittedRef = useRef(false);
-  const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
-  const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
-
   const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => {
     const moveNumber =
       entry.player === 'you'
@@ -130,11 +126,10 @@ function MultiplayerGameShellComponent({
 
   const liveMatchRoomRuntime = useMemo(
     (): MultiplayerLiveMatchRoomRuntime => ({
-      joinedRoomRef,
       maxSequenceRef,
       roomPlayersRef,
     }),
-    [joinedRoomRef, maxSequenceRef, roomPlayersRef],
+    [maxSequenceRef, roomPlayersRef],
   );
 
   const liveMatchRecoverySetters = useMemo(
@@ -147,14 +142,13 @@ function MultiplayerGameShellComponent({
 
   const liveMatchSessionRefsRuntime = useMemo(
     (): MultiplayerSessionRefsRuntime => ({
-      isSeatedPlayerRef,
-      matchStartedRef,
-      playerReadyEmittedRef,
+      sessionRef: sessionRuntime.sessionRef,
+      dispatchSession: sessionRuntime.dispatchSession as MultiplayerSessionRefsRuntime['dispatchSession'],
       schedulePlayerReadyRef,
       trySchedulePlayerReadyRef,
       isMutedRef,
     }),
-    [isMutedRef],
+    [isMutedRef, schedulePlayerReadyRef, sessionRuntime, trySchedulePlayerReadyRef],
   );
 
   const resetShellClientGameSessionRef = useRef<() => void>(() => {});
@@ -287,8 +281,7 @@ function MultiplayerGameShellComponent({
     autoTurnActionKeyRef.current = '';
     mpAutoDrawSuppressUntilSequenceRef.current = null;
     frozenHandOverBoardRef.current = null;
-    playerReadyEmittedRef.current = false;
-    matchStartedRef.current = false;
+    sessionRuntime.dispatchSession({ type: 'SESSION_RESET_GAME' });
     rematchAwaitingStateRef.current = false;
     resyncBufferedUpdateRef.current = null;
     setOpponentDragging(false);
@@ -299,10 +292,9 @@ function MultiplayerGameShellComponent({
     autoTurnActionKeyRef,
     clearTransientRoomUi,
     frozenHandOverBoardRef,
-    matchStartedRef,
     mpAutoDrawSuppressUntilSequenceRef,
-    playerReadyEmittedRef,
     rematchAwaitingStateRef,
+    sessionRuntime,
     resyncBufferedUpdateRef,
     setBoneyardDisplayCount,
     setOpponentDisconnectMessage,
@@ -405,7 +397,7 @@ function MultiplayerGameShellComponent({
   }, [authProfile?.glicko_rating, state?.gameOver]);
 
   const isSpectatingMatch = Boolean(
-    tournamentMatch?.isTournament && joinedRoom && state && !state.playerIds.includes(you),
+    joinedRoom && state && !state.playerIds.includes(you)
   );
   const isTournamentMatch = Boolean(tournamentMatch?.isTournament);
 
@@ -946,8 +938,8 @@ function MultiplayerGameShellComponent({
     onPregameTileTap,
   ]);
 
-  const bridge = useMemo(
-    (): MultiplayerGameShellBridge => ({
+  const shellDelegates = useMemo(
+    (): MultiplayerShellDelegates => ({
       stateRef,
       draggingStateRef,
       handRevealShownRef,
@@ -1000,12 +992,15 @@ function MultiplayerGameShellComponent({
   });
 
   useLayoutEffect(() => {
-    shellBridgeRef.current = bridge;
+    shellDelegatesRef.current = shellDelegates;
+  }, [shellDelegates, shellDelegatesRef]);
+
+  useEffect(() => {
     return () => {
-      shellBridgeRef.current = null;
+      shellDelegatesRef.current = null;
       resetGameSnapshot();
     };
-  }, [bridge, shellBridgeRef]);
+  }, [shellDelegatesRef]);
 
   useEffect(() => {
     const snapshot: MultiplayerGameSnapshot = {

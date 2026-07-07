@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../components';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import type { AnalyzedMove, GameAnalysis, MoveRating } from './moveAnalyzer';
-import { sameTileTuple } from './moveLogger';
+import { sameTileTuple } from '../game/moveLogger';
 import { buildReviewSidebarCopy } from './reviewSidebarCopy';
 import './GameReviewer.css';
 

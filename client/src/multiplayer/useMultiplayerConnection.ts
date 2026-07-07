@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { MutableRefObject } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
-import { traceSocketEvent } from '../debug/socketTrace';
-import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
-import type { GameState, Move, Tile } from '../types';
-import { wrapSocketHandler } from './socketGuards';
+import { dispatchSocketEvent } from './socketEventBus';
+import {
+  applyGameRematchStartedSocketEvent,
+  applyGameRematchStatusSocketEvent,
+  applyHandEndedSocketEvent,
+  applyPlayerDraggingSocketEvent,
+} from './connectionGameplaySocketHandlers';
+import { gameplaySocketScopeRef } from './gameplaySocketScope';
+import { registerMultiplayerConnectionGameplaySocketHandlers } from './registerMultiplayerConnectionGameplaySocketHandlers';
+import { registerMultiplayerConnectionSocketHandlers } from './registerMultiplayerConnectionSocketHandlers';
 import { emitRoomAbandonMatch, emitRoomLeave, type RoomAckResponse } from './roomTransport';
-import type {
-  GameRematchStatusPayload,
-  TournamentMatchAssignedPayload,
-} from './legacyTournamentTypes';
+
 import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
 import {
   createRecoveryMachine,
@@ -20,163 +22,36 @@ import {
   type RecoveryMachine,
   type RecoveryMachineSnapshot,
 } from './recoveryMachine';
-import type {
-  MultiplayerAuthRuntime,
-  MultiplayerConnectionConfig,
-  MultiplayerConnectionState,
-  MultiplayerConnectionUiSetters,
-  MultiplayerGameplayRefsRuntime,
-  MultiplayerJoinFlightRuntime,
-  MultiplayerNavigationRuntime,
-  MultiplayerRecoveryCallbacksRuntime,
-  MultiplayerReconnectRuntime,
-  MultiplayerRoomRuntime,
-  MultiplayerRoomSocialRuntime,
-  MultiplayerSocketRuntime,
-  RoomPlayer,
-  RoomRecoveryState,
-} from './multiplayerRuntime';
+import {
+  createMultiplayerConnectionScope,
+  type MultiplayerConnectionScope,
+  type MultiplayerConnectionScopeSource,
+} from './multiplayerConnectionScope';
+import {
+  createLifecycleHiddenTracker,
+  evaluateLifecycleResumeResync,
+} from './multiplayerLifecycleRecovery';
+import {
+  recordJoinLatency,
+  recordResyncRequested,
+  recordResyncSkipped,
+} from './mpTelemetry';
+import {
+  selectIntentionalDisconnect,
+  selectJoinedRoomCode,
+  selectMatchStarted,
+} from './session/sessionStateMachine';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
-type HandEndedPayload = {
-  handNumber: number;
-  opponentRemainingTiles: Tile[];
-  yourRemainingTiles: Tile[];
-  pointsAwarded: {
-    you: number;
-    opponent: number;
-  };
-  whoWentOut?: string | null;
-  winnerId?: string | null;
-  handWinnerId?: string | null;
-};
-
-export type UseMultiplayerConnectionParams = {
-  config: MultiplayerConnectionConfig;
-  connectionState: MultiplayerConnectionState;
-  socketRuntime: MultiplayerSocketRuntime;
-  roomRuntime: MultiplayerRoomRuntime;
-  reconnectRuntime: MultiplayerReconnectRuntime;
-  joinFlightRuntime: MultiplayerJoinFlightRuntime;
-  authRuntime: MultiplayerAuthRuntime;
-  navigationRuntime: MultiplayerNavigationRuntime;
-  gameplayRefsRuntime: MultiplayerGameplayRefsRuntime & {
-    isMutedRef: MutableRefObject<boolean>;
-    rematchAwaitingStateRef: MutableRefObject<boolean>;
-  };
-  recoveryRuntime: MultiplayerRecoveryCallbacksRuntime;
-  roomSocialRuntime: MultiplayerRoomSocialRuntime;
-  uiSetters: MultiplayerConnectionUiSetters;
+export type UseMultiplayerConnectionParams = MultiplayerConnectionScopeSource & {
   recoveryDispatchRef?: MutableRefObject<(event: RecoveryEvent) => RecoveryMachineSnapshot | null>;
 };
 
-type FlatMultiplayerConnectionParams = {
-  emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
-  normalizeRoomCode: MultiplayerConnectionConfig['normalizeRoomCode'];
-  lastRoomStorageKey: string;
-  serverUrl: string;
-  showToast: MultiplayerConnectionConfig['showToast'];
-  emitCreateRoom: MultiplayerConnectionConfig['emitCreateRoom'];
-  socket: Socket | null;
-  isConnecting: boolean;
-  isConnected: boolean;
-  roomRecoveryState: RoomRecoveryState;
-  appMode: MultiplayerConnectionState['appMode'];
-  authUserId?: string | null;
-  authEmail?: string | null;
-  authProfileUsername?: string | null;
-  roomCode: string;
-  connectRef: MutableRefObject<() => void>;
-  socketRef: MutableRefObject<Socket | null>;
-  authUserRef: MutableRefObject<{ id?: string | null; email?: string | null } | null>;
-  authProfileRef: MutableRefObject<{ username?: string | null } | null>;
-  authAccessTokenRef: MutableRefObject<string | null>;
-  multiplayerIdentityUserIdRef: MutableRefObject<string | null>;
-  joinedRoomRef: MutableRefObject<string | null>;
-  youRef: MutableRefObject<string>;
-  stateRef: MutableRefObject<GameState | null>;
-  pendingCreateOnConnectRef: MutableRefObject<boolean>;
-  reconnectRoomCodeRef: MutableRefObject<string | null>;
-  reconnectShouldJoinRef: MutableRefObject<boolean>;
-  preventAutoRejoinRef: MutableRefObject<boolean>;
-  autoJoinAttemptedRef: MutableRefObject<boolean>;
-  joinInFlightRef: MutableRefObject<boolean>;
-  createInFlightRef: MutableRefObject<boolean>;
-  inviteJoinInFlightRef: MutableRefObject<boolean>;
-  rejoinInFlightRef: MutableRefObject<boolean>;
-  intentionalDisconnectRef: MutableRefObject<boolean>;
-  reconnectAttemptTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  reconnectAttemptCountRef: MutableRefObject<number>;
-  autoConnectAttemptedRef: MutableRefObject<boolean>;
-  draggingStateRef: MutableRefObject<boolean>;
-  isMutedRef: MutableRefObject<boolean>;
-  handRevealShownRef: MutableRefObject<number | null>;
-  handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  maxSequenceRef: MutableRefObject<number>;
-  roomIdentityRef: MutableRefObject<{
-    username: string;
-    userId: string | null;
-    authToken: string | null;
-  } | null>;
-  setSocket: Dispatch<SetStateAction<Socket | null>>;
-  setIsConnected: Dispatch<SetStateAction<boolean>>;
-  setIsConnecting: Dispatch<SetStateAction<boolean>>;
-  setIsRecoveringConnection: Dispatch<SetStateAction<boolean>>;
-  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  setYou: Dispatch<SetStateAction<string>>;
-  setServerWaking: Dispatch<SetStateAction<boolean>>;
-  setError: Dispatch<SetStateAction<string>>;
-  setActionError: Dispatch<SetStateAction<string>>;
-  setRematchRequested: Dispatch<SetStateAction<boolean>>;
-  setRematchReadyIds: Dispatch<SetStateAction<string[]>>;
-  setOpponentDragging: Dispatch<SetStateAction<boolean>>;
-  setJoinedRoom: Dispatch<SetStateAction<string | null>>;
-  setState: Dispatch<SetStateAction<GameState | null>>;
-  setLegalMoves: Dispatch<SetStateAction<Move[]>>;
-  setCanDraw: Dispatch<SetStateAction<boolean>>;
-  setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
-  setRoomCode: Dispatch<SetStateAction<string>>;
-  setAppMode: Dispatch<SetStateAction<MultiplayerConnectionState['appMode']>>;
-  appendRoomReactionRef: MultiplayerRoomSocialRuntime['appendRoomReactionRef'];
-  setHandReveal: Dispatch<SetStateAction<HandEndedPayload | null>>;
-  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
-  setSelectedTile: Dispatch<SetStateAction<Tile | null>>;
-  setPendingUiAction: Dispatch<
-    SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>
-  >;
-  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
-  clearReconnectAttemptTimer: () => void;
-  clearTransientRoomUi: () => void;
-  fetchGameState: (reason: string) => Promise<boolean>;
-  resetClientGameSession: () => void;
-  rematchAwaitingStateRef: MutableRefObject<boolean>;
-};
-
-function flattenMultiplayerConnectionParams(
-  params: UseMultiplayerConnectionParams,
-): FlatMultiplayerConnectionParams {
-  return {
-    ...params.config,
-    ...params.connectionState,
-    ...params.socketRuntime,
-    ...params.roomRuntime,
-    ...params.reconnectRuntime,
-    ...params.joinFlightRuntime,
-    ...params.authRuntime,
-    ...params.gameplayRefsRuntime,
-    ...params.recoveryRuntime,
-    ...params.roomSocialRuntime,
-    ...params.uiSetters,
-    setAppMode: params.navigationRuntime.setAppMode,
-  };
-}
-
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
-  const latestRef = useRef<ReturnType<typeof flattenMultiplayerConnectionParams>>(null!);
+  const scopeRef = useRef<MultiplayerConnectionScope>(null!);
   useLayoutEffect(() => {
-    latestRef.current = flattenMultiplayerConnectionParams(params);
+    scopeRef.current = createMultiplayerConnectionScope(params);
   });
   const { connectionState, config } = params;
 
@@ -187,16 +62,16 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
   const syncMachineToLegacy = useCallback(() => {
     const machine = recoveryMachineRef.current;
     if (!machine) return;
-    const p = latestRef.current;
+    const scope = scopeRef.current;
     syncRecoveryLegacyRefs(machine.getSnapshot(), {
-      reconnectShouldJoinRef: p.reconnectShouldJoinRef,
-      preventAutoRejoinRef: p.preventAutoRejoinRef,
-      reconnectRoomCodeRef: p.reconnectRoomCodeRef,
-      reconnectAttemptCountRef: p.reconnectAttemptCountRef,
-      rejoinInFlightRef: p.rejoinInFlightRef,
-      setRoomRecoveryState: p.setRoomRecoveryState,
-      setRoomRecoveryMessage: p.setRoomRecoveryMessage,
-      setIsRecoveringConnection: p.setIsRecoveringConnection,
+      reconnectShouldJoinRef: scope.reconnect.reconnectShouldJoinRef,
+      preventAutoRejoinRef: scope.reconnect.preventAutoRejoinRef,
+      reconnectRoomCodeRef: scope.reconnect.reconnectRoomCodeRef,
+      reconnectAttemptCountRef: scope.reconnect.reconnectAttemptCountRef,
+      rejoinInFlightRef: scope.reconnect.rejoinInFlightRef,
+      setRoomRecoveryState: scope.ui.setRoomRecoveryState,
+      setRoomRecoveryMessage: scope.ui.setRoomRecoveryMessage,
+      setIsRecoveringConnection: scope.ui.setIsRecoveringConnection,
     });
   }, []);
 
@@ -213,33 +88,35 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
   const executeRecoveryRoomJoin = useCallback(
     async (roomCode: string) => {
-      const p = latestRef.current;
-      const socket = p.socketRef.current;
+      const scope = scopeRef.current;
+      const socket = scope.socket.socketRef.current;
       if (!socket?.connected) {
         dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'socket_not_connected' });
         return;
       }
 
-      const rejoinIdentity = p.roomIdentityRef.current ?? {
-        username: p.authProfileRef.current?.username ?? 'Guest',
-        userId: p.multiplayerIdentityUserIdRef.current,
-        authToken: p.authAccessTokenRef.current,
+      const rejoinIdentity = scope.room.roomIdentityRef.current ?? {
+        username: scope.auth.authProfileRef.current?.username ?? 'Guest',
+        userId: scope.auth.multiplayerIdentityUserIdRef.current,
+        authToken: scope.auth.authAccessTokenRef.current,
       };
 
       try {
-        console.warn('[rejoin] attempting room:join after recovery', {
-          code: roomCode,
-          attempt: p.reconnectAttemptCountRef.current,
-        });
-        const resp = await p.emitWithAck<RoomAckResponse>(socket, 'room:join', roomCode, rejoinIdentity);
+        const rejoinStartedAt =
+          typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const resp = await scope.config.emitWithAck<RoomAckResponse>(
+          socket,
+          'room:join',
+          roomCode,
+          rejoinIdentity,
+        );
 
         if (resp?.ok) {
-          console.warn('[rejoin] room:join success', {
-            roomCode: resp.roomCode,
-            you: resp.you,
-          });
+          const rejoinEndedAt =
+            typeof performance !== 'undefined' ? performance.now() : Date.now();
+          recordJoinLatency(rejoinEndedAt - rejoinStartedAt, 'rejoin');
           const wasRecovery = recoveryMachineRef.current?.getSnapshot().state === 'joining';
-          p.applyJoinedRoomResponse(resp);
+          scope.recovery.applyJoinedRoomResponse(resp);
           const terminalTournamentJoin =
             Boolean(resp?.tournamentMatch?.matchId) &&
             Boolean((resp?.state as { gameOver?: boolean } | null | undefined)?.gameOver);
@@ -251,16 +128,16 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           }
           dispatchRecovery({ type: 'ROOM_JOIN_OK' });
           if (wasRecovery) {
-            p.showToast('Reconnected to room.', 1200);
+            scope.config.showToast('Reconnected to room.', 1200);
           } else {
-            p.setAppMode('multiplayer');
+            scope.navigation.setAppMode('multiplayer');
           }
           return;
         }
 
         const errorText = String(resp?.error ?? 'not_ok');
         if (isTerminalJoinError(errorText)) {
-          dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
+          dispatchSocketEvent({ type: 'ROOM_JOIN_TERMINAL', payload: { error: errorText } });
           return;
         }
         dispatchRecovery({ type: 'ROOM_JOIN_TRANSIENT', error: errorText });
@@ -276,7 +153,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
   const executeRecoveryResync = useCallback(
     async (_roomCode: string) => {
-      const success = await latestRef.current.fetchGameState('recovery_machine');
+      const success = await scopeRef.current.recovery.fetchGameState('recovery_machine');
       if (success) {
         dispatchRecovery({ type: 'RESYNC_OK' });
       } else {
@@ -288,7 +165,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
   useEffect(() => {
     handleRecoveryEffectRef.current = (effect: RecoveryEffect) => {
-      const p = latestRef.current;
+      const scope = scopeRef.current;
       switch (effect.type) {
         case 'connect':
           establishSocketRef.current();
@@ -301,11 +178,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           break;
         case 'clear_terminal_room':
           if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(p.lastRoomStorageKey);
+            window.localStorage.removeItem(scope.config.lastRoomStorageKey);
           }
           break;
         case 'cancel_schedule':
-          p.reconnectAttemptTimerRef.current = null;
+          scope.reconnect.reconnectAttemptTimerRef.current = null;
           break;
         default:
           break;
@@ -332,62 +209,178 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const machine = recoveryMachineRef.current;
     return () => {
       machine?.dispose();
-      latestRef.current.clearReconnectAttemptTimer();
+      scopeRef.current.recovery.clearReconnectAttemptTimer();
+    };
+  }, []);
+
+  const lifecycleHiddenTrackerRef = useRef(createLifecycleHiddenTracker());
+  const lastLifecycleResyncAtRef = useRef(0);
+
+  useEffect(() => {
+    const hiddenTracker = lifecycleHiddenTrackerRef.current;
+
+    const handleLifecycleResume = () => {
+      const now = Date.now();
+      const hiddenSinceMs = hiddenTracker.consumeHiddenSince(now);
+      const scope = scopeRef.current;
+      const roomCode = selectJoinedRoomCode(scope.session.sessionRef.current);
+      const decision = evaluateLifecycleResumeResync({
+        now,
+        hiddenSinceMs,
+        roomCode,
+        matchStarted: selectMatchStarted(scope.session.sessionRef.current),
+        recoveryState: recoveryMachineRef.current?.getSnapshot().state ?? 'idle',
+        socketConnected: Boolean(scope.socket.socketRef.current?.connected),
+        resyncInFlight: scope.recovery.resyncInFlightRef.current,
+        rejoinInFlight: scope.reconnect.rejoinInFlightRef.current,
+        intentionalDisconnect: selectIntentionalDisconnect(scope.session.sessionRef.current),
+        lastLifecycleResyncAtMs: lastLifecycleResyncAtRef.current,
+      });
+
+      if (!decision.shouldResync || !roomCode) {
+        if (decision.reason && decision.reason !== 'hidden_duration_short') {
+          recordResyncSkipped(`lifecycle_${decision.reason}`, { roomCode });
+        }
+        return;
+      }
+
+      lastLifecycleResyncAtRef.current = now;
+      recordResyncRequested('lifecycle_resume', { roomCode, reason: decision.reason });
+      dispatchSocketEvent({ type: 'RESYNC_NEEDED', payload: { roomCode } });
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenTracker.markHidden(Date.now());
+        return;
+      }
+      handleLifecycleResume();
+    };
+
+    const onPageHide = () => {
+      hiddenTracker.markHidden(Date.now());
+    };
+
+    const onPageShow = () => {
+      handleLifecycleResume();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
+      hiddenTracker.reset();
     };
   }, []);
 
   const trySavedRoomAutoJoin = useCallback(
     async (socket: Socket) => {
-      const p = latestRef.current;
-      if (p.preventAutoRejoinRef.current || p.autoJoinAttemptedRef.current) return;
-      const savedCode = p.normalizeRoomCode(
-        (typeof window !== 'undefined' && window.localStorage.getItem(p.lastRoomStorageKey)) || '',
+      const scope = scopeRef.current;
+      if (scope.reconnect.preventAutoRejoinRef.current || scope.joinFlight.autoJoinAttemptedRef.current) {
+        return;
+      }
+      const savedCode = scope.config.normalizeRoomCode(
+        (typeof window !== 'undefined' && window.localStorage.getItem(scope.config.lastRoomStorageKey)) || '',
       );
-      if (!savedCode || p.joinedRoomRef.current) return;
-      p.autoJoinAttemptedRef.current = true;
+      if (!savedCode || selectJoinedRoomCode(scope.session.sessionRef.current)) return;
+      scope.joinFlight.autoJoinAttemptedRef.current = true;
       try {
-        const resp = await p.emitWithAck<RoomAckResponse>(socket, 'room:join', savedCode, {
-          username: p.authProfileUsername ?? 'Guest',
-          userId: p.multiplayerIdentityUserIdRef.current,
-          authToken: p.authAccessTokenRef.current,
+        const joinStartedAt =
+          typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const resp = await scope.config.emitWithAck<RoomAckResponse>(socket, 'room:join', savedCode, {
+          username: scope.state.authProfileUsername ?? 'Guest',
+          userId: scope.auth.multiplayerIdentityUserIdRef.current,
+          authToken: scope.auth.authAccessTokenRef.current,
         });
+        if (resp?.ok) {
+          const joinEndedAt =
+            typeof performance !== 'undefined' ? performance.now() : Date.now();
+          recordJoinLatency(joinEndedAt - joinStartedAt, 'join');
+        }
         if (!resp?.ok) {
           const errorText = String(resp?.error ?? '').toLowerCase();
           if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(p.lastRoomStorageKey);
+            window.localStorage.removeItem(scope.config.lastRoomStorageKey);
           }
           if (errorText.includes('completed')) {
             dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
           }
-          p.showToast('Saved room is no longer available.', 2000);
+          scope.config.showToast('Saved room is no longer available.', 2000);
           return;
         }
-        p.applyJoinedRoomResponse(resp);
-        p.showToast('Rejoined room.', 1200);
+        scope.recovery.applyJoinedRoomResponse(resp);
+        scope.config.showToast('Rejoined room.', 1200);
       } catch (error) {
-        p.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
+        scope.config.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }
     },
     [dispatchRecovery],
   );
 
+  useEffect(() => {
+    const recoverState = () => {
+      const roomCode = selectJoinedRoomCode(scopeRef.current.session.sessionRef.current);
+      if (!roomCode) return;
+      if (recoveryMachineRef.current?.getSnapshot().state === 'idle') {
+        dispatchSocketEvent({ type: 'RESYNC_NEEDED', payload: { roomCode } });
+      }
+    };
+
+    const unregisterConnection = registerMultiplayerConnectionSocketHandlers({
+      getScope: () => scopeRef.current,
+      recoveryMachineRef,
+      dispatchRecovery,
+      syncMachineToLegacy,
+      trySavedRoomAutoJoin,
+      recoverState,
+    });
+    gameplaySocketScopeRef.current.gameplay = {
+      onHandEnded: (payload) => {
+        applyHandEndedSocketEvent(scopeRef.current, payload, () => scopeRef.current);
+      },
+      onGameRematchStatus: (payload) => {
+        applyGameRematchStatusSocketEvent(scopeRef.current, payload);
+      },
+      onGameRematchStarted: () => {
+        applyGameRematchStartedSocketEvent(scopeRef.current);
+      },
+      onPlayerDragging: (payload) => {
+        applyPlayerDraggingSocketEvent(scopeRef.current, payload);
+      },
+    };
+
+    const unregisterGameplay = registerMultiplayerConnectionGameplaySocketHandlers({
+      getScope: () => gameplaySocketScopeRef.current,
+      recoverState,
+    });
+    return () => {
+      gameplaySocketScopeRef.current.gameplay = null;
+      unregisterConnection();
+      unregisterGameplay();
+    };
+  }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
+
   const establishSocket = useCallback(() => {
-    const p = latestRef.current;
-    if (p.socket?.connected) return;
-    if (p.socket && !p.socket.connected && p.socket.active) return;
-    if (p.isConnecting) return;
-    p.intentionalDisconnectRef.current = false;
-    p.setError('');
-    p.setIsConnecting(true);
-    if (p.socket && !p.socket.connected) {
-      const oldSocket = p.socket as SocketWithPing;
+    const scope = scopeRef.current;
+    if (scope.state.socket?.connected) return;
+    if (scope.state.socket && !scope.state.socket.connected && scope.state.socket.active) return;
+    if (scope.state.isConnecting) return;
+    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: false });
+    scope.ui.setError('');
+    scope.ui.setIsConnecting(true);
+    if (scope.state.socket && !scope.state.socket.connected) {
+      const oldSocket = scope.state.socket as SocketWithPing;
       if (oldSocket.__mpPingTimer) clearInterval(oldSocket.__mpPingTimer);
       oldSocket.removeAllListeners();
       oldSocket.io.removeAllListeners();
       oldSocket.disconnect();
     }
 
-    const s = io(p.serverUrl, {
+    const s = io(scope.config.serverUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
       reconnection: true,
@@ -396,16 +389,6 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       reconnectionDelayMax: 5000,
       timeout: 20000,
     });
-
-    s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
-
-    const recoverState = () => {
-      const roomCode = latestRef.current.joinedRoomRef.current;
-      if (!roomCode) return;
-      if (recoveryMachineRef.current?.getSnapshot().state === 'idle') {
-        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
-      }
-    };
 
     const pingSocket = s as SocketWithPing;
     pingSocket.__mpPingTimer = setInterval(() => {
@@ -422,230 +405,10 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       });
     }, 5000);
 
-    s.on(
-      'connect',
-      wrapSocketHandler('connect', async () => {
-        const current = latestRef.current;
-        if (current.intentionalDisconnectRef.current) return;
-        current.setIsConnected(true);
-        current.setIsConnecting(false);
-        current.setServerWaking(false);
-
-        const userId = current.authUserRef.current?.id;
-        const username =
-          current.authProfileRef.current?.username ??
-          current.authUserRef.current?.email?.split('@')[0] ??
-          'player';
-        if (userId) {
-          void current.emitWithAck<RoomAckResponse>(s, 'presence:identify', {
-            userId,
-            username,
-            authToken: current.authAccessTokenRef.current,
-          }).catch((error) => {
-            if (import.meta.env.DEV) {
-              console.log('[presence] identify failed', error instanceof Error ? error.message : error);
-            }
-          });
-        }
-
-        if (current.pendingCreateOnConnectRef.current) {
-          current.pendingCreateOnConnectRef.current = false;
-          void current.emitCreateRoom(s).catch((error) => {
-            const message = error instanceof Error ? error.message : 'Action failed';
-            current.setError(message);
-            current.showToast(message, 2000);
-          });
-          return;
-        }
-
-        dispatchRecovery({ type: 'SOCKET_CONNECTED' });
-
-        if (recoveryMachineRef.current?.getSnapshot().state === 'idle') {
-          await trySavedRoomAutoJoin(s);
-        }
-      }, { recoverOnError: recoverState }),
-    );
-
-    s.on(
-      'disconnect',
-      wrapSocketHandler('disconnect', (reason) => {
-        const current = latestRef.current;
-        const roomBeforeDisconnect = current.joinedRoomRef.current;
-        const isRecoverableSession =
-          Boolean(roomBeforeDisconnect) && !current.intentionalDisconnectRef.current;
-
-        current.setIsConnected(false);
-        current.setIsConnecting(false);
-        current.setError('');
-        current.setActionError('');
-        current.setRematchRequested(false);
-        current.setRematchReadyIds([]);
-        current.setOpponentDragging(false);
-        current.draggingStateRef.current = false;
-
-        if (isRecoverableSession && roomBeforeDisconnect) {
-          current.clearTransientRoomUi();
-          console.warn('[socket] disconnected mid-game, recovery dispatched', {
-            reason,
-            roomCode: roomBeforeDisconnect,
-          });
-          dispatchRecovery({ type: 'SOCKET_LOST', roomCode: roomBeforeDisconnect });
-          return;
-        }
-
-        current.setJoinedRoom(null);
-        current.setState(null);
-        current.setLegalMoves([]);
-        current.setCanDraw(false);
-        current.setTournamentActiveRoom(null);
-        syncMachineToLegacy();
-      }),
-    );
-
-    s.on(
-      'tournament:match:assigned',
-      wrapSocketHandler('tournament:match:assigned', (data: TournamentMatchAssignedPayload) => {
-        const current = latestRef.current;
-        if (typeof data?.roomCode === 'string') current.setTournamentActiveRoom(data.roomCode);
-        if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
-          const code = String(data.roomCode).trim().toUpperCase();
-          current.setJoinedRoom(code);
-          current.setRoomCode(code);
-          current.setAppMode('multiplayer');
-        }
-      }),
-    );
-
-    s.on('room:chat', wrapSocketHandler('room:chat', (msg: RoomChatEvent) => {
-      latestRef.current.appendRoomReactionRef.current(msg);
-    }));
-
-    s.on('room:emote', wrapSocketHandler('room:emote', (evt: RoomEmoteEvent) => {
-      latestRef.current.appendRoomReactionRef.current(evt);
-    }));
-
-    s.on(
-      'hand:ended',
-      wrapSocketHandler('hand:ended', (payload: HandEndedPayload) => {
-        const current = latestRef.current;
-        const currentState = current.stateRef.current;
-        const myId = current.youRef.current;
-        const myRemaining = currentState?.players[myId]?.hand ?? [];
-        const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
-        const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
-        const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
-        if (blocked) playBlockedSound(current.isMutedRef.current);
-        const stateNow = current.stateRef.current;
-        const target = stateNow?.config?.winningScore ?? 60;
-        const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
-        const myAward = payload.pointsAwarded?.you ?? 0;
-        const oppAward = payload.pointsAwarded?.opponent ?? 0;
-        const myPostScore = (stateNow?.players?.[myId]?.score ?? 0) + myAward;
-        const oppPostScore = oppId ? (stateNow?.players?.[oppId]?.score ?? 0) + oppAward : oppAward;
-        const matchWillBeOver = myPostScore >= target || oppPostScore >= target;
-        if (!matchWillBeOver) {
-          const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
-          const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
-          if (iWonHand) playHandWinSound(current.isMutedRef.current);
-          else playHandLoseSound(current.isMutedRef.current);
-        }
-        current.handRevealShownRef.current = payload.handNumber;
-        current.handRevealTimerRef.current = window.setTimeout(() => {
-          current.handRevealTimerRef.current = null;
-          latestRef.current.setHandReveal({ ...payload, yourRemainingTiles });
-        }, 1400);
-      }),
-    );
-
-    s.on(
-      'game:rematch:status',
-      wrapSocketHandler('game:rematch:status', (payload: GameRematchStatusPayload) => {
-        const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
-          ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
-          : [];
-        latestRef.current.setRematchReadyIds(readyPlayerIds);
-        latestRef.current.setRematchRequested(readyPlayerIds.includes(latestRef.current.youRef.current));
-      }),
-    );
-
-    s.on(
-      'game:rematch:started',
-      wrapSocketHandler('game:rematch:started', () => {
-        const current = latestRef.current;
-        if (current.handRevealTimerRef.current !== null) {
-          clearTimeout(current.handRevealTimerRef.current);
-          current.handRevealTimerRef.current = null;
-        }
-        current.setHandReveal(null);
-        current.handRevealShownRef.current = null;
-        current.rematchAwaitingStateRef.current = true;
-        current.setRematchRequested(false);
-        current.setRematchReadyIds([]);
-        current.showToast('Rematch started.', 1200);
-      }, { recoverOnError: recoverState }),
-    );
-
-    s.on(
-      'player:dragging',
-      wrapSocketHandler('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
-        if (!payload?.playerId || payload.playerId === latestRef.current.youRef.current) return;
-        latestRef.current.setOpponentDragging(Boolean(payload.dragging));
-      }),
-    );
-
-    s.on(
-      'room:session:superseded',
-      wrapSocketHandler('room:session:superseded', () => {
-        const current = latestRef.current;
-        if (current.intentionalDisconnectRef.current) return;
-        const roomCode = current.joinedRoomRef.current;
-        if (!roomCode) return;
-        current.showToast('Session moved to this device. Syncing…', 1600);
-        dispatchRecovery({ type: 'SESSION_SUPERSEDED', roomCode });
-      }),
-    );
-
-    s.on(
-      'connect_error',
-      wrapSocketHandler('connect_error', () => {
-        const current = latestRef.current;
-        current.setIsConnecting(false);
-        const machineState = recoveryMachineRef.current?.getSnapshot().state;
-        if (machineState === 'connecting' || machineState === 'joining') {
-          dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'connect_error' });
-          return;
-        }
-        current.setServerWaking(true);
-        current.setError('');
-      }),
-    );
-
-    s.on(
-      'reconnect_failed',
-      wrapSocketHandler('reconnect_failed', () => {
-        const current = latestRef.current;
-        current.setIsConnecting(false);
-        const machineState = recoveryMachineRef.current?.getSnapshot().state;
-        if (machineState === 'connecting' || machineState === 'joining') {
-          dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'reconnect_failed' });
-        }
-      }),
-    );
-
-    s.on(
-      'server:shutdown',
-      wrapSocketHandler('server:shutdown', (payload: { reason?: string } | undefined) => {
-        latestRef.current.showToast(
-          'Server is updating. You may need to rejoin your match from the lobby.',
-          4000,
-        );
-        if (import.meta.env.DEV) {
-          console.warn('[socket] server:shutdown', payload);
-        }
-      }),
-    );
-
-    p.setSocket(s);
+    scope.ui.setSocket(s);
+    if (import.meta.env.DEV && typeof window !== 'undefined') {
+      (window as Window & { __racehorseE2eSocket?: Socket }).__racehorseE2eSocket = s;
+    }
   }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
 
   useLayoutEffect(() => {
@@ -658,29 +421,30 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
   useEffect(() => {
     return () => {
-      const p = latestRef.current;
-      p.intentionalDisconnectRef.current = true;
+      const scope = scopeRef.current;
+      scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: true });
       recoveryMachineRef.current?.dispose();
-      p.clearReconnectAttemptTimer();
-      const sock = p.socketRef.current as SocketWithPing | null;
+      scope.recovery.clearReconnectAttemptTimer();
+      const sock = scope.socket.socketRef.current as SocketWithPing | null;
       if (sock) {
         if (sock.__mpPingTimer) clearInterval(sock.__mpPingTimer);
         sock.removeAllListeners();
         sock.io.removeAllListeners();
         sock.disconnect();
-        p.socketRef.current = null;
+        scope.socket.socketRef.current = null;
       }
     };
   }, []);
 
   const retryRoomRecovery = useCallback(() => {
-    const p = latestRef.current;
-    if (!p.joinedRoomRef.current) return;
-    p.intentionalDisconnectRef.current = false;
-    dispatchRecovery({ type: 'SET_TARGET_ROOM', roomCode: p.joinedRoomRef.current });
+    const scope = scopeRef.current;
+    const roomCode = selectJoinedRoomCode(scope.session.sessionRef.current);
+    if (!roomCode) return;
+    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: false });
+    dispatchRecovery({ type: 'SET_TARGET_ROOM', roomCode });
     dispatchRecovery({ type: 'USER_RETRY' });
-    p.setError('');
-    p.setActionError('');
+    scope.ui.setError('');
+    scope.ui.setActionError('');
   }, [dispatchRecovery]);
 
   /**
@@ -694,21 +458,25 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
    * @see resetMultiplayerRoomState in App.tsx
    */
   const disconnect = useCallback((reason: string = 'user requested') => {
-    const p = latestRef.current;
-    console.warn('[nav] redirect home', {
-      reason,
-      appMode: p.appMode,
-      joinedRoom: p.joinedRoomRef.current,
-      gameOver: p.stateRef.current?.gameOver ?? null,
-      handOver: p.stateRef.current?.handOver ?? null,
-    });
-    p.intentionalDisconnectRef.current = true;
+    const scope = scopeRef.current;
+    if (import.meta.env.DEV) {
+      console.warn('[nav] redirect home', {
+        reason,
+        appMode: scope.state.appMode,
+        joinedRoom: selectJoinedRoomCode(scope.session.sessionRef.current),
+        gameOver: scope.room.stateRef.current?.gameOver ?? null,
+        handOver: scope.room.stateRef.current?.handOver ?? null,
+      });
+    }
+    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: true });
     dispatchRecovery({ type: 'USER_LEAVE' });
-    p.autoJoinAttemptedRef.current = false;
-    p.setAppMode('home');
-    const socket = p.socketRef.current;
-    const activeRoomCode = p.normalizeRoomCode(p.joinedRoomRef.current);
-    const midActiveMatch = Boolean(p.stateRef.current && !p.stateRef.current.gameOver);
+    scope.joinFlight.autoJoinAttemptedRef.current = false;
+    scope.navigation.setAppMode('home');
+    const socket = scope.socket.socketRef.current;
+    const activeRoomCode = scope.config.normalizeRoomCode(
+      selectJoinedRoomCode(scope.session.sessionRef.current),
+    );
+    const midActiveMatch = Boolean(scope.room.stateRef.current && !scope.room.stateRef.current.gameOver);
 
     void (async () => {
       if (socket?.connected && activeRoomCode) {
@@ -719,7 +487,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
               tournamentMatchId: null,
             });
           } catch (abandonErr) {
-            console.warn('[nav] abandon failed, falling back to room:leave', abandonErr);
+            if (import.meta.env.DEV) {
+              console.warn('[nav] abandon failed, falling back to room:leave', abandonErr);
+            }
             emitRoomLeave(socket, activeRoomCode);
           }
         } else {
@@ -729,49 +499,49 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       if (socket) {
         socket.removeAllListeners();
         socket.disconnect();
-        if (p.socketRef.current === socket) p.socketRef.current = null;
+        if (scope.socket.socketRef.current === socket) scope.socket.socketRef.current = null;
       }
     })();
 
-    if (socket && p.socketRef.current === socket) p.socketRef.current = null;
-    p.setSocket(null);
-    p.setError('');
-    p.setActionError('');
-    p.setYou('');
-    p.setIsConnected(false);
-    p.setIsConnecting(false);
-    p.draggingStateRef.current = false;
-    p.setAppMode('home');
-    p.autoConnectAttemptedRef.current = false;
+    if (socket && scope.socket.socketRef.current === socket) scope.socket.socketRef.current = null;
+    scope.ui.setSocket(null);
+    scope.ui.setError('');
+    scope.ui.setActionError('');
+    scope.ui.setYou('');
+    scope.ui.setIsConnected(false);
+    scope.ui.setIsConnecting(false);
+    scope.gameplay.draggingStateRef.current = false;
+    scope.navigation.setAppMode('home');
+    scope.joinFlight.autoConnectAttemptedRef.current = false;
   }, [dispatchRecovery]);
 
   useEffect(() => {
-    latestRef.current.connectRef.current = connect;
+    scopeRef.current.socket.connectRef.current = connect;
   }, [connect]);
 
   useEffect(() => {
-    const p = latestRef.current;
-    if (p.appMode !== 'multiplayer' && p.appMode !== 'tournament') return;
-    if (p.autoConnectAttemptedRef.current) return;
-    if (!p.serverUrl) return;
-    p.intentionalDisconnectRef.current = false;
-    p.autoConnectAttemptedRef.current = true;
+    const scope = scopeRef.current;
+    if (scope.state.appMode !== 'multiplayer' && scope.state.appMode !== 'tournament') return;
+    if (scope.joinFlight.autoConnectAttemptedRef.current) return;
+    if (!scope.config.serverUrl) return;
+    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: false });
+    scope.joinFlight.autoConnectAttemptedRef.current = true;
     connect();
   }, [connectionState.appMode, config.serverUrl, connect]);
 
   useEffect(() => {
-    const p = latestRef.current;
-    if (p.appMode !== 'tournament') return;
-    if (p.socket) return;
-    p.intentionalDisconnectRef.current = false;
+    const scope = scopeRef.current;
+    if (scope.state.appMode !== 'tournament') return;
+    if (scope.state.socket) return;
+    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: false });
     connect();
   }, [connectionState.appMode, connectionState.socket, connect]);
 
   useEffect(() => {
-    const p = latestRef.current;
-    if (!p.authUserId) return;
-    if (!p.serverUrl || p.socket || p.isConnecting) return;
-    if (p.intentionalDisconnectRef.current) return;
+    const scope = scopeRef.current;
+    if (!scope.state.authUserId) return;
+    if (!scope.config.serverUrl || scope.state.socket || scope.state.isConnecting) return;
+    if (selectIntentionalDisconnect(scope.session.sessionRef.current)) return;
     connect();
   }, [
     connectionState.authUserId,
@@ -800,22 +570,22 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (prev === null) return;
     if (prev === fingerprint) return;
 
-    const current = latestRef.current;
-    const socket = current.socketRef?.current;
+    const scope = scopeRef.current;
+    const socket = scope.socket.socketRef?.current;
     if (!socket?.connected) return;
 
-    const userId = current.authUserRef.current?.id;
+    const userId = scope.auth.authUserRef.current?.id;
     if (!userId) return;
 
     const username =
-      current.authProfileRef.current?.username ??
-      current.authUserRef.current?.email?.split('@')[0] ??
+      scope.auth.authProfileRef.current?.username ??
+      scope.auth.authUserRef.current?.email?.split('@')[0] ??
       'player';
 
-    void current.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
+    void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
       userId,
       username,
-      authToken: current.authAccessTokenRef.current,
+      authToken: scope.auth.authAccessTokenRef.current,
     }).catch((error) => {
       if (import.meta.env.DEV) {
         console.log(

@@ -1,0 +1,19 @@
+{
+  "forbidden": [
+    {
+      "name": "mp-no-circular",
+      "comment": "Multiplayer module graph must remain acyclic",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/" },
+      "to": {
+        "circular": true,
+        "path": "^src/multiplayer/"
+      }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsPreCompilationDeps": true,
+    "externalModuleResolutionStrategy": "node_modules"
+  }
+}

@@ -1,10 +1,9 @@
-import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
-import { normalizeBoardRenderState, sameTileTuple } from './moveLogger';
-import { chooseBotMove, evaluateMove, toBotVisibleState, type BotDifficulty } from '../bot/botHeuristics';
-import { createBotMatch, getLegalMoves } from '../bot/botEngine';
-import type { BotMatchState } from '../bot/botEngine';
-import type { FritzTier } from '../bot/fritzConfig';
-import { FRITZ_TIERS } from '../bot/fritzConfig';
+import type { EngineBestMove, MoveEntry, TileTuple } from '../game/moveLogger';
+import { normalizeBoardRenderState, sameTileTuple } from '../game/moveLogger';
+import { chooseBotMove, evaluateMove, toBotVisibleState, type BotDifficulty } from '../modules/fritz/botHeuristics.ts';
+import { createBotMatch, getLegalMoves, type BotMatchState } from '../modules/match/runtime/botEngine.ts';
+import type { FritzTier } from '../modules/fritz/fritzConfig.ts';
+import { FRITZ_TIERS } from '../modules/fritz/fritzConfig.ts';
 import type { PlacementPosition } from '../types';
 import type {
   AnalyzeMoveLogOptions,

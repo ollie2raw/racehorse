@@ -6,7 +6,7 @@ import {
   saveGameAnalysis,
   enrichMovesWithFritz,
 } from './moveAnalyzer';
-import type { MoveEntry } from './moveLogger';
+import type { MoveEntry } from '../game/moveLogger';
 import type { BoardState } from '../types';
 
 const HISTORY_KEY = 'racehorse_move_analysis_history_v1';

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import type { MatchFoundPayload } from './types';
+import { fetchRankingProfile, fetchUserStatsByUserId } from '../stats/statsApi';
 import './matchFoundOverlay.css';
 
 type Props = {
@@ -8,19 +9,10 @@ type Props = {
   onComplete: () => void;
   /** Signed-in display name for the local player (optional fallback: "You"). */
   yourUsername?: string | null;
+  yourUserId?: string | null;
   /** Queue wait time at match — used for stake band label (same bands as search UI). */
   queueElapsedMs?: number;
 };
-
-/** Placeholder until match history is wired from the API. */
-const PLACEHOLDER_FORM_YOU = 0;
-const PLACEHOLDER_FORM_OPP = 0;
-const PLACEHOLDER_LAST_5_YOU: Array<'W' | 'L' | 'D'> = ['W', 'L', 'W', 'W', 'D'];
-const PLACEHOLDER_LAST_5_OPP: Array<'W' | 'L' | 'D'> = ['W', 'W', 'L', 'L', 'W'];
-const PLACEHOLDER_RECORD_YOU = '28 · 12 · 4';
-const PLACEHOLDER_RECORD_OPP = '16 · 9 · 3';
-/** Shown on the left card when greater than 1; replace with live streak from API. */
-const PLACEHOLDER_WIN_STREAK = 4;
 
 function displayInitials(name: string): string {
   const t = name.trim().replace(/^@+/, '');
@@ -46,12 +38,6 @@ function formatElo(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-function formatForm(n: number): string {
-  if (n === 0) return 'FORM +0';
-  const sign = n > 0 ? '+' : '';
-  return `FORM ${sign}${n}`;
-}
-
 const STAKE_SEGMENTS = [
   { range: '±100' },
   { range: '±200' },
@@ -67,30 +53,11 @@ function stakeLabelFromElapsed(elapsedMs: number): string {
 const RING_R = 52;
 const RING_C = 2 * Math.PI * RING_R;
 
-function LastFivePills({ results }: { results: Array<'W' | 'L' | 'D'> }) {
-  return (
-    <div className="mm-found-last5">
-      <span className="mm-found-last5__label">Last 5</span>
-      <div className="mm-found-last5__pills" role="list">
-        {results.map((r, i) => (
-          <span
-            key={i}
-            className={`mm-found-wld mm-found-wld--${r.toLowerCase()}`}
-            role="listitem"
-          >
-            {r}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
  * Full-screen match-found layout: dual player columns, center countdown ring,
  * match facts row, footer parameters. Shown after `queue:matched`.
  */
-export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElapsedMs = 0 }: Props) {
+export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserId, queueElapsedMs = 0 }: Props) {
   const totalSeconds = useMemo(() => Math.max(1, Math.ceil(payload.countdownMs / 1000)), [payload.countdownMs]);
   const countdownKey = `${payload.roomCode}:${totalSeconds}`;
   const [trackedCountdownKey, setTrackedCountdownKey] = useState(countdownKey);
@@ -99,6 +66,9 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
     setTrackedCountdownKey(countdownKey);
     setSecondsLeft(totalSeconds);
   }
+
+  const [youStats, setYouStats] = useState<{ record: string; streak: number } | null>(null);
+  const [oppStats, setOppStats] = useState<{ record: string; streak: number } | null>(null);
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -109,12 +79,47 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
     return () => window.clearTimeout(t);
   }, [secondsLeft, onComplete]);
 
+  useEffect(() => {
+    if (yourUserId) {
+      Promise.all([
+        fetchRankingProfile(yourUserId),
+        fetchUserStatsByUserId(yourUserId),
+      ]).then(([profileResp, statsResp]) => {
+        const ratingProfile = profileResp.data;
+        const stats = statsResp.data;
+        if (ratingProfile || stats) {
+          const record = stats ? `${stats.wins} · ${stats.losses} · 0` : '0 · 0 · 0';
+          const streak = ratingProfile?.currentWinStreak ?? 0;
+          setYouStats({ record, streak });
+        }
+      }).catch(() => {});
+    }
+  }, [yourUserId]);
+
+  useEffect(() => {
+    const oppId = payload.opponent.userId;
+    if (oppId) {
+      Promise.all([
+        fetchRankingProfile(oppId),
+        fetchUserStatsByUserId(oppId),
+      ]).then(([profileResp, statsResp]) => {
+        const ratingProfile = profileResp.data;
+        const stats = statsResp.data;
+        if (ratingProfile || stats) {
+          const record = stats ? `${stats.wins} · ${stats.losses} · 0` : '0 · 0 · 0';
+          const streak = ratingProfile?.currentWinStreak ?? 0;
+          setOppStats({ record, streak });
+        }
+      }).catch(() => {});
+    }
+  }, [payload.opponent.userId]);
+
   const youName = yourUsername?.trim() || 'You';
   const oppName = payload.opponent.username.trim() || 'Opponent';
   const stakeLabel = stakeLabelFromElapsed(queueElapsedMs);
   const ringProgress = secondsLeft / totalSeconds;
   const dashOffset = RING_C * (1 - ringProgress);
-  const winStreak = PLACEHOLDER_WIN_STREAK;
+  const winStreak = youStats ? youStats.streak : 0;
 
   return (
     <GameOverlayPortal>
@@ -147,13 +152,11 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
                   <span>Rated</span>
                 </p>
                 <p className="mm-found-seat__record" aria-label="Record placeholder">
-                  {PLACEHOLDER_RECORD_YOU}
+                  {youStats ? youStats.record : '— · — · —'}
                 </p>
                 <p className="mm-found-seat__elo-row">
                   <span className="mm-found-seat__elo-num">{formatElo(payload.yourRating)}</span>
-                  <span className="mm-found-seat__form">{formatForm(PLACEHOLDER_FORM_YOU)}</span>
                 </p>
-                <LastFivePills results={PLACEHOLDER_LAST_5_YOU} />
                 {winStreak > 1 ? (
                   <p className="mm-found-streak mm-found-streak--gold">
                     <svg className="mm-found-streak__icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
@@ -205,15 +208,24 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
                   <span>Rated</span>
                 </p>
                 <p className="mm-found-seat__record" aria-label="Record placeholder">
-                  {PLACEHOLDER_RECORD_OPP}
+                  {oppStats ? oppStats.record : '— · — · —'}
                 </p>
                 <p className="mm-found-seat__elo-row">
                   <span className="mm-found-seat__elo-num mm-found-seat__elo-num--blue">
                     {formatElo(payload.opponent.rating)}
                   </span>
-                  <span className="mm-found-seat__form">{formatForm(PLACEHOLDER_FORM_OPP)}</span>
                 </p>
-                <LastFivePills results={PLACEHOLDER_LAST_5_OPP} />
+                {oppStats && oppStats.streak > 1 ? (
+                  <p className="mm-found-streak mm-found-streak--blue">
+                    <svg className="mm-found-streak__icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M8 1c0 2-1.5 3-2 5-.3 1.2 0 2.5.8 3.5L8 15l1.2-5.5c.8-1 .9-2.3.6-3.5C9.5 4 8 3 8 1z"
+                      />
+                    </svg>
+                    {oppStats.streak}-game win streak
+                  </p>
+                ) : null}
                 <div className="mm-found-badge mm-found-badge--blue">Skill-matched opponent</div>
               </div>
             </div>

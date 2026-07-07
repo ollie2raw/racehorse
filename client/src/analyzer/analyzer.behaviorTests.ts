@@ -1,8 +1,8 @@
 import { analyzeMoveLog, type AnalyzedMove } from './moveAnalyzer.ts';
 import { buildConsequenceChain } from './consequenceChain.ts';
 import { segmentMoveLogByHand } from './handSegmentation.ts';
-import { normalizeBoardRenderState, sameTileTuple } from './moveLogger.ts';
-import type { MoveEntry } from './moveLogger.ts';
+import { normalizeBoardRenderState, sameTileTuple } from '../game/moveLogger.ts';
+import type { MoveEntry } from '../game/moveLogger.ts';
 import { isRenderableNonNullBoard } from '../multiplayer/boardSnapshotGuards.ts';
 import type { BoardState } from '../types.ts';
 

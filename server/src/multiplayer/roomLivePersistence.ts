@@ -18,6 +18,10 @@ import { supabaseFetch } from '../supabaseUtils';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
 
 const LIVE_PERSIST_DEBOUNCE_MS = 75;
+export const DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS = 10_000;
+
+let persistenceShuttingDown = false;
+const inFlightPersistByRoomCode = new Map<string, Promise<boolean>>();
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -447,7 +451,34 @@ export async function persistLiveRoomSessionNow(
   roster: LiveRosterEntry[],
 ): Promise<boolean> {
   if (liveSessionsTableAvailable === false) return false;
-  return persistLiveSessionRowNow(buildLiveSessionRow(room, roster));
+
+  const roomCode = room.code.trim().toUpperCase();
+  const inFlight = inFlightPersistByRoomCode.get(roomCode);
+  if (inFlight) return inFlight;
+
+  const persistPromise = persistLiveSessionRowNow(buildLiveSessionRow(room, roster)).finally(() => {
+    if (inFlightPersistByRoomCode.get(roomCode) === persistPromise) {
+      inFlightPersistByRoomCode.delete(roomCode);
+    }
+  });
+  inFlightPersistByRoomCode.set(roomCode, persistPromise);
+  return persistPromise;
+}
+
+export function isLiveRoomPersistenceShuttingDown(): boolean {
+  return persistenceShuttingDown;
+}
+
+export function setLiveRoomPersistenceShuttingDown(value: boolean): void {
+  persistenceShuttingDown = value;
+}
+
+export function getPendingLiveRoomPersistenceRoomCodes(): string[] {
+  return [...pendingPersistByRoomCode.keys()];
+}
+
+export function getInFlightLiveRoomPersistenceRoomCodes(): string[] {
+  return [...inFlightPersistByRoomCode.keys()];
 }
 
 export function cancelScheduledLiveRoomPersistence(roomCode: string): void {
@@ -487,6 +518,8 @@ export async function finalizeAndDeleteLiveRoomSession(
 export function schedulePersistLiveRoomSession(room: Room, roster: LiveRosterEntry[]): void {
   const roomCode = room.code.trim().toUpperCase();
   pendingPersistByRoomCode.set(roomCode, { room, roster });
+  if (persistenceShuttingDown) return;
+
   const existingTimer = flushTimersByRoomCode.get(roomCode);
   if (existingTimer) return;
 
@@ -501,10 +534,18 @@ export function schedulePersistLiveRoomSession(room: Room, roster: LiveRosterEnt
   flushTimersByRoomCode.set(roomCode, timer);
 }
 
-export async function flushScheduledLiveRoomPersistence(roomCode?: string): Promise<void> {
+export type FlushScheduledLiveRoomPersistenceResult = {
+  flushedRoomCodes: string[];
+};
+
+export async function flushScheduledLiveRoomPersistence(
+  roomCode?: string,
+): Promise<FlushScheduledLiveRoomPersistenceResult> {
   const codes = roomCode
     ? [roomCode.trim().toUpperCase()]
-    : [...pendingPersistByRoomCode.keys()];
+    : [...new Set([...pendingPersistByRoomCode.keys(), ...flushTimersByRoomCode.keys()])];
+
+  const flushedRoomCodes: string[] = [];
 
   for (const code of codes) {
     const timer = flushTimersByRoomCode.get(code);
@@ -516,9 +557,82 @@ export async function flushScheduledLiveRoomPersistence(roomCode?: string): Prom
     pendingPersistByRoomCode.delete(code);
     if (pending) {
       await persistLiveRoomSessionNow(pending.room, pending.roster);
+      flushedRoomCodes.push(code);
     }
   }
+
+  return { flushedRoomCodes };
 }
+
+export type FlushAllPendingLiveSessionsResult = {
+  flushedRoomCodes: string[];
+  awaitedInFlightRoomCodes: string[];
+  timedOut: boolean;
+};
+
+/**
+ * Production shutdown flush: drain debounced pending writes and await in-flight upserts.
+ * Safe to call multiple times; concurrent callers share one in-flight flush promise.
+ */
+export async function flushAllPendingLiveSessions(options?: {
+  timeoutMs?: number;
+}): Promise<FlushAllPendingLiveSessionsResult> {
+  if (flushAllPendingInFlight) return flushAllPendingInFlight;
+
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS;
+  const wasShuttingDown = persistenceShuttingDown;
+  persistenceShuttingDown = true;
+
+  flushAllPendingInFlight = (async () => {
+    const flushedRoomCodes: string[] = [];
+    let timedOut = false;
+
+    const flushWork = async (): Promise<string[]> => {
+      const scheduled = await flushScheduledLiveRoomPersistence();
+      flushedRoomCodes.push(...scheduled.flushedRoomCodes);
+
+      const inFlightCodes = [...inFlightPersistByRoomCode.keys()];
+      await Promise.all([...inFlightPersistByRoomCode.values()]);
+      return inFlightCodes;
+    };
+
+    let awaitedInFlightRoomCodes: string[] = [];
+    try {
+      awaitedInFlightRoomCodes = await Promise.race([
+        flushWork(),
+        new Promise<string[]>((_, reject) => {
+          setTimeout(() => reject(new Error('live_persist_flush_timeout')), timeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'live_persist_flush_timeout') {
+        timedOut = true;
+        console.warn('[room-live-sessions] shutdown flush timed out', {
+          timeoutMs,
+          pendingRoomCodes: getPendingLiveRoomPersistenceRoomCodes(),
+          inFlightRoomCodes: getInFlightLiveRoomPersistenceRoomCodes(),
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    return {
+      flushedRoomCodes: [...new Set(flushedRoomCodes)],
+      awaitedInFlightRoomCodes,
+      timedOut,
+    };
+  })().finally(() => {
+    flushAllPendingInFlight = null;
+    if (!wasShuttingDown) {
+      persistenceShuttingDown = false;
+    }
+  });
+
+  return flushAllPendingInFlight;
+}
+
+let flushAllPendingInFlight: Promise<FlushAllPendingLiveSessionsResult> | null = null;
 
 export async function loadLiveRoomSession(roomCode: string): Promise<RoomLiveSessionRow | null> {
   if (liveSessionsTableAvailable === false) return null;
@@ -599,6 +713,9 @@ export function resetLiveRoomPersistenceForTests(): void {
   }
   flushTimersByRoomCode.clear();
   pendingPersistByRoomCode.clear();
+  inFlightPersistByRoomCode.clear();
+  flushAllPendingInFlight = null;
+  persistenceShuttingDown = false;
   liveSessionsTableAvailable = null;
   rosterResolver = null;
 }

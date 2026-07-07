@@ -80,6 +80,8 @@ export type Room = {
   preGameDraw?: ServerPregameDrawState | null;
   preGameDrawTimer?: NodeJS.Timeout | null;
   disconnectExpiries?: Record<string, number>;
+  /** Active tile pool size when pre-game draw eliminated tiles (default: full double-6 set). */
+  activeTileSetSize?: number;
 };
 
 export type DrawAnimationStep = {
@@ -546,8 +548,12 @@ export async function startGame(
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0, options.customDeck, options.startingPlayerId);
   room.state = state1;
-  assertTileCountInvariant(room.state, `startGame:${code}`);
-  assertValidGameState(room.state, `startGame:${code}`);
+  if (options.customDeck) {
+    room.activeTileSetSize = options.customDeck.length;
+  }
+  const expectedTileCount = room.activeTileSetSize;
+  assertTileCountInvariant(room.state, `startGame:${code}`, expectedTileCount);
+  assertValidGameState(room.state, `startGame:${code}`, expectedTileCount);
   room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
   room.ghostTurnIndex = 0;
   if (room.events.some((event) => event.type === 'match_started')) {
@@ -657,6 +663,10 @@ export async function readyForNextHand(
       return { kind: 'coalesce', room, existingStart, readyHandNumber };
     }
 
+    if (room.nextHandReady.has(playerSeatId)) {
+      return { kind: 'return', value: { started: false, room, ignored: true } };
+    }
+
     room.nextHandReady.add(playerSeatId);
     appendRoomEvent(room, {
       type: 'hand_ready',
@@ -751,8 +761,9 @@ export interface ActionPayload {
 function commitResolvedGameState(room: Room, assertLabel: string, nextState: GameState, autoPassExtras?: string[]) {
   const finalized = finalizeMandatoryAutoPasses(nextState);
   room.state = finalized.state;
-  assertTileCountInvariant(room.state, assertLabel);
-  assertValidGameState(room.state, assertLabel);
+  const expectedTileCount = room.activeTileSetSize;
+  assertTileCountInvariant(room.state, assertLabel, expectedTileCount);
+  assertValidGameState(room.state, assertLabel, expectedTileCount);
   const extras = autoPassExtras?.filter(Boolean) ?? [];
   const merged = [...extras, ...finalized.autoPassedPlayerIds];
   room.pendingAutoPassNotice = merged.length > 0 ? merged : undefined;

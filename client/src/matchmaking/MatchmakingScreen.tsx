@@ -12,6 +12,8 @@ import { IconFlame, IconPlus, IconUserBust } from '../multiplayer/MultiplayerDue
 import { DuelOpponentFriendButton } from '../multiplayer/DuelOpponentFriendButton';
 import { MultiplayerHubFeatureStrip } from '../multiplayer/MultiplayerHubFeatureStrip';
 import { MultiplayerTwoColumnPvLayout } from '../multiplayer/MultiplayerTwoColumnPvLayout';
+import { playMatchFoundSound } from '../utils/sound';
+import { mutePreference } from '../utils/mutePreference';
 import '../multiplayer/privateMatchLobby.css';
 import './matchmakingScreen.css';
 
@@ -205,6 +207,8 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
 
   const handleMatchReady = useCallback(
     (payload: MatchFoundPayload) => {
+      // Play match found chime sound
+      playMatchFoundSound(mutePreference.get());
       // Join the match room immediately so both players are seated before the
       // countdown ends — server can deal as soon as the room is full.
       if (isConnected) {

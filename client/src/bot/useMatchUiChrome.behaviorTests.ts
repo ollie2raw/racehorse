@@ -1,3 +1,7 @@
+if (typeof globalThis.window === 'undefined') {
+  Object.defineProperty(globalThis, 'window', { value: globalThis, writable: true, configurable: true });
+}
+
 import { mutePreference } from '../utils/mutePreference.ts';
 
 function assert(cond: boolean, msg: string): void {

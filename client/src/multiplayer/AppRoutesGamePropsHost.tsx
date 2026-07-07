@@ -4,7 +4,7 @@ import { FriendInvitePopupOverlay } from '../AppOverlays';
 import { useAppRoutesInput } from '../useAppRoutesInput';
 import { useAppRoutesProps } from '../useAppRoutesProps';
 import type { UseAppRoutesPropsSource } from '../useAppRoutesProps';
-import type { FriendInviteState } from './multiplayerRuntime';
+import type { FriendInviteState } from './runtime/friendInviteRuntime';
 import {
   EMPTY_ROUTE_PROPS,
   getGameSnapshot,
@@ -28,7 +28,7 @@ type AppRoutesGamePropsHostProps = {
 export function AppRoutesGamePropsHost({ source }: AppRoutesGamePropsHostProps) {
   const gameSnapshot = useSyncExternalStore(subscribeGameSnapshot, getGameSnapshot, getGameSnapshot);
   const routeProps =
-    source.joinedRoom
+    source.routeBundles.social.joinedRoom
       ? gameSnapshot.routeProps
       : { ...EMPTY_ROUTE_PROPS, isRoomHost: source.fallbackIsRoomHost };
 

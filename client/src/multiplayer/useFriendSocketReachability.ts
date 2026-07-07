@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Socket } from 'socket.io-client';
+import { registerRawSocketEventHandler } from './socketEventBus';
+import { SOCKET_EVENTS } from './socketEventRegistry';
 
 type UseFriendSocketReachabilityParams = {
   socket: Socket | null;
@@ -19,15 +21,18 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
   return true;
 }
 
-function subscribeSocketConnection(socket: Socket | null, onStoreChange: () => void): () => void {
-  if (!socket) return () => {};
+function subscribeSocketConnection(_socket: Socket | null, onStoreChange: () => void): () => void {
+  if (!_socket) return () => {};
   const handleConnect = () => onStoreChange();
   const handleDisconnect = () => onStoreChange();
-  socket.on('connect', handleConnect);
-  socket.on('disconnect', handleDisconnect);
+  const unregisterConnect = registerRawSocketEventHandler(SOCKET_EVENTS.CONNECT, handleConnect);
+  const unregisterDisconnect = registerRawSocketEventHandler(
+    SOCKET_EVENTS.DISCONNECT,
+    handleDisconnect,
+  );
   return () => {
-    socket.off('connect', handleConnect);
-    socket.off('disconnect', handleDisconnect);
+    unregisterConnect();
+    unregisterDisconnect();
   };
 }
 

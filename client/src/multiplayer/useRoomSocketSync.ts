@@ -1,190 +1,83 @@
-import { useEffect } from 'react';
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
-import type { Socket } from 'socket.io-client';
-import type { GameState, Move, Tile } from '../types';
-import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
-import { projectMultiplayerGameState } from './boardSnapshotGuards';
-import { hasHandIdentityMismatch } from './handIdentity';
-import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import type { GameState, Tile } from '../types';
+import { wrapSocketHandler } from './socketGuards';
+import {
+  getSocketEpisodeProjectionGate,
+  getSocketEpisodeSequence,
+  registerNormalizedSocketRouter,
+  registerRawSocketEventHandler,
+  type EpisodeStampedPayload,
+  type RawSocketHandler,
+  type SocketEpisodeProjectionGate,
+} from './socketEventBus';
 import { logger } from '../utils/logger';
+import { recordIngressStaleEpisodeDrop } from './mpTelemetry';
 import { drawAudit } from './drawAudit';
-import { isMpDebugEnabled, mpPerfMarkStateApplied } from './mpPerf';
-import type {
-  MultiplayerRoomSyncDomRuntime,
-  MultiplayerRoomSyncRuntime,
-  MultiplayerRoomSyncUiRuntime,
-  RoomRecoveryState,
-  StateUpdatePayload,
-  RoomPlayer,
-} from './multiplayerRuntime';
+import { isMpDebugEnabled } from './mpPerf';
+import type { RoomEventMeta, StateUpdatePayload } from './protocol';
+import {
+  createMultiplayerRoomSyncScope,
+  type MultiplayerRoomSyncScope,
+  type MultiplayerRoomSyncScopeSource,
+} from './multiplayerRoomSyncScope';
+import {
+  applyProjectionSessionRefs,
+  applySpectateProjection,
+  applyStateUpdateProjection,
+  logSequenceRegressionDrop,
+} from './projection/applyProjectionResult';
+import {
+  nextEpisodeSequenceCursor,
+  shouldDropClosedEpisodeProjection,
+  shouldDropStaleEpisodeStateUpdate,
+  shouldDropStaleProjectionCommit,
+  shouldDropTransportReplayProjection,
+} from './projection/projectionGates';
+import { projectStateSpectate } from './projection/projectStateSpectate';
+import { projectStateUpdate } from './projection/projectStateUpdate';
+import { SOCKET_EVENTS } from './socketEventRegistry';
+import {
+  dispatchSessionEvents,
+  sessionEventsFromProjectionRefs,
+} from './sessionProjectionBridge';
+import { selectJoinedRoomCode, selectMatchStarted } from './session/sessionStateMachine';
 
-export type { StateUpdatePayload } from './multiplayerRuntime';
+export type { StateUpdatePayload } from './protocol';
+export type { AbandonedMatchNotice } from './multiplayerRoomSyncScope';
+
+export {
+  nextEpisodeSequenceCursor,
+  shouldDropClosedEpisodeProjection,
+  shouldDropPreProjectionStateReplay,
+  shouldDropStaleEpisodeStateUpdate,
+  shouldDropStaleProjectionCommit,
+  shouldDropTransportReplayProjection,
+  STATE_REPLAY_SILENT_DROP_GAP,
+} from './projection/projectionGates';
 
 /** Per-step stagger; chain runs to completion before final hand is shown. */
 const FORCED_DRAW_STAGGER_MS = 500;
 const FORCED_DRAW_FLY_MS = 1800;
 
-function isActiveGameplayState(state: GameState | null): boolean {
-  return Boolean(
-    state &&
-      Array.isArray(state.playerIds) &&
-      state.playerIds.length >= 2 &&
-      typeof state.sequence === 'number' &&
-      Number.isFinite(state.sequence),
-  );
-}
-
-type RoomEventMeta = {
-  matchId?: string;
-  lastEventSequence?: number;
-  eventCount?: number;
-};
-
-export type AbandonedMatchNotice = {
-  context: 'tournament' | 'multiplayer';
-  title: string;
-  detail: string;
-  tournamentId?: string | null;
-};
-
-export type UseRoomSocketSyncParams = {
-  socket: Socket | null;
-  syncRuntime: MultiplayerRoomSyncRuntime;
-  syncUi: MultiplayerRoomSyncUiRuntime;
-  syncDom: MultiplayerRoomSyncDomRuntime;
-  setState: Dispatch<SetStateAction<GameState | null>>;
-  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
-  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
-  authUserId?: string | null;
-  setAbandonedMatchNotice?: Dispatch<SetStateAction<AbandonedMatchNotice | null>>;
-};
-
-type FlatRoomSocketSyncParams = {
-  socket: Socket | null;
-  showToast: (message: string, duration?: number) => void;
-  normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
-  applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
-  setFriendInvite: MultiplayerRoomSyncUiRuntime['setFriendInvite'];
-  joinedRoomRef: MutableRefObject<string | null>;
-  maxSequenceRef: MutableRefObject<number>;
-  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
-  setState: Dispatch<SetStateAction<GameState | null>>;
-  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  setPreGameDraw: Dispatch<SetStateAction<PreGameDrawState | null>>;
-  setLegalMoves: Dispatch<SetStateAction<Move[]>>;
-  setCanDraw: Dispatch<SetStateAction<boolean>>;
-  setOpponentDisconnected: Dispatch<SetStateAction<boolean>>;
-  setOpponentDisconnectMessage: Dispatch<SetStateAction<string>>;
-  drawSequenceActiveRef: MutableRefObject<boolean>;
-  drawSequenceTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  setDrawSequenceActiveBoth: (value: boolean) => void;
-  setDrawStepMyHand: Dispatch<SetStateAction<Tile[] | null>>;
-  setDrawStepActorId: Dispatch<SetStateAction<string | null>>;
-  setDrawStepOpponentHandCount: Dispatch<SetStateAction<number | null>>;
-  setFlyingTiles: Dispatch<
-    SetStateAction<{ x: number; y: number; toX: number; toY: number; id: number }[]>
-  >;
-  setBoneyardDisplayCount: Dispatch<SetStateAction<number | null>>;
-  setDrawPulseIndex: Dispatch<SetStateAction<number | null>>;
-  boneyardRef: RefObject<HTMLDivElement | null>;
-  handAreaRef: RefObject<HTMLDivElement | null>;
-  opponentPillRef: RefObject<HTMLButtonElement | null>;
-  youRef: MutableRefObject<string>;
-  stateRef: MutableRefObject<GameState | null>;
-  flyingTileIdRef: MutableRefObject<number>;
-  isMutedRef: MutableRefObject<boolean>;
-  playDrawSound: (muted: boolean) => void;
-  tileEquals: (a: Tile, b: Tile) => boolean;
-  fetchGameState: (reason: string) => Promise<boolean>;
-  pendingForcedHandRevealRef: MutableRefObject<{ sequence: number; fullHand: Tile[] } | null>;
-  resyncInFlightRef: MutableRefObject<boolean>;
-  resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
-  resyncFlushRef: MutableRefObject<(() => void) | null>;
-  rematchAwaitingStateRef: MutableRefObject<boolean>;
-  resetClientGameSession: () => void;
-  isSeatedPlayerRef: MutableRefObject<boolean>;
-  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
-  matchStartedRef: MutableRefObject<boolean>;
-  playerReadyEmittedRef: MutableRefObject<boolean>;
-  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
-  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
-  onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
-  setError: Dispatch<SetStateAction<string>>;
-  authUserId: string | null;
-  setAbandonedMatchNotice: Dispatch<SetStateAction<AbandonedMatchNotice | null>> | null;
-};
-
-function flattenRoomSocketSyncParams(params: UseRoomSocketSyncParams): FlatRoomSocketSyncParams {
-  return {
-    socket: params.socket,
-    ...params.syncUi,
-    ...params.syncRuntime.roomRuntime,
-    ...params.syncRuntime.recoveryRuntime,
-    ...params.syncRuntime.sessionRefsRuntime,
-    setState: params.setState,
-    setPlayers: params.setPlayers,
-    roomPlayersRef: params.roomPlayersRef,
-    ...params.syncDom,
-    authUserId: params.authUserId ?? null,
-    setAbandonedMatchNotice: params.setAbandonedMatchNotice ?? null,
-  };
-}
+export type UseRoomSocketSyncParams = MultiplayerRoomSyncScopeSource;
 
 type HandTileTarget = HTMLDivElement | HTMLButtonElement | null;
 
-function clearDrawPreview(params: Pick<
-  FlatRoomSocketSyncParams,
-  | 'drawSequenceTimeoutRef'
-  | 'setDrawSequenceActiveBoth'
-  | 'setDrawStepMyHand'
-  | 'setDrawStepActorId'
-  | 'setDrawStepOpponentHandCount'
-  | 'setFlyingTiles'
->) {
-  if (params.drawSequenceTimeoutRef.current) {
-    clearTimeout(params.drawSequenceTimeoutRef.current);
-    params.drawSequenceTimeoutRef.current = null;
-  }
-  params.setDrawSequenceActiveBoth(false);
-  params.setDrawStepMyHand(null);
-  params.setDrawStepActorId(null);
-  params.setDrawStepOpponentHandCount(null);
-  params.setFlyingTiles([]);
-}
-
-function applySequenceToWatermark(
-  maxSequenceRef: MutableRefObject<number>,
-  incoming: number | undefined | null,
-  fetchGameState: (reason: string) => Promise<boolean>,
-): boolean {
-  const decision = evaluateSequenceUpdate(maxSequenceRef, incoming);
-  if (decision.action === 'reject_regression') {
-    logger.error('useRoomSocketSync.ts', new Error('[mp-state] sequence regression — full resync'), {
-      incoming: decision.incoming,
-      watermark: decision.watermark,
-    });
-    void fetchGameState('sequence_regression');
-    return false;
-  }
-  if (decision.action === 'reject_stale') {
-    void fetchGameState('stale_state_update');
-    return false;
-  }
-  if (typeof incoming === 'number' && Number.isFinite(incoming)) {
-    maxSequenceRef.current = decision.sequence;
-  }
-  return true;
-}
-
 export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
+  const scopeRef = useRef<MultiplayerRoomSyncScope>(null!);
+  useLayoutEffect(() => {
+    scopeRef.current = createMultiplayerRoomSyncScope(inputParams);
+  });
+
+  const currentEpisodeSequenceRef = useRef(0);
+  const currentEpisodeRef = useRef<SocketEpisodeProjectionGate>({ id: 0, isClosed: false });
+  const currentCommitRef = useRef<symbol | null>(null);
+
   useEffect(() => {
-    const params = flattenRoomSocketSyncParams(inputParams);
-    const { socket } = params;
-    if (!socket) return;
+    const scope = scopeRef.current;
 
     const recover = () => {
-      void params.fetchGameState('handler_error');
+      void scope.recovery.fetchGameState('handler_error');
     };
     const drawAnimationStepTimers: Array<ReturnType<typeof setTimeout>> = [];
 
@@ -198,20 +91,20 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
 
     const onFriendInviteError = wrapSocketHandler('friend:invite:error', () => {
-      params.showToast('Invite failed: room not found', 2000);
+      scope.ui.showToast('Invite failed: room not found', 2000);
     });
 
     const onRoomUpdate = wrapSocketHandler(
       'room:update',
       (payload: { players?: unknown }) => {
-        const parsedPlayers = params.normalizeRoomPlayers(payload?.players);
-        params.roomPlayersRef.current = parsedPlayers;
-        params.setPlayers(parsedPlayers);
+        const parsedPlayers = scope.ui.normalizeRoomPlayers(payload?.players);
+        scope.room.roomPlayersRef.current = parsedPlayers;
+        scope.ui.setPlayers(parsedPlayers);
 
         // If a matchmaking room was waiting for an opponent to join,
         // trigger the ready signal now that the roster has updated.
         if (parsedPlayers.length >= 2) {
-          params.trySchedulePlayerReadyRef.current();
+          scope.session.trySchedulePlayerReadyRef.current();
         }
       },
     );
@@ -219,209 +112,125 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     const onRoomRequestReady = wrapSocketHandler(
       'room:request_ready',
       (payload: { roomCode?: string }) => {
-        const activeRoom = params.joinedRoomRef.current;
-        if (!activeRoom || params.matchStartedRef.current) return;
+        const activeRoom = selectJoinedRoomCode(scope.session.sessionRef.current);
+        if (!activeRoom || selectMatchStarted(scope.session.sessionRef.current)) return;
         const requestedCode =
           typeof payload?.roomCode === 'string' ? payload.roomCode.trim().toUpperCase() : '';
         if (requestedCode && requestedCode !== activeRoom.trim().toUpperCase()) return;
-        params.playerReadyEmittedRef.current = false;
-        void params.schedulePlayerReadyRef.current();
+        scope.session.dispatchSession({ type: 'ROOM_REQUEST_READY' });
+        void scope.session.schedulePlayerReadyRef.current();
       },
     );
 
-    const applyAuthoritativeStateUpdate = (payload: StateUpdatePayload) => {
-      if (params.rematchAwaitingStateRef.current) {
-        params.resetClientGameSession();
-        params.rematchAwaitingStateRef.current = false;
-      }
+    const applyAuthoritativeStateUpdate = (
+      payload: StateUpdatePayload & { episodeSequence?: number; transportId?: string },
+    ) => {
+      const commitId = Symbol('projection-commit');
+      currentCommitRef.current = commitId;
 
-      const maxSeqWatermarkBeforeMeta = params.maxSequenceRef.current;
-      params.applyRoomEventMeta(payload?.eventMeta);
-
-      /** After a new match identity, watermark is −1 briefly — insist on structural integrity before hydration. */
-      const eventMetaResetSequenceWatermark =
-        maxSeqWatermarkBeforeMeta !== params.maxSequenceRef.current &&
-        params.maxSequenceRef.current === -1;
-
-      const rawState = payload?.state ?? null;
-      let nextState = rawState;
-      let projectionMs: number | undefined;
-      if (nextState !== null) {
-        const projectionStart =
-          isMpDebugEnabled() && typeof performance !== 'undefined' ? performance.now() : null;
-        const projected = projectMultiplayerGameState(nextState);
-        if (!projected) {
-          void params.fetchGameState('invalid_state_projection');
-          return;
-        }
-        nextState = projected;
-        if (projectionStart != null) {
-          projectionMs = performance.now() - projectionStart;
-        }
-      }
-
-      /**
-       * After match identity rolls the sequence watermark back to −1, require a numbered snapshot frame
-       * so stray undated payloads cannot hydrate the chrome before the authoritative counter exists.
-       */
+      currentEpisodeRef.current = getSocketEpisodeProjectionGate();
       if (
-        eventMetaResetSequenceWatermark &&
-        nextState !== null &&
-        (typeof nextState.sequence !== 'number' || !Number.isFinite(nextState.sequence))
-      ) {
-        void params.fetchGameState('fresh_match_requires_sequence');
-        return;
-      }
-
-      if (
-        nextState &&
-        !applySequenceToWatermark(
-          params.maxSequenceRef,
-          nextState.sequence,
-          params.fetchGameState,
+        shouldDropClosedEpisodeProjection(
+          currentEpisodeRef.current,
+          payload.episodeSequence,
         )
       ) {
+        recordIngressStaleEpisodeDrop({ gate: 'closed_episode' });
         return;
       }
 
-      if (nextState?.playerIds && !nextState.playerIds.includes(params.youRef.current)) {
-        params.isSeatedPlayerRef.current = false;
-      }
-
-      if (hasHandIdentityMismatch(nextState, params.youRef.current)) {
-        void params.fetchGameState('hand_identity_mismatch');
-      }
-
-      if (typeof payload.matchStarted === 'boolean') {
-        params.matchStartedRef.current = payload.matchStarted;
-        if (
-          payload.matchStarted &&
-          nextState?.playerIds?.includes(params.youRef.current)
-        ) {
-          params.playerReadyEmittedRef.current = true;
-        }
-      }
-
       if (
-        typeof payload.you === 'string' &&
-        payload.you &&
-        (!nextState?.playerIds || nextState.playerIds.includes(payload.you))
+        shouldDropStaleEpisodeStateUpdate(
+          currentEpisodeSequenceRef.current,
+          payload.episodeSequence,
+          getSocketEpisodeSequence(),
+        )
       ) {
-        params.youRef.current = payload.you;
+        recordIngressStaleEpisodeDrop({ gate: 'stale_episode' });
+        return;
       }
-
-      params.setState(nextState);
-      if (isActiveGameplayState(nextState)) {
-        params.setError((current) => (current === 'waiting_for_ready' ? '' : current));
-      }
-
-      const selfForcedRevealPending =
-        typeof payload.forcedDrawCount === 'number' &&
-        payload.forcedDrawCount > 0 &&
-        payload.forcedDrawActorId === params.youRef.current &&
-        !!nextState;
-
-      if (params.joinedRoomRef.current) {
-        params.setRoomRecoveryState('idle');
-        params.setRoomRecoveryMessage('');
-      }
-
-      params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
-      params.setCanDraw(Boolean(payload?.canDraw));
-      console.log('[PREGAME-CLIENT] setPreGameDraw called with:', 
-        JSON.stringify(payload.preGameDraw?.currentRound),
-        'phase:', payload.preGameDraw?.phase
+      currentEpisodeSequenceRef.current = nextEpisodeSequenceCursor(
+        currentEpisodeSequenceRef.current,
+        payload.episodeSequence,
+        getSocketEpisodeSequence(),
       );
-      params.setPreGameDraw(payload.preGameDraw ?? null);
 
-      const autoPassIds = Array.isArray(payload.recentAutoPasses) ? payload.recentAutoPasses : [];
-      if (autoPassIds.length > 0) {
-        drawAudit('auto-pass', {
-          roomCode: params.joinedRoomRef.current ?? '',
-          playerId: autoPassIds.join(','),
-          boneyardCount: nextState?.boneyard?.length ?? 0,
-          reason: 'blocked_locked_boneyard',
-        });
-        params.showToast('No moves available — passing…', 1500);
+      const transportId =
+        typeof payload.transportId === 'string' && payload.transportId.trim()
+          ? payload.transportId.trim()
+          : undefined;
+      if (shouldDropTransportReplayProjection(transportId)) {
+        return;
       }
 
-      if (selfForcedRevealPending && nextState) {
-        if (params.drawSequenceTimeoutRef.current) {
-          clearTimeout(params.drawSequenceTimeoutRef.current);
-          params.drawSequenceTimeoutRef.current = null;
-        }
-        params.setDrawSequenceActiveBoth(true);
-        const youId = params.youRef.current;
-        const fullHand = nextState.players[youId]?.hand ?? [];
-        const drawnCount = payload.forcedDrawCount ?? 0;
-        const stagedHand = fullHand.slice(0, Math.max(0, fullHand.length - drawnCount));
-        params.pendingForcedHandRevealRef.current = {
-          sequence: nextState.sequence,
-          fullHand: fullHand.map((tile) => ({ low: tile.low, high: tile.high })),
-        };
-        params.setDrawStepMyHand(stagedHand);
-        params.setDrawStepActorId(youId);
-        params.setDrawStepOpponentHandCount(null);
-        const preDrawBoneyard = (nextState.boneyard?.length ?? 0) + drawnCount;
-        params.setBoneyardDisplayCount(preDrawBoneyard);
-      } else {
-        const opponentForcedRevealPending =
-          typeof payload.forcedDrawCount === 'number' &&
-          payload.forcedDrawCount > 0 &&
-          typeof payload.forcedDrawActorId === 'string' &&
-          payload.forcedDrawActorId !== params.youRef.current &&
-          !!nextState;
-
-        params.pendingForcedHandRevealRef.current = null;
-        params.setDrawStepMyHand(null);
-
-        if (opponentForcedRevealPending && nextState) {
-          params.setDrawSequenceActiveBoth(true);
-          const drawnCount = payload.forcedDrawCount ?? 0;
-          const opponentId = payload.forcedDrawActorId!;
-          const finalCount =
-            nextState.handCounts?.[opponentId] ??
-            nextState.players[opponentId]?.hand?.length ??
-            0;
-          params.setDrawStepActorId(opponentId);
-          params.setDrawStepOpponentHandCount(Math.max(0, finalCount - drawnCount));
-          params.setBoneyardDisplayCount((nextState.boneyard?.length ?? 0) + drawnCount);
-        } else {
-          clearDrawPreview(params);
-          params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
-          params.setDrawSequenceActiveBoth(false);
-        }
+      if (scope.recovery.rematchAwaitingStateRef.current) {
+        scope.recovery.resetClientGameSession();
+        scope.recovery.rematchAwaitingStateRef.current = false;
       }
 
-      drawAudit('room-update', {
-        requestId: nextState?.sequence,
-        handCount: nextState?.players[params.youRef.current]?.hand?.length ?? 0,
-        boneyardCount: nextState?.boneyard?.length ?? 0,
-        currentTurn: nextState?.playerIds[nextState?.currentPlayerIndex ?? -1],
-        forcedDraw: payload.forcedDrawCount ?? 0,
+      const maxSeqWatermarkBeforeMeta = scope.room.maxSequenceRef.current;
+      scope.ui.applyRoomEventMeta(payload?.eventMeta);
+
+      const projectionStart =
+        isMpDebugEnabled() && typeof performance !== 'undefined' ? performance.now() : null;
+      const projection = projectStateUpdate({
+        payload,
+        maxSequenceWatermark: scope.room.maxSequenceRef.current,
+        maxSequenceWatermarkBeforeMeta: maxSeqWatermarkBeforeMeta,
+        youId: scope.dom.youRef.current,
+        joinedRoom: selectJoinedRoomCode(scope.session.sessionRef.current),
       });
+      const projectionMs =
+        projectionStart != null && typeof performance !== 'undefined'
+          ? performance.now() - projectionStart
+          : undefined;
 
-      params.setOpponentDisconnected(false);
-      params.setOpponentDisconnectMessage('');
-
-      if (nextState && isMpDebugEnabled()) {
-        mpPerfMarkStateApplied(nextState.sequence, projectionMs);
+      if (projection.kind === 'drop') {
+        if (projection.fetchReason) {
+          if (projection.reason === 'sequence_regression') {
+            logSequenceRegressionDrop(
+              payload?.state?.sequence,
+              scope.room.maxSequenceRef.current,
+            );
+          }
+          void scope.recovery.fetchGameState(projection.fetchReason);
+        }
+        return;
       }
-      params.onAuthoritativeGameplayStateApplied?.(nextState);
+
+      dispatchSessionEvents(
+        scope.session.dispatchSession,
+        sessionEventsFromProjectionRefs(
+          projection.result.sessionRefs,
+          projection.result.nextState,
+        ),
+      );
+      applyProjectionSessionRefs(scope, projection.result.sessionRefs);
+
+      if (shouldDropStaleProjectionCommit(currentCommitRef.current, commitId)) {
+        return;
+      }
+
+      applyStateUpdateProjection(scope, projection.result, {
+        commitId,
+        currentCommitRef,
+        transportId,
+        projectionMs,
+      });
     };
 
-    params.resyncFlushRef.current = () => {
-      const buffered = params.resyncBufferedUpdateRef.current;
+    scope.recovery.resyncFlushRef.current = () => {
+      const buffered = scope.recovery.resyncBufferedUpdateRef.current;
       if (!buffered) return;
-      params.resyncBufferedUpdateRef.current = null;
+      scope.recovery.resyncBufferedUpdateRef.current = null;
       applyAuthoritativeStateUpdate(buffered);
     };
 
-    const onStateUpdate = wrapSocketHandler(
+    const handleStateUpdate = wrapSocketHandler(
       'state:update',
-      (payload: StateUpdatePayload) => {
-        if (params.resyncInFlightRef.current) {
-          params.resyncBufferedUpdateRef.current = payload;
+      (payload: EpisodeStampedPayload<StateUpdatePayload>) => {
+        if (scope.recovery.resyncInFlightRef.current) {
+          scope.recovery.resyncBufferedUpdateRef.current = payload;
           return;
         }
         applyAuthoritativeStateUpdate(payload);
@@ -432,41 +241,38 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     const onStateSpectate = wrapSocketHandler(
       'state:spectate',
       (payload: { state?: GameState | null; eventMeta?: RoomEventMeta }) => {
-        params.isSeatedPlayerRef.current = false;
-        params.applyRoomEventMeta(payload?.eventMeta);
-        const rawState = payload?.state ?? null;
-        if (rawState?.playerIds?.includes(params.youRef.current)) {
-          return;
-        }
-        let nextState = rawState;
-        if (nextState !== null) {
-          const projected = projectMultiplayerGameState(nextState);
-          if (!projected) {
-            void params.fetchGameState('invalid_spectator_snapshot');
-            return;
+        scope.session.dispatchSession({
+          type: 'STATE_UPDATE_LIFECYCLE',
+          seatedClear: true,
+        });
+        scope.ui.applyRoomEventMeta(payload?.eventMeta);
+
+        const projection = projectStateSpectate({
+          payload,
+          maxSequenceWatermark: scope.room.maxSequenceRef.current,
+          youId: scope.dom.youRef.current,
+          joinedRoom: selectJoinedRoomCode(scope.session.sessionRef.current),
+        });
+
+        if (projection.kind === 'drop') {
+          if (projection.fetchReason) {
+            if (projection.reason === 'sequence_regression') {
+              logSequenceRegressionDrop(
+                payload?.state?.sequence,
+                scope.room.maxSequenceRef.current,
+              );
+            }
+            void scope.recovery.fetchGameState(projection.fetchReason);
           }
-          nextState = projected;
-        }
-        if (
-          nextState &&
-          !applySequenceToWatermark(
-            params.maxSequenceRef,
-            nextState.sequence,
-            params.fetchGameState,
-          )
-        ) {
           return;
         }
 
-        params.setState(nextState);
-        if (params.joinedRoomRef.current) {
-          params.setRoomRecoveryState('idle');
-          params.setRoomRecoveryMessage('');
-        }
-        params.setLegalMoves([]);
-        params.setCanDraw(false);
-        clearDrawPreview(params);
-        params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
+        dispatchSessionEvents(
+          scope.session.dispatchSession,
+          sessionEventsFromProjectionRefs(projection.result.sessionRefs, projection.result.nextState),
+        );
+        applyProjectionSessionRefs(scope, projection.result.sessionRefs);
+        applySpectateProjection(scope, projection.result);
       },
       { recoverOnError: recover },
     );
@@ -497,9 +303,9 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           return;
         }
 
-        if (params.stateRef.current?.handOver || params.stateRef.current?.gameOver) {
+        if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
           clearPendingDrawAnimationTimers();
-          params.setFlyingTiles([]);
+          scope.ui.setFlyingTiles([]);
           return;
         }
 
@@ -524,45 +330,45 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         });
 
         clearPendingDrawAnimationTimers();
-        if (params.drawSequenceTimeoutRef.current) {
-          clearTimeout(params.drawSequenceTimeoutRef.current);
-          params.drawSequenceTimeoutRef.current = null;
+        if (scope.dom.drawSequenceTimeoutRef.current) {
+          clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
+          scope.dom.drawSequenceTimeoutRef.current = null;
         }
 
-        const ownForcedDraw = payload.playerId === params.youRef.current;
-        params.setDrawSequenceActiveBoth(true);
-        params.setDrawStepActorId(payload.playerId);
+        const ownForcedDraw = payload.playerId === scope.dom.youRef.current;
+        scope.ui.setDrawSequenceActiveBoth(true);
+        scope.ui.setDrawStepActorId(payload.playerId);
 
         if (ownForcedDraw) {
-          if (!params.pendingForcedHandRevealRef.current) {
-            const youId = params.youRef.current;
-            const fullHand = params.stateRef.current?.players[youId]?.hand ?? [];
+          if (!scope.dom.pendingForcedHandRevealRef.current) {
+            const youId = scope.dom.youRef.current;
+            const fullHand = scope.dom.stateRef.current?.players[youId]?.hand ?? [];
             const stagedHand = fullHand.slice(
               0,
               Math.max(0, fullHand.length - payload.steps.length),
             );
-            params.pendingForcedHandRevealRef.current = {
+            scope.dom.pendingForcedHandRevealRef.current = {
               sequence: payload.sequence,
               fullHand: fullHand.map((tile) => ({ low: tile.low, high: tile.high })),
             };
-            params.setDrawStepMyHand(stagedHand);
+            scope.ui.setDrawStepMyHand(stagedHand);
             if (payload.steps[0]) {
-              params.setBoneyardDisplayCount(
+              scope.ui.setBoneyardDisplayCount(
                 payload.steps[0].boneyardCount + payload.steps.length,
               );
             }
           }
         } else {
-          params.setDrawStepMyHand(null);
-          params.pendingForcedHandRevealRef.current = null;
+          scope.ui.setDrawStepMyHand(null);
+          scope.dom.pendingForcedHandRevealRef.current = null;
           const opponentId = payload.playerId;
           const finalCount =
-            params.stateRef.current?.handCounts?.[opponentId] ??
-            params.stateRef.current?.players[opponentId]?.hand?.length ??
+            scope.dom.stateRef.current?.handCounts?.[opponentId] ??
+            scope.dom.stateRef.current?.players[opponentId]?.hand?.length ??
             0;
-          params.setDrawStepOpponentHandCount(Math.max(0, finalCount - payload.steps.length));
+          scope.ui.setDrawStepOpponentHandCount(Math.max(0, finalCount - payload.steps.length));
           if (payload.steps[0]) {
-            params.setBoneyardDisplayCount(
+            scope.ui.setBoneyardDisplayCount(
               payload.steps[0].boneyardCount + payload.steps.length,
             );
           }
@@ -574,25 +380,25 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         payload.steps.forEach((step, index) => {
           const stepTimer = window.setTimeout(() => {
             try {
-              if (params.stateRef.current?.handOver || params.stateRef.current?.gameOver) {
+              if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
                 clearPendingDrawAnimationTimers();
-                params.setFlyingTiles([]);
+                scope.ui.setFlyingTiles([]);
                 return;
               }
-              params.playDrawSound(params.isMutedRef.current);
-              params.setBoneyardDisplayCount(step.boneyardCount);
+              scope.ui.playDrawSound(scope.session.isMutedRef.current);
+              scope.ui.setBoneyardDisplayCount(step.boneyardCount);
 
-              if (!params.boneyardRef.current) return;
+              if (!scope.dom.boneyardRef.current) return;
 
-              const from = params.boneyardRef.current.getBoundingClientRect();
-              const isMe = payload.playerId === params.youRef.current;
+              const from = scope.dom.boneyardRef.current.getBoundingClientRect();
+              const isMe = payload.playerId === scope.dom.youRef.current;
               const targetEl: HandTileTarget = isMe
-                ? params.handAreaRef.current
-                : params.opponentPillRef.current;
+                ? scope.dom.handAreaRef.current
+                : scope.dom.opponentPillRef.current;
               if (targetEl) {
                 const to = targetEl.getBoundingClientRect();
-                const id = ++params.flyingTileIdRef.current;
-                params.setFlyingTiles((prev) => [
+                const id = ++scope.dom.flyingTileIdRef.current;
+                scope.ui.setFlyingTiles((prev) => [
                   ...prev,
                   {
                     x: from.left + from.width / 2,
@@ -603,25 +409,25 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
                   },
                 ]);
                 const removalTimer = window.setTimeout(() => {
-                  params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
+                  scope.ui.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
                 }, FORCED_DRAW_FLY_MS);
                 drawAnimationStepTimers.push(removalTimer);
               }
 
               if (!isMe) {
-                params.setDrawStepOpponentHandCount(step.drawerHandCount);
+                scope.ui.setDrawStepOpponentHandCount(step.drawerHandCount);
               } else if (step.tile) {
                 const drawnTile = { low: step.tile.low, high: step.tile.high };
-                params.setDrawStepMyHand((prev) => {
+                scope.ui.setDrawStepMyHand((prev) => {
                   const base = prev ?? [];
-                  if (base.some((tile) => params.tileEquals(tile, drawnTile))) {
+                  if (base.some((tile) => scope.ui.tileEquals(tile, drawnTile))) {
                     return base;
                   }
                   const nextHand = [...base, drawnTile];
                   if (nextHand.length > 0) {
-                    params.setDrawPulseIndex(nextHand.length - 1);
+                    scope.ui.setDrawPulseIndex(nextHand.length - 1);
                     const pulseClear = window.setTimeout(
-                      () => params.setDrawPulseIndex(null),
+                      () => scope.ui.setDrawPulseIndex(null),
                       360,
                     );
                     drawAnimationStepTimers.push(pulseClear);
@@ -637,19 +443,19 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           drawAnimationStepTimers.push(stepTimer);
         });
 
-        params.drawSequenceTimeoutRef.current = setTimeout(() => {
+        scope.dom.drawSequenceTimeoutRef.current = setTimeout(() => {
           drawAudit('animation-end', {
             requestId: chainId,
             ms: Date.now() - animationStartedAt,
           });
           clearPendingDrawAnimationTimers();
-          params.setDrawStepMyHand(null);
-          params.pendingForcedHandRevealRef.current = null;
-          params.setDrawStepActorId(null);
-          params.setDrawStepOpponentHandCount(null);
-          params.setBoneyardDisplayCount(null);
-          params.setFlyingTiles([]);
-          params.setDrawSequenceActiveBoth(false);
+          scope.ui.setDrawStepMyHand(null);
+          scope.dom.pendingForcedHandRevealRef.current = null;
+          scope.ui.setDrawStepActorId(null);
+          scope.ui.setDrawStepOpponentHandCount(null);
+          scope.ui.setBoneyardDisplayCount(null);
+          scope.ui.setFlyingTiles([]);
+          scope.ui.setDrawSequenceActiveBoth(false);
         }, chainDurationMs);
       },
     );
@@ -657,67 +463,54 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     const onPlayerDisconnected = wrapSocketHandler(
       'player:disconnected',
       (payload: { playerId?: string; graceMs?: number }) => {
-        if (!payload?.playerId || payload.playerId === params.youRef.current) return;
-        params.setOpponentDisconnected(true);
+        if (!payload?.playerId || payload.playerId === scope.dom.youRef.current) return;
+        scope.ui.setOpponentDisconnected(true);
         const seconds = Math.max(1, Math.round((payload.graceMs ?? 30_000) / 1000));
-        params.setOpponentDisconnectMessage(`Opponent disconnected. Waiting up to ${seconds}s…`);
+        scope.ui.setOpponentDisconnectMessage(`Opponent disconnected. Waiting up to ${seconds}s…`);
+        scope.ui.showToast('Opponent disconnected.', 2500);
       },
     );
 
     const onPlayerReconnected = wrapSocketHandler('player:reconnected', () => {
-      params.setOpponentDisconnected(false);
-      params.setOpponentDisconnectMessage('');
+      scope.ui.setOpponentDisconnected(false);
+      scope.ui.setOpponentDisconnectMessage('');
+      scope.ui.showToast('Opponent reconnected.', 2500);
     });
 
     const onPlayerReconnectTimeout = wrapSocketHandler('player:reconnect_timeout', () => {
-      params.setOpponentDisconnectMessage('Opponent did not return in time.');
+      scope.ui.setOpponentDisconnectMessage('Opponent did not return in time.');
+      scope.ui.showToast('Opponent forfeited.', 3000);
     });
 
-    const onRoomMatchAbandoned = wrapSocketHandler(
-      'room:match_abandoned',
-      (payload: {
-        abandonedUserId: string;
-        abandonedUsername: string;
-        message: string;
-        tournamentId?: string | null;
-        isTournament?: boolean;
-      }) => {
-        if (payload?.abandonedUserId === params.authUserId) return;
-        params.setAbandonedMatchNotice?.({
-          context: payload.isTournament ? 'tournament' : 'multiplayer',
-          title: 'Opponent Left the Game',
-          detail: payload.message || `${payload.abandonedUsername || 'Opponent'} left the game`,
-          tournamentId: payload.tournamentId ?? null,
-        });
-      },
-    );
+    const unregisterNormalized = registerNormalizedSocketRouter({
+      stateUpdate: handleStateUpdate,
+    });
 
+    const asRawHandler = (handler: (...args: never[]) => void): RawSocketHandler =>
+      handler as RawSocketHandler;
 
-    socket.on('friend:invite:error', onFriendInviteError);
-    socket.on('room:update', onRoomUpdate);
-    socket.on('room:request_ready', onRoomRequestReady);
-    socket.on('state:update', onStateUpdate);
-    socket.on('state:spectate', onStateSpectate);
-    socket.on('game:draw_animation', onDrawAnimation);
-    socket.on('player:disconnected', onPlayerDisconnected);
-    socket.on('player:reconnected', onPlayerReconnected);
-    socket.on('player:reconnect_timeout', onPlayerReconnectTimeout);
-    socket.on('room:match_abandoned', onRoomMatchAbandoned);
+    const unregisterRaw = [
+      registerRawSocketEventHandler(SOCKET_EVENTS.FRIEND_INVITE_ERROR, asRawHandler(onFriendInviteError)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.ROOM_UPDATE, asRawHandler(onRoomUpdate)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.ROOM_REQUEST_READY, asRawHandler(onRoomRequestReady)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.STATE_SPECTATE, asRawHandler(onStateSpectate)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.GAME_DRAW_ANIMATION, asRawHandler(onDrawAnimation)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECTED, asRawHandler(onPlayerDisconnected)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECTED, asRawHandler(onPlayerReconnected)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECT_TIMEOUT, asRawHandler(onPlayerReconnectTimeout)),
+    ];
 
     return () => {
-      params.resyncFlushRef.current = null;
-
-      socket.off('friend:invite:error', onFriendInviteError);
-      socket.off('room:update', onRoomUpdate);
-      socket.off('room:request_ready', onRoomRequestReady);
-      socket.off('state:update', onStateUpdate);
-      socket.off('state:spectate', onStateSpectate);
-      socket.off('game:draw_animation', onDrawAnimation);
-      socket.off('player:disconnected', onPlayerDisconnected);
-      socket.off('player:reconnected', onPlayerReconnected);
-      socket.off('player:reconnect_timeout', onPlayerReconnectTimeout);
-      socket.off('room:match_abandoned', onRoomMatchAbandoned);
+      scope.recovery.resyncFlushRef.current = null;
+      unregisterNormalized();
+      for (const unregister of unregisterRaw) {
+        unregister();
+      }
       clearPendingDrawAnimationTimers();
+      if (scope.dom.drawSequenceTimeoutRef.current) {
+        clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
+        scope.dom.drawSequenceTimeoutRef.current = null;
+      }
     };
   }, [inputParams]);
 }

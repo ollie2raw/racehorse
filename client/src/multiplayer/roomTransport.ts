@@ -1,6 +1,7 @@
 /** Socket.IO emit-with-ack transport for live multiplayer / tournament rooms. */
 
 import type { GameState } from '../types';
+import { recordJoinAckTimeout } from './mpTelemetry';
 
 export const SOCKET_ACK_TIMEOUT_MS = 8000;
 
@@ -88,11 +89,13 @@ export function emitWithAck<TResp>(
       });
     }
     const t = window.setTimeout(() => {
+      const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const elapsedMs = Number((endedAt - startedAt).toFixed(1));
+      recordJoinAckTimeout(event, elapsedMs);
       if (mpDebug) {
-        const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
         console.warn('[mp-action-client] timeout', {
           event,
-          elapsedMs: Number((endedAt - startedAt).toFixed(1)),
+          elapsedMs,
         });
       }
       reject(new Error(`${event} timed out after ${SOCKET_ACK_TIMEOUT_MS}ms`));
@@ -125,6 +128,14 @@ export function emitRoomJoin(
   identity: RoomJoinIdentity,
 ): Promise<RoomAckResponse> {
   return emitWithAck<RoomAckResponse>(socket, 'room:join', roomCode, identity);
+}
+
+export function emitRoomSpectate(
+  socket: SocketEmitter,
+  roomCode: string,
+  identity: RoomJoinIdentity,
+): Promise<RoomAckResponse> {
+  return emitWithAck<RoomAckResponse>(socket, 'room:spectate', roomCode, identity);
 }
 
 export function emitRoomLeave(socket: SocketEmitter, roomCode: string): void {

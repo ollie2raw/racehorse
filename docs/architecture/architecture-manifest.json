@@ -1,0 +1,68 @@
+{
+  "version": 3,
+  "phase": "S",
+  "description": "Canonical architecture counts — CI verifies source matches this manifest; zero grandfather tolerance.",
+  "runtime": {
+    "compositionRoot": "client/src/multiplayer/runtime/createMultiplayerRuntime.ts",
+    "allowedConstructionSites": [
+      "App.tsx",
+      "multiplayer/runtime/runtimeBehaviorTests.ts"
+    ],
+    "nestedRuntimeFactoriesFile": "multiplayer/runtime/runtimeComposition.ts",
+    "singletonGuard": true
+  },
+  "socketRegistry": {
+    "grandfatheredDirectSocketOn": 0,
+    "approvedRegistrarFiles": 9
+  },
+  "session": {
+    "pureCoreFiles": [
+      "multiplayer/session/sessionReducer.ts",
+      "multiplayer/session/sessionStateMachine.ts",
+      "multiplayer/session/sessionTypes.ts"
+    ],
+    "adapterAllowlist": [
+      "multiplayer/session/useSessionState.ts",
+      "multiplayer/session/useSessionStateTypes.ts",
+      "multiplayer/session/sessionRuntimeTypes.ts"
+    ]
+  },
+  "registrar": {
+    "approvedFiles": [
+      "multiplayer/registerMultiplayerConnectionSocketHandlers.ts",
+      "multiplayer/registerMultiplayerConnectionGameplaySocketHandlers.ts",
+      "tournament/registerTournamentSocketHandlers.ts",
+      "matchmaking/registerMatchmakingSocketHandlers.ts",
+      "friends/registerFriendsSocketHandlers.ts"
+    ],
+    "grandfatheredBusinessLogic": []
+  },
+  "projection": {
+    "pureTransformFiles": [
+      "multiplayer/projection/projectStateUpdate.ts",
+      "multiplayer/projection/projectStateSpectate.ts",
+      "multiplayer/projection/projectionTypes.ts",
+      "multiplayer/projection/projectionGates.ts"
+    ],
+    "applyLayerFile": "multiplayer/projection/applyProjectionResult.ts"
+  },
+  "documentation": {
+    "canonicalReports": [
+      "docs/runtime-composition-phase-p-report.md",
+      "docs/tournament-socket-registrar-report.md",
+      "docs/architecture/session-state-machine-report.md",
+      "docs/architecture/matchmaking-socket-registrar-phase-r-report.md",
+      "docs/architecture/friends-socket-registrar-phase-s-report.md"
+    ],
+    "stalePatterns": [
+      "19 grandfathered",
+      "11 grandfathered tournament",
+      "grandfathered count 19",
+      "8 grandfathered listeners",
+      "1 grandfathered",
+      "Grandfathered direct socket.on sites: 8",
+      "Grandfathered direct socket.on sites: 1",
+      "grandfather warn"
+    ]
+  }
+}

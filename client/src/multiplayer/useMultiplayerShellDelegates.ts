@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { MutableRefObject, SetStateAction } from 'react';
 import type { GameState, Move, Tile } from '../types';
-import type { MultiplayerGameShellBridge } from './multiplayerGameShellTypes';
+import type { MultiplayerShellDelegates } from './multiplayerGameShellTypes';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -14,83 +14,83 @@ type HandEndedPayload = {
 };
 
 export function useMultiplayerShellDelegates(
-  shellBridgeRef: MutableRefObject<MultiplayerGameShellBridge | null>,
+  shellDelegatesRef: MutableRefObject<MultiplayerShellDelegates | null>,
 ) {
   const setState = useCallback(
     (value: SetStateAction<GameState | null>) => {
-      shellBridgeRef.current?.setState(value);
+      shellDelegatesRef.current?.setState(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setLegalMoves = useCallback(
     (value: SetStateAction<Move[]>) => {
-      shellBridgeRef.current?.setLegalMoves(value);
+      shellDelegatesRef.current?.setLegalMoves(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setCanDraw = useCallback(
     (value: SetStateAction<boolean>) => {
-      shellBridgeRef.current?.setCanDraw(value);
+      shellDelegatesRef.current?.setCanDraw(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setRematchRequested = useCallback(
     (value: SetStateAction<boolean>) => {
-      shellBridgeRef.current?.setRematchRequested(value);
+      shellDelegatesRef.current?.setRematchRequested(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setRematchReadyIds = useCallback(
     (value: SetStateAction<string[]>) => {
-      shellBridgeRef.current?.setRematchReadyIds(value);
+      shellDelegatesRef.current?.setRematchReadyIds(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setOpponentDragging = useCallback(
     (value: SetStateAction<boolean>) => {
-      shellBridgeRef.current?.setOpponentDragging(value);
+      shellDelegatesRef.current?.setOpponentDragging(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setHandReveal = useCallback(
     (value: SetStateAction<HandEndedPayload | null>) => {
-      shellBridgeRef.current?.setHandReveal(value);
+      shellDelegatesRef.current?.setHandReveal(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setSelectedTile = useCallback(
     (value: SetStateAction<Tile | null>) => {
-      shellBridgeRef.current?.setSelectedTile(value);
+      shellDelegatesRef.current?.setSelectedTile(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setPendingUiAction = useCallback(
     (
       value: SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>,
     ) => {
-      shellBridgeRef.current?.setPendingUiAction(value);
+      shellDelegatesRef.current?.setPendingUiAction(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const setActionError = useCallback(
     (value: SetStateAction<string>) => {
-      shellBridgeRef.current?.setActionError(value);
+      shellDelegatesRef.current?.setActionError(value);
     },
-    [shellBridgeRef],
+    [shellDelegatesRef],
   );
 
   const clearTransientRoomUi = useCallback(() => {
-    shellBridgeRef.current?.clearTransientRoomUi();
-  }, [shellBridgeRef]);
+    shellDelegatesRef.current?.clearTransientRoomUi();
+  }, [shellDelegatesRef]);
 
   return {
     setState,
@@ -108,9 +108,9 @@ export function useMultiplayerShellDelegates(
 }
 
 export type SharedGameplayRefs = {
-  stateRef: MutableRefObject<GameState | null>;
-  draggingStateRef: MutableRefObject<boolean>;
-  handRevealShownRef: MutableRefObject<number | null>;
-  handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  rematchAwaitingStateRef: MutableRefObject<boolean>;
+  stateRef: import('react').MutableRefObject<GameState | null>;
+  draggingStateRef: import('react').MutableRefObject<boolean>;
+  handRevealShownRef: import('react').MutableRefObject<number | null>;
+  handRevealTimerRef: import('react').MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  rematchAwaitingStateRef: import('react').MutableRefObject<boolean>;
 };

@@ -1,6 +1,6 @@
 import type { BoardState } from '../types';
 import type { HandMoveSegment } from './analysisTypes';
-import type { MoveEntry } from './moveLogger';
+import type { MoveEntry } from '../game/moveLogger';
 
 function isBoardEmpty(board: BoardState | null | undefined): boolean {
   return !board?.mainLine?.length;

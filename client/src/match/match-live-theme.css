@@ -36,7 +36,7 @@
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-top-rail,
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail {
-  padding: 10px 16px 8px !important;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 8px calc(16px + env(safe-area-inset-left, 0px)) !important;
   min-height: var(--match-hud-min-height, 82px) !important;
   background: transparent !important;
   border: 0 !important;
@@ -795,3 +795,348 @@
     min-height: 70px !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   PHASE AC TASK 3 — ANIMATION & FEEDBACK PASS OVERRIDES
+   ───────────────────────────────────────────────────────────── */
+
+/* 1. Domino Placement & Landing Feel */
+@keyframes domino-drop {
+  0% {
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.board-tile-wrapper.is-last-played {
+  animation: domino-drop 0.32s cubic-bezier(0.25, 1, 0.5, 1.15) forwards;
+  z-index: 10;
+}
+
+@keyframes last-played-neon-glow {
+  0% {
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.94),
+      inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+      0 0 0 1px rgba(231, 182, 74, 0.16),
+      0 0 24px 8px rgba(231, 182, 74, 0.85) !important; /* Strong gold pulse */
+  }
+  100% {
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.94),
+      inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+      0 0 0 1px rgba(231, 182, 74, 0.16),
+      0 0 6px 2px rgba(231, 182, 74, 0.24) !important; /* Gentle landing glow */
+  }
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .board-canvas
+  .domino-tile.board-tile.highlight.is-last-played
+  .domino-body {
+  animation: last-played-neon-glow 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+}
+
+/* 2. Interactive Placement Zones Hover */
+.screen.game-screen.walnut-live.rh-match-live .placement-zone.active:hover,
+.screen.game-screen.walnut-live.rh-match-live .placement-zone.highlighted:hover {
+  border-color: rgba(231, 182, 74, 0.9) !important;
+  background: rgba(231, 182, 74, 0.22) !important;
+  box-shadow: 
+    0 0 28px rgba(231, 182, 74, 0.45),
+    inset 0 0 10px rgba(231, 182, 74, 0.15) !important;
+  transform: translate(-50%, -50%) scale(1.06) !important;
+  cursor: pointer;
+}
+
+/* 3. Tactile Tile Press (Click) Down Feedback */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight:not(.unplayable):active,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile.highlight:not(.unplayable):active,
+.bot-match-screen .hand-container .domino-tile.highlight:not(.unplayable):active {
+  transform: translateY(-2px) scale(0.97) !important;
+  transition: transform 0.06s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+/* 4. Active Turn Indicator & Player Pill Glowing */
+@keyframes active-accent-pulse-you {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(231, 182, 74, 0.46);
+    background: #e7b64a;
+  }
+  50% {
+    box-shadow: 0 0 24px 4px rgba(231, 182, 74, 0.85);
+    background: #ffd67a;
+  }
+}
+
+@keyframes active-accent-pulse-opp {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.58);
+    background: #58a6ff;
+  }
+  50% {
+    box-shadow: 0 0 24px 4px rgba(88, 166, 255, 0.95);
+    background: #8ec2ff;
+  }
+}
+
+@keyframes active-pill-pulse-you {
+  0%, 100% {
+    border-color: rgba(226, 176, 72, 0.2) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
+  }
+  50% {
+    border-color: rgba(231, 182, 74, 0.5) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 16px 2px rgba(231, 182, 74, 0.18), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
+  }
+}
+
+@keyframes active-pill-pulse-opp {
+  0%, 100% {
+    border-color: rgba(88, 166, 255, 0.2) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
+  }
+  50% {
+    border-color: rgba(88, 166, 255, 0.5) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 16px 2px rgba(88, 166, 255, 0.18), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn.is-you::before,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn.is-you::before {
+    animation: active-accent-pulse-you 2.2s infinite ease-in-out;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you)::before,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you)::before {
+    animation: active-accent-pulse-opp 2.2s infinite ease-in-out;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn.is-you,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn.is-you,
+  .bot-match-screen .wl-player-pill.is-active-turn.is-you,
+  .bot-match-screen .wl-player-pill-btn.is-active-turn.is-you {
+    animation: active-pill-pulse-you 2.2s infinite ease-in-out;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you),
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you),
+  .bot-match-screen .wl-player-pill.is-active-turn:not(.is-you),
+  .bot-match-screen .wl-player-pill-btn.is-active-turn:not(.is-you) {
+    animation: active-pill-pulse-opp 2.2s infinite ease-in-out;
+  }
+}
+
+/* Turn bar label soft breathing highlight */
+@keyframes active-turn-glow-your {
+  0%, 100% {
+    box-shadow: 0 0 6px 1px rgba(149, 240, 202, 0.15);
+    border-color: rgba(149, 240, 202, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 12px 3px rgba(149, 240, 202, 0.35);
+    border-color: rgba(149, 240, 202, 0.8);
+  }
+}
+
+@keyframes active-turn-glow-opp {
+  0%, 100% {
+    box-shadow: 0 0 6px 1px rgba(216, 181, 111, 0.15);
+    border-color: rgba(216, 181, 111, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 12px 3px rgba(216, 181, 111, 0.35);
+    border-color: rgba(216, 181, 111, 0.8);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wl-board-turn__label.your-turn {
+    animation: active-turn-glow-your 2s infinite ease-in-out;
+  }
+
+  .wl-board-turn__label.opp-turn {
+    animation: active-turn-glow-opp 2s infinite ease-in-out;
+  }
+}
+
+/* 5. Score Update Burst Effect */
+@keyframes score-hit-pulse-you {
+  0% {
+    transform: scale(1);
+    border-color: rgba(231, 182, 74, 0.2) !important;
+  }
+  30% {
+    transform: scale(1.08);
+    border-color: #ffd67a !important;
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 20px 4px rgba(231, 182, 74, 0.5), 
+      0 14px 38px rgba(0, 0, 0, 0.35) !important;
+  }
+  100% {
+    transform: scale(1);
+    border-color: rgba(226, 176, 72, 0.2) !important;
+  }
+}
+
+@keyframes score-hit-pulse-opp {
+  0% {
+    transform: scale(1);
+    border-color: rgba(88, 166, 255, 0.2) !important;
+  }
+  30% {
+    transform: scale(1.08);
+    border-color: #8ec2ff !important;
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 20px 4px rgba(88, 166, 255, 0.6), 
+      0 14px 38px rgba(0, 0, 0, 0.35) !important;
+  }
+  100% {
+    transform: scale(1);
+    border-color: rgba(88, 166, 255, 0.2) !important;
+  }
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.score-hit.is-you,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.score-hit.is-you,
+.bot-match-screen .wl-player-pill.score-card.score-hit,
+.bot-match-screen .wl-player-pill-btn.score-card.score-hit {
+  animation: score-hit-pulse-you 0.45s cubic-bezier(0.25, 1, 0.5, 1.2) forwards !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.score-hit:not(.is-you),
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.score-hit:not(.is-you) {
+  animation: score-hit-pulse-opp 0.45s cubic-bezier(0.25, 1, 0.5, 1.2) forwards !important;
+}
+
+/* 6. Score Pill Button Hover & Pressed state */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn:hover {
+  border-color: rgba(226, 176, 72, 0.4) !important;
+  background: rgba(12, 19, 30, 0.88) !important;
+  transform: scale(1.02);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-you:hover {
+  border-color: rgba(231, 182, 74, 0.45) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn:active {
+  transform: scale(0.97) !important;
+}
+
+/* 7. Match Start Entrance Sweep */
+@keyframes match-hud-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes match-board-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes match-deck-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .game-top-bar {
+    animation: match-hud-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .learn-guided-live-board-zone {
+    animation: match-board-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .learn-guided-live-hand-deck {
+    animation: match-deck-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-tile-wrapper.is-last-played {
+    animation: none;
+  }
+}
+
+/* Landscape compact height override for mobile viewports */
+@media (max-height: 480px) and (orientation: landscape) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+    --tray-height: 72px !important;
+    --match-hud-min-height: 44px !important;
+  }
+  
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail {
+    padding-top: calc(4px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: 4px !important;
+    min-height: 44px !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn {
+    min-height: 38px !important;
+    min-width: 110px !important;
+    padding: 2px 8px 3px !important;
+    border-radius: 10px !important;
+    gap: 6px !important;
+  }
+  
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-label {
+    font-size: 1.0rem !important;
+  }
+  
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-score {
+    font-size: 1.35rem !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck {
+    padding-top: 6px !important;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {
+    font-size: 0.72rem !important;
+    padding: 4px 10px !important;
+    min-width: 90px !important;
+  }
+}
+
+

@@ -292,3 +292,71 @@
   border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: var(--radius-md);
 }
+
+/* ── Responsive Overrides ── */
+@media (max-width: 640px) {
+  .rh-lb-header {
+    padding: 16px 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  
+  .rh-lb-tabs {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .rh-lb-tab {
+    padding: 5px 12px;
+    font-size: 13px;
+  }
+  
+  .rh-lb-mode-bar {
+    padding: 8px 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  
+  .rh-lb-content {
+    padding: 12px 16px 0;
+  }
+  
+  .rh-lb-row {
+    grid-template-columns: 32px 1fr 64px;
+    padding: 12px 14px;
+    gap: 8px;
+  }
+  
+  .rh-lb-avatar,
+  .rh-lb-tier,
+  .rh-lb-winrate,
+  .rh-lb-trend,
+  .rh-lb-games {
+    display: none !important;
+  }
+  
+  .rh-lb-rank {
+    font-size: 15px;
+  }
+  
+  .rh-lb-username {
+    font-size: 14px;
+  }
+  
+  .rh-lb-rating {
+    font-size: 15px;
+  }
+  
+  .rh-lb-self-pin {
+    padding: 12px 16px;
+  }
+  
+  .rh-lb-self-pin-inner {
+    grid-template-columns: 32px 1fr 64px;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+}
+

@@ -16,7 +16,8 @@ import {
   type Room,
 } from '../rooms';
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
-import { configureDisconnectGraceSeatResolver } from './disconnectGrace';
+import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
+import { configureDisconnectGraceSeatResolver, clearDisconnectGrace } from './disconnectGrace';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
@@ -245,6 +246,8 @@ export function clearReconnectSeatsForRoom(roomCode: string): void {
 export function clearRoomMetadata(roomCode: string): void {
   deleteRoomRoster(roomCode);
   reconnectSeatsByCode.delete(roomCode);
+  clearGameActionIdempotencyForRoom(roomCode);
+  clearDisconnectGrace(roomCode);
 }
 
 export function cancelRoomCleanup(roomCode: string): void {
@@ -671,7 +674,11 @@ export function broadcastStateUpdate(roomCode: string): void {
 
   const room = getRoom(roomCode);
   if (!room.state) return;
-  assertValidGameState(room.state, `broadcastStateUpdate:${roomCode}`);
+  assertValidGameState(
+    room.state,
+    `broadcastStateUpdate:${roomCode}`,
+    room.activeTileSetSize,
+  );
 
   const cfg = (room as { config?: Record<string, unknown> }).config ?? {};
   const isTournamentRoom = Boolean(cfg.tournamentId);

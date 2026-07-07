@@ -13,7 +13,7 @@ function findBehaviorTests(dir) {
       results.push(...findBehaviorTests(fullPath));
       continue;
     }
-    if (entry.endsWith('.behaviorTests.ts')) {
+    if (entry.endsWith('.behaviorTests.ts') || entry.endsWith('.invariantTests.ts')) {
       results.push(fullPath);
     }
   }

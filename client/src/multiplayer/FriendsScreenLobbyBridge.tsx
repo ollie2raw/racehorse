@@ -8,6 +8,13 @@ type FriendsScreenLobbyBridgeProps = Omit<
 >;
 
 export default function FriendsScreenLobbyBridge(props: FriendsScreenLobbyBridgeProps) {
-  const { copyInviteLink, onCreatePrivateRoom } = useMultiplayerLobbyActionsContext();
-  return <FriendsScreen {...props} onCopyInviteLink={copyInviteLink} onCreatePrivateRoom={onCreatePrivateRoom} />;
+  const { copyInviteLink, onCreatePrivateRoom, spectateRoom } = useMultiplayerLobbyActionsContext();
+  return (
+    <FriendsScreen
+      {...props}
+      onCopyInviteLink={copyInviteLink}
+      onCreatePrivateRoom={onCreatePrivateRoom}
+      onSpectate={spectateRoom}
+    />
+  );
 }

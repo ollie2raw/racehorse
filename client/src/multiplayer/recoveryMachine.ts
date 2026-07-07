@@ -1,7 +1,18 @@
 /**
  * Client room recovery state machine (item 6).
  * Single scheduler, max 5 attempts per episode, explicit policy/target invariants.
+ *
+ * Recovery authority contract (Phase K):
+ * Recovery state is driven only by:
+ * - recoveryMachine snapshot
+ * - episodeSequence gate (socketEventBus)
+ * - socketEventBus projection gate
+ * Any other derived state is invalid for recovery authority.
  */
+
+import { recordRecoveryTransition } from './mpTelemetry';
+import { clearAllIngressState } from './socketEventBus';
+import { RECOVERY_AUTHORITY_CONTRACT } from './recoveryAuthorityContract';
 
 export const MAX_RECOVERY_ATTEMPTS = 5;
 
@@ -15,20 +26,32 @@ export type RecoveryMachineSnapshot = {
   state: RecoveryState;
   policy: RecoveryPolicy;
   targetRoom: string | null;
+  /** Coalesced indirect resync request while machine is non-idle (Phase B). */
+  pendingResyncRoomCode: string | null;
   attempt: number;
   episodeId: number;
   manualRetry: boolean;
   lastMessage: string;
+  /** Set when an episode closes; blocks post-success pending flush (Phase J). */
+  lastEpisodeClosedAt?: number;
+  /** Internal reducer re-entry guard (Phase I). */
+  _transitionLock?: boolean;
 };
+
+let recoveryReducerInFlight = false;
+
+export function resetRecoveryConcurrencyStateForTests(): void {
+  recoveryReducerInFlight = false;
+}
 
 export type RecoveryEvent =
   | { type: 'SOCKET_LOST'; roomCode: string }
   | { type: 'SOCKET_CONNECTED' }
-  | { type: 'TRANSPORT_FAIL'; reason?: string }
-  | { type: 'ROOM_JOIN_OK'; needsResync?: boolean }
+  | { type: 'TRANSPORT_FAIL'; reason?: string; episodeSequence?: number }
+  | { type: 'ROOM_JOIN_OK'; episodeSequence?: number }
   | { type: 'ROOM_JOIN_TRANSIENT'; error?: string }
-  | { type: 'ROOM_JOIN_TERMINAL'; error: string }
-  | { type: 'RESYNC_NEEDED'; roomCode: string }
+  | { type: 'ROOM_JOIN_TERMINAL'; error: string; episodeSequence?: number }
+  | { type: 'RESYNC_NEEDED'; roomCode: string; episodeSequence?: number }
   | { type: 'RESYNC_OK' }
   | { type: 'RESYNC_FAIL'; terminal?: boolean; reason?: string }
   | { type: 'MANUAL_JOIN'; roomCode: string }
@@ -146,6 +169,7 @@ function initialSnapshot(policy: RecoveryPolicy = 'auto'): RecoveryMachineSnapsh
     state: 'idle',
     policy,
     targetRoom: null,
+    pendingResyncRoomCode: null,
     attempt: 0,
     episodeId: 0,
     manualRetry: false,
@@ -175,15 +199,123 @@ function resetEpisode(snapshot: RecoveryMachineSnapshot): RecoveryMachineSnapsho
   };
 }
 
-function clearedTerminal(snapshot: RecoveryMachineSnapshot): RecoveryMachineSnapshot {
+/** Single episode closure boundary — clears pending/attempt state and marks episode closed. */
+export function closeRecoveryEpisode(
+  snapshot: RecoveryMachineSnapshot,
+): RecoveryMachineSnapshot {
   return {
     ...snapshot,
-    state: 'idle',
-    policy: 'disabled',
-    targetRoom: null,
+    pendingResyncRoomCode: null,
     attempt: 0,
     manualRetry: false,
-    lastMessage: 'Match is no longer available.',
+    lastMessage: '',
+    lastEpisodeClosedAt: snapshot.episodeId,
+  };
+}
+
+function shouldClearIngressOnRecoveryEvent(
+  event: RecoveryEvent,
+  next: RecoveryMachineSnapshot,
+): boolean {
+  if (event.type === 'USER_LEAVE') {
+    return true;
+  }
+  if (event.type === 'ROOM_JOIN_TERMINAL') {
+    return true;
+  }
+  if (event.type === 'SET_POLICY' && event.policy === 'disabled') {
+    return true;
+  }
+  if (event.type === 'SET_TARGET_ROOM' && event.roomCode === null && next.targetRoom === null) {
+    return next.policy === 'disabled';
+  }
+  return false;
+}
+
+function isStaleEpisodeEvent(
+  snapshot: RecoveryMachineSnapshot,
+  episodeSequence: number | undefined,
+): boolean {
+  return episodeSequence !== undefined && episodeSequence < snapshot.episodeId;
+}
+
+/** True when an inbound event belongs to a prior recovery episode (Phase K). */
+export function isEpisodeStaleRecoveryEvent(
+  snapshot: RecoveryMachineSnapshot,
+  event: RecoveryEvent,
+): boolean {
+  const episodeSequence =
+    'episodeSequence' in event ? event.episodeSequence : undefined;
+  if (episodeSequence === undefined) {
+    return false;
+  }
+  return episodeSequence < snapshot.episodeId;
+}
+
+function assertRecoveryAuthorityContractInDev(): void {
+  if (!import.meta.env?.DEV) return;
+  if (RECOVERY_AUTHORITY_CONTRACT !== 'recoveryMachine+episodeSequence+projectionGate') {
+    console.error('[recoveryMachine] recovery authority contract drift detected');
+  }
+}
+
+function clearStalePendingResyncOnBoundary(
+  snapshot: RecoveryMachineSnapshot,
+  event: { episodeSequence?: number },
+): RecoveryMachineSnapshot {
+  if (!isStaleEpisodeEvent(snapshot, event.episodeSequence)) {
+    return snapshot;
+  }
+  if (snapshot.pendingResyncRoomCode === null) {
+    return snapshot;
+  }
+  return { ...snapshot, pendingResyncRoomCode: null };
+}
+
+function clearedTerminal(snapshot: RecoveryMachineSnapshot): RecoveryMachineSnapshot {
+  return withMessage(
+    closeRecoveryEpisode({
+      ...snapshot,
+      state: 'idle',
+      policy: 'disabled',
+      targetRoom: null,
+    }),
+    'Match is no longer available.',
+  );
+}
+
+/** Flush a single coalesced resync after the machine reaches idle. */
+function applyPendingResyncAfterIdle(
+  idleSnapshot: RecoveryMachineSnapshot,
+  baseEffects: RecoveryEffect[],
+): RecoveryTransition {
+  if (idleSnapshot.state !== 'idle') {
+    return { snapshot: idleSnapshot, effects: baseEffects };
+  }
+  if (idleSnapshot.lastEpisodeClosedAt === idleSnapshot.episodeId) {
+    return {
+      snapshot: { ...idleSnapshot, pendingResyncRoomCode: null },
+      effects: baseEffects,
+    };
+  }
+  const pending = idleSnapshot.pendingResyncRoomCode;
+  if (!pending) {
+    return { snapshot: idleSnapshot, effects: baseEffects };
+  }
+  const withTarget = {
+    ...idleSnapshot,
+    targetRoom: pending,
+    pendingResyncRoomCode: null,
+  };
+  if (!canEnterJoinOrResync(withTarget)) {
+    return {
+      snapshot: { ...idleSnapshot, pendingResyncRoomCode: null },
+      effects: baseEffects,
+    };
+  }
+  return {
+    snapshot: withMessage({ ...withTarget, state: 'resyncing' }, 'Syncing game state…'),
+    effects: [...baseEffects, { type: 'resync', roomCode: pending }],
   };
 }
 
@@ -237,7 +369,36 @@ function bumpAttemptOrFail(
 /**
  * Pure transition reducer. Scheduler effects are returned for the machine owner to execute.
  */
+function clearTransitionLock(
+  snapshot: RecoveryMachineSnapshot,
+): RecoveryMachineSnapshot {
+  if (!snapshot._transitionLock) {
+    return snapshot;
+  }
+  return { ...snapshot, _transitionLock: false };
+}
+
 export function reduceRecovery(
+  snapshot: RecoveryMachineSnapshot,
+  event: RecoveryEvent,
+): RecoveryTransition {
+  if (snapshot._transitionLock === true || recoveryReducerInFlight) {
+    return { snapshot: clearTransitionLock(snapshot), effects: [] };
+  }
+
+  recoveryReducerInFlight = true;
+  try {
+    const result = reduceRecoveryCore({ ...snapshot, _transitionLock: true }, event);
+    return {
+      snapshot: clearTransitionLock(result.snapshot),
+      effects: result.effects,
+    };
+  } finally {
+    recoveryReducerInFlight = false;
+  }
+}
+
+function reduceRecoveryCore(
   snapshot: RecoveryMachineSnapshot,
   event: RecoveryEvent,
 ): RecoveryTransition {
@@ -249,7 +410,7 @@ export function reduceRecovery(
         (next.state === 'connecting' || next.state === 'joining' || next.state === 'resyncing')
       ) {
         return {
-          snapshot: resetEpisode({ ...next, state: 'idle' }),
+          snapshot: closeRecoveryEpisode({ ...next, state: 'idle' }),
           effects: [{ type: 'cancel_schedule' }],
         };
       }
@@ -259,7 +420,7 @@ export function reduceRecovery(
         !next.manualRetry
       ) {
         return {
-          snapshot: resetEpisode({ ...next, state: 'idle' }),
+          snapshot: resetEpisode({ ...next, state: 'idle', pendingResyncRoomCode: null }),
           effects: [{ type: 'cancel_schedule' }],
         };
       }
@@ -313,10 +474,10 @@ export function reduceRecovery(
         return { snapshot, effects: [] };
       }
       if (!canEnterJoinOrResync(snapshot)) {
-        return {
-          snapshot: resetEpisode({ ...snapshot, state: 'idle' }),
-          effects: [{ type: 'cancel_schedule' }],
-        };
+        return applyPendingResyncAfterIdle(
+          resetEpisode({ ...snapshot, state: 'idle' }),
+          [{ type: 'cancel_schedule' }],
+        );
       }
       const roomCode = snapshot.targetRoom!;
       return {
@@ -341,27 +502,29 @@ export function reduceRecovery(
           : 'Connection unstable. Retrying…';
       const exhausted = 'Reconnect failed after multiple attempts.';
       const result = bumpAttemptOrFail(snapshot, message, exhausted);
-      return result;
+      return {
+        ...result,
+        snapshot: clearStalePendingResyncOnBoundary(result.snapshot, event),
+      };
     }
 
     case 'ROOM_JOIN_OK': {
       if (snapshot.state !== 'joining') {
         return { snapshot, effects: [] };
       }
-      if (event.needsResync) {
-        const roomCode = snapshot.targetRoom;
+      if (isStaleEpisodeEvent(snapshot, event.episodeSequence)) {
         return {
-          snapshot: withMessage(
-            resetEpisode({ ...snapshot, state: 'resyncing' }),
-            'Syncing game state…',
+          snapshot: clearStalePendingResyncOnBoundary(
+            resetEpisode({ ...snapshot, state: 'idle' }),
+            event,
           ),
-          effects: roomCode ? [{ type: 'resync', roomCode }] : [],
+          effects: [{ type: 'cancel_schedule' }],
         };
       }
-      return {
-        snapshot: resetEpisode({ ...snapshot, state: 'idle' }),
-        effects: [{ type: 'cancel_schedule' }],
-      };
+      return applyPendingResyncAfterIdle(
+        resetEpisode({ ...snapshot, state: 'idle' }),
+        [{ type: 'cancel_schedule' }],
+      );
     }
 
     case 'ROOM_JOIN_TRANSIENT': {
@@ -383,8 +546,9 @@ export function reduceRecovery(
           ? 'Room no longer exists. Return to home.'
           : 'Match is no longer available.'
         : 'Match is no longer available.';
+      const terminalSnapshot = withMessage(clearedTerminal(snapshot), message);
       return {
-        snapshot: withMessage(clearedTerminal(snapshot), message),
+        snapshot: clearStalePendingResyncOnBoundary(terminalSnapshot, event),
         effects: [
           { type: 'cancel_schedule' },
           { type: 'clear_terminal_room', roomCode },
@@ -393,14 +557,20 @@ export function reduceRecovery(
     }
 
     case 'RESYNC_NEEDED': {
-      if (snapshot.state !== 'idle') {
-        return { snapshot, effects: [] };
-      }
       const roomCode = normalizeRecoveryRoomCode(event.roomCode);
       if (!roomCode) {
         return { snapshot, effects: [] };
       }
-      const withTarget = { ...snapshot, targetRoom: roomCode };
+      if (snapshot.state === 'resyncing') {
+        return { snapshot, effects: [] };
+      }
+      if (snapshot.state !== 'idle') {
+        return {
+          snapshot: { ...snapshot, pendingResyncRoomCode: roomCode },
+          effects: [],
+        };
+      }
+      const withTarget = { ...snapshot, targetRoom: roomCode, pendingResyncRoomCode: null };
       if (!canEnterJoinOrResync(withTarget)) {
         return { snapshot, effects: [] };
       }
@@ -417,10 +587,10 @@ export function reduceRecovery(
       if (snapshot.state !== 'resyncing') {
         return { snapshot, effects: [] };
       }
-      return {
-        snapshot: resetEpisode({ ...snapshot, state: 'idle' }),
-        effects: [{ type: 'cancel_schedule' }],
-      };
+      return applyPendingResyncAfterIdle(
+        closeRecoveryEpisode({ ...snapshot, state: 'idle' }),
+        [{ type: 'cancel_schedule' }],
+      );
     }
 
     case 'RESYNC_FAIL': {
@@ -499,10 +669,11 @@ export function reduceRecovery(
 
     case 'USER_LEAVE':
       return {
-        snapshot: clearedTerminal({
+        snapshot: closeRecoveryEpisode({
           ...snapshot,
           state: 'idle',
-          lastMessage: '',
+          policy: 'disabled',
+          targetRoom: null,
         }),
         effects: [
           { type: 'cancel_schedule' },
@@ -570,17 +741,24 @@ export function createRecoveryMachine(
 ): RecoveryMachine {
   let snapshot = initialSnapshot(options.initialPolicy ?? 'auto');
   let scheduledEpisodeId: number | null = null;
+  let dispatchEpoch = 0;
 
   const scheduler: Scheduler = options.scheduler ?? createDefaultScheduler();
   const onLog =
     options.onLog ??
     ((entry: RecoveryLogEntry) => {
-      console.warn(formatRecoveryLog(entry));
+      recordRecoveryTransition(entry);
+      if (import.meta.env?.DEV) {
+        console.warn(formatRecoveryLog(entry));
+      }
     });
   const onEffect = options.onEffect;
 
   const runEffects = (from: RecoveryState, event: RecoveryEvent, effects: RecoveryEffect[]) => {
     for (const effect of effects) {
+      if (effect.type === 'clear_terminal_room') {
+        clearAllIngressState('terminal-reset');
+      }
       if (effect.type === 'schedule') {
         scheduledEpisodeId = effect.episodeId;
         scheduler.schedule(effect.delayMs, () => {
@@ -615,9 +793,40 @@ export function createRecoveryMachine(
   const getSnapshot = (): RecoveryMachineSnapshot => snapshot;
 
   const dispatch = (event: RecoveryEvent): RecoveryMachineSnapshot => {
+    assertRecoveryAuthorityContractInDev();
+    dispatchEpoch += 1;
+    const currentEpoch = dispatchEpoch;
+
+    if (
+      snapshot.lastEpisodeClosedAt !== undefined &&
+      isEpisodeStaleRecoveryEvent(snapshot, event)
+    ) {
+      return snapshot;
+    }
+
+    if (event.type === 'RESYNC_NEEDED') {
+      if (snapshot.state === 'resyncing') {
+        return snapshot;
+      }
+      if (
+        event.episodeSequence !== undefined &&
+        event.episodeSequence < snapshot.episodeId
+      ) {
+        return snapshot;
+      }
+    }
+
     const from = snapshot.state;
     const { snapshot: next, effects } = reduceRecovery(snapshot, event);
+
+    if (currentEpoch !== dispatchEpoch) {
+      return snapshot;
+    }
+
     snapshot = next;
+    if (shouldClearIngressOnRecoveryEvent(event, snapshot)) {
+      clearAllIngressState('terminal-reset');
+    }
     runEffects(from, event, effects);
     return snapshot;
   };

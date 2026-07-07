@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { FriendInvitePopupBridge } from './multiplayer/FriendInvitePopupBridge';
-import type { FriendInviteState } from './multiplayer/multiplayerRuntime';
+import type { FriendInviteState } from './multiplayer/runtime/friendInviteRuntime';
 
 const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));

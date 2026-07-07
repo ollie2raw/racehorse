@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
-import { formatRatingDelta } from '../ghost/botMatchGhostHelpers';
+import { formatRatingDelta } from '../modules/ghost/ghostMatchHelpers.ts';
 
 export interface BotPostGameCardProps {
   showPlayVsFritzResultOverlay: boolean;

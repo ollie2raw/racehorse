@@ -10,6 +10,7 @@ interface PublicProfileScreenProps {
   onClose: () => void;
   showToast: (msg: string) => void;
   onChallenge?: (username: string) => void;
+  onSpectate?: (roomCode: string) => void;
 }
 
 function presenceDot(status: PresenceStatus) {
@@ -72,7 +73,7 @@ function timeAgo(isoDate: string): string {
   return `${d}d ago`;
 }
 
-export default function PublicProfileScreen({ username, user, onClose, showToast, onChallenge }: PublicProfileScreenProps) {
+export default function PublicProfileScreen({ username, user, onClose, showToast, onChallenge, onSpectate }: PublicProfileScreenProps) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,14 +165,21 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
           </div>
           {!profile.is_self && user && (
             <div className="rh-pp-hero-actions">
-              {profile.presence.status !== 'offline' && onChallenge && (
+              {profile.presence.status === 'in_game' && profile.presence.current_mode && onSpectate ? (
+                <button
+                  className="rh-pp-btn rh-pp-btn--challenge"
+                  onClick={() => onSpectate(profile.presence.current_mode!)}
+                >
+                  Spectate
+                </button>
+              ) : profile.presence.status !== 'offline' && onChallenge ? (
                 <button
                   className="rh-pp-btn rh-pp-btn--challenge"
                   onClick={() => onChallenge(profile.username)}
                 >
                   Challenge
                 </button>
-              )}
+              ) : null}
               {!profile.is_friend && !profile.has_pending_request && (
                 <button
                   className="rh-pp-btn rh-pp-btn--primary"

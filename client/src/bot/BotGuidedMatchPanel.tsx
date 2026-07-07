@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatedScore } from '../components';
-import type { BotMatchState } from './botEngine';
+import type { BotMatchState } from '../modules/match/runtime/botEngine.ts';
 
 export interface BotGuidedMatchPanelProps {
   showLeaveConfirm: boolean;

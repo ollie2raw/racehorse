@@ -1,8 +1,11 @@
 import type { BoardState, Move, PlacementPosition, Tile } from '../types';
-import type { BotMatchState, BotPlayerId } from '../bot/botEngine';
-import { getMatchableOpenEnds, previewPlayMove } from '../bot/botEngine';
+import type { BotMatchState, BotPlayerId } from '../modules/match/runtime/botEngine.ts';
+import { getMatchableOpenEnds, previewPlayMove } from '../modules/match/runtime/botEngine.ts';
 import type { GhostCompositeState, GhostProfileSummary, GhostResolvedMove } from './api';
-import { chooseBotMove } from '../bot/botHeuristics';
+import { chooseBotMove } from '../modules/fritz/botHeuristics.ts';
+import { parseTileKey, toTileKey } from '../game/tileKeys.ts';
+
+export { parseTileKey, toTileKey };
 
 const STYLE_PRIORS = {
   drawPriority: 0.35,
@@ -11,29 +14,6 @@ const STYLE_PRIORS = {
   scoringBias: 0.7,
   spinnerControl: 0.8,
 } as const;
-
-function normalizeTileKey(value: string): string {
-  const [aRaw, bRaw] = value.split('|');
-  const a = Number(aRaw);
-  const b = Number(bRaw);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return value;
-  const low = Math.min(a, b);
-  const high = Math.max(a, b);
-  return `${low}|${high}`;
-}
-
-export function toTileKey(tile: Tile): string {
-  return normalizeTileKey(`${tile.low}|${tile.high}`);
-}
-
-export function parseTileKey(value: string): Tile | null {
-  const normalized = normalizeTileKey(value);
-  const [lowRaw, highRaw] = normalized.split('|');
-  const low = Number(lowRaw);
-  const high = Number(highRaw);
-  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
-  return { low, high };
-}
 
 export function serializeGhostBoardState(board: BoardState | null): string {
   if (!board) return 'board:empty';

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../../components';
 import type { AnalyzedMove, MoveRating } from '../../analyzer/moveAnalyzer';
-import { sameTileTuple } from '../../analyzer/moveLogger';
+import { sameTileTuple } from '../../game/moveLogger';
 import { GameOverlayPortal } from '../../components/GameOverlayPortal';
 import type { PostGameReviewAccent } from './PostGameReviewPrompt';
 import {

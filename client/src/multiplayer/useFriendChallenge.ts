@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
+import { registerRawSocketEventHandler, type RawSocketHandler } from './socketEventBus';
+import { SOCKET_EVENTS } from './socketEventRegistry';
 import {
   challengeButtonLabel,
   isChallengeButtonDisabled,
@@ -189,10 +191,10 @@ export function useFriendChallenge({
       window.setTimeout(() => resetEntry(challengedUserId, 'idle'), 1200);
     };
 
-    socket.on('friend:invite:declined', onDeclined);
-    return () => {
-      socket.off('friend:invite:declined', onDeclined);
-    };
+    return registerRawSocketEventHandler(
+      SOCKET_EVENTS.FRIEND_INVITE_DECLINED,
+      onDeclined as RawSocketHandler,
+    );
   }, [clearOutboundChallenge, outboundChallenge, resetEntry, showToast, socket]);
 
   useEffect(

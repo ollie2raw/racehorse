@@ -1,25 +1,23 @@
 import { useEffect, useRef } from 'react';
-import { playTileSound, playScoreSound, playDrawSound } from '../utils/sound';
+import { getBoardTileCount } from '../match/boardSessionUtils';
+import { playTileSound, playScoreSound, playDrawSound, playYourTurnSound } from '../utils/sound';
 import type { GameState, Tile } from '../types';
-
-function getBoardTileCount(board: any): number {
-  if (!board || !Array.isArray(board.tiles)) return 0;
-  return board.tiles.length;
-}
+import type { RoomPlayer } from './protocol';
+import type { FlyingTile } from '../match/liveMatchScreenTypes';
 
 interface PresentationCoordinatorParams {
   state: GameState | null;
   you: string;
   isMutedRef: React.MutableRefObject<boolean>;
   opponentName: string;
-  players: any[];
+  players: RoomPlayer[];
   myHand: Tile[];
   opponentTileCount: number;
   drawSequenceActive: boolean;
   boneyardCount: number;
   showScoreLikeToast: (message: string, tone: 'you' | 'opp') => void;
   showScoreToast: (player: 'you' | 'opp', points: number, label?: string) => void;
-  setFlyingTiles: React.Dispatch<React.SetStateAction<any[]>>;
+  setFlyingTiles: React.Dispatch<React.SetStateAction<FlyingTile[]>>;
   boneyardRef: React.RefObject<HTMLElement | null>;
   handAreaRef: React.RefObject<HTMLElement | null>;
   opponentPillRef: React.RefObject<HTMLElement | null>;
@@ -46,6 +44,27 @@ export function useMultiplayerPresentation({
   const prevOpponentHandLenRef = useRef<number>(0);
   const localFlyingTileIdRef = useRef<number>(0);
   const lastHandNumberRef = useRef<number | null>(null);
+  const lastTurnPlayerRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!state) {
+      lastTurnPlayerRef.current = null;
+      return;
+    }
+    const currentTurnPlayer = state.playerIds[state.currentPlayerIndex] ?? null;
+    const prevTurnPlayer = lastTurnPlayerRef.current;
+    lastTurnPlayerRef.current = currentTurnPlayer;
+
+    if (
+      prevTurnPlayer &&
+      prevTurnPlayer !== currentTurnPlayer &&
+      currentTurnPlayer === you &&
+      !state.handOver &&
+      !state.gameOver
+    ) {
+      playYourTurnSound(isMutedRef.current);
+    }
+  }, [state, you, isMutedRef]);
 
   useEffect(() => {
     if (!state) {
@@ -148,7 +167,7 @@ export function useMultiplayerPresentation({
           const from = boneyardRef.current.getBoundingClientRect();
           const to = handAreaRef.current.getBoundingClientRect();
           const id = ++localFlyingTileIdRef.current;
-          
+
           setFlyingTiles((prevTiles) => [
             ...(prevTiles || []),
             {

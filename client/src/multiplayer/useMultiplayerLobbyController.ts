@@ -1,31 +1,36 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
+import type { RoomChatEvent, RoomEmoteEvent } from './protocol';
 import { clearLastRoomCode, LAST_ROOM_STORAGE_KEY } from '../match/recovery/matchRecovery';
 import { emitRoomLeave, emitWithAck, type RoomAckResponse } from './roomTransport';
 import { useMultiplayerRoomActions } from './useMultiplayerRoomActions';
 import type { OutboundChallenge } from './friendChallenge';
+import type { RoomPlayer } from './protocol';
+import type { FriendInviteState } from './runtime/friendInviteRuntime';
 import type {
-  FriendInviteState,
+  MultiplayerReconnectRuntime,
+  MultiplayerSocketRuntime,
+} from './runtime/connectionRuntime';
+import type { MultiplayerNavigationRuntime } from './runtime/navigationRuntime';
+import type {
   MultiplayerControllerLobbyActions,
   MultiplayerJoinFlightRuntime,
-  MultiplayerNavigationRuntime,
-  MultiplayerReconnectRuntime,
   MultiplayerRoomActionsAuth,
   MultiplayerRoomActionsTransport,
   MultiplayerRoomActionsUi,
   MultiplayerRoomRuntime,
   MultiplayerRoomSocialRuntime,
-  MultiplayerSocketRuntime,
-  RoomPlayer,
-} from './multiplayerRuntime';
+} from './runtime/roomRuntime';
+import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
+import { selectJoinedRoomCode } from './session/sessionStateMachine';
 
 export type MultiplayerLobbyActionsContextValue = Omit<MultiplayerControllerLobbyActions, 'startGame'> & {
   onCreatePrivateRoom: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
   acceptFriendInvite: () => Promise<void>;
   declineFriendInvite: () => void;
   sendFriendChallenge: ReturnType<typeof useMultiplayerRoomActions>['sendFriendChallenge'];
+  spectateRoom: (roomCode: string) => Promise<{ ok: boolean; error?: string }>;
   roomActionsUi: MultiplayerRoomActionsUi;
   roomReactions: Array<RoomChatEvent | RoomEmoteEvent>;
   sendRoomChat: (text: string) => void;
@@ -58,7 +63,8 @@ export function useMultiplayerLobbyActionsContext(): MultiplayerLobbyActionsCont
 export type MultiplayerLobbyActionsHostProps = {
   socket: Socket | null;
   socketRuntime: MultiplayerSocketRuntime;
-  roomRuntime: Pick<MultiplayerRoomRuntime, 'joinedRoomRef' | 'roomIdentityRef'>;
+  roomRuntime: Pick<MultiplayerRoomRuntime, 'roomIdentityRef'>;
+  sessionRuntime: MultiplayerSessionStateRuntime;
   joinFlightRuntime: MultiplayerJoinFlightRuntime;
   reconnectRuntime: Pick<
     MultiplayerReconnectRuntime,
@@ -96,7 +102,6 @@ export type MultiplayerLobbyActionsHostProps = {
   setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
   setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
   setOutboundChallenge: Dispatch<SetStateAction<OutboundChallenge | null>>;
-  intentionalDisconnectRef: MutableRefObject<boolean>;
   reconnectAttemptCountRef: MutableRefObject<number>;
   rejoinInFlightRef: MutableRefObject<boolean>;
   autoJoinAttemptedRef: MutableRefObject<boolean>;
@@ -172,6 +177,7 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
   const roomActions = useMultiplayerRoomActions({
     socket: props.socket,
     socketRuntime: props.socketRuntime,
+    sessionRuntime: props.sessionRuntime,
     roomRuntime: props.roomRuntime,
     joinFlightRuntime: props.joinFlightRuntime,
     reconnectRuntime: props.reconnectRuntime,
@@ -204,17 +210,18 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
   }, [appendRoomReaction, clearRoomReactions, props.roomSocialRuntime]);
 
   const leavePrivateLobbyRoom = useCallback(() => {
-    const code = props.normalizeRoomCode(props.roomRuntime.joinedRoomRef.current);
+    const code = props.normalizeRoomCode(
+      selectJoinedRoomCode(props.sessionRuntime.sessionRef.current),
+    );
     const s = props.socketRuntime.socketRef.current;
     if (s?.connected && code) {
       emitRoomLeave(s, code);
     }
     clearLastRoomCode();
-    const intentionalDisconnectRef = props.intentionalDisconnectRef;
     const reconnectShouldJoinRef = props.reconnectRuntime.reconnectShouldJoinRef;
     const reconnectRoomCodeRef = props.reconnectRuntime.reconnectRoomCodeRef;
     const preventAutoRejoinRef = props.reconnectRuntime.preventAutoRejoinRef;
-    intentionalDisconnectRef.current = false;
+    props.sessionRuntime.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: false });
     reconnectShouldJoinRef.current = false;
     reconnectRoomCodeRef.current = null;
     props.clearReconnectAttemptTimer();
@@ -312,6 +319,7 @@ export function MultiplayerLobbyActionsHost({
       acceptFriendInvite: lobby.acceptFriendInvite,
       declineFriendInvite: lobby.declineFriendInvite,
       sendFriendChallenge: lobby.sendFriendChallenge,
+      spectateRoom: lobby.spectateRoom,
       roomActionsUi: lobby.roomActionsUi,
       roomReactions: lobby.roomReactions,
       sendRoomChat: lobby.sendRoomChat,

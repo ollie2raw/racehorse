@@ -208,6 +208,15 @@ export function subscribeHasLiveGameState(listener: () => void): () => void {
 }
 
 export function publishGameSnapshot(next: MultiplayerGameSnapshot): void {
+  const routePropsUnchanged = snapshot.routeProps === next.routeProps;
+  const flagsUnchanged =
+    snapshot.inGame === next.inGame &&
+    snapshot.liveGameOver === next.liveGameOver &&
+    snapshot.hasState === next.hasState;
+  if (routePropsUnchanged && flagsUnchanged) {
+    return;
+  }
+
   snapshot = next;
 
   notifySnapshotListeners();

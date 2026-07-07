@@ -6,6 +6,7 @@ const LIMITS = {
   'AppRoutes': 200_000,      // was 1.4MB, now 73kB — guard against regression
   'BotMatchScreen': 250_000, // 196kB currently
   'index': 700_000,          // main bundle
+  'lesson-v2': 1_400_000,    // huge lessonV2 chunk
 };
 
 const distAssets = 'dist/assets';

@@ -1,8 +1,9 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
-import type { StateUpdatePayload } from './useRoomSocketSync';
-import type { FriendInviteState, RoomPlayer, RoomRecoveryState } from './multiplayerRuntime';
+import type { RoomEventMeta, RoomPlayer, RoomRecoveryState, StateUpdatePayload } from './protocol';
+import type { FriendInviteState } from './runtime/friendInviteRuntime';
+import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -14,8 +15,8 @@ type HandEndedPayload = {
   handWinnerId?: string | null;
 };
 
-/** Imperative bridge App connection/lobby code uses without re-rendering App on state:update. */
-export type MultiplayerGameShellBridge = {
+/** Live-match controls registered from MultiplayerGameShell for App connection/lobby code. */
+export type MultiplayerShellDelegates = {
   stateRef: MutableRefObject<GameState | null>;
   draggingStateRef: MutableRefObject<boolean>;
   handRevealShownRef: MutableRefObject<number | null>;
@@ -51,12 +52,6 @@ export type MultiplayerGameShellConnectionRecovery = {
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
 };
 
-type RoomEventMeta = {
-  matchId?: string;
-  lastEventSequence?: number;
-  eventCount?: number;
-};
-
 export type MultiplayerGameShellProps = {
   socket: Socket | null;
   joinedRoom: string;
@@ -84,7 +79,9 @@ export type MultiplayerGameShellProps = {
   } | null;
   tournamentOpponentLabel: string | null;
   rejoinInFlightRef: MutableRefObject<boolean>;
-  joinedRoomRef: MutableRefObject<string | null>;
+  sessionRuntime: MultiplayerSessionStateRuntime;
+  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
+  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   maxSequenceRef: MutableRefObject<number>;
   roomPlayersRef: MutableRefObject<RoomPlayer[]>;
   resyncInFlightRef: MutableRefObject<boolean>;
@@ -92,7 +89,7 @@ export type MultiplayerGameShellProps = {
   resyncFlushRef: MutableRefObject<(() => void) | null>;
   fetchGameState: (reason: string) => Promise<boolean>;
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
-  shellBridgeRef: MutableRefObject<MultiplayerGameShellBridge | null>;
+  shellDelegatesRef: MutableRefObject<MultiplayerShellDelegates | null>;
   sharedGameplayRefs: {
     stateRef: MutableRefObject<import('../types').GameState | null>;
     draggingStateRef: MutableRefObject<boolean>;

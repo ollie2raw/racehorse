@@ -186,4 +186,175 @@ describe('hand:ready gameplay lock', () => {
     expect(roomAfter.state!.handNumber).toBe(handNumberBefore + 1);
     expect(roomAfter.state!.handOver).toBe(false);
   });
+
+  it('prevents duplicate hand:ready from the same player before other player is ready', async () => {
+    const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
+    const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
+
+    const io = makeTwoPlayerIo(hostSocket, guestSocket, 'PENDING');
+    initRoomSession(io, sessionDeps);
+    registerRoomSessionHandlers(io, hostSocket);
+    registerRoomSessionHandlers(io, guestSocket);
+
+    const { roomCode } = await startPrivateMatch(
+      io,
+      hostHandlers,
+      guestHandlers,
+      hostSocket,
+      guestSocket,
+    );
+
+    armHandOverForReadyTest(roomCode);
+
+    const room = getRoom(roomCode);
+    const handNumberBefore = room.state!.handNumber;
+
+    const firstAck = vi.fn();
+    await hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore, firstAck);
+    expect(firstAck).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, started: false, ignored: false }),
+    );
+
+    // Count hand_ready events in room.events
+    const initialReadyEventsCount = room.events.filter((e) => e.type === 'hand_ready').length;
+    expect(initialReadyEventsCount).toBe(1);
+
+    // Duplicate call
+    const secondAck = vi.fn();
+    await hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore, secondAck);
+    expect(secondAck).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: false, error: 'stale_or_duplicate_hand_ready', ignored: true }),
+    );
+
+    // Verify event count is still 1
+    const finalReadyEventsCount = room.events.filter((e) => e.type === 'hand_ready').length;
+    expect(finalReadyEventsCount).toBe(1);
+  });
+
+  it('handles concurrent duplicate hand:ready calls through lock serialization', async () => {
+    const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
+    const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
+
+    const io = makeTwoPlayerIo(hostSocket, guestSocket, 'PENDING');
+    initRoomSession(io, sessionDeps);
+    registerRoomSessionHandlers(io, hostSocket);
+    registerRoomSessionHandlers(io, guestSocket);
+
+    const { roomCode } = await startPrivateMatch(
+      io,
+      hostHandlers,
+      guestHandlers,
+      hostSocket,
+      guestSocket,
+    );
+
+    armHandOverForReadyTest(roomCode);
+
+    const room = getRoom(roomCode);
+    const handNumberBefore = room.state!.handNumber;
+
+    const firstAck = vi.fn();
+    const secondAck = vi.fn();
+
+    // Call hand:ready concurrently
+    await Promise.all([
+      hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore, firstAck),
+      hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore, secondAck),
+    ]);
+
+    // One should succeed, one should be ignored
+    const firstCallResult = firstAck.mock.calls[0]?.[0];
+    const secondCallResult = secondAck.mock.calls[0]?.[0];
+
+    const succeeded = [firstCallResult, secondCallResult].filter((r) => r?.ok === true);
+    const ignored = [firstCallResult, secondCallResult].filter((r) => r?.ignored === true);
+
+    expect(succeeded.length).toBe(1);
+    expect(ignored.length).toBe(1);
+
+    // Verify only one event is appended
+    const readyEventsCount = room.events.filter((e) => e.type === 'hand_ready').length;
+    expect(readyEventsCount).toBe(1);
+  });
+
+  it('allows different players to mark ready and start next hand', async () => {
+    const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
+    const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
+
+    const io = makeTwoPlayerIo(hostSocket, guestSocket, 'PENDING');
+    initRoomSession(io, sessionDeps);
+    registerRoomSessionHandlers(io, hostSocket);
+    registerRoomSessionHandlers(io, guestSocket);
+
+    const { roomCode } = await startPrivateMatch(
+      io,
+      hostHandlers,
+      guestHandlers,
+      hostSocket,
+      guestSocket,
+    );
+
+    armHandOverForReadyTest(roomCode);
+
+    const room = getRoom(roomCode);
+    const handNumberBefore = room.state!.handNumber;
+
+    const hostAck = vi.fn();
+    await hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore, hostAck);
+    expect(hostAck).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, started: false, ignored: false }),
+    );
+
+    const guestAck = vi.fn();
+    await guestHandlers.get('hand:ready')?.(roomCode, handNumberBefore, guestAck);
+    expect(guestAck).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, ignored: false }),
+    );
+
+    await vi.waitFor(
+      () => {
+        const r = getRoom(roomCode);
+        return Boolean(r.state && r.state.handNumber > handNumberBefore);
+      },
+      { timeout: 2000, interval: 50 },
+    );
+
+    const finalRoom = getRoom(roomCode);
+    expect(finalRoom.state!.handNumber).toBe(handNumberBefore + 1);
+    expect(finalRoom.state!.handOver).toBe(false);
+  });
+
+  it('preserves invalid/stale hand:ready behavior', async () => {
+    const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
+    const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
+
+    const io = makeTwoPlayerIo(hostSocket, guestSocket, 'PENDING');
+    initRoomSession(io, sessionDeps);
+    registerRoomSessionHandlers(io, hostSocket);
+    registerRoomSessionHandlers(io, guestSocket);
+
+    const { roomCode } = await startPrivateMatch(
+      io,
+      hostHandlers,
+      guestHandlers,
+      hostSocket,
+      guestSocket,
+    );
+
+    armHandOverForReadyTest(roomCode);
+
+    const room = getRoom(roomCode);
+    const handNumberBefore = room.state!.handNumber;
+
+    const staleAck = vi.fn();
+    // Send wrong hand number
+    await hostHandlers.get('hand:ready')?.(roomCode, handNumberBefore - 1, staleAck);
+    expect(staleAck).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: false, ignored: true, error: 'stale_or_duplicate_hand_ready' }),
+    );
+
+    // Verify no event is added
+    const readyEventsCount = room.events.filter((e) => e.type === 'hand_ready').length;
+    expect(readyEventsCount).toBe(0);
+  });
 });

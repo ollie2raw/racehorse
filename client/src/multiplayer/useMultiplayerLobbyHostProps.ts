@@ -2,23 +2,27 @@ import { useMemo } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { OutboundChallenge } from './friendChallenge';
+import type { RoomPlayer } from './protocol';
+import type { FriendInviteState } from './runtime/friendInviteRuntime';
+import type {
+  MultiplayerReconnectRuntime,
+  MultiplayerSocketRuntime,
+} from './runtime/connectionRuntime';
+import type { MultiplayerNavigationRuntime } from './runtime/navigationRuntime';
 import type {
   MultiplayerJoinFlightRuntime,
-  MultiplayerNavigationRuntime,
-  MultiplayerReconnectRuntime,
   MultiplayerRoomRuntime,
   MultiplayerRoomSocialRuntime,
-  MultiplayerSocketRuntime,
-  FriendInviteState,
-  RoomPlayer,
-} from './multiplayerRuntime';
+} from './runtime/roomRuntime';
 import type { RoomAckResponse } from './roomTransport';
 import type { MultiplayerLobbyActionsHostProps } from './useMultiplayerLobbyController';
+import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
 
 export type UseMultiplayerLobbyHostPropsSource = {
   socket: Socket | null;
   socketRuntime: MultiplayerSocketRuntime;
   roomRuntime: MultiplayerRoomRuntime;
+  sessionRuntime: MultiplayerSessionStateRuntime;
   joinFlightRuntime: MultiplayerJoinFlightRuntime;
   reconnectRuntime: MultiplayerReconnectRuntime;
   navigationRuntime: MultiplayerNavigationRuntime;
@@ -53,7 +57,6 @@ export type UseMultiplayerLobbyHostPropsSource = {
   setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
   setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
   setOutboundChallenge: Dispatch<SetStateAction<OutboundChallenge | null>>;
-  intentionalDisconnectRef: MutableRefObject<boolean>;
   reconnectAttemptCountRef: MutableRefObject<number>;
   rejoinInFlightRef: MutableRefObject<boolean>;
   autoJoinAttemptedRef: MutableRefObject<boolean>;
@@ -67,9 +70,9 @@ export function useMultiplayerLobbyHostProps(
       socket: source.socket,
       socketRuntime: source.socketRuntime,
       roomRuntime: {
-        joinedRoomRef: source.roomRuntime.joinedRoomRef,
         roomIdentityRef: source.roomRuntime.roomIdentityRef,
       },
+      sessionRuntime: source.sessionRuntime,
       joinFlightRuntime: source.joinFlightRuntime,
       reconnectRuntime: {
         reconnectRoomCodeRef: source.reconnectRuntime.reconnectRoomCodeRef,
@@ -106,17 +109,15 @@ export function useMultiplayerLobbyHostProps(
       setFriendInvite: source.setFriendInvite,
       setMpSubView: source.setMpSubView,
       setOutboundChallenge: source.setOutboundChallenge,
-      intentionalDisconnectRef: source.intentionalDisconnectRef,
       reconnectAttemptCountRef: source.reconnectAttemptCountRef,
       rejoinInFlightRef: source.rejoinInFlightRef,
       autoJoinAttemptedRef: source.autoJoinAttemptedRef,
     }),
     [
-      source,
       source.socket,
       source.socketRuntime,
-      source.roomRuntime.joinedRoomRef,
       source.roomRuntime.roomIdentityRef,
+      source.sessionRuntime,
       source.joinFlightRuntime,
       source.reconnectRuntime.reconnectRoomCodeRef,
       source.reconnectRuntime.reconnectShouldJoinRef,

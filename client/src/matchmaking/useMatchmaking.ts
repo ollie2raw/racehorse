@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
+import { matchmakingSocketScopeRef } from './matchmakingSocketScope';
 import type { MatchFoundPayload, OnlineCountEvent, QueueUiState } from './types';
 
 type Identity = { userId: string; username: string } | null;
@@ -28,6 +29,8 @@ export type UseMatchmakingReturn = {
 /**
  * React hook around the matchmaking socket protocol.
  *
+ * Socket ingress is owned by registerMatchmakingSocketHandlers — this hook assigns delegates only.
+ *
  *   queue:join   →  put me in the queue
  *   queue:leave  →  pull me out
  *   queue:matched (server-pushed) →  match found, fire `onMatchReady`
@@ -47,7 +50,6 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
   const joinAckTimerRef = useRef<number | null>(null);
   const queueUiStateRef = useRef<QueueUiState>(state);
 
-  // Keep callback ref fresh so we don't re-subscribe on every render.
   useEffect(() => { onMatchReadyRef.current = onMatchReady; }, [onMatchReady]);
   useEffect(() => {
     queueUiStateRef.current = state;
@@ -72,52 +74,69 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
     });
   }, [socket, applyOnlineAck]);
 
+  const handleQueueOnline = useCallback((evt: OnlineCountEvent) => {
+    setOnline(evt?.online ?? 0);
+    setQueued(evt?.queued ?? 0);
+  }, []);
+
+  const handleQueueMatched = useCallback((payload: MatchFoundPayload) => {
+    clearJoinAckTimer();
+    setMatched(payload);
+    setState('matched');
+    onMatchReadyRef.current(payload);
+  }, [clearJoinAckTimer]);
+
+  const handleQueueTimeout = useCallback(() => {
+    clearJoinAckTimer();
+    setState('timeout');
+  }, [clearJoinAckTimer]);
+
+  const handleDisconnect = useCallback(() => {
+    clearJoinAckTimer();
+    joinGenerationRef.current += 1;
+    setOnline(0);
+    setQueued(0);
+    const prev = queueUiStateRef.current;
+    if (prev === 'searching' || prev === 'matched') {
+      setSearchStartedAtMs(null);
+      setError('Lost connection to the game server.');
+      setState('idle');
+    }
+  }, [clearJoinAckTimer]);
+
+  const handleConnect = useCallback(() => {
+    if (!socket?.connected) return;
+    socket.emit('queue:online', {}, (resp: { online?: number; queued?: number } | undefined) => {
+      applyOnlineAck(resp);
+    });
+  }, [socket, applyOnlineAck]);
+
+  useLayoutEffect(() => {
+    if (socket) {
+      matchmakingSocketScopeRef.current.matchmaking = {
+        onQueueOnline: handleQueueOnline,
+        onQueueMatched: handleQueueMatched,
+        onQueueTimeout: handleQueueTimeout,
+        onConnect: handleConnect,
+        onDisconnect: handleDisconnect,
+      };
+    } else {
+      matchmakingSocketScopeRef.current.matchmaking = null;
+    }
+  }, [
+    socket,
+    handleQueueOnline,
+    handleQueueMatched,
+    handleQueueTimeout,
+    handleConnect,
+    handleDisconnect,
+  ]);
+
   useEffect(() => {
-    if (!socket) return;
-    const handleOnline = (evt: OnlineCountEvent) => {
-      setOnline(evt?.online ?? 0);
-      setQueued(evt?.queued ?? 0);
-    };
-    const handleMatched = (payload: MatchFoundPayload) => {
-      clearJoinAckTimer();
-      setMatched(payload);
-      setState('matched');
-      onMatchReadyRef.current(payload);
-    };
-    const handleTimeout = () => {
-      clearJoinAckTimer();
-      setState('timeout');
-    };
-    const handleDisconnect = () => {
-      clearJoinAckTimer();
-      joinGenerationRef.current += 1;
-      setOnline(0);
-      setQueued(0);
-      const prev = queueUiStateRef.current;
-      if (prev === 'searching' || prev === 'matched') {
-        setSearchStartedAtMs(null);
-        setError('Lost connection to the game server.');
-        setState('idle');
-      }
-    };
-    const handleConnect = () => {
-      socket.emit('queue:online', {}, (resp: { online?: number; queued?: number } | undefined) => {
-        applyOnlineAck(resp);
-      });
-    };
-    socket.on('queue:online', handleOnline);
-    socket.on('queue:matched', handleMatched);
-    socket.on('queue:timeout', handleTimeout);
-    socket.on('disconnect', handleDisconnect);
-    socket.on('connect', handleConnect);
     return () => {
-      socket.off('queue:online', handleOnline);
-      socket.off('queue:matched', handleMatched);
-      socket.off('queue:timeout', handleTimeout);
-      socket.off('disconnect', handleDisconnect);
-      socket.off('connect', handleConnect);
+      matchmakingSocketScopeRef.current.matchmaking = null;
     };
-  }, [socket, clearJoinAckTimer, applyOnlineAck]);
+  }, []);
 
   const findMatch = useCallback(() => {
     if (!socket?.connected) {

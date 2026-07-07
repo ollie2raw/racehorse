@@ -1,3 +1,7 @@
+if (typeof globalThis.window === 'undefined') {
+  Object.defineProperty(globalThis, 'window', { value: globalThis, writable: true, configurable: true });
+}
+
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`[useAuthoringCapture.behaviorTests] ${msg}`);
 }
@@ -39,7 +43,7 @@ import { fileURLToPath } from 'node:url';
 const LESSON_V2_AUTHORING_KEY = 'racehorse:lesson-v2:authoring:v1';
 
 function testHookExported(): void {
-  const hookPath = join(dirname(fileURLToPath(import.meta.url)), 'useAuthoringCapture.ts');
+  const hookPath = join(dirname(fileURLToPath(import.meta.url)), '../modules/guided/useAuthoringCapture.ts');
   const src = readFileSync(hookPath, 'utf8');
   assert(/export function useAuthoringCapture\b/.test(src), 'useAuthoringCapture is exported');
 }

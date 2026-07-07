@@ -1,0 +1,55 @@
+{
+  "forbidden": [
+    {
+      "name": "mp-protocol-isolated",
+      "comment": "Protocol may not import runtime, transport, controllers, or UI",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/protocol/" },
+      "to": {
+        "path": "^src/multiplayer/",
+        "pathNot": "^src/multiplayer/protocol/"
+      }
+    },
+    {
+      "name": "mp-protocol-no-ui",
+      "comment": "Protocol may not import React screens or components",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/protocol/" },
+      "to": { "path": "\\.tsx$" }
+    },
+    {
+      "name": "mp-runtime-no-multiplayer-internals",
+      "comment": "Runtime may only reach protocol, peer runtime modules, roomTransport ack types, and friendChallenge challenge types",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/runtime/" },
+      "to": {
+        "path": "^src/multiplayer/",
+        "pathNot": "^src/multiplayer/(protocol/|runtime/|session/|roomTransport\\.ts$|friendChallenge\\.ts$)"
+      }
+    },
+    {
+      "name": "mp-runtime-no-ui",
+      "comment": "Runtime may not import UI screens or components",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/runtime/" },
+      "to": {
+        "path": "(^src/multiplayer/.*\\.tsx$|^src/components/)"
+      }
+    },
+    {
+      "name": "mp-protocol-runtime-acyclic",
+      "comment": "Protocol and runtime layers must remain acyclic",
+      "severity": "error",
+      "from": { "path": "^src/multiplayer/(protocol|runtime)/" },
+      "to": {
+        "circular": true,
+        "path": "^src/multiplayer/(protocol|runtime)/"
+      }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsPreCompilationDeps": true,
+    "externalModuleResolutionStrategy": "node_modules"
+  }
+}

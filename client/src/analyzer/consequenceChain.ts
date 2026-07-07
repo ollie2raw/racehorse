@@ -4,7 +4,7 @@ import type {
   HandOutcomeContribution,
   InitiativeShift,
 } from './analysisTypes';
-import type { MoveEntry, TileTuple } from './moveLogger';
+import type { MoveEntry, TileTuple } from '../game/moveLogger';
 
 const CONSEQUENCE_WINDOW = 3;
 

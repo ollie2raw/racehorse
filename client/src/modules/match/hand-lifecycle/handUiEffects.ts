@@ -1,0 +1,23 @@
+import type { BotActionResult } from '../runtime/botEngine.ts';
+import { toastFromResult } from '../runtime/botMatchHelpers.ts';
+import type { HandLifecyclePorts } from './types.ts';
+import { playScoreAudioEffect } from './handAudioEffects.ts';
+
+/** Toast and score UI side effects for non-hand-end bot action results. */
+export function applyBotActionUiEffects(
+  result: BotActionResult,
+  ports: HandLifecyclePorts,
+  opponentLabel: string,
+  isMuted: boolean,
+): void {
+  if (result.scored) {
+    const points = result.scored.points;
+    ports.showScoreToast(result.scored.player, points);
+    playScoreAudioEffect(result, isMuted);
+  }
+  if (result.drew && result.drew.player === 'you') {
+    ports.showBoardToast('You drew a tile', 'bot');
+  }
+  const msg = toastFromResult(result, opponentLabel);
+  if (msg) ports.pushToast(msg);
+}

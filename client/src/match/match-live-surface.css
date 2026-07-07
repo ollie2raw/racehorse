@@ -100,7 +100,7 @@
 /* Hand dock */
 .screen.game-screen.walnut-live.rh-match-live .rh-live-hand-deck,
 .screen.game-screen.walnut-live.rh-match-live .learn-guided-live-hand-deck {
-  padding: 12px 20px 16px;
+  padding: 12px calc(20px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(20px + env(safe-area-inset-left, 0px));
   border-radius: 28px 28px 0 0;
   border: 0 !important;
   background: rgba(5, 9, 15, 0.9) !important;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Socket } from 'socket.io-client';
 import * as api from './tournamentApi';
 import { bindTournamentRecoverySignals } from './recoverySignals';
 import { isTerminalTournamentMatch } from './terminalMatches';
+import type { TournamentHubSocketDelegates } from './tournamentSocketTypes';
 import type {
   BracketView,
   MatchReadyEvent,
@@ -11,7 +11,7 @@ import type {
   TournamentMeResponse,
 } from './types';
 
-type Args = { socket: Socket | null; userId: string | null };
+type Args = { userId: string | null };
 
 function sameScheduledTournament(a: ScheduledTournament, b: ScheduledTournament): boolean {
   return (
@@ -150,7 +150,7 @@ function samePendingMatch(prev: MatchReadyEvent | null, next: MatchReadyEvent | 
   );
 }
 
-export function useTournament({ socket, userId }: Args) {
+export function useTournament({ userId }: Args) {
   const [upcoming, setUpcoming] = useState<ScheduledTournament[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [activeBracket, setActiveBracket] = useState<BracketView | null>(null);
@@ -164,6 +164,16 @@ export function useTournament({ socket, userId }: Args) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const boundaryRefreshInFlightRef = useRef(false);
+  const hubSocketDelegatesRef = useRef<TournamentHubSocketDelegates>({
+    onRegistrationOpen: () => undefined,
+    onRegistrationUpdated: () => undefined,
+    onBracketGenerated: () => undefined,
+    onMatchUpdated: () => undefined,
+    onMatchReady: () => undefined,
+    onMatchCompleted: () => undefined,
+    onTournamentCompleted: () => undefined,
+    onRecover: () => undefined,
+  });
 
   const applyUpcoming = useCallback((next: ScheduledTournament[]) => {
     setUpcoming((prev) => (sameScheduledTournamentList(prev, next) ? prev : next));
@@ -330,21 +340,24 @@ export function useTournament({ socket, userId }: Args) {
     setHasLoaded((prev) => (prev ? prev : true));
   }, [userId, applyRegistrations, applyRecoveryMatch, applyAssignedMatch, applyCountdown]);
 
-  useEffect(() => {
-    if (!socket) return;
-    const onRegOpen = () => { void refresh(); };
-    const onRegUpdated = (payload: { tournamentId: string }) => {
+  const activeBracketTournamentId = activeBracket?.tournament.id ?? null;
+
+  hubSocketDelegatesRef.current = {
+    onRegistrationOpen: () => {
+      void refresh();
+    },
+    onRegistrationUpdated: (payload) => {
       void refresh();
       void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    };
-    const onBracket = (payload: { tournamentId: string }) => {
+    },
+    onBracketGenerated: (payload) => {
       void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
       void refresh();
-    };
-    const onMatchUpdated = (payload: { tournamentId: string }) => {
+    },
+    onMatchUpdated: (payload) => {
       void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    };
-    const onMatchReady = (payload: MatchReadyEvent) => {
+    },
+    onMatchReady: (payload) => {
       console.log('[tournament] match_ready received', {
         matchId: payload.matchId,
         tournamentId: payload.tournamentId,
@@ -352,13 +365,8 @@ export function useTournament({ socket, userId }: Args) {
         matchStatus: payload.matchStatus,
       });
       setPendingMatch((prev) => (samePendingMatch(prev, payload) ? prev : payload));
-    };
-    const onMatchCompleted = (payload: {
-      tournamentId: string;
-      matchId: string;
-      roomCode?: string | null;
-      round?: number;
-    }) => {
+    },
+    onMatchCompleted: (payload) => {
       console.log('[tournament:complete] received match_completed', {
         roomCode: payload.roomCode ?? null,
         matchId: payload.matchId,
@@ -367,44 +375,30 @@ export function useTournament({ socket, userId }: Args) {
       setPendingMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
       setRecoveryMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
       void refresh();
-      if (activeBracket?.tournament.id === payload.tournamentId) {
+      if (activeBracketTournamentId === payload.tournamentId) {
         void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
       }
-    };
-    const onCompleted = (payload: { tournamentId: string }) => {
+    },
+    onTournamentCompleted: (payload) => {
       setPendingMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
       setRecoveryMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
       void refresh();
       void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    };
-    socket.on('tournament:registration_open', onRegOpen);
-    socket.on('tournament:registration_updated', onRegUpdated);
-    socket.on('tournament:bracket_generated', onBracket);
-    socket.on('tournament:match_updated', onMatchUpdated);
-    socket.on('tournament:match_ready', onMatchReady);
-    socket.on('tournament:match_completed', onMatchCompleted);
-    socket.on('tournament:completed', onCompleted);
-    return () => {
-      socket.off('tournament:registration_open', onRegOpen);
-      socket.off('tournament:registration_updated', onRegUpdated);
-      socket.off('tournament:bracket_generated', onBracket);
-      socket.off('tournament:match_updated', onMatchUpdated);
-      socket.off('tournament:match_ready', onMatchReady);
-      socket.off('tournament:match_completed', onMatchCompleted);
-      socket.off('tournament:completed', onCompleted);
-    };
-  }, [socket, refresh, activeBracket?.tournament.id, fetchAndApplyBracket]);
+    },
+    onRecover: () => {
+      void recover();
+    },
+  };
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
     return bindTournamentRecoverySignals({
-      socket,
       documentLike: document,
       onRecover: () => {
         void recover();
       },
     });
-  }, [socket, recover]);
+  }, [recover]);
 
   const register = useCallback(async (tournamentId: string) => {
     const cleanUserId = userId?.trim() || null;
@@ -467,5 +461,6 @@ export function useTournament({ socket, userId }: Args) {
     openBracket,
     clearPendingMatch,
     clearRecoveryMatch,
+    hubSocketDelegatesRef,
   };
 }

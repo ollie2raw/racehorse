@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'client/**'
+  workflow_call:
 
 jobs:
   ci:
@@ -25,6 +26,10 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install server (E2E game server)
+        working-directory: server
+        run: npm ci
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -36,6 +41,18 @@ jobs:
 
       - name: Dependency boundaries
         run: npm run check:deps
+
+      - name: Multiplayer architecture boundaries
+        run: npm run check:multiplayer-arch
+
+      - name: Multiplayer dependency cycles
+        run: npm run check:multiplayer-cycles
+
+      - name: Socket event registry ownership
+        run: npm run check:socket-registry
+
+      - name: Architecture invariant enforcement
+        run: npm run check:architecture
 
       - name: Test
         run: npm run test:coverage
@@ -50,4 +67,7 @@ jobs:
         run: npm run build
 
       - name: Bundle size check
-        run: npm run build && npm run size-check
+        run: npm run size-check
+
+      - name: Bot match lazy-load boundaries
+        run: npm run check:bot-match-lazy

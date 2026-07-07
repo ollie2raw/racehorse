@@ -1,5 +1,4 @@
 import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import './App.css';
@@ -15,9 +14,16 @@ import { mutePreference } from './utils/mutePreference';
 import { logger } from './utils/logger';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
-import { type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
-import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
+
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
+import { useJoinAckCoordinator } from './multiplayer/useJoinAckCoordinator';
+import type { RoomEventMeta } from './multiplayer/protocol';
+import {
+  attachSocketEventBus,
+  dispatchSocketEvent,
+  registerNormalizedSocketRouter,
+  registerRawSocketEventHandler,
+} from './multiplayer/socketEventBus';
 import { useMultiplayerConnectionHostParams } from './multiplayer/useMultiplayerConnectionHostParams';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recoveryMachine';
 import { useMultiplayerConnectionActionsBridge } from './multiplayer/useMultiplayerConnectionContext';
@@ -26,7 +32,7 @@ import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyH
 import { AuthModalsLayer } from './AppOverlays';
 import { MultiplayerGameShell } from './multiplayer/MultiplayerGameShell';
 import { AppRoutesGamePropsHost } from './multiplayer/AppRoutesGamePropsHost';
-import type { MultiplayerGameShellBridge } from './multiplayer/multiplayerGameShellTypes';
+import type { MultiplayerShellDelegates } from './multiplayer/multiplayerGameShellTypes';
 import {
   getHasLiveGameState,
   getLiveGameOver,
@@ -34,16 +40,34 @@ import {
   subscribeLiveGameOver,
 } from './multiplayer/multiplayerGameSnapshot';
 import { useMultiplayerShellDelegates } from './multiplayer/useMultiplayerShellDelegates';
+import { useMultiplayerResync } from './multiplayer/useMultiplayerResync';
+import { shouldAutoConnectForMode } from './multiplayer/connectPolicy';
+import { shouldShowPrivateMatchLobby } from './multiplayer/privateLobbyVisibility';
+import {
+  canAttemptMatchmakingRoomJoin,
+  emitMatchmakingRoomJoin,
+  handleMatchmakingRoomJoinAck,
+} from './multiplayer/matchmakingRoomJoin';
+import {
+  canAttemptMatchAbandon,
+  emitMatchAbandonTransport,
+  handleMatchAbandonFailure,
+  performMatchAbandonSuccessCleanup,
+  performPostGameHomeTeardown,
+} from './multiplayer/postGameExit';
 import { useRenderProfiler } from './debug/renderProfiler';
 import { useTournament } from './tournament/useTournament';
-import { isTerminalTournamentMatch } from './tournament/terminalMatches';
+import { friendsSocketScopeRef } from './friends/friendsSocketScope';
+import { useRegisterFriendsSocketHandlers } from './friends/useRegisterFriendsSocketHandlers';
+import { matchmakingSocketScopeRef } from './matchmaking/matchmakingSocketScope';
+import { useRegisterMatchmakingSocketHandlers } from './matchmaking/useRegisterMatchmakingSocketHandlers';
+import { useRegisterTournamentSocketHandlers } from './tournament/useRegisterTournamentSocketHandlers';
+
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
 import type { MatchFoundPayload } from './matchmaking/types';
 import {
   emitWithAck,
-  emitRoomAbandonMatch,
   emitRoomCreate,
-  emitRoomJoin,
   type PrivateRoomCreateSettings,
   type RoomAckResponse,
 } from './multiplayer/roomTransport';
@@ -52,21 +76,27 @@ import {
   LAST_ROOM_STORAGE_KEY,
   readRoomInviteCodeFromLocation,
   saveLastRoomCode,
-  shouldPersistLastRoomCode,
 } from './match/recovery/matchRecovery';
-import { normalizeRoomPlayers, type RoomPlayer } from './multiplayer/multiplayerRuntime';
+import { shouldPersistJoinedRoom } from './match/recovery/joinedRoomPersistPolicy';
+import {
+  normalizeRoomPlayers,
+  type RoomPlayer,
+  type RoomRecoveryState,
+} from './multiplayer/protocol';
 
 // ─── Utilities ───────────────────────────────────────────────
-type RoomEventMeta = {
-  matchId?: string;
-  lastEventSequence?: number;
-  eventCount?: number;
-};
-type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
 import type { AppMode } from './appRouteTypes';
 import { LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE } from './appRouteTypes';
-import { useAppSessionRuntime } from './useAppSessionRuntime';
+import { selectLegacyAppSessionRuntime } from './multiplayer/runtime/runtimeSelectors';
+import { createMultiplayerRuntime } from './multiplayer/runtime/createMultiplayerRuntime';
+import { MultiplayerRuntimeProvider } from './multiplayer/runtime/runtimeProvider';
+import type { MultiplayerRuntime, MultiplayerRuntimeBootstrap } from './multiplayer/runtime/runtimeTypes';
+import {
+  selectCanSendReady,
+  selectJoinedRoomCode,
+  selectMatchStarted,
+} from './multiplayer/session/sessionStateMachine';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -220,7 +250,6 @@ export default function App() {
   // pending match-ready events are observed in App.tsx and can trigger top-level
   // navigation (auto-route to result on tournament:completed).
   const tournament = useTournament({
-    socket,
     userId: authUser?.id ?? null,
   });
 
@@ -276,7 +305,6 @@ export default function App() {
     mpSubViewRef.current = mpSubView;
   }, [mpSubView]);
 
-  const joinedRoomRef = useRef<string | null>(null);
   const reconnectRoomCodeRef = useRef<string | null>(null);
   const reconnectShouldJoinRef = useRef(false);
   const preventAutoRejoinRef = useRef(false);
@@ -292,7 +320,6 @@ export default function App() {
   const createInFlightRef = useRef(false);
   const inviteJoinInFlightRef = useRef(false);
   const rejoinInFlightRef = useRef(false);
-  const intentionalDisconnectRef = useRef(false);
   const reconnectAttemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptCountRef = useRef(0);
   const maxSequenceRef = useRef<number>(-1);
@@ -308,26 +335,57 @@ export default function App() {
     roomMatchIdRef.current = null;
   }, [joinedRoom]);
 
+  const prevConnectedRef = useRef(false);
+  const prevRecoveryStateRef = useRef<RoomRecoveryState>('idle');
+
+  useEffect(() => {
+    if (appMode === 'multiplayer') {
+      const prev = prevConnectedRef.current;
+      if (prev !== isConnected) {
+        prevConnectedRef.current = isConnected;
+        if (isConnected) {
+          showToast('Connected to server.', 1200);
+        } else if (!isRecoveringConnection && roomRecoveryState === 'idle') {
+          showToast('Disconnected from server.', 1500);
+        }
+      }
+    } else {
+      prevConnectedRef.current = isConnected;
+    }
+  }, [isConnected, appMode, isRecoveringConnection, roomRecoveryState, showToast]);
+
+  useEffect(() => {
+    const prev = prevRecoveryStateRef.current;
+    if (prev !== roomRecoveryState) {
+      prevRecoveryStateRef.current = roomRecoveryState;
+      if (prev === 'idle' && (roomRecoveryState === 'reconnecting' || roomRecoveryState === 'resyncing')) {
+        showToast('Connection lost. Reconnecting...', 2000);
+      } else if ((prev === 'reconnecting' || prev === 'resyncing') && roomRecoveryState === 'idle') {
+        showToast('Connection restored. Match recovered.', 2000);
+      } else if (roomRecoveryState === 'failed') {
+        showToast('Reconnection failed.', 3000);
+      }
+    }
+  }, [roomRecoveryState, showToast]);
+
   const isMutedRef = useRef(isMuted);
   const applyRoomEventMetaRef = useRef<(meta?: RoomEventMeta | null) => void>(() => {});
-  const fetchGameStateRef = useRef<(reason: string) => Promise<boolean>>(async () => false);
   const resetClientGameSessionRef = useRef<() => void>(() => {});
-  const resyncInFlightRef = useRef(false);
-  const resyncCooldownUntilRef = useRef(0);
-  const resyncBufferedUpdateRef = useRef<StateUpdatePayload | null>(null);
-  const resyncFlushRef = useRef<(() => void) | null>(null);
-  const playerReadyEmittedRef = useRef(false);
-  const isSeatedPlayerRef = useRef(false);
-  const matchStartedRef = useRef(false);
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
   const applyJoinedRoomResponseRef = useRef<(resp: RoomAckResponse) => void>(() => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
+  const resyncInFlightRef = useRef(false);
+  const resyncBufferedUpdateRef = useRef<import('./multiplayer/protocol').StateUpdatePayload | null>(null);
+  const resyncFlushRef = useRef<(() => void) | null>(null);
+
+  const runtimeBootstrapRef = useRef<MultiplayerRuntimeBootstrap | null>(null);
+  const multiplayerRuntimeRef = useRef<MultiplayerRuntime | null>(null);
 
   const dispatchRecovery = useCallback((event: RecoveryEvent) => {
     recoveryDispatchRef.current?.(event);
   }, []);
 
-  const gameShellBridgeRef = useRef<MultiplayerGameShellBridge | null>(null);
+  const shellDelegatesRef = useRef<MultiplayerShellDelegates | null>(null);
   const sharedGameplayRefs = useMemo(
     () => ({
       stateRef: { current: null as GameState | null },
@@ -344,7 +402,60 @@ export default function App() {
   const handRevealTimerRef = sharedGameplayRefs.handRevealTimerRef;
   const rematchAwaitingStateRef = sharedGameplayRefs.rematchAwaitingStateRef;
 
-  const shellDelegates = useMultiplayerShellDelegates(gameShellBridgeRef);
+  if (!runtimeBootstrapRef.current) {
+    runtimeBootstrapRef.current = {
+      socketRef,
+      connectRef,
+      pendingCreateOnConnectRef,
+      pendingCreateResolversRef,
+      autoJoinAttemptedRef,
+      joinInFlightRef,
+      createInFlightRef,
+      inviteJoinInFlightRef,
+      autoConnectAttemptedRef,
+      reconnectRoomCodeRef,
+      reconnectShouldJoinRef,
+      preventAutoRejoinRef,
+      reconnectAttemptTimerRef,
+      reconnectAttemptCountRef,
+      rejoinInFlightRef,
+      authUserRef,
+      authProfileRef,
+      authAccessTokenRef,
+      multiplayerIdentityUserIdRef,
+      appModeRef,
+      setAppMode,
+      joinedRoomResponseRef,
+      roomIdentityRef,
+      youRef,
+      stateRef,
+      maxSequenceRef,
+      roomPlayersRef,
+      applyJoinedRoomResponseRef,
+      clearRecoverableRoomStateRef,
+      resetMultiplayerRoomStateRef,
+      resyncInFlightRef,
+      resyncBufferedUpdateRef,
+      resyncFlushRef,
+      rematchAwaitingStateRef,
+      schedulePlayerReadyRef,
+      trySchedulePlayerReadyRef,
+      isMutedRef,
+      gameplayRefs: {
+        draggingStateRef,
+        handRevealShownRef,
+        handRevealTimerRef,
+      },
+    };
+  }
+
+  if (!multiplayerRuntimeRef.current) {
+    multiplayerRuntimeRef.current = createMultiplayerRuntime(runtimeBootstrapRef.current);
+  }
+  const multiplayerRuntime = multiplayerRuntimeRef.current;
+  const { sessionRef, dispatchSession } = multiplayerRuntime.session;
+
+  const shellDelegateActions = useMultiplayerShellDelegates(shellDelegatesRef);
   const {
     setState: shellSetState,
     setLegalMoves: shellSetLegalMoves,
@@ -357,7 +468,7 @@ export default function App() {
     setPendingUiAction: shellSetPendingUiAction,
     setActionError: shellSetActionError,
     clearTransientRoomUi,
-  } = shellDelegates;
+  } = shellDelegateActions;
 
   const liveGameOver = useSyncExternalStore(subscribeLiveGameOver, getLiveGameOver, () => false);
   const hasLiveGameState = useSyncExternalStore(
@@ -365,6 +476,24 @@ export default function App() {
     getHasLiveGameState,
     () => false,
   );
+
+  const { fetchGameState } = useMultiplayerResync({
+    socketRef,
+    sessionRef,
+    dispatchSession,
+    roomIdentityRef,
+    rejoinInFlightRef,
+    applyJoinedRoomResponseRef,
+    dispatchRecovery,
+    normalizeRoomCode,
+    authProfileUsername: authProfile?.username,
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    mpSubView,
+    joinedRoom,
+    hasLiveGameState,
+    trySchedulePlayerReadyRef,
+  });
 
   const onTournamentMatchAbandoned = useCallback(
     (notice: {
@@ -384,10 +513,6 @@ export default function App() {
     [],
   );
 
-  // ENTANGLEMENT E11 [auth + socket + room]
-  // useAppSessionRuntime bundles auth, socket, and room refs into one runtime object for useMultiplayerConnection.
-  // Splitting refs across hooks without updating multiplayerRuntime types breaks the connection host wiring.
-  // Resolution path: narrow runtime slices per concern once socket and room layers are fully decoupled. Phase 3 candidate.
   const {
     socketRuntime,
     joinFlightRuntime,
@@ -395,41 +520,9 @@ export default function App() {
     authRuntime,
     navigationRuntime,
     roomRuntime,
+    sessionRuntime,
     tournamentAttachRuntime,
-  } = useAppSessionRuntime({
-    socketRef,
-    connectRef,
-    pendingCreateOnConnectRef,
-    pendingCreateResolversRef,
-    autoJoinAttemptedRef,
-    joinInFlightRef,
-    createInFlightRef,
-    inviteJoinInFlightRef,
-    autoConnectAttemptedRef,
-    reconnectRoomCodeRef,
-    reconnectShouldJoinRef,
-    preventAutoRejoinRef,
-    reconnectAttemptTimerRef,
-    reconnectAttemptCountRef,
-    intentionalDisconnectRef,
-    rejoinInFlightRef,
-    authUserRef,
-    authProfileRef,
-    authAccessTokenRef,
-    multiplayerIdentityUserIdRef,
-    appModeRef,
-    setAppMode,
-    joinedRoomRef,
-    joinedRoomResponseRef,
-    roomIdentityRef,
-    youRef,
-    stateRef,
-    maxSequenceRef,
-    roomPlayersRef,
-    applyJoinedRoomResponseRef,
-    clearRecoverableRoomStateRef,
-    resetMultiplayerRoomStateRef,
-  });
+  } = selectLegacyAppSessionRuntime(multiplayerRuntime);
 
   const tournamentSession = useTournamentMatchSession({
     socket,
@@ -470,7 +563,26 @@ export default function App() {
     exitToTournamentHub,
     enterTournamentLobby,
     navigateAfterTournamentMatch,
+    sessionSocketDelegatesRef,
   } = tournamentSession;
+
+  useRegisterTournamentSocketHandlers({
+    enabled: Boolean(socket),
+    getScope: () => ({
+      hub: tournament.hubSocketDelegatesRef.current,
+      session: sessionSocketDelegatesRef.current,
+    }),
+  });
+
+  useRegisterMatchmakingSocketHandlers({
+    enabled: Boolean(socket),
+    getScope: () => matchmakingSocketScopeRef.current,
+  });
+
+  useRegisterFriendsSocketHandlers({
+    enabled: Boolean(socket),
+    getScope: () => friendsSocketScopeRef.current,
+  });
 
   const canOpenHowToPlayPreview = true;
   const needsUsernameOnboarding = Boolean(
@@ -536,20 +648,14 @@ export default function App() {
     socketRef.current = socket;
   }, [socket]);
 
-  // ENTANGLEMENT E3 [room + game + tournament]
-  // joinedRoom persistence gates saveLastRoomCode on liveGameOver and terminal tournament match state.
-  // Room-only persistence would save codes after finished games or block recovery for active tournament exits.
-  // Resolution path: pass explicit persist policy from game/tournament layers into a room recovery helper. Phase 3 candidate.
+  // Joined-room persist policy: see shouldPersistJoinedRoom in match/recovery/joinedRoomPersistPolicy.ts
   useEffect(() => {
-    joinedRoomRef.current = joinedRoom;
     if (
-      shouldPersistLastRoomCode({
+      shouldPersistJoinedRoom({
         joinedRoom,
         preventAutoRejoin: preventAutoRejoinRef.current,
-        gameOver: liveGameOver,
-        isTerminalTournamentMatch: Boolean(
-          tournamentMatch?.matchId && isTerminalTournamentMatch(tournamentMatch.matchId),
-        ),
+        liveGameOver,
+        tournamentMatchId: tournamentMatch?.matchId,
       })
     ) {
       saveLastRoomCode(joinedRoom!);
@@ -580,41 +686,52 @@ export default function App() {
     maxSequenceRef.current = -1;
     maxEventSequenceRef.current = -1;
     roomMatchIdRef.current = null;
-    playerReadyEmittedRef.current = false;
-    matchStartedRef.current = false;
+    dispatchSession({ type: 'SESSION_RESET_GAME' });
     clearTournamentAttachRefs();
     resyncBufferedUpdateRef.current = null;
-    gameShellBridgeRef.current?.resetShellClientGameSession();
-  }, [clearTournamentAttachRefs]);
+    shellDelegatesRef.current?.resetShellClientGameSession();
+  }, [clearTournamentAttachRefs, dispatchSession]);
 
   resetClientGameSessionRef.current = resetClientGameSession;
 
-  // ENTANGLEMENT E4 [room + game shell + tournament]
-  // resetMultiplayerRoomState clears joined room, tournament match, and game shell state in one callback.
-  // Moving room reset without shell/tournament setters leaves stale match UI or orphaned tournament attach state.
-  // Resolution path: split into room-only reset plus explicit shell/tournament teardown orchestrated in App. Phase 3 candidate.
-  const resetMultiplayerRoomState = useCallback(
-    (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
+  type RoomIdentityResetPart = 'joined' | 'identity' | 'players';
+  type GameShellResetPart = 'ui' | 'session';
+
+  const resetRoomIdentityState = useCallback(
+    (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}, part: RoomIdentityResetPart) => {
       const { keepPlayers = false, clearRoomCode = true } = options;
-      setJoinedRoom(null);
-      setTournamentMatch(null);
-      roomIdentityRef.current = null;
-      if (clearRoomCode) setRoomCode('');
-      shellSetState(null);
-      shellSetLegalMoves([]);
-      shellSetCanDraw(false);
-      shellSetSelectedTile(null);
-      shellSetHandReveal(null);
-      shellSetRematchRequested(false);
-      shellSetRematchReadyIds([]);
+      if (part === 'joined') {
+        setJoinedRoom(null);
+        return;
+      }
+      if (part === 'identity') {
+        roomIdentityRef.current = null;
+        if (clearRoomCode) setRoomCode('');
+        return;
+      }
       if (!keepPlayers) {
         setPlayers([]);
+      }
+    },
+    [setJoinedRoom, setRoomCode, setPlayers],
+  );
+
+  const resetGameShellState = useCallback(
+    (part: GameShellResetPart) => {
+      if (part === 'ui') {
+        shellSetState(null);
+        shellSetLegalMoves([]);
+        shellSetCanDraw(false);
+        shellSetSelectedTile(null);
+        shellSetHandReveal(null);
+        shellSetRematchRequested(false);
+        shellSetRematchReadyIds([]);
+        return;
       }
       resetClientGameSession();
     },
     [
       resetClientGameSession,
-      setTournamentMatch,
       shellSetCanDraw,
       shellSetHandReveal,
       shellSetLegalMoves,
@@ -623,6 +740,23 @@ export default function App() {
       shellSetSelectedTile,
       shellSetState,
     ],
+  );
+
+  const resetTournamentAttachState = useCallback(() => {
+    setTournamentMatch(null);
+  }, [setTournamentMatch]);
+
+  // Room/shell/tournament reset composition: see resetMultiplayerRoomState below.
+  const resetMultiplayerRoomState = useCallback(
+    (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
+      resetRoomIdentityState(options, 'joined');
+      resetTournamentAttachState();
+      resetRoomIdentityState(options, 'identity');
+      resetGameShellState('ui');
+      resetRoomIdentityState(options, 'players');
+      resetGameShellState('session');
+    },
+    [resetGameShellState, resetRoomIdentityState, resetTournamentAttachState],
   );
   resetMultiplayerRoomStateRef.current = resetMultiplayerRoomState;
 
@@ -688,149 +822,8 @@ export default function App() {
     [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery, shellSetActionError],
   );
 
-  // ENTANGLEMENT E5 [room + game shell + tournament]
-  // applyJoinedRoomResponse projects join ack into room roster, game shell bridge, and tournament metadata attach.
-  // Extracting room-only join handling without the shell bridge drops authoritative state on join and breaks seated-player ready.
-  // Resolution path: room hook owns roster; App keeps a thin bridge callback for shell/tournament projection. Phase 3 candidate.
-  const applyJoinedRoomResponse = useCallback((resp: RoomAckResponse) => {
-    joinedRoomResponseRef.current = resp;
-    applyRoomEventMeta(resp.eventMeta as RoomEventMeta | null | undefined);
-
-    if (!roomIdentityRef.current) {
-      roomIdentityRef.current = {
-        username: authProfile?.username ?? 'Guest',
-        userId: multiplayerIdentityUserId,
-        authToken: multiplayerAuthToken,
-      };
-    }
-
-    const resolvedYou =
-      typeof resp?.you === 'string' && resp.you ? resp.you : '';
-
-    if (resolvedYou) {
-      setYou(resolvedYou);
-      youRef.current = resolvedYou;
-    }
-
-    flushSync(() => {
-      setJoinedRoom(resp.roomCode ?? null);
-      setRoomCode(resp.roomCode ?? '');
-    });
-
-    const { ok, nextState } = gameShellBridgeRef.current?.applyJoinResponseGameState(resp) ?? {
-      ok: false,
-      nextState: null,
-    };
-    if (!ok && resp.state != null) {
-      console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
-      const roomCode = normalizeRoomCode(resp.roomCode ?? joinedRoomRef.current);
-      if (roomCode) {
-        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
-      }
-    }
-
-    const normalized = normalizeRoomPlayers(resp.players);
-    roomPlayersRef.current = normalized;
-    setPlayers(normalized);
-    dispatchRecovery({ type: 'ROOM_JOIN_OK' });
-    if (
-      applyTournamentMetadataFromJoin(resp, nextState) === 'terminal_handled'
-    ) {
-      return;
-    }
-
-    const roster = normalizeRoomPlayers(resp.players);
-    const seated =
-      Boolean(resolvedYou) &&
-      (roster.some((p) => p.id === resolvedYou) ||
-        (Array.isArray(nextState?.playerIds) && nextState.playerIds.includes(resolvedYou)));
-    isSeatedPlayerRef.current = seated;
-    matchStartedRef.current = resp.matchStarted === true;
-    if (!seated) {
-      playerReadyEmittedRef.current = false;
-    } else if (!matchStartedRef.current) {
-      playerReadyEmittedRef.current = false;
-    }
-
-    if (hasHandIdentityMismatch(nextState, resolvedYou)) {
-      const roomCode = normalizeRoomCode(resp.roomCode ?? joinedRoomRef.current);
-      if (roomCode) {
-        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
-      }
-    } else if (seated && !matchStartedRef.current) {
-      trySchedulePlayerReadyRef.current();
-    }
-  }, [
-    applyRoomEventMeta,
-    applyTournamentMetadataFromJoin,
-    authProfile?.username,
-    multiplayerIdentityUserId,
-    multiplayerAuthToken,
-    dispatchRecovery,
-  ]);
-
-  /** Fetch full authoritative game state from the server (room:join ack). */
-  // ENTANGLEMENT E6 [room + socket refs + auth identity]
-  // fetchGameState re-joins via socketRef using roomIdentity or live auth profile/token fallbacks.
-  // A room-only resync without auth refs sends guest identity on reconnect and fails authenticated room joins.
-  // Resolution path: inject stable identity from useAuthSession into a room transport helper. Phase 3 candidate.
-  const fetchGameState = useCallback(
-    async (reason: string) => {
-      const roomCode = normalizeRoomCode(joinedRoomRef.current);
-      if (!roomCode) return false;
-
-      if (reason !== 'recovery_machine') {
-        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
-        return true;
-      }
-
-      const activeSocket = socketRef.current;
-      if (!activeSocket?.connected) return false;
-      if (resyncInFlightRef.current || rejoinInFlightRef.current) return false;
-      const now = Date.now();
-      if (now < resyncCooldownUntilRef.current) return false;
-
-      resyncInFlightRef.current = true;
-      resyncCooldownUntilRef.current = now + 1200;
-
-      const identity =
-        roomIdentityRef.current ?? {
-          username: authProfile?.username ?? 'Guest',
-          userId: multiplayerIdentityUserId,
-          authToken: multiplayerAuthToken,
-        };
-
-      try {
-        const resp = await emitRoomJoin(activeSocket, roomCode, identity);
-        if (!resp?.ok) {
-          logger.error('App.tsx', new Error('[mp] fetchGameState failed'), { reason, error: resp?.error });
-          return false;
-        }
-        applyJoinedRoomResponse(resp);
-        return true;
-      } catch (error) {
-        logger.error('App.tsx', error, {
-          reason,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return false;
-      } finally {
-        resyncInFlightRef.current = false;
-        resyncFlushRef.current?.();
-      }
-    },
-    [
-      normalizeRoomCode,
-      applyJoinedRoomResponse,
-      authProfile?.username,
-      multiplayerIdentityUserId,
-      multiplayerAuthToken,
-      dispatchRecovery,
-    ],
-  );
-
   const trySchedulePlayerReady = useCallback(() => {
-    if (!isSeatedPlayerRef.current || matchStartedRef.current || playerReadyEmittedRef.current) {
+    if (!selectCanSendReady(sessionRef.current)) {
       return;
     }
 
@@ -845,78 +838,126 @@ export default function App() {
     }
 
     void schedulePlayerReadyRef.current();
-  }, []);
+  }, [sessionRef]);
 
   /**
    * Emit player:ready only after room:join ack is applied (seated, lobby before deal).
    * Uses server matchStarted — not local state — so a partial state:update cannot block ready.
    */
   const schedulePlayerReady = useCallback(async () => {
-    if (!isSeatedPlayerRef.current || playerReadyEmittedRef.current) return;
+    const session = sessionRef.current;
+    if (!selectCanSendReady(session)) return;
     const activeSocket = socketRef.current;
-    const roomCode = normalizeRoomCode(joinedRoomRef.current);
-    if (!activeSocket?.connected || !roomCode || matchStartedRef.current) {
+    const roomCode = normalizeRoomCode(selectJoinedRoomCode(session));
+    if (!activeSocket?.connected || !roomCode || selectMatchStarted(session)) {
       return;
     }
 
-    playerReadyEmittedRef.current = true;
+    dispatchSession({ type: 'PLAYER_READY_EMITTED' });
     try {
       const ack = await emitWithAck<RoomAckResponse>(activeSocket, 'player:ready', roomCode);
       if (ack?.ok === false) {
-        playerReadyEmittedRef.current = false;
+        dispatchSession({ type: 'ROOM_REQUEST_READY' });
         return;
       }
-      if (ack?.started === true) {
-        matchStartedRef.current = true;
-      }
+      dispatchSession({
+        type: 'PLAYER_READY_ACK',
+        matchStarted: ack?.started === true,
+      });
     } catch (error) {
-      playerReadyEmittedRef.current = false;
+      dispatchSession({ type: 'ROOM_REQUEST_READY' });
       logger.error('App.tsx', new Error('[mp] player:ready failed'), {
         detail: error instanceof Error ? error.message : error,
       });
     }
-  }, [normalizeRoomCode, emitWithAck]);
+  }, [dispatchSession, normalizeRoomCode, emitWithAck, sessionRef]);
 
-  fetchGameStateRef.current = fetchGameState;
+  const applySnapshot = useCallback(
+    (resp: RoomAckResponse) =>
+      shellDelegatesRef.current?.applyJoinResponseGameState(resp) ?? {
+        ok: false,
+        nextState: null,
+      },
+    [],
+  );
+
+  const { handleJoinAck } = useJoinAckCoordinator({
+    dispatchRecovery,
+    normalizeRoomCode,
+    applySnapshot,
+    applyRoomEventMeta,
+    setJoinedRoom,
+    setRoomCode,
+    setYou,
+    setPlayers,
+    normalizeRoomPlayers,
+    sessionRef,
+    dispatchSession,
+    joinedRoomResponseRef,
+    youRef,
+    roomPlayersRef,
+    roomIdentityRef,
+    authProfileUsername: authProfile?.username,
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    onTerminalJoinHandled: (resp, nextState) =>
+      applyTournamentMetadataFromJoin(resp, nextState) === 'terminal_handled'
+        ? 'terminal_handled'
+        : undefined,
+    trySchedulePlayerReady,
+  });
+
+  const applyJoinedRoomResponse = useCallback((resp: RoomAckResponse) => {
+    dispatchSocketEvent({ type: 'ROOM_JOIN_OK', payload: resp });
+  }, []);
+
+  useEffect(() => {
+    return registerNormalizedSocketRouter({ roomJoinOk: handleJoinAck });
+  }, [handleJoinAck]);
+
+  useEffect(() => {
+    if (!socket) return;
+    return attachSocketEventBus(socket);
+  }, [socket]);
+
   applyRoomEventMetaRef.current = applyRoomEventMeta;
   schedulePlayerReadyRef.current = schedulePlayerReady;
   applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
   trySchedulePlayerReadyRef.current = trySchedulePlayerReady;
 
-  // ENTANGLEMENT E7 [room + auth + navigation]
-  // handleMatchmakingAutoJoin emits room:join with auth identity and switches appMode to multiplayer on match found.
-  // Separating room join from navigation stranding the overlay open or joining without switching to the MP shell.
-  // Resolution path: matchmaking service callback returns join result; App owns navigation side effect. Phase 3 candidate.
+  // Matchmaking auto-join: see matchmakingRoomJoin.ts (join transport + ack); App owns optimistic navigation below.
   const handleMatchmakingAutoJoin = useCallback(
     (payload: MatchFoundPayload) => {
-      const roomCode = payload.roomCode.trim().toUpperCase();
       const activeSocket = socketRef.current;
-      if (!activeSocket?.connected) {
-        return;
-      }
-      if (normalizeRoomCode(joinedRoomRef.current) === roomCode) {
+      if (
+        !canAttemptMatchmakingRoomJoin({
+          socket: activeSocket,
+          roomCode: payload.roomCode,
+          currentJoinedRoom: selectJoinedRoomCode(sessionRef.current),
+          normalizeRoomCode,
+        })
+      ) {
         return;
       }
 
+      // Optimistic overlay + mode switch before ack — keeps countdown/match-found UI responsive while join runs.
       setOverlayPayload(payload);
+      setAppMode('multiplayer');
 
       const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'Guest';
-      setAppMode('multiplayer');
-      activeSocket.emit(
-        'room:join',
-        roomCode,
-        { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken },
-        (resp: RoomAckResponse) => {
-          if (!resp?.ok) {
-            showToast(resp?.error ?? 'Could not join matched room.', 2500);
-            return;
-          }
-          applyJoinedRoomResponse(resp);
+      void emitMatchmakingRoomJoin({
+        socket: activeSocket!,
+        roomCode: payload.roomCode,
+        identity: {
+          username,
+          userId: multiplayerIdentityUserId,
+          authToken: multiplayerAuthToken,
         },
-      );
+      }).then((resp) => {
+        handleMatchmakingRoomJoinAck(resp, { applyJoinedRoomResponse, showToast });
+      });
     },
     [
-      normalizeRoomCode,
       authProfile?.username,
       authUser?.email,
       multiplayerIdentityUserId,
@@ -928,18 +969,6 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (mpSubView !== 'quick' || !joinedRoom || hasLiveGameState) return;
-    const timer = window.setTimeout(() => {
-      if (!matchStartedRef.current && isSeatedPlayerRef.current) {
-        playerReadyEmittedRef.current = false;
-        trySchedulePlayerReadyRef.current();
-      }
-      void fetchGameState('quick_match_stall');
-    }, 4000);
-    return () => window.clearTimeout(timer);
-  }, [mpSubView, joinedRoom, hasLiveGameState, fetchGameState]);
-
-  useEffect(() => {
     if (!friendInvite) return;
     const timer = setTimeout(() => {
       setFriendInvite(null);
@@ -948,43 +977,44 @@ export default function App() {
   }, [friendInvite]);
 
   useEffect(() => {
-    if (!socket) return;
-    const onDeclined = (payload: { inviteId?: string; fromUsername?: string }) => {
-      setOutboundChallenge((current) => {
-        if (!current) return null;
-        if (payload.inviteId && current.inviteId !== payload.inviteId) return current;
-        const name = payload.fromUsername ?? current.friendUsername;
-        showToast(`${name} declined the challenge.`, 2400);
-        return null;
-      });
-    };
+    const unregisterDeclined = registerRawSocketEventHandler(
+      'friend:invite:declined',
+      (payload) => {
+        const data = payload as { inviteId?: string; fromUsername?: string };
+        setOutboundChallenge((current) => {
+          if (!current) return null;
+          if (data.inviteId && current.inviteId !== data.inviteId) return current;
+          const name = data.fromUsername ?? current.friendUsername;
+          showToast(`${name} declined the challenge.`, 2400);
+          return null;
+        });
+      },
+    );
 
-    const onFriendInvited = (payload: {
-      inviteId?: string;
-      fromUsername: string;
-      fromUserId?: string | null;
-      roomCode: string;
-      inviteUrl: string;
-      matchSummary?: string;
-    }) => {
+    const unregisterInvited = registerRawSocketEventHandler('friend:invited', (payload) => {
+      const data = payload as {
+        inviteId?: string;
+        fromUsername: string;
+        fromUserId?: string | null;
+        roomCode: string;
+        inviteUrl: string;
+        matchSummary?: string;
+      };
       setFriendInvite({
-        inviteId: String(payload.inviteId ?? `${Date.now()}-${payload.roomCode}`),
-        fromUsername: payload.fromUsername,
-        fromUserId: payload.fromUserId ?? null,
-        roomCode: payload.roomCode,
-        inviteUrl: payload.inviteUrl,
-        matchSummary: payload.matchSummary ?? '7-Tile · First to 60 · Untimed',
+        inviteId: String(data.inviteId ?? `${Date.now()}-${data.roomCode}`),
+        fromUsername: data.fromUsername,
+        fromUserId: data.fromUserId ?? null,
+        roomCode: data.roomCode,
+        inviteUrl: data.inviteUrl,
+        matchSummary: data.matchSummary ?? '7-Tile · First to 60 · Untimed',
       });
-    };
-
-    socket.on('friend:invite:declined', onDeclined);
-    socket.on('friend:invited', onFriendInvited);
+    });
 
     return () => {
-      socket.off('friend:invite:declined', onDeclined);
-      socket.off('friend:invited', onFriendInvited);
+      unregisterDeclined();
+      unregisterInvited();
     };
-  }, [showToast, socket]);
+  }, [showToast]);
 
   useEffect(() => {
     if (!outboundChallenge) return;
@@ -1004,13 +1034,18 @@ export default function App() {
     }
   }, [players.length, outboundChallenge, clearOutboundChallenge]);
 
-  // ENTANGLEMENT E2 [socket + auth + navigation]
-  // Feed mode triggers connectRef when authUser is present but socket is not yet connected.
-  // Moving connect trigger to socket-only hook ignores feed's auth-gated lazy connect and leaves feed stale offline.
-  // Resolution path: explicit connect policy table keyed by appMode + auth readiness. Phase 3 candidate.
+  // Feed lazy-connect policy: see shouldAutoConnectForMode in multiplayer/connectPolicy.ts
   useEffect(() => {
-    if (appMode !== 'feed' || !authUser) return;
-    if (!socket?.connected) connectRef.current();
+    if (
+      !shouldAutoConnectForMode({
+        appMode,
+        hasAuthUser: Boolean(authUser),
+        isSocketConnected: Boolean(socket?.connected),
+      })
+    ) {
+      return;
+    }
+    connectRef.current();
   }, [appMode, authUser, socket?.connected]);
 
   useEffect(() => {
@@ -1062,6 +1097,7 @@ export default function App() {
     roomCode,
     socketRuntime,
     roomRuntime,
+    sessionRuntime,
     reconnectRuntime,
     joinFlightRuntime,
     authRuntime,
@@ -1072,6 +1108,7 @@ export default function App() {
     handRevealTimerRef,
     isMutedRef,
     rematchAwaitingStateRef,
+    resyncInFlightRef,
     recoveryDispatchRef,
     applyJoinedRoomResponse,
     fetchGameState,
@@ -1113,10 +1150,7 @@ export default function App() {
 
 
 
-  // ENTANGLEMENT E8 [room + tournament + socket]
-  // handlePostGame and abandonCurrentMatch branch on tournament context while calling disconnect or room abandon over socketRef.
-  // Splitting post-game navigation from socket/room teardown causes double-leave or tournament bracket desync after match end.
-  // Resolution path: tournament session owns exit routing; room layer owns leave/abandon transport. Phase 3 candidate.
+  // Post-game / abandon exit: transport in multiplayer/postGameExit.ts; App owns navigation below.
   const handlePostGame = useCallback(() => {
     resetRoomRecoveryState();
     // Tournament matches should return to tournament lobby, not disconnect to Home.
@@ -1138,8 +1172,7 @@ export default function App() {
     // 1. Reset room + shell state (tournament match, room code, identity ref, shell bridge, sequence refs)
     // 2. Transport teardown (socket close, leave/abandon emit, recovery flags, navigate home)
     // Order matters: reset room state before transport so shell unmounts cleanly.
-    resetMultiplayerRoomState({ keepPlayers: false, clearRoomCode: true });
-    disconnect('post-game to home');
+    performPostGameHomeTeardown({ resetMultiplayerRoomState, disconnect });
   }, [
     currentTournamentContext,
     disconnect,
@@ -1150,8 +1183,8 @@ export default function App() {
 
   const abandonCurrentMatch = useCallback(async () => {
     const activeSocket = socketRef.current;
-    const activeRoomCode = normalizeRoomCode(joinedRoomRef.current);
-    if (!activeSocket?.connected || !activeRoomCode) {
+    const activeRoomCode = normalizeRoomCode(selectJoinedRoomCode(sessionRef.current));
+    if (!canAttemptMatchAbandon({ socket: activeSocket, activeRoomCode })) {
       shellSetActionError('Could not leave the match right now.');
       return;
     }
@@ -1161,7 +1194,7 @@ export default function App() {
       tournamentMatchId: currentTournamentContext?.matchId ?? null,
     });
     try {
-      const resp = await emitRoomAbandonMatch(activeSocket, {
+      const resp = await emitMatchAbandonTransport(activeSocket!, {
         roomCode: activeRoomCode,
         tournamentMatchId: currentTournamentContext?.matchId ?? null,
       });
@@ -1171,16 +1204,17 @@ export default function App() {
           roomCode: activeRoomCode,
           error: errorMessage,
         });
-        shellSetActionError(errorMessage);
-        showToast(errorMessage, 2200);
+        handleMatchAbandonFailure(errorMessage, { shellSetActionError, showToast });
         return;
       }
       console.log('[leave-game] ack/success', {
         roomCode: activeRoomCode,
       });
-      clearRecoverableRoomState();
-      resetMultiplayerRoomState({ keepPlayers: true });
-      shellSetActionError('');
+      performMatchAbandonSuccessCleanup({
+        clearRecoverableRoomState,
+        resetMultiplayerRoomState,
+        shellSetActionError,
+      });
       if (currentTournamentContext?.tournamentId) {
         setActiveTournamentId(currentTournamentContext.tournamentId);
         setTournamentSubView('bracket');
@@ -1196,13 +1230,11 @@ export default function App() {
         roomCode: activeRoomCode,
         error: message,
       });
-      shellSetActionError(message);
-      showToast(message, 2200);
+      handleMatchAbandonFailure(message, { shellSetActionError, showToast });
     }
   }, [
     clearRecoverableRoomState,
     currentTournamentContext,
-    emitWithAck,
     normalizeRoomCode,
     resetMultiplayerRoomState,
     showToast,
@@ -1256,20 +1288,20 @@ export default function App() {
     tournamentMatch,
   ]);
 
-  // ENTANGLEMENT E9 [auth + socket + room + game]
-  // Private lobby win streak fetch requires authUser, connection/recovery flags, joinedRoom, and hasLiveGameState together.
-  // Extracting to auth-only or room-only hook fetches stats during live matches or skips them in the lobby idle state.
-  // Resolution path: derive lobby visibility predicate in one selector; stats effect depends on that only. Phase 3 candidate.
+  // Private lobby visibility: see shouldShowPrivateMatchLobby in multiplayer/privateLobbyVisibility.ts
   useEffect(() => {
     if (appMode !== 'multiplayer' || !authUser?.id) {
       setPrivateLobbyHostWinStreak(null);
       return;
     }
-    const showPrivateMatchLobby =
-      (!isConnected && !isRecoveringConnection) ||
-      (isConnected && !joinedRoom) ||
-      (isConnected && Boolean(joinedRoom) && !hasLiveGameState);
-    if (!showPrivateMatchLobby) {
+    if (
+      !shouldShowPrivateMatchLobby({
+        isConnected,
+        isRecoveringConnection,
+        joinedRoom,
+        hasLiveGameState,
+      })
+    ) {
       setPrivateLobbyHostWinStreak(null);
       return;
     }
@@ -1348,6 +1380,7 @@ export default function App() {
     socket,
     socketRuntime,
     roomRuntime,
+    sessionRuntime,
     joinFlightRuntime,
     reconnectRuntime,
     navigationRuntime,
@@ -1380,7 +1413,6 @@ export default function App() {
     setFriendInvite,
     setMpSubView,
     setOutboundChallenge,
-    intentionalDisconnectRef,
     reconnectAttemptCountRef,
     rejoinInFlightRef,
     autoJoinAttemptedRef,
@@ -1393,6 +1425,88 @@ export default function App() {
       multiplayerLobbyHostProps,
       authModalsLayer,
     },
+    routeBundles: {
+      navigation: { appMode, setAppMode, appRootRef },
+      auth: {
+        isAdmin,
+        authUser,
+        authProfile,
+        supabaseEnabled,
+        supabaseConfigError,
+        refreshAuthProfile,
+        applyProfilePatch,
+        setAuthModalOpen,
+        setUsernameModalOpen,
+        myHandle,
+        homeRatingLabel,
+      },
+      learn: {
+        canOpenHowToPlayPreview,
+        selectedLearnLessonId,
+        setSelectedLearnLessonId,
+        learnHowToPlayOpen,
+        setLearnHowToPlayOpen,
+        setIsGuidedMode,
+        setIsAuthoringMode,
+        setIsAuthoringV2Mode,
+        setIsGuidedV2Mode,
+      },
+      botMatch: {
+        setBotFritzTier,
+        setBotDealSize,
+        botDealSize,
+        botFritzTier,
+        isGuidedMode,
+        isAuthoringMode,
+        isAuthoringV2Mode,
+        isGuidedV2Mode,
+      },
+      ghost: {
+        ghostProfile,
+        setGhostProfile,
+        ghostOpponentName,
+        ghostOpponentUserId,
+        setGhostOpponentName,
+        setGhostOpponentUserId,
+      },
+      social: {
+        socket,
+        joinedRoom,
+        showToast,
+        outboundChallenge,
+        clearOutboundChallenge,
+        profileTarget,
+        setProfileTarget,
+        toast,
+      },
+      homeOverlays: {
+        activeHomeMode,
+        setActiveHomeMode,
+        welcomeOpen,
+        setWelcomeOpen,
+        weeklyStatsOpen,
+        setWeeklyStatsOpen,
+      },
+      tournament: {
+        tournament,
+        tournamentSubView,
+        activeTournamentId,
+        tournamentAttachPhase,
+        tournamentAttachError,
+        tournamentResult,
+        tournamentResultLoading,
+        tournamentResultError,
+        setTournamentSubView,
+        setActiveTournamentId,
+        setTournamentResult,
+        setTournamentResultLoading,
+        setTournamentResultError,
+        exitToTournamentHub,
+        enterTournamentLobby,
+        attachAssignedTournamentMatch,
+      },
+      multiplayerRoute: { mpSubView, error, setError },
+    },
     multiplayerConnectionState,
     multiplayerConnectionConfig,
     connect,
@@ -1400,7 +1514,6 @@ export default function App() {
     isRecoveringConnection,
     serverWaking,
     roomRecoveryMessage,
-    setAppMode,
     overlayPayload,
     setOverlayPayload,
     handleMatchmakingAutoJoin,
@@ -1423,80 +1536,12 @@ export default function App() {
     tournamentOpponentLabel,
     navigateAfterTournamentMatch,
     currentTournamentContext,
-    appMode,
-    appRootRef,
-    canOpenHowToPlayPreview,
-    isAdmin,
-    authUser,
-    authProfile,
-    supabaseEnabled,
-    supabaseConfigError,
-    selectedLearnLessonId,
-    setSelectedLearnLessonId,
-    learnHowToPlayOpen,
-    setLearnHowToPlayOpen,
-    setIsGuidedMode,
-    setIsAuthoringMode,
-    setIsAuthoringV2Mode,
-    setIsGuidedV2Mode,
-    setBotFritzTier,
-    setBotDealSize,
-    botDealSize,
-    botFritzTier,
-    isGuidedMode,
-    isAuthoringMode,
-    isAuthoringV2Mode,
-    isGuidedV2Mode,
-    refreshAuthProfile,
-    applyProfilePatch,
-    ghostProfile,
-    setGhostProfile,
-    ghostOpponentName,
-    ghostOpponentUserId,
-    setGhostOpponentName,
-    setGhostOpponentUserId,
-    setAuthModalOpen,
-    setUsernameModalOpen,
-    socket,
-    joinedRoom,
-    showToast,
-    outboundChallenge,
-    clearOutboundChallenge,
-    profileTarget,
-    setProfileTarget,
     friendInvite,
-    toast,
-    error,
-    setError,
     setActionError: shellSetActionError,
-    mpSubView,
-    myHandle,
-    homeRatingLabel,
-    activeHomeMode,
-    setActiveHomeMode,
-    welcomeOpen,
-    setWelcomeOpen,
-    weeklyStatsOpen,
-    setWeeklyStatsOpen,
-    tournament,
-    tournamentSubView,
-    activeTournamentId,
-    tournamentAttachPhase,
-    tournamentAttachError,
-    tournamentResult,
-    tournamentResultLoading,
-    tournamentResultError,
-    setTournamentSubView,
-    setActiveTournamentId,
-    setTournamentResult,
-    setTournamentResultLoading,
-    setTournamentResultError,
-    exitToTournamentHub,
-    enterTournamentLobby,
-    attachAssignedTournamentMatch,
   };
 
   return (
+    <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
     <>
       {joinedRoom ? (
         <ErrorBoundary
@@ -1569,7 +1614,9 @@ export default function App() {
             tournamentMatch={tournamentMatch}
             tournamentOpponentLabel={tournamentOpponentLabel}
             rejoinInFlightRef={rejoinInFlightRef}
-            joinedRoomRef={joinedRoomRef}
+            sessionRuntime={sessionRuntime}
+            schedulePlayerReadyRef={schedulePlayerReadyRef}
+            trySchedulePlayerReadyRef={trySchedulePlayerReadyRef}
             maxSequenceRef={maxSequenceRef}
             roomPlayersRef={roomPlayersRef}
             resyncInFlightRef={resyncInFlightRef}
@@ -1577,7 +1624,7 @@ export default function App() {
             resyncFlushRef={resyncFlushRef}
             fetchGameState={fetchGameState}
             applyRoomEventMeta={applyRoomEventMeta}
-            shellBridgeRef={gameShellBridgeRef}
+            shellDelegatesRef={shellDelegatesRef}
             sharedGameplayRefs={sharedGameplayRefs}
             setAbandonedMatchNotice={setAbandonedMatchNotice}
           />
@@ -1585,5 +1632,6 @@ export default function App() {
       ) : null}
       <AppRoutesGamePropsHost source={appRoutesHostSource} />
     </>
+    </MultiplayerRuntimeProvider>
   );
 }

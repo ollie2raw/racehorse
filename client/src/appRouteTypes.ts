@@ -6,9 +6,7 @@ import type { FritzTier } from './bot/fritzConfig';
 import type { BotDealSize } from './bot/botEngine';
 import type { GameState } from './types';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
-import type {
-  MultiplayerControllerConnectionBundle,
-} from './multiplayer/multiplayerRuntime';
+import type { MultiplayerControllerConnectionBundle } from './multiplayer/runtime/connectionRuntime';
 import type { MultiplayerModeViewProps } from './multiplayer/MultiplayerModeController';
 import type { useTournament } from './tournament/useTournament';
 import type { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
@@ -46,22 +44,42 @@ export type AppMode =
   | 'profile'
   | 'feed';
 
-export type AppRoutesProps = {
+/** Shell chrome: auth-modal wrapper, fallback host, layout class, invite overlay. */
+export type AppRoutesShellProps = {
   withAuthModals: (node: React.ReactNode) => React.ReactNode;
   fallbackConnectionHost: React.ReactNode;
   appRootClassName: string;
-  appMode: AppMode;
   appRootRef: RefObject<HTMLDivElement | null>;
+  friendInvitePopup: React.ReactNode;
+};
+
+/** Top-level mode routing. */
+export type AppRoutesNavigationProps = {
+  appMode: AppMode;
   setAppMode: Dispatch<SetStateAction<AppMode>>;
+};
+
+/** Auth, account modals, profile identity, and home HUD labels. */
+export type AppRoutesAuthProps = {
   handleOpenAuthModal: () => void;
   handleOpenAccountModal: () => void;
-  showLearnAdminView: boolean;
-  canOpenHowToPlayPreview: boolean;
   isAdmin: boolean;
   authUser: User | null;
   authProfile: UserProfile | null;
   supabaseEnabled: boolean;
   supabaseConfigError: string | null | undefined;
+  refreshAuthProfile: () => Promise<void>;
+  applyProfilePatch: (patch: Partial<UserProfile>) => void;
+  setAuthModalOpen: Dispatch<SetStateAction<boolean>>;
+  setUsernameModalOpen: Dispatch<SetStateAction<boolean>>;
+  myHandle: string;
+  homeRatingLabel: string;
+};
+
+/** Learn mode lesson selection, how-to-play, and guided/authoring mode setters. */
+export type AppRoutesLearnProps = {
+  showLearnAdminView: boolean;
+  canOpenHowToPlayPreview: boolean;
   selectedLearnLessonId: string | null;
   setSelectedLearnLessonId: Dispatch<SetStateAction<string | null>>;
   learnHowToPlayOpen: boolean;
@@ -70,6 +88,10 @@ export type AppRoutesProps = {
   setIsAuthoringMode: Dispatch<SetStateAction<boolean>>;
   setIsAuthoringV2Mode: Dispatch<SetStateAction<boolean>>;
   setIsGuidedV2Mode: Dispatch<SetStateAction<boolean>>;
+};
+
+/** Fritz/bot match configuration and guided/authoring flags. */
+export type AppRoutesBotMatchProps = {
   setBotFritzTier: Dispatch<SetStateAction<FritzTier>>;
   setBotDealSize: Dispatch<SetStateAction<BotDealSize>>;
   botDealSize: BotDealSize;
@@ -78,16 +100,20 @@ export type AppRoutesProps = {
   isAuthoringMode: boolean;
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
-  refreshAuthProfile: () => Promise<void>;
-  applyProfilePatch: (patch: Partial<UserProfile>) => void;
+};
+
+/** Ghost opponent profile and setup state. */
+export type AppRoutesGhostProps = {
   ghostProfile: GhostProfileSummary | null;
   setGhostProfile: Dispatch<SetStateAction<GhostProfileSummary | null>>;
   ghostOpponentName: string;
   ghostOpponentUserId: string | null;
   setGhostOpponentName: Dispatch<SetStateAction<string>>;
   setGhostOpponentUserId: Dispatch<SetStateAction<string | null>>;
-  setAuthModalOpen: Dispatch<SetStateAction<boolean>>;
-  setUsernameModalOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+/** Social graph: friends, feed, profile target, socket connectivity, toasts. */
+export type AppRoutesSocialProps = {
   socket: Socket | null;
   connect: () => void;
   joinedRoom: string | null;
@@ -96,8 +122,23 @@ export type AppRoutesProps = {
   clearOutboundChallenge: () => void;
   profileTarget: string | null;
   setProfileTarget: Dispatch<SetStateAction<string | null>>;
-  friendInvitePopup: React.ReactNode;
   toast: string;
+};
+
+/** Home screen accordion hover state and welcome/weekly-stats overlays. */
+export type AppRoutesHomeOverlayProps = {
+  activeHomeMode: 'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn';
+  setActiveHomeMode: Dispatch<
+    SetStateAction<'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'>
+  >;
+  welcomeOpen: boolean;
+  setWelcomeOpen: Dispatch<SetStateAction<boolean>>;
+  weeklyStatsOpen: boolean;
+  setWeeklyStatsOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+/** Multiplayer route: connection bundle, mode controller view, and in-match errors. */
+export type AppRoutesMultiplayerProps = {
   error: string;
   actionError: string;
   state: GameState | null;
@@ -107,16 +148,10 @@ export type AppRoutesProps = {
   mpSubView: 'quick' | 'private';
   startGame: () => void;
   multiplayerModeViewProps: MultiplayerModeViewProps;
-  myHandle: string;
-  homeRatingLabel: string;
-  activeHomeMode: 'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn';
-  setActiveHomeMode: Dispatch<
-    SetStateAction<'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'>
-  >;
-  welcomeOpen: boolean;
-  setWelcomeOpen: Dispatch<SetStateAction<boolean>>;
-  weeklyStatsOpen: boolean;
-  setWeeklyStatsOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+/** Tournament hub, bracket, result sub-views and attach/recovery hooks. */
+export type AppRoutesTournamentProps = {
   tournament: ReturnType<typeof useTournament>;
   tournamentSubView: ReturnType<typeof useTournamentMatchSession>['tournamentSubView'];
   activeTournamentId: ReturnType<typeof useTournamentMatchSession>['activeTournamentId'];
@@ -133,4 +168,34 @@ export type AppRoutesProps = {
   exitToTournamentHub: ReturnType<typeof useTournamentMatchSession>['exitToTournamentHub'];
   enterTournamentLobby: ReturnType<typeof useTournamentMatchSession>['enterTournamentLobby'];
   attachAssignedTournamentMatch: ReturnType<typeof useTournamentMatchSession>['attachAssignedTournamentMatch'];
+};
+
+/** Grouped prop bundles passed into AppRoutes (replaces the former 84-prop flat funnel). */
+export type AppRoutesProps = {
+  shell: AppRoutesShellProps;
+  navigation: AppRoutesNavigationProps;
+  auth: AppRoutesAuthProps;
+  learn: AppRoutesLearnProps;
+  botMatch: AppRoutesBotMatchProps;
+  ghost: AppRoutesGhostProps;
+  social: AppRoutesSocialProps;
+  homeOverlays: AppRoutesHomeOverlayProps;
+  multiplayer: AppRoutesMultiplayerProps;
+  tournament: AppRoutesTournamentProps;
+};
+
+/** Route-domain bundles constructed at the App host source call site. */
+export type AppRoutesHostRouteBundles = {
+  navigation: Pick<AppRoutesNavigationProps, 'appMode' | 'setAppMode'> & Pick<AppRoutesShellProps, 'appRootRef'>;
+  auth: Omit<
+    AppRoutesAuthProps,
+    'handleOpenAuthModal' | 'handleOpenAccountModal'
+  >;
+  learn: Omit<AppRoutesLearnProps, 'showLearnAdminView'>;
+  botMatch: AppRoutesBotMatchProps;
+  ghost: AppRoutesGhostProps;
+  social: Omit<AppRoutesSocialProps, 'toast' | 'connect'> & { toast: string };
+  homeOverlays: AppRoutesHomeOverlayProps;
+  tournament: AppRoutesTournamentProps;
+  multiplayerRoute: Pick<AppRoutesMultiplayerProps, 'mpSubView' | 'error' | 'setError'>;
 };

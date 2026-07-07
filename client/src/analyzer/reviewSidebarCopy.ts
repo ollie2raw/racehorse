@@ -1,5 +1,5 @@
 import type { ConsequenceChain } from './analysisTypes';
-import type { EngineBestMove } from './moveLogger';
+import type { EngineBestMove } from '../game/moveLogger';
 import type { AnalyzedMove, MoveRating } from './moveAnalyzer';
 
 export type ReviewSidebarCopy = {

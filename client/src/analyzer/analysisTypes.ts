@@ -1,6 +1,6 @@
-import type { FritzTier } from '../bot/fritzConfig';
+import type { FritzTier } from '../modules/fritz/fritzConfig.ts';
 import type { AnalyzedMove } from './moveAnalyzer';
-import type { MoveEntry } from './moveLogger';
+import type { MoveEntry } from '../game/moveLogger';
 
 /** Shared analysis types — structured for future `shared/analysis/` extraction. */
 

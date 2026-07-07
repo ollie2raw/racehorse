@@ -391,6 +391,13 @@
   text-shadow: 0 0 20px rgba(231, 182, 74, 0.2);
 }
 
+.mm-found-streak--blue {
+  color: #00d8ff;
+  border: 1px solid rgba(0, 216, 255, 0.45);
+  background: rgba(0, 216, 255, 0.12);
+  text-shadow: 0 0 20px rgba(0, 216, 255, 0.2);
+}
+
 .mm-found-streak__icon {
   flex-shrink: 0;
   opacity: 0.95;

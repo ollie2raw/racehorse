@@ -24,7 +24,7 @@ const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
 const FriendsScreenLobbyBridge = React.lazy(() => import('./multiplayer/FriendsScreenLobbyBridge'));
 const ActivityFeedLobbyBridge = React.lazy(() => import('./multiplayer/ActivityFeedLobbyBridge'));
 const DailyFritzLeaderboardRoute = React.lazy(() => import('./dailyFritz/DailyFritzLeaderboardRoute'));
-const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScreen'));
+const PublicProfileScreenLobbyBridge = React.lazy(() => import('./multiplayer/PublicProfileScreenLobbyBridge'));
 const RacehorseHomeScreen = React.lazy(() => import('./screens/HomeScreen'));
 const MultiplayerModeController = React.lazy(() => import('./multiplayer/MultiplayerModeController'));
 const TournamentHubScreen = React.lazy(() => import('./tournament/TournamentHubScreen'));
@@ -47,23 +47,44 @@ const LearnPlayer = React.lazy(() =>
 );
 const WeeklyStatsScreen = React.lazy(() => import('./stats/WeeklyStatsScreen'));
 
-export default function AppRoutes(props: AppRoutesProps) {
+export default function AppRoutes({
+  shell,
+  navigation,
+  auth,
+  learn,
+  botMatch,
+  ghost,
+  social,
+  homeOverlays,
+  multiplayer,
+  tournament: tournamentProps,
+}: AppRoutesProps) {
   const {
     withAuthModals,
     fallbackConnectionHost,
     appRootClassName,
-    appMode,
     appRootRef,
-    setAppMode,
+    friendInvitePopup,
+  } = shell;
+  const { appMode, setAppMode } = navigation;
+  const {
     handleOpenAuthModal,
     handleOpenAccountModal,
-    showLearnAdminView,
-    canOpenHowToPlayPreview,
     isAdmin,
     authUser,
     authProfile,
     supabaseEnabled,
     supabaseConfigError,
+    refreshAuthProfile,
+    applyProfilePatch,
+    setAuthModalOpen,
+    setUsernameModalOpen,
+    myHandle,
+    homeRatingLabel,
+  } = auth;
+  const {
+    showLearnAdminView,
+    canOpenHowToPlayPreview,
     selectedLearnLessonId,
     setSelectedLearnLessonId,
     learnHowToPlayOpen,
@@ -72,6 +93,8 @@ export default function AppRoutes(props: AppRoutesProps) {
     setIsAuthoringMode,
     setIsAuthoringV2Mode,
     setIsGuidedV2Mode,
+  } = learn;
+  const {
     setBotFritzTier,
     setBotDealSize,
     botDealSize,
@@ -80,16 +103,16 @@ export default function AppRoutes(props: AppRoutesProps) {
     isAuthoringMode,
     isAuthoringV2Mode,
     isGuidedV2Mode,
-    refreshAuthProfile,
-    applyProfilePatch,
+  } = botMatch;
+  const {
     ghostProfile,
     setGhostProfile,
     ghostOpponentName,
     ghostOpponentUserId,
     setGhostOpponentName,
     setGhostOpponentUserId,
-    setAuthModalOpen,
-    setUsernameModalOpen,
+  } = ghost;
+  const {
     socket,
     connect,
     joinedRoom,
@@ -98,8 +121,17 @@ export default function AppRoutes(props: AppRoutesProps) {
     clearOutboundChallenge,
     profileTarget,
     setProfileTarget,
-    friendInvitePopup,
     toast,
+  } = social;
+  const {
+    activeHomeMode,
+    setActiveHomeMode,
+    welcomeOpen,
+    setWelcomeOpen,
+    weeklyStatsOpen,
+    setWeeklyStatsOpen,
+  } = homeOverlays;
+  const {
     error,
     actionError,
     state,
@@ -109,14 +141,8 @@ export default function AppRoutes(props: AppRoutesProps) {
     mpSubView,
     startGame,
     multiplayerModeViewProps,
-    myHandle,
-    homeRatingLabel,
-    activeHomeMode,
-    setActiveHomeMode,
-    welcomeOpen,
-    setWelcomeOpen,
-    weeklyStatsOpen,
-    setWeeklyStatsOpen,
+  } = multiplayer;
+  const {
     tournament,
     tournamentSubView,
     activeTournamentId,
@@ -133,7 +159,7 @@ export default function AppRoutes(props: AppRoutesProps) {
     exitToTournamentHub,
     enterTournamentLobby,
     attachAssignedTournamentMatch,
-  } = props;
+  } = tournamentProps;
 
   if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
     return withAuthModals(
@@ -564,7 +590,7 @@ export default function AppRoutes(props: AppRoutesProps) {
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Profile…" />}>
-          <PublicProfileScreen
+          <PublicProfileScreenLobbyBridge
             username={profileTarget ?? ''}
             user={authUser}
             showToast={showToast}

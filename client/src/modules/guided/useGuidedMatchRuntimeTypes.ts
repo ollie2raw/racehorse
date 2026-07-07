@@ -1,0 +1,100 @@
+import type { Move, Tile } from '../../types.ts';
+import type { BotMatchState } from '../match/runtime/botEngine.ts';
+import type { BotDifficulty } from '../fritz/botHeuristics.ts';
+import type { BotHandReveal, GuidedCoachTip } from '../match/types.ts';
+import { getGuidedV1AuthoredStepByIndex } from './guidedBotMatchHelpers.ts';
+import type { FrozenLesson, GuidedTranscript, GuidedTurn } from '../../learn/guidedAuthoring.ts';
+import type { LessonV2, LessonV2Event } from '../../learn/lessonV2.ts';
+import type { getGuidedMatchCaptureStatus } from '../../learn/guidedMatch/guidedMatchCapture.ts';
+import type { GuidedMatchFinalDebrief } from '../../learn/guidedMatch/guidedMatchFinalDebrief.ts';
+import type { useLearningCoach } from '../../learning/useLearningCoach.ts';
+import type { GuidedPlacementResult } from './guidedPlacementHandlers.ts';
+import type { GuidedCoachViewModel } from '../match/types.ts';
+import type { LessonCoachPanelContent } from './guidedCoachPresentationTypes.ts';
+import type { GuidedV2CoordinationState } from './useGuidedV2CoordinationState.ts';
+import type { UseGuidedMatchCaptureRuntimeResult } from './useGuidedMatchCaptureRuntime.ts';
+
+export type UseGuidedMatchRuntimeArgs = {
+  boot: {
+    isGuidedMode: boolean;
+    isAuthoringMode: boolean;
+    isGuidedV2Mode: boolean;
+    isLearnAcademyMode: boolean;
+    frozenV2Lesson: LessonV2 | null;
+    guidedV2PlaybackReady: boolean;
+    frozenLesson: FrozenLesson | null;
+    guidedTranscript: GuidedTranscript | null;
+    guidedInitSourceRef: React.MutableRefObject<
+      'full-matchStateJson' | 'reduced-snapshot' | 'seeded-deal' | 'random' | null
+    >;
+    isGuidedTranscriptMode: boolean;
+    isGuidedFrozenLessonMode: boolean;
+    lessonLayoutMode: boolean;
+  };
+  match: BotMatchState;
+  userPlayMoves: Move[];
+  handReveal: BotHandReveal | null;
+  guidedV2Coordination: GuidedV2CoordinationState;
+  captureRuntime: UseGuidedMatchCaptureRuntimeResult;
+  drawSequenceActive: boolean;
+  botTurn: boolean;
+  isTransitioningRef: React.MutableRefObject<boolean>;
+  showRecommendation: boolean;
+  setShowFullCoachTip: (show: boolean) => void;
+  handActive: boolean;
+  fritzDifficulty: BotDifficulty;
+  matchGameOver: boolean;
+};
+
+export type UseGuidedMatchRuntimeBaseResult = {
+  lessonStepIndex: number;
+  setLessonStepIndex: React.Dispatch<React.SetStateAction<number>>;
+  isOffAuthoredLine: boolean;
+  setIsOffAuthoredLine: React.Dispatch<React.SetStateAction<boolean>>;
+  guidedV2EventIndex: number;
+  setGuidedV2EventIndex: React.Dispatch<React.SetStateAction<number>>;
+  isGuidedV2OffLine: boolean;
+  setIsGuidedV2OffLine: React.Dispatch<React.SetStateAction<boolean>>;
+  fritzV2LastAppliedIndexRef: React.MutableRefObject<number>;
+  guidedV1Replay: { stepIndex: number; replyIndex: number } | null;
+  setGuidedV1Replay: React.Dispatch<React.SetStateAction<{ stepIndex: number; replyIndex: number } | null>>;
+  currentExpectedV2PlayerEvent: LessonV2Event | null;
+  guidedMatchCaptureStatus: ReturnType<typeof getGuidedMatchCaptureStatus>;
+  guidedMatchCandidateSaveStatus: string | null;
+  setGuidedMatchCandidateSaveStatus: React.Dispatch<React.SetStateAction<string | null>>;
+  captureGuidedMatchCandidateAction: UseGuidedMatchCaptureRuntimeResult['captureGuidedMatchCandidateAction'];
+  captureGuidedMatchCandidateNextHand: UseGuidedMatchCaptureRuntimeResult['captureGuidedMatchCandidateNextHand'];
+  saveGuidedMatchCandidate: UseGuidedMatchCaptureRuntimeResult['saveGuidedMatchCandidate'];
+  copyGuidedMatchCandidate: UseGuidedMatchCaptureRuntimeResult['copyGuidedMatchCandidate'];
+  canSaveGuidedMatchCandidate: UseGuidedMatchCaptureRuntimeResult['canSaveGuidedMatchCandidate'];
+  coach: ReturnType<typeof useLearningCoach>;
+  guidedCoachTip: GuidedCoachTip | null;
+  guidedScoringTiles: Map<string, number>;
+  currentTranscriptTurn: GuidedTurn | null;
+  currentLessonStep: ReturnType<typeof getGuidedV1AuthoredStepByIndex>;
+  guidedMatchFinalDebrief: GuidedMatchFinalDebrief | null;
+  isGuidedMatchVictoryResult: boolean;
+  isLessonLayoutMode: boolean;
+  isGuidedV2FritzResolving: boolean;
+  isAwaitingPlayerTurnAction: boolean;
+  showPlayerCoaching: boolean;
+  showFritzCoachingPanel: boolean;
+  canPlayCoachedMove: boolean;
+  lessonRecommendedTileKey: string | null;
+  lessonCoachVm: GuidedCoachViewModel | null;
+  lessonCoachProgressLabel: string;
+  lessonCoachProgressPct: number;
+  lessonCoachContent: ReturnType<typeof import('./guidedBotMatchHelpers.ts').parseGuidedLessonCoachContent>;
+  showLessonCoachPanel: boolean;
+  lessonCoachPanelContent: LessonCoachPanelContent | null;
+  lessonBoardPlacementMoves: Move[];
+  showCoachedRecommendation: boolean;
+  activePlacementMoves: Move[];
+};
+
+export type UseGuidedMatchRuntimeResult = UseGuidedMatchRuntimeBaseResult & {
+  acceptGuidedTranscriptTurn: (turn: GuidedTurn, playedTile: Tile | null) => void;
+  handleGuidedPlacement: (move: Move, position: import('../../types.ts').PlacementPosition) => GuidedPlacementResult;
+  playBestMove: () => void;
+  playLessonBestMove: () => void;
+};

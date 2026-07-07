@@ -1,19 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
+import type { RoomChatEvent, RoomEmoteEvent } from '../multiplayer/protocol';
 import './roomReactions.css';
-
-export type RoomChatEvent = {
-  id: string;
-  t: number;
-  from: { userId: string | null; username: string };
-  text: string;
-};
-
-export type RoomEmoteEvent = {
-  id: string;
-  t: number;
-  from: { userId: string | null; username: string };
-  emote: string;
-};
 
 type Props = {
   feed: Array<RoomChatEvent | RoomEmoteEvent>;

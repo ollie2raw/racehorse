@@ -1,5 +1,5 @@
 import IncomingFriendChallengeCard from './IncomingFriendChallengeCard';
-import type { FriendInviteState } from './multiplayerRuntime';
+import type { FriendInviteState } from './runtime/friendInviteRuntime';
 import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyController';
 
 export function FriendInvitePopupBridge({

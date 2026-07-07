@@ -6,7 +6,7 @@ import {
   deriveReconnectShouldJoin,
   type RecoveryMachineSnapshot,
 } from './recoveryMachine';
-import type { RoomRecoveryState } from './multiplayerRuntime';
+import type { RoomRecoveryState } from './protocol';
 
 export type RecoveryLegacyRefTargets = {
   reconnectShouldJoinRef: MutableRefObject<boolean>;

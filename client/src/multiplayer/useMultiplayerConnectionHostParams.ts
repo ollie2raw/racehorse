@@ -5,22 +5,22 @@ import type { RoomAckResponse } from './roomTransport';
 import type { GameState, Move, Tile } from '../types';
 import type { UseMultiplayerConnectionParams } from './useMultiplayerConnection';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './recoveryMachine';
+import type { RoomPlayer, RoomRecoveryState } from './protocol';
 import type {
   MultiplayerAuthRuntime,
   MultiplayerConnectionConfig,
+  MultiplayerConnectionJoinFlightRuntime,
+  MultiplayerConnectionNavigationRuntime,
+  MultiplayerConnectionReconnectRuntime,
+  MultiplayerConnectionRoomRuntime,
   MultiplayerConnectionState,
   MultiplayerConnectionUiSetters,
-  MultiplayerGameplayRefsRuntime,
-  MultiplayerJoinFlightRuntime,
-  MultiplayerNavigationRuntime,
-  MultiplayerReconnectRuntime,
-  MultiplayerRecoveryCallbacksRuntime,
-  MultiplayerRoomRuntime,
-  MultiplayerRoomSocialRuntime,
   MultiplayerSocketRuntime,
-  RoomRecoveryState,
-  RoomPlayer,
-} from './multiplayerRuntime';
+} from './runtime/connectionRuntime';
+import type { MultiplayerGameplayRefsRuntime } from './runtime/gameplayRuntime';
+import type { MultiplayerRecoveryCallbacksRuntime } from './runtime/recoveryRuntime';
+import type { MultiplayerRoomSocialRuntime } from './runtime/roomRuntime';
+import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
 
 export type UseMultiplayerConnectionHostParamsSource = {
   emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
@@ -40,17 +40,19 @@ export type UseMultiplayerConnectionHostParamsSource = {
   authAccessToken: string | null;
   roomCode: string;
   socketRuntime: MultiplayerSocketRuntime;
-  roomRuntime: MultiplayerRoomRuntime;
-  reconnectRuntime: MultiplayerReconnectRuntime;
-  joinFlightRuntime: MultiplayerJoinFlightRuntime;
+  roomRuntime: MultiplayerConnectionRoomRuntime;
+  sessionRuntime: MultiplayerSessionStateRuntime;
+  reconnectRuntime: MultiplayerConnectionReconnectRuntime;
+  joinFlightRuntime: MultiplayerConnectionJoinFlightRuntime;
   authRuntime: MultiplayerAuthRuntime;
-  navigationRuntime: MultiplayerNavigationRuntime;
+  navigationRuntime: MultiplayerConnectionNavigationRuntime;
   roomSocialRuntime: MultiplayerRoomSocialRuntime;
   draggingStateRef: MutableRefObject<boolean>;
   handRevealShownRef: MutableRefObject<number | null>;
   handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   isMutedRef: MutableRefObject<boolean>;
   rematchAwaitingStateRef: MutableRefObject<boolean>;
+  resyncInFlightRef: MutableRefObject<boolean>;
   recoveryDispatchRef?: MutableRefObject<
     (event: RecoveryEvent) => RecoveryMachineSnapshot | null
   >;
@@ -179,6 +181,7 @@ export function useMultiplayerConnectionHostParams(
       clearReconnectAttemptTimer: source.clearReconnectAttemptTimer,
       clearTransientRoomUi: source.clearTransientRoomUi,
       rematchAwaitingStateRef: source.rematchAwaitingStateRef,
+      resyncInFlightRef: source.resyncInFlightRef,
     }),
     [
       source.applyJoinedRoomResponse,
@@ -186,6 +189,7 @@ export function useMultiplayerConnectionHostParams(
       source.clearTransientRoomUi,
       source.fetchGameState,
       source.rematchAwaitingStateRef,
+      source.resyncInFlightRef,
       source.resetClientGameSession,
     ],
   );
@@ -247,6 +251,7 @@ export function useMultiplayerConnectionHostParams(
     (): UseMultiplayerConnectionParams => ({
       config: multiplayerConnectionConfig,
       connectionState: multiplayerConnectionState,
+      sessionRuntime: source.sessionRuntime,
       socketRuntime: source.socketRuntime,
       roomRuntime: source.roomRuntime,
       reconnectRuntime: source.reconnectRuntime,
@@ -263,6 +268,7 @@ export function useMultiplayerConnectionHostParams(
       multiplayerConnectionConfig,
       multiplayerConnectionState,
       source.authRuntime,
+      source.sessionRuntime,
       source.joinFlightRuntime,
       source.navigationRuntime,
       source.reconnectRuntime,

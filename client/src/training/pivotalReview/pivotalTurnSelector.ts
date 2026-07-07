@@ -1,6 +1,6 @@
-import { analyzeMoveLog, type AnalyzedMove, type GameAnalysis, type MoveRating } from '../../analyzer/moveAnalyzer';
+import type { AnalyzedMove, GameAnalysis, MoveRating } from '../../analyzer/moveAnalyzer';
 import type { ConsequenceChain } from '../../analyzer/analysisTypes';
-import type { MoveEntry } from '../../analyzer/moveLogger';
+import type { MoveEntry } from '../../game/moveLogger';
 
 export type PivotalTurnSignal =
   | 'rating_blunder'
@@ -277,10 +277,12 @@ export function selectPivotalTurns(
   const count = Math.max(1, options.count ?? DEFAULT_COUNT);
   const winningScore = options.winningScore ?? DEFAULT_WINNING_SCORE;
 
-  const analysis =
-    options.analysis ??
-    // Master Fritz backfill — see enrichMovesWithFritz in moveAnalyzer.ts
-    analyzeMoveLog(moveLog, true);
+  const analysis = options.analysis;
+  if (!analysis) {
+    throw new Error(
+      'selectPivotalTurns requires options.analysis — run analyzeMoveLog or analyzeMoveLogDeferred first',
+    );
+  }
 
   const entryByMoveNumber = new Map<number, MoveEntry>();
   for (const entry of moveLog) {

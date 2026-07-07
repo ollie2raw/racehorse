@@ -241,7 +241,7 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
   });
 
   it('keeps request-time generation opt-out via ENABLE_REQUEST_PUZZLE_GENERATION=false', () => {
-    const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
+    const source = readFileSync(resolve(__dirname, 'http/stores/dailyPuzzleStore.ts'), 'utf8');
     expect(source).toContain('isRequestPuzzleGenerationEnabled');
     expect(source).toContain('ENABLE_REQUEST_PUZZLE_GENERATION');
     expect(source).toContain('request-time generation skipped');

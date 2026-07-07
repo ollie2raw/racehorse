@@ -545,3 +545,36 @@ export function playYourTurnSound(isMuted: boolean): void {
     return;
   }
 }
+
+export function playMatchFoundSound(isMuted: boolean): void {
+  if (isMuted) return;
+  try {
+    const ac = getCtx();
+    if (!ac) return;
+    const t = ac.currentTime;
+
+    // Ascending arcade chime notes: C5 (523Hz), E5 (659Hz), G5 (784Hz), C6 (1046Hz)
+    const notes = [523, 659, 784, 1046];
+    for (let i = 0; i < notes.length; i++) {
+      const t0 = t + i * 0.08;
+      const freq = notes[i];
+
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+
+      const env = ac.createGain();
+      env.gain.setValueAtTime(0, t0);
+      env.gain.linearRampToValueAtTime(0.18, t0 + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+
+      osc.connect(env);
+      env.connect(ac.destination);
+
+      osc.start(t0);
+      osc.stop(t0 + 0.38);
+    }
+  } catch {
+    return;
+  }
+}

@@ -2,24 +2,22 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'reac
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
 import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
-import type { MoveEntry } from '../../analyzer/moveLogger';
+import type { MoveEntry } from '../../game/moveLogger';
 import type { RoomAckResponse } from '../../multiplayer/roomTransport';
-import { useRoomSocketSync, type StateUpdatePayload } from '../../multiplayer/useRoomSocketSync';
+import { useRoomSocketSync } from '../../multiplayer/useRoomSocketSync';
 import type {
-  FriendInviteState,
-  MultiplayerLiveMatchRecoveryRuntime,
-  MultiplayerLiveMatchRoomRuntime,
-  MultiplayerRoomRecoverySetters,
-  MultiplayerSessionRefsRuntime,
+  RoomEventMeta,
   RoomPlayer,
   RoomRecoveryState,
-} from '../../multiplayer/multiplayerRuntime';
-
-export type RoomEventMeta = {
-  matchId?: string;
-  lastEventSequence?: number;
-  eventCount?: number;
-};
+  StateUpdatePayload,
+} from '../../multiplayer/protocol';
+import type { FriendInviteState } from '../../multiplayer/runtime/friendInviteRuntime';
+import type {
+  MultiplayerLiveMatchRecoveryRuntime,
+  MultiplayerRoomRecoverySetters,
+} from '../../multiplayer/runtime/recoveryRuntime';
+import type { MultiplayerLiveMatchRoomRuntime } from '../../multiplayer/runtime/roomRuntime';
+import type { MultiplayerSessionRefsRuntime } from '../../multiplayer/runtime/gameplayRuntime';
 
 /** Matches `useMultiplayerConnection` hand:ended payload shape. */
 export type HandEndedPayload = {
@@ -181,18 +179,12 @@ export type FlatLiveMatchSessionParams = {
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
   setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
-  joinedRoomRef: MutableRefObject<string | null>;
   maxSequenceRef: MutableRefObject<number>;
   setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
   roomPlayersRef: MutableRefObject<RoomPlayer[]>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  isSeatedPlayerRef: MutableRefObject<boolean>;
-  matchStartedRef: MutableRefObject<boolean>;
-  playerReadyEmittedRef: MutableRefObject<boolean>;
-  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
-  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
-  isMutedRef: MutableRefObject<boolean>;
+  sessionRefsRuntime: MultiplayerSessionRefsRuntime;
   playDrawSound: (muted: boolean) => void;
   resyncInFlightRef: MutableRefObject<boolean>;
   resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
@@ -220,7 +212,7 @@ export function flattenLiveMatchSessionParams(params: UseLiveMatchSessionParams)
     ...params.roomRuntime,
     setPlayers: params.setPlayers,
     ...params.recoverySetters,
-    ...params.sessionRefsRuntime,
+    sessionRefsRuntime: params.sessionRefsRuntime,
     playDrawSound: params.playDrawSound,
     resyncInFlightRef: params.recoveryRuntime.resyncInFlightRef,
     resyncBufferedUpdateRef: params.recoveryRuntime.resyncBufferedUpdateRef,

@@ -1,4 +1,4 @@
-import React, { useMemo, type RefObject } from 'react';
+import React, { useMemo } from 'react';
 import {
   AnimatedScore,
   Board,
@@ -13,7 +13,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '../components';
-import type { BoardHandle } from '../components';
+
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MatchLiveLayout } from './board';
 import LeaveGameModal from '../components/LeaveGameModal';
@@ -29,8 +29,7 @@ import {
 import TileRack from '../components/TileRack';
 import GameOverModal from '../components/GameOverModal';
 import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
-import type { PreGameDrawState } from './preGameDraw/preGameDrawLogic';
-import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from '../components/RoomReactions';
+import { RoomReactions } from '../components/RoomReactions';
 import TournamentMatchHud from '../tournament/TournamentMatchHud';
 import { tournamentStageShortLabel } from '../tournament/displayNames';
 import { shouldShowTournamentGameOverOverlay } from '../tournament/tournamentPostgamePolicy';
@@ -38,112 +37,11 @@ import type { TournamentMatchContext } from './session/useTournamentMatchSession
 import { tileEquals } from '../game/tileUtils';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
-import type { GameState, Move, PlacementPosition, Tile } from '../types';
-import type { RoomPlayer } from '../multiplayer/multiplayerRuntime';
+import type { GameState, Move, Tile } from '../types';
+import type { RoomPlayer } from '../multiplayer/protocol';
+import type { LiveMatchScreenProps } from './liveMatchScreenTypes';
 
-type HandRevealState = {
-  handNumber: number;
-  opponentRemainingTiles: Tile[];
-  yourRemainingTiles: Tile[];
-  pointsAwarded: { you: number; opponent: number };
-  whoWentOut?: string | null;
-  winnerId?: string | null;
-  handWinnerId?: string | null;
-};
-
-type FlyingTile = { x: number; y: number; toX: number; toY: number; id: number };
-
-type ScoreToastState = {
-  message: string;
-  tone: 'you' | 'opp';
-  visible: boolean;
-} | null;
-
-
-
-export type LiveMatchScreenProps = {
-  visible: boolean;
-  state: GameState | null;
-  you: string;
-  opponentId: string | null;
-  opponentName: string;
-  myName: string;
-  myScore: number;
-  opponentScore: number;
-  opponentTileCount: number;
-  isMyTurn: boolean;
-  isHandActive: boolean;
-  hudScorePulse: Record<string, boolean>;
-  hudRightLabel: string;
-  hudRightScore: number;
-  hudRightScorePulse: boolean;
-  opponentPillRef: RefObject<HTMLButtonElement | null>;
-  boneyardRef: RefObject<HTMLDivElement | null>;
-  boneyardCount: number;
-  openEndsSum: number;
-  boardRef: RefObject<BoardHandle | null>;
-  handAreaRef: RefObject<HTMLDivElement | null>;
-  trayCenterRef: RefObject<HTMLDivElement | null>;
-  confettiCanvasRef: RefObject<HTMLCanvasElement | null>;
-  boardForDisplay: GameState['board'];
-  boardLegalMoves: Move[];
-  boardSelectedTile: Tile | null;
-  lastPlayedTile: Tile | null;
-  boardShowOpenEndGlow: boolean;
-  onPositionClick: (position: PlacementPosition) => void;
-  myHand: Tile[];
-  handSelectedTile: Tile | null;
-  onHandTileSelect: (tile: Tile) => void;
-  legalMoves: Move[];
-  handTileSize: number;
-  handCompactStacked: boolean;
-  drawPulseIndex: number | null;
-  scoreToast: ScoreToastState;
-  scoreTrackOpen: boolean;
-  onScoreTrackOpenChange: (open: boolean) => void;
-  winTarget?: number;
-  roomReactions: Array<RoomChatEvent | RoomEmoteEvent>;
-  onSendRoomChat: (message: string) => void;
-  onSendRoomEmote: (emote: RoomEmoteEvent['emote']) => void;
-  isMuted: boolean;
-  onToggleMute: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
-  opponentDisconnected: boolean;
-  opponentDisconnectMessage: string | null;
-  roomRecoveryState: 'idle' | 'reconnecting' | 'resyncing' | 'failed';
-  roomRecoveryMessage: string;
-  onRetryRoomRecovery: () => void;
-  tournamentMatch: TournamentMatchContext | null;
-  consumedTournamentGameOverMatchIds: ReadonlySet<string>;
-  tournamentMyLabel: string;
-  tournamentOpponentLabel: string | null;
-  onTournamentViewBracket: () => void;
-  onTournamentViewFinalResult: () => void;
-  onTournamentReturnToHub: () => void;
-  canUseRematch: boolean;
-  rematchRequested: boolean;
-  rematchWaitingText: string | undefined;
-  onRematch: () => void;
-  onPostGame: () => void;
-  players: RoomPlayer[];
-  multiplayerRatingSummary: {
-    pending: boolean;
-    delta: number | null;
-    newRating: number | null;
-  } | null;
-  onOpenMultiplayerAnalyzer: () => void;
-  handReveal: HandRevealState | null;
-  handRevealAutoProgress: number;
-  flyingTiles: FlyingTile[];
-  showLeaveConfirm: boolean;
-  onRequestLeaveConfirm: () => void;
-  onLeaveConfirmDismiss: () => void;
-  leaveModalIsTournament: boolean;
-  onConfirmLeaveMatch: () => void;
-  preGameDraw?: PreGameDrawState | null;
-  onPregameTileTap?: (tileId: string) => void;
-};
+export type { LiveMatchScreenProps } from './liveMatchScreenTypes';
 
 // ─── Hand View ───────────────────────────────────────────────
 
@@ -427,84 +325,104 @@ function renderScoreToastMessage(message: string) {
 }
 
 export function LiveMatchScreen({
-  visible,
-  state,
-  you,
-  opponentId,
-  opponentName,
-  myName,
-  myScore,
-  opponentScore,
-  opponentTileCount,
-  isMyTurn,
-  isHandActive,
-  hudScorePulse,
-  hudRightLabel,
-  hudRightScore,
-  hudRightScorePulse,
-  opponentPillRef,
-  boneyardRef,
-  boneyardCount,
-  openEndsSum,
-  boardRef,
-  handAreaRef,
-  trayCenterRef,
-  confettiCanvasRef,
-  boardForDisplay,
-  boardLegalMoves,
-  boardSelectedTile,
-  lastPlayedTile,
-  boardShowOpenEndGlow,
-  onPositionClick,
-  myHand,
-  handSelectedTile,
-  onHandTileSelect,
-  legalMoves,
-  handTileSize,
-  handCompactStacked,
-  drawPulseIndex,
-  scoreToast,
-  scoreTrackOpen,
-  onScoreTrackOpenChange,
-  winTarget = 60,
-  roomReactions,
-  onSendRoomChat,
-  onSendRoomEmote,
-  isMuted,
-  onToggleMute,
-  isFullscreen,
-  onToggleFullscreen,
-  opponentDisconnected,
-  opponentDisconnectMessage,
-  roomRecoveryState,
-  roomRecoveryMessage,
-  onRetryRoomRecovery,
-  tournamentMatch,
-  consumedTournamentGameOverMatchIds,
-  tournamentMyLabel,
-  tournamentOpponentLabel,
-  onTournamentViewBracket,
-  onTournamentViewFinalResult,
-  onTournamentReturnToHub,
-  canUseRematch,
-  rematchRequested,
-  rematchWaitingText,
-  onRematch,
-  onPostGame,
-  players,
-  multiplayerRatingSummary,
-  onOpenMultiplayerAnalyzer,
-  handReveal,
-  handRevealAutoProgress,
-  flyingTiles,
-  showLeaveConfirm,
-  onRequestLeaveConfirm,
-  onLeaveConfirmDismiss,
-  leaveModalIsTournament,
-  onConfirmLeaveMatch,
+  shell,
+  identity,
+  hud,
+  board,
+  hand,
+  chrome,
+  connection,
+  tournament,
+  postGame,
+  leave,
   preGameDraw,
-  onPregameTileTap,
 }: LiveMatchScreenProps) {
+  const { visible, state, flyingTiles, scoreToast } = shell;
+  const { you, opponentId, opponentName, myName, players } = identity;
+  const {
+    myScore,
+    opponentScore,
+    opponentTileCount,
+    isMyTurn,
+    isHandActive,
+    hudScorePulse,
+    hudRightLabel,
+    hudRightScore,
+    hudRightScorePulse,
+    boneyardCount,
+    openEndsSum,
+    winTarget = 60,
+  } = hud;
+  const {
+    opponentPillRef,
+    boneyardRef,
+    boardRef,
+    handAreaRef,
+    trayCenterRef,
+    confettiCanvasRef,
+    boardForDisplay,
+    boardLegalMoves,
+    boardSelectedTile,
+    lastPlayedTile,
+    boardShowOpenEndGlow,
+    onPositionClick,
+  } = board;
+  const {
+    myHand,
+    handSelectedTile,
+    onHandTileSelect,
+    legalMoves,
+    handTileSize,
+    handCompactStacked,
+    drawPulseIndex,
+  } = hand;
+  const {
+    scoreTrackOpen,
+    onScoreTrackOpenChange,
+    roomReactions,
+    onSendRoomChat,
+    onSendRoomEmote,
+    isMuted,
+    onToggleMute,
+    isFullscreen,
+    onToggleFullscreen,
+  } = chrome;
+  const {
+    opponentDisconnected,
+    opponentDisconnectMessage,
+    roomRecoveryState,
+    roomRecoveryMessage,
+    onRetryRoomRecovery,
+  } = connection;
+  const {
+    tournamentMatch,
+    consumedTournamentGameOverMatchIds,
+    tournamentMyLabel,
+    tournamentOpponentLabel,
+    onTournamentViewBracket,
+    onTournamentViewFinalResult,
+    onTournamentReturnToHub,
+  } = tournament;
+  const {
+    canUseRematch,
+    rematchRequested,
+    rematchWaitingText,
+    onRematch,
+    onPostGame,
+    multiplayerRatingSummary,
+    onOpenMultiplayerAnalyzer,
+    handReveal,
+    handRevealAutoProgress,
+  } = postGame;
+  const {
+    showLeaveConfirm,
+    onRequestLeaveConfirm,
+    onLeaveConfirmDismiss,
+    leaveModalIsTournament,
+    onConfirmLeaveMatch,
+  } = leave;
+  const preGameDrawState = preGameDraw?.preGameDraw;
+  const onPregameTileTap = preGameDraw?.onPregameTileTap;
   const showGameOverOverlay = Boolean(state?.gameOver);
 
   if (!visible || !state) {
@@ -532,6 +450,12 @@ export function LiveMatchScreen({
       <>
           <RotateOverlay />
           <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
+            <style>{`
+              @keyframes rh-pulse-dot {
+                0%, 100% { opacity: 0.35; transform: scale(0.85); }
+                50% { opacity: 1; transform: scale(1.15); }
+              }
+            `}</style>
             {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
               <div
                 style={{
@@ -540,15 +464,32 @@ export function LiveMatchScreen({
                   left: '50%',
                   transform: 'translateX(-50%)',
                   zIndex: 1190,
-                  padding: '8px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(251,191,36,0.35)',
-                  background: 'rgba(15,25,20,0.82)',
-                  color: 'rgba(255,236,200,0.95)',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(245, 158, 11, 0.6)',
+                  background: '#0a101d',
+                  color: '#f8fafc',
                   fontSize: '0.84rem',
                   fontWeight: 600,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 0 12px rgba(245, 158, 11, 0.15)',
+                  letterSpacing: '0.02em',
+                  fontFamily: 'var(--font-sans, sans-serif)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
                 }}
               >
+                <span 
+                  style={{ 
+                    display: 'inline-block', 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: '50%', 
+                    background: '#f59e0b', 
+                    boxShadow: '0 0 8px #f59e0b',
+                    animation: 'rh-pulse-dot 1.5s infinite ease-in-out'
+                  }} 
+                />
                 {opponentDisconnectMessage}
               </div>
             )}
@@ -560,18 +501,34 @@ export function LiveMatchScreen({
                   left: '50%',
                   transform: 'translateX(-50%)',
                   zIndex: 1200,
-                  padding: '8px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(236,252,245,0.24)',
-                  background: 'rgba(15,25,20,0.82)',
-                  color: 'rgba(232,245,240,0.95)',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: roomRecoveryState === 'failed' ? '1px solid rgba(239, 68, 68, 0.6)' : '1px solid rgba(0, 216, 255, 0.6)',
+                  background: '#0a101d',
+                  color: '#f8fafc',
                   fontSize: '0.84rem',
                   fontWeight: 700,
+                  boxShadow: roomRecoveryState === 'failed'
+                    ? '0 4px 16px rgba(0,0,0,0.5), 0 0 12px rgba(239, 68, 68, 0.15)'
+                    : '0 4px 16px rgba(0,0,0,0.5), 0 0 12px rgba(0, 216, 255, 0.15)',
+                  letterSpacing: '0.02em',
+                  fontFamily: 'var(--font-sans, sans-serif)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
+                  gap: 12,
                 }}
               >
+                <span 
+                  style={{ 
+                    display: 'inline-block', 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: '50%', 
+                    background: roomRecoveryState === 'failed' ? '#ef4444' : '#00d8ff', 
+                    boxShadow: roomRecoveryState === 'failed' ? '0 0 8px #ef4444' : '0 0 8px #00d8ff',
+                    animation: roomRecoveryState === 'failed' ? 'none' : 'rh-pulse-dot 1.5s infinite ease-in-out'
+                  }} 
+                />
                 <span>
                   {roomRecoveryState === 'reconnecting'
                     ? 'Reconnecting…'
@@ -587,11 +544,11 @@ export function LiveMatchScreen({
                     type="button"
                     onClick={onRetryRoomRecovery}
                     style={{
-                      border: '1px solid rgba(236,252,245,0.24)',
-                      background: 'rgba(255,255,255,0.08)',
-                      color: 'inherit',
-                      borderRadius: 999,
-                      padding: '4px 10px',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      borderRadius: '4px',
+                      padding: '4px 12px',
                       fontSize: '0.78rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -709,7 +666,7 @@ export function LiveMatchScreen({
                     type="button"
                     ref={opponentPillRef}
                     style={{ margin: 8 }}
-                    className={`wl-player-pill wl-player-pill-btn score-card ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                    className={`wl-player-pill wl-player-pill-btn score-card ${!isMyTurn ? 'is-active-turn' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
                     onClick={() => onScoreTrackOpenChange(true)}
                     aria-label="Open score track"
                   >
@@ -729,17 +686,17 @@ export function LiveMatchScreen({
                     left: '50%',
                     top: '50%',
                     transform: 'translate(-50%, -50%)',
-                    display: (isHandActive || tournamentMatch || (state.handNumber === 0 && !!preGameDraw)) ? 'flex' : 'none',
+                    display: (isHandActive || tournamentMatch || (state.handNumber === 0 && !!preGameDrawState)) ? 'flex' : 'none',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {state.handNumber === 0 && preGameDraw ? (
+                  {state.handNumber === 0 && preGameDrawState ? (
                     (() => {
                       let label = '';
                       let tone = 'your-turn';
-                      const phase = preGameDraw.phase as string;
-                      const { winner, currentRound } = preGameDraw;
+                      const phase = preGameDrawState.phase as string;
+                      const { winner, currentRound } = preGameDrawState;
                       if (phase === 'showing-tie') {
                         label = 'Tie — tap again';
                         tone = 'your-turn';
@@ -790,7 +747,7 @@ export function LiveMatchScreen({
                 <button
                   type="button"
                   style={{ margin: 8 }}
-                  className={`wl-player-pill wl-player-pill-btn score-card is-you ${hudRightScorePulse ? 'score-hit' : ''}`}
+                  className={`wl-player-pill wl-player-pill-btn score-card is-you ${isMyTurn ? 'is-active-turn' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
                   onClick={() => onScoreTrackOpenChange(true)}
                   aria-label="Open score track"
                 >
@@ -927,27 +884,18 @@ export function LiveMatchScreen({
                       </div>
                     }
                   >
-                  {state.handNumber === 0 && preGameDraw ? (
-                    (() => {
-                      console.log('[PREGAME-RENDER] isPlayerPickEnabled:', 
-                        !preGameDraw?.currentRound?.you,
-                        'phase:', preGameDraw?.phase,
-                        'currentRound:', JSON.stringify(preGameDraw?.currentRound)
-                      );
-                      return (
-                        <PreGameTileDrawBoard
-                          drawState={preGameDraw}
-                          isPlayerPickEnabled={
-                            !preGameDraw.currentRound?.you &&
-                            (preGameDraw.phase as string) !== 'showing-tie' &&
-                            (preGameDraw.phase as string) !== 'showing-reveal' &&
-                            (preGameDraw.phase as string) !== 'showing-result' &&
-                            preGameDraw.phase !== 'resolved'
-                          }
-                          onTileTap={onPregameTileTap || (() => {})}
-                        />
-                      );
-                    })()
+                  {state.handNumber === 0 && preGameDrawState ? (
+                    <PreGameTileDrawBoard
+                      drawState={preGameDrawState}
+                      isPlayerPickEnabled={
+                        !preGameDrawState.currentRound?.you &&
+                        (preGameDrawState.phase as string) !== 'showing-tie' &&
+                        (preGameDrawState.phase as string) !== 'showing-reveal' &&
+                        (preGameDrawState.phase as string) !== 'showing-result' &&
+                        preGameDrawState.phase !== 'resolved'
+                      }
+                      onTileTap={onPregameTileTap || (() => {})}
+                    />
                   ) : (
                     <Board
                       ref={boardRef}
@@ -965,7 +913,7 @@ export function LiveMatchScreen({
                 </>
               }
               handDock={
-                state.handNumber === 0 && preGameDraw ? (
+                state.handNumber === 0 && preGameDrawState ? (
                   <div className="hand-area wl-hand-area pre-game-draw-hand-dock" data-ui="tray" aria-hidden="true" />
                 ) : (
                   <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">

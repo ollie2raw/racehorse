@@ -462,3 +462,45 @@
     padding-right: 20px !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   PHASE AC TASK 3 — MATCHMAKING HUB ENTRY & PANEL ANIMATIONS
+   ───────────────────────────────────────────────────────────── */
+
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mm-page {
+  animation: page-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes section-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mm-section {
+  animation: section-fade-in 0.28s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-page,
+  .mm-section {
+    animation: none !important;
+  }
+}
+

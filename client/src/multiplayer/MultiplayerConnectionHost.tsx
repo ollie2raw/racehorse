@@ -1,4 +1,4 @@
-import { createElement, useEffect, type ReactNode } from 'react';
+import { createElement, useEffect, useMemo, type ReactNode } from 'react';
 import { useMultiplayerConnection, type UseMultiplayerConnectionParams } from './useMultiplayerConnection';
 import {
   MultiplayerConnectionContext,
@@ -16,6 +16,10 @@ export function MultiplayerConnectionHost({
   ...params
 }: MultiplayerConnectionHostProps) {
   const { connect, disconnect, retryRoomRecovery } = useMultiplayerConnection(params);
+  const contextValue = useMemo(
+    () => ({ connect, disconnect, retryRoomRecovery }),
+    [connect, disconnect, retryRoomRecovery],
+  );
 
   useEffect(() => {
     const disconnectBridgeRef = actionsBridge.disconnectRef;
@@ -27,7 +31,7 @@ export function MultiplayerConnectionHost({
   return createElement(
     MultiplayerConnectionContext.Provider,
     {
-      value: { connect, disconnect, retryRoomRecovery },
+      value: contextValue,
     },
     children,
   );

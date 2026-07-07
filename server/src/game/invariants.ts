@@ -83,7 +83,10 @@ export function boardTileCount(board: BoardState | null): number {
  * deadTiles are the protected tail of boneyard — they are already counted
  * inside boneyard.length and must NOT be added again.
  */
-export function collectGameStateViolations(state: GameState): string[] {
+export function collectGameStateViolations(
+  state: GameState,
+  expectedTotalOverride?: number,
+): string[] {
   const v: string[] = [];
 
   const {
@@ -181,7 +184,7 @@ export function collectGameStateViolations(state: GameState): string[] {
 
   // ── hand-active tile invariants ───────────────────────────────────────────
   if (handActive) {
-    v.push(...collectTileAccountingViolations(state));
+    v.push(...collectTileAccountingViolations(state, expectedTotalOverride));
   }
 
   // ── gameOver implies handOver ──────────────────────────────────────────────
@@ -220,11 +223,14 @@ export function collectGameStateViolations(state: GameState): string[] {
  * Tile accounting invariants once a hand is active:
  * total count, no duplicates across hands+boneyard+board, dead/boneyard tail rules.
  */
-export function collectTileAccountingViolations(state: GameState): string[] {
+export function collectTileAccountingViolations(
+  state: GameState,
+  expectedTotalOverride?: number,
+): string[] {
   const v: string[] = [];
   const { config, playerIds, players, board, boneyard, deadTiles, handNumber } = state;
   const { maxPips, deadTileCount } = config;
-  const expectedTotal = totalTilesInSet(maxPips);
+  const expectedTotal = expectedTotalOverride ?? totalTilesInSet(maxPips);
 
   if (handNumber <= 0) return v;
 
@@ -289,12 +295,20 @@ function throwIfViolations(violations: string[], context: string): void {
 }
 
 /** Tile accounting subset — used after every gameplay mutation. */
-export function assertTileCountInvariant(state: GameState, context = 'unknown'): void {
-  throwIfViolations(collectTileAccountingViolations(state), context);
+export function assertTileCountInvariant(
+  state: GameState,
+  context = 'unknown',
+  expectedTotalOverride?: number,
+): void {
+  throwIfViolations(collectTileAccountingViolations(state, expectedTotalOverride), context);
 }
 
 // ─── Public assertion ──────────────────────────────────────────────────────
 
-export function assertValidGameState(state: GameState, context = 'unknown'): void {
-  throwIfViolations(collectGameStateViolations(state), context);
+export function assertValidGameState(
+  state: GameState,
+  context = 'unknown',
+  expectedTotalOverride?: number,
+): void {
+  throwIfViolations(collectGameStateViolations(state, expectedTotalOverride), context);
 }

@@ -27,6 +27,13 @@
       "severity": "error",
       "from": { "path": "^src/(?!test)" },
       "to": { "path": "^src/test/" }
+    },
+    {
+      "name": "no-bot-from-modules",
+      "comment": "Modules must not import from bot/ feature folder",
+      "severity": "error",
+      "from": { "path": "^src/modules/" },
+      "to": { "path": "^src/bot/" }
     }
   ],
   "options": {

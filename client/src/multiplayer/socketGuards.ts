@@ -9,14 +9,13 @@ export type SequenceDecision =
   | { action: 'reject_stale'; incoming: number; watermark: number }
   | { action: 'reject_regression'; incoming: number; watermark: number };
 
-export function evaluateSequenceUpdate(
-  watermarkRef: MutableRefObject<number>,
+export function evaluateSequenceWatermark(
+  watermark: number,
   incoming: number | undefined | null,
 ): SequenceDecision {
   if (typeof incoming !== 'number' || !Number.isFinite(incoming)) {
-    return { action: 'accept', sequence: watermarkRef.current };
+    return { action: 'accept', sequence: watermark };
   }
-  const watermark = watermarkRef.current;
   if (incoming < watermark) {
     const gap = watermark - incoming;
     if (gap > SEQUENCE_REGRESSION_THRESHOLD) {
@@ -25,6 +24,13 @@ export function evaluateSequenceUpdate(
     return { action: 'reject_stale', incoming, watermark };
   }
   return { action: 'accept', sequence: incoming };
+}
+
+export function evaluateSequenceUpdate(
+  watermarkRef: MutableRefObject<number>,
+  incoming: number | undefined | null,
+): SequenceDecision {
+  return evaluateSequenceWatermark(watermarkRef.current, incoming);
 }
 
 export function wrapSocketHandler<TArgs extends unknown[]>(

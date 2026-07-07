@@ -35,6 +35,7 @@ function baseSnapshot(
     state: 'idle',
     policy: 'auto',
     targetRoom: null,
+    pendingResyncRoomCode: null,
     attempt: 0,
     episodeId: 0,
     manualRetry: false,
@@ -147,12 +148,11 @@ function testRoomJoinOkReturnsIdle(): void {
   assertEqual(effects.some((e) => e.type === 'cancel_schedule'), true, 'cancel schedule');
 }
 
-function testRoomJoinOkNeedsResync(): void {
-  const { snapshot, effects } = reduceRecovery(
-    baseSnapshot({ state: 'joining', targetRoom: 'ABCD', attempt: 1, episodeId: 1 }),
-    { type: 'ROOM_JOIN_OK', needsResync: true },
-  );
-  assertEqual(snapshot.state, 'resyncing', 'state');
+function testJoinOkFlushesPendingResyncToResyncing(): void {
+  let snapshot = baseSnapshot({ state: 'joining', targetRoom: 'ABCD', attempt: 1, episodeId: 1 });
+  snapshot = reduceRecovery(snapshot, { type: 'RESYNC_NEEDED', roomCode: 'ABCD' }).snapshot;
+  const { snapshot: next, effects } = reduceRecovery(snapshot, { type: 'ROOM_JOIN_OK' });
+  assertEqual(next.state, 'resyncing', 'state');
   assertDeepEqual(
     effects.filter((e) => e.type === 'resync'),
     [{ type: 'resync', roomCode: 'ABCD' }],
@@ -246,15 +246,128 @@ function testResyncNeededBlockedWhenDisabled(): void {
   assertEqual(effects.length, 0, 'no resync');
 }
 
-function testResyncNeededOnlyFromIdle(): void {
-  for (const state of ['connecting', 'joining', 'resyncing', 'failed'] as const) {
+function testResyncNeededQueuesWhileNonIdle(): void {
+  for (const state of ['connecting', 'joining', 'failed'] as const) {
     const { snapshot, effects } = reduceRecovery(
       baseSnapshot({ state, targetRoom: 'ABCD', attempt: 1, episodeId: 1 }),
       { type: 'RESYNC_NEEDED', roomCode: 'ABCD' },
     );
     assertEqual(snapshot.state, state, `unchanged while ${state}`);
-    assertEqual(effects.length, 0, `no resync while ${state}`);
+    assertEqual(snapshot.pendingResyncRoomCode, 'ABCD', `queued while ${state}`);
+    assertEqual(effects.length, 0, `no immediate resync while ${state}`);
   }
+}
+
+function countEffectsOfType(effects: RecoveryEffect[], type: RecoveryEffect['type']): number {
+  return effects.filter((e) => e.type === type).length;
+}
+
+/** Integration: RESYNC_NEEDED during joining is queued until ROOM_JOIN_OK. */
+function testResyncNeededDuringReconnectJoiningIsQueued(): void {
+  let snapshot = baseSnapshot();
+
+  snapshot = reduceRecovery(snapshot, { type: 'SOCKET_LOST', roomCode: 'ABCD' }).snapshot;
+  snapshot = reduceRecovery(snapshot, { type: 'SOCKET_CONNECTED' }).snapshot;
+  assertEqual(snapshot.state, 'joining', 'joining after socket connected');
+
+  const duringJoin = reduceRecovery(snapshot, { type: 'RESYNC_NEEDED', roomCode: 'ABCD' });
+  assertEqual(duringJoin.snapshot.state, 'joining', 'still joining after resync needed');
+  assertEqual(duringJoin.snapshot.pendingResyncRoomCode, 'ABCD', 'queued during join');
+  assertEqual(countEffectsOfType(duringJoin.effects, 'resync'), 0, 'no resync effect during join');
+}
+
+/** Integration: RESYNC_NEEDED while connecting is queued. */
+function testResyncNeededWhileConnectingIsQueued(): void {
+  const snapshot = baseSnapshot({
+    state: 'connecting',
+    targetRoom: 'ABCD',
+    attempt: 1,
+    episodeId: 2,
+  });
+  const { snapshot: next, effects } = reduceRecovery(snapshot, {
+    type: 'RESYNC_NEEDED',
+    roomCode: 'ABCD',
+  });
+  assertEqual(next.state, 'connecting', 'still connecting');
+  assertEqual(next.pendingResyncRoomCode, 'ABCD', 'queued while connecting');
+  assertEqual(effects.length, 0, 'no immediate effects while connecting');
+}
+
+/** Integration: multiple RESYNC_NEEDED events coalesce to one pending room. */
+function testMultipleResyncNeededWhileJoiningCoalesce(): void {
+  let snapshot = baseSnapshot({
+    state: 'joining',
+    targetRoom: 'ABCD',
+    attempt: 1,
+    episodeId: 3,
+  });
+  let totalResyncEffects = 0;
+
+  for (let i = 0; i < 3; i += 1) {
+    const result = reduceRecovery(snapshot, { type: 'RESYNC_NEEDED', roomCode: 'ABCD' });
+    snapshot = result.snapshot;
+    totalResyncEffects += countEffectsOfType(result.effects, 'resync');
+  }
+
+  assertEqual(snapshot.state, 'joining', 'still joining after triple dispatch');
+  assertEqual(snapshot.pendingResyncRoomCode, 'ABCD', 'single coalesced pending room');
+  assertEqual(totalResyncEffects, 0, 'no immediate resync effects');
+}
+
+/** Integration: after reconnect join completes, the next RESYNC_NEEDED is honored. */
+function testResyncNeededAcceptedAfterReconnectJoinOk(): void {
+  let snapshot = baseSnapshot({
+    state: 'joining',
+    targetRoom: 'WXYZ',
+    attempt: 1,
+    episodeId: 4,
+  });
+
+  snapshot = reduceRecovery(snapshot, { type: 'ROOM_JOIN_OK' }).snapshot;
+  assertEqual(snapshot.state, 'idle', 'idle after room join ok');
+
+  const resync = reduceRecovery(snapshot, { type: 'RESYNC_NEEDED', roomCode: 'WXYZ' });
+  assertEqual(resync.snapshot.state, 'resyncing', 'resyncing after idle resync needed');
+  assertEqual(countEffectsOfType(resync.effects, 'resync'), 1, 'resync effect emitted');
+}
+
+/** Reducer aligns with dispatch: RESYNC_NEEDED while resyncing is ignored. */
+function testResyncNeededIgnoredWhileResyncing(): void {
+  const snapshot = baseSnapshot({
+    state: 'resyncing',
+    targetRoom: 'ABCD',
+    attempt: 0,
+    episodeId: 1,
+    lastMessage: 'Syncing game state…',
+  });
+  const { snapshot: next, effects } = reduceRecovery(snapshot, {
+    type: 'RESYNC_NEEDED',
+    roomCode: 'ABCD',
+  });
+  assertEqual(next.state, 'resyncing', 'still resyncing');
+  assertEqual(next.pendingResyncRoomCode, null, 'not queued while resyncing');
+  assertEqual(effects.length, 0, 'no duplicate resync effect');
+}
+
+/** Integration: queued resync flushes once when reconnect join completes. */
+function testReconnectEpisodeFlushesQueuedResyncOnJoinOk(): void {
+  const effects: RecoveryEffect[] = [];
+  const machine = createRecoveryMachine({
+    scheduler: { schedule: () => {}, cancel: () => {} },
+    onEffect: (effect) => effects.push(effect),
+  });
+
+  machine.dispatch({ type: 'SOCKET_LOST', roomCode: 'ROOM1' });
+  machine.dispatch({ type: 'SOCKET_CONNECTED' });
+  assertEqual(machine.getSnapshot().state, 'joining', 'joining mid-reconnect');
+
+  machine.dispatch({ type: 'RESYNC_NEEDED', roomCode: 'ROOM1' });
+  assertEqual(machine.getSnapshot().pendingResyncRoomCode, 'ROOM1', 'queued during joining');
+
+  machine.dispatch({ type: 'ROOM_JOIN_OK' });
+  assertEqual(machine.getSnapshot().state, 'resyncing', 'flushed to resyncing after join ok');
+  assertEqual(machine.getSnapshot().pendingResyncRoomCode, null, 'pending cleared on flush');
+  assertEqual(countEffectsOfType(effects, 'resync'), 1, 'single resync effect on flush');
 }
 
 function testManualJoinSetsManualRetry(): void {
@@ -329,14 +442,20 @@ function run(): void {
   testResyncingTrapManualOnlyWithoutRetryOnConnect();
   testSocketConnectedAutoEntersJoining();
   testRoomJoinOkReturnsIdle();
-  testRoomJoinOkNeedsResync();
+  testJoinOkFlushesPendingResyncToResyncing();
   testTransportFailRetriesUntilMax();
   testRoomJoinTerminalClearsRecoverability();
   testUserRetryFromFailed();
   testUserLeaveClearsEverything();
   testResyncNeededWhileConnected();
   testResyncNeededBlockedWhenDisabled();
-  testResyncNeededOnlyFromIdle();
+  testResyncNeededQueuesWhileNonIdle();
+  testResyncNeededDuringReconnectJoiningIsQueued();
+  testResyncNeededWhileConnectingIsQueued();
+  testMultipleResyncNeededWhileJoiningCoalesce();
+  testResyncNeededAcceptedAfterReconnectJoinOk();
+  testResyncNeededIgnoredWhileResyncing();
+  testReconnectEpisodeFlushesQueuedResyncOnJoinOk();
   testManualJoinSetsManualRetry();
   testSessionSupersededAutoReconnect();
   testShimDerivations();

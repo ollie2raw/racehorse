@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
-import type { FritzTier } from "./fritzConfig";
-import type { BotDealSize } from "./botEngine";
+import type { FritzTier } from "../modules/fritz/fritzConfig.ts";
+import type { BotDealSize } from "../modules/match/runtime/botEngine.ts";
 import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
