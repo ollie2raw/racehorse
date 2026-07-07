@@ -1,4 +1,11 @@
 {
+  "name": "racehorse-dominoes",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "packages/*"
+  ],
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2"
   }
