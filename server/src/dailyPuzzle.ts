@@ -457,3 +457,20 @@ export function buildDailyPuzzleLeaderboard(
     }),
   }));
 }
+
+export function calculateServerAuthoritativeElapsedSeconds(
+  attempt: { startedAt: string; result: { slots: Array<{ slotIndex: number; completedAt: string }> } },
+  slotIndex: number,
+  now: Date = new Date(),
+): number {
+  let startTimestamp = attempt.startedAt ? new Date(attempt.startedAt) : now;
+  if (slotIndex === 2 || slotIndex === 3) {
+    const prevSlotIndex = slotIndex - 1;
+    const prevSlot = attempt.result.slots.find((s) => s.slotIndex === prevSlotIndex);
+    if (prevSlot && prevSlot.completedAt) {
+      startTimestamp = new Date(prevSlot.completedAt);
+    }
+  }
+  return Math.max(1, Math.floor((now.getTime() - startTimestamp.getTime()) / 1000));
+}
+

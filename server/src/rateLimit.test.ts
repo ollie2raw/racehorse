@@ -28,5 +28,34 @@ describe('InMemoryRateLimiter', () => {
     expect(limiter.take('b', undefined, 0).allowed).toBe(true);
     expect(limiter.take('a', undefined, 0).allowed).toBe(false);
   });
+
+  describe('check and increment', () => {
+    it('check does not increment count but correctly reports permission state', () => {
+      const limiter = new InMemoryRateLimiter({ windowMs: 1000, max: 2 });
+      
+      // Initially allowed
+      expect(limiter.check('key', undefined, 0).allowed).toBe(true);
+      
+      // Take 1
+      limiter.take('key', undefined, 0);
+      expect(limiter.check('key', undefined, 0).allowed).toBe(true);
+      expect(limiter.check('key', undefined, 0).remaining).toBe(1);
+
+      // Take 2 (reaches max)
+      limiter.take('key', undefined, 0);
+      expect(limiter.check('key', undefined, 0).allowed).toBe(false);
+      expect(limiter.check('key', undefined, 0).remaining).toBe(0);
+    });
+
+    it('increment increases count manually without calling take', () => {
+      const limiter = new InMemoryRateLimiter({ windowMs: 1000, max: 2 });
+      
+      limiter.increment('key', undefined, 0);
+      expect(limiter.check('key', undefined, 0).remaining).toBe(1);
+
+      limiter.increment('key', undefined, 0);
+      expect(limiter.check('key', undefined, 0).allowed).toBe(false);
+    });
+  });
 });
 

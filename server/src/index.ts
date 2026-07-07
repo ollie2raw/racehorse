@@ -1,11 +1,11 @@
-import './loadEnv';
 import * as Sentry from '@sentry/node';
+import { config } from './config';
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  enabled: process.env.NODE_ENV === 'production' && Boolean(process.env.SENTRY_DSN),
-  environment: process.env.NODE_ENV ?? 'development',
-  release: process.env.RENDER_GIT_COMMIT ?? process.env.npm_package_version ?? 'dev',
+  dsn: config.sentryDsn || undefined,
+  enabled: config.isProd && Boolean(config.sentryDsn),
+  environment: config.nodeEnv,
+  release: config.renderGitCommit ?? config.packageVersion,
   tracesSampleRate: 0.2,
 });
 import fs from 'node:fs';
@@ -205,6 +205,7 @@ import {
   InMemoryRateLimiter,
   createRateLimitMiddleware,
   socketRateLimitKey,
+  failedRoomLookupLimiter,
   type RateLimitRule,
 } from './rateLimit';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
@@ -296,13 +297,13 @@ const allowedOriginPatterns = [
   /^https:\/\/.*\.vercel\.app$/i,
 ];
 
-const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
+const configuredCorsOrigins = config.corsAllowedOrigins
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
 /** Public web app URL (e.g. Vercel). Set on Render so CORS matches your deployed client. */
-const CLIENT_DEPLOY_URL = process.env.CLIENT_URL?.trim() || undefined;
+const CLIENT_DEPLOY_URL = config.clientUrl || undefined;
 
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true;
@@ -505,23 +506,38 @@ registerRoomEventsRoutes(app, {
 
 
 const SOCKET_EVENT_LIMITS: Record<string, RateLimitRule> = {
-  'room:create': { windowMs: 60_000, max: 10 },
-  'room:join': { windowMs: 60_000, max: 30 },
-  'room:spectate': { windowMs: 60_000, max: 30 },
-  'queue:join': { windowMs: 60_000, max: 10 },
-  'friend:invite': { windowMs: 60_000, max: 20 },
-  'friend:invite:decline': { windowMs: 60_000, max: 60 },
-  'room:chat:send': { windowMs: 60_000, max: 30 },
-  'room:emote:send': { windowMs: 60_000, max: 60 },
-  'game:action': { windowMs: 60_000, max: 240 },
-  'hand:ready': { windowMs: 60_000, max: 120 },
-  'player:ready': { windowMs: 60_000, max: 120 },
+  'room:create': { windowMs: 60_000, max: config.limitRoomCreateMax },
+  'room:join': { windowMs: 60_000, max: config.limitRoomJoinMax },
+  'room:spectate': { windowMs: 60_000, max: config.limitRoomSpectateMax },
+  'queue:join': { windowMs: 60_000, max: config.limitQueueJoinMax },
+  'friend:invite': { windowMs: 60_000, max: config.limitFriendInviteMax },
+  'friend:invite:decline': { windowMs: 60_000, max: config.limitFriendDeclineMax },
+  'room:chat:send': { windowMs: 60_000, max: config.limitRoomChatMax },
+  'room:emote:send': { windowMs: 60_000, max: config.limitRoomEmoteMax },
+  'game:action': { windowMs: 60_000, max: config.limitGameActionMax },
+  'hand:ready': { windowMs: 60_000, max: config.limitHandReadyMax },
+  'player:ready': { windowMs: 60_000, max: config.limitPlayerReadyMax },
 };
-const DEFAULT_SOCKET_EVENT_LIMIT: RateLimitRule = { windowMs: 60_000, max: 600 };
+const DEFAULT_SOCKET_EVENT_LIMIT: RateLimitRule = { windowMs: 60_000, max: config.limitDefaultMax };
 
 function installSocketRateLimit(socket: Socket): void {
   socket.use((packet, next) => {
     const eventName = typeof packet[0] === 'string' ? packet[0] : 'unknown';
+
+    // Protect room:join and room:spectate from brute-force scans
+    if (eventName === 'room:join' || eventName === 'room:spectate') {
+      const rateLimitKey = socketRateLimitKey(socket);
+      const failedLookupsKey = `failed_lookups:${rateLimitKey}`;
+      const checkResult = failedRoomLookupLimiter.check(failedLookupsKey);
+      if (!checkResult.allowed) {
+        const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
+        ack?.({ ok: false, error: 'rate_limited', retryAfterMs: checkResult.retryAfterMs });
+        socket.emit('rate_limited', { event: eventName, retryAfterMs: checkResult.retryAfterMs });
+        next(new Error('rate_limited'));
+        return;
+      }
+    }
+
     const rule = SOCKET_EVENT_LIMITS[eventName] ?? DEFAULT_SOCKET_EVENT_LIMIT;
     const result = socketRateLimiter.take(`socket:${eventName}:${socketRateLimitKey(socket)}`, rule);
     if (result.allowed) {
@@ -675,7 +691,7 @@ io.on('connection', (socket: Socket) => {
   console.log('Client connected:', socket.id);
 
   // TOURNAMENT_HELPERS
-  const ENABLE_LEGACY_TOURNAMENTS = process.env.ENABLE_LEGACY_TOURNAMENTS === '1';
+  const ENABLE_LEGACY_TOURNAMENTS = config.enableLegacyTournaments;
   if (ENABLE_LEGACY_TOURNAMENTS) {
     finalizeTournamentMatchHook = registerLegacyTournamentHandlers(socket, {
       io,
@@ -730,7 +746,7 @@ process.on('uncaughtException', (error) => {
   console.error('[process] uncaughtException', getProcessErrorLogPayload(error));
 });
 
-const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
+const PORT = config.port;
 
 Sentry.setupExpressErrorHandler(app);
 
@@ -773,7 +789,7 @@ server.listen(PORT, () => {
     .catch((err) => {
       console.warn('[room-match-logs] startup probe error', err instanceof Error ? err.message : err);
     });
-  const serverUrl = process.env.SERVER_URL?.trim();
+  const serverUrl = config.serverUrl;
   if (serverUrl) {
     const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;
     setInterval(() => {

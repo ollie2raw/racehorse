@@ -10,6 +10,7 @@ import {
   type RoomJoinConfig,
   type RoomSessionHandlerDeps,
 } from './roomSession';
+import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
 
 export type RegisterRoomSpectateHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -39,6 +40,9 @@ export function registerRoomSpectateHandlers(
       try {
         room = getRoom(code);
       } catch {
+        const rateLimitKey = socketRateLimitKey(socket);
+        const failedLookupsKey = `failed_lookups:${rateLimitKey}`;
+        failedRoomLookupLimiter.increment(failedLookupsKey);
         return cb?.({ ok: false, error: 'not_found' });
       }
       if (room.abandonedAt) {

@@ -1,4 +1,6 @@
 
+import { config } from './config';
+
 /** Prevent hung PostgREST/auth calls from blocking HTTP handlers indefinitely. */
 export const DEFAULT_SUPABASE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -9,8 +11,8 @@ function requireEnv(name: string, value: string | undefined): string {
 
 function getConfig() {
   return {
-    supabaseUrl: requireEnv('SUPABASE_URL', process.env.SUPABASE_URL),
-    serviceKey: requireEnv('SUPABASE_SERVICE_KEY', process.env.SUPABASE_SERVICE_KEY),
+    supabaseUrl: requireEnv('SUPABASE_URL', config.supabaseUrl),
+    serviceKey: requireEnv('SUPABASE_SERVICE_KEY', config.supabaseServiceKey),
   };
 }
 

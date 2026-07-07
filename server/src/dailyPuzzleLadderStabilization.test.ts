@@ -5,6 +5,7 @@ import {
   isDailyPuzzleAttemptFinalizeReady,
   normalizeDailyPuzzleAttempt,
   resolveActiveSlotForAttempt,
+  calculateServerAuthoritativeElapsedSeconds,
   type DailyPuzzleAttempt,
   type DailyPuzzleSlot,
   type DailyPuzzleSlotResult,
@@ -195,5 +196,54 @@ describe('Daily Puzzle ladder stabilization', () => {
     );
     expect(normalized.practiceMode).toBe('review');
     expect(normalized.reviewUnlocked).toBe(true);
+  });
+
+  describe('server-authoritative timing calculations', () => {
+    it('calculates slot 1 elapsed seconds based on attempt start time', () => {
+      const attempt = baseAttempt({
+        startedAt: '2026-05-17T10:00:00.000Z',
+      });
+      const now = new Date('2026-05-17T10:00:15.000Z');
+      const elapsed = calculateServerAuthoritativeElapsedSeconds(attempt, 1, now);
+      expect(elapsed).toBe(15);
+    });
+
+    it('calculates slot 2 elapsed seconds based on slot 1 completion time', () => {
+      const attempt = baseAttempt({
+        startedAt: '2026-05-17T10:00:00.000Z',
+        result: {
+          slots: [
+            slotResult({ slotIndex: 1, completedAt: '2026-05-17T10:01:00.000Z' }),
+          ],
+        },
+      });
+      const now = new Date('2026-05-17T10:01:25.000Z');
+      const elapsed = calculateServerAuthoritativeElapsedSeconds(attempt, 2, now);
+      expect(elapsed).toBe(25);
+    });
+
+    it('calculates slot 3 elapsed seconds based on slot 2 completion time', () => {
+      const attempt = baseAttempt({
+        startedAt: '2026-05-17T10:00:00.000Z',
+        result: {
+          slots: [
+            slotResult({ slotIndex: 1, completedAt: '2026-05-17T10:01:00.000Z' }),
+            slotResult({ slotIndex: 2, completedAt: '2026-05-17T10:03:00.000Z' }),
+          ],
+        },
+      });
+      const now = new Date('2026-05-17T10:03:10.000Z');
+      const elapsed = calculateServerAuthoritativeElapsedSeconds(attempt, 3, now);
+      expect(elapsed).toBe(10);
+    });
+
+    it('clamps negative or zero durations to at least 1 second to prevent clock skew exploits', () => {
+      const attempt = baseAttempt({
+        startedAt: '2026-05-17T10:00:00.000Z',
+      });
+      const now = new Date('2026-05-17T09:59:00.000Z'); // Clock skew / manipulation
+      const elapsed = calculateServerAuthoritativeElapsedSeconds(attempt, 1, now);
+      expect(elapsed).toBe(1);
+    });
   });
 });

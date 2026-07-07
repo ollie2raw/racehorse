@@ -1,6 +1,7 @@
 import type { Application } from 'express';
 import {
   calculateDailyPuzzleAwardedPoints,
+  calculateServerAuthoritativeElapsedSeconds,
   findLadderSlotsForAttemptSet,
   findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleAttemptFinalizeReady,
@@ -243,12 +244,15 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       return;
     }
     const bestPossibleScore = slot.bestPossibleScore ?? 0;
+    const now = new Date();
+    const serverElapsedSeconds = calculateServerAuthoritativeElapsedSeconds(attempt, slotIndex, now);
+
     let validation;
     try {
       validation = validateDailyPuzzleSubmission({
         slot,
         submittedLine,
-        elapsedSeconds,
+        elapsedSeconds: serverElapsedSeconds,
         clientRawScore,
       });
     } catch (error) {

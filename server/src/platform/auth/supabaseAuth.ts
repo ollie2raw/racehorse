@@ -1,4 +1,5 @@
 import type express from 'express';
+import { config } from '../../config';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
 const AUTHENTICATED_USER_ID_TTL_MS = 60_000;
@@ -32,8 +33,8 @@ export async function getAuthenticatedUserIdFromToken(token: string | null): Pro
   const cached = authenticatedUserIdCache.get(token);
   if (cached && cached.expiresAt > Date.now()) return cached.userId;
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  const supabaseUrl = config.supabaseUrl;
+  const serviceKey = config.supabaseServiceKey;
   if (!supabaseUrl || !serviceKey) {
     throw new Error('Supabase auth configuration is required.');
   }

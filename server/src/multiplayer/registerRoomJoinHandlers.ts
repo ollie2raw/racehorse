@@ -6,6 +6,7 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
+import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
 
 export type RegisterRoomJoinHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -68,6 +69,11 @@ export function registerRoomJoinHandlers(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[room:join] ERROR: ${message}`);
+      if (message === 'Room not found.') {
+        const rateLimitKey = socketRateLimitKey(socket);
+        const failedLookupsKey = `failed_lookups:${rateLimitKey}`;
+        failedRoomLookupLimiter.increment(failedLookupsKey);
+      }
       cb?.({ ok: false, error: message });
     }
   });

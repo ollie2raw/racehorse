@@ -46,6 +46,37 @@ export class InMemoryRateLimiter {
     };
   }
 
+  check(key: string, rule: RateLimitRule = this.defaultRule, now = Date.now()): RateLimitResult {
+    const normalizedKey = key.trim() || 'anonymous';
+    const existing = this.buckets.get(normalizedKey);
+    if (!existing || existing.resetAt <= now) {
+      return { allowed: true, remaining: rule.max, retryAfterMs: 0 };
+    }
+    if (existing.count >= rule.max) {
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterMs: Math.max(0, existing.resetAt - now),
+      };
+    }
+    return {
+      allowed: true,
+      remaining: Math.max(0, rule.max - existing.count),
+      retryAfterMs: Math.max(0, existing.resetAt - now),
+    };
+  }
+
+  increment(key: string, rule: RateLimitRule = this.defaultRule, now = Date.now()): void {
+    const normalizedKey = key.trim() || 'anonymous';
+    const existing = this.buckets.get(normalizedKey);
+    if (!existing || existing.resetAt <= now) {
+      const resetAt = now + rule.windowMs;
+      this.buckets.set(normalizedKey, { count: 1, resetAt });
+      return;
+    }
+    existing.count += 1;
+  }
+
   clear(): void {
     this.buckets.clear();
   }
@@ -96,4 +127,16 @@ export function socketRateLimitKey(socket: {
     : null;
   return userId ?? socket.handshake?.address ?? socket.id ?? 'unknown';
 }
+
+const getEnvInt = (key: string, defaultValue: number): number => {
+  const val = process.env[key];
+  if (!val) return defaultValue;
+  const parsed = parseInt(val, 10);
+  return Number.isNaN(parsed) ? defaultValue : parsed;
+};
+
+export const failedRoomLookupLimiter = new InMemoryRateLimiter({
+  windowMs: getEnvInt('LIMIT_FAILED_ROOM_LOOKUPS_WINDOW', 60_000),
+  max: getEnvInt('LIMIT_FAILED_ROOM_LOOKUPS_MAX', 5),
+});
 
