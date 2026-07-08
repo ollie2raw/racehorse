@@ -94,7 +94,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         matchStartGlickoRating={modals.matchStartGlickoRating}
         fritzGlickoDelta={modals.fritzGlickoDelta}
         ghostResult={modals.ghostResult}
-        onNavigate={navigation.onNavigate}
+        onNavigate={navigation.onNavigate ?? null}
         botPostGameReviewEligible={modals.botPostGameReviewEligible}
         postGameAnalysisPending={modals.postGameAnalysisPending}
         postGameAnalysis={modals.postGameAnalysis}
@@ -109,7 +109,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         showPostGameOverlays={modals.showPostGameOverlays}
         isPlayVsFritzGameOver={modals.isPlayVsFritzGameOver}
         isDailyFritzMode={modals.isDailyFritzMode}
-        onDailyFritzGameComplete={navigation.onDailyFritzGameComplete}
+        onDailyFritzGameComplete={navigation.onDailyFritzGameComplete ?? null}
         opponentLabel={opponentLabel}
         isGuidedMatchVictoryResult={modals.isGuidedMatchVictoryResult}
         winnerId={match.winnerId}
@@ -145,7 +145,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         onCopyGuidedMatchCandidate={modals.copyGuidedMatchCandidate}
         onSaveGuidedMatchCandidate={modals.saveGuidedMatchCandidate}
         onRetryDailyFritzCompletion={modals.retryDailyFritzCompletion}
-        onNavigate={navigation.onNavigate}
+        onNavigate={navigation.onNavigate ?? null}
       />
     </>
   );

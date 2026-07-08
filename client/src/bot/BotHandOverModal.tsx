@@ -12,6 +12,8 @@ import {
 import LearningHandRecap from '../learning/LearningHandRecap';
 import type { BotHandReveal } from './botMatchScreenTypes';
 
+import type { HandLearningSummary } from '../learning/handSummary';
+
 export interface BotHandOverModalProps {
   handReveal: BotHandReveal | null;
   gameOver: boolean;
@@ -25,7 +27,7 @@ export interface BotHandOverModalProps {
   opponentLabel: string;
   tileReveals: HandOverTileReveal[];
   coach: {
-    handSummary?: any;
+    handSummary?: HandLearningSummary | null;
   };
   autoAdvanceMs: number;
   onAdvanceHand: () => void;

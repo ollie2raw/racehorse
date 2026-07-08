@@ -38,6 +38,12 @@
     {
       "files": ["src/devtools/**"],
       "rules": { "no-console": "off" }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.behaviorTests.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
     }
   ]
 }

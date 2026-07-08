@@ -340,55 +340,56 @@ export function useTournament({ userId }: Args) {
     setHasLoaded((prev) => (prev ? prev : true));
   }, [userId, applyRegistrations, applyRecoveryMatch, applyAssignedMatch, applyCountdown]);
 
-  const activeBracketTournamentId = activeBracket?.tournament.id ?? null;
-
-  hubSocketDelegatesRef.current = {
-    onRegistrationOpen: () => {
-      void refresh();
-    },
-    onRegistrationUpdated: (payload) => {
-      void refresh();
-      void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    },
-    onBracketGenerated: (payload) => {
-      void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-      void refresh();
-    },
-    onMatchUpdated: (payload) => {
-      void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    },
-    onMatchReady: (payload) => {
-      console.log('[tournament] match_ready received', {
-        matchId: payload.matchId,
-        tournamentId: payload.tournamentId,
-        roomCode: payload.roomCode,
-        matchStatus: payload.matchStatus,
-      });
-      setPendingMatch((prev) => (samePendingMatch(prev, payload) ? prev : payload));
-    },
-    onMatchCompleted: (payload) => {
-      console.log('[tournament:complete] received match_completed', {
-        roomCode: payload.roomCode ?? null,
-        matchId: payload.matchId,
-        tournamentId: payload.tournamentId,
-      });
-      setPendingMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
-      setRecoveryMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
-      void refresh();
-      if (activeBracketTournamentId === payload.tournamentId) {
+  useEffect(() => {
+    const activeBracketTournamentId = activeBracket?.tournament.id ?? null;
+    hubSocketDelegatesRef.current = {
+      onRegistrationOpen: () => {
+        void refresh();
+      },
+      onRegistrationUpdated: (payload) => {
+        void refresh();
         void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-      }
-    },
-    onTournamentCompleted: (payload) => {
-      setPendingMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
-      setRecoveryMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
-      void refresh();
-      void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-    },
-    onRecover: () => {
-      void recover();
-    },
-  };
+      },
+      onBracketGenerated: (payload) => {
+        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        void refresh();
+      },
+      onMatchUpdated: (payload) => {
+        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+      },
+      onMatchReady: (payload) => {
+        console.log('[tournament] match_ready received', {
+          matchId: payload.matchId,
+          tournamentId: payload.tournamentId,
+          roomCode: payload.roomCode,
+          matchStatus: payload.matchStatus,
+        });
+        setPendingMatch((prev) => (samePendingMatch(prev, payload) ? prev : payload));
+      },
+      onMatchCompleted: (payload) => {
+        console.log('[tournament:complete] received match_completed', {
+          roomCode: payload.roomCode ?? null,
+          matchId: payload.matchId,
+          tournamentId: payload.tournamentId,
+        });
+        setPendingMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
+        setRecoveryMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
+        void refresh();
+        if (activeBracketTournamentId === payload.tournamentId) {
+          void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        }
+      },
+      onTournamentCompleted: (payload) => {
+        setPendingMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
+        setRecoveryMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
+        void refresh();
+        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+      },
+      onRecover: () => {
+        void recover();
+      },
+    };
+  });
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

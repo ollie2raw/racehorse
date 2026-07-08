@@ -2,6 +2,10 @@ import React from 'react';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
 import { formatRatingDelta } from '../modules/ghost/ghostMatchHelpers.ts';
 
+import type { GhostCompletionResult } from '../ghost/api';
+import type { GameAnalysis } from '../analyzer/moveAnalyzer';
+import type { AppMode } from '../appRouteTypes';
+
 export interface BotPostGameCardProps {
   showPlayVsFritzResultOverlay: boolean;
   winnerId: 'you' | 'bot' | null;
@@ -18,11 +22,11 @@ export interface BotPostGameCardProps {
   currentGlickoRating: number | null;
   matchStartGlickoRating: number | null;
   fritzGlickoDelta: number | null;
-  ghostResult: any;
-  onNavigate: any;
+  ghostResult: GhostCompletionResult | null;
+  onNavigate: ((mode: AppMode) => void) | null;
   botPostGameReviewEligible: boolean;
   postGameAnalysisPending: boolean;
-  postGameAnalysis: any;
+  postGameAnalysis: GameAnalysis | null;
   showPostGameReviewPrompt: boolean;
 
   onRematch: () => void;

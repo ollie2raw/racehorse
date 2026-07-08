@@ -33,8 +33,10 @@ export function registerFriendsSocketHandlers(
 
   register(
     SOCKET_EVENTS.PRESENCE_UPDATE,
-    wrapSocketHandler(SOCKET_EVENTS.PRESENCE_UPDATE, (payload: any) => {
-      getScope().presence?.onPresenceUpdate?.(payload?.userId, payload?.status);
+    wrapSocketHandler(SOCKET_EVENTS.PRESENCE_UPDATE, (payload: { userId?: string; status?: string } | null | undefined) => {
+      if (payload?.userId && payload?.status) {
+        getScope().presence?.onPresenceUpdate?.(payload.userId, payload.status);
+      }
     }),
   );
 

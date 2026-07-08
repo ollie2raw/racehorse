@@ -1,8 +1,9 @@
-import { useCallback, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 
 /** Wall-clock ms that updates on an interval — avoids setState in effects for live clocks. */
 export function useSyncNow(intervalMs: number, enabled: boolean): number {
-  const snapshotRef = useRef(Date.now());
+  const [initialTime] = useState(Date.now);
+  const snapshotRef = useRef(initialTime);
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {

@@ -2,11 +2,25 @@ import React from 'react';
 import { AnimatedScore } from '../components';
 import type { BotMatchState } from '../modules/match/runtime/botEngine.ts';
 
+export interface LessonCoachPanelContent {
+  progressChipLabel?: string;
+  title?: string;
+  showMore?: boolean;
+  previewText?: string;
+  bodyParagraphs?: string[];
+  showFooter?: boolean;
+  contextChips?: string[];
+}
+
+export interface LessonCoachVm {
+  canBestMove?: boolean;
+}
+
 export interface BotGuidedMatchPanelProps {
   showLeaveConfirm: boolean;
   setShowLeaveConfirm: (show: boolean) => void;
   showFritzCoachingPanel: boolean;
-  lessonCoachPanelContent: any;
+  lessonCoachPanelContent: LessonCoachPanelContent | null;
   lessonCoachProgressLabel: string;
   lessonCoachProgressPct: number;
   showFullCoachTip: boolean;
@@ -15,7 +29,7 @@ export interface BotGuidedMatchPanelProps {
   showRecommendation: boolean;
   setShowRecommendation: React.Dispatch<React.SetStateAction<boolean>>;
   canPlayCoachedMove: boolean;
-  lessonCoachVm: any;
+  lessonCoachVm: LessonCoachVm | null;
   playLessonBestMove: () => void;
   guidedFritzAnchorRef: React.RefObject<HTMLButtonElement | null>;
   setScoreTrackOpen: (open: boolean) => void;

@@ -14,11 +14,28 @@ const formatGhostName = (rawName: string) => {
   return `@${capitalized}`;
 };
 
+import type { GuidedMatchFinalDebrief } from '../learn/guidedMatch/guidedMatchFinalDebrief';
+import type { GuidedMatchCaptureStatus } from '../learn/guidedMatch/guidedMatchCapture';
+import type { GhostCompletionResult } from '../ghost/api';
+import type { DailyPuzzleLeaderboardEntry } from '../dailyPuzzle/api';
+import type { AppMode } from '../appRouteTypes';
+import type { DailyFritzLeaderboardRow } from '../dailyFritz/api';
+
+import type { MoveEntry } from '../game/moveLogger';
+
 export interface BotGameOverModalProps {
   showPostGameOverlays: boolean;
   isPlayVsFritzGameOver: boolean;
   isDailyFritzMode: boolean;
-  onDailyFritzGameComplete: any;
+  onDailyFritzGameComplete: ((result: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+    movesUsed: number;
+    handsPlayed: number;
+    currentHandIndex: number;
+    moveLog: MoveEntry[];
+  }) => void) | null;
   opponentLabel: string;
   isGuidedMatchVictoryResult: boolean;
   winnerId: 'you' | 'bot' | null;
@@ -27,25 +44,25 @@ export interface BotGameOverModalProps {
   botScore: number;
   isGhostMode: boolean;
   ghostSubLabel: string | null;
-  guidedMatchFinalDebrief: any;
+  guidedMatchFinalDebrief: GuidedMatchFinalDebrief | null;
   enableGuidedMatchCandidateCapture: boolean;
   isJourneyTrial: boolean;
-  guidedMatchCaptureStatus: any;
+  guidedMatchCaptureStatus: GuidedMatchCaptureStatus;
   guidedMatchCandidateSaveStatus: string | null;
   ghostResultLoading: boolean;
   ghostResultError: string | null;
   dailyFritzRank: number | null;
-  dailyFritzLeaderboard: any[];
+  dailyFritzLeaderboard: DailyFritzLeaderboardRow[];
   isDailyPuzzleRun: boolean;
   userId: string | null;
   dailyLeaderboardLoading: boolean;
   dailyLeaderboardError: string | null;
-  dailyLeaderboard: any[];
+  dailyLeaderboard: DailyPuzzleLeaderboardEntry[];
   ghostRatingDeltaLabel: string | null;
   ghostResultMessage: string;
   canSaveGuidedMatchCandidate: boolean;
   isGuidedMode: boolean;
-  ghostResult: any;
+  ghostResult: GhostCompletionResult | null;
 
 
   onExitMatch: () => void;
@@ -56,7 +73,7 @@ export interface BotGameOverModalProps {
   onCopyGuidedMatchCandidate: () => void;
   onSaveGuidedMatchCandidate: () => void;
   onRetryDailyFritzCompletion: () => void;
-  onNavigate: any;
+  onNavigate: ((mode: AppMode) => void) | null;
 }
 
 export const BotGameOverModal: React.FC<BotGameOverModalProps> = ({
