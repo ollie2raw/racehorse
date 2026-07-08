@@ -453,7 +453,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
   const playerCountLabel = `${rows.length} ${rows.length === 1 ? 'player' : 'players'}`;
 
   return (
-    <div className="rh-hub-screen dflb-page dflb-page--ladder">
+    <div className="rh-hub-screen dflb-page dflb-page--ladder daily-puzzle-root">
       <div className="rh-hub-shell">
         <GlobalNav
           currentMode="leaderboard"

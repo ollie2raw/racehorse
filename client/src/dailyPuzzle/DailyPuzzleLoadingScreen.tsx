@@ -10,7 +10,7 @@ export type DailyPuzzleLoadingScreenProps = {
 export function DailyPuzzleLoadingScreen({ onBack }: DailyPuzzleLoadingScreenProps) {
   const loadingSteps = [1, 2, 3].map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
   return (
-    <div className="daily-puzzle-loading-root">
+    <div className="daily-puzzle-loading-root daily-puzzle-root">
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
         <div className="home-bg__texture" />

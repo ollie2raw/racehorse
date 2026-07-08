@@ -511,7 +511,7 @@ export default function DailyPuzzleLadderScreen({
     <>
       {ladderOverlays}
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud daily-puzzle-root">
         <MatchLiveLayout
           hudLeft={
             <div className="wl-player-pill wl-player-pill-btn score-card is-you">

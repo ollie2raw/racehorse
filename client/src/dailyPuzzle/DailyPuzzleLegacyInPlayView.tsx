@@ -81,7 +81,7 @@ export function DailyPuzzleLegacyInPlayView({
   return (
     <>
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud daily-puzzle-root">
         <canvas
           ref={confettiCanvasRef}
           style={{

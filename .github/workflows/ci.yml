@@ -77,6 +77,9 @@ jobs:
         run: npm run test:all --prefix client
 
       - name: Playwright E2E tests
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
           npx playwright install chromium --with-deps
           npm run e2e --prefix client

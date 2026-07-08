@@ -541,12 +541,12 @@ export default function DailyPuzzleScreen({
   if (entryMode === 'ladderCheckError' && selectedDateSeed === localDateKey) {
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
+        className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title={stableDailyTitle}
         subtitle="Could not confirm today’s ladder."
         contentClassName="screen-shell"
       >
-        <p className="auth-inline-error">{ladderStatusError ?? 'Unknown error.'}</p>
+        <p className="auth-inline-error" role="alert">{ladderStatusError ?? 'Unknown error.'}</p>
         <p className="lobby-server">Run calendar uses Pacific time (same as the daily reset).</p>
         <button
           type="button"
@@ -569,12 +569,12 @@ export default function DailyPuzzleScreen({
   if (entryMode === 'ladderPending' && ladderToday && selectedDateSeed === localDateKey) {
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
+        className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title="Today’s Puzzle Ladder is being prepared"
         subtitle="Three fixed puzzles. Same ladder for everyone."
         contentClassName="screen-shell"
       >
-        <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }}>
+        <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }} role="alert">
           We couldn’t publish today’s full three-step ladder yet. Please check back soon, or refresh in a few
           minutes.
         </p>
@@ -637,12 +637,12 @@ export default function DailyPuzzleScreen({
   if (loadError && !showLobby) {
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
+        className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title={stableDailyTitle}
         subtitle={isArchiveMode ? 'Unable to load archived puzzle.' : "Unable to load today's puzzle."}
         contentClassName="screen-shell"
       >
-        <p className="auth-inline-error">{loadError}</p>
+        <p className="auth-inline-error" role="alert">{loadError}</p>
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
         <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
@@ -655,12 +655,12 @@ export default function DailyPuzzleScreen({
   if (!puzzle && !showLobby) {
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
+        className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title={stableDailyTitle}
         subtitle={isArchiveMode ? 'No puzzle exists for that date.' : "Today's puzzle is not posted yet."}
         contentClassName="screen-shell"
       >
-        <p className="lobby-server">Local date key: {localDateKey}</p>
+        <p className="lobby-server" role="alert">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
         <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
           ← Back to Home
@@ -962,7 +962,7 @@ export default function DailyPuzzleScreen({
   if (!runtimeState) {
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
+        className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title={stableDailyTitle}
         subtitle="Preparing puzzle board..."
         contentClassName="screen-shell"

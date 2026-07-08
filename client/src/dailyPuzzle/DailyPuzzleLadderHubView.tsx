@@ -96,7 +96,7 @@ export function DailyPuzzleLadderHubView({
     <>
       {overlays}
       <div
-        className="df-page dpl-ladder-hub"
+        className="df-page dpl-ladder-hub daily-puzzle-root"
         style={{ '--pvf-dynamic-color': 'var(--tier-standard)' } as React.CSSProperties}
       >
         <div className="home-bg" aria-hidden="true">

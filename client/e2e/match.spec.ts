@@ -70,25 +70,20 @@ test.describe('Match lifecycle — Play vs Fritz', () => {
 test.describe('Match lifecycle — Daily Puzzle', () => {
   test('daily puzzle loads a playable board state', async ({ page }) => {
     await page.goto('/#/daily');
-    await expect(page.locator('.df-page, .df-shell, .daily-puzzle-screen, .game-screen').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('.daily-puzzle-root').first()).toBeVisible({ timeout: 20_000 });
 
     // If lobby page is visible and shows start/resume button, click it to enter puzzle board
     const startBtn = page.getByRole('button', { name: /Start Daily Ladder|Resume Daily/i });
     try {
-      await startBtn.waitFor({ state: 'visible', timeout: 3000 });
+      await startBtn.waitFor({ state: 'visible', timeout: 10_000 });
       await startBtn.click();
     } catch (e) {
       // Not visible or already past this screen
     }
 
-    // Should show either the puzzle board or a loading/error state — not blank
-    const boardOrErrorSelector = '.game-screen, .board-area, .nbl-board-canvas, .loading-screen, [class*="loading"], .df-hub-error, .dpl-ladder-hub-error, [role="alert"]';
-    await expect(page.locator(boardOrErrorSelector).first()).toBeVisible({ timeout: 10_000 });
-
-    const hasBoard = await page.locator('.game-screen, .board-area, .nbl-board-canvas').first().isVisible().catch(() => false);
-    const hasLoading = await page.locator('.loading-screen, [class*="loading"]').first().isVisible().catch(() => false);
-    const hasError = await page.locator('.df-hub-error, .dpl-ladder-hub-error, [role="alert"]').first().isVisible().catch(() => false);
-    expect(hasBoard || hasLoading || hasError).toBe(true);
+    // Must show the genuine puzzle board state — not blank, not loading, and not an error
+    const boardSelector = '.game-screen, .board-area, .nbl-board-canvas';
+    await expect(page.locator(boardSelector).first()).toBeVisible({ timeout: 15_000 });
   });
 });
 
