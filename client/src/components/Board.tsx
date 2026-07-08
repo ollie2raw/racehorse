@@ -1023,9 +1023,12 @@ function BoardComponent(
                 width,
                 height,
                 transform: 'translate(-50%, -50%)',
+                touchAction: 'none',
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 if (profileDailyFritz) {

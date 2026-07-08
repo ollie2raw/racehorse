@@ -96,6 +96,27 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   const prefetchCoordinator = prefetchCoordinatorRef.current;
   const advanceRetry = advanceRetryRef.current;
 
+  const handleAutoAdvance = useCallback(() => {
+    advanceHandRef.current();
+  }, []);
+
+  const handleRevealShown = useCallback(() => {
+    setHandAdvanceError(null);
+    transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
+  }, [setHandAdvanceError]);
+
+  const handleRevealHidden = useCallback(() => {
+    setShowManualHandAdvance(false);
+  }, [setShowManualHandAdvance]);
+
+  const handlePrefetchReady = useCallback(() => {
+    return prefetchCoordinatorRef.current.hasReadyResult();
+  }, []);
+
+  const handleHandTransitionInFlight = useCallback(() => {
+    return handTransitionInFlightRef.current;
+  }, []);
+
   const reveal = useHandRevealScheduler({
     match,
     matchRef,
@@ -105,16 +126,11 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     isGuidedV2Mode,
     lastDailyFlowLabelRef,
     traceHandLifecycle,
-    onAutoAdvance: () => advanceHandRef.current(),
-    onRevealShown: () => {
-      setHandAdvanceError(null);
-      transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
-    },
-    onRevealHidden: () => {
-      setShowManualHandAdvance(false);
-    },
-    prefetchReady: () => prefetchCoordinator.hasReadyResult(),
-    handTransitionInFlight: () => handTransitionInFlightRef.current,
+    onAutoAdvance: handleAutoAdvance,
+    onRevealShown: handleRevealShown,
+    onRevealHidden: handleRevealHidden,
+    prefetchReady: handlePrefetchReady,
+    handTransitionInFlight: handleHandTransitionInFlight,
   });
 
   const applyDailyFritzNextHandResponse = useCallback(

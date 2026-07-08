@@ -329,134 +329,156 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           source: 'game:draw_animation',
         });
 
-        clearPendingDrawAnimationTimers();
-        if (scope.dom.drawSequenceTimeoutRef.current) {
-          clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
-          scope.dom.drawSequenceTimeoutRef.current = null;
-        }
+        try {
+          clearPendingDrawAnimationTimers();
+          if (scope.dom.drawSequenceTimeoutRef.current) {
+            clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
+            scope.dom.drawSequenceTimeoutRef.current = null;
+          }
 
-        const ownForcedDraw = payload.playerId === scope.dom.youRef.current;
-        scope.ui.setDrawSequenceActiveBoth(true);
-        scope.ui.setDrawStepActorId(payload.playerId);
+          const ownForcedDraw = payload.playerId === scope.dom.youRef.current;
+          scope.ui.setDrawSequenceActiveBoth(true);
+          scope.ui.setDrawStepActorId(payload.playerId);
 
-        if (ownForcedDraw) {
-          if (!scope.dom.pendingForcedHandRevealRef.current) {
-            const youId = scope.dom.youRef.current;
-            const fullHand = scope.dom.stateRef.current?.players[youId]?.hand ?? [];
-            const stagedHand = fullHand.slice(
-              0,
-              Math.max(0, fullHand.length - payload.steps.length),
-            );
-            scope.dom.pendingForcedHandRevealRef.current = {
-              sequence: payload.sequence,
-              fullHand: fullHand.map((tile) => ({ low: tile.low, high: tile.high })),
-            };
-            scope.ui.setDrawStepMyHand(stagedHand);
+          if (ownForcedDraw) {
+            if (!scope.dom.pendingForcedHandRevealRef.current) {
+              const youId = scope.dom.youRef.current;
+              const fullHand = scope.dom.stateRef.current?.players[youId]?.hand ?? [];
+              const stagedHand = fullHand.slice(
+                0,
+                Math.max(0, fullHand.length - payload.steps.length),
+              );
+              scope.dom.pendingForcedHandRevealRef.current = {
+                sequence: payload.sequence,
+                fullHand: fullHand.map((tile) => ({ low: tile.low, high: tile.high })),
+              };
+              scope.ui.setDrawStepMyHand(stagedHand);
+              if (payload.steps[0]) {
+                scope.ui.setBoneyardDisplayCount(
+                  payload.steps[0].boneyardCount + payload.steps.length,
+                );
+              }
+            }
+          } else {
+            scope.ui.setDrawStepMyHand(null);
+            scope.dom.pendingForcedHandRevealRef.current = null;
+            const opponentId = payload.playerId;
+            const finalCount =
+              scope.dom.stateRef.current?.handCounts?.[opponentId] ??
+              scope.dom.stateRef.current?.players[opponentId]?.hand?.length ??
+              0;
+            scope.ui.setDrawStepOpponentHandCount(Math.max(0, finalCount - payload.steps.length));
             if (payload.steps[0]) {
               scope.ui.setBoneyardDisplayCount(
                 payload.steps[0].boneyardCount + payload.steps.length,
               );
             }
           }
-        } else {
-          scope.ui.setDrawStepMyHand(null);
-          scope.dom.pendingForcedHandRevealRef.current = null;
-          const opponentId = payload.playerId;
-          const finalCount =
-            scope.dom.stateRef.current?.handCounts?.[opponentId] ??
-            scope.dom.stateRef.current?.players[opponentId]?.hand?.length ??
-            0;
-          scope.ui.setDrawStepOpponentHandCount(Math.max(0, finalCount - payload.steps.length));
-          if (payload.steps[0]) {
-            scope.ui.setBoneyardDisplayCount(
-              payload.steps[0].boneyardCount + payload.steps.length,
-            );
-          }
-        }
 
-        const chainDurationMs =
-          payload.steps.length * FORCED_DRAW_STAGGER_MS + FORCED_DRAW_FLY_MS;
+          const chainDurationMs =
+            payload.steps.length * FORCED_DRAW_STAGGER_MS + FORCED_DRAW_FLY_MS;
 
-        payload.steps.forEach((step, index) => {
-          const stepTimer = window.setTimeout(() => {
-            try {
-              if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
+          payload.steps.forEach((step, index) => {
+            const stepTimer = window.setTimeout(() => {
+              try {
+                if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
+                  clearPendingDrawAnimationTimers();
+                  scope.ui.setFlyingTiles([]);
+                  scope.ui.setDrawSequenceActiveBoth(false);
+                  return;
+                }
+                scope.ui.playDrawSound(scope.session.isMutedRef.current);
+                scope.ui.setBoneyardDisplayCount(step.boneyardCount);
+
+                if (!scope.dom.boneyardRef.current) return;
+
+                const from = scope.dom.boneyardRef.current.getBoundingClientRect();
+                const isMe = payload.playerId === scope.dom.youRef.current;
+                const targetEl: HandTileTarget = isMe
+                  ? scope.dom.handAreaRef.current
+                  : scope.dom.opponentPillRef.current;
+                if (targetEl) {
+                  const to = targetEl.getBoundingClientRect();
+                  const id = ++scope.dom.flyingTileIdRef.current;
+                  scope.ui.setFlyingTiles((prev) => [
+                    ...prev,
+                    {
+                      x: from.left + from.width / 2,
+                      y: from.top + from.height / 2,
+                      toX: to.left + to.width / 2,
+                      toY: to.top + to.height / 2,
+                      id,
+                    },
+                  ]);
+                  const removalTimer = window.setTimeout(() => {
+                    scope.ui.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
+                  }, FORCED_DRAW_FLY_MS);
+                  drawAnimationStepTimers.push(removalTimer);
+                }
+
+                if (!isMe) {
+                  scope.ui.setDrawStepOpponentHandCount(step.drawerHandCount);
+                } else if (step.tile) {
+                  const drawnTile = { low: step.tile.low, high: step.tile.high };
+                  scope.ui.setDrawStepMyHand((prev) => {
+                    const base = prev ?? [];
+                    if (base.some((tile) => scope.ui.tileEquals(tile, drawnTile))) {
+                      return base;
+                    }
+                    const nextHand = [...base, drawnTile];
+                    if (nextHand.length > 0) {
+                      scope.ui.setDrawPulseIndex(nextHand.length - 1);
+                      const pulseClear = window.setTimeout(
+                        () => scope.ui.setDrawPulseIndex(null),
+                        360,
+                      );
+                      drawAnimationStepTimers.push(pulseClear);
+                    }
+                    return nextHand;
+                  });
+                }
+              } catch (error) {
+                logger.error('useRoomSocketSync.ts', error, { message: '[socket:game:draw_animation] step error' });
                 clearPendingDrawAnimationTimers();
+                scope.ui.setDrawSequenceActiveBoth(false);
+                scope.ui.setDrawStepMyHand(null);
+                scope.ui.setDrawStepActorId(null);
+                scope.ui.setDrawStepOpponentHandCount(null);
+                scope.ui.setBoneyardDisplayCount(null);
                 scope.ui.setFlyingTiles([]);
-                return;
               }
-              scope.ui.playDrawSound(scope.session.isMutedRef.current);
-              scope.ui.setBoneyardDisplayCount(step.boneyardCount);
-
-              if (!scope.dom.boneyardRef.current) return;
-
-              const from = scope.dom.boneyardRef.current.getBoundingClientRect();
-              const isMe = payload.playerId === scope.dom.youRef.current;
-              const targetEl: HandTileTarget = isMe
-                ? scope.dom.handAreaRef.current
-                : scope.dom.opponentPillRef.current;
-              if (targetEl) {
-                const to = targetEl.getBoundingClientRect();
-                const id = ++scope.dom.flyingTileIdRef.current;
-                scope.ui.setFlyingTiles((prev) => [
-                  ...prev,
-                  {
-                    x: from.left + from.width / 2,
-                    y: from.top + from.height / 2,
-                    toX: to.left + to.width / 2,
-                    toY: to.top + to.height / 2,
-                    id,
-                  },
-                ]);
-                const removalTimer = window.setTimeout(() => {
-                  scope.ui.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
-                }, FORCED_DRAW_FLY_MS);
-                drawAnimationStepTimers.push(removalTimer);
-              }
-
-              if (!isMe) {
-                scope.ui.setDrawStepOpponentHandCount(step.drawerHandCount);
-              } else if (step.tile) {
-                const drawnTile = { low: step.tile.low, high: step.tile.high };
-                scope.ui.setDrawStepMyHand((prev) => {
-                  const base = prev ?? [];
-                  if (base.some((tile) => scope.ui.tileEquals(tile, drawnTile))) {
-                    return base;
-                  }
-                  const nextHand = [...base, drawnTile];
-                  if (nextHand.length > 0) {
-                    scope.ui.setDrawPulseIndex(nextHand.length - 1);
-                    const pulseClear = window.setTimeout(
-                      () => scope.ui.setDrawPulseIndex(null),
-                      360,
-                    );
-                    drawAnimationStepTimers.push(pulseClear);
-                  }
-                  return nextHand;
-                });
-              }
-            } catch (error) {
-              logger.error('useRoomSocketSync.ts', error, { message: '[socket:game:draw_animation] step error' });
-              clearPendingDrawAnimationTimers();
-            }
-          }, index * FORCED_DRAW_STAGGER_MS);
-          drawAnimationStepTimers.push(stepTimer);
-        });
-
-        scope.dom.drawSequenceTimeoutRef.current = setTimeout(() => {
-          drawAudit('animation-end', {
-            requestId: chainId,
-            ms: Date.now() - animationStartedAt,
+            }, index * FORCED_DRAW_STAGGER_MS);
+            drawAnimationStepTimers.push(stepTimer);
           });
+
+          scope.dom.drawSequenceTimeoutRef.current = setTimeout(() => {
+            drawAudit('animation-end', {
+              requestId: chainId,
+              ms: Date.now() - animationStartedAt,
+            });
+            clearPendingDrawAnimationTimers();
+            scope.ui.setDrawStepMyHand(null);
+            scope.dom.pendingForcedHandRevealRef.current = null;
+            scope.ui.setDrawStepActorId(null);
+            scope.ui.setDrawStepOpponentHandCount(null);
+            scope.ui.setBoneyardDisplayCount(null);
+            scope.ui.setFlyingTiles([]);
+            scope.ui.setDrawSequenceActiveBoth(false);
+          }, chainDurationMs);
+        } catch (error) {
+          logger.error('useRoomSocketSync.ts', error, { message: '[socket:game:draw_animation] setup error' });
           clearPendingDrawAnimationTimers();
+          if (scope.dom.drawSequenceTimeoutRef.current) {
+            clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
+            scope.dom.drawSequenceTimeoutRef.current = null;
+          }
+          scope.ui.setDrawSequenceActiveBoth(false);
           scope.ui.setDrawStepMyHand(null);
-          scope.dom.pendingForcedHandRevealRef.current = null;
           scope.ui.setDrawStepActorId(null);
           scope.ui.setDrawStepOpponentHandCount(null);
           scope.ui.setBoneyardDisplayCount(null);
           scope.ui.setFlyingTiles([]);
-          scope.ui.setDrawSequenceActiveBoth(false);
-        }, chainDurationMs);
+        }
       },
     );
 
