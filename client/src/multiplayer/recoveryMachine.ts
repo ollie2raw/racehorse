@@ -509,7 +509,7 @@ function reduceRecoveryCore(
     }
 
     case 'ROOM_JOIN_OK': {
-      if (snapshot.state !== 'joining') {
+      if (snapshot.state !== 'joining' && snapshot.state !== 'connecting') {
         return { snapshot, effects: [] };
       }
       if (isStaleEpisodeEvent(snapshot, event.episodeSequence)) {

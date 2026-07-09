@@ -21,6 +21,7 @@ interface PresentationCoordinatorParams {
   boneyardRef: React.RefObject<HTMLElement | null>;
   handAreaRef: React.RefObject<HTMLElement | null>;
   opponentPillRef: React.RefObject<HTMLElement | null>;
+  recentAutoPasses?: string[];
 }
 
 export function useMultiplayerPresentation({
@@ -38,6 +39,7 @@ export function useMultiplayerPresentation({
   boneyardRef,
   handAreaRef,
   opponentPillRef,
+  recentAutoPasses,
 }: PresentationCoordinatorParams) {
   const prevStateRef = useRef<GameState | null>(null);
   const prevMyHandLenRef = useRef<number>(0);
@@ -94,10 +96,7 @@ export function useMultiplayerPresentation({
     if (actorId !== you && nextBoardCount === prevBoardCount) {
       if (nextBoneyardLen < prevBoneyardLen) {
         showScoreLikeToast(`${opponentName} drew a tile`, 'opp');
-      } else if (
-        state.currentPlayerIndex !== prev.currentPlayerIndex &&
-        (prev.players[actorId]?.hand?.length ?? 0) === (state.players[actorId]?.hand?.length ?? 0)
-      ) {
+      } else if (recentAutoPasses?.includes(actorId)) {
         showScoreLikeToast(`${opponentName} passed`, 'opp');
       }
     }
@@ -119,7 +118,7 @@ export function useMultiplayerPresentation({
         return () => clearTimeout(timer);
       }
     }
-  }, [state, you, isMutedRef, opponentName, players, showScoreLikeToast, showScoreToast]);
+  }, [state, you, isMutedRef, opponentName, players, showScoreLikeToast, showScoreToast, recentAutoPasses]);
 
   useEffect(() => {
     if (!state) {

@@ -71,6 +71,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   const [opponentDragging, setOpponentDragging] = useState(false);
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [opponentDisconnectMessage, setOpponentDisconnectMessage] = useState('');
+  const [recentAutoPasses, setRecentAutoPasses] = useState<string[]>([]);
 
   const stateRef = useRef<GameState | null>(state);
   const legalMovesRef = useRef<Move[]>(legalMoves);
@@ -293,6 +294,8 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     flyingTileIdRef,
     pendingForcedHandRevealRef,
     setState,
+    setRecentAutoPasses,
+    setOpponentDragging,
   });
 
   useEffect(() => {
@@ -395,6 +398,8 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     onPregameTileTap: tileSelection.onPregameTileTap,
     setDrawSequenceActiveBoth: transientUi.setDrawSequenceActiveBoth,
     flashLastPlayed: transientUi.flashLastPlayed,
+    recentAutoPasses,
+    setRecentAutoPasses,
     applyJoinResponseGameState,
     roomSocketSyncParams,
   };

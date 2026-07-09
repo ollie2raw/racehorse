@@ -33,10 +33,20 @@ function clearDrawPreview(scope: Pick<MultiplayerRoomSyncScope, 'dom' | 'ui'>) {
     clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
     scope.dom.drawSequenceTimeoutRef.current = null;
   }
+  // TEMP-DIAGNOSTIC
+  console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
+    path: 'clearDrawPreview',
+    at: Date.now(),
+  });
   scope.ui.setDrawSequenceActiveBoth(false);
   scope.ui.setDrawStepMyHand(null);
   scope.ui.setDrawStepActorId(null);
   scope.ui.setDrawStepOpponentHandCount(null);
+  // TEMP-DIAGNOSTIC
+  console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
+    path: 'clearDrawPreview',
+    at: Date.now(),
+  });
   scope.ui.setFlyingTiles([]);
 }
 
@@ -112,6 +122,7 @@ export function applyStateUpdateProjection(
   }
 
   scope.ui.setState(result.nextState);
+  scope.ui.setOpponentDragging?.(false);
   if (result.clearWaitingForReadyError) {
     scope.ui.setError((current) => (current === 'waiting_for_ready' ? '' : current));
   }
@@ -130,6 +141,9 @@ export function applyStateUpdateProjection(
       reason: 'blocked_locked_boneyard',
     });
     scope.ui.showToast('No moves available — passing…', 1500);
+  }
+  if (scope.ui.setRecentAutoPasses) {
+    scope.ui.setRecentAutoPasses(result.autoPassPlayerIds);
   }
 
   applyForcedDrawStaging(scope, result.forcedDrawStaging, options.recordForcedDrawStateEvent);

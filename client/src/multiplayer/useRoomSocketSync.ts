@@ -88,7 +88,108 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       }
     };
 
+    type ForcedDrawPendingDiag = {
+      diagId: number;
+      stateEventAt: number;
+      source: 'state:self_forced' | 'state:opponent_forced';
+      sequence: number;
+      actorId: string;
+      forcedDrawCount: number;
+      animationArrived: boolean;
+      animationArrivedAt: number | null;
+    };
+    let forcedDrawDiagIdCounter = 0;
+    const forcedDrawPendingDiags: ForcedDrawPendingDiag[] = [];
 
+    const recordForcedDrawStateEvent = (
+      source: ForcedDrawPendingDiag['source'],
+      sequence: number,
+      actorId: string,
+      forcedDrawCount: number,
+    ) => {
+      const diagId = ++forcedDrawDiagIdCounter;
+      const stateEventAt = Date.now();
+      const entry: ForcedDrawPendingDiag = {
+        diagId,
+        stateEventAt,
+        source,
+        sequence,
+        actorId,
+        forcedDrawCount,
+        animationArrived: false,
+        animationArrivedAt: null,
+      };
+      forcedDrawPendingDiags.push(entry);
+
+      // TEMP-DIAGNOSTIC
+      console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set true (forced-draw state event)', {
+        path: 'applyAuthoritativeStateUpdate',
+        source,
+        sequence,
+        actorId,
+        forcedDrawCount,
+        diagId,
+        at: stateEventAt,
+      });
+
+      // TEMP-DIAGNOSTIC: logging-only watchdog — does not change drawSequenceActive or gameplay.
+      window.setTimeout(() => {
+        const pending = forcedDrawPendingDiags.find(
+          (item) => item.diagId === diagId && !item.animationArrived,
+        );
+        if (pending) {
+          console.warn('[TEMP-DIAGNOSTIC] game:draw_animation never arrived for forced-draw state event', {
+            diagId: pending.diagId,
+            source: pending.source,
+            sequence: pending.sequence,
+            actorId: pending.actorId,
+            forcedDrawCount: pending.forcedDrawCount,
+            elapsedMs: Date.now() - pending.stateEventAt,
+          });
+        }
+      }, 30_000);
+    };
+
+    const recordForcedDrawAnimationArrival = (
+      sequence: number,
+      actorId: string,
+      chainId: number,
+      stepCount: number,
+    ) => {
+      const arrivedAt = Date.now();
+      const pending = [...forcedDrawPendingDiags]
+        .reverse()
+        .find(
+          (item) =>
+            !item.animationArrived &&
+            item.actorId === actorId &&
+            (item.sequence === sequence || item.sequence === chainId),
+        );
+      if (pending) {
+        pending.animationArrived = true;
+        pending.animationArrivedAt = arrivedAt;
+        // TEMP-DIAGNOSTIC
+        console.log('[TEMP-DIAGNOSTIC] game:draw_animation arrived for forced-draw state event', {
+          diagId: pending.diagId,
+          source: pending.source,
+          sequence: pending.sequence,
+          actorId: pending.actorId,
+          chainId,
+          stepCount,
+          latencyMs: arrivedAt - pending.stateEventAt,
+          at: arrivedAt,
+        });
+        return;
+      }
+      // TEMP-DIAGNOSTIC
+      console.log('[TEMP-DIAGNOSTIC] game:draw_animation arrived without matching pending state event', {
+        sequence,
+        actorId,
+        chainId,
+        stepCount,
+        at: arrivedAt,
+      });
+    };
 
     const onFriendInviteError = wrapSocketHandler('friend:invite:error', () => {
       scope.ui.showToast('Invite failed: room not found', 2000);
@@ -216,6 +317,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         currentCommitRef,
         transportId,
         projectionMs,
+        recordForcedDrawStateEvent,
       });
     };
 
@@ -305,11 +407,22 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
         if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
           clearPendingDrawAnimationTimers();
+          // TEMP-DIAGNOSTIC
+          console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
+            path: 'game:draw_animation:handOverOrGameOver',
+            at: Date.now(),
+          });
           scope.ui.setFlyingTiles([]);
           return;
         }
 
         const chainId = payload.drawChainId ?? payload.sequence;
+        recordForcedDrawAnimationArrival(
+          payload.sequence,
+          payload.playerId,
+          chainId,
+          payload.steps.length,
+        );
         if (chainId === lastForcedDrawAnimationSequence) {
           drawAudit('animation-start', {
             requestId: chainId,
@@ -337,6 +450,16 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           }
 
           const ownForcedDraw = payload.playerId === scope.dom.youRef.current;
+          // TEMP-DIAGNOSTIC
+          console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set true', {
+            path: 'game:draw_animation:handler_start',
+            actorId: payload.playerId,
+            sequence: payload.sequence,
+            chainId,
+            stepCount: payload.steps.length,
+            ownForcedDraw,
+            at: Date.now(),
+          });
           scope.ui.setDrawSequenceActiveBoth(true);
           scope.ui.setDrawStepActorId(payload.playerId);
 
@@ -383,6 +506,11 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
               try {
                 if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
                   clearPendingDrawAnimationTimers();
+                  // TEMP-DIAGNOSTIC
+                  console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
+                    path: 'game:draw_animation:step:handOverOrGameOver',
+                    at: Date.now(),
+                  });
                   scope.ui.setFlyingTiles([]);
                   scope.ui.setDrawSequenceActiveBoth(false);
                   return;
@@ -462,7 +590,22 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
             scope.ui.setDrawStepActorId(null);
             scope.ui.setDrawStepOpponentHandCount(null);
             scope.ui.setBoneyardDisplayCount(null);
+            // TEMP-DIAGNOSTIC
+            console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
+              path: 'game:draw_animation:timer_chain_complete',
+              chainId,
+              chainDurationMs,
+              at: Date.now(),
+            });
             scope.ui.setFlyingTiles([]);
+            // TEMP-DIAGNOSTIC
+            console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
+              path: 'game:draw_animation:timer_chain_complete',
+              chainId,
+              chainDurationMs,
+              stepCount: payload.steps.length,
+              at: Date.now(),
+            });
             scope.ui.setDrawSequenceActiveBoth(false);
           }, chainDurationMs);
         } catch (error) {

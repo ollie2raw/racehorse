@@ -158,6 +158,8 @@ export type LiveMatchSessionApi = {
   handleTileTap: (tile: Tile) => void;
   setDrawSequenceActiveBoth: (value: boolean) => void;
   flashLastPlayed: (tile: Tile | null) => void;
+  recentAutoPasses: string[];
+  setRecentAutoPasses: Dispatch<SetStateAction<string[]>>;
   applyJoinResponseGameState: (resp: RoomAckResponse) => {
     ok: boolean;
     nextState: GameState | null;

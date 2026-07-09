@@ -57,6 +57,8 @@ export type BuildRoomSocketSyncParamsInput = {
     fullHand: import('../../types').Tile[];
   } | null>;
   setState: Dispatch<SetStateAction<GameState | null>>;
+  setRecentAutoPasses: Dispatch<SetStateAction<string[]>>;
+  setOpponentDragging: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useRoomSocketSyncParams(
@@ -105,6 +107,8 @@ export function useRoomSocketSyncParams(
     flyingTileIdRef,
     pendingForcedHandRevealRef,
     setState,
+    setRecentAutoPasses,
+    setOpponentDragging,
   } = input;
 
   return useMemo(
@@ -147,6 +151,8 @@ export function useRoomSocketSyncParams(
         tileEquals,
         onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
         setError,
+        setRecentAutoPasses,
+        setOpponentDragging,
       },
       syncDom: {
         drawSequenceActiveRef,
@@ -206,6 +212,8 @@ export function useRoomSocketSyncParams(
       flyingTileIdRef,
       pendingForcedHandRevealRef,
       setState,
+      setRecentAutoPasses,
+      setOpponentDragging,
     ],
   );
 }

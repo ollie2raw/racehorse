@@ -86,6 +86,7 @@ function MultiplayerGameShellComponent({
   shellDelegatesRef,
   sharedGameplayRefs,
   setAbandonedMatchNotice,
+  joinedRoomResponseRef,
 }: MultiplayerGameShellProps) {
   const { roomRecoveryState, isRecoveringConnection, setRoomRecoveryState, setRoomRecoveryMessage } =
     connectionRecovery;
@@ -263,6 +264,7 @@ function MultiplayerGameShellComponent({
     setDrawStepOpponentHandCount,
     preGameDraw,
     onPregameTileTap,
+    recentAutoPasses,
   } = liveMatch;
 
   const extendedSocketSyncParams = React.useMemo(() => ({
@@ -345,6 +347,11 @@ function MultiplayerGameShellComponent({
       clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = null;
     }
+    // TEMP-DIAGNOSTIC
+    console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
+      path: 'MultiplayerGameShell:stateNullEffect',
+      at: Date.now(),
+    });
     setDrawSequenceActiveBoth(false);
     setDrawStepMyHand(null);
     setDrawStepOpponentHandCount(null);
@@ -821,6 +828,7 @@ function MultiplayerGameShellComponent({
     boneyardRef,
     handAreaRef,
     opponentPillRef,
+    recentAutoPasses,
   });
 
   const routeProps = useMemo((): MultiplayerGameRouteProps => {
@@ -993,7 +1001,11 @@ function MultiplayerGameShellComponent({
 
   useLayoutEffect(() => {
     shellDelegatesRef.current = shellDelegates;
-  }, [shellDelegates, shellDelegatesRef]);
+    if (joinedRoomResponseRef?.current) {
+      shellDelegates.applyJoinResponseGameState(joinedRoomResponseRef.current);
+      joinedRoomResponseRef.current = null;
+    }
+  }, [shellDelegates, shellDelegatesRef, joinedRoomResponseRef]);
 
   useEffect(() => {
     return () => {

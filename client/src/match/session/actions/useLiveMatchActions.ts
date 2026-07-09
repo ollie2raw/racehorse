@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
@@ -86,6 +86,17 @@ export type UseLiveMatchActionsResult = {
   isGameplayActionBlocked: () => boolean;
 };
 
+type GameplayBlockReason =
+  | 'missing_context'
+  | 'connection'
+  | 'pendingActionRef'
+  | 'drawSequenceActive'
+  | 'flyingTiles'
+  | 'pendingUiAction'
+  | 'handOver'
+  | 'not_in_game'
+  | 'not_your_turn';
+
 export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveMatchActionsResult {
   const {
     socket,
@@ -145,6 +156,184 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     [socket, joinedRoom, state, you, draggingStateRef],
   );
 
+  // TEMP-DIAGNOSTIC: timestamps for how long each block condition has been active.
+  const drawSequenceActiveTrueSinceRef = useRef<number | null>(null);
+  const flyingTilesNonEmptySinceRef = useRef<number | null>(null);
+  const pendingActionTrueSinceRef = useRef<number | null>(null);
+  const pendingUiActionTrueSinceRef = useRef<number | null>(null);
+  const connectionBlockedTrueSinceRef = useRef<number | null>(null);
+  const prevDrawSequenceActiveRef = useRef(drawSequenceActive);
+  const prevFlyingTilesCountRef = useRef(flyingTiles.length);
+
+  const setPendingActionRefDiag = useCallback(
+    (value: boolean) => {
+      const now = Date.now();
+      if (value) {
+        if (pendingActionTrueSinceRef.current === null) {
+          pendingActionTrueSinceRef.current = now;
+        }
+      } else {
+        pendingActionTrueSinceRef.current = null;
+      }
+      pendingActionRef.current = value;
+    },
+    [pendingActionRef],
+  );
+
+  useEffect(() => {
+    const now = Date.now();
+    if (drawSequenceActive) {
+      if (drawSequenceActiveTrueSinceRef.current === null) {
+        drawSequenceActiveTrueSinceRef.current = now;
+      }
+    } else {
+      drawSequenceActiveTrueSinceRef.current = null;
+    }
+  }, [drawSequenceActive]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const prev = prevDrawSequenceActiveRef.current;
+    if (prev !== drawSequenceActive) {
+      // TEMP-DIAGNOSTIC: correlate with useRoomSocketSync path-tagged logs for clear-path attribution.
+      console.log('[TEMP-DIAGNOSTIC] drawSequenceActive observed transition', {
+        from: prev,
+        to: drawSequenceActive,
+        at: now,
+      });
+      prevDrawSequenceActiveRef.current = drawSequenceActive;
+    }
+  }, [drawSequenceActive]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const prevCount = prevFlyingTilesCountRef.current;
+    const nextCount = flyingTiles.length;
+    if (nextCount > 0) {
+      if (flyingTilesNonEmptySinceRef.current === null) {
+        flyingTilesNonEmptySinceRef.current = now;
+      }
+    } else if (prevCount > 0) {
+      // TEMP-DIAGNOSTIC
+      console.log('[TEMP-DIAGNOSTIC] flyingTiles transitioned to empty', {
+        at: now,
+        wasNonEmptyForMs:
+          flyingTilesNonEmptySinceRef.current === null
+            ? null
+            : now - flyingTilesNonEmptySinceRef.current,
+        previousCount: prevCount,
+      });
+      flyingTilesNonEmptySinceRef.current = null;
+    }
+    prevFlyingTilesCountRef.current = nextCount;
+  }, [flyingTiles]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const blocksConnection =
+      !socket ||
+      !joinedRoom ||
+      !state ||
+      !you ||
+      !socket.connected ||
+      roomRecoveryState !== 'idle' ||
+      isRecoveringConnection ||
+      rejoinInFlightRef.current;
+    if (blocksConnection) {
+      if (connectionBlockedTrueSinceRef.current === null) {
+        connectionBlockedTrueSinceRef.current = now;
+      }
+    } else {
+      connectionBlockedTrueSinceRef.current = null;
+    }
+  }, [
+    socket,
+    joinedRoom,
+    state,
+    you,
+    roomRecoveryState,
+    isRecoveringConnection,
+    rejoinInFlightRef,
+  ]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const blocksUi =
+      pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play';
+    if (blocksUi) {
+      if (pendingUiActionTrueSinceRef.current === null) {
+        pendingUiActionTrueSinceRef.current = now;
+      }
+    } else {
+      pendingUiActionTrueSinceRef.current = null;
+    }
+  }, [pendingUiAction]);
+
+  const diagnoseGameplayBlockReason = useCallback((): GameplayBlockReason | null => {
+    if (!socket || !joinedRoom || !state || !you) return 'missing_context';
+    if (
+      !socket.connected ||
+      roomRecoveryState !== 'idle' ||
+      isRecoveringConnection ||
+      rejoinInFlightRef.current
+    ) {
+      return 'connection';
+    }
+    if (pendingActionRef.current) return 'pendingActionRef';
+    if (drawSequenceActive) return 'drawSequenceActive';
+    if (flyingTiles.length > 0) return 'flyingTiles';
+    if (pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play') {
+      return 'pendingUiAction';
+    }
+    if (state.handOver || state.gameOver) return 'handOver';
+    if (!state.playerIds.includes(you)) return 'not_in_game';
+    if (state.playerIds[state.currentPlayerIndex] !== you) return 'not_your_turn';
+    return null;
+  }, [
+    socket,
+    joinedRoom,
+    state,
+    you,
+    roomRecoveryState,
+    isRecoveringConnection,
+    rejoinInFlightRef,
+    pendingUiAction,
+    drawSequenceActive,
+    flyingTiles,
+    pendingActionRef,
+  ]);
+
+  const blockConditionAgeMs = useCallback(
+    (reason: GameplayBlockReason): number | null => {
+      const now = Date.now();
+      switch (reason) {
+        case 'pendingActionRef':
+          return pendingActionTrueSinceRef.current === null
+            ? null
+            : now - pendingActionTrueSinceRef.current;
+        case 'drawSequenceActive':
+          return drawSequenceActiveTrueSinceRef.current === null
+            ? null
+            : now - drawSequenceActiveTrueSinceRef.current;
+        case 'flyingTiles':
+          return flyingTilesNonEmptySinceRef.current === null
+            ? null
+            : now - flyingTilesNonEmptySinceRef.current;
+        case 'pendingUiAction':
+          return pendingUiActionTrueSinceRef.current === null
+            ? null
+            : now - pendingUiActionTrueSinceRef.current;
+        case 'connection':
+          return connectionBlockedTrueSinceRef.current === null
+            ? null
+            : now - connectionBlockedTrueSinceRef.current;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
+
   const isGameplayActionBlocked = useCallback(() => {
     if (!socket || !joinedRoom || !state || !you) return true;
     if (
@@ -156,7 +345,9 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       showToast('Reconnecting...', 1200);
       return true;
     }
-    if (pendingActionRef.current || drawSequenceActive || flyingTiles.length > 0) return true;
+    if (pendingActionRef.current) {
+      return true;
+    }
     if (pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play') {
       return true;
     }
@@ -173,8 +364,6 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     rejoinInFlightRef,
     pendingUiAction,
     showToast,
-    drawSequenceActive,
-    flyingTiles,
     pendingActionRef,
   ]);
 
@@ -241,7 +430,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     pendingGameplayActionRef.current = { kind: 'draw', baselineSequence };
     mpPerfBeginAction('draw', baselineSequence);
     setPendingUiAction('draw');
-    pendingActionRef.current = true;
+    setPendingActionRefDiag(true);
     const boardEnds = getBoardEnds(stateNow?.board ?? null);
     const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
     const validMoves = legalMovesNow
@@ -303,7 +492,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
-      pendingActionRef.current = false;
+      setPendingActionRefDiag(false);
       pendingGameplayActionRef.current = null;
     }
   }, [
@@ -318,7 +507,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     stateRef,
     legalMovesRef,
     pendingGameplayActionRef,
-    pendingActionRef,
+    setPendingActionRefDiag,
     mpAutoDrawSuppressUntilSequenceRef,
     autoTurnActionKeyRef,
     setActionError,
@@ -336,7 +525,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     pendingGameplayActionRef.current = { kind: 'pass', baselineSequence };
     mpPerfBeginAction('pass', baselineSequence);
     setPendingUiAction('pass');
-    pendingActionRef.current = true;
+    setPendingActionRefDiag(true);
     const boardEnds = getBoardEnds(stateNow?.board ?? null);
     const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
     const validMoves = legalMovesNow
@@ -373,7 +562,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
-      pendingActionRef.current = false;
+      setPendingActionRefDiag(false);
       pendingGameplayActionRef.current = null;
     }
   }, [
@@ -387,7 +576,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     stateRef,
     legalMovesRef,
     pendingGameplayActionRef,
-    pendingActionRef,
+    setPendingActionRefDiag,
     setActionError,
     setPendingUiAction,
   ]);
@@ -400,7 +589,29 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       const selected = selectedTileRef.current;
       if (!socket || !joinedRoom || !selected) return;
 
-      if (isGameplayActionBlocked()) return;
+      if (isGameplayActionBlocked()) {
+        const blockReason = diagnoseGameplayBlockReason();
+        if (blockReason) {
+          // TEMP-DIAGNOSTIC
+          console.log('[TEMP-DIAGNOSTIC] play() blocked by isGameplayActionBlocked', {
+            reason: blockReason,
+            conditionAgeMs: blockConditionAgeMs(blockReason),
+            at: Date.now(),
+            position,
+            selectedTile: selected ? `${selected.low}-${selected.high}` : null,
+            stateSequence: stateNow?.sequence ?? null,
+            drawSequenceActive,
+            flyingTilesCount: flyingTiles.length,
+            pendingActionRef: pendingActionRef.current,
+            pendingUiAction,
+            roomRecoveryState,
+            socketConnected: socket?.connected ?? false,
+            isRecoveringConnection,
+            rejoinInFlight: rejoinInFlightRef.current,
+          });
+        }
+        return;
+      }
 
       const tileToPlay = selected;
       const selectedMove = legalMovesNow.find(
@@ -422,7 +633,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       mpPerfBeginAction('play', baselineSequence);
       setPendingUiAction('play');
       playTileSound('standard', isMutedRef.current);
-      pendingActionRef.current = true;
+      setPendingActionRefDiag(true);
       setSelectedTile(null);
       setDrawStepMyHand(null);
       const boardEnds = getBoardEnds(stateNow?.board ?? null);
@@ -480,7 +691,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
-        pendingActionRef.current = false;
+        setPendingActionRefDiag(false);
         pendingGameplayActionRef.current = null;
       }
     },
@@ -493,10 +704,19 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       showToast,
       flashLastPlayed,
       isGameplayActionBlocked,
+      diagnoseGameplayBlockReason,
+      blockConditionAgeMs,
+      drawSequenceActive,
+      flyingTiles,
+      pendingUiAction,
+      roomRecoveryState,
+      isRecoveringConnection,
+      rejoinInFlightRef,
       stateRef,
       legalMovesRef,
       selectedTileRef,
       pendingGameplayActionRef,
+      setPendingActionRefDiag,
       pendingActionRef,
       mpAutoDrawSuppressUntilSequenceRef,
       autoTurnActionKeyRef,

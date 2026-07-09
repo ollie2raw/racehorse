@@ -1593,6 +1593,7 @@ export default function App() {
             players={players}
             isConnected={isConnected}
             showToast={showToast}
+            joinedRoomResponseRef={joinedRoomResponseRef}
             connectionRecovery={{
               roomRecoveryState,
               isRecoveringConnection,

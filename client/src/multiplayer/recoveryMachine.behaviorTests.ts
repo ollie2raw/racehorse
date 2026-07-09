@@ -160,6 +160,18 @@ function testJoinOkFlushesPendingResyncToResyncing(): void {
   );
 }
 
+function testConnectingJoinOkFlushesPendingResyncToResyncing(): void {
+  let snapshot = baseSnapshot({ state: 'connecting', targetRoom: 'ABCD', attempt: 1, episodeId: 1 });
+  snapshot = reduceRecovery(snapshot, { type: 'RESYNC_NEEDED', roomCode: 'ABCD' }).snapshot;
+  const { snapshot: next, effects } = reduceRecovery(snapshot, { type: 'ROOM_JOIN_OK' });
+  assertEqual(next.state, 'resyncing', 'state');
+  assertDeepEqual(
+    effects.filter((e) => e.type === 'resync'),
+    [{ type: 'resync', roomCode: 'ABCD' }],
+    'resync effect',
+  );
+}
+
 function testTransportFailRetriesUntilMax(): void {
   let snapshot = baseSnapshot({
     state: 'connecting',
@@ -443,6 +455,7 @@ function run(): void {
   testSocketConnectedAutoEntersJoining();
   testRoomJoinOkReturnsIdle();
   testJoinOkFlushesPendingResyncToResyncing();
+  testConnectingJoinOkFlushesPendingResyncToResyncing();
   testTransportFailRetriesUntilMax();
   testRoomJoinTerminalClearsRecoverability();
   testUserRetryFromFailed();

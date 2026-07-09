@@ -85,6 +85,8 @@ export type MultiplayerRoomSyncUiRuntime = {
   tileEquals: (a: Tile, b: Tile) => boolean;
   setError: Dispatch<SetStateAction<string>>;
   onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
+  setRecentAutoPasses?: Dispatch<SetStateAction<string[]>>;
+  setOpponentDragging?: Dispatch<SetStateAction<boolean>>;
 };
 
 export type MultiplayerRoomSyncDomRuntime = {

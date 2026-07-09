@@ -14,7 +14,7 @@ type ActiveTrace = {
 let activeTrace: ActiveTrace | null = null;
 
 export function isMpDebugEnabled(): boolean {
-  return typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
+  return typeof window !== 'undefined' && typeof window.localStorage?.getItem === 'function' && window.localStorage.getItem('mp_debug') === '1';
 }
 
 function roundMs(ms: number): number {

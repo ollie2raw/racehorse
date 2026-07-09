@@ -90,6 +90,7 @@ export type MultiplayerGameShellProps = {
   fetchGameState: (reason: string) => Promise<boolean>;
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
   shellDelegatesRef: MutableRefObject<MultiplayerShellDelegates | null>;
+  joinedRoomResponseRef?: MutableRefObject<import('./roomTransport').RoomAckResponse | null>;
   sharedGameplayRefs: {
     stateRef: MutableRefObject<import('../types').GameState | null>;
     draggingStateRef: MutableRefObject<boolean>;
