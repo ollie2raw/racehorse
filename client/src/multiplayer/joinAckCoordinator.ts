@@ -150,7 +150,10 @@ export function processJoinAck(params: ProcessJoinAckParams): ProcessJoinAckResu
       dispatchSocketEvent({ type: 'RESYNC_NEEDED', payload: { roomCode: resyncRoom } });
     }
   } else if (seated && resp.matchStarted !== true) {
+    console.log('[DEBUG-READY] calling trySchedulePlayerReady', { seated, matchStarted: resp.matchStarted, resolvedYou });
     params.trySchedulePlayerReady?.();
+  } else {
+    console.log('[DEBUG-READY] SKIPPED trySchedulePlayerReady', { seated, matchStarted: resp.matchStarted, resolvedYou });
   }
 
   return {
