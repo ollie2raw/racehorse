@@ -2,9 +2,18 @@ import { test, expect } from '@playwright/test';
 
 const HUB_LOCATOR = '.mm-page.multiplayer-hub, .mm-page.mm-mp-bridge';
 
-async function openMultiplayerHub(page: import('@playwright/test').Page) {
-  await page.goto('/');
+async function gotoStableHome(page: import('@playwright/test').Page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    const homeVisible = await page.getByText('RACEHORSE', { exact: false }).isVisible().catch(() => false);
+    if (homeVisible) return;
+  }
   await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 15_000 });
+}
+
+async function openMultiplayerHub(page: import('@playwright/test').Page) {
+  await gotoStableHome(page);
   await page.getByText('Multiplayer', { exact: false }).first().click();
   await expect(page.locator(HUB_LOCATOR).first()).toBeVisible({ timeout: 15_000 });
 }

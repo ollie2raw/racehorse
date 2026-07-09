@@ -403,9 +403,9 @@ function testSessionSupersededDisablesRecovery(): void {
   assertEqual(snapshot.targetRoom, null, 'target');
   assertEqual(effects.some((e) => e.type === 'connect'), false, 'no connect effect');
   assertEqual(
-    effects.some((e) => e.type === 'clear_terminal_room' && e.roomCode === 'ABCD'),
-    true,
-    'clear stored room effect',
+    effects.some((e) => e.type === 'clear_terminal_room'),
+    false,
+    'does not clear shared stored room state',
   );
 }
 

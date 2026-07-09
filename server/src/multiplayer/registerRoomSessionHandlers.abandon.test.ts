@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, setRoomRoster } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
+import { resetLiveRoomPersistenceForTests } from './roomLivePersistence';
 
 const fetchMatchByIdMock = vi.fn();
 const applyMatchResultMock = vi.fn();
@@ -96,6 +97,7 @@ function seedActiveMidGameRoom(roomCode: string) {
     },
     board: { tiles: [], leftEnd: null, rightEnd: null },
     boneyard: [],
+    deadTiles: [],
     currentPlayerIndex: 0,
     handOver: false,
     gameOver: false,
@@ -130,6 +132,7 @@ describe('room:abandon_match', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetRoomRuntimeForTests();
+    resetLiveRoomPersistenceForTests();
     initAbandonTestSession();
   });
 
@@ -249,6 +252,7 @@ describe('room:leave mid-match auto-forfeit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetRoomRuntimeForTests();
+    resetLiveRoomPersistenceForTests();
     initAbandonTestSession();
   });
 

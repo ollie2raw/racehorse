@@ -105,7 +105,13 @@ describe('registerRoomAbandonHandlers', () => {
       io,
       socket,
       roomCode,
-      expect.objectContaining({ id: 'p1', userId: 'u1' }),
+      expect.objectContaining({
+        id: 'p1',
+        socketId: 'sock-u1',
+        username: 'P1',
+        userId: 'u1',
+      }),
+      'manual',
     );
     expect(leaveTrackedRoom).toHaveBeenCalledWith(roomCode);
     expect(ack).toHaveBeenCalledWith(

@@ -118,23 +118,8 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
       timeout: 20_000,
     });
     await secondaryPage.getByText('Multiplayer', { exact: false }).first().click();
-
-    await expect
-      .poll(async () => {
-        const primaryToast = await primaryPage.locator('.toast').textContent().catch(() => '');
-        const secondaryInMatch = await secondaryPage
-          .locator(GAME_SCREEN_LOCATOR)
-          .isVisible()
-          .catch(() => false);
-        return Boolean(primaryToast?.includes('Session moved') || secondaryInMatch);
-      })
-      .toBeTruthy();
-
-    const survivor = (await secondaryPage.locator(GAME_SCREEN_LOCATOR).isVisible().catch(() => false))
-      ? secondaryPage
-      : primaryPage;
-    await expect(survivor.locator(GAME_SCREEN_LOCATOR)).toBeVisible({ timeout: 45_000 });
-    expect(await readLastRoomCode(survivor)).toBe(roomCode);
+    await waitForActiveMatch(secondaryPage);
+    expect(await readLastRoomCode(secondaryPage)).toBe(roomCode);
     await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
 
     await context.close();

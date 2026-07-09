@@ -200,9 +200,6 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
       scope.reconnect.reconnectShouldJoinRef.current = false;
       scope.reconnect.rejoinInFlightRef.current = false;
       scope.joinFlight.autoJoinAttemptedRef.current = false;
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(scope.config.lastRoomStorageKey);
-      }
       scope.ui.setJoinedRoom(null);
       scope.ui.setState(null);
       scope.ui.setLegalMoves([]);

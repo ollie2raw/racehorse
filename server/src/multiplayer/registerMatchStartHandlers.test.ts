@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReservedRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import {
   ensureSocketDataSeat,
@@ -40,7 +40,12 @@ function makeIo(roomCode: string, socketIds: string[]) {
 }
 
 describe('registerMatchStartHandlers', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();
     initRoomSession({} as any, {

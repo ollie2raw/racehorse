@@ -693,7 +693,6 @@ function reduceRecoveryCore(
       };
 
     case 'SESSION_SUPERSEDED': {
-      const roomCode = normalizeRecoveryRoomCode(event.roomCode);
       const next = withMessage(
         closeRecoveryEpisode({
           ...snapshot,
@@ -706,10 +705,7 @@ function reduceRecoveryCore(
       );
       return {
         snapshot: next,
-        effects: [
-          { type: 'cancel_schedule' },
-          { type: 'clear_terminal_room', roomCode },
-        ],
+        effects: [{ type: 'cancel_schedule' }],
       };
     }
 
