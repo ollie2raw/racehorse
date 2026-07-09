@@ -66,7 +66,7 @@ export function DailyFritzLoadingScreen({
           </div>
           <button type="button" className="df-fritz-loading-back rh-back-button" onClick={onBack}>
             <span className="df-fritz-loading-back-icon">←</span>
-            <span>Back to Single Player</span>
+            <span>Back to Home</span>
           </button>
         </nav>
 

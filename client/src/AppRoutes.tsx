@@ -316,7 +316,7 @@ export default function AppRoutes({
               setBotDealSize(dealSize);
               setAppMode('bot');
             }}
-            onBack={() => setAppMode('home')}
+            onBack={() => setAppMode('singlePlayerHub')}
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
@@ -339,11 +339,13 @@ export default function AppRoutes({
                 setAppMode('journey');
                 return;
               }
+              const shouldReturnHome =
+                isGuidedMode || isAuthoringMode || isAuthoringV2Mode || isGuidedV2Mode;
               setIsGuidedMode(false);
               setIsAuthoringMode(false);
               setIsAuthoringV2Mode(false);
               setIsGuidedV2Mode(false);
-              setAppMode('home');
+              setAppMode(shouldReturnHome ? 'home' : 'singlePlayerHub');
             }}
             onNavigate={(mode) => {
               if (journeyChallenge) {
@@ -408,7 +410,7 @@ export default function AppRoutes({
           <GhostSetupScreen
             userId={authUser?.id ?? null}
             fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
-            onBack={() => setAppMode('home')}
+            onBack={() => setAppMode('singlePlayerHub')}
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
@@ -430,7 +432,7 @@ export default function AppRoutes({
         <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
           <ErrorBoundary context="bot-match">
           <BotMatchScreen
-            onBack={() => setAppMode('home')}
+            onBack={() => setAppMode('singlePlayerHub')}
             onNavigate={setAppMode}
             dealSize={botDealSize}
             mode="ghost"
@@ -482,7 +484,7 @@ export default function AppRoutes({
             onProfilePatch={applyProfilePatch}
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
-            onBack={() => setAppMode('singlePlayerHub')}
+            onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
           />
 
