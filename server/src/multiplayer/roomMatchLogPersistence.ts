@@ -197,6 +197,30 @@ export async function queryPersistedRoomMatchLog(
   }
 }
 
+export async function queryLatestPersistedRoomMatchLogByRoomCode(
+  roomCode: string,
+): Promise<PersistedRoomMatchLogRow | null> {
+  if (persistentRoomMatchLogsAvailable === false) return null;
+
+  const code = roomCode.trim().toUpperCase();
+  if (!code) return null;
+
+  try {
+    const rows = await supabaseFetch<PersistedRoomMatchLogRow[]>(
+      `/rest/v1/room_match_logs?select=match_id,room_code,status,event_log_version,last_event_sequence,event_count,started_at,archived_at,participant_user_ids,participants,summary,state_snapshot,events&room_code=eq.${encodeURIComponent(code)}&order=archived_at.desc&limit=1`,
+      { method: 'GET' },
+    );
+    persistentRoomMatchLogsAvailable = true;
+    return rows[0] ?? null;
+  } catch (error) {
+    if (isMissingRoomMatchLogsTable(error)) {
+      persistentRoomMatchLogsAvailable = false;
+      return null;
+    }
+    throw error;
+  }
+}
+
 /** Test-only reset for table-availability cache. */
 export function resetRoomMatchLogPersistenceForTests(): void {
   persistentRoomMatchLogsAvailable = null;

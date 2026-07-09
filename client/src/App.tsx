@@ -168,6 +168,7 @@ export default function App() {
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
 
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
+  const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
   const [, setTournamentActiveRoom] = useState<string | null>(null);
@@ -827,10 +828,9 @@ export default function App() {
       return;
     }
 
-    // Quick match deferral: wait until both players are seated before emitting player:ready.
-    // This prevents the server from timing out or starting a deal before the real opponent
-    // has even finished their join handshake.
-    const isQuickMatch = appModeRef.current === 'multiplayer' && mpSubViewRef.current === 'quick';
+    const isQuickMatch =
+      appModeRef.current === 'multiplayer' &&
+      Boolean(joinedRoomResponseRef.current?.matchmakingMatchId);
     if (isQuickMatch) {
       if (roomPlayersRef.current.length < 2) {
         return;
@@ -1110,6 +1110,7 @@ export default function App() {
     rematchAwaitingStateRef,
     resyncInFlightRef,
     recoveryDispatchRef,
+    setRecoveredTerminalMatchNotice: setAbandonedMatchNotice,
     applyJoinedRoomResponse,
     fetchGameState,
     resetClientGameSession,
@@ -1138,6 +1139,7 @@ export default function App() {
     setPlayers,
     setSelectedTile: shellSetSelectedTile,
     setPendingUiAction: shellSetPendingUiAction,
+    setMpSubView,
   });
 
   const { connect, disconnect, retryRoomRecovery } = connectionActions;
@@ -1477,6 +1479,8 @@ export default function App() {
         clearOutboundChallenge,
         profileTarget,
         setProfileTarget,
+        profileOriginMode,
+        setProfileOriginMode,
         toast,
       },
       homeOverlays: {

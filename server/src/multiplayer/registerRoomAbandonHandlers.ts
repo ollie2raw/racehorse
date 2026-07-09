@@ -81,7 +81,7 @@ export function registerRoomAbandonHandlers(
         return;
       }
 
-      const result = await applyActiveMatchForfeit(io, socket, roomCode, abandoningPlayer);
+      const result = await applyActiveMatchForfeit(io, socket, roomCode, abandoningPlayer, 'manual');
       if (!result) {
         const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
         console.log('[room:abandon] rejected', {

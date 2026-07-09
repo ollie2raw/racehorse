@@ -65,6 +65,8 @@ export function registerRoomJoinHandlers(
         eventMeta: getRoomMatchEventMeta(attached.room.code),
         tournamentMatch: attached.tournamentMatchMeta,
         matchStarted: Boolean(attached.room.state),
+        matchmakingMatchId: attached.room.matchmakingMatchId ?? null,
+        scheduledTournamentMatchId: attached.room.scheduledTournamentMatchId ?? null,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';

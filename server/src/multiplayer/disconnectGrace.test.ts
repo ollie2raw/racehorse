@@ -9,6 +9,7 @@ import {
   DISCONNECT_GRACE_MS,
   getActiveDisconnectGracePlayerId,
   hasActiveDisconnectGrace,
+  hasActiveDisconnectGraceForSeat,
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
   resetDisconnectGraceForTests,
@@ -191,6 +192,34 @@ describe('disconnectGrace', () => {
     onPlayerSocketRejoined('GRACE6', io, 'seat-a');
     await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
     expect(actSpy).not.toHaveBeenCalled();
+  });
+
+  it('tracks grace timers per seat so reconnecting one player does not clear another player timer', async () => {
+    const room = seedLiveRoom('GRACE_PER_SEAT', 0);
+    const { io } = makeIo(false);
+
+    onActivePlayerSocketDisconnect('GRACE_PER_SEAT', 'seat-a', io, vi.fn());
+    room.state!.currentPlayerIndex = 1;
+    onActivePlayerSocketDisconnect('GRACE_PER_SEAT', 'seat-b', io, vi.fn());
+
+    expect(hasActiveDisconnectGraceForSeat('GRACE_PER_SEAT', 'seat-a')).toBe(true);
+    expect(hasActiveDisconnectGraceForSeat('GRACE_PER_SEAT', 'seat-b')).toBe(true);
+
+    onPlayerSocketRejoined('GRACE_PER_SEAT', io, 'seat-a');
+
+    expect(hasActiveDisconnectGraceForSeat('GRACE_PER_SEAT', 'seat-a')).toBe(false);
+    expect(hasActiveDisconnectGraceForSeat('GRACE_PER_SEAT', 'seat-b')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
+
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(actSpy).toHaveBeenCalledWith(
+      'GRACE_PER_SEAT',
+      'seat-b',
+      { type: 'PASS' },
+      io,
+      expect.any(Function),
+    );
   });
 
   it('covers full disconnect and forfeit lifecycle on second expiry', async () => {

@@ -151,7 +151,7 @@ describe('hand:ready gameplay lock', () => {
     const lateAction =
       getRoomCanDraw(roomCode, currentId)
         ? ({ type: 'DRAW', requestId: 'late-draw-at-hand-boundary' } as const)
-        : ({ type: 'PASS' } as const);
+        : ({ type: 'PASS', requestId: 'late-pass-at-hand-boundary' } as const);
 
     const lateActionAck = vi.fn();
     const hostReadyAck = vi.fn();

@@ -33,14 +33,19 @@ export function BotMatchScreenView({
   debug,
 }: BotMatchScreenViewProps) {
   if (!match || !match.players || !match.players.you || !match.players.bot) {
-    return <BotMatchMalformedStateView onExitMatch={navigation.exitMatch} />;
+    return (
+      <BotMatchMalformedStateView
+        onExitMatch={navigation.exitMatch}
+        backLabel={layout.isJourneyTrial ? 'Back to Journey' : 'Back to Home'}
+      />
+    );
   }
 
   if (layout.isGuidedV2Mode && layout.guidedV2BootError) {
     return (
       <BotMatchGuidedV2BootErrorView
         guidedV2BootError={layout.guidedV2BootError}
-        onBack={navigation.onBack}
+        onBack={navigation.returnToLearn}
       />
     );
   }

@@ -145,7 +145,11 @@ async function findPlayMoveForCurrentTurn(
     }
     if (legalMoves.some((move) => move.type === 'pass')) {
       const ack = vi.fn();
-      await activeHandlers.get('game:action')?.(roomCode, { type: 'PASS' }, ack);
+      await activeHandlers.get('game:action')?.(
+        roomCode,
+        { type: 'PASS', requestId: `setup-pass-${step}` },
+        ack,
+      );
       expect(ack).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
       continue;
     }
@@ -200,7 +204,11 @@ describe('private room happy path', () => {
     const wrongTurnAck = vi.fn();
     await inactiveHandlers.get('game:action')?.(
       roomCode,
-      { type: 'MOVE', move: { tile: playMove!.tile, position: playMove!.position } },
+      {
+        type: 'MOVE',
+        requestId: 'wrong-turn-move',
+        move: { tile: playMove!.tile, position: playMove!.position },
+      },
       wrongTurnAck,
     );
     expect(wrongTurnAck).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
@@ -209,7 +217,11 @@ describe('private room happy path', () => {
     const moveAck = vi.fn();
     await activeHandlers.get('game:action')?.(
       roomCode,
-      { type: 'MOVE', move: { tile: playMove!.tile, position: playMove!.position } },
+      {
+        type: 'MOVE',
+        requestId: 'accepted-move',
+        move: { tile: playMove!.tile, position: playMove!.position },
+      },
       moveAck,
     );
     expect(moveAck).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
@@ -250,11 +262,20 @@ describe('private room happy path', () => {
     const beforeSequence = getRoom(roomCode).state!.sequence;
     const ack1 = vi.fn();
     const ack2 = vi.fn();
-    const payload = { type: 'MOVE', move: { tile: playMove!.tile, position: playMove!.position } };
+    const payload1 = {
+      type: 'MOVE',
+      requestId: 'concurrent-move-1',
+      move: { tile: playMove!.tile, position: playMove!.position },
+    };
+    const payload2 = {
+      type: 'MOVE',
+      requestId: 'concurrent-move-2',
+      move: { tile: playMove!.tile, position: playMove!.position },
+    };
 
     await Promise.all([
-      activeHandlers.get('game:action')?.(roomCode, payload, ack1),
-      activeHandlers.get('game:action')?.(roomCode, payload, ack2),
+      activeHandlers.get('game:action')?.(roomCode, payload1, ack1),
+      activeHandlers.get('game:action')?.(roomCode, payload2, ack2),
     ]);
 
     const results = [ack1.mock.calls[0]?.[0], ack2.mock.calls[0]?.[0]];

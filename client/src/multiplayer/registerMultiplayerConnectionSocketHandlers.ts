@@ -195,7 +195,26 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
       const roomCode = selectJoinedRoomCode(scope.session.sessionRef.current);
       if (!roomCode) return;
       scope.session.dispatchSession({ type: 'ROOM_SESSION_SUPERSEDED' });
-      scope.config.showToast('Session moved to this device. Syncing…', 1600);
+      scope.reconnect.preventAutoRejoinRef.current = true;
+      scope.reconnect.reconnectRoomCodeRef.current = null;
+      scope.reconnect.reconnectShouldJoinRef.current = false;
+      scope.reconnect.rejoinInFlightRef.current = false;
+      scope.joinFlight.autoJoinAttemptedRef.current = false;
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(scope.config.lastRoomStorageKey);
+      }
+      scope.ui.setJoinedRoom(null);
+      scope.ui.setState(null);
+      scope.ui.setLegalMoves([]);
+      scope.ui.setCanDraw(false);
+      scope.ui.setTournamentActiveRoom(null);
+      scope.ui.setRoomCode('');
+      scope.ui.setPlayers([]);
+      scope.ui.setSelectedTile(null);
+      scope.ui.setPendingUiAction(null);
+      scope.ui.setError('');
+      scope.ui.setActionError('');
+      scope.config.showToast('Session moved to another tab.', 2400);
       dispatchRecovery({ type: 'SESSION_SUPERSEDED', roomCode });
     }),
   );

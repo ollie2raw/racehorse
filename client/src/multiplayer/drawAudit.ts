@@ -5,5 +5,9 @@ export function drawAudit(event: string, payload: Record<string, unknown>): void
 }
 
 export function nextDrawRequestId(): string {
-  return `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return nextGameActionRequestId('draw');
+}
+
+export function nextGameActionRequestId(kind: 'draw' | 'pass' | 'move'): string {
+  return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

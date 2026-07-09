@@ -69,6 +69,7 @@ function makeIo() {
 
 describe('registerGameplayActionHandlers', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();
     resetRoomGameplayLocksForTests();
@@ -148,6 +149,43 @@ describe('registerGameplayActionHandlers', () => {
     expect(maybeFinalizeTournamentMatch).not.toHaveBeenCalled();
   });
 
+  it('game:action rejects valid action types when requestId is missing', async () => {
+    const roomCode = 'REQID1';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+    const actSpy = vi.spyOn(rooms, 'act');
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const cb = vi.fn();
+    await handlers.get('game:action')?.(roomCode, { type: 'PASS' }, cb);
+
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Missing action requestId.' });
+    expect(actSpy).not.toHaveBeenCalled();
+  });
+
   it('game:action with duplicate requestId mutates only once and replays ack', async () => {
     const roomCode = 'IDEM1';
     createReservedRoom(roomCode);
@@ -184,6 +222,60 @@ describe('registerGameplayActionHandlers', () => {
     });
 
     const payload = { type: 'PASS', requestId: 'idem-pass-1' };
+    const ack1 = vi.fn();
+    const ack2 = vi.fn();
+    await handlers.get('game:action')?.(roomCode, payload, ack1);
+    await handlers.get('game:action')?.(roomCode, payload, ack2);
+
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(broadcastSpy).toHaveBeenCalledTimes(1);
+    expect(ack1).toHaveBeenCalledWith(expect.objectContaining({ ok: true, sequence: 6 }));
+    expect(ack2).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, sequence: 6, duplicate: true }),
+    );
+    expect(getRoom(roomCode).state!.sequence).toBe(6);
+  });
+
+  it('game:action MOVE with duplicate requestId mutates only once and replays ack', async () => {
+    const roomCode = 'IDEM2';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+
+    const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
+      room.state!.sequence += 1;
+      return { room, forcedDrawAnimation: undefined };
+    });
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const payload = {
+      type: 'MOVE',
+      requestId: 'idem-move-1',
+      move: { tile: { low: 5, high: 6 }, position: 'right' },
+    };
     const ack1 = vi.fn();
     const ack2 = vi.fn();
     await handlers.get('game:action')?.(roomCode, payload, ack1);

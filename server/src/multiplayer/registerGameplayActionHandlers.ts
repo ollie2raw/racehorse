@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { act, getRoom, readyForNextHand } from '../rooms';
-import { withGameActionIdempotency } from './gameActionIdempotency';
+import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
 import {
   broadcastStateUpdate,
   emitForcedDrawAnimationPayload,
@@ -32,6 +32,11 @@ export function registerGameplayActionHandlers(
         if (typeof cb === 'function') cb({ ok: false, error: 'Unknown action type.' });
         return;
       }
+      const requestId = normalizeGameActionRequestId((action as { requestId?: unknown }).requestId);
+      if (!requestId) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Missing action requestId.' });
+        return;
+      }
       const existingRoom = getRoom(roomCode);
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       if (!existingRoom.players.includes(playerSeatId)) {
@@ -49,7 +54,7 @@ export function registerGameplayActionHandlers(
       const ack = await withGameActionIdempotency(
         roomCode,
         playerSeatId,
-        (action as { requestId?: string }).requestId,
+        requestId,
         async () => {
           const result = await act(roomCode, playerSeatId, action, io, (code) =>
             broadcastStateUpdate(code),

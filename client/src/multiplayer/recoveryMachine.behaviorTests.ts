@@ -393,14 +393,20 @@ function testManualJoinSetsManualRetry(): void {
   assertEqual(effects.some((e) => e.type === 'room_join'), true, 'join emitted');
 }
 
-function testSessionSupersededAutoReconnect(): void {
+function testSessionSupersededDisablesRecovery(): void {
   const { snapshot, effects } = reduceRecovery(baseSnapshot({ policy: 'auto' }), {
     type: 'SESSION_SUPERSEDED',
     roomCode: 'abcd',
   });
-  assertEqual(snapshot.state, 'connecting', 'state');
-  assertEqual(snapshot.targetRoom, 'ABCD', 'target');
-  assertEqual(effects.some((e) => e.type === 'connect'), true, 'connect effect');
+  assertEqual(snapshot.state, 'idle', 'state');
+  assertEqual(snapshot.policy, 'disabled', 'policy');
+  assertEqual(snapshot.targetRoom, null, 'target');
+  assertEqual(effects.some((e) => e.type === 'connect'), false, 'no connect effect');
+  assertEqual(
+    effects.some((e) => e.type === 'clear_terminal_room' && e.roomCode === 'ABCD'),
+    true,
+    'clear stored room effect',
+  );
 }
 
 function testShimDerivations(): void {
@@ -470,7 +476,7 @@ function run(): void {
   testResyncNeededIgnoredWhileResyncing();
   testReconnectEpisodeFlushesQueuedResyncOnJoinOk();
   testManualJoinSetsManualRetry();
-  testSessionSupersededAutoReconnect();
+  testSessionSupersededDisablesRecovery();
   testShimDerivations();
   testMachineSchedulerFiresScheduledRetry();
   testMachineLogsEveryTransition();

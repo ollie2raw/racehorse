@@ -191,6 +191,7 @@ import {
   isRoomMatchLogsPersistenceAvailable,
   persistRoomMatchLog,
   probeRoomMatchLogsTable,
+  queryLatestPersistedRoomMatchLogByRoomCode,
   queryPersistedRoomMatchLog,
 } from './multiplayer/roomMatchLogPersistence';
 import {
@@ -501,6 +502,7 @@ registerDailyFritzRoutes(app);
 registerRoomEventsRoutes(app, {
   getAuthenticatedUserId,
   queryPersistedRoomMatchLog,
+  queryLatestPersistedRoomMatchLogByRoomCode,
   isRoomMatchLogsPersistenceAvailable,
 });
 

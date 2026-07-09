@@ -13,6 +13,7 @@ import {
   getRoomMatchLogsPersistenceAvailability,
   persistRoomMatchLog,
   probeRoomMatchLogsTable,
+  queryLatestPersistedRoomMatchLogByRoomCode,
   queryPersistedRoomMatchLog,
   resetRoomMatchLogPersistenceForTests,
 } from './roomMatchLogPersistence';
@@ -285,6 +286,44 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     expect(persistenceStore.matchLogs.get(room.matchId)?.status).toBe('abandoned');
     expect(terminalLiveStatuses).toContain('abandoned');
     expect(persistenceStore.liveSessions.has('CLN002')).toBe(false);
+  });
+
+  it('loads the latest archived terminal log by room code for offline room recovery', async () => {
+    const room = seedTerminalRoom('CLN003');
+
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/room_match_logs') && init?.method === 'POST') {
+        const rows = JSON.parse(String(init.body)) as ArchiveRow[];
+        for (const row of rows) {
+          persistenceStore.matchLogs.set(String(row.match_id), row);
+        }
+        return undefined;
+      }
+      if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+        return undefined;
+      }
+      if (path.includes('/room_live_sessions') && init?.method === 'DELETE') {
+        return undefined;
+      }
+      if (path.includes('/room_match_logs') && (!init?.method || init.method === 'GET')) {
+        const roomCode = decodeURIComponent(path.match(/room_code=eq\.([^&]+)/)?.[1] ?? '')
+          .trim()
+          .toUpperCase();
+        const row = [...persistenceStore.matchLogs.values()].find(
+          (candidate) => String(candidate.room_code).toUpperCase() === roomCode,
+        );
+        return row ? [row] : [];
+      }
+      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+    });
+
+    await persistRoomMatchLog(room, 'completed');
+
+    const loadedArchive = await queryLatestPersistedRoomMatchLogByRoomCode('cln003');
+
+    expect(loadedArchive?.match_id).toBe(room.matchId);
+    expect(loadedArchive?.room_code).toBe('CLN003');
+    expect(loadedArchive?.status).toBe('completed');
   });
 
   it('probeRoomMatchLogsTable sets availability true when table exists', async () => {

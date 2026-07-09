@@ -97,6 +97,7 @@ export type MultiplayerConnectionUiSetters = {
   setPendingUiAction: Dispatch<
     SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>
   >;
+  setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
 };
 
 export type MultiplayerConnectionConfig = {

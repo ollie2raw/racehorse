@@ -1,22 +1,28 @@
-import type { Application, Request } from 'express';
+import type { Application, Request, Response } from 'express';
 import type { PersistedRoomMatchLogRow } from '../../multiplayer/roomMatchLogPersistence';
 
 export type RoomEventsRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
   queryPersistedRoomMatchLog: (matchId: string) => Promise<PersistedRoomMatchLogRow | null>;
+  queryLatestPersistedRoomMatchLogByRoomCode: (
+    roomCode: string,
+  ) => Promise<PersistedRoomMatchLogRow | null>;
   isRoomMatchLogsPersistenceAvailable: () => boolean;
 };
 
 export function registerRoomEventsRoutes(app: Application, deps: RoomEventsRouteDeps): void {
-  const { getAuthenticatedUserId, queryPersistedRoomMatchLog, isRoomMatchLogsPersistenceAvailable } = deps;
+  const {
+    getAuthenticatedUserId,
+    queryPersistedRoomMatchLog,
+    queryLatestPersistedRoomMatchLogByRoomCode,
+    isRoomMatchLogsPersistenceAvailable,
+  } = deps;
 
-  app.get('/api/room-events/:matchId', async (req, res) => {
-    const matchId = typeof req.params.matchId === 'string' ? req.params.matchId.trim() : '';
-    if (!matchId) {
-      res.status(400).json({ error: 'matchId is required.' });
-      return;
-    }
-
+  const sendLogResponse = async (
+    req: Request,
+    res: Response,
+    loadLog: () => Promise<PersistedRoomMatchLogRow | null>,
+  ) => {
     try {
       const authenticatedUserId = await getAuthenticatedUserId(req);
       if (!authenticatedUserId) {
@@ -24,7 +30,7 @@ export function registerRoomEventsRoutes(app: Application, deps: RoomEventsRoute
         return;
       }
 
-      const log = await queryPersistedRoomMatchLog(matchId);
+      const log = await loadLog();
       if (!log) {
         if (!isRoomMatchLogsPersistenceAvailable()) {
           res.status(503).json({ error: 'Room event persistence is not configured.' });
@@ -61,5 +67,25 @@ export function registerRoomEventsRoutes(app: Application, deps: RoomEventsRoute
         error: error instanceof Error ? error.message : 'Failed to load room event log.',
       });
     }
+  };
+
+  app.get('/api/room-events/:matchId', async (req, res) => {
+    const matchId = typeof req.params.matchId === 'string' ? req.params.matchId.trim() : '';
+    if (!matchId) {
+      res.status(400).json({ error: 'matchId is required.' });
+      return;
+    }
+
+    await sendLogResponse(req, res, () => queryPersistedRoomMatchLog(matchId));
+  });
+
+  app.get('/api/room-events/by-room/:roomCode', async (req, res) => {
+    const roomCode = typeof req.params.roomCode === 'string' ? req.params.roomCode.trim().toUpperCase() : '';
+    if (!roomCode) {
+      res.status(400).json({ error: 'roomCode is required.' });
+      return;
+    }
+
+    await sendLogResponse(req, res, () => queryLatestPersistedRoomMatchLogByRoomCode(roomCode));
   });
 }

@@ -75,7 +75,7 @@ export function reduceSession(
     }
 
     case 'ROOM_SESSION_SUPERSEDED':
-      return snapshot;
+      return { phase: 'connected', context: { ...INITIAL_SESSION_CONTEXT } };
 
     case 'ROOM_REQUEST_READY':
       return withContext(

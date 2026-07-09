@@ -130,7 +130,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         };
 
       try {
-        await applyActiveMatchForfeit(io, socket, code, abandoningPlayer);
+        await applyActiveMatchForfeit(io, socket, code, abandoningPlayer, 'manual');
       } catch (err) {
         console.error('[room:leave] forfeit failed', {
           roomCode: code,

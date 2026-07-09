@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, t
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
-import { drawAudit, nextDrawRequestId } from '../../../multiplayer/drawAudit';
+import { drawAudit, nextDrawRequestId, nextGameActionRequestId } from '../../../multiplayer/drawAudit';
 import {
   mpPerfBeginAction,
   mpPerfMarkAck,
@@ -531,8 +531,9 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     const validMoves = legalMovesNow
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
+    const requestId = nextGameActionRequestId('pass');
     try {
-      const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS' });
+      const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
         setActionError(resp?.error ?? 'Unable to pass.');
@@ -642,10 +643,12 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         .filter((m) => m.type === 'play' && m.tile)
         .map((m) => toTileTuple(m.tile as Tile));
       const playedTile = toTileTuple(tileToPlay);
+      const requestId = nextGameActionRequestId('move');
 
       try {
         const resp = await emitGameAction(socket, joinedRoom, {
           type: 'MOVE',
+          requestId,
           move: { tile: tileToPlay, position },
         });
 

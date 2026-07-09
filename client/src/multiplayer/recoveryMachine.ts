@@ -694,23 +694,21 @@ function reduceRecoveryCore(
 
     case 'SESSION_SUPERSEDED': {
       const roomCode = normalizeRecoveryRoomCode(event.roomCode);
-      if (!roomCode || snapshot.policy !== 'auto') {
-        return { snapshot, effects: [] };
-      }
       const next = withMessage(
-        nextEpisode({
+        closeRecoveryEpisode({
           ...snapshot,
-          state: 'connecting',
-          targetRoom: roomCode,
+          state: 'idle',
+          policy: 'disabled',
+          targetRoom: null,
           manualRetry: false,
         }),
-        'Session moved to this device. Syncing…',
+        'Session moved to another tab.',
       );
       return {
         snapshot: next,
         effects: [
           { type: 'cancel_schedule' },
-          { type: 'connect' },
+          { type: 'clear_terminal_room', roomCode },
         ],
       };
     }

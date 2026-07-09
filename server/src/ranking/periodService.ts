@@ -92,6 +92,7 @@ async function commitProcessedGame(
   game: RankedGame,
   opponent: OpponentSnapshot,
   processedAt: string,
+  scale?: number,
 ): Promise<{
   profile: Profile;
   newRating: number;
@@ -114,14 +115,18 @@ async function commitProcessedGame(
   );
 
   const newGamesPlayed = profile.ranked_games_played + 1;
-  const newPeakRating = Math.max(profile.peak_rating || 0, result.newRating);
-  const delta = result.newRating - profile.glicko_rating;
+  let delta = result.newRating - profile.glicko_rating;
+  if (scale != null && Number.isFinite(scale)) {
+    delta = delta * scale;
+  }
+  const adjustedNewRating = profile.glicko_rating + delta;
+  const newPeakRating = Math.max(profile.peak_rating || 0, adjustedNewRating);
 
   await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
     method: 'POST',
     body: JSON.stringify({
       p_profile_id: profile.id,
-      p_glicko_rating: result.newRating,
+      p_glicko_rating: adjustedNewRating,
       p_glicko_rd: result.newRD,
       p_glicko_vol: result.newVol,
       p_glicko_last_period: processedAt,
@@ -139,7 +144,7 @@ async function commitProcessedGame(
   return {
     profile: {
       ...profile,
-      glicko_rating: result.newRating,
+      glicko_rating: adjustedNewRating,
       glicko_rd: result.newRD,
       glicko_vol: result.newVol,
       glicko_last_period: processedAt,
@@ -147,7 +152,7 @@ async function commitProcessedGame(
       peak_rating: newPeakRating,
       ranked_games_played: newGamesPlayed,
     },
-    newRating: result.newRating,
+    newRating: adjustedNewRating,
     newRD: result.newRD,
     delta,
   };
@@ -241,6 +246,7 @@ export async function processRealtimeMultiplayerGame(params: {
   playerBProfile: Profile;
   playerAGame: RankedGame;
   playerBGame: RankedGame;
+  ratingScale?: number;
 }) {
   const processedAt = new Date().toISOString();
 
@@ -253,6 +259,7 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerBProfile.glicko_rd,
       },
       processedAt,
+      params.ratingScale,
     ),
     commitProcessedGame(
       params.playerBProfile,
@@ -262,6 +269,7 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerAProfile.glicko_rd,
       },
       processedAt,
+      params.ratingScale,
     ),
   ]);
 

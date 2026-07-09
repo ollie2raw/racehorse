@@ -356,6 +356,9 @@ export default function MultiplayerModeController({
               onOpenAuth={onOpenAuthModal}
               onOpenAccount={onOpenAccountModal}
               onBackHome={() => {
+                if (joinedRoom) {
+                  leavePrivateLobbyRoom();
+                }
                 setMpSubView('quick');
                 setAppMode('home');
               }}

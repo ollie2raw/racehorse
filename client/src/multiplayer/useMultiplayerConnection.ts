@@ -41,11 +41,16 @@ import {
   selectJoinedRoomCode,
   selectMatchStarted,
 } from './session/sessionStateMachine';
+import {
+  fetchRecoveredTerminalMatchNotice,
+  type RecoveredTerminalMatchNotice,
+} from './terminalRoomArchiveRecovery';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
 export type UseMultiplayerConnectionParams = MultiplayerConnectionScopeSource & {
   recoveryDispatchRef?: MutableRefObject<(event: RecoveryEvent) => RecoveryMachineSnapshot | null>;
+  setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
 };
 
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
@@ -54,6 +59,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     scopeRef.current = createMultiplayerConnectionScope(params);
   });
   const { connectionState, config } = params;
+  const setRecoveredTerminalMatchNotice = params.setRecoveredTerminalMatchNotice;
 
   const recoveryMachineRef = useRef<RecoveryMachine | null>(null);
   const establishSocketRef = useRef<() => void>(() => {});
@@ -309,16 +315,31 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           if (errorText.includes('completed')) {
             dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
           }
+          if (errorText.includes('completed') || errorText.includes('abandoned')) {
+            const notice = await fetchRecoveredTerminalMatchNotice({
+              serverUrl: scope.config.serverUrl,
+              roomCode: savedCode,
+              authToken: scope.auth.authAccessTokenRef.current,
+            });
+            if (notice) {
+              setRecoveredTerminalMatchNotice?.(notice);
+              scope.navigation.setAppMode('multiplayer');
+              dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
+              return;
+            }
+          }
           scope.config.showToast('Saved room is no longer available.', 2000);
           return;
         }
+        const isPrivateRoom = !resp.matchmakingMatchId && !resp.scheduledTournamentMatchId;
+        scope.ui.setMpSubView(isPrivateRoom ? 'private' : 'quick');
         scope.recovery.applyJoinedRoomResponse(resp);
         scope.config.showToast('Rejoined room.', 1200);
       } catch (error) {
         scope.config.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }
     },
-    [dispatchRecovery],
+    [dispatchRecovery, setRecoveredTerminalMatchNotice],
   );
 
   useEffect(() => {

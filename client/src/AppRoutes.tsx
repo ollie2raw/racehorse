@@ -121,6 +121,8 @@ export default function AppRoutes({
     clearOutboundChallenge,
     profileTarget,
     setProfileTarget,
+    profileOriginMode,
+    setProfileOriginMode,
     toast,
   } = social;
   const {
@@ -486,7 +488,7 @@ export default function AppRoutes({
             onProfilePatch={applyProfilePatch}
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
-            onBack={() => setAppMode('home')}
+            onBack={() => setAppMode('singlePlayerHub')}
             onNavigate={setAppMode}
           />
 
@@ -521,7 +523,11 @@ export default function AppRoutes({
             currentUsername={authProfile?.username ?? ''}
             showToast={showToast}
             onClose={() => setAppMode('home')}
-            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
+            onViewProfile={(username) => {
+              setProfileTarget(username);
+              setProfileOriginMode('friends');
+              setAppMode('profile');
+            }}
           />
         </Suspense>
         {friendInvitePopup}
@@ -556,7 +562,11 @@ export default function AppRoutes({
             showToast={showToast}
             outboundChallenge={outboundChallenge}
             clearOutboundChallenge={clearOutboundChallenge}
-            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
+            onViewProfile={(username) => {
+              setProfileTarget(username);
+              setProfileOriginMode('feed');
+              setAppMode('profile');
+            }}
             onClose={() => setAppMode('home')}
             onNavigateToFriends={() => setAppMode('friends')}
             onNavigate={setAppMode}
@@ -594,7 +604,12 @@ export default function AppRoutes({
             username={profileTarget ?? ''}
             user={authUser}
             showToast={showToast}
-            onClose={() => setAppMode('home')}
+            onClose={() => {
+              setProfileTarget(null);
+              const nextMode = profileOriginMode ?? 'home';
+              setProfileOriginMode(null);
+              setAppMode(nextMode);
+            }}
             onChallenge={() => setAppMode('multiplayer')}
           />
         </Suspense>

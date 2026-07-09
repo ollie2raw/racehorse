@@ -437,6 +437,8 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
           return;
         }
         scope.room.applyJoinedRoomResponse(resp);
+        scope.navigation.setAppMode('multiplayer');
+        scope.ui.setMpSubView('private');
       } catch (error) {
         scope.ui.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }

@@ -24,6 +24,8 @@ export type RoomAckResponse = {
   tournamentMatch?: Record<string, unknown> | null;
   eventMeta?: unknown;
   matchStarted?: boolean;
+  matchmakingMatchId?: string | null;
+  scheduledTournamentMatchId?: string | null;
 } & Record<string, unknown>;
 
 export type RoomJoinIdentity = {
@@ -54,9 +56,10 @@ export type RoomAbandonPayload = {
 
 export type GameActionPayload =
   | { type: 'DRAW'; requestId: string }
-  | { type: 'PASS' }
+  | { type: 'PASS'; requestId: string }
   | {
       type: 'MOVE';
+      requestId: string;
       move: { tile: { high: number; low: number }; position: string };
     };
 

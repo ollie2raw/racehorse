@@ -356,6 +356,8 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       clearOutboundChallenge: social.clearOutboundChallenge,
       profileTarget: social.profileTarget,
       setProfileTarget: social.setProfileTarget,
+      profileOriginMode: social.profileOriginMode,
+      setProfileOriginMode: social.setProfileOriginMode,
       toast: social.toast,
     },
     homeOverlays,

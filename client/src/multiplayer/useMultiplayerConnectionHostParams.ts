@@ -21,6 +21,7 @@ import type { MultiplayerGameplayRefsRuntime } from './runtime/gameplayRuntime';
 import type { MultiplayerRecoveryCallbacksRuntime } from './runtime/recoveryRuntime';
 import type { MultiplayerRoomSocialRuntime } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
+import type { RecoveredTerminalMatchNotice } from './terminalRoomArchiveRecovery';
 
 export type UseMultiplayerConnectionHostParamsSource = {
   emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
@@ -56,6 +57,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   recoveryDispatchRef?: MutableRefObject<
     (event: RecoveryEvent) => RecoveryMachineSnapshot | null
   >;
+  setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
   applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
   resetClientGameSession: () => void;
@@ -96,6 +98,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   setPendingUiAction: Dispatch<
     SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>
   >;
+  setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
 };
 
 export type UseMultiplayerConnectionHostParamsResult = {
@@ -219,6 +222,7 @@ export function useMultiplayerConnectionHostParams(
       setPlayers: source.setPlayers,
       setSelectedTile: source.setSelectedTile,
       setPendingUiAction: source.setPendingUiAction,
+      setMpSubView: source.setMpSubView,
     }),
     [
       source.setActionError,
@@ -244,6 +248,7 @@ export function useMultiplayerConnectionHostParams(
       source.setState,
       source.setTournamentActiveRoom,
       source.setYou,
+      source.setMpSubView,
     ],
   );
 
@@ -263,6 +268,7 @@ export function useMultiplayerConnectionHostParams(
       roomSocialRuntime: source.roomSocialRuntime,
       uiSetters: connectionUiSetters,
       recoveryDispatchRef: source.recoveryDispatchRef,
+      setRecoveredTerminalMatchNotice: source.setRecoveredTerminalMatchNotice,
     }),
     [
       multiplayerConnectionConfig,
@@ -273,6 +279,7 @@ export function useMultiplayerConnectionHostParams(
       source.navigationRuntime,
       source.reconnectRuntime,
       source.recoveryDispatchRef,
+      source.setRecoveredTerminalMatchNotice,
       source.roomRuntime,
       source.roomSocialRuntime,
       source.socketRuntime,

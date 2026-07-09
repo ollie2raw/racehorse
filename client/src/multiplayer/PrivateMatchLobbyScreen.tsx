@@ -11,7 +11,6 @@ import type { PrivateMatchLobbyScreenProps } from './privateMatchLobbyScreenType
 import {
   buildPendingInviteState,
   buildPrivateLobbyDuelViewModel,
-  resolveLobbyBackAction,
 } from './privateMatchLobbyViewModel';
 import { usePrivateMatchLobbyGuestProfile } from './usePrivateMatchLobbyGuestProfile';
 import { PrivateMatchLobbyMatchupView } from './PrivateMatchLobbyMatchupView';
@@ -86,7 +85,7 @@ export default function PrivateMatchLobbyScreen({
     now,
   );
 
-  const onBackClick = resolveLobbyBackAction(phase, onLeaveRoom, onBackHome);
+  const onBackClick = onBackHome;
 
   return (
     <div className="pml-root pml-mp-bridge multiplayer-hub">
@@ -115,7 +114,7 @@ export default function PrivateMatchLobbyScreen({
           onSelectPrivate={() => {}}
           privateTabLocksQuick={phase === 'room'}
           onBackMultiplayer={onBackClick}
-          backAriaLabel={phase === 'room' ? 'Leave room' : 'Back to home'}
+          backAriaLabel="Back to home"
           fetchCounts={phase !== 'disconnected'}
           socket={socket}
         />

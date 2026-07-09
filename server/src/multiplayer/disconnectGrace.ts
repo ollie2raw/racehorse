@@ -9,10 +9,14 @@ type GraceEntry = {
   playerId: string;
 };
 
-const graceTimersByRoom = new Map<string, GraceEntry>();
+const graceTimersByRoomSeat = new Map<string, GraceEntry>();
 
 function normalizeRoomCode(roomCode: string): string {
   return roomCode.trim().toUpperCase();
+}
+
+function graceKey(roomCode: string, playerSeatId: string): string {
+  return `${normalizeRoomCode(roomCode)}:${playerSeatId}`;
 }
 
 type SeatSocketResolver = (roomCode: string, playerSeatId: string) => string | null;
@@ -25,26 +29,48 @@ export function configureDisconnectGraceSeatResolver(resolver: SeatSocketResolve
 
 export function clearDisconnectGrace(roomCode: string): void {
   const code = normalizeRoomCode(roomCode);
-  const entry = graceTimersByRoom.get(code);
-  if (!entry) return;
+  for (const [key, entry] of graceTimersByRoomSeat) {
+    if (!key.startsWith(`${code}:`)) continue;
+    clearTimeout(entry.timer);
+    graceTimersByRoomSeat.delete(key);
+  }
+}
+
+function clearDisconnectGraceForSeat(roomCode: string, playerSeatId: string): boolean {
+  const key = graceKey(roomCode, playerSeatId);
+  const entry = graceTimersByRoomSeat.get(key);
+  if (!entry) return false;
   clearTimeout(entry.timer);
-  graceTimersByRoom.delete(code);
+  graceTimersByRoomSeat.delete(key);
+  return true;
 }
 
 export function hasActiveDisconnectGrace(roomCode: string): boolean {
-  return graceTimersByRoom.has(normalizeRoomCode(roomCode));
+  const code = normalizeRoomCode(roomCode);
+  for (const key of graceTimersByRoomSeat.keys()) {
+    if (key.startsWith(`${code}:`)) return true;
+  }
+  return false;
 }
 
 export function getActiveDisconnectGracePlayerId(roomCode: string): string | null {
-  return graceTimersByRoom.get(normalizeRoomCode(roomCode))?.playerId ?? null;
+  const code = normalizeRoomCode(roomCode);
+  for (const [key, entry] of graceTimersByRoomSeat) {
+    if (key.startsWith(`${code}:`)) return entry.playerId;
+  }
+  return null;
+}
+
+export function hasActiveDisconnectGraceForSeat(roomCode: string, playerSeatId: string): boolean {
+  return graceTimersByRoomSeat.has(graceKey(roomCode, playerSeatId));
 }
 
 /** Test-only reset between vitest cases. */
 export function resetDisconnectGraceForTests(): void {
-  for (const entry of graceTimersByRoom.values()) {
+  for (const entry of graceTimersByRoomSeat.values()) {
     clearTimeout(entry.timer);
   }
-  graceTimersByRoom.clear();
+  graceTimersByRoomSeat.clear();
   resolveSeatSocket = () => null;
 }
 
@@ -63,7 +89,7 @@ export function onActivePlayerSocketDisconnect(
   if (!room.state || room.state.gameOver || room.state.handOver) return;
   if (!room.players.includes(playerSeatId)) return;
 
-  clearDisconnectGrace(roomCode);
+  clearDisconnectGraceForSeat(roomCode, playerSeatId);
 
   io.to(roomCode).emit('player:disconnected', {
     playerId: playerSeatId,
@@ -74,12 +100,11 @@ export function onActivePlayerSocketDisconnect(
     void handleDisconnectGraceExpired(roomCode, playerSeatId, io, broadcast);
   }, DISCONNECT_GRACE_MS);
 
-  graceTimersByRoom.set(normalizeRoomCode(roomCode), { timer, playerId: playerSeatId });
+  graceTimersByRoomSeat.set(graceKey(roomCode, playerSeatId), { timer, playerId: playerSeatId });
 }
 
 export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatId: string): void {
-  const hadGrace = graceTimersByRoom.has(normalizeRoomCode(roomCode));
-  clearDisconnectGrace(roomCode);
+  const hadGrace = clearDisconnectGraceForSeat(roomCode, playerSeatId);
   try {
     const room = getRoom(roomCode);
     if (room.disconnectExpiries) {
@@ -98,7 +123,7 @@ async function handleDisconnectGraceExpired(
   broadcast: (roomCode: string) => void,
 ): Promise<void> {
   const code = normalizeRoomCode(roomCode);
-  graceTimersByRoom.delete(code);
+  graceTimersByRoomSeat.delete(graceKey(code, disconnectedPlayerSeatId));
   try {
     const room = getRoom(code);
     if (!room.state || room.state.gameOver || room.state.handOver) return;
@@ -156,7 +181,7 @@ async function handleDisconnectGraceExpired(
         },
       } as any;
 
-      await applyActiveMatchForfeit(io, mockSocket, code, abandoningPlayer);
+      await applyActiveMatchForfeit(io, mockSocket, code, abandoningPlayer, 'disconnect_timeout');
       broadcast(code);
       return;
     }

@@ -10,6 +10,9 @@ import {
   getRoomRoster,
   requireRoomSessionHandlerDeps,
 } from './roomSession';
+import { processRealtimeMultiplayerGame } from '../ranking/periodService';
+import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
+import { supabaseFetch } from '../supabaseUtils';
 
 export type ForfeitLeavingPlayer = {
   id: string;
@@ -26,6 +29,7 @@ export async function applyActiveMatchForfeit(
   socket: Socket,
   roomCode: string,
   abandoningPlayer: ForfeitLeavingPlayer,
+  forfeitReason: 'manual' | 'disconnect_timeout' = 'manual',
 ): Promise<{ winnerUserId: string | null } | null> {
   const handlerDeps = requireRoomSessionHandlerDeps();
   const room = getRoom(roomCode);
@@ -83,13 +87,98 @@ export async function applyActiveMatchForfeit(
     });
   }
 
+  // Calculate forfeit scores and run Glicko-2 updates for ranked multiplayer games
+  let ratingResult: any = null;
+  const isPrivate = !room.scheduledTournamentMatchId && !room.scheduledTournamentId;
+  const aId = room.players[0];
+  const bId = room.players[1];
+  const a = roster.find((p) => p.id === aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
+  const b = roster.find((p) => p.id === bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
+
+  const loserActualScore = room.state?.players[abandoningPlayer.id]?.score ?? 0;
+  const winnerActualScore = opponentSeatId ? (room.state?.players[opponentSeatId]?.score ?? 0) : 0;
+
+  const winnerScore = Math.max(60, winnerActualScore);
+  const loserScore = Math.min(loserActualScore, winnerScore - 5);
+
+  const scoreA = abandoningPlayer.id === aId ? loserScore : winnerScore;
+  const scoreB = abandoningPlayer.id === aId ? winnerScore : loserScore;
+
+  if (
+    isPrivate &&
+    a.userId &&
+    b.userId &&
+    Math.max(loserActualScore, winnerActualScore) >= 10
+  ) {
+    try {
+      const [profilesA, profilesB] = await Promise.all([
+        supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${a.userId}`),
+        supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${b.userId}`),
+      ]);
+      const profileA = profilesA?.[0];
+      const profileB = profilesB?.[0];
+
+      if (profileA && profileB) {
+        const sourceMatchId = room.matchId ?? `forfeit-${room.code}-${Date.now()}`;
+
+        const [insertA, insertB] = await Promise.all([
+          insertRankedGameIdempotent({
+            playerId: a.userId,
+            opponentId: b.userId,
+            playerScore: scoreA,
+            opponentScore: scoreB,
+            gameType: 'multiplayer',
+            ratingBefore: profileA.glicko_rating,
+            rdBefore: profileA.glicko_rd,
+            playedAt: nowIso,
+            source: { sourceType: 'live_room', sourceMatchId },
+          }),
+          insertRankedGameIdempotent({
+            playerId: b.userId,
+            opponentId: a.userId,
+            playerScore: scoreB,
+            opponentScore: scoreA,
+            gameType: 'multiplayer',
+            ratingBefore: profileB.glicko_rating,
+            rdBefore: profileB.glicko_rd,
+            playedAt: nowIso,
+            source: { sourceType: 'live_room', sourceMatchId },
+          }),
+        ]);
+
+        if (insertA.isNew && insertB.isNew && insertA.game && insertB.game) {
+          const ratingScale = forfeitReason === 'disconnect_timeout' ? 0.5 : 1.0;
+          ratingResult = await processRealtimeMultiplayerGame({
+            playerAProfile: profileA,
+            playerBProfile: profileB,
+            playerAGame: insertA.game,
+            playerBGame: insertB.game,
+            ratingScale,
+          });
+
+          console.log('[Ranking] Forfeit rating update complete', {
+            roomCode: room.code,
+            loserId: abandoningPlayer.userId,
+            winnerId: winnerUserId,
+            forfeitReason,
+            ratingScale,
+            deltaA: ratingResult.playerA.delta,
+            deltaB: ratingResult.playerB.delta,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Ranking] Forfeit rating update failed:', err);
+    }
+  }
+
   if (room.matchmakingMatchId) {
     await recordMatchEnd({
       matchId: room.matchmakingMatchId,
       status: 'forfeit',
       winnerId: winnerUserId,
-      playerARatingChange: null,
-      playerBRatingChange: null,
+      playerARatingChange: ratingResult?.playerA?.delta ?? null,
+      playerBRatingChange: ratingResult?.playerB?.delta ?? null,
       isSim: false,
     });
   }

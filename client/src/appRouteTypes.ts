@@ -122,6 +122,8 @@ export type AppRoutesSocialProps = {
   clearOutboundChallenge: () => void;
   profileTarget: string | null;
   setProfileTarget: Dispatch<SetStateAction<string | null>>;
+  profileOriginMode: AppMode | null;
+  setProfileOriginMode: Dispatch<SetStateAction<AppMode | null>>;
   toast: string;
 };
 

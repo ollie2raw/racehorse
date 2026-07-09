@@ -1,8 +1,9 @@
 type BotMatchMalformedStateViewProps = {
   onExitMatch: () => void;
+  backLabel: string;
 };
 
-export function BotMatchMalformedStateView({ onExitMatch }: BotMatchMalformedStateViewProps) {
+export function BotMatchMalformedStateView({ onExitMatch, backLabel }: BotMatchMalformedStateViewProps) {
   return (
     <div
       className="screen game-screen walnut-live theme-green bot-match-screen"
@@ -12,7 +13,7 @@ export function BotMatchMalformedStateView({ onExitMatch }: BotMatchMalformedSta
         <h3>Game State Error</h3>
         <p>The match state is incomplete or malformed.</p>
         <button type="button" className="btn rh-back-button" onClick={onExitMatch}>
-          ← Back to Home
+          {`← ${backLabel}`}
         </button>
       </div>
     </div>

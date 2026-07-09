@@ -640,7 +640,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
 
           <div className="learn-board-nav" style={{ position: 'relative', bottom: 'auto', right: 'auto', marginTop: '14px', justifyContent: 'flex-end' }}>
             <button className="claude-mode-topbar__back rh-back-button" onClick={handleBack} disabled={stepIndex === 0}>
-              ← Back to Learn
+              ← Previous Step
             </button>
             <button
               className={`claude-mode-primary ${quizSolved ? 'is-next-ready' : ''}`}
@@ -686,4 +686,3 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     </div>
   );
 }
-
