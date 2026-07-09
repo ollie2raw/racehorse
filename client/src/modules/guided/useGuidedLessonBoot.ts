@@ -10,7 +10,10 @@ import {
   type GuidedTranscript,
 } from '../../learn/guidedAuthoring.ts';
 import type { LessonV2 } from '../../learn/lessonV2.ts';
-import { getLessonV2Module } from '../match/bootstrap/lessonV2LazyRegistry.ts';
+import {
+  getLessonV2Module,
+  isLessonV2Preloaded,
+} from '../match/bootstrap/lessonV2LazyRegistry.ts';
 
 export type GuidedInitSource = 'full-matchStateJson' | 'reduced-snapshot' | 'seeded-deal' | 'random' | null;
 
@@ -51,20 +54,21 @@ export function useGuidedLessonBoot({
   const isAuthoringV2Mode = isAuthoringV2ModeProp && mode === 'bot';
   const isGuidedV2Mode = isGuidedV2ModeProp && mode === 'bot';
   const isLearnAcademyMode = isGuidedMode || isAuthoringMode || isAuthoringV2Mode || isGuidedV2Mode;
+  const lessonV2Ready = !isGuidedV2Mode || isLessonV2Preloaded();
 
   const frozenV2Lesson = useMemo(() => {
-    if (!isGuidedV2Mode) return null;
+    if (!isGuidedV2Mode || !lessonV2Ready) return null;
     return getLessonV2Module().loadGuidedV2PlaybackLesson();
-  }, [isGuidedV2Mode]);
+  }, [isGuidedV2Mode, lessonV2Ready]);
 
   const guidedV2BootError = useMemo(() => {
-    if (!isGuidedV2Mode) return null;
+    if (!isGuidedV2Mode || !lessonV2Ready) return null;
     const lessonV2 = getLessonV2Module();
     if (!lessonV2.canStartGuidedV2Lesson(frozenV2Lesson)) {
       return lessonV2.validateGuidedV2Lesson(frozenV2Lesson);
     }
     return null;
-  }, [isGuidedV2Mode, frozenV2Lesson]);
+  }, [isGuidedV2Mode, lessonV2Ready, frozenV2Lesson]);
 
   const guidedV2PlaybackReady =
     isGuidedV2Mode && guidedV2BootError === null && frozenV2Lesson !== null;

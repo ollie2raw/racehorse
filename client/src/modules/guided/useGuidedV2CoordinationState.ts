@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react';
-import { getLessonV2Module } from '../match/bootstrap/lessonV2LazyRegistry.ts';
+import {
+  getLessonV2Module,
+  isLessonV2Preloaded,
+} from '../match/bootstrap/lessonV2LazyRegistry.ts';
 import type { UseGuidedLessonBootResult } from './index.ts';
 
 export type GuidedV2CoordinationState = {
@@ -17,6 +20,7 @@ export function useGuidedV2CoordinationState(
   const [guidedV2EventIndex, setGuidedV2EventIndex] = useState(() => {
     if (!isGuidedV2Mode) return 0;
     if (!frozenV2Lesson) return 0;
+    if (!isLessonV2Preloaded()) return 0;
     const lessonV2 = getLessonV2Module();
     if (!lessonV2.canStartGuidedV2Lesson(frozenV2Lesson)) return 0;
     return lessonV2.initGuidedV2Playback(frozenV2Lesson, 1).firstEventIndex;

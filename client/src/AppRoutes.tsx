@@ -30,21 +30,15 @@ const MultiplayerModeController = React.lazy(() => import('./multiplayer/Multipl
 const TournamentHubScreen = React.lazy(() => import('./tournament/TournamentHubScreen'));
 const TournamentBracketScreen = React.lazy(() => import('./tournament/TournamentBracketScreen'));
 const TournamentResultScreen = React.lazy(() => import('./tournament/TournamentResultScreen'));
-const LearnHome = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnHome })),
-);
+const LearnHome = React.lazy(() => import('./learn/LearnHome'));
 const GuidedMatchRecorderScreen = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.GuidedMatchRecorderScreen })),
+  import('./learn/guidedMatch/GuidedMatchRecorderScreen'),
 );
 const GuidedMatchAnnotatorScreen = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.GuidedMatchAnnotatorScreen })),
+  import('./learn/guidedMatch/GuidedMatchAnnotatorScreen'),
 );
-const LearnHowToPlayRacehorse = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnHowToPlayRacehorse })),
-);
-const LearnPlayer = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnPlayer })),
-);
+const LearnHowToPlayRacehorse = React.lazy(() => import('./learn/LearnHowToPlayRacehorse'));
+const LearnPlayer = React.lazy(() => import('./learn/LearnPlayer'));
 const WeeklyStatsScreen = React.lazy(() => import('./stats/WeeklyStatsScreen'));
 
 export default function AppRoutes({
