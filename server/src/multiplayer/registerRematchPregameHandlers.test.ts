@@ -64,6 +64,7 @@ function seedGameOverRoom(roomCode: string) {
     },
     board: { mainLine: [], hubDoubles: [] },
     boneyard: [],
+    deadTiles: [],
     currentPlayerIndex: 0,
     handOver: true,
     gameOver: true,
