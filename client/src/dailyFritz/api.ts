@@ -204,6 +204,13 @@ export interface DailyFritzLeaderboardRow {
   }>;
   is_current_user?: boolean;
 }
+export type DailyFritzVerificationStatus = 'verified' | 'legacy_unverified';
+export type DailyFritzHistoryEntry = { challenge_date: string; player_score: number; fritz_score: number; won: boolean; completed_at: string | null; verification_status: DailyFritzVerificationStatus };
+export async function getDailyFritzHistory(limit = 5): Promise<DailyFritzHistoryEntry[]> {
+  const result = await apiGet<{ ok: true; results: DailyFritzHistoryEntry[] }>(`/api/daily-fritz/history?limit=${Math.max(1,Math.min(10,Math.floor(limit)))}`);
+  if (result.error) throw new Error(result.error);
+  return result.data?.results ?? [];
+}
 
 export type DailyFritzSetGameNumber = 1 | 2 | 3;
 
@@ -247,6 +254,10 @@ export interface DailyFritzSetResult {
 export interface DailyFritzTodayResponse {
   ok: true;
   run_date: string;
+  challenge_id?: string;
+  rules_version?: number;
+  seed_version?: number;
+  time_zone?: 'America/Los_Angeles';
   fritz_tier: FritzTier;
   deal_size: BotDealSize;
   winning_score: number;
@@ -258,6 +269,9 @@ export interface DailyFritzTodayResponse {
   set_result: DailyFritzSetResult | null;
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
+  verification_protocol_version?: number;
+  competitive_verification_available?: boolean;
+  verification_status?: DailyFritzVerificationStatus;
 }
 
 export interface DailyFritzStartResponse {
@@ -265,7 +279,12 @@ export interface DailyFritzStartResponse {
   attempt_id: string;
   verified_match_id: string;
   run_date: string;
+  challenge_id?: string;
+  rules_version?: number;
+  seed_version?: number;
+  time_zone?: 'America/Los_Angeles';
   current_hand_index: number;
+  current_game_scores?: { you: number; fritz: number };
   current_game_number?: DailyFritzSetGameNumber | null;
   needs_completion?: boolean;
   set_result: DailyFritzSetResult | null;
@@ -285,6 +304,7 @@ export interface DailyFritzNextHandResponse {
   current_game_number?: DailyFritzSetGameNumber | null;
   set_result?: DailyFritzSetResult | null;
   current_hand_index: number;
+  current_game_scores: { you: number; fritz: number };
   hand: BotHandDeal;
   draw_winner: DailyFritzDrawWinner;
   draw_player_tile: Tile;

@@ -95,12 +95,16 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
     ?? (preGameDrawEligible
       ? createPreGameDrawShellMatch(winningScore, dealSize)
       : mode === 'daily-fritz' && dailyFritzPackage
-        ? createFixedBotMatchWithStarter(
+        ? (() => {
+          const created = createFixedBotMatchWithStarter(
             dailyFritzPackage.first_hand,
             dailyFritzPackage.draw_winner === 'bot' ? 'bot' : 'you',
             winningScore,
             dealSize,
-          )
+          );
+          const scores = dailyFritzPackage.current_game_scores;
+          return scores ? { ...created, players: { you: { ...created.players.you, score: scores.you }, bot: { ...created.players.bot, score: scores.fritz } } } : created;
+        })()
         : createBotMatch(winningScore, dealSize))
   );
 }

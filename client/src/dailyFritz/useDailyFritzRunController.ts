@@ -44,6 +44,7 @@ export type UseDailyFritzRunControllerResult = {
   finishEmbeddedRun: () => Promise<void>;
   handleDailyFritzGameComplete: (game: DailyFritzGameCompletionPayload) => Promise<void>;
   clearSetOverlay: () => void;
+  retryFinalSubmission: () => Promise<void>;
   hasEmbeddedMatch: boolean;
 };
 
@@ -386,6 +387,11 @@ export function useDailyFritzRunController({
   const clearSetOverlay = useCallback(() => {
     setSetOverlay(null);
   }, []);
+  const retryFinalSubmission = useCallback(async () => {
+    const run = activeRunRef.current;
+    if (!run || setOverlay?.kind !== 'final-error') return;
+    await submitSetCompletion({ run, setResult:setOverlay.setResult, completedGame:setOverlay.completedGame, currentHandIndex:setOverlay.currentHandIndex, boardContext:true });
+  }, [setOverlay, submitSetCompletion]);
 
   const hasEmbeddedMatch = Boolean(activeRun && embeddedMatchKey);
 
@@ -401,6 +407,7 @@ export function useDailyFritzRunController({
     finishEmbeddedRun,
     handleDailyFritzGameComplete,
     clearSetOverlay,
+    retryFinalSubmission,
     hasEmbeddedMatch,
   };
 }

@@ -52,6 +52,16 @@ describe('tryApplyDailyFritzNextHand', () => {
       expect(result.nextState.handNumber).toBe(2);
     }
   });
+
+  it('restores server-persisted cumulative scores on the next hand', () => {
+    const match = { ...createBotMatch(60, 7), handOver: true };
+    const result = tryApplyDailyFritzNextHand(match, sampleDeal, { you: 35, fritz: 20 });
+    expect(result.applied).toBe(true);
+    if (result.applied) {
+      expect(result.nextState.players.you.score).toBe(35);
+      expect(result.nextState.players.bot.score).toBe(20);
+    }
+  });
 });
 
 describe('createEndOfRunMatchState', () => {

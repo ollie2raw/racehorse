@@ -17,8 +17,8 @@ export function BotMatchLiveTurnHud({
     <div className="wl-center-status" data-ui="turn-status">
       {isDailyFritzMode && dailyFritzPackage && (
         <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
-          <span className="hud-pill-label">GAME</span>
-          <span className="hud-pill-value">{dailyFritzPackage.current_game_number ?? 1}</span>
+          <span className="hud-pill-label">OFFICIAL · GAME {dailyFritzPackage.current_game_number ?? 1}</span>
+          <span className="hud-pill-value">FIRST TO {dailyFritzPackage.winning_score}</span>
         </div>
       )}
       {turnLabel && (

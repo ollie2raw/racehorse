@@ -131,7 +131,7 @@ export function buildDailyFritzHubViewModel(
   const isStarted = today?.attempt_status === 'started';
 
   const primaryCtaLabel = isComplete
-    ? 'Set complete'
+    ? "View Today's Result"
     : isStarted
       ? "Resume Today's Set"
       : "Play Today's Set";
@@ -149,10 +149,18 @@ export function buildDailyFritzHubViewModel(
   const leaderboardSupportLine = leaderboardRankLabel
     ? `${leaderboardRankLabel} today`
     : isComplete
-      ? 'Leaderboard updates after your set'
-      : 'Play today to appear on the leaderboard';
+      ? today?.verification_status === 'verified'
+        ? 'Verified result recorded'
+        : 'Result saved locally — not ranked'
+      : today?.competitive_verification_available === false
+        ? 'Competitive verification temporarily unavailable'
+        : 'Play today to appear on the leaderboard';
   const setStatusLabel = isComplete ? 'Complete' : isStarted ? 'In Progress' : 'Ready';
-  const setStakesLabel = isComplete ? 'Return tomorrow for a new set' : 'Leaderboard eligible';
+  const setStakesLabel = isComplete
+    ? 'Return tomorrow for a new set'
+    : today?.competitive_verification_available === false
+      ? 'Daily challenge — unranked'
+      : 'Leaderboard eligible';
   const opponentBadgeLabel = isComplete ? 'Set Complete' : isStarted ? 'Resume Available' : 'Bot Opponent';
   const resetCountdownLabel = formatCountdownHms(secondsUntilNextPacificMidnight(new Date()));
 

@@ -42,7 +42,7 @@ export const BotDailyFritzSetOverlay: React.FC<BotDailyFritzSetOverlayProps> = (
                 {overlay.skunkBadge}
               </span>
             ) : null}
-            <h2 className="daily-fritz-set-overlay-title">{overlay.headline}</h2>
+            <h2 className="daily-fritz-set-overlay-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
             <p className="daily-fritz-set-overlay-copy">{overlay.subheadline}</p>
           </div>
 

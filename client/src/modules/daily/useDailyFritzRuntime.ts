@@ -108,6 +108,9 @@ export function useDailyFritzRuntime({
     }
     return dailyFritzPackage?.current_hand_index ?? 0;
   });
+  const [persistedHandResult, setPersistedHandResult] = useState(
+    resumablePersistedDailyFritzMatch?.handResult ?? null,
+  );
 
   const [dailyLeaderboard, setDailyLeaderboard] = useState<import('../../dailyPuzzle/api.ts').DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
@@ -116,11 +119,16 @@ export function useDailyFritzRuntime({
     enabled: isDailyFritzMode,
     storageKey: dailyFritzStorageKey,
     attemptId: dailyFritzPackage?.attempt_id,
+    runDate: dailyFritzPackage?.run_date,
+    gameNumber: dailyFritzPackage?.current_game_number ?? 1,
     dailyFritzHandIndex,
     match,
     moveLog,
     movesUsed,
     preGameDrawActive,
+    handResult: persistedHandResult,
+    initialRevision: resumablePersistedDailyFritzMatch?.revision,
+    initialStartedAt: resumablePersistedDailyFritzMatch?.startedAt,
   });
 
   const {
@@ -202,6 +210,8 @@ export function useDailyFritzRuntime({
     handleShareResult,
     dailyFritzHandIndex,
     setDailyFritzHandIndex,
+    persistedHandResult,
+    setPersistedHandResult,
     dailyFritzLeaderboard,
     dailyFritzRank,
     retryDailyFritzCompletion,

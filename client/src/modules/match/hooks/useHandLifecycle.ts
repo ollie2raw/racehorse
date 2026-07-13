@@ -59,6 +59,8 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     dailyFritzPackage,
     dailyFritzHandIndex,
     setDailyFritzHandIndex,
+    initialDailyFritzHandResult,
+    setDailyFritzHandResult,
     frozenV2Lesson,
     frozenLesson,
     fritzV2LastAppliedIndexRef,
@@ -131,6 +133,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     onRevealHidden: handleRevealHidden,
     prefetchReady: handlePrefetchReady,
     handTransitionInFlight: handleHandTransitionInFlight,
+    initialHandReveal: initialDailyFritzHandResult,
   });
 
   const applyDailyFritzNextHandResponse = useCallback(
@@ -145,6 +148,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         ignored: Boolean(response.ignored),
       });
       setDailyFritzHandIndex(response.current_hand_index);
+      setDailyFritzHandResult(null);
       transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
@@ -153,7 +157,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
       let applied = false;
       setMatch((prev) => {
-        const result = tryApplyDailyFritzNextHand(prev, response.hand);
+        const result = tryApplyDailyFritzNextHand(prev, response.hand, response.current_game_scores);
         if (!result.applied) {
           warnHandLifecycleStuck('setMatch skipped — hand not over', {
             handOver: prev.handOver,
@@ -190,6 +194,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       prefetchCoordinator,
       reveal,
       setDailyFritzHandIndex,
+      setDailyFritzHandResult,
       setMatch,
       traceHandLifecycle,
     ],
@@ -445,6 +450,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         }
         ports.flashLastPlayed(null);
         const plan = reveal.planHandEndedReveal(result);
+        if (isDailyFritzMode) setDailyFritzHandResult(plan.revealPayload);
         reveal.showHandEndedReveal(plan, result.state.handNumber);
         playHandEndAudioEffects(result, isMuted);
       }
@@ -462,6 +468,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       ports,
       prefetchCoordinator,
       reveal,
+      setDailyFritzHandResult,
     ],
   );
 

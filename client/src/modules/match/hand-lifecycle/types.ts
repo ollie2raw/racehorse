@@ -79,6 +79,8 @@ export type UseHandLifecycleArgs = {
   dailyFritzPackage: DailyFritzStartResponse | null;
   dailyFritzHandIndex: number;
   setDailyFritzHandIndex: (index: number) => void;
+  initialDailyFritzHandResult: BotHandReveal | null;
+  setDailyFritzHandResult: (result: BotHandReveal | null) => void;
   frozenV2Lesson: import('../../../learn/lessonV2.ts').LessonV2 | null;
   frozenLesson: import('../../../learn/guidedAuthoring.ts').FrozenLesson | null;
   fritzV2LastAppliedIndexRef: React.MutableRefObject<number>;

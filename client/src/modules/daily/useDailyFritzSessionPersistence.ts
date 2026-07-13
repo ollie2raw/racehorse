@@ -1,62 +1,83 @@
 import { useEffect, useRef } from 'react';
 import type { MoveEntry } from '../../game/moveLogger';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
+import type { BotHandReveal } from '../match/types.ts';
 import { pruneNonPlayableDailyFritzSnapshot } from './dailyFritzSessionStorage';
+import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
+import { persistDailyFritzSnapshot, type DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
   storageKey: string | null;
   attemptId: string | null | undefined;
+  runDate: string | null | undefined;
+  gameNumber: number;
   dailyFritzHandIndex: number;
   match: BotMatchState;
   moveLog: readonly MoveEntry[];
   movesUsed: number;
   preGameDrawActive: boolean;
+  handResult: BotHandReveal | null;
+  initialRevision?: number;
+  initialStartedAt?: string;
 };
 
 export function useDailyFritzSessionPersistence({
   enabled,
   storageKey,
   attemptId,
+  runDate,
+  gameNumber,
   dailyFritzHandIndex,
   match,
   moveLog,
   movesUsed,
   preGameDrawActive,
+  handResult,
+  initialRevision = 0,
+  initialStartedAt,
 }: UseDailyFritzSessionPersistenceArgs): void {
   const storageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
+  const startedAtRef = useRef(initialStartedAt ?? new Date().toISOString());
+  const revisionRef = useRef(initialRevision);
 
   useEffect(() => {
-    if (!enabled || !storageKey || typeof window === 'undefined') return;
+    if (!enabled || !storageKey || !attemptId || !runDate || typeof window === 'undefined') return;
     if (preGameDrawActive) return;
-    if (match.gameOver) {
+    const now = new Date().toISOString();
+    const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
+    const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
+      schemaVersion: 3,
+      challenge: createDailyFritzChallengeIdentity(runDate),
+      classification: 'official',
+      attemptId,
+      gameNumber,
+      currentHandIndex: dailyFritzHandIndex,
+      lifecyclePhase,
+      match,
+      handResult,
+      movesUsed,
+      moveLog: [...moveLog],
+      startedAt: startedAtRef.current,
+      lastTransitionAt: now,
+      revision: ++revisionRef.current,
+    });
+    if (match.gameOver || match.handOver) {
       if (storageTimerRef.current) {
         clearTimeout(storageTimerRef.current);
         storageTimerRef.current = null;
       }
-      const finalSnapshot = {
-        attemptId: attemptId ?? null,
-        currentHandIndex: dailyFritzHandIndex,
-        match,
-        movesUsed,
-        moveLog,
-      };
+      const finalSnapshot = buildSnapshot();
       storagePendingRef.current = { key: storageKey, payload: finalSnapshot };
-      window.sessionStorage.setItem(storageKey, JSON.stringify(finalSnapshot));
+      persistDailyFritzSnapshot(storageKey, finalSnapshot);
       return;
     }
     if (storageTimerRef.current) clearTimeout(storageTimerRef.current);
-    const snapshot = {
-      attemptId: attemptId ?? null,
-      currentHandIndex: dailyFritzHandIndex,
-      match,
-      movesUsed,
-      moveLog,
-    };
+    const snapshot = buildSnapshot();
     storagePendingRef.current = { key: storageKey, payload: snapshot };
     storageTimerRef.current = setTimeout(() => {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+      persistDailyFritzSnapshot(storageKey, snapshot);
       storagePendingRef.current = null;
       storageTimerRef.current = null;
     }, 1000);
@@ -68,6 +89,9 @@ export function useDailyFritzSessionPersistence({
     };
   }, [
     attemptId,
+    runDate,
+    gameNumber,
+    handResult,
     dailyFritzHandIndex,
     enabled,
     match,
@@ -83,7 +107,7 @@ export function useDailyFritzSessionPersistence({
       const pending = storagePendingRef.current;
       if (!pending) return;
       try {
-        window.sessionStorage.setItem(pending.key, JSON.stringify(pending.payload));
+        persistDailyFritzSnapshot(pending.key, pending.payload as DailyFritzPersistedSnapshot);
       } catch {
         // sessionStorage may be unavailable during unload
       }

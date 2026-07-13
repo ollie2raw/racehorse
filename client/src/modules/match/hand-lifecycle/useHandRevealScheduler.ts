@@ -28,6 +28,7 @@ export type UseHandRevealSchedulerArgs = {
   onRevealHidden: () => void;
   prefetchReady: () => boolean;
   handTransitionInFlight: () => boolean;
+  initialHandReveal?: BotHandReveal | null;
 };
 
 export function useHandRevealScheduler({
@@ -44,12 +45,13 @@ export function useHandRevealScheduler({
   onRevealHidden,
   prefetchReady,
   handTransitionInFlight,
+  initialHandReveal = null,
 }: UseHandRevealSchedulerArgs) {
-  const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
+  const [handReveal, setHandReveal] = useState<BotHandReveal | null>(initialHandReveal);
   const [handRevealProgress, setHandRevealProgress] = useState(1);
 
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const pendingHandRevealRef = useRef<{ handNumber: number; reveal: BotHandReveal } | null>(null);
+  const pendingHandRevealRef = useRef<{ handNumber: number; reveal: BotHandReveal } | null>(initialHandReveal ? { handNumber: match.handNumber, reveal: initialHandReveal } : null);
   const handRevealRef = useRef<BotHandReveal | null>(null);
   handRevealRef.current = handReveal;
 

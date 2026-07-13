@@ -19,6 +19,7 @@ export interface DailyFritzSetOverlayViewModel {
   primaryTone: 'default' | 'decider' | 'success';
   primaryDisabled?: boolean;
   secondaryLabel: string | null;
+  tertiaryLabel?: string | null;
   errorMessage?: string | null;
   gameScoreLabel: string;
   gameScoreValue: string;
@@ -49,4 +50,5 @@ export interface DailyFritzSetOverlayViewModel {
   practiceHint?: string | null;
   onPrimary: () => void;
   onSecondary: () => void;
+  onTertiary?: () => void;
 }

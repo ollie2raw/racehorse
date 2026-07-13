@@ -13,6 +13,7 @@ import {
   DfPvfIconRobotNav,
 } from './DailyFritzIcons';
 import type { DailyFritzHubViewModel } from './dailyFritzHubViewModel';
+import type { DailyFritzHistoryEntry } from './api';
 
 export type DailyFritzHubViewProps = {
   hub: DailyFritzHubViewModel;
@@ -25,6 +26,8 @@ export type DailyFritzHubViewProps = {
   onOpenAccount?: () => void;
   onSetAction: () => void;
   onOpenLeaderboard: () => void;
+  history: DailyFritzHistoryEntry[];
+  onPractice: () => void;
 };
 
 export function DailyFritzHubView({
@@ -38,6 +41,8 @@ export function DailyFritzHubView({
   onOpenAccount,
   onSetAction,
   onOpenLeaderboard,
+  history,
+  onPractice,
 }: DailyFritzHubViewProps) {
   const {
     dateLabel,
@@ -87,6 +92,7 @@ export function DailyFritzHubView({
             <div className="df-pvf-header">
               <div className="df-pvf-label">DAILY FRITZ</div>
               <h1 className="df-pvf-title">Daily Fritz</h1>
+              <p className="df-pvf-subtitle">Win two games before Fritz. Each game is first to {winTarget}.</p>
             </div>
 
             <article className="df-pvf-opponent-card" aria-label="Daily Fritz overview">
@@ -290,7 +296,7 @@ export function DailyFritzHubView({
                   .filter(Boolean)
                   .join(' ')}
                 onClick={() => void onSetAction()}
-                disabled={startActionPending || isComplete}
+                disabled={startActionPending}
               >
                 {primaryCtaLabel}
                 {!isComplete ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
@@ -300,6 +306,8 @@ export function DailyFritzHubView({
                   View Leaderboard →
                 </Button>
               </div>
+              {isComplete ? <Button type="button" variant="ghost" onClick={onPractice}>Practice vs Fritz</Button> : null}
+              {history.length > 0 ? <section className="df-history-preview" aria-label="Recent Daily Fritz results"><h3>Recent results</h3><ul>{history.slice(0,3).map((entry)=><li key={`${entry.challenge_date}:${entry.completed_at}`}><span>{entry.challenge_date}</span><strong>{entry.won?'Win':'Loss'} · {entry.player_score}–{entry.fritz_score}{entry.verification_status === 'verified' ? '' : ' · Unranked'}</strong></li>)}</ul></section> : null}
             </div>
           </section>
         </div>

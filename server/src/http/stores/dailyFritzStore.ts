@@ -519,6 +519,15 @@ export async function listDailyFritzAttemptsForDate(runDate: string): Promise<Da
   return rows.map(toDailyFritzAttemptRecord);
 }
 
+export async function listDailyFritzAttemptsForUser(userId: string, limit = 10): Promise<DailyFritzAttemptRecord[]> {
+  const bounded = Math.max(1, Math.min(30, Math.floor(limit)));
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc,completed_at.desc&limit=${bounded}`,
+    { method: 'GET' },
+  );
+  return rows.map(toDailyFritzAttemptRecord);
+}
+
 export async function fetchProfileNames(userIds: string[]): Promise<Map<string, string>> {
   const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
   const out = new Map<string, string>();
@@ -544,6 +553,7 @@ export async function buildDailyFritzLeaderboard(
   const names = await fetchProfileNames(attempts.map((attempt) => attempt.userId));
   const sorted = sortDailyFritzLeaderboard(
     attempts
+      .filter(isDailyFritzAttemptLeaderboardEligible)
       .map((attempt) => {
         const setResult = normalizeDailyFritzSetResult(attempt.result);
         const pointDiff = getDailyFritzSetPointDiff(setResult) ?? attempt.pointDiff;
@@ -590,6 +600,12 @@ export async function buildDailyFritzLeaderboard(
       .filter((attempt): attempt is DailyFritzLeaderboardEntry & { userId: string } => Boolean(attempt)),
   );
   return sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+export function isDailyFritzAttemptLeaderboardEligible(
+  attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
+): boolean {
+  return attempt.status === 'completed' && attempt.result?.verification_status === 'verified';
 }
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(

@@ -32,6 +32,8 @@ export function buildHandLifecycleArgs(
     dailyFritzPackage: bootstrap.dailyFritzPackage,
     dailyFritzHandIndex: sources.dailyFritz.dailyFritzHandIndex,
     setDailyFritzHandIndex: sources.dailyFritz.setDailyFritzHandIndex,
+    initialDailyFritzHandResult: sources.dailyFritz.persistedHandResult,
+    setDailyFritzHandResult: sources.dailyFritz.setPersistedHandResult,
     frozenV2Lesson,
     frozenLesson,
     fritzV2LastAppliedIndexRef: guidedV2Coordination.fritzV2LastAppliedIndexRef,

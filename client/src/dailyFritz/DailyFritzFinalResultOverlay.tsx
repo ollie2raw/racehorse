@@ -24,7 +24,7 @@ export function DailyFritzFinalResultOverlay({
                 {overlay.skunkBadge}
               </span>
             ) : null}
-            <h2 className="df-result-title">{overlay.headline}</h2>
+            <h2 className="df-result-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
             <p className="df-result-subtitle">{overlay.subheadline}</p>
           </header>
 
@@ -93,7 +93,7 @@ export function DailyFritzFinalResultOverlay({
           ) : null}
 
           {overlay.errorMessage ? (
-            <div className="hand-over-error-zone">
+            <div className="hand-over-error-zone" role="alert">
               <span className="hand-over-error-text" title={overlay.errorMessage}>
                 {overlay.errorMessage}
               </span>
@@ -121,6 +121,9 @@ export function DailyFritzFinalResultOverlay({
               <button type="button" className="df-result-secondary" onClick={overlay.onSecondary}>
                 {overlay.secondaryLabel}
               </button>
+            ) : null}
+            {overlay.tertiaryLabel ? (
+              <button type="button" className="df-result-secondary" onClick={overlay.onTertiary}>{overlay.tertiaryLabel}</button>
             ) : null}
           </div>
         </div>

@@ -82,14 +82,20 @@ export type ApplyDailyFritzNextHandResult =
 export function tryApplyDailyFritzNextHand(
   prev: BotMatchState,
   hand: DailyFritzNextHandResponse['hand'],
+  scores?: DailyFritzNextHandResponse['current_game_scores'],
 ): ApplyDailyFritzNextHandResult {
   if (!canApplyNextHand(prev)) {
     return { applied: false };
   }
+  const nextHand = startNextFixedBotHand(prev, hand);
   return {
     applied: true,
     nextState: {
-      ...startNextFixedBotHand(prev, hand),
+      ...nextHand,
+      ...(scores ? { players: {
+        you: { ...nextHand.players.you, score: scores.you },
+        bot: { ...nextHand.players.bot, score: scores.fritz },
+      } } : {}),
       opponentPassedOnEnds: [],
       opponentDrawCount: 0,
       opponentKnownMissing: [],

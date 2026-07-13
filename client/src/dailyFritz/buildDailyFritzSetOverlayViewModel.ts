@@ -24,6 +24,8 @@ export type BuildDailyFritzSetOverlayActions = {
   loadToday: () => void;
   openLeaderboardForRunDate: () => void;
   clearOverlay: () => void;
+  retryFinalSubmission: () => void;
+  startPractice: () => void;
 };
 
 export type BuildDailyFritzSetOverlayContext = {
@@ -51,6 +53,7 @@ export function buildDailyFritzSetOverlayViewModel(
     primaryTone: 'default' as const,
     primaryDisabled: false,
     secondaryLabel: null,
+    tertiaryLabel: null,
     errorMessage: null,
     gameScoreLabel: '',
     gameScoreValue: '',
@@ -64,6 +67,7 @@ export function buildDailyFritzSetOverlayViewModel(
     games: [] as OverlayGameItem[],
     onPrimary: () => {},
     onSecondary: () => {},
+    onTertiary: () => {},
   };
 
   if (setOverlay.kind === 'saving') {
@@ -131,8 +135,10 @@ export function buildDailyFritzSetOverlayViewModel(
       kind: 'final-error' as const,
       headline: 'Couldn’t finish Daily Fritz',
       subheadline: 'Please try again.',
-      primaryLabel: 'Back Home',
-      onPrimary: () => {
+      primaryLabel: 'Retry submission',
+      onPrimary: actions.retryFinalSubmission,
+      secondaryLabel: 'Back Home',
+      onSecondary: () => {
         actions.clearOverlay();
         actions.closeEmbeddedRun();
         void actions.loadToday();
@@ -142,6 +148,7 @@ export function buildDailyFritzSetOverlayViewModel(
       setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
       marginValue: formatMargin(sr.totalPointDiff),
       marginTone: 'idle' as const,
+      errorMessage: setOverlay.error,
     };
   }
 
@@ -248,8 +255,10 @@ export function buildDailyFritzSetOverlayViewModel(
       games,
       primaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : 'Back Home',
       onPrimary: setOverlay.canViewLeaderboard ? openLeaderboard : returnToHub,
-      onSecondary: setOverlay.canViewLeaderboard ? returnToHub : (): void => {},
-      secondaryLabel: setOverlay.canViewLeaderboard ? 'Back Home' : null,
+      onSecondary: actions.startPractice,
+      secondaryLabel: 'Practice vs Fritz',
+      tertiaryLabel: setOverlay.canViewLeaderboard ? 'Return Home' : null,
+      onTertiary: setOverlay.canViewLeaderboard ? returnToHub : (): void => {},
       practiceHint: !setWonPlayer ? DAILY_FRITZ_CLASSIC_PRACTICE_HINT : null,
     };
   }

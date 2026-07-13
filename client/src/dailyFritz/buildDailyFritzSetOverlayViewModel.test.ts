@@ -32,6 +32,8 @@ function makeActions() {
     loadToday: vi.fn(),
     openLeaderboardForRunDate: vi.fn(),
     clearOverlay: vi.fn(),
+    retryFinalSubmission: vi.fn(),
+    startPractice: vi.fn(),
   };
 }
 
@@ -91,5 +93,15 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
     );
     vm.onPrimary();
     expect(actions.submitCompletedGame).toHaveBeenCalledWith(game);
+  });
+
+  it('keeps completed submission retryable without discarding the result', () => {
+    const actions=makeActions();const vm=buildDailyFritzSetOverlayViewModel({kind:'final-error',completedGame,setResult:{...setResult,setWinner:'player'},error:'offline',currentHandIndex:3},actions,{});
+    expect(vm.primaryLabel).toBe('Retry submission');expect(vm.errorMessage).toBe('offline');vm.onPrimary();expect(actions.retryFinalSubmission).toHaveBeenCalledOnce();
+  });
+
+  it('offers Practice separately from the verified final result', () => {
+    const actions=makeActions();const vm=buildDailyFritzSetOverlayViewModel({kind:'final',completedGame,setResult:{...setResult,setWinner:'player',playerGamesWon:2},rank:4,canViewLeaderboard:true},actions,{});
+    expect(vm.primaryLabel).toBe('View Leaderboard');expect(vm.secondaryLabel).toBe('Practice vs Fritz');expect(vm.tertiaryLabel).toBe('Return Home');vm.onSecondary();expect(actions.startPractice).toHaveBeenCalledOnce();
   });
 });
