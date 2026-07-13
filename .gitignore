@@ -15,4 +15,6 @@
 server/.env
 client/.auth/
 client/coverage/
+client/playwright-report/
+client/test-results/
 reset-password.mjs

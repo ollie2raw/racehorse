@@ -27,7 +27,7 @@ async function waitForInteractiveMatch(page: import('@playwright/test').Page) {
   await expect(page.locator('.game-screen, .bot-match-screen').first()).toBeVisible({
     timeout: 20_000,
   });
-  await expect(page.locator('.wl-hand-area, .hand-area').first()).toBeVisible({
+  await expect(page.locator('.wl-hand-area:visible, .hand-area:visible').first()).toBeVisible({
     timeout: 20_000,
   });
 }

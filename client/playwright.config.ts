@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(clientDir, '..');
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
 
 export default defineConfig({
   testDir: './e2e',
@@ -13,7 +14,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
