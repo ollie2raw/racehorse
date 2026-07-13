@@ -24,6 +24,9 @@ import type {
   DailyFritzGameCompletionPayload,
   DailyFritzOverlayState,
 } from './dailyFritzScreenTypes';
+import { buildDailyFritzTranscript } from './dailyFritzTranscript';
+import { createDailyFritzChallengeIdentity } from './dailyFritzChallengeIdentity';
+import type { MoveEntry } from '../game/moveLogger';
 
 export type UseDailyFritzRunControllerParams = {
   today: DailyFritzTodayResponse | null;
@@ -284,11 +287,26 @@ export function useDailyFritzRunController({
     });
 
     try {
+      let transcript: import('@racehorse/game-core').DailyFritzTranscript | null = null;
+      try {
+        transcript = buildDailyFritzTranscript({
+          challengeId: run.challenge_id
+            ?? createDailyFritzChallengeIdentity(run.run_date).challengeId,
+          attemptId: run.attempt_id,
+          gameNumber,
+          handIndex: game.currentHandIndex,
+          handNumber: game.handsPlayed,
+          moveLog: game.moveLog as MoveEntry[],
+        });
+      } catch {
+        // Existing pre-verifier sessions finalize through the unranked legacy path.
+      }
       const recorded = await recordDailyFritzGame({
         attemptId: run.attempt_id,
         verifiedMatchId: run.verified_match_id,
         runDate: run.run_date,
         gameNumber,
+        transcript,
         playerScore: game.yourScore,
         fritzScore: game.botScore,
         movesUsed: game.movesUsed,

@@ -67,6 +67,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     setGuidedV2EventIndex,
     setIsGuidedV2OffLine,
     lastDailyFlowLabelRef,
+    getMoveLog,
     ports,
   } = args;
 
@@ -286,6 +287,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         dailyFritzPackage,
         dailyFritzHandIndex,
         matchRef.current,
+        getMoveLog(),
       );
       const source = cacheSnapshot?.promise ? 'advance-await-prefetch' : 'advance-fetch';
       const activeCache = prefetchCoordinator.ensureRequest(prefetchParams, source);
@@ -443,11 +445,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
           logDailyFritzHandComplete(result);
         }
-        if (isDailyFritzMode && dailyFritzPackage && !result.state.gameOver) {
-          prefetchCoordinator.startPrefetch(
-            buildDailyFritzPrefetchParams(dailyFritzPackage, dailyFritzHandIndex, result.state),
-          );
-        }
         ports.flashLastPlayed(null);
         const plan = reveal.planHandEndedReveal(result);
         if (isDailyFritzMode) setDailyFritzHandResult(plan.revealPayload);
@@ -457,8 +454,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       applyBotActionUiEffects(result, ports, opponentLabel, isMuted);
     },
     [
-      dailyFritzHandIndex,
-      dailyFritzPackage,
       isDailyFritzMode,
       isMuted,
       lastDailyFlowLabelRef,

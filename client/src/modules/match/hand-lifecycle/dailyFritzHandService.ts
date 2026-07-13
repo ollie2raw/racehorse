@@ -18,6 +18,9 @@ import {
 import { dailyFritzDebugLog } from '../../daily/dailyFritzMatchDiagnostics.ts';
 import type { BotActionResult } from '../runtime/botEngine.ts';
 import type { DailyFritzPrefetchParams } from './types.ts';
+import type { MoveEntry } from '../../../game/moveLogger.ts';
+import { buildDailyFritzTranscript } from '../../../dailyFritz/dailyFritzTranscript.ts';
+import { createDailyFritzChallengeIdentity } from '../../../dailyFritz/dailyFritzChallengeIdentity.ts';
 
 export function computeDailyFritzMinAdvanceAtOnHandComplete(): number {
   const scheduleMode = resolveHandRevealScheduleMode(true);
@@ -47,28 +50,43 @@ export function buildDailyFritzPrefetchParams(
   dailyFritzPackage: DailyFritzStartResponse,
   dailyFritzHandIndex: number,
   match: BotMatchState,
+  moveLog: readonly MoveEntry[],
 ): DailyFritzPrefetchParams {
+  const gameNumber = (dailyFritzPackage.current_game_number ?? 1) as DailyFritzSetGameNumber;
+  let transcript: DailyFritzPrefetchParams['transcript'] = null;
+  try {
+    transcript = buildDailyFritzTranscript({
+      challengeId: dailyFritzPackage.challenge_id
+        ?? createDailyFritzChallengeIdentity(dailyFritzPackage.run_date).challengeId,
+      attemptId: dailyFritzPackage.attempt_id,
+      gameNumber,
+      handIndex: dailyFritzHandIndex,
+      handNumber: match.handNumber,
+      moveLog,
+    });
+  } catch {
+    // Pre-verifier persisted logs may not contain placement positions.
+  }
   return {
     dailyFritzPackage,
     dailyFritzHandIndex,
-    gameNumber: (dailyFritzPackage.current_game_number ?? 1) as DailyFritzSetGameNumber,
-    completedHandScores: {
-      you: match.players.you.score,
-      fritz: match.players.bot.score,
-    },
+    gameNumber,
+    transcript,
+    completedHandScores: { you: match.players.you.score, fritz: match.players.bot.score },
   };
 }
 
 export function createDailyFritzNextHandRequest(
   params: DailyFritzPrefetchParams,
 ): Promise<DailyFritzNextHandResponse> {
-  const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, completedHandScores } = params;
+  const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript, completedHandScores } = params;
   return nextDailyFritzHand({
     attemptId: dailyFritzPackage.attempt_id,
     verifiedMatchId: dailyFritzPackage.verified_match_id,
     runDate: dailyFritzPackage.run_date,
     gameNumber,
     completedHandIndex: dailyFritzHandIndex,
+    transcript,
     completedHandScores,
     timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
   });

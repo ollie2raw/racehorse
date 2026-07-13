@@ -40,6 +40,7 @@ export function buildHandLifecycleArgs(
     setGuidedV2EventIndex: guidedV2Coordination.setGuidedV2EventIndex,
     setIsGuidedV2OffLine: guidedV2Coordination.setIsGuidedV2OffLine,
     lastDailyFlowLabelRef: refs.lastDailyFlowLabelRef,
+    getMoveLog: () => sources.replayRecorder.getMoveLog(),
     ports,
   };
 }

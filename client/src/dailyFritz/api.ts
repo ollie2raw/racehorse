@@ -204,7 +204,7 @@ export interface DailyFritzLeaderboardRow {
   }>;
   is_current_user?: boolean;
 }
-export type DailyFritzVerificationStatus = 'verified' | 'legacy_unverified';
+export type DailyFritzVerificationStatus = 'in_progress' | 'pending_verification' | 'verified' | 'rejected' | 'legacy_unverified';
 export type DailyFritzHistoryEntry = { challenge_date: string; player_score: number; fritz_score: number; won: boolean; completed_at: string | null; verification_status: DailyFritzVerificationStatus };
 export async function getDailyFritzHistory(limit = 5): Promise<DailyFritzHistoryEntry[]> {
   const result = await apiGet<{ ok: true; results: DailyFritzHistoryEntry[] }>(`/api/daily-fritz/history?limit=${Math.max(1,Math.min(10,Math.floor(limit)))}`);
@@ -270,6 +270,9 @@ export interface DailyFritzTodayResponse {
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
   verification_protocol_version?: number;
+  game_rules_version?: number;
+  fritz_policy_version?: number;
+  verifier_version?: number;
   competitive_verification_available?: boolean;
   verification_status?: DailyFritzVerificationStatus;
 }
@@ -282,6 +285,10 @@ export interface DailyFritzStartResponse {
   challenge_id?: string;
   rules_version?: number;
   seed_version?: number;
+  verification_protocol_version?: number;
+  game_rules_version?: number;
+  fritz_policy_version?: number;
+  verifier_version?: number;
   time_zone?: 'America/Los_Angeles';
   current_hand_index: number;
   current_game_scores?: { you: number; fritz: number };
@@ -365,7 +372,11 @@ export async function startDailyFritz(options?: {
 }): Promise<DailyFritzStartResponse> {
   const response = await dfRequestJsonWithTimeout<DailyFritzStartResponse>('/api/daily-fritz/start', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      verification_protocol_version: (await import('@racehorse/game-core')).DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+      game_rules_version: (await import('@racehorse/game-core')).GAME_RULES_VERSION,
+      fritz_policy_version: (await import('@racehorse/game-core')).FRITZ_POLICY_VERSION,
+    }),
     timeoutMs: options?.timeoutMs,
   });
   const normalized = normalizeDailyFritzStartDrawFields(response);
@@ -434,6 +445,7 @@ export async function nextDailyFritzHand(input: {
   runDate: string;
   gameNumber?: DailyFritzSetGameNumber;
   completedHandIndex: number;
+  transcript: import('@racehorse/game-core').DailyFritzTranscript | null;
   completedHandScores: { you: number; fritz: number };
   timeoutMs?: number;
 }): Promise<DailyFritzNextHandResponse> {
@@ -467,7 +479,9 @@ export async function nextDailyFritzHand(input: {
         run_date: input.runDate,
         game_number: input.gameNumber ?? 1,
         completed_hand_index: input.completedHandIndex,
-        completed_hand_scores: input.completedHandScores,
+        ...(input.transcript
+          ? { transcript: input.transcript }
+          : { completed_hand_scores: input.completedHandScores }),
       },
       { signal: controller.signal },
     );
@@ -610,6 +624,7 @@ export async function recordDailyFritzGame(input: {
   verifiedMatchId: string;
   runDate: string;
   gameNumber: DailyFritzSetGameNumber;
+  transcript: import('@racehorse/game-core').DailyFritzTranscript | null;
   playerScore: number;
   fritzScore: number;
   movesUsed: number;
@@ -621,10 +636,14 @@ export async function recordDailyFritzGame(input: {
       verified_match_id: input.verifiedMatchId,
       run_date: input.runDate,
       game_number: input.gameNumber,
-      player_score: input.playerScore,
-      fritz_score: input.fritzScore,
-      moves_used: input.movesUsed,
-      hands_played: input.handsPlayed,
+      ...(input.transcript
+        ? { transcript: input.transcript }
+        : {
+            player_score: input.playerScore,
+            fritz_score: input.fritzScore,
+            moves_used: input.movesUsed,
+            hands_played: input.handsPlayed,
+          }),
     }),
   );
 }

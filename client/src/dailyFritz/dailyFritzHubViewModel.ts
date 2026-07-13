@@ -160,7 +160,7 @@ export function buildDailyFritzHubViewModel(
     ? 'Return tomorrow for a new set'
     : today?.competitive_verification_available === false
       ? 'Daily challenge — unranked'
-      : 'Leaderboard eligible';
+      : 'Verified Daily Challenge';
   const opponentBadgeLabel = isComplete ? 'Set Complete' : isStarted ? 'Resume Available' : 'Bot Opponent';
   const resetCountdownLabel = formatCountdownHms(secondsUntilNextPacificMidnight(new Date()));
 

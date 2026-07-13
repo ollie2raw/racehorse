@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { createDeterministicDoubleSixDeal } from '@racehorse/game-core';
 import {
   dailyFritzDrawTilesMatchWinner,
   dailyFritzTilePipSum,
   generateDailyFritzRun,
+  generateSingleDailyFritzGameHand,
+  getDailyFritzGameSeed,
   getDailyFritzDrawTiles,
   getDailyFritzDrawWinner,
   resolveDailyFritzDrawTiles,
@@ -72,5 +75,19 @@ describe('Daily Fritz scripted draw tiles', () => {
     });
     expectTilesMatchWinner(resolved, drawWinner, 'resolved game 2');
     expect(resolved).not.toEqual(misaligned);
+  });
+
+  it('uses the same deterministic deal vector as game-core', () => {
+    const hand = generateSingleDailyFritzGameHand(SAMPLE_RUN_DATE, 2, 4, 7);
+    const core = createDeterministicDoubleSixDeal({
+      seed: `${getDailyFritzGameSeed(SAMPLE_RUN_DATE, 2)}:hand:4`,
+      tilesPerPlayer: 7,
+    });
+    expect(hand).toEqual({
+      player_tiles: core.playerTiles,
+      fritz_tiles: core.opponentTiles,
+      boneyard: core.boneyard,
+      locked: core.deadTiles,
+    });
   });
 });

@@ -38,13 +38,12 @@ export class HandPrefetchCoordinator {
   }
 
   startPrefetch(params: DailyFritzPrefetchParams): void {
-    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, completedHandScores } = params;
+    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
     dailyFritzDebugLog('[daily-fritz-hand] requesting next hand', {
       source: 'prefetch',
       gameNumber,
       completedHandIndex: dailyFritzHandIndex,
-      yourScore: completedHandScores.you,
-      fritzScore: completedHandScores.fritz,
+      transcriptActions: transcript?.actions.length ?? 0,
     });
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const cache: DailyFritzNextHandCacheEntry = {
@@ -54,7 +53,8 @@ export class HandPrefetchCoordinator {
         runDate: dailyFritzPackage.run_date,
         gameNumber,
         completedHandIndex: dailyFritzHandIndex,
-        completedHandScores,
+        transcript,
+        completedHandScores: params.completedHandScores,
         timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
       }),
       result: null,
@@ -97,7 +97,7 @@ export class HandPrefetchCoordinator {
       return this.cache;
     }
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, completedHandScores } = params;
+    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
     this.cache = {
       promise: nextDailyFritzHand({
         attemptId: dailyFritzPackage.attempt_id,
@@ -105,7 +105,8 @@ export class HandPrefetchCoordinator {
         runDate: dailyFritzPackage.run_date,
         gameNumber,
         completedHandIndex: dailyFritzHandIndex,
-        completedHandScores,
+        transcript,
+        completedHandScores: params.completedHandScores,
         timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
       }),
       result: null,
@@ -116,8 +117,7 @@ export class HandPrefetchCoordinator {
       source,
       gameNumber,
       completedHandIndex: dailyFritzHandIndex,
-      yourScore: completedHandScores.you,
-      fritzScore: completedHandScores.fritz,
+      transcriptActions: transcript?.actions.length ?? 0,
     });
     return this.cache;
   }

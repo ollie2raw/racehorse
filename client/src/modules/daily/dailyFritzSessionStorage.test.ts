@@ -8,7 +8,7 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
   const match = createBotMatch(60, 7);
   match.players.you.score = 35;
   match.players.bot.score = 20;
-  return { schemaVersion:3,challenge:createDailyFritzChallengeIdentity('2026-07-12'),classification:'official',attemptId:'attempt-1',gameNumber:1,currentHandIndex:2,lifecyclePhase:'active_hand',match,handResult:null,movesUsed:4,moveLog:[],startedAt:'2026-07-12T18:00:00.000Z',lastTransitionAt:'2026-07-12T18:01:00.000Z',revision:2,...overrides };
+  return { schemaVersion:4,challenge:createDailyFritzChallengeIdentity('2026-07-12'),classification:'official',attemptId:'attempt-1',gameNumber:1,currentHandIndex:2,lifecyclePhase:'active_hand',match,handResult:null,movesUsed:4,moveLog:[],transcript:null,verificationPhase:'collecting',startedAt:'2026-07-12T18:00:00.000Z',lastTransitionAt:'2026-07-12T18:01:00.000Z',revision:2,...overrides };
 }
 
 describe('Daily Fritz v3 session persistence', () => {

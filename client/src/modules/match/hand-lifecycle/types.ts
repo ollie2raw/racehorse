@@ -8,6 +8,8 @@ import type {
   DailyFritzStartResponse,
 } from '../../daily/dailyFritzContracts.ts';
 import type { MatchLifecycleController } from '../controllers/MatchLifecycleController.ts';
+import type { MoveEntry } from '../../../game/moveLogger.ts';
+import type { DailyFritzTranscript } from '@racehorse/game-core';
 
 export type HandLifecyclePorts = {
   invalidateLocalRuns: () => void;
@@ -43,6 +45,7 @@ export type DailyFritzPrefetchParams = {
   dailyFritzPackage: DailyFritzStartResponse;
   dailyFritzHandIndex: number;
   gameNumber: DailyFritzSetGameNumber;
+  transcript: DailyFritzTranscript | null;
   completedHandScores: { you: number; fritz: number };
 };
 
@@ -88,6 +91,7 @@ export type UseHandLifecycleArgs = {
   setIsGuidedV2OffLine: React.Dispatch<React.SetStateAction<boolean>>;
   lastDailyFlowLabelRef: React.MutableRefObject<string>;
   ports: HandLifecyclePorts;
+  getMoveLog: () => readonly MoveEntry[];
 };
 
 export type UseHandLifecycleResult = {

@@ -106,14 +106,16 @@ export function normalizeDailyFritzStatus(value: unknown): DailyFritzRunStatus |
 export function isTile(value: unknown): value is { low: number; high: number } {
   if (!value || typeof value !== 'object') return false;
   const rec = value as Record<string, unknown>;
-  return Number.isInteger(rec.low) && Number.isInteger(rec.high);
+  return Number.isInteger(rec.low) && Number.isInteger(rec.high)
+    && Number(rec.low) >= 0 && Number(rec.low) <= 6
+    && Number(rec.high) >= 0 && Number(rec.high) <= 6;
 }
 
 export function normalizeTile(value: unknown): { low: number; high: number } | null {
   if (Array.isArray(value) && value.length === 2) {
     const low = Number(value[0]);
     const high = Number(value[1]);
-    if (!Number.isInteger(low) || !Number.isInteger(high)) return null;
+    if (!Number.isInteger(low) || !Number.isInteger(high) || low < 0 || high < 0 || low > 6 || high > 6) return null;
     return { low: Math.min(low, high), high: Math.max(low, high) };
   }
   if (!isTile(value)) return null;
@@ -605,7 +607,9 @@ export async function buildDailyFritzLeaderboard(
 export function isDailyFritzAttemptLeaderboardEligible(
   attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
 ): boolean {
-  return attempt.status === 'completed' && attempt.result?.verification_status === 'verified';
+  return attempt.status === 'completed'
+    && attempt.result?.verification_status === 'verified'
+    && attempt.result?.verification_protocol_version === 1;
 }
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(

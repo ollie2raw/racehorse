@@ -5,6 +5,7 @@ import type { BotHandReveal } from '../match/types.ts';
 import { pruneNonPlayableDailyFritzSnapshot } from './dailyFritzSessionStorage';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
 import { persistDailyFritzSnapshot, type DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
+import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
@@ -48,7 +49,7 @@ export function useDailyFritzSessionPersistence({
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
     const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
-      schemaVersion: 3,
+      schemaVersion: 4,
       challenge: createDailyFritzChallengeIdentity(runDate),
       classification: 'official',
       attemptId,
@@ -59,6 +60,21 @@ export function useDailyFritzSessionPersistence({
       handResult,
       movesUsed,
       moveLog: [...moveLog],
+      transcript: (() => {
+        try {
+          return buildDailyFritzTranscript({
+            challengeId: createDailyFritzChallengeIdentity(runDate).challengeId,
+            attemptId,
+            gameNumber: gameNumber as 1 | 2 | 3,
+            handIndex: dailyFritzHandIndex,
+            handNumber: match.handNumber,
+            moveLog,
+          });
+        } catch {
+          return null;
+        }
+      })(),
+      verificationPhase: match.handOver || match.gameOver ? 'pending' : 'collecting',
       startedAt: startedAtRef.current,
       lastTransitionAt: now,
       revision: ++revisionRef.current,

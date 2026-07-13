@@ -1,5 +1,11 @@
 import { createHash } from 'crypto';
 import type { Tile } from './game/types';
+import {
+  createDeterministicDoubleSixDeal,
+  createDeterministicRandom,
+  generateFullSet,
+  shuffleDeterministically,
+} from '@racehorse/game-core';
 
 export type DailyFritzTier = 'rookie' | 'standard' | 'elite' | 'master';
 export type DailyFritzRunStatus = 'live' | 'archived' | 'invalidated';
@@ -79,47 +85,12 @@ export interface DailyFritzSetResult {
   skunkBy?: 'player' | 'fritz' | null;
 }
 
-function hashSeedToUint32(seed: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash ^= seed.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function createSeededPrng(seed: string): () => number {
-  let state = hashSeedToUint32(seed) || 0x9e3779b9;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}
-
 function cloneTile(tile: Tile): Tile {
   const low = Math.min(tile.low, tile.high);
   const high = Math.max(tile.low, tile.high);
   return { low, high };
 }
 
-function buildDoubleSixSet(): Tile[] {
-  const tiles: Tile[] = [];
-  for (let high = 0; high <= 6; high += 1) {
-    for (let low = 0; low <= high; low += 1) {
-      tiles.push({ low, high });
-    }
-  }
-  return tiles;
-}
-
-function shuffleWithPrng<T>(items: readonly T[], rand: () => number): T[] {
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
 
 export function getDailyFritzSeed(runDate: string): string {
   return `daily-fritz-${runDate}`;
@@ -130,8 +101,7 @@ export function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSet
 }
 
 export function getDailyFritzDrawWinnerFromGameSeed(gameSeed: string): DailyFritzDrawWinner {
-  const prng = createSeededPrng(`${gameSeed}:draw-winner`);
-  return prng() < 0.5 ? 'you' : 'bot';
+  return createDeterministicRandom(`${gameSeed}:draw-winner`).next() < 0.5 ? 'you' : 'bot';
 }
 
 export function getDailyFritzDrawWinner(
@@ -169,8 +139,10 @@ export function getDailyFritzDrawTilesFromGameSeed(
   gameSeed: string,
   drawWinner: DailyFritzDrawWinner,
 ): DailyFritzDrawTiles {
-  const prng = createSeededPrng(`${gameSeed}:draw-tiles`);
-  const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
+  const shuffled = shuffleDeterministically(
+    generateFullSet(6),
+    createDeterministicRandom(`${gameSeed}:draw-tiles`),
+  ).map(cloneTile);
 
   for (let i = 0; i < shuffled.length; i += 1) {
     for (let j = i + 1; j < shuffled.length; j += 1) {
@@ -285,14 +257,16 @@ export function generateSingleDailyFritzHand(
   handIndex: number,
   dealSize: 7 | 14,
 ): DailyFritzHandDeal {
-  const prng = createSeededPrng(`${seed}:hand:${handIndex}`);
-  const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
-  const playerTiles = shuffled.slice(0, dealSize);
-  const fritzTiles  = shuffled.slice(dealSize, dealSize * 2);
-  const remaining   = shuffled.slice(dealSize * 2);
-  const locked      = remaining.slice(Math.max(0, remaining.length - 2)).map(cloneTile);
-  const boneyard    = remaining.map(cloneTile);
-  return { player_tiles: playerTiles, fritz_tiles: fritzTiles, boneyard, locked };
+  const deal = createDeterministicDoubleSixDeal({
+    seed: `${seed}:hand:${handIndex}`,
+    tilesPerPlayer: dealSize,
+  });
+  return {
+    player_tiles: deal.playerTiles,
+    fritz_tiles: deal.opponentTiles,
+    boneyard: deal.boneyard,
+    locked: deal.deadTiles,
+  };
 }
 
 export function generateSingleDailyFritzGameHand(
@@ -301,7 +275,16 @@ export function generateSingleDailyFritzGameHand(
   handIndex: number,
   dealSize: 7 | 14,
 ): DailyFritzHandDeal {
-  return generateSingleDailyFritzHand(getDailyFritzGameSeed(runDate, gameNumber), handIndex, dealSize);
+  const deal = createDeterministicDoubleSixDeal({
+    seed: `${getDailyFritzGameSeed(runDate, gameNumber)}:hand:${handIndex}`,
+    tilesPerPlayer: dealSize,
+  });
+  return {
+    player_tiles: deal.playerTiles,
+    fritz_tiles: deal.opponentTiles,
+    boneyard: deal.boneyard,
+    locked: deal.deadTiles,
+  };
 }
 
 export function generateDailyFritzRun(
@@ -315,18 +298,15 @@ export function generateDailyFritzRun(
   const gameOneSeed = getDailyFritzGameSeed(runDate, 1);
 
   for (let handIndex = 0; handIndex < 12; handIndex += 1) {
-    const prng = createSeededPrng(`${gameOneSeed}:hand:${handIndex}`);
-    const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
-    const playerTiles = shuffled.slice(0, dealSize);
-    const fritzTiles = shuffled.slice(dealSize, dealSize * 2);
-    const remaining = shuffled.slice(dealSize * 2);
-    const locked = remaining.slice(Math.max(0, remaining.length - 2)).map(cloneTile);
-    const boneyard = remaining.map(cloneTile);
+    const deal = createDeterministicDoubleSixDeal({
+      seed: `${gameOneSeed}:hand:${handIndex}`,
+      tilesPerPlayer: dealSize,
+    });
     handDeals.push({
-      player_tiles: playerTiles,
-      fritz_tiles: fritzTiles,
-      boneyard,
-      locked,
+      player_tiles: deal.playerTiles,
+      fritz_tiles: deal.opponentTiles,
+      boneyard: deal.boneyard,
+      locked: deal.deadTiles,
     });
   }
 

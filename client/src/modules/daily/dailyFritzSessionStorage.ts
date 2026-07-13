@@ -3,12 +3,13 @@ import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { BotHandReveal } from '../match/types.ts';
 import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
 import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type DailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
+import type { DailyFritzTranscript } from '@racehorse/game-core';
 
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 3;
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 4;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 3;
+  schemaVersion: 4;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
@@ -19,6 +20,8 @@ export type DailyFritzPersistedSnapshot = {
   handResult: BotHandReveal | null;
   movesUsed: number;
   moveLog: MoveEntry[];
+  transcript: DailyFritzTranscript | null;
+  verificationPhase: 'collecting' | 'pending';
   startedAt: string;
   lastTransitionAt: string;
   revision: number;
@@ -64,7 +67,7 @@ function validHandResult(value: unknown): value is BotHandReveal | null {
 }
 
 export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date()): DailyFritzPersistedSnapshot | null {
-  if (!object(value) || value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION || value.classification !== 'official') return null;
+  if (!object(value) || (value.schemaVersion !== 3 && value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION) || value.classification !== 'official') return null;
   if (!validChallenge(value.challenge) || !isDailyFritzChallengeCurrent(value.challenge, now)) return null;
   if (typeof value.attemptId !== 'string' || !value.attemptId || !nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex)) return null;
   if (!['active_hand','hand_transition','completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;
@@ -74,7 +77,13 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
   if (phase === 'active_hand' && (match.handOver || match.gameOver)) return null;
   if (phase === 'hand_transition' && (!match.handOver || match.gameOver || value.handResult === null)) return null;
   if (phase === 'completed' && !match.gameOver) return null;
-  return value as unknown as DailyFritzPersistedSnapshot;
+  const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
+  return {
+    ...value,
+    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
+    verificationPhase,
+  } as unknown as DailyFritzPersistedSnapshot;
 }
 
 export function buildDailyFritzStorageKey(attemptId: string, gameNumber: number): string {
@@ -101,8 +110,17 @@ export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFri
   if (typeof window === 'undefined') return false;
   try {
     const existingRaw = window.sessionStorage.getItem(storageKey);
-    const existing = existingRaw ? parseDailyFritzPersistedSnapshot(JSON.parse(existingRaw)) : null;
-    if (existing && (existing.revision > snapshot.revision || Date.parse(existing.lastTransitionAt) > Date.parse(snapshot.lastTransitionAt))) return false;
+    const existing = existingRaw ? JSON.parse(existingRaw) as unknown : null;
+    if (object(existing)) {
+      const revision = Number(existing.revision);
+      const transitionAt = typeof existing.lastTransitionAt === 'string'
+        ? Date.parse(existing.lastTransitionAt)
+        : Number.NaN;
+      if (
+        (Number.isInteger(revision) && revision > snapshot.revision)
+        || (Number.isFinite(transitionAt) && transitionAt > Date.parse(snapshot.lastTransitionAt))
+      ) return false;
+    }
     window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
     return true;
   } catch { return false; }
