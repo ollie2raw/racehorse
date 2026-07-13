@@ -12,6 +12,7 @@ import { buildDailyFritzHubViewModel } from './dailyFritzHubViewModel';
 import { DailyFritzHubView } from './DailyFritzHubView';
 import { DailyFritzEmbeddedMatchView } from './DailyFritzEmbeddedMatchView';
 import './dailyFritz.css';
+import { getDailyFritzHistory, type DailyFritzHistoryEntry } from './api';
 
 export default function DailyFritzScreen({
   user,
@@ -24,6 +25,7 @@ export default function DailyFritzScreen({
   onOpenAccount,
   onBack,
   onNavigate,
+  socket,
 }: DailyFritzScreenProps) {
   const {
     today,
@@ -49,6 +51,7 @@ export default function DailyFritzScreen({
     finishEmbeddedRun,
     handleDailyFritzGameComplete,
     clearSetOverlay,
+    retryFinalSubmission,
     hasEmbeddedMatch,
   } = useDailyFritzRunController({
     today,
@@ -58,6 +61,8 @@ export default function DailyFritzScreen({
   });
 
   const [countdownTick, setCountdownTick] = useState(0);
+  const [history, setHistory] = useState<DailyFritzHistoryEntry[]>([]);
+  useEffect(() => { if (!user?.id) return; void getDailyFritzHistory(5).then(setHistory).catch(() => setHistory([])); }, [user?.id, today?.attempt_status]);
 
   const loadHeroAsset = useCallback(
     () => import('../assets/dailyFritz/playvsfritzdone.webp'),
@@ -85,13 +90,14 @@ export default function DailyFritzScreen({
   }, [onNavigate]);
 
   const handleSetAction = useCallback(() => {
+    if (today?.attempt_status === 'completed') { openLeaderboard(); return; }
     const isStarted = today?.attempt_status === 'started';
     if (isStarted) {
       void continueSet();
       return;
     }
     void beginRun();
-  }, [beginRun, continueSet, today?.attempt_status]);
+  }, [beginRun, continueSet, openLeaderboard, today?.attempt_status]);
 
   const setOverlayConfig = useMemo(() => {
     if (!setOverlay) return null;
@@ -110,6 +116,8 @@ export default function DailyFritzScreen({
         },
         openLeaderboardForRunDate,
         clearOverlay: clearSetOverlay,
+        retryFinalSubmission: () => { void retryFinalSubmission(); },
+        startPractice: () => { clearSetOverlay(); closeEmbeddedRun(); onNavigate?.('botSetup'); },
       },
       {
         todayRunDate: today?.run_date,
@@ -131,6 +139,7 @@ export default function DailyFritzScreen({
     handleDailyFritzGameComplete,
     closeEmbeddedRun,
     clearSetOverlay,
+    retryFinalSubmission,
   ]);
 
   const todaySetResult = useMemo(
@@ -168,6 +177,7 @@ export default function DailyFritzScreen({
         onDailyFritzComplete={() => {
           void finishEmbeddedRun();
         }}
+        socket={socket}
       />
     );
   }
@@ -198,6 +208,8 @@ export default function DailyFritzScreen({
       onOpenAccount={onOpenAccount}
       onSetAction={handleSetAction}
       onOpenLeaderboard={openLeaderboard}
+      history={history}
+      onPractice={() => onNavigate?.('botSetup')}
     />
   );
 }

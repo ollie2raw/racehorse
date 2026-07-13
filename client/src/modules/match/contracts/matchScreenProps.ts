@@ -5,6 +5,7 @@ import type { GhostProfileSummary } from '../../ghost/ghostContracts.ts';
 import type { AppMode } from '../../../types.ts';
 import type { BotDealSize } from '../runtime/botEngine.ts';
 import type { FritzTier } from '../../fritz/fritzConfig.ts';
+import type { BotMatchState } from '../runtime/botEngine.ts';
 
 export interface BotMatchScreenProps {
   onBack: () => void;
@@ -30,6 +31,7 @@ export interface BotMatchScreenProps {
   /** Parent-owned stable instance key (Daily Fritz embedded match). Used for remount diagnostics. */
   matchInstanceKey?: string | null;
   onDailyFritzComplete?: (() => void) | null;
+  onPublicStateChange?: ((state: BotMatchState) => void) | null;
   dailyFritzSetOverlay?: DailyFritzSetOverlayViewModel | null;
   onDailyFritzGameComplete?: ((result: {
     winner: 'you' | 'bot' | null;

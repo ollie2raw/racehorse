@@ -12,3 +12,4 @@ export type {
   MatchEventListener,
 } from './events.ts';
 export type { MatchCommand, MatchCommandType } from './commands.ts';
+export * from './spectator.ts';

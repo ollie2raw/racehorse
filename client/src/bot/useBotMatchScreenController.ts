@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { BotMatchScreenViewProps } from './botMatchScreenViewTypes';
 import type { BotMatchScreenProps } from './botMatchScreenTypes';
 import { useMatchUiChrome } from './useMatchUiChrome';
@@ -36,6 +37,7 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
   });
 
   const bootstrap = useBotMatchBootstrap({ props, guidedBoot });
+  useEffect(() => { if (props.mode === 'daily-fritz') props.onPublicStateChange?.(bootstrap.match); }, [bootstrap.match, props.mode, props.onPublicStateChange]);
 
   const refs = useBotMatchRefs({
     initialMoveLog: bootstrap.resumablePersistedDailyFritzMatch?.moveLog,

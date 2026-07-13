@@ -63,6 +63,8 @@ export const APPROVED_SOCKET_REGISTRAR_FILES = [
   'tournament/registerTournamentSocketHandlers.ts',
   'matchmaking/registerMatchmakingSocketHandlers.ts',
   'friends/registerFriendsSocketHandlers.ts',
+  'live/LiveNowScreen.tsx',
+  'dailyFritz/DailyFritzBroadcastControl.tsx',
 ] as const;
 
 /**
@@ -81,6 +83,12 @@ export const GRANDFATHERED_DIRECT_SOCKET_ON: ReadonlyArray<{
  * Canonical event catalog. Every enforced entry must appear exactly once in its declared registrar.
  */
 export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
+  { socketEvent:'spectator:session_added',owner:'spectator.discovery',registrar:'live/LiveNowScreen.tsx',boundedContext:'social',registrationKind:'raw',enforced:true,description:'Live session discovery added' },
+  { socketEvent:'spectator:session_updated',owner:'spectator.discovery',registrar:'live/LiveNowScreen.tsx',boundedContext:'social',registrationKind:'raw',enforced:true,description:'Live session discovery updated' },
+  { socketEvent:'spectator:session_removed',owner:'spectator.discovery',registrar:'live/LiveNowScreen.tsx',boundedContext:'social',registrationKind:'raw',enforced:true,description:'Live session discovery removed' },
+  { socketEvent:'spectator:update',owner:'spectator.viewer',registrar:'live/LiveNowScreen.tsx',boundedContext:'social',registrationKind:'raw',enforced:true,description:'Sanitized spectator snapshot update' },
+  { socketEvent:'spectator:ended',owner:'spectator.viewer',registrar:'live/LiveNowScreen.tsx',boundedContext:'social',registrationKind:'raw',enforced:true,description:'Spectator source ended' },
+  { socketEvent:'spectator:count',owner:'spectator.viewer',registrar:'live/LiveNowScreen.tsx',additionalRegistrars:['dailyFritz/DailyFritzBroadcastControl.tsx'],boundedContext:'social',registrationKind:'raw',enforced:true,description:'Server authoritative spectator count' },
   {
     socketEvent: 'state:update',
     normalizedEvent: 'STATE_UPDATE',
@@ -156,6 +164,7 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
       'tournament/registerTournamentSocketHandlers.ts',
       'matchmaking/registerMatchmakingSocketHandlers.ts',
       'friends/registerFriendsSocketHandlers.ts',
+      'live/LiveNowScreen.tsx',
     ],
     boundedContext: 'connection',
     registrationKind: 'raw',
@@ -169,6 +178,7 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     additionalRegistrars: [
       'multiplayer/useFriendSocketReachability.ts',
       'matchmaking/registerMatchmakingSocketHandlers.ts',
+      'live/LiveNowScreen.tsx',
     ],
     boundedContext: 'connection',
     registrationKind: 'raw',

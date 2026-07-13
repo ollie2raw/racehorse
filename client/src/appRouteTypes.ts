@@ -42,7 +42,8 @@ export type AppMode =
   | 'tournament'
   | 'leaderboard'
   | 'profile'
-  | 'feed';
+  | 'feed'
+  | 'live';
 
 /** Shell chrome: auth-modal wrapper, fallback host, layout class, invite overlay. */
 export type AppRoutesShellProps = {

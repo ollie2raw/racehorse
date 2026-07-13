@@ -14,6 +14,7 @@ import cors, { type CorsOptions } from 'cors';
 import http from 'http';
 import { createHash, randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
+import { registerSpectatorHandlersIfEnabled } from './spectator/spectatorIntegration';
 import {
   getGhostProfileSummary,
   getGhostProfileSummaryByUsername,
@@ -634,6 +635,7 @@ io.on('connection', (socket: Socket) => {
     console.log(`[socket.io] transport upgraded id=${socket.id} -> ${transport.name}`);
   });
   installSocketRateLimit(socket);
+  registerSpectatorHandlersIfEnabled(io, socket);
 
   /* Matchmaking queue handlers — additive, does not modify private-match flow. */
   registerMatchmakingHandlers(io, socket, (code) => broadcastStateUpdate(code));

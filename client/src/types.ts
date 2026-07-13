@@ -99,4 +99,5 @@ export type AppMode =
   | 'tournament'
   | 'leaderboard'
   | 'profile'
-  | 'feed';
+  | 'feed'
+  | 'live';

@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
 import type { AppMode } from '../types';
+import type { Socket } from 'socket.io-client';
 import type {
   DailyFritzSetGameNumber,
   DailyFritzSetGameResult,
@@ -41,6 +42,7 @@ export interface DailyFritzScreenProps {
   onOpenAccount?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
+  socket: Socket | null;
 }
 
 export type DailyFritzOverlayState =

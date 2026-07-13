@@ -10,6 +10,7 @@ import {
 } from './journey/journeyRuntime';
 import { markJourneyNodeCompleted } from './journey/journeyStorage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { isSpectatorModeEnabled, resolveSpectatorGatedMode } from './config/spectatorModeFeature';
 
 const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
 const RacehorseJourneyScreen = React.lazy(() => import('./journey/RacehorseJourneyScreen'));
@@ -40,6 +41,8 @@ const GuidedMatchAnnotatorScreen = React.lazy(() =>
 const LearnHowToPlayRacehorse = React.lazy(() => import('./learn/LearnHowToPlayRacehorse'));
 const LearnPlayer = React.lazy(() => import('./learn/LearnPlayer'));
 const WeeklyStatsScreen = React.lazy(() => import('./stats/WeeklyStatsScreen'));
+const spectatorModeEnabled = isSpectatorModeEnabled();
+const LiveNowScreen = spectatorModeEnabled ? React.lazy(() => import('./live/LiveNowScreen')) : null;
 
 export default function AppRoutes({
   shell,
@@ -61,6 +64,10 @@ export default function AppRoutes({
     friendInvitePopup,
   } = shell;
   const { appMode, setAppMode } = navigation;
+  React.useEffect(() => {
+    const resolved = resolveSpectatorGatedMode(appMode, spectatorModeEnabled);
+    if (resolved !== appMode) setAppMode(resolved);
+  }, [appMode, setAppMode]);
   const {
     handleOpenAuthModal,
     handleOpenAccountModal,
@@ -157,7 +164,7 @@ export default function AppRoutes({
     attachAssignedTournamentMatch,
   } = tournamentProps;
 
-  if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
+  if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && (appMode === 'home' || (appMode === 'live' && !spectatorModeEnabled))) {
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Home…" />}>
         <RacehorseHomeScreen
@@ -479,6 +486,7 @@ export default function AppRoutes({
           <DailyFritzScreen
             user={authUser}
             profile={authProfile}
+            socket={socket}
             ghostProfile={ghostProfile}
             onGhostProfileChange={setGhostProfile}
             onProfileRefresh={refreshAuthProfile}
@@ -491,6 +499,16 @@ export default function AppRoutes({
 
         </Suspense>
       </div>
+    );
+  }
+
+  if (appMode === 'live' && spectatorModeEnabled && LiveNowScreen) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Live Now…" />}>
+          <LiveNowScreen socket={socket} connect={social.connect} onBack={() => setAppMode('home')} />
+        </Suspense>
+      </div>,
     );
   }
 
