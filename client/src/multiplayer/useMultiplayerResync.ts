@@ -18,6 +18,11 @@ import {
   selectMatchStarted,
 } from './session/sessionStateMachine';
 import type { SessionEvent, SessionSnapshot } from './session/sessionTypes';
+import {
+  beginRoomOperation,
+  isCurrentRoomOperation,
+  type RoomOperationEpochRef,
+} from './roomOperationEpoch';
 
 export type UseMultiplayerResyncParams = {
   socketRef: MutableRefObject<Socket | null>;
@@ -39,6 +44,7 @@ export type UseMultiplayerResyncParams = {
   joinedRoom: string | null;
   hasLiveGameState: boolean;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
+  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 export type UseMultiplayerResyncResult = {
@@ -73,6 +79,7 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
     joinedRoom,
     hasLiveGameState,
     trySchedulePlayerReadyRef,
+    roomOperationEpochRef,
   } = params;
 
   /** Fetch full authoritative game state from the server (room:join ack). */
@@ -105,6 +112,7 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
 
       resyncInFlightRef.current = true;
       resyncCooldownUntilRef.current = now + 1200;
+      const operationToken = beginRoomOperation(roomOperationEpochRef);
 
       const identity =
         roomIdentityRef.current ?? {
@@ -115,6 +123,9 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
 
       try {
         const resp = await emitRoomJoin(activeSocket, roomCode, identity);
+        if (!isCurrentRoomOperation(roomOperationEpochRef, operationToken)) {
+          return false;
+        }
         if (!resp?.ok) {
           recordResyncFailed(reason, { roomCode, error: resp?.error });
           logger.error('App.tsx', new Error('[mp] fetchGameState failed'), { reason, error: resp?.error });
@@ -124,6 +135,9 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
         recordResyncCompleted(reason, { roomCode });
         return true;
       } catch (error) {
+        if (!isCurrentRoomOperation(roomOperationEpochRef, operationToken)) {
+          return false;
+        }
         recordResyncFailed(reason, {
           roomCode,
           message: error instanceof Error ? error.message : String(error),
@@ -149,6 +163,7 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
       multiplayerIdentityUserId,
       multiplayerAuthToken,
       applyJoinedRoomResponseRef,
+      roomOperationEpochRef,
     ],
   );
 

@@ -25,6 +25,11 @@ import {
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
 import { maskPregameDrawForRecipient } from './preGameDraw';
+import { publishMultiplayerSpectatorSnapshotIfEnabled } from '../spectator/spectatorIntegration';
+import type {
+  LegacyMatchmakingRoomShellHydrationResult,
+  MatchmakingRoomShellHydrationResult,
+} from '../matchmaking/roomShellHydration';
 
 function drawAuditUpdateEmitted(roomCode: string, reason: string): void {
   drawAudit('update-emitted', {
@@ -84,7 +89,7 @@ export type RoomSessionHandlerDeps = {
   normalizeUserId: (value: unknown) => string | null;
   tryHydrateMatchmakingRoomShell: (
     roomCode: string,
-  ) => Promise<'skipped' | 'already' | 'hydrated' | 'miss'>;
+  ) => Promise<MatchmakingRoomShellHydrationResult | LegacyMatchmakingRoomShellHydrationResult>;
   waitUntilMatchmakingRoomSocketsReady: (
     io: Server,
     roomCode: string,
@@ -825,6 +830,7 @@ export function broadcastStateUpdate(roomCode: string): void {
   }
 
   room.lastBroadcastScores = currentScores;
+  publishMultiplayerSpectatorSnapshotIfEnabled(io, room, () => getRoomRoster(room.code));
 
   if (room.state) {
     const spectatorMasked = maskStateForRecipient(room.state, null);

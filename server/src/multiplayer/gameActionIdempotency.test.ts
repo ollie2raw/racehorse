@@ -72,6 +72,33 @@ describe('gameActionIdempotency', () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
+  it('caches uncertain actions and replays the same logical request without re-executing', async () => {
+    const execute = vi.fn(async () => ({
+      ok: false,
+      error: 'room_persistence_failed',
+      uncertain: true,
+      sequence: 11,
+    }));
+
+    const first = await withGameActionIdempotency('room1', 'seat-a', 'uncertain-req', execute);
+    const second = await withGameActionIdempotency('room1', 'seat-a', 'uncertain-req', execute);
+
+    expect(first).toEqual({
+      ok: false,
+      error: 'room_persistence_failed',
+      uncertain: true,
+      sequence: 11,
+    });
+    expect(second).toEqual({
+      ok: false,
+      error: 'room_persistence_failed',
+      uncertain: true,
+      sequence: 11,
+      duplicate: true,
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('clears cache entries after TTL and on room cleanup', async () => {
     await withGameActionIdempotency('room1', 'seat-a', 'ttl-req', async () => ({
       ok: true,

@@ -10,6 +10,7 @@ import {
   setRoomRoster,
 } from './roomSession';
 import * as roomSession from './roomSession';
+import * as livePersistence from './roomLivePersistence';
 import { registerGameplayActionHandlers } from './registerGameplayActionHandlers';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
 
@@ -201,8 +202,28 @@ describe('registerGameplayActionHandlers', () => {
     const { socket, handlers } = makeSocket('sock-1', seatId);
     ensureSocketDataSeat(socket, seatId);
 
+    vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: ['IDEM1'],
+    });
     const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
       room.state!.sequence += 1;
+      const version = {
+        asyncStateVersion: room.asyncStateVersion,
+        stateSequence: room.state!.sequence,
+        eventSequence: room.eventSequence,
+      };
+      const commitFence = { ...version, commitId: room.durability.targetFence.commitId };
+      room.durability = {
+        status: 'healthy',
+        targetVersion: version,
+        targetFence: commitFence,
+        persistedVersion: version,
+        persistedFence: commitFence,
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptedAtMs: Date.now(),
+        lastPersistedAtMs: Date.now(),
+      };
       return { room, forcedDrawAnimation: undefined };
     });
     const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
@@ -236,6 +257,143 @@ describe('registerGameplayActionHandlers', () => {
     expect(getRoom(roomCode).state!.sequence).toBe(6);
   });
 
+  it('blocks gameplay actions after room persistence failure', async () => {
+    const roomCode = 'FAILACT';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    room.durability.status = 'failed';
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const cb = vi.fn();
+    await handlers.get('game:action')?.(roomCode, { type: 'PASS', requestId: 'failed-pass' }, cb);
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'room_persistence_failed' });
+  });
+
+  it('blocks hand:ready when room persistence is degraded', async () => {
+    const roomCode = 'HNDBLK';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = {
+      ...mkStartedRoom(roomCode),
+      handOver: true,
+      gameOver: false,
+    };
+    room.durability.status = 'degraded';
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const cb = vi.fn();
+    await handlers.get('hand:ready')?.(roomCode, room.state.handNumber, cb);
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'new_hand_blocked' });
+  });
+
+  it('returns an uncertain ack when a gameplay mutation cannot be proven durably committed', async () => {
+    const roomCode = 'ACKUNK';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    room.durability.persistedFence = null;
+    room.durability.status = 'healthy';
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+
+    const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
+      room.state!.sequence += 1;
+      return { room, forcedDrawAnimation: undefined };
+    });
+    vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: ['ACKUNK'],
+    });
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const payload = { type: 'PASS', requestId: 'uncertain-pass' };
+    const ack1 = vi.fn();
+    const ack2 = vi.fn();
+    await handlers.get('game:action')?.(roomCode, payload, ack1);
+    await handlers.get('game:action')?.(roomCode, payload, ack2);
+
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(ack1).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: false,
+        uncertain: true,
+        error: expect.stringMatching(/^room_(persistence_failed|snapshot_uncommitted)$/),
+      }),
+    );
+    expect(ack2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: false,
+        uncertain: true,
+        duplicate: true,
+        error: expect.stringMatching(/^room_(persistence_failed|snapshot_uncommitted)$/),
+      }),
+    );
+  });
+
   it('game:action MOVE with duplicate requestId mutates only once and replays ack', async () => {
     const roomCode = 'IDEM2';
     createReservedRoom(roomCode);
@@ -251,8 +409,28 @@ describe('registerGameplayActionHandlers', () => {
     const { socket, handlers } = makeSocket('sock-1', seatId);
     ensureSocketDataSeat(socket, seatId);
 
+    vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: ['IDEM2'],
+    });
     const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
       room.state!.sequence += 1;
+      const version = {
+        asyncStateVersion: room.asyncStateVersion,
+        stateSequence: room.state!.sequence,
+        eventSequence: room.eventSequence,
+      };
+      const commitFence = { ...version, commitId: room.durability.targetFence.commitId };
+      room.durability = {
+        status: 'healthy',
+        targetVersion: version,
+        targetFence: commitFence,
+        persistedVersion: version,
+        persistedFence: commitFence,
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptedAtMs: Date.now(),
+        lastPersistedAtMs: Date.now(),
+      };
       return { room, forcedDrawAnimation: undefined };
     });
     const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});

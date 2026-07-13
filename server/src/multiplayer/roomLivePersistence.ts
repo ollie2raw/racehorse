@@ -12,10 +12,19 @@
 import type { Config, GameState, Tile } from '../game/types';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { Room, LeadTracker } from '../rooms';
-import { peekRoom } from '../rooms';
+import { deleteRoom, peekRoom } from '../rooms';
 import type { RoomMatchEvent } from '../roomEvents';
 import { supabaseFetch } from '../supabaseUtils';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
+import {
+  captureRoomDurabilityFence,
+  getRoomDurabilityState,
+  isRoomDurablyRecoverable,
+  markRoomDurabilityPending,
+  markRoomDurabilityPersistFailure,
+  markRoomDurabilityPersistSuccess,
+  type RoomDurabilityFence,
+} from './roomDurability';
 
 const LIVE_PERSIST_DEBOUNCE_MS = 75;
 export const DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS = 10_000;
@@ -37,6 +46,7 @@ export type LiveRosterEntry = {
 export type PersistedRoomShell = {
   config: Partial<Config>;
   asyncStateVersion: number;
+  durabilityCommit: RoomDurabilityFence | null;
   nextHandReady: string[];
   rematchReady: string[];
   matchStartReady: string[];
@@ -82,11 +92,22 @@ export type RoomHydrateResult = {
   source: 'memory' | 'database';
 };
 
+export type ActiveRoomHydrationResult =
+  | { kind: 'already_in_memory'; room: Room; restoredRoster: []; durabilityRecoverable: boolean }
+  | { kind: 'hydrated'; room: Room; restoredRoster: LiveRosterEntry[]; durabilityRecoverable: true }
+  | { kind: 'not_found' }
+  | { kind: 'shell_only' }
+  | { kind: 'snapshot_freshness_unknown'; error: string }
+  | { kind: 'snapshot_stale'; error: string }
+  | { kind: 'snapshot_invalid'; error: string }
+  | { kind: 'persistence_unavailable'; error: string };
+
 const flushTimersByRoomCode = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingPersistByRoomCode = new Map<
   string,
   { room: Room; roster: LiveRosterEntry[] }
 >();
+const inFlightHydrationByRoomCode = new Map<string, Promise<ActiveRoomHydrationResult>>();
 
 let liveSessionsTableAvailable: boolean | null = null;
 
@@ -130,6 +151,19 @@ function isValidTile(value: unknown): value is Tile {
     Number.isFinite(tile.low) &&
     typeof tile.high === 'number' &&
     Number.isFinite(tile.high)
+  );
+}
+
+function isRoomDurabilityFence(value: unknown): value is RoomDurabilityFence {
+  if (!value || typeof value !== 'object') return false;
+  const fence = value as { commitId?: unknown; asyncStateVersion?: unknown; stateSequence?: unknown; eventSequence?: unknown };
+  return (
+    typeof fence.commitId === 'string' &&
+    typeof fence.asyncStateVersion === 'number' &&
+    Number.isFinite(fence.asyncStateVersion) &&
+    (typeof fence.stateSequence === 'number' || fence.stateSequence === null) &&
+    typeof fence.eventSequence === 'number' &&
+    Number.isFinite(fence.eventSequence)
   );
 }
 
@@ -192,6 +226,7 @@ export function serializeRoomShell(room: Room): PersistedRoomShell {
   return {
     config: room.config,
     asyncStateVersion: room.asyncStateVersion,
+    durabilityCommit: room.durability.persistedFence ? { ...room.durability.persistedFence } : null,
     nextHandReady: [...room.nextHandReady],
     rematchReady: [...room.rematchReady],
     matchStartReady: [...room.matchStartReady],
@@ -219,6 +254,9 @@ export function parseRoomShell(raw: unknown): PersistedRoomShell {
   return {
     config: (shell.config && typeof shell.config === 'object' ? shell.config : {}) as Partial<Config>,
     asyncStateVersion: typeof shell.asyncStateVersion === 'number' ? shell.asyncStateVersion : 0,
+    durabilityCommit: isRoomDurabilityFence(shell.durabilityCommit)
+      ? (shell.durabilityCommit as RoomDurabilityFence)
+      : null,
     nextHandReady: Array.isArray(shell.nextHandReady)
       ? shell.nextHandReady.filter((id): id is string => typeof id === 'string')
       : [],
@@ -278,7 +316,11 @@ function normalizeRosterEntry(raw: unknown): LiveRosterEntry | null {
   };
 }
 
-export function buildLiveSessionRow(room: Room, roster: LiveRosterEntry[]): RoomLiveSessionRow {
+export function buildLiveSessionRow(
+  room: Room,
+  roster: LiveRosterEntry[],
+  commitFence: RoomDurabilityFence = captureRoomDurabilityFence(room),
+): RoomLiveSessionRow {
   const status = inferLiveSessionStatus(room);
   const gameState = room.state ? cloneGameState(room.state) : null;
   if (gameState) {
@@ -299,7 +341,10 @@ export function buildLiveSessionRow(room: Room, roster: LiveRosterEntry[]): Room
     source_type: inferLiveSessionSourceType(room),
     game_state: gameState,
     game_state_sequence: gameState?.sequence ?? 0,
-    room_shell: serializeRoomShell(room),
+    room_shell: {
+      ...serializeRoomShell(room),
+      durabilityCommit: { ...commitFence },
+    },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
     event_log_version: room.eventLogVersion,
@@ -399,6 +444,111 @@ function parseLiveSessionRow(raw: Record<string, unknown>): RoomLiveSessionRow |
   };
 }
 
+type LoadLiveRoomSessionResult =
+  | { kind: 'found'; row: RoomLiveSessionRow }
+  | { kind: 'not_found' }
+  | { kind: 'snapshot_invalid'; error: string }
+  | { kind: 'persistence_unavailable'; error: string };
+
+type LiveRoomHydrationValidationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      kind: 'shell_only' | 'snapshot_freshness_unknown' | 'snapshot_stale' | 'snapshot_invalid';
+      error: string;
+    };
+
+function validateLiveRoomHydrationRow(
+  requestedRoomCode: string,
+  row: RoomLiveSessionRow,
+): LiveRoomHydrationValidationResult {
+  const normalizedRoomCode = requestedRoomCode.trim().toUpperCase();
+  if (row.room_code !== normalizedRoomCode) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_room_code_mismatch' };
+  }
+  if (row.status === 'game_over' || row.status === 'abandoned') {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_terminal' };
+  }
+  if (row.status === 'lobby') {
+    return { ok: false, kind: 'shell_only', error: 'snapshot_has_no_active_gameplay' };
+  }
+  if (!row.room_shell.durabilityCommit) {
+    return {
+      ok: false,
+      kind: 'snapshot_freshness_unknown',
+      error: 'snapshot_missing_commit_fence',
+    };
+  }
+  if (!row.game_state) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_missing_game_state' };
+  }
+  if (!Array.isArray(row.engine_seat_ids) || row.engine_seat_ids.length !== 2) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_invalid_engine_seats' };
+  }
+  if (!Array.isArray(row.roster) || row.roster.length < 2) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_missing_roster' };
+  }
+  const rosterSeatIds = new Set(row.roster.map((entry) => entry.seatId));
+  if (!row.engine_seat_ids.every((seatId) => rosterSeatIds.has(seatId))) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_roster_seat_mismatch' };
+  }
+  if (row.game_state.playerIds.length !== 2) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_invalid_player_ids' };
+  }
+  const playerIdsMatch =
+    row.game_state.playerIds.length === row.engine_seat_ids.length &&
+    row.game_state.playerIds.every((seatId, index) => seatId === row.engine_seat_ids[index]);
+  if (!playerIdsMatch) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_player_seat_mismatch' };
+  }
+  if (
+    typeof row.game_state.sequence !== 'number' ||
+    !Number.isFinite(row.game_state.sequence) ||
+    row.game_state.sequence < 0
+  ) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_invalid_state_sequence' };
+  }
+  if (row.game_state_sequence !== row.game_state.sequence) {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_state_sequence_mismatch' };
+  }
+  if (
+    typeof row.last_event_sequence !== 'number' ||
+    !Number.isFinite(row.last_event_sequence) ||
+    row.last_event_sequence < 0
+  ) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_invalid_event_sequence' };
+  }
+  const maxEventSequence = row.events.reduce(
+    (max, event) => Math.max(max, typeof event.sequence === 'number' ? event.sequence : 0),
+    0,
+  );
+  if (maxEventSequence > row.last_event_sequence) {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_event_sequence_mismatch' };
+  }
+  if (typeof row.room_shell.asyncStateVersion !== 'number' || row.room_shell.asyncStateVersion < 0) {
+    return { ok: false, kind: 'snapshot_invalid', error: 'snapshot_invalid_async_state_version' };
+  }
+  if (
+    row.room_shell.durabilityCommit.asyncStateVersion !== row.room_shell.asyncStateVersion ||
+    row.room_shell.durabilityCommit.stateSequence !== row.game_state.sequence ||
+    row.room_shell.durabilityCommit.eventSequence !== row.last_event_sequence
+  ) {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_commit_fence_mismatch' };
+  }
+  const expectedStatus = row.game_state.gameOver
+    ? 'game_over'
+    : row.game_state.handOver
+      ? 'hand_over'
+      : 'playing';
+  if (row.status !== expectedStatus) {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_status_mismatch' };
+  }
+  if (row.game_state.gameOver) {
+    return { ok: false, kind: 'snapshot_stale', error: 'snapshot_terminal_state' };
+  }
+  return { ok: true };
+}
+
 function assertJsonSerializable(value: unknown, label: string): void {
   try {
     JSON.stringify(value);
@@ -411,8 +561,20 @@ function assertJsonSerializable(value: unknown, label: string): void {
   }
 }
 
-async function persistLiveSessionRowNow(row: RoomLiveSessionRow): Promise<boolean> {
-  if (liveSessionsTableAvailable === false) return false;
+type PersistLiveSessionAttemptResult =
+  | { ok: true }
+  | { ok: false; status: 'degraded' | 'failed'; error: string };
+
+async function persistLiveSessionRowNow(
+  row: RoomLiveSessionRow,
+): Promise<PersistLiveSessionAttemptResult> {
+  if (liveSessionsTableAvailable === false) {
+    return {
+      ok: false,
+      status: 'failed',
+      error: 'room_live_sessions table unavailable',
+    };
+  }
 
   const payload = toUpsertPayload(row);
   assertJsonSerializable(payload.game_state, 'game_state');
@@ -431,18 +593,27 @@ async function persistLiveSessionRowNow(row: RoomLiveSessionRow): Promise<boolea
       },
     );
     liveSessionsTableAvailable = true;
-    return true;
+    return { ok: true };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
       liveSessionsTableAvailable = false;
       console.warn('[room-live-sessions] table missing; skipping live persist');
-      return false;
+      return {
+        ok: false,
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.warn('[room-live-sessions] persist failed', {
       roomCode: row.room_code,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     });
-    return false;
+    return {
+      ok: false,
+      status: 'degraded',
+      error: errorMessage,
+    };
   }
 }
 
@@ -450,19 +621,41 @@ export async function persistLiveRoomSessionNow(
   room: Room,
   roster: LiveRosterEntry[],
 ): Promise<boolean> {
-  if (liveSessionsTableAvailable === false) return false;
-
   const roomCode = room.code.trim().toUpperCase();
   const inFlight = inFlightPersistByRoomCode.get(roomCode);
   if (inFlight) return inFlight;
+  const commitFence = captureRoomDurabilityFence(room, room.durability.targetFence.commitId);
 
-  const persistPromise = persistLiveSessionRowNow(buildLiveSessionRow(room, roster)).finally(() => {
+  const persistPromise = (async () => {
+    const result = await persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+    if (result.ok) {
+      markRoomDurabilityPersistSuccess(room, commitFence);
+      return true;
+    }
+    markRoomDurabilityPersistFailure(
+      room,
+      {
+        status: result.status,
+        error: result.error,
+      },
+      commitFence,
+    );
+    return false;
+  })().finally(() => {
     if (inFlightPersistByRoomCode.get(roomCode) === persistPromise) {
       inFlightPersistByRoomCode.delete(roomCode);
     }
   });
   inFlightPersistByRoomCode.set(roomCode, persistPromise);
   return persistPromise;
+}
+
+export function getLiveRoomDurabilityState(room: Room) {
+  return getRoomDurabilityState(room);
+}
+
+export function isLiveRoomDurablyRecoverable(room: Room): boolean {
+  return isRoomDurablyRecoverable(room);
 }
 
 export function isLiveRoomPersistenceShuttingDown(): boolean {
@@ -508,8 +701,8 @@ export async function finalizeAndDeleteLiveRoomSession(
   const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
   row.status = terminalStatus;
 
-  const persisted = await persistLiveSessionRowNow(row);
-  if (!persisted) return;
+  const result = await persistLiveSessionRowNow(row);
+  if (!result.ok) return;
 
   await deleteLiveRoomSession(room.code);
 }
@@ -517,6 +710,7 @@ export async function finalizeAndDeleteLiveRoomSession(
 /** Debounced upsert — coalesces rapid state commits per room. */
 export function schedulePersistLiveRoomSession(room: Room, roster: LiveRosterEntry[]): void {
   const roomCode = room.code.trim().toUpperCase();
+  markRoomDurabilityPending(room);
   pendingPersistByRoomCode.set(roomCode, { room, roster });
   if (persistenceShuttingDown) return;
 
@@ -634,8 +828,13 @@ export async function flushAllPendingLiveSessions(options?: {
 
 let flushAllPendingInFlight: Promise<FlushAllPendingLiveSessionsResult> | null = null;
 
-export async function loadLiveRoomSession(roomCode: string): Promise<RoomLiveSessionRow | null> {
-  if (liveSessionsTableAvailable === false) return null;
+export async function loadLiveRoomSession(roomCode: string): Promise<LoadLiveRoomSessionResult> {
+  if (liveSessionsTableAvailable === false) {
+    return {
+      kind: 'persistence_unavailable',
+      error: 'room_live_sessions table unavailable',
+    };
+  }
 
   const code = roomCode.trim().toUpperCase();
   try {
@@ -645,18 +844,29 @@ export async function loadLiveRoomSession(roomCode: string): Promise<RoomLiveSes
     );
     liveSessionsTableAvailable = true;
     const raw = rows[0];
-    if (!raw) return null;
-    return parseLiveSessionRow(raw);
+    if (!raw) return { kind: 'not_found' };
+    const parsed = parseLiveSessionRow(raw);
+    if (!parsed) {
+      return { kind: 'snapshot_invalid', error: 'snapshot_parse_failed' };
+    }
+    return { kind: 'found', row: parsed };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
       liveSessionsTableAvailable = false;
-      return null;
+      return {
+        kind: 'persistence_unavailable',
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.warn('[room-live-sessions] load failed', {
       roomCode: code,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     });
-    return null;
+    return {
+      kind: 'persistence_unavailable',
+      error: errorMessage,
+    };
   }
 }
 
@@ -683,27 +893,87 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
 }
 
 /**
- * Lazy hydrate: memory hit → DB load → materialize via `applyLiveSessionRoom`.
- * Roster socket wiring happens in `attachSocketToTrackedRoom`.
+ * Restart hydration contract for active gameplay rooms.
+ * Returns explicit outcomes so callers can distinguish durable gameplay restore,
+ * shell-only state, absence, stale/invalid snapshot, and persistence outage.
  */
-export async function ensureRoomHydrated(roomCode: string): Promise<RoomHydrateResult | null> {
+export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHydrationResult> {
   const code = roomCode.trim().toUpperCase();
   const existing = peekRoom(code);
   if (existing) {
-    return { room: existing, restoredRoster: [], source: 'memory' };
+    return {
+      kind: 'already_in_memory',
+      room: existing,
+      restoredRoster: [],
+      durabilityRecoverable: isRoomDurablyRecoverable(existing),
+    };
   }
 
-  const row = await loadLiveRoomSession(code);
-  if (!row || isTerminalLiveSessionStatus(row.status)) return null;
+  const inFlight = inFlightHydrationByRoomCode.get(code);
+  if (inFlight) return inFlight;
 
-  const applied = applyLiveSessionRow(row);
-  if (!applied) return null;
+  const hydrationPromise = (async (): Promise<ActiveRoomHydrationResult> => {
+    const loaded = await loadLiveRoomSession(code);
+    if (loaded.kind === 'not_found') {
+      return { kind: 'not_found' };
+    }
+    if (loaded.kind === 'persistence_unavailable') {
+      return {
+        kind: 'persistence_unavailable',
+        error: loaded.error,
+      };
+    }
+    if (loaded.kind === 'snapshot_invalid') {
+      return {
+        kind: 'snapshot_invalid',
+        error: loaded.error,
+      };
+    }
 
-  return {
-    room: applied.room,
-    restoredRoster: applied.restoredRoster,
-    source: 'database',
-  };
+    const validation = validateLiveRoomHydrationRow(code, loaded.row);
+    if (!validation.ok) {
+      if (validation.kind === 'shell_only') {
+        return { kind: 'shell_only' };
+      }
+      if (validation.kind === 'snapshot_freshness_unknown') {
+        return {
+          kind: 'snapshot_freshness_unknown',
+          error: validation.error,
+        };
+      }
+      return {
+        kind: validation.kind,
+        error: validation.error,
+      };
+    }
+
+    const applied = applyLiveSessionRow(loaded.row);
+    if (!applied) {
+      return { kind: 'snapshot_invalid', error: 'snapshot_apply_failed' };
+    }
+
+    try {
+      return {
+        kind: 'hydrated',
+        room: applied.room,
+        restoredRoster: applied.restoredRoster,
+        durabilityRecoverable: true,
+      };
+    } catch (error) {
+      deleteRoom(code);
+      return {
+        kind: 'snapshot_invalid',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  })().finally(() => {
+    if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
+      inFlightHydrationByRoomCode.delete(code);
+    }
+  });
+
+  inFlightHydrationByRoomCode.set(code, hydrationPromise);
+  return hydrationPromise;
 }
 
 /** Test-only reset for debounce timers and table-availability cache. */
@@ -714,6 +984,7 @@ export function resetLiveRoomPersistenceForTests(): void {
   flushTimersByRoomCode.clear();
   pendingPersistByRoomCode.clear();
   inFlightPersistByRoomCode.clear();
+  inFlightHydrationByRoomCode.clear();
   flushAllPendingInFlight = null;
   persistenceShuttingDown = false;
   liveSessionsTableAvailable = null;

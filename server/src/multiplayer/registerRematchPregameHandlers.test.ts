@@ -9,6 +9,16 @@ import {
 import * as roomSession from './roomSession';
 import { registerRematchPregameHandlers } from './registerRematchPregameHandlers';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
+import { supabaseFetch } from '../supabaseUtils';
+
+vi.mock('../supabaseUtils', () => ({
+  supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
+    if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+      return undefined;
+    }
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+  }),
+}));
 
 function makeSocket(socketId: string, seatId: string, roomId?: string) {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -88,6 +98,7 @@ describe('registerRematchPregameHandlers', () => {
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();
     resetRoomGameplayLocksForTests();
+    vi.mocked(supabaseFetch).mockClear();
     initRoomSession(sessionIo(), {
       ...handlerDeps,
       onGameOver: () => null,
@@ -166,6 +177,25 @@ describe('registerRematchPregameHandlers', () => {
     expect(rematchStartedIdx).toBeGreaterThanOrEqual(0);
     expect(postRematchBroadcastIdx).toBeGreaterThan(rematchStartedIdx);
     broadcastSpy.mockRestore();
+  });
+
+  it('blocks rematch when room persistence is degraded', async () => {
+    const roomCode = 'RMTDG';
+    const room = seedGameOverRoom(roomCode);
+    room.durability.status = 'degraded';
+
+    const io = makeIo(roomCode);
+    const { socket, handlers } = makeSocket('sock-p1', 'p1');
+    ensureSocketDataSeat(socket, 'p1');
+
+    registerRematchPregameHandlers(io, socket, { handlerDeps });
+
+    const cb = vi.fn();
+    await handlers.get('game:rematch')?.(roomCode, cb);
+    expect(cb).toHaveBeenCalledWith({
+      ok: false,
+      error: 'rematch_blocked',
+    });
   });
 
   it('game:pregame_draw_pick no-ops without slotId', () => {

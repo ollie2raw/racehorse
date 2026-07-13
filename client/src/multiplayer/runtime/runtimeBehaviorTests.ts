@@ -53,6 +53,7 @@ function createBootstrap(): MultiplayerRuntimeBootstrap {
     clearRecoverableRoomStateRef: { current: () => undefined },
     resetMultiplayerRoomStateRef: { current: () => undefined },
     resyncInFlightRef: { current: false },
+    roomOperationEpochRef: { current: 0 },
     resyncBufferedUpdateRef: { current: null },
     resyncFlushRef: { current: null },
     rematchAwaitingStateRef: { current: false },

@@ -136,4 +136,40 @@ describe('registerMatchStartHandlers', () => {
       }),
     );
   });
+
+  it('blocks match start when room persistence is degraded', async () => {
+    const roomCode = 'STBLK';
+    const room = createReservedRoom(roomCode);
+    room.durability.status = 'degraded';
+    const hostSeat = 'seat-host';
+    const guestSeat = 'seat-guest';
+    joinRoom(roomCode, hostSeat);
+    joinRoom(roomCode, guestSeat);
+    setRoomRoster(roomCode, [
+      { id: hostSeat, socketId: 'sock-host', username: 'Host', userId: 'host-user' },
+      { id: guestSeat, socketId: 'sock-guest', username: 'Guest', userId: 'guest-user' },
+    ]);
+
+    const io = makeIo(roomCode, ['sock-host', 'sock-guest']);
+    const { socket, handlers } = makeSocket('sock-host', hostSeat);
+    ensureSocketDataSeat(socket, hostSeat);
+    socket.join(roomCode);
+
+    registerMatchStartHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'Host', userId: 'host-user' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+      },
+    });
+
+    const cb = vi.fn();
+    await handlers.get('game:start')?.(roomCode, cb);
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'match_start_blocked' });
+  });
 });

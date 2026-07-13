@@ -24,6 +24,12 @@ import {
   resetRoomEventLog,
   type RoomMatchEvent,
 } from './roomEvents';
+import {
+  createInitialRoomDurabilityState,
+  type RoomDurabilityState,
+} from './multiplayer/roomDurability';
+import { flushScheduledLiveRoomPersistence, isLiveRoomDurablyRecoverable } from './multiplayer/roomLivePersistence';
+import { assertRoomDurabilityOperationAllowed } from './multiplayer/roomDurabilityPolicy';
 
 export type RoomCode = string;
 
@@ -82,6 +88,7 @@ export type Room = {
   disconnectExpiries?: Record<string, number>;
   /** Active tile pool size when pre-game draw eliminated tiles (default: full double-6 set). */
   activeTileSetSize?: number;
+  durability: RoomDurabilityState;
 };
 
 export type DrawAnimationStep = {
@@ -125,6 +132,20 @@ export function resetLiveRoomPersistHookForTests(): void {
 
 function notifyLiveRoomStateCommitted(room: Room): void {
   liveRoomPersistHook?.(room);
+}
+
+async function flushCommittedRoomStateOrThrow(room: Room): Promise<void> {
+  const result = await flushScheduledLiveRoomPersistence(room.code);
+  if (!isLiveRoomDurablyRecoverable(room)) {
+    throw new Error(
+      room.durability.status === 'failed' || room.durability.status === 'degraded'
+        ? 'room_persistence_failed'
+        : 'room_snapshot_uncommitted',
+    );
+  }
+  if (result.flushedRoomCodes.length > 0) {
+    return;
+  }
 }
 const MIN_HAND_OVER_MS = 2500;
 const MP_DEBUG =
@@ -203,6 +224,7 @@ function makeCode(len = 5): string {
 export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {}): Room {
   let code = makeCode();
   while (rooms.has(code)) code = makeCode();
+  const eventState = createRoomEventState();
 
   const room: Room = {
     code,
@@ -225,7 +247,12 @@ export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {
     abandonedWinnerUserId: null,
     abandonedReason: undefined,
     disconnectExpiries: {},
-    ...createRoomEventState(),
+    ...eventState,
+    durability: createInitialRoomDurabilityState({
+      asyncStateVersion: 0,
+      state: null,
+      eventSequence: eventState.eventSequence,
+    }),
   };
   appendRoomEvent(room, {
     type: 'room_created',
@@ -248,6 +275,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
   if (rooms.has(normalizedCode)) {
     return rooms.get(normalizedCode)!;
   }
+  const eventState = createRoomEventState();
 
   const room: Room = {
     code: normalizedCode,
@@ -266,7 +294,12 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     matchLogged: false,
     leadTracker: null,
     disconnectExpiries: {},
-    ...createRoomEventState(),
+    ...eventState,
+    durability: createInitialRoomDurabilityState({
+      asyncStateVersion: 0,
+      state: null,
+      eventSequence: eventState.eventSequence,
+    }),
   };
   appendRoomEvent(room, {
     type: 'room_created',
@@ -491,6 +524,7 @@ export async function initiatePregameDrawOrStart(
   options: { allowRestart?: boolean } = {},
 ): Promise<Room> {
   const room = getRoom(code);
+  assertRoomDurabilityOperationAllowed(room, 'match_start');
   if (!isPregameDrawEligible(room)) {
     return startGame(code, io, options);
   }
@@ -507,6 +541,7 @@ export async function initiatePregameDrawOrStart(
   room.nextHandReady.clear();
 
   notifyLiveRoomStateCommitted(room);
+  await flushCommittedRoomStateOrThrow(room);
   return room;
 }
 
@@ -516,6 +551,7 @@ export async function startGame(
   options: { allowRestart?: boolean; customDeck?: Tile[]; startingPlayerId?: string } = {},
 ): Promise<Room> {
   const room = getRoom(code);
+  assertRoomDurabilityOperationAllowed(room, 'match_start');
   if (room.abandonedAt) {
     throw new Error('match_abandoned');
   }
@@ -582,11 +618,13 @@ export async function startGame(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
   notifyLiveRoomStateCommitted(room);
+  await flushCommittedRoomStateOrThrow(room);
   return room;
 }
 
 export async function nextHand(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
+  assertRoomDurabilityOperationAllowed(room, 'new_hand');
   if (room.abandonedAt) {
     throw new Error('match_abandoned');
   }
@@ -625,6 +663,8 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   room.lastBroadcastScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
+  notifyLiveRoomStateCommitted(room);
+  await flushCommittedRoomStateOrThrow(room);
   return room;
 }
 
@@ -656,6 +696,7 @@ export async function readyForNextHand(
     if (!room.state.handOver) {
       return { kind: 'return', value: { started: false, room } };
     }
+    assertRoomDurabilityOperationAllowed(room, 'new_hand');
 
     const readyHandNumber = room.state.handNumber;
     const existingStart = nextHandStartsByRoom.get(code);
@@ -794,6 +835,7 @@ async function actUnlocked(
   onStateReady: (roomCode: string) => void,
 ): Promise<ActResult> {
   const room = getRoom(code);
+  assertRoomDurabilityOperationAllowed(room, 'gameplay_action');
   if (room.abandonedAt) {
     throw new Error('match_abandoned');
   }

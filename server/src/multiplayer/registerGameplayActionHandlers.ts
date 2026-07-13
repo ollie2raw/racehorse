@@ -2,6 +2,12 @@ import type { Server, Socket } from 'socket.io';
 import { act, getRoom, readyForNextHand } from '../rooms';
 import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
 import {
+  flushScheduledLiveRoomPersistence,
+  getLiveRoomDurabilityState,
+  isLiveRoomDurablyRecoverable,
+} from './roomLivePersistence';
+import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
+import {
   broadcastStateUpdate,
   emitForcedDrawAnimationPayload,
   resolveActorSeatId,
@@ -51,6 +57,7 @@ export function registerGameplayActionHandlers(
         if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.' });
         return;
       }
+      assertRoomDurabilityOperationAllowed(existingRoom, 'gameplay_action');
       const ack = await withGameActionIdempotency(
         roomCode,
         playerSeatId,
@@ -66,6 +73,21 @@ export function registerGameplayActionHandlers(
                 count: result.forcedDrawAnimation.steps.length,
               }
             : undefined;
+          const flushResult = await flushScheduledLiveRoomPersistence(room.code);
+          const durability = getLiveRoomDurabilityState(room);
+          const committed = isLiveRoomDurablyRecoverable(room);
+          if (!committed) {
+            return {
+              ok: false,
+              error:
+                durability.status === 'failed' || durability.status === 'degraded'
+                  ? 'room_persistence_failed'
+                  : 'room_snapshot_uncommitted',
+              uncertain: true,
+              sequence: room.state?.sequence ?? null,
+            };
+          }
+
           // Authoritative state before draw animations so clients never render against stale hands/board.
           broadcastStateUpdate(room.code);
           if (result.forcedDrawAnimation) {
@@ -82,6 +104,7 @@ export function registerGameplayActionHandlers(
               playerId: socket.id,
               action: action?.type,
               sequence: room.state?.sequence ?? null,
+              flushedRoomCodes: flushResult.flushedRoomCodes,
             });
           }
           const forcedMeta = result.forcedDrawAnimation
@@ -109,6 +132,8 @@ export function registerGameplayActionHandlers(
     const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
     const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
     try {
+      const room = getRoom(roomCode);
+      assertRoomDurabilityOperationAllowed(room, 'new_hand');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       const result = await readyForNextHand(roomCode, playerSeatId, io, handNumber, (code) => {
         broadcastStateUpdate(code);

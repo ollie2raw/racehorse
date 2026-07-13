@@ -15,6 +15,7 @@ import type {
   MultiplayerRoomRuntime,
 } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
+import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 /**
  * Nested imperative surface for room action handlers.
@@ -36,6 +37,7 @@ export type MultiplayerRoomActionsScope = {
     'reconnectRoomCodeRef' | 'reconnectShouldJoinRef' | 'preventAutoRejoinRef'
   >;
   navigation: MultiplayerNavigationRuntime;
+  roomOperationEpochRef: RoomOperationEpochRef;
   auth: MultiplayerRoomActionsAuth;
   ui: MultiplayerRoomActionsUi & {
     friendInvite: FriendInviteState;
@@ -54,6 +56,7 @@ export type MultiplayerRoomActionsScopeSource = {
     'reconnectRoomCodeRef' | 'reconnectShouldJoinRef' | 'preventAutoRejoinRef'
   >;
   navigationRuntime: MultiplayerNavigationRuntime;
+  roomOperationEpochRef: RoomOperationEpochRef;
   transport: MultiplayerRoomActionsTransport;
   auth: MultiplayerRoomActionsAuth;
   ui: MultiplayerRoomActionsUi;
@@ -81,6 +84,7 @@ export function createMultiplayerRoomActionsScope(
     joinFlight: source.joinFlightRuntime,
     reconnect: source.reconnectRuntime,
     navigation: source.navigationRuntime,
+    roomOperationEpochRef: source.roomOperationEpochRef,
     auth: source.auth,
     ui: {
       ...source.ui,

@@ -14,6 +14,7 @@ import type { MultiplayerGameplayRefsRuntime } from './runtime/gameplayRuntime';
 import type { MultiplayerRecoveryCallbacksRuntime } from './runtime/recoveryRuntime';
 import type { MultiplayerRoomSocialRuntime } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
+import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 /**
  * Nested imperative surface for connection transport handlers.
@@ -36,6 +37,7 @@ export type MultiplayerConnectionScope = {
   social: MultiplayerRoomSocialRuntime;
   ui: MultiplayerConnectionUiSetters;
   navigation: MultiplayerConnectionNavigationRuntime;
+  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 export type MultiplayerConnectionScopeSource = {
@@ -52,6 +54,7 @@ export type MultiplayerConnectionScopeSource = {
   roomSocialRuntime: MultiplayerRoomSocialRuntime;
   uiSetters: MultiplayerConnectionUiSetters;
   navigationRuntime: MultiplayerConnectionNavigationRuntime;
+  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 export function createMultiplayerConnectionScope(
@@ -71,5 +74,6 @@ export function createMultiplayerConnectionScope(
     social: source.roomSocialRuntime,
     ui: source.uiSetters,
     navigation: source.navigationRuntime,
+    roomOperationEpochRef: source.roomOperationEpochRef,
   };
 }

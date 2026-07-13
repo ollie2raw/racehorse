@@ -1,6 +1,55 @@
 import type { Server } from 'socket.io';
-import { createReservedRoom, peekRoom } from '../rooms';
+import { createReservedRoom, peekRoom, type Room } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+
+export type MatchmakingRoomShellHydrationResult =
+  | { kind: 'skipped' }
+  | { kind: 'already_in_memory'; room: Room }
+  | { kind: 'shell_only'; room: Room; matchmakingMatchId: string }
+  | { kind: 'not_found' }
+  | { kind: 'persistence_unavailable'; error: string };
+
+export type LegacyMatchmakingRoomShellHydrationResult =
+  | 'skipped'
+  | 'already'
+  | 'hydrated'
+  | 'miss';
+
+export function normalizeMatchmakingRoomShellHydrationResult(
+  result:
+    | MatchmakingRoomShellHydrationResult
+    | LegacyMatchmakingRoomShellHydrationResult,
+  roomCode?: string,
+): MatchmakingRoomShellHydrationResult {
+  if (typeof result !== 'string') {
+    return result;
+  }
+  switch (result) {
+    case 'skipped':
+      return { kind: 'skipped' };
+    case 'already': {
+      const existing = roomCode ? peekRoom(roomCode.trim().toUpperCase()) : undefined;
+      if (existing) {
+        return { kind: 'already_in_memory', room: existing };
+      }
+      return { kind: 'not_found' };
+    }
+    case 'hydrated': {
+      const existing = roomCode ? peekRoom(roomCode.trim().toUpperCase()) : undefined;
+      if (existing?.matchmakingMatchId) {
+        return {
+          kind: 'shell_only',
+          room: existing,
+          matchmakingMatchId: existing.matchmakingMatchId,
+        };
+      }
+      return { kind: 'not_found' };
+    }
+    case 'miss':
+    default:
+      return { kind: 'not_found' };
+  }
+}
 
 /**
  * After Render/deploy the in-memory Map is empty but matchmaking still has an
@@ -9,23 +58,27 @@ import { supabaseFetch } from '../supabaseUtils';
  */
 export async function tryHydrateMatchmakingRoomShell(
   roomCode: string,
-): Promise<'skipped' | 'already' | 'hydrated' | 'miss'> {
+): Promise<MatchmakingRoomShellHydrationResult> {
   const code = roomCode.trim().toUpperCase();
-  if (!code.startsWith('MM')) return 'skipped';
-  if (peekRoom(code)) return 'already';
+  if (!code.startsWith('MM')) return { kind: 'skipped' };
+  const existing = peekRoom(code);
+  if (existing) return { kind: 'already_in_memory', room: existing };
   try {
     const rows = await supabaseFetch<Array<{ id: string }>>(
       `/rest/v1/matchmaking_matches?room_code=eq.${encodeURIComponent(code)}&status=eq.in_progress&select=id&limit=1`,
     );
     const id = typeof rows[0]?.id === 'string' ? rows[0].id : null;
-    if (!id) return 'miss';
+    if (!id) return { kind: 'not_found' };
     const room = createReservedRoom(code, { winningScore: 60 });
     room.matchmakingMatchId = id;
     console.log('[room:hydrate] matchmaking shell restored', { roomCode: code, matchmakingMatchId: id });
-    return 'hydrated';
+    return { kind: 'shell_only', room, matchmakingMatchId: id };
   } catch (err) {
     console.warn('[room:hydrate] failed', err instanceof Error ? err.message : err);
-    return 'miss';
+    return {
+      kind: 'persistence_unavailable',
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

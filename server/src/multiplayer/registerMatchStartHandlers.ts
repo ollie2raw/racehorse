@@ -3,6 +3,7 @@ import { getRoom } from '../rooms';
 import { defaultEnginePersistence } from '../scheduledTournament/persistenceInterface';
 import { promoteScheduledMatchToInProgress } from '../scheduledTournament/matchDispatch';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
+import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import {
   buildMatchStartDeps,
   getRoomPlayersWithFallback,
@@ -27,6 +28,7 @@ export function registerMatchStartHandlers(
     const roomCode = String(code ?? '').trim().toUpperCase();
     try {
       const room = getRoom(roomCode);
+      assertRoomDurabilityOperationAllowed(room, 'match_start');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       if (!room.players.includes(playerSeatId)) {
         console.log('[player:ready] rejected — seat not in room.players', {
@@ -100,6 +102,7 @@ export function registerMatchStartHandlers(
     console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
       const existingRoom = getRoom(roomCode);
+      assertRoomDurabilityOperationAllowed(existingRoom, 'match_start');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       if (!existingRoom.players.includes(playerSeatId)) {
         if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can start the game.' });

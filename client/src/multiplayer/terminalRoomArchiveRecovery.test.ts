@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildTerminalArchiveFallbackNotice,
   buildRecoveredTerminalMatchNotice,
   fetchRecoveredTerminalMatchNotice,
+  recoverTerminalMatchArchive,
 } from './terminalRoomArchiveRecovery';
 
 afterEach(() => {
@@ -83,13 +85,79 @@ describe('buildRecoveredTerminalMatchNotice', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3001/api/room-events/by-room/ROOM3',
-      {
+      expect.objectContaining({
         headers: {
           Authorization: 'Bearer token-1',
         },
-      },
+      }),
     );
     expect(notice?.title).toBe('Match completed');
     expect(notice?.detail).toContain('Oliver 60 - Riley 42');
+  });
+
+  it('distinguishes missing archive from temporary archive failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+    await expect(
+      recoverTerminalMatchArchive({
+        serverUrl: 'http://localhost:3001',
+        roomCode: 'room4',
+        authToken: 'token-1',
+      }),
+    ).resolves.toEqual({ status: 'absent' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+    await expect(
+      recoverTerminalMatchArchive({
+        serverUrl: 'http://localhost:3001',
+        roomCode: 'room4',
+        authToken: 'token-1',
+      }),
+    ).resolves.toEqual({ status: 'temporarily_unavailable', error: 'HTTP 500' });
+  });
+
+  it('returns unauthorized when auth is missing or expired', async () => {
+    await expect(
+      recoverTerminalMatchArchive({
+        serverUrl: 'http://localhost:3001',
+        roomCode: 'room5',
+        authToken: null,
+      }),
+    ).resolves.toEqual({ status: 'unauthorized' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+
+    await expect(
+      recoverTerminalMatchArchive({
+        serverUrl: 'http://localhost:3001',
+        roomCode: 'room5',
+        authToken: 'expired',
+      }),
+    ).resolves.toEqual({ status: 'unauthorized' });
+  });
+
+  it('treats archive timeout/network failure as temporarily unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+
+    const result = await recoverTerminalMatchArchive({
+      serverUrl: 'http://localhost:3001',
+      roomCode: 'room6',
+      authToken: 'token-1',
+    });
+
+    expect(result).toEqual({ status: 'temporarily_unavailable', error: 'network down' });
+  });
+
+  it('builds degraded terminal notices without claiming the room is merely unavailable', () => {
+    expect(buildTerminalArchiveFallbackNotice('temporarily_unavailable', 'room7')).toEqual({
+      context: 'multiplayer',
+      title: 'Result still syncing',
+      detail:
+        'Your saved room ROOM7 has ended, but the archived result is temporarily unavailable. Return home and retry Multiplayer in a moment.',
+    });
+    expect(buildTerminalArchiveFallbackNotice('unauthorized', 'room8').title).toBe(
+      'Sign in to recover result',
+    );
   });
 });

@@ -25,6 +25,11 @@ import {
   registerRawSocketEventHandler,
 } from './multiplayer/socketEventBus';
 import { useMultiplayerConnectionHostParams } from './multiplayer/useMultiplayerConnectionHostParams';
+import {
+  beginRoomOperation,
+  invalidateRoomOperations,
+  isCurrentRoomOperation,
+} from './multiplayer/roomOperationEpoch';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recoveryMachine';
 import { useMultiplayerConnectionActionsBridge } from './multiplayer/useMultiplayerConnectionContext';
 import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
@@ -376,6 +381,7 @@ export default function App() {
   const applyJoinedRoomResponseRef = useRef<(resp: RoomAckResponse) => void>(() => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
   const resyncInFlightRef = useRef(false);
+  const roomOperationEpochRef = useRef(0);
   const resyncBufferedUpdateRef = useRef<import('./multiplayer/protocol').StateUpdatePayload | null>(null);
   const resyncFlushRef = useRef<(() => void) | null>(null);
 
@@ -436,8 +442,9 @@ export default function App() {
       clearRecoverableRoomStateRef,
       resetMultiplayerRoomStateRef,
       resyncInFlightRef,
-      resyncBufferedUpdateRef,
-      resyncFlushRef,
+    resyncBufferedUpdateRef,
+    resyncFlushRef,
+    roomOperationEpochRef,
       rematchAwaitingStateRef,
       schedulePlayerReadyRef,
       trySchedulePlayerReadyRef,
@@ -494,6 +501,7 @@ export default function App() {
     joinedRoom,
     hasLiveGameState,
     trySchedulePlayerReadyRef,
+    roomOperationEpochRef,
   });
 
   const onTournamentMatchAbandoned = useCallback(
@@ -750,6 +758,7 @@ export default function App() {
   // Room/shell/tournament reset composition: see resetMultiplayerRoomState below.
   const resetMultiplayerRoomState = useCallback(
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
+      invalidateRoomOperations(roomOperationEpochRef);
       resetRoomIdentityState(options, 'joined');
       resetTournamentAttachState();
       resetRoomIdentityState(options, 'identity');
@@ -767,6 +776,7 @@ export default function App() {
   }, [dispatchRecovery]);
 
   const clearRecoverableRoomState = useCallback(() => {
+    invalidateRoomOperations(roomOperationEpochRef);
     resetRoomRecoveryState();
     clearLastRoomCode();
     tournament.clearPendingMatch();
@@ -795,6 +805,7 @@ export default function App() {
       setError('');
       shellSetActionError('');
       try {
+        const operationToken = beginRoomOperation(roomOperationEpochRef);
         const username = authProfile?.username ?? 'Guest';
         const userId = multiplayerIdentityUserId;
         const authToken = multiplayerAuthToken;
@@ -808,6 +819,9 @@ export default function App() {
         });
         if (!resp?.ok) {
           throw new Error(resp?.error ?? 'Unable to create room.');
+        }
+        if (!isCurrentRoomOperation(roomOperationEpochRef, operationToken)) {
+          return resp;
         }
 
         applyJoinedRoomResponseRef.current(resp);
@@ -1110,6 +1124,7 @@ export default function App() {
     rematchAwaitingStateRef,
     resyncInFlightRef,
     recoveryDispatchRef,
+    roomOperationEpochRef,
     setRecoveredTerminalMatchNotice: setAbandonedMatchNotice,
     applyJoinedRoomResponse,
     fetchGameState,
@@ -1418,6 +1433,7 @@ export default function App() {
     reconnectAttemptCountRef,
     rejoinInFlightRef,
     autoJoinAttemptedRef,
+    roomOperationEpochRef,
   });
 
   const appRoutesHostSource = {

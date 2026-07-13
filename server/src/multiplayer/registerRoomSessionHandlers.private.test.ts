@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getRoom, getRoomCanDraw, getRoomLegalMoves, resetRoomRuntimeForTests } from '../rooms';
+import {
+  getRoom,
+  getRoomCanDraw,
+  getRoomLegalMoves,
+  resetLiveRoomPersistHookForTests,
+  resetRoomRuntimeForTests,
+} from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests, setRoomRoster } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
+import { resetLiveRoomPersistenceForTests } from './roomLivePersistence';
+import { resetGameActionIdempotencyForTests } from './gameActionIdempotency';
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async () => []),
@@ -161,6 +169,9 @@ async function findPlayMoveForCurrentTurn(
 describe('private room happy path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetGameActionIdempotencyForTests();
+    resetLiveRoomPersistenceForTests();
+    resetLiveRoomPersistHookForTests();
     resetRoomGameplayLocksForTests();
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();

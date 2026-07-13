@@ -6,6 +6,7 @@ import {
   joinRoom,
   startGame,
 } from '../rooms';
+import { supabaseFetch } from '../supabaseUtils';
 import {
   broadcastStateUpdate,
   getRoomRoster,
@@ -13,6 +14,15 @@ import {
   setRoomRoster,
 } from './roomSession';
 import { seatSyntheticBotInRoom } from './botSeating';
+
+vi.mock('../supabaseUtils', () => ({
+  supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
+    if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+      return undefined;
+    }
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+  }),
+}));
 
 function makeIo() {
   return {
@@ -47,6 +57,7 @@ describe('seatSyntheticBotInRoom', () => {
   afterEach(() => {
     deleteRoom('BOTSEAT1');
     deleteRoom('BOTTURN1');
+    vi.mocked(supabaseFetch).mockClear();
     vi.useRealTimers();
   });
 

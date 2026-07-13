@@ -4,6 +4,12 @@ export type RecoveredTerminalMatchNotice = {
   detail: string;
 };
 
+export type TerminalArchiveRecoveryResult =
+  | { status: 'found'; notice: RecoveredTerminalMatchNotice }
+  | { status: 'absent' }
+  | { status: 'unauthorized' }
+  | { status: 'temporarily_unavailable'; error?: string };
+
 type ArchivedRoomParticipant = {
   id: string;
   username?: string | null;
@@ -69,25 +75,80 @@ export function buildRecoveredTerminalMatchNotice(
   };
 }
 
+export function buildTerminalArchiveFallbackNotice(
+  status: Exclude<TerminalArchiveRecoveryResult['status'], 'found'>,
+  roomCode: string,
+): RecoveredTerminalMatchNotice {
+  const code = roomCode.trim().toUpperCase();
+  if (status === 'unauthorized') {
+    return {
+      context: 'multiplayer',
+      title: 'Sign in to recover result',
+      detail: `Your saved room ${code} has ended, but result recovery needs a fresh sign-in. Return home, sign in, then retry Multiplayer.`,
+    };
+  }
+  if (status === 'temporarily_unavailable') {
+    return {
+      context: 'multiplayer',
+      title: 'Result still syncing',
+      detail: `Your saved room ${code} has ended, but the archived result is temporarily unavailable. Return home and retry Multiplayer in a moment.`,
+    };
+  }
+  return {
+    context: 'multiplayer',
+    title: 'Match ended',
+    detail: `Your saved room ${code} has ended, but no archived result was found.`,
+  };
+}
+
+export async function recoverTerminalMatchArchive(params: {
+  serverUrl: string;
+  roomCode: string;
+  authToken: string | null;
+  timeoutMs?: number;
+}): Promise<TerminalArchiveRecoveryResult> {
+  const roomCode = params.roomCode.trim().toUpperCase();
+  if (!params.serverUrl || !roomCode) return { status: 'absent' };
+  if (!params.authToken) return { status: 'unauthorized' };
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), params.timeoutMs ?? 8000);
+
+  try {
+    const response = await fetch(
+      `${params.serverUrl.replace(/\/$/, '')}/api/room-events/by-room/${encodeURIComponent(roomCode)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${params.authToken}`,
+        },
+        signal: controller.signal,
+      },
+    );
+    if (response.status === 404) return { status: 'absent' };
+    if (response.status === 403 || response.status === 401) return { status: 'unauthorized' };
+    if (!response.ok) {
+      return { status: 'temporarily_unavailable', error: `HTTP ${response.status}` };
+    }
+
+    const payload = (await response.json()) as ArchivedRoomLogResponse;
+    return payload.log
+      ? { status: 'found', notice: buildRecoveredTerminalMatchNotice(payload.log) }
+      : { status: 'absent' };
+  } catch (error) {
+    return {
+      status: 'temporarily_unavailable',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export async function fetchRecoveredTerminalMatchNotice(params: {
   serverUrl: string;
   roomCode: string;
   authToken: string | null;
 }): Promise<RecoveredTerminalMatchNotice | null> {
-  const roomCode = params.roomCode.trim().toUpperCase();
-  if (!params.serverUrl || !roomCode || !params.authToken) return null;
-
-  const response = await fetch(
-    `${params.serverUrl.replace(/\/$/, '')}/api/room-events/by-room/${encodeURIComponent(roomCode)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${params.authToken}`,
-      },
-    },
-  );
-  if (response.status === 404 || response.status === 403 || response.status === 401) return null;
-  if (!response.ok) return null;
-
-  const payload = (await response.json()) as ArchivedRoomLogResponse;
-  return payload.log ? buildRecoveredTerminalMatchNotice(payload.log) : null;
+  const result = await recoverTerminalMatchArchive(params);
+  return result.status === 'found' ? result.notice : null;
 }

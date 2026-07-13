@@ -42,9 +42,15 @@ import {
   selectMatchStarted,
 } from './session/sessionStateMachine';
 import {
-  fetchRecoveredTerminalMatchNotice,
+  buildTerminalArchiveFallbackNotice,
+  recoverTerminalMatchArchive,
   type RecoveredTerminalMatchNotice,
 } from './terminalRoomArchiveRecovery';
+import {
+  beginRoomOperation,
+  invalidateRoomOperations,
+  isCurrentRoomOperation,
+} from './roomOperationEpoch';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
@@ -107,6 +113,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         authToken: scope.auth.authAccessTokenRef.current,
       };
 
+      const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
       try {
         const rejoinStartedAt =
           typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -116,6 +123,10 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           roomCode,
           rejoinIdentity,
         );
+
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
 
         if (resp?.ok) {
           const rejoinEndedAt =
@@ -148,6 +159,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         }
         dispatchRecovery({ type: 'ROOM_JOIN_TRANSIENT', error: errorText });
       } catch (error) {
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
         dispatchRecovery({
           type: 'TRANSPORT_FAIL',
           reason: error instanceof Error ? error.message : String(error),
@@ -293,6 +307,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         (typeof window !== 'undefined' && window.localStorage.getItem(scope.config.lastRoomStorageKey)) || '',
       );
       if (!savedCode || selectJoinedRoomCode(scope.session.sessionRef.current)) return;
+      const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
       scope.joinFlight.autoJoinAttemptedRef.current = true;
       try {
         const joinStartedAt =
@@ -302,6 +317,10 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           userId: scope.auth.multiplayerIdentityUserIdRef.current,
           authToken: scope.auth.authAccessTokenRef.current,
         });
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
+
         if (resp?.ok) {
           const joinEndedAt =
             typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -316,13 +335,30 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
           }
           if (errorText.includes('completed') || errorText.includes('abandoned')) {
-            const notice = await fetchRecoveredTerminalMatchNotice({
+            const archiveResult = await recoverTerminalMatchArchive({
               serverUrl: scope.config.serverUrl,
               roomCode: savedCode,
               authToken: scope.auth.authAccessTokenRef.current,
             });
-            if (notice) {
-              setRecoveredTerminalMatchNotice?.(notice);
+            if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+              return;
+            }
+            if (archiveResult.status === 'found') {
+              setRecoveredTerminalMatchNotice?.(archiveResult.notice);
+              scope.navigation.setAppMode('multiplayer');
+              dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
+              return;
+            }
+            if (
+              archiveResult.status === 'temporarily_unavailable' ||
+              archiveResult.status === 'unauthorized'
+            ) {
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem(scope.config.lastRoomStorageKey, savedCode);
+              }
+              setRecoveredTerminalMatchNotice?.(
+                buildTerminalArchiveFallbackNotice(archiveResult.status, savedCode),
+              );
               scope.navigation.setAppMode('multiplayer');
               dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
               return;
@@ -336,6 +372,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         scope.recovery.applyJoinedRoomResponse(resp);
         scope.config.showToast('Rejoined room.', 1200);
       } catch (error) {
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
         scope.config.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }
     },
@@ -444,6 +483,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     return () => {
       const scope = scopeRef.current;
       scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: true });
+      invalidateRoomOperations(scope.roomOperationEpochRef);
       recoveryMachineRef.current?.dispose();
       scope.recovery.clearReconnectAttemptTimer();
       const sock = scope.socket.socketRef.current as SocketWithPing | null;
@@ -489,8 +529,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         handOver: scope.room.stateRef.current?.handOver ?? null,
       });
     }
-    scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: true });
-    dispatchRecovery({ type: 'USER_LEAVE' });
+      scope.session.dispatchSession({ type: 'INTENTIONAL_DISCONNECT', value: true });
+    invalidateRoomOperations(scope.roomOperationEpochRef);
+      dispatchRecovery({ type: 'USER_LEAVE' });
     scope.joinFlight.autoJoinAttemptedRef.current = false;
     scope.navigation.setAppMode('home');
     const socket = scope.socket.socketRef.current;

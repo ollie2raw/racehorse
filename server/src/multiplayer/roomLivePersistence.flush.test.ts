@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameState } from '../game/types';
 import type { Room } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+import { createInitialRoomDurabilityState } from './roomDurability';
 import {
   flushAllPendingLiveSessions,
   flushScheduledLiveRoomPersistence,
@@ -62,7 +63,7 @@ function mkGameState(): GameState {
 }
 
 function mkRoom(overrides: Partial<Room> = {}): Room {
-  return {
+  const room = {
     code: 'FLUSH1',
     players: ['seat-a', 'seat-b'],
     state: mkGameState(),
@@ -83,7 +84,15 @@ function mkRoom(overrides: Partial<Room> = {}): Room {
     eventSequence: 0,
     events: [],
     ...overrides,
-  };
+  } as Room;
+  room.durability =
+    overrides.durability ??
+    createInitialRoomDurabilityState({
+      asyncStateVersion: room.asyncStateVersion,
+      state: room.state,
+      eventSequence: room.eventSequence,
+    });
+  return room;
 }
 
 const roster = [

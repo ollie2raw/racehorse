@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent, resetRoomEventLog } from '../roomEvents';
 import { getRoom, initiatePregameDrawOrStart, startGame } from '../rooms';
+import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import { withRoomGameplayLock } from './roomGameplayLock';
 import {
   broadcastStateUpdate,
@@ -26,6 +27,7 @@ export function registerRematchPregameHandlers(
     const roomCode = String(code ?? '').trim().toUpperCase();
     try {
       const room = getRoom(roomCode);
+      assertRoomDurabilityOperationAllowed(room, 'rematch');
       const cfg = (room as any).config ?? {};
 
       if (cfg.tournamentId) {

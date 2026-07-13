@@ -18,6 +18,7 @@ import {
   selectIntentionalDisconnect,
   selectJoinedRoomCode,
 } from './session/sessionStateMachine';
+import { invalidateRoomOperations } from './roomOperationEpoch';
 export function registerMultiplayerConnectionSocketHandlers(options: {
   getScope: () => MultiplayerConnectionScope;
   recoveryMachineRef: RefBox<RecoveryMachine | null>;
@@ -194,6 +195,7 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
       if (selectIntentionalDisconnect(scope.session.sessionRef.current)) return;
       const roomCode = selectJoinedRoomCode(scope.session.sessionRef.current);
       if (!roomCode) return;
+      invalidateRoomOperations(scope.roomOperationEpochRef);
       scope.session.dispatchSession({ type: 'ROOM_SESSION_SUPERSEDED' });
       scope.reconnect.preventAutoRejoinRef.current = true;
       scope.reconnect.reconnectRoomCodeRef.current = null;

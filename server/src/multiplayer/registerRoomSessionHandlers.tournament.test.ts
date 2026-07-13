@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createReservedRoom } from '../rooms';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createReservedRoom,
+  resetLiveRoomPersistHookForTests,
+  resetRoomRuntimeForTests,
+} from '../rooms';
 import { initRoomSession } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
+import { resetLiveRoomPersistenceForTests } from './roomLivePersistence';
 
 const {
   fetchMatchByIdMock,
@@ -90,6 +95,9 @@ function makeIo(socket: any) {
 describe('tournament:attach_assigned_match', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetLiveRoomPersistenceForTests();
+    resetLiveRoomPersistHookForTests();
+    resetRoomRuntimeForTests();
     initRoomSession(
       { sockets: { sockets: new Map() } } as any,
       {
@@ -106,6 +114,12 @@ describe('tournament:attach_assigned_match', () => {
         finalizeTournamentMatch: () => undefined,
       },
     );
+  });
+
+  afterEach(() => {
+    resetLiveRoomPersistenceForTests();
+    resetLiveRoomPersistHookForTests();
+    resetRoomRuntimeForTests();
   });
 
   it('rehydrates a missing reserved room from the DB room_code during attach', async () => {
@@ -361,6 +375,7 @@ describe('tournament:attach_assigned_match', () => {
         },
         board: { tiles: [], leftEnd: null, rightEnd: null },
         boneyard: [],
+        deadTiles: [],
         currentPlayerIndex: 0,
         handOver: true,
         handNumber: 1,
@@ -397,6 +412,7 @@ describe('tournament:attach_assigned_match', () => {
         },
         board: { tiles: [], leftEnd: null, rightEnd: null },
         boneyard: [],
+        deadTiles: [],
         currentPlayerIndex: 0,
         handOver: true,
         handNumber: 1,

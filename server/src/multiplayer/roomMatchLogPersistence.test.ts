@@ -231,7 +231,7 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     expect(loadedArchive?.status).toBe('completed');
 
     const loadedLive = await loadLiveRoomSession('CLN001');
-    expect(loadedLive).toBeNull();
+    expect(loadedLive).toEqual({ kind: 'not_found' });
   });
 
   it('writes abandoned terminal live status before deleting on abandoned archive', async () => {

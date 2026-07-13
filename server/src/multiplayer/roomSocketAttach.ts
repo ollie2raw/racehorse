@@ -10,8 +10,10 @@ import {
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { ensureRoomHydrated } from './roomLivePersistence';
+import { normalizeMatchmakingRoomShellHydrationResult } from '../matchmaking/roomShellHydration';
 import { onPlayerSocketRejoined } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
+import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import { applyActiveMatchForfeit } from './roomForfeit';
 import {
   allocatePlayerSeatId,
@@ -54,6 +56,7 @@ export type AttachSocketToTrackedRoomFn = (params: {
   stateWithCounts: ReturnType<typeof maskStateForRecipient> & { handCounts?: Record<string, number> } | null;
   rejoinLegalMoves: ReturnType<typeof getRoomLegalMoves>;
   rejoinCanDraw: boolean;
+  hydrationOutcome: 'already_in_memory' | 'hydrated' | 'shell_only';
   tournamentMatchMeta: {
     tournamentId: string;
     matchId: string;
@@ -190,7 +193,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     leaveExistingSocketRooms();
 
     const hydrated = await ensureRoomHydrated(roomCode);
-    if (hydrated?.source === 'database' && hydrated.restoredRoster.length > 0) {
+    if (hydrated.kind === 'hydrated' && hydrated.restoredRoster.length > 0) {
       setRoomRoster(
         roomCode,
         hydrated.restoredRoster.map((entry) => ({
@@ -205,16 +208,38 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         seats: hydrated.restoredRoster.length,
       });
     }
+    if (hydrated.kind === 'persistence_unavailable') {
+      throw new Error('room_persistence_unavailable');
+    }
+    if (hydrated.kind === 'snapshot_freshness_unknown') {
+      throw new Error('room_snapshot_uncommitted');
+    }
+    if (hydrated.kind === 'snapshot_invalid' || hydrated.kind === 'snapshot_stale') {
+      throw new Error(hydrated.error);
+    }
 
-    const hydrateResult = hydrateMatchmakingRoom
-      ? !peekRoom(roomCode)
-        ? await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode)
-        : ('skipped' as const)
-      : 'skipped';
+    const shellHydrationResult =
+      (hydrated.kind === 'not_found' || hydrated.kind === 'shell_only') &&
+      hydrateMatchmakingRoom &&
+      !peekRoom(roomCode)
+        ? normalizeMatchmakingRoomShellHydrationResult(
+            await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode),
+            roomCode,
+          )
+        : { kind: 'skipped' as const };
+    if (shellHydrationResult.kind === 'persistence_unavailable') {
+      throw new Error('room_persistence_unavailable');
+    }
+    if (hydrated.kind === 'shell_only' && shellHydrationResult.kind !== 'shell_only') {
+      throw new Error('room_shell_only');
+    }
+
     let existingRoom = peekRoom(roomCode);
     if (!existingRoom) {
       const message = 'Room not found.';
-      console.log(`[${via}] ERROR: ${message} hydrate=${hydrateResult}`);
+      console.log(
+        `[${via}] ERROR: ${message} live=${hydrated.kind} shell=${shellHydrationResult.kind}`,
+      );
       throw new Error(message);
     }
     if (existingRoom.abandonedAt) {
@@ -234,6 +259,9 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     if (existingRoom && userId) {
       const existingPlayer = roster.find((player) => player.userId === userId);
       if (existingPlayer) {
+        assertRoomDurabilityOperationAllowed(existingRoom, 'reconnect_existing_player', {
+          attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
+        });
         const oldSocket = existingPlayer.socketId
           ? io.sockets.sockets.get(existingPlayer.socketId)
           : undefined;
@@ -273,6 +301,19 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       : null;
     if (!migratedByUserId) {
       try {
+        const reconnectCandidate = pruneReconnectSeats(roomCode).find((seat) =>
+          identityMatchesReconnectSeat(seat, {
+            username,
+            userId,
+          }),
+        );
+        assertRoomDurabilityOperationAllowed(
+          existingRoom,
+          reconnectCandidate ? 'reconnect_existing_player' : 'join_new_player',
+          {
+            attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
+          },
+        );
         joinedPlayerSeatId = allocatePlayerSeatId();
         room = joinRoom(roomCode, joinedPlayerSeatId);
       } catch (err) {
@@ -288,6 +329,9 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           }),
         );
         if (!match) throw err;
+        assertRoomDurabilityOperationAllowed(existingRoom, 'reconnect_existing_player', {
+          attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
+        });
         joinedPlayerSeatId = match.seatId;
         migrateRoomSeat(roomCode, match.seatId, socket.id);
         releaseReconnectSeat(roomCode, match.seatId);
@@ -452,6 +496,13 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     onPlayerSocketRejoined(room.code, io, joinedPlayerSeatId);
     evaluateRoomLifecycle(room.code);
 
+    const hydrationOutcome =
+      shellHydrationResult.kind === 'shell_only'
+        ? 'shell_only'
+        : hydrated.kind === 'hydrated'
+          ? 'hydrated'
+          : 'already_in_memory';
+
     return {
       room,
       joinedPlayerSeatId,
@@ -459,6 +510,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       stateWithCounts,
       rejoinLegalMoves,
       rejoinCanDraw,
+      hydrationOutcome,
       tournamentMatchMeta,
     };
   };

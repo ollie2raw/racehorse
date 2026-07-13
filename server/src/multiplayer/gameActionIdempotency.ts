@@ -8,6 +8,7 @@ export type GameActionAck = {
   };
   error?: string;
   duplicate?: boolean;
+  uncertain?: boolean;
 };
 
 type CacheEntry = {
@@ -87,19 +88,21 @@ function readCachedAck(
   return { ...entry.ack, duplicate: true };
 }
 
-function storeSuccessfulAck(
+function storeCachedAck(
   roomCode: string,
   playerSeatId: string,
   requestId: string,
   ack: GameActionAck,
 ): void {
-  if (!ack.ok) return;
+  if (!ack.ok && !ack.uncertain) return;
   const roomCache = getRoomCache(roomCode);
   roomCache.set(cacheKeyFor(playerSeatId, requestId), {
     ack: {
       ok: ack.ok,
       sequence: ack.sequence ?? null,
       ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
+      ...(ack.error ? { error: ack.error } : {}),
+      ...(ack.uncertain ? { uncertain: ack.uncertain } : {}),
     },
     expiresAt: Date.now() + ACTION_IDEMPOTENCY_TTL_MS,
   });
@@ -133,8 +136,8 @@ export async function withGameActionIdempotency(
 
   const inflight = (async () => {
     const result = await execute();
-    if (result.ok) {
-      storeSuccessfulAck(roomCode, playerSeatId, normalizedRequestId, result);
+    if (result.ok || result.uncertain) {
+      storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
     }
     return result;
   })().finally(() => {

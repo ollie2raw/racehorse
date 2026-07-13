@@ -17,6 +17,7 @@ import type {
 import type { RoomAckResponse } from './roomTransport';
 import type { MultiplayerLobbyActionsHostProps } from './useMultiplayerLobbyController';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
+import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 export type UseMultiplayerLobbyHostPropsSource = {
   socket: Socket | null;
@@ -60,6 +61,7 @@ export type UseMultiplayerLobbyHostPropsSource = {
   reconnectAttemptCountRef: MutableRefObject<number>;
   rejoinInFlightRef: MutableRefObject<boolean>;
   autoJoinAttemptedRef: MutableRefObject<boolean>;
+  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 export function useMultiplayerLobbyHostProps(
@@ -112,6 +114,7 @@ export function useMultiplayerLobbyHostProps(
       reconnectAttemptCountRef: source.reconnectAttemptCountRef,
       rejoinInFlightRef: source.rejoinInFlightRef,
       autoJoinAttemptedRef: source.autoJoinAttemptedRef,
+      roomOperationEpochRef: source.roomOperationEpochRef,
     }),
     [
       source.socket,
@@ -139,6 +142,7 @@ export function useMultiplayerLobbyHostProps(
       source.authProfile,
       source.multiplayerIdentityUserId,
       source.multiplayerAuthToken,
+      source.roomOperationEpochRef,
     ],
   );
 }

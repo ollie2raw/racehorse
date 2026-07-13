@@ -23,7 +23,7 @@ describe('tryHydrateMatchmakingRoomShell', () => {
 
     const result = await tryHydrateMatchmakingRoomShell('PRIVATE1');
 
-    expect(result).toBe('skipped');
+    expect(result).toEqual({ kind: 'skipped' });
     expect(peekSpy).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -34,7 +34,7 @@ describe('tryHydrateMatchmakingRoomShell', () => {
 
     const result = await tryHydrateMatchmakingRoomShell('mm12345');
 
-    expect(result).toBe('already');
+    expect(result).toEqual({ kind: 'already_in_memory', room: expect.any(Object) });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -44,7 +44,7 @@ describe('tryHydrateMatchmakingRoomShell', () => {
 
     const result = await tryHydrateMatchmakingRoomShell('MMNOPE');
 
-    expect(result).toBe('miss');
+    expect(result).toEqual({ kind: 'not_found' });
     expect(supabaseFetch).toHaveBeenCalledWith(
       '/rest/v1/matchmaking_matches?room_code=eq.MMNOPE&status=eq.in_progress&select=id&limit=1',
     );
@@ -58,7 +58,11 @@ describe('tryHydrateMatchmakingRoomShell', () => {
 
     const result = await tryHydrateMatchmakingRoomShell('MMHYDR');
 
-    expect(result).toBe('hydrated');
+    expect(result).toEqual({
+      kind: 'shell_only',
+      room: created,
+      matchmakingMatchId: 'mm-match-1',
+    });
     expect(rooms.createReservedRoom).toHaveBeenCalledWith('MMHYDR', { winningScore: 60 });
     expect(created.matchmakingMatchId).toBe('mm-match-1');
   });
@@ -69,7 +73,10 @@ describe('tryHydrateMatchmakingRoomShell', () => {
 
     const result = await tryHydrateMatchmakingRoomShell('MMERR');
 
-    expect(result).toBe('miss');
+    expect(result).toEqual({
+      kind: 'persistence_unavailable',
+      error: 'db_down',
+    });
   });
 });
 

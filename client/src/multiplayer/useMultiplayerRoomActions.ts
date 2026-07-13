@@ -14,6 +14,10 @@ import {
 } from './multiplayerRoomActionsScope';
 import { recordJoinLatency } from './mpTelemetry';
 import { selectJoinedRoomCode } from './session/sessionStateMachine';
+import {
+  beginRoomOperation,
+  isCurrentRoomOperation,
+} from './roomOperationEpoch';
 
 type RoomJoinConfig = {
   username: string;
@@ -170,6 +174,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     if (scope.joinFlight.joinInFlightRef.current) return;
     scope.joinFlight.joinInFlightRef.current = true;
     scope.ui.setPendingUiAction('join');
+    const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
     try {
       const joinStartedAt =
         typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -184,6 +189,9 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
           typeof performance !== 'undefined' ? performance.now() : Date.now();
         recordJoinLatency(joinEndedAt - joinStartedAt, 'join');
       }
+      if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+        return;
+      }
       if (!resp?.ok) {
         scope.ui.setError(resp?.error ?? 'Unable to join room.');
         return;
@@ -194,6 +202,9 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       scope.joinFlight.autoJoinAttemptedRef.current = false;
       scope.reconnect.preventAutoRejoinRef.current = false;
     } catch (error) {
+      if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+        return;
+      }
       scope.ui.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
     } finally {
       scope.joinFlight.joinInFlightRef.current = false;
@@ -380,6 +391,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     scope.ui.setPendingUiAction('join');
     scope.ui.setError('');
     scope.ui.setActionError('');
+    const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
 
     try {
       const resp = await scope.transport.emitWithAck<RoomAckResponse>(
@@ -391,12 +403,14 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       if (!resp?.ok) {
         throw new Error(resp?.error ?? 'Unable to join room from invite.');
       }
+      if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) return;
       scope.room.applyJoinedRoomResponse(resp);
       scope.navigation.setAppMode('multiplayer');
       scope.ui.setMpSubView('private');
       scope.joinFlight.autoJoinAttemptedRef.current = false;
       scope.ui.setFriendInvite(null);
     } catch (error) {
+      if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) return;
       scope.ui.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
     } finally {
       scope.joinFlight.inviteJoinInFlightRef.current = false;
@@ -424,6 +438,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
 
     scope.joinFlight.autoJoinAttemptedRef.current = true;
     scope.ui.setRoomCode(linkedCode);
+    const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
     void (async () => {
       try {
         const resp = await scope.transport.emitWithAck<RoomAckResponse>(
@@ -432,6 +447,9 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
           linkedCode,
           roomJoinConfig(),
         );
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
         if (!resp?.ok) {
           scope.ui.setError(resp?.error ?? 'Unable to join room from invite link.');
           return;
@@ -440,6 +458,9 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
         scope.navigation.setAppMode('multiplayer');
         scope.ui.setMpSubView('private');
       } catch (error) {
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
         scope.ui.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }
     })();
@@ -473,6 +494,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       scope.ui.setPendingUiAction('join');
       scope.ui.setError('');
       scope.ui.setActionError('');
+      const operationToken = beginRoomOperation(scope.roomOperationEpochRef);
 
       try {
         const resp = await scope.transport.emitWithAck<RoomAckResponse>(
@@ -484,10 +506,16 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
         if (!resp?.ok) {
           throw new Error(resp?.error ?? 'Unable to spectate room.');
         }
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return { ok: false, error: 'stale_response' };
+        }
         scope.room.applyJoinedRoomResponse(resp);
         scope.navigation.setAppMode('multiplayer');
         return { ok: true };
       } catch (error) {
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return { ok: false, error: 'stale_response' };
+        }
         const msg = error instanceof Error ? error.message : 'Spectate failed';
         scope.ui.showToast(msg, 2000);
         scope.ui.setPendingUiAction(null);

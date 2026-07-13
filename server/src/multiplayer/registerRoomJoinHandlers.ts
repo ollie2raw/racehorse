@@ -62,6 +62,7 @@ export function registerRoomJoinHandlers(
         state: attached.stateWithCounts,
         legalMoves: attached.rejoinLegalMoves,
         canDraw: attached.rejoinCanDraw,
+        hydrationOutcome: attached.hydrationOutcome,
         eventMeta: getRoomMatchEventMeta(attached.room.code),
         tournamentMatch: attached.tournamentMatchMeta,
         matchStarted: Boolean(attached.room.state),

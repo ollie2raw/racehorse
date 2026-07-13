@@ -22,6 +22,7 @@ import type { MultiplayerRecoveryCallbacksRuntime } from './runtime/recoveryRunt
 import type { MultiplayerRoomSocialRuntime } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
 import type { RecoveredTerminalMatchNotice } from './terminalRoomArchiveRecovery';
+import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 export type UseMultiplayerConnectionHostParamsSource = {
   emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
@@ -58,6 +59,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
     (event: RecoveryEvent) => RecoveryMachineSnapshot | null
   >;
   setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
+  roomOperationEpochRef: RoomOperationEpochRef;
   applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
   resetClientGameSession: () => void;
@@ -267,6 +269,7 @@ export function useMultiplayerConnectionHostParams(
       recoveryRuntime: connectionRecoveryRuntime,
       roomSocialRuntime: source.roomSocialRuntime,
       uiSetters: connectionUiSetters,
+      roomOperationEpochRef: source.roomOperationEpochRef,
       recoveryDispatchRef: source.recoveryDispatchRef,
       setRecoveredTerminalMatchNotice: source.setRecoveredTerminalMatchNotice,
     }),
@@ -279,6 +282,7 @@ export function useMultiplayerConnectionHostParams(
       source.navigationRuntime,
       source.reconnectRuntime,
       source.recoveryDispatchRef,
+      source.roomOperationEpochRef,
       source.setRecoveredTerminalMatchNotice,
       source.roomRuntime,
       source.roomSocialRuntime,

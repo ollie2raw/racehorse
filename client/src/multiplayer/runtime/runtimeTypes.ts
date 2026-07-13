@@ -14,6 +14,7 @@ import type { MultiplayerNavigationRuntime } from './navigationRuntime';
 import type { MultiplayerJoinFlightRuntime, MultiplayerRoomRuntime } from './roomRuntime';
 import type { MultiplayerRecoveryRuntime } from './recoveryRuntime';
 import type { TournamentAttachRuntime } from './tournamentRuntime';
+import type { RoomOperationEpochRef } from './roomOperationEpochTypes';
 
 /** Imperative session surface — machine owned by composition root, React subscribes via provider. */
 export type SessionRuntimeSlice = Readonly<{
@@ -86,6 +87,7 @@ export type MultiplayerRuntimeBootstrap = {
     (options?: { keepPlayers?: boolean; clearRoomCode?: boolean }) => void
   >;
   resyncInFlightRef: MutableRefObject<boolean>;
+  roomOperationEpochRef: RoomOperationEpochRef;
   resyncBufferedUpdateRef: MutableRefObject<import('../protocol').StateUpdatePayload | null>;
   resyncFlushRef: MutableRefObject<(() => void) | null>;
   rematchAwaitingStateRef: MutableRefObject<boolean>;

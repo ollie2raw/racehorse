@@ -24,6 +24,7 @@ import type {
 } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
 import { selectJoinedRoomCode } from './session/sessionStateMachine';
+import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 export type MultiplayerLobbyActionsContextValue = Omit<MultiplayerControllerLobbyActions, 'startGame'> & {
   onCreatePrivateRoom: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
@@ -105,6 +106,7 @@ export type MultiplayerLobbyActionsHostProps = {
   reconnectAttemptCountRef: MutableRefObject<number>;
   rejoinInFlightRef: MutableRefObject<boolean>;
   autoJoinAttemptedRef: MutableRefObject<boolean>;
+  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) {
@@ -189,6 +191,7 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
     friendInvite: props.friendInvite,
     outboundChallenge: props.outboundChallenge,
     applyJoinedRoomResponse: props.applyJoinedRoomResponse,
+    roomOperationEpochRef: props.roomOperationEpochRef,
   });
 
   const appendRoomReaction = useCallback((item: RoomChatEvent | RoomEmoteEvent) => {

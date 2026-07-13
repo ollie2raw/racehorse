@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../game/types';
 import type { Room } from '../rooms';
+import { createInitialRoomDurabilityState } from './roomDurability';
 import {
   assertUnmaskedGameStateForPersistence,
   buildLiveSessionRow,
@@ -41,7 +42,7 @@ function mkGameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 function mkRoom(overrides: Partial<Room> = {}): Room {
-  return {
+  const room = {
     code: 'ABCD12',
     players: ['seat-a', 'seat-b'],
     state: mkGameState(),
@@ -63,7 +64,15 @@ function mkRoom(overrides: Partial<Room> = {}): Room {
     events: [],
     matchmakingMatchId: '22222222-2222-4222-8222-222222222222',
     ...overrides,
-  };
+  } as Room;
+  room.durability =
+    overrides.durability ??
+    createInitialRoomDurabilityState({
+      asyncStateVersion: room.asyncStateVersion,
+      state: room.state,
+      eventSequence: room.eventSequence,
+    });
+  return room;
 }
 
 describe('roomLivePersistence', () => {

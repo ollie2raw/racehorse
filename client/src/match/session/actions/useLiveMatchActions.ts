@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, t
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
-import { drawAudit, nextDrawRequestId, nextGameActionRequestId } from '../../../multiplayer/drawAudit';
+import { drawAudit } from '../../../multiplayer/drawAudit';
 import {
   mpPerfBeginAction,
   mpPerfMarkAck,
@@ -26,6 +26,12 @@ import type { RoomRecoveryState } from '../../../multiplayer/protocol';
 import type { SessionEvent } from '../../../multiplayer/session/sessionTypes';
 import { tileEquals } from '../../../game/tileUtils';
 import { emitDraggingState as emitDraggingStateFn } from './emitDraggingState';
+import {
+  buildLogicalActionSignature,
+  resolveLogicalActionRequestId,
+  shouldClearLogicalActionForState,
+  type LogicalGameplayAction,
+} from './gameplayActionIdentity';
 
 export type UseLiveMatchActionsParams = {
   socket: Socket | null;
@@ -49,6 +55,7 @@ export type UseLiveMatchActionsParams = {
     kind: 'play' | 'draw' | 'pass';
     baselineSequence: number;
   } | null>;
+  logicalGameplayActionRef?: MutableRefObject<LogicalGameplayAction | null>;
   draggingStateRef: MutableRefObject<boolean>;
   mpAutoDrawSuppressUntilSequenceRef: MutableRefObject<number | null>;
   autoTurnActionKeyRef: MutableRefObject<string>;
@@ -117,6 +124,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     selectedTileRef,
     pendingActionRef,
     pendingGameplayActionRef,
+    logicalGameplayActionRef: providedLogicalGameplayActionRef,
     draggingStateRef,
     mpAutoDrawSuppressUntilSequenceRef,
     autoTurnActionKeyRef,
@@ -162,6 +170,8 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
   const pendingActionTrueSinceRef = useRef<number | null>(null);
   const pendingUiActionTrueSinceRef = useRef<number | null>(null);
   const connectionBlockedTrueSinceRef = useRef<number | null>(null);
+  const ownedLogicalGameplayActionRef = useRef<LogicalGameplayAction | null>(null);
+  const logicalGameplayActionRef = providedLogicalGameplayActionRef ?? ownedLogicalGameplayActionRef;
   const prevDrawSequenceActiveRef = useRef(drawSequenceActive);
   const prevFlyingTilesCountRef = useRef(flyingTiles.length);
 
@@ -268,6 +278,18 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       pendingUiActionTrueSinceRef.current = null;
     }
   }, [pendingUiAction]);
+
+  useEffect(() => {
+    if (
+      shouldClearLogicalActionForState(
+        logicalGameplayActionRef.current,
+        state,
+        joinedRoom,
+      )
+    ) {
+      logicalGameplayActionRef.current = null;
+    }
+  }, [state?.sequence, state?.handNumber, state?.gameOver, state?.handOver, joinedRoom, logicalGameplayActionRef]);
 
   const diagnoseGameplayBlockReason = useCallback((): GameplayBlockReason | null => {
     if (!socket || !joinedRoom || !state || !you) return 'missing_context';
@@ -436,7 +458,25 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     const validMoves = legalMovesNow
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
-    const requestId = nextDrawRequestId();
+    const handNumber = stateNow?.handNumber ?? 0;
+    const signature = buildLogicalActionSignature({
+      kind: 'draw',
+      roomCode: joinedRoom,
+      playerId: you,
+      baselineSequence,
+      handNumber,
+    });
+    const logicalAction = resolveLogicalActionRequestId({
+      current: logicalGameplayActionRef.current,
+      kind: 'draw',
+      roomCode: joinedRoom,
+      playerId: you,
+      baselineSequence,
+      handNumber,
+      signature,
+    });
+    logicalGameplayActionRef.current = logicalAction;
+    const requestId = logicalAction.requestId;
     const emitAt = Date.now();
     drawAudit('forced-state-detected', {
       roomCode: joinedRoom,
@@ -464,6 +504,9 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         setActionError(resp?.error ?? 'Unable to draw.');
         return;
       }
+      if (logicalGameplayActionRef.current?.requestId === requestId) {
+        logicalGameplayActionRef.current = null;
+      }
       if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
         mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
         autoTurnActionKeyRef.current = '';
@@ -489,6 +532,12 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       });
     } catch (e) {
       mpPerfMarkAck(false);
+      if (logicalGameplayActionRef.current?.requestId === requestId) {
+        logicalGameplayActionRef.current = {
+          ...logicalGameplayActionRef.current,
+          uncertain: true,
+        };
+      }
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
@@ -507,6 +556,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     stateRef,
     legalMovesRef,
     pendingGameplayActionRef,
+    logicalGameplayActionRef,
     setPendingActionRefDiag,
     mpAutoDrawSuppressUntilSequenceRef,
     autoTurnActionKeyRef,
@@ -531,13 +581,34 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     const validMoves = legalMovesNow
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
-    const requestId = nextGameActionRequestId('pass');
+    const handNumber = stateNow?.handNumber ?? 0;
+    const signature = buildLogicalActionSignature({
+      kind: 'pass',
+      roomCode: joinedRoom,
+      playerId: you,
+      baselineSequence,
+      handNumber,
+    });
+    const logicalAction = resolveLogicalActionRequestId({
+      current: logicalGameplayActionRef.current,
+      kind: 'pass',
+      roomCode: joinedRoom,
+      playerId: you,
+      baselineSequence,
+      handNumber,
+      signature,
+    });
+    logicalGameplayActionRef.current = logicalAction;
+    const requestId = logicalAction.requestId;
     try {
       const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
         setActionError(resp?.error ?? 'Unable to pass.');
         return;
+      }
+      if (logicalGameplayActionRef.current?.requestId === requestId) {
+        logicalGameplayActionRef.current = null;
       }
       appendMultiplayerMove({
         player: 'you',
@@ -560,6 +631,12 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       });
     } catch (e) {
       mpPerfMarkAck(false);
+      if (logicalGameplayActionRef.current?.requestId === requestId) {
+        logicalGameplayActionRef.current = {
+          ...logicalGameplayActionRef.current,
+          uncertain: true,
+        };
+      }
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
@@ -577,6 +654,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     stateRef,
     legalMovesRef,
     pendingGameplayActionRef,
+    logicalGameplayActionRef,
     setPendingActionRefDiag,
     setActionError,
     setPendingUiAction,
@@ -643,7 +721,27 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         .filter((m) => m.type === 'play' && m.tile)
         .map((m) => toTileTuple(m.tile as Tile));
       const playedTile = toTileTuple(tileToPlay);
-      const requestId = nextGameActionRequestId('move');
+      const handNumber = stateNow?.handNumber ?? 0;
+      const signature = buildLogicalActionSignature({
+        kind: 'move',
+        roomCode: joinedRoom,
+        playerId: you,
+        baselineSequence,
+        handNumber,
+        tile: tileToPlay,
+        position,
+      });
+      const logicalAction = resolveLogicalActionRequestId({
+        current: logicalGameplayActionRef.current,
+        kind: 'move',
+        roomCode: joinedRoom,
+        playerId: you,
+        baselineSequence,
+        handNumber,
+        signature,
+      });
+      logicalGameplayActionRef.current = logicalAction;
+      const requestId = logicalAction.requestId;
 
       try {
         const resp = await emitGameAction(socket, joinedRoom, {
@@ -656,6 +754,9 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         if (!resp?.ok) {
           setActionError(resp?.error ?? 'Unable to play tile.');
           return;
+        }
+        if (logicalGameplayActionRef.current?.requestId === requestId) {
+          logicalGameplayActionRef.current = null;
         }
         if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
           mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
@@ -691,6 +792,12 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         });
       } catch (e) {
         mpPerfMarkAck(false);
+        if (logicalGameplayActionRef.current?.requestId === requestId) {
+          logicalGameplayActionRef.current = {
+            ...logicalGameplayActionRef.current,
+            uncertain: true,
+          };
+        }
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
@@ -712,6 +819,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       drawSequenceActive,
       flyingTiles,
       pendingUiAction,
+      logicalGameplayActionRef,
       roomRecoveryState,
       isRecoveringConnection,
       rejoinInFlightRef,

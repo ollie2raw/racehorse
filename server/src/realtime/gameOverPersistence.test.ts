@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server } from 'socket.io';
 import type { Room } from '../rooms';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
+import { createInitialRoomDurabilityState } from '../multiplayer/roomDurability';
 
 const {
   applyTournamentGameOverFromRoomMock,
@@ -117,6 +118,13 @@ function buildInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<
     events: [],
     ...roomOverrides,
   } as Room;
+  room.durability =
+    roomOverrides?.durability ??
+    createInitialRoomDurabilityState({
+      asyncStateVersion: room.asyncStateVersion,
+      state: room.state,
+      eventSequence: room.eventSequence,
+    });
 
   return {
     room,
