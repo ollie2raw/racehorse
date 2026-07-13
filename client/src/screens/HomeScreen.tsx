@@ -1,16 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useHomeCommandCenter } from '../home/useHomeCommandCenter';
+import type { AppRoutesTournamentProps } from '../appRouteTypes';
 import type { CSSProperties } from 'react';
 import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
-import { useAuth } from '../auth/useAuth';
-import { getTodayDailyFritz } from '../dailyFritz/api';
-import { getTodayDailyPuzzleLadder } from '../dailyPuzzle/api';
-import {
-  getHomeDailySummary,
-  type HomeDailySummaryResponse,
-  type HomeDailySummaryWeekDay,
-} from '../features/daily/homeDailySummaryApi';
+import { getHomeDailyCardState, getHomeDailyResultCopy } from '../home/homeDailyCardPresentation';
+import { HomeNextMoveBar } from '../home/components/HomeNextMoveBar';
 import './RacehorseHomeArt.css';
+import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
 
 type AppMode =
   | 'home'
@@ -33,24 +29,24 @@ type AppMode =
   | 'tournament'
   | 'leaderboard'
   | 'profile'
-  | 'feed';
+  | 'feed'
+  | 'live';
 
-type DailyStripVisualState = 'done' | 'today' | 'future' | 'missed';
-
-function getDayVisualState(day: HomeDailySummaryWeekDay): DailyStripVisualState {
-  if (day.complete) return 'done';
-  if (day.isToday) return 'today';
-  if (day.isFuture) return 'future';
-  return 'missed';
-}
-
-const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
+const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
   { label: 'Multiplayer', color: '#3FA7FF', icon: 'users', mode: 'multiplayer' },
   { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
   { label: 'Tournament', color: '#F5A524', icon: 'trophy', mode: 'tournament' },
   { label: 'Social', color: '#B8C7DA', icon: 'medal', mode: 'feed' },
   { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
 ];
+
+export function getHomeTabs(spectatorEnabled = isSpectatorModeEnabled()) {
+  return spectatorEnabled
+    ? [{ label: 'Live Now', color: '#58A6FF', icon: 'users' as const, mode: 'live' as const }, ...coreTabs]
+    : coreTabs;
+}
+
+const tabs = getHomeTabs();
 
 function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon']; color: string; size?: number }) {
   const common = {
@@ -123,30 +119,13 @@ function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon
 
 function StatusRow({
   status,
-  text,
   color = '#22C55E',
   accentColor = '#3BE26F',
-  textColor,
 }: {
-  status: 'completed' | 'started' | 'none';
-  text?: string;
+  status: 'started' | 'none' | 'unknown';
   color?: string;
   accentColor?: string;
-  textColor?: string;
 }) {
-  if (status === 'completed') {
-    return (
-      <div className="mt-6 flex items-center gap-3 text-[15px]">
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border" style={{ borderColor: `${color}a6` }}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 8.5L6.1 11.6L13 4.7" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-        <span className="font-medium" style={{ color: accentColor }}>Complete</span>
-        {text && <><span className="text-[#777287]">·</span><span style={{ color: textColor ?? '#B7B2C0' }}>{text}</span></>}
-      </div>
-    );
-  }
   if (status === 'started') {
     return (
       <div className="mt-6 flex items-center gap-3 text-[15px]">
@@ -154,7 +133,16 @@ function StatusRow({
           <div className="h-2 w-2 rounded-full" style={{ backgroundColor: accentColor }} />
         </span>
         <span className="font-medium" style={{ color: accentColor }}>In Progress</span>
-        {text && <><span className="text-[#777287]">·</span><span className="text-[#B7B2C0]">{text}</span></>}
+      </div>
+    );
+  }
+  if (status === 'unknown') {
+    return (
+      <div className="mt-6 flex items-center gap-3 text-[15px]">
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20">
+          <div className="h-2 w-2 rounded-full bg-white/25" />
+        </span>
+        <span className="text-[#777287]">Status unavailable</span>
       </div>
     );
   }
@@ -172,83 +160,39 @@ export default function RacehorseHomeScreen({
   setAppMode,
   onOpenAuth,
   onOpenAccount,
+  tournament,
 }: {
   setAppMode?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
   onOpenAccount?: () => void;
+  tournament: AppRoutesTournamentProps['tournament'];
 }) {
   const navigate = (mode: AppMode) => setAppMode?.(mode);
-
-  const { user: authUser } = useAuth();
-
-  const [, setFritzStreak] = useState<number | null>(null);
-  const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
-  const [fritzOutcome, setFritzOutcome] = useState<'win' | 'loss' | null>(null);
-  const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');
-  const [puzzleScore, setPuzzleScore] = useState<number | null>(null);
-  const [homeDailySummary, setHomeDailySummary] = useState<HomeDailySummaryResponse | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getHomeDailySummary()
-      .then((data) => {
-        if (!cancelled) setHomeDailySummary(data);
-      })
-      .catch(() => {
-        if (!cancelled) setHomeDailySummary(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authUser?.id, fritzStatus, puzzleStatus]);
-
-  useEffect(() => {
-    if (!authUser?.id) return;
-
-    getTodayDailyFritz()
-      .then((data) => {
-        setFritzStreak(data.streak ?? 0);
-        const s = data.attempt_status;
-        setFritzStatus(s === 'completed' ? 'completed' : s === 'started' ? 'started' : 'none');
-        const won = data.set_result?.setWinner === 'player' || data.set_result?.won === true;
-        const lost = data.set_result?.setWinner === 'fritz' || (data.set_result?.won === false && s === 'completed');
-        setFritzOutcome(s === 'completed' ? (won ? 'win' : lost ? 'loss' : null) : null);
-      })
-      .catch(() => {
-        setFritzStreak(0);
-        setFritzStatus('none');
-        setFritzOutcome(null);
-      });
-  }, [authUser?.id]);
-
-  const displayFritzStatus = authUser?.id ? fritzStatus : 'none';
-  const displayFritzOutcome = authUser?.id ? fritzOutcome : null;
-
-  useEffect(() => {
-    getTodayDailyPuzzleLadder()
-      .then((data) => {
-        const s = data.attemptStatus;
-        setPuzzleStatus(s === 'completed' ? 'completed' : s === 'started' ? 'started' : 'none');
-        if (s === 'completed' && data.attempt?.totalScore != null) {
-          setPuzzleScore(data.attempt.totalScore);
-        }
-      })
-      .catch(() => setPuzzleStatus('none'));
-  }, []);
-
-  const streakDays = homeDailySummary?.week ?? [];
-  const weeklyCompletedCount = homeDailySummary?.weeklyCompletedCount ?? 0;
-  const currentStreakCount = homeDailySummary?.currentStreakCount ?? 0;
-  const todayComplete = homeDailySummary?.todayComplete ?? false;
-  const weeklyGoalComplete = weeklyCompletedCount >= 7;
-  const streakTitle = currentStreakCount > 0 ? `${currentStreakCount} Day Streak` : 'Start your streak';
-  const streakSubtitle = weeklyGoalComplete
-    ? 'Weekly goal complete.'
-    : todayComplete
-      ? 'Nice — today is complete.'
-      : currentStreakCount > 0
-        ? 'Play Fritz or Puzzle today to keep it going.'
-        : 'Play Fritz or Puzzle today.';
+  const homeModel = useHomeCommandCenter(tournament);
+  const fritz = homeModel.daily.fritz.data;
+  const puzzle = homeModel.daily.puzzle.data;
+  const displayFritzStatus = homeModel.daily.fritz.status === 'error'
+    ? 'unknown'
+    : fritz?.state === 'completed'
+      ? 'completed'
+      : fritz?.state === 'started'
+        ? 'started'
+        : 'none';
+  const displayFritzOutcome = fritz?.outcome ?? null;
+  const puzzleStatus = homeModel.daily.puzzle.status === 'error'
+    ? 'unknown'
+    : puzzle?.state === 'completed'
+      ? 'completed'
+      : puzzle?.state === 'started'
+        ? 'started'
+        : 'none';
+  const puzzleScore = puzzle?.score ?? null;
+  const currentStreakCount = homeModel.daily.summary.data?.currentStreakCount ?? 0;
+  const fritzCompleted = getHomeDailyCardState(homeModel.daily.fritz.status, fritz?.state ?? null) === 'completed';
+  const puzzleCompleted = getHomeDailyCardState(homeModel.daily.puzzle.status, puzzle?.state ?? null) === 'completed';
+  const fritzResultCopy = getHomeDailyResultCopy('fritz', displayFritzOutcome);
+  const puzzleResultCopy = getHomeDailyResultCopy('puzzle');
+  const homeLoading = Object.values(homeModel.sourceStatus).some((status) => status === 'loading');
 
   const themeVars = {
     '--rh-bg': '#050911',
@@ -286,65 +230,77 @@ export default function RacehorseHomeScreen({
           onOpenAccount={onOpenAccount}
         />
 
-        <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
+        <main className="relative flex-1 px-0 pb-5 pt-8 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="text-center">
             <h1 className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Race</h1>
             <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">Two ways to test your strategy. One daily tradition.</p>
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-5 px-14">
-            <section className="daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-7 py-8">
+          <div className="mt-6 grid grid-cols-2 gap-5 px-14">
+            <section className={`daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-7 py-8${fritzCompleted ? ' daily-card--completed' : ''}`} aria-label={fritzCompleted ? 'Daily Fritz completed results' : 'Daily Fritz'}>
               <div className="home-card-art home-card-art--fritz" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#E7B64A]">Daily Fritz</h2>
-                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
-                  <div className="mt-2">
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{fritzCompleted ? "Today's result" : 'Best of 3 series. Same deal for everyone.'}</p>
+                  {fritzCompleted && (
+                    <div className="home-daily-result-summary" aria-label="Daily Fritz result summary">
+                      <span className="home-daily-result-badge" role="status">{fritzResultCopy.badge}</span>
+                      {fritz?.rank != null && <span>Placement <strong>#{fritz.rank}</strong></span>}
+                      {fritz?.streak != null && <span>Streak <strong>{fritz.streak}</strong></span>}
+                      {fritzResultCopy.outcome && <span className="home-daily-result-outcome" aria-label={`Outcome: ${fritzResultCopy.outcome}`}>{fritzResultCopy.outcome}</span>}
+                    </div>
+                  )}
+                  {!fritzCompleted && <div className="mt-2">
                     <StatusRow
-                      status={displayFritzStatus}
-                      text={displayFritzStatus === 'completed' ? (displayFritzOutcome === 'win' ? 'Win' : displayFritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
+                      status={displayFritzStatus === 'completed' ? 'none' : displayFritzStatus}
                       color="#E7B64A"
                       accentColor="#FFD76A"
-                      textColor={displayFritzOutcome === 'win' ? '#7EE24E' : displayFritzOutcome === 'loss' ? '#F87171' : undefined}
                     />
-                  </div>
+                  </div>}
                   <Button
                     variant="tier-elite"
                     onClick={() => navigate('dailyFritz')}
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
-                    <span>{displayFritzStatus === 'completed' ? 'View Result' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
+                    <span>{fritzCompleted ? 'View Results' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: '#FFD76A', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>
               </div>
             </section>
 
-            <section className="daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-7 py-8">
+            <section className={`daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-7 py-8${puzzleCompleted ? ' daily-card--completed' : ''}`} aria-label={puzzleCompleted ? 'Daily Puzzle completed results' : 'Daily Puzzle'}>
               <div className="home-card-art home-card-art--puzzle" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
-                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">Three daily puzzles. Rising difficulty.</p>
-                  <div className="mt-2">
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Three daily puzzles. Rising difficulty.'}</p>
+                  {puzzleCompleted && (
+                    <div className="home-daily-result-summary" aria-label="Daily Puzzle result summary">
+                      <span className="home-daily-result-badge" role="status">{puzzleResultCopy.badge}</span>
+                      {puzzleScore != null && <span>Score <strong>{puzzleScore}</strong></span>}
+                      {currentStreakCount > 0 && <span>Streak <strong>{currentStreakCount}</strong></span>}
+                    </div>
+                  )}
+                  {!puzzleCompleted && <div className="mt-2">
                     <StatusRow
-                      status={puzzleStatus}
-                      text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
+                      status={puzzleStatus === 'completed' ? 'none' : puzzleStatus}
                       color="#58A6FF"
                       accentColor="#68B3FF"
                     />
-                  </div>
+                  </div>}
                   <Button
                     variant="tier-standard"
                     onClick={() => navigate('daily')}
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
-                    <span>{puzzleStatus === 'completed' ? 'Review Puzzle' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>
+                    <span>{puzzleCompleted ? 'View Results' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: '#68B3FF', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>
@@ -352,62 +308,13 @@ export default function RacehorseHomeScreen({
             </section>
           </div>
 
-          <section className="mx-14 mt-4 flex items-center rounded-[18px] border border-white/[0.055] bg-[rgba(7,9,16,0.88)] px-7 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.028),0_8px_20px_rgba(0,0,0,0.22)]">
-            <div className="flex min-w-[236px] items-center gap-4">
-              <div className="flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[#24541F] bg-[#132012] shadow-[0_0_20px_rgba(78,218,74,0.12)]">
-                <img 
-                  src="/daystreak.png" 
-                  alt="Streak Icon" 
-                  style={{ width: 28, height: 28, objectFit: 'contain' }}
-                />
-              </div>
-              <div>
-                <div className="text-[18px] font-semibold text-[#7EE24E]">{streakTitle}</div>
-                <div className="mt-1 text-[13px] text-[#9D98A9]">{streakSubtitle}</div>
-              </div>
-            </div>
+          <HomeNextMoveBar
+            action={homeModel.primaryAction}
+            loading={homeLoading}
+            onAction={(action) => navigate(action.route)}
+          />
 
-            <div className="flex flex-1 items-center justify-center gap-8">
-              {streakDays.map((day) => (
-                <div key={day.label} className="flex flex-col items-center">
-                  <div className="mb-2.5 text-[12px] text-[#B6B1BF]">{day.label}</div>
-                  {getDayVisualState(day) === 'done' ? (
-                    <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#345B26] bg-[#1C3518] shadow-[0_0_16px_rgba(126,226,78,0.15)]">
-                      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#7EE24E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                  ) : getDayVisualState(day) === 'today' ? (
-                    <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#9B6CFF]">
-                      <div className="h-[9px] w-[9px] rounded-full bg-[#A77CFF]" />
-                    </div>
-                  ) : getDayVisualState(day) === 'future' ? (
-                    <div className="h-[38px] w-[38px] rounded-full border border-[#32394A]" />
-                  ) : (
-                    <div className="h-[38px] w-[38px] rounded-full border border-[#262D3A] opacity-70" />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="ml-7 flex min-w-[280px] items-center gap-7 border-l border-white/10 pl-8">
-              <div>
-                <div className="text-[13px] text-[#B6B1BF]">Weekly Goal</div>
-                <div className="mt-1.5 text-[16px]">
-                  <span className="font-semibold text-[#7EE24E]">{weeklyCompletedCount}</span>
-                  <span className="text-[#B6B1BF]"> / 7 Days</span>
-                </div>
-              </div>
-              <div className="h-[7px] w-[160px] rounded-full bg-[#1B2432]">
-                <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,#7EE24E,#89D830)] shadow-[0_0_10px_rgba(126,226,78,0.22)]"
-                  style={{ width: `${Math.round(Math.min(weeklyCompletedCount / 7, 1) * 100)}%` }}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="mx-14 mt-4 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,13,22,0.96)_0%,rgba(6,8,14,0.98)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_8px_20px_rgba(0,0,0,0.22)]">
+          <section className="home-mode-tabs mx-14 mt-4 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,13,22,0.96)_0%,rgba(6,8,14,0.98)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_8px_20px_rgba(0,0,0,0.22)]" aria-label="Game modes">
             <div className="flex">
               {tabs.map((tab) => (
                 <button

@@ -164,6 +164,7 @@ export default function AppRoutes({
           setAppMode={setAppMode}
           onOpenAuth={handleOpenAuthModal}
           onOpenAccount={handleOpenAccountModal}
+          tournament={tournamentProps.tournament}
         />
       </Suspense>,
     );

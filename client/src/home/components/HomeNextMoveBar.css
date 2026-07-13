@@ -1,0 +1,191 @@
+.home-next-move {
+  --next-move-accent: #d7a64a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 78px;
+  margin: 16px 56px 0;
+  padding: 13px 18px 13px 20px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--next-move-accent) 24%, transparent);
+  border-radius: 14px;
+  background: #080f1a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 20px rgba(0, 0, 0, 0.16);
+  animation: home-next-move-enter 160ms ease-out both;
+}
+
+.home-next-move::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--next-move-accent) 72%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--next-move-accent) 32%, transparent);
+  content: '';
+}
+
+.home-next-move--continue_lesson {
+  --next-move-accent: #67d957;
+}
+
+.home-next-move--continue_daily_puzzle,
+.home-next-move--play_daily_puzzle {
+  --next-move-accent: #58a6ff;
+}
+
+.home-next-move--continue_tournament {
+  --next-move-accent: #f2a63a;
+}
+
+.home-next-move--challenge_online_rival {
+  --next-move-accent: #b8c7da;
+}
+
+.home-next-move__icon {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--next-move-accent);
+  border: 1px solid color-mix(in srgb, var(--next-move-accent) 35%, transparent);
+  border-radius: 10px;
+  background: #111a27;
+}
+
+.home-next-move__icon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.8;
+}
+
+.home-next-move__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.home-next-move__eyebrow {
+  color: #8d98aa;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.home-next-move__title,
+.home-next-move__reason {
+  overflow-wrap: anywhere;
+}
+
+.home-next-move__title {
+  margin: 0;
+  color: #f2eee8;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+.home-next-move__reason {
+  margin: 0;
+  color: #9aa6b6;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.home-next-move__cta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 132px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: #0b111b;
+  border: 1px solid color-mix(in srgb, var(--next-move-accent) 84%, #f2eee8);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--next-move-accent) 80%, #0b111b);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.home-next-move__cta:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.home-next-move__cta:focus-visible {
+  outline: 2px solid #f2eee8;
+  outline-offset: 3px;
+}
+
+.home-next-move__cta:active {
+  transform: translateY(0);
+}
+
+.home-next-move__cta svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
+}
+
+.home-next-move--loading {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 132px;
+  border-color: rgba(184, 199, 218, 0.12);
+}
+
+.home-next-move__skeleton {
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.home-next-move__skeleton--icon {
+  width: 38px;
+  height: 38px;
+}
+
+.home-next-move__skeleton--copy {
+  width: min(360px, 72%);
+}
+
+.home-next-move__skeleton--cta {
+  width: 132px;
+  height: 40px;
+}
+
+@keyframes home-next-move-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-next-move { animation: none; }
+  .home-next-move__cta { transition: none; }
+}
+
+@media (max-width: 600px) {
+  .home-next-move {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    margin: 14px 16px 0;
+    padding: 14px 16px 14px 18px;
+  }
+
+  .home-next-move__copy { flex-basis: calc(100% - 52px); }
+  .home-next-move__cta { width: 100%; min-height: 40px; }
+  .home-next-move--loading { grid-template-columns: 38px minmax(0, 1fr); }
+  .home-next-move--loading .home-next-move__skeleton--cta { grid-column: 1 / -1; width: 100%; }
+}
