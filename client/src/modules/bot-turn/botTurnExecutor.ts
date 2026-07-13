@@ -30,6 +30,7 @@ export type BotTurnExecutionInput = {
   isGhostMode: boolean;
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
+  isDailyFritzMode: boolean;
   isMuted: boolean;
   moveCounter: number;
   setBotChainPaused: (paused: boolean) => void;
@@ -68,6 +69,7 @@ export async function executeBotTurn(
       isGhostMode: input.isGhostMode,
       ghostProfile: input.ghostProfile,
       fritzDifficulty: input.fritzDifficulty,
+      isDailyFritzMode: input.isDailyFritzMode,
       isMuted: input.isMuted,
       moveCounter: input.moveCounter,
       matchHandNumber: input.matchSnapshotSource.handNumber,
@@ -96,6 +98,7 @@ export async function executeBotTurn(
       isGhostMode: input.isGhostMode,
       ghostProfile: input.ghostProfile,
       fritzDifficulty: input.fritzDifficulty,
+      isDailyFritzMode: input.isDailyFritzMode,
     });
     chosen = resolution.chosen;
     ghostChosen = resolution.ghostChosen;

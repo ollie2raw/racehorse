@@ -1,6 +1,7 @@
 import type { EngineBestMove, MoveEntry } from '../../game/moveLogger.ts';
 import { toTileTuple } from '../../game/moveLogger.ts';
 import type { Tile } from '../../types.ts';
+import type { PlacementPosition } from '../../types.ts';
 import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
 
 type OpponentMoveLogEntry = Omit<MoveEntry, 'moveNumber' | 'handNumber'>;
@@ -47,12 +48,14 @@ export function buildBotPassMoveLogEntry(
 export function buildBotPlaceMoveLogEntry(input: {
   snapshot: BotTurnSnapshot;
   tile: Tile;
+  position: PlacementPosition;
   engineBestMove: EngineBestMove | null;
 }): OpponentMoveLogEntry {
   return {
     player: 'opponent',
     action: 'place',
     tile: toTileTuple(input.tile),
+    position: input.position,
     ...baseFields(input.snapshot, input.engineBestMove),
   };
 }

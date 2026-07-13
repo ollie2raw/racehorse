@@ -20,6 +20,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@racehorse/game-core": "*",
     "@sentry/node": "^10.62.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",

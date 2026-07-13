@@ -7,6 +7,8 @@ import {
   boardTileCount,
   tileKey,
   isValidTile,
+  assertUniquePhysicalTiles,
+  collectPhysicalTilesFromBoard,
 } from '../invariants';
 import { GameState, BoardState, Tile, PlacedTile, DEFAULT_CONFIG } from '../types';
 
@@ -40,6 +42,32 @@ function makeState(overrides: Partial<GameState>): GameState {
   const base = createInitialState(['A', 'B']);
   return { ...base, ...overrides } as GameState;
 }
+
+it('validates tile bounds and physical board enumeration', () => {
+  expect(isValidTile({ low: 0, high: 6 })).toBe(true);
+  expect(isValidTile({ low: -1, high: 6 })).toBe(false);
+  expect(isValidTile({ low: 0.5, high: 6 })).toBe(false);
+  const board: BoardState = {
+    mainLine: [pt(2, 2), pt(2, 5)],
+    leftEnd: 2,
+    rightEnd: 5,
+    leftEndIsDouble: false,
+    rightEndIsDouble: false,
+    hubDoubles: [{
+      hubId: 0,
+      tileIndex: 0,
+      hubValue: 2,
+      isCrossed: true,
+      branches: [{
+        tiles: [pt(2, 4)],
+        openEnd: 4,
+        openEndIsDouble: false,
+      }, null],
+    }],
+  };
+  expect(collectPhysicalTilesFromBoard(board)).toHaveLength(3);
+  expect(() => assertUniquePhysicalTiles([{ low: 1, high: 2 }, { low: 2, high: 1 }])).toThrow(/duplicate/i);
+});
 
 // ─── Helper unit tests ─────────────────────────────────────────────────────
 

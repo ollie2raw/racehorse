@@ -259,7 +259,7 @@ describe('botEngine', () => {
 
   it('18. drawOne draws tile from boneyard', () => {
     const handDeal = {
-      player_tiles: [dummyTile(3, 3)],
+      player_tiles: [dummyTile(1, 2)],
       fritz_tiles: [],
       boneyard: [dummyTile(5, 5), dummyTile(6, 6), dummyTile(0, 0)],
       locked: [],

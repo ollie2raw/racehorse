@@ -14,6 +14,7 @@ import { resolveGhostMove } from '../ghost/ghostMoveLogic.ts';
 import { playTileSound, queueSound } from '../../utils/sound.ts';
 import type { Move, Tile } from '../../types.ts';
 import { logFritzFairnessDecision } from './fritzEvaluation.ts';
+import { chooseOfficialFritzBotChoice } from '../match/runtime/gameCoreAdapter.ts';
 
 export type BotMoveResolution = {
   chosen: BotChoice | null;
@@ -28,6 +29,7 @@ export function resolveBotMoveChoice(input: {
   isGhostMode: boolean;
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
+  isDailyFritzMode: boolean;
 }): BotMoveResolution {
   let chosen: BotChoice | null = null;
   let ghostChosen: GhostResolvedMove | null = null;
@@ -40,7 +42,9 @@ export function resolveBotMoveChoice(input: {
       profile: input.ghostProfile,
     });
   } else {
-    chosen = chooseBotMove(toBotVisibleState(input.state), input.fritzDifficulty);
+    chosen = input.isDailyFritzMode
+      ? chooseOfficialFritzBotChoice(input.state, input.fritzDifficulty)
+      : chooseBotMove(toBotVisibleState(input.state), input.fritzDifficulty);
     logFritzFairnessDecision(input.state, chosen);
   }
 

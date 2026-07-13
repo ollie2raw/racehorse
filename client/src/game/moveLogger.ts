@@ -30,6 +30,7 @@ export type MoveEntry = {
   player: 'you' | 'opponent';
   action: 'place' | 'draw' | 'pass';
   tile?: TileTuple;
+  position?: PlacementPosition;
   boardEnds: [number, number];
   handBefore: TileTuple[];
   validMoves: TileTuple[];

@@ -155,6 +155,17 @@ export function usePlayerPlacementHandler({
     console.log('[guided-move] result.state player hand =', result.state.players.you.hand.map(toTileKey));
     console.log('[guided-move] result.state board mainLine length =', result.state.board?.mainLine.length);
 
+    appendMove(
+      buildPlacementMoveLogEntry(
+        match,
+        snapshot,
+        selectedTile!,
+        position,
+        afterPips,
+        result.scored?.points ?? 0,
+        fritzDifficulty,
+      ),
+    );
     applyAndNotify(result);
     console.log('[guided-click-applied]', {
       currentPlayerAfter: result.state.currentPlayer,
@@ -186,16 +197,6 @@ export function usePlayerPlacementHandler({
       );
     }
 
-    appendMove(
-      buildPlacementMoveLogEntry(
-        match,
-        snapshot,
-        selectedTile!,
-        afterPips,
-        result.scored?.points ?? 0,
-        fritzDifficulty,
-      ),
-    );
   }, [
     applyAndNotify,
     appendGhostMove,

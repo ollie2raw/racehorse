@@ -43,6 +43,7 @@ export function buildPlacementMoveLogEntry(
   match: BotMatchState,
   snapshot: PlayerMoveSnapshot,
   selectedTile: Tile,
+  position: import('../../types.ts').PlacementPosition,
   afterPips: number,
   pointsScored: number,
   fritzDifficulty: BotDifficulty,
@@ -51,6 +52,7 @@ export function buildPlacementMoveLogEntry(
     player: 'you',
     action: 'place',
     tile: toTileTuple(selectedTile),
+    position,
     ...baseMoveLogFields(match, snapshot, fritzDifficulty, {
       pipDelta: snapshot.beforePips - afterPips,
       pointsScored,

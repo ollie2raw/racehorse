@@ -25,6 +25,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
+      "@racehorse/game-core": ["../packages/game-core/src/index.ts"],
+      "@racehorse/game-core/*": ["../packages/game-core/src/*"],
       "@racehorse/match-protocol": ["../packages/match-protocol/src/index.ts"],
       "@racehorse/match-protocol/*": ["../packages/match-protocol/src/*"]
     }

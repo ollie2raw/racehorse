@@ -12,6 +12,7 @@ import { computeBotChainPaused } from './botChainPause.ts';
 import { collectBotTurnSnapshot } from './botMoveSnapshot.ts';
 import { buildBotPlaceMoveLogEntry } from './botMoveLogEntries.ts';
 import type { BotTurnPorts } from './types.ts';
+import { chooseOfficialFritzBotChoice } from '../match/runtime/gameCoreAdapter.ts';
 
 export type BotThinkingFallbackOutcome = {
   applied: boolean;
@@ -29,6 +30,8 @@ export function executeBotThinkingFallback(input: {
   setBotChainPaused: (paused: boolean) => void;
   cancelled: boolean;
   actionResolved: boolean;
+  isDailyFritzMode: boolean;
+  fritzDifficulty: import('../fritz/botHeuristics.ts').BotDifficulty;
 }): BotThinkingFallbackOutcome {
   if (input.cancelled || input.actionResolved) {
     return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
@@ -42,7 +45,12 @@ export function executeBotThinkingFallback(input: {
     return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
   }
 
-  const fallbackPlay = asPlayMoves(getLegalMoves(live, 'bot'))[0];
+  const officialChoice = input.isDailyFritzMode
+    ? chooseOfficialFritzBotChoice(live, input.fritzDifficulty)?.move ?? null
+    : null;
+  const fallbackPlay = officialChoice?.type === 'play'
+    ? officialChoice
+    : asPlayMoves(getLegalMoves(live, 'bot'))[0];
   if (!fallbackPlay) {
     return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
   }
@@ -63,6 +71,7 @@ export function executeBotThinkingFallback(input: {
       buildBotPlaceMoveLogEntry({
         snapshot,
         tile: fallbackPlay.tile as Tile,
+        position: fallbackPlay.position!,
         engineBestMove: fallbackPlay.tile
           ? {
               tile: toTileTuple(fallbackPlay.tile),

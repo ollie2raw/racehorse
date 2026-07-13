@@ -28,6 +28,7 @@ describe('bot move log entries', () => {
     const entry = buildBotPlaceMoveLogEntry({
       snapshot,
       tile,
+      position: 'left',
       engineBestMove: null,
     });
     expect(entry.action).toBe('place');

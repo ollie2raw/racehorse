@@ -10,15 +10,15 @@ import {
   drawOne,
   drawUntilPlayableOrEmpty,
   getLegalMoves,
-} from './engine';
-import { computePlayScore, simulatePlacement } from './scoring';
+} from '../engine';
+import { computePlayScore, simulatePlacement } from '../scoring';
 import {
   DEFAULT_CONFIG,
   type BoardState,
   type GameState,
   type PlacedTile,
   type Tile,
-} from './types';
+} from '../types';
 
 function t(a: number, b: number): Tile {
   return a <= b ? { low: a, high: b } : { low: b, high: a };

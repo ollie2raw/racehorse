@@ -127,6 +127,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             isGhostMode,
             ghostProfile,
             fritzDifficulty,
+            isDailyFritzMode,
             isMuted,
             moveCounter: moveCounterRef.current,
             setBotChainPaused: (paused) => {
@@ -177,6 +178,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
         },
         cancelled,
         actionResolved,
+        isDailyFritzMode,
+        fritzDifficulty,
       });
       cancelled = outcome.cancelled;
       actionResolved = outcome.actionResolved;

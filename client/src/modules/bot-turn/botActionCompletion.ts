@@ -25,6 +25,7 @@ export function logBotPlaceMove(input: {
     buildBotPlaceMoveLogEntry({
       snapshot: input.snapshot,
       tile,
+      position: input.ghostChosen?.position ?? input.chosen!.move.position!,
       engineBestMove: input.ghostChosen
         ? {
             tile: toTileTuple(input.ghostChosen.tile),
