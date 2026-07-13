@@ -20,6 +20,8 @@ import {
 } from './journeyStorage';
 import { JOURNEY_CHAPTER_1_ID } from './journeyTypes';
 import type { JourneyChapterWithStatus, JourneyNodeWithStatus } from './journeyTypes';
+import { getAllJourneyContentDescriptors } from './journeyContentResolver';
+import { projectLegacyJourneyProgressToEvidence } from './journeyLegacyEvidenceAdapter';
 
 export function useJourneyProgress() {
   const [progress, setProgress] = useState(() => loadJourneyProgress());
@@ -66,6 +68,14 @@ export function useJourneyProgress() {
     [activeChapter.chapterId, progress],
   );
 
+  const learningEvidence = useMemo(
+    () => projectLegacyJourneyProgressToEvidence({
+      legacyProgress: progress,
+      activeDescriptors: getAllJourneyContentDescriptors(),
+    }),
+    [progress],
+  );
+
   const selectNode = useCallback((nodeId: string) => {
     setProgress((current) => setJourneyLastVisited(nodeId, current));
   }, []);
@@ -98,6 +108,7 @@ export function useJourneyProgress() {
     summary,
     activeChapterComplete,
     shouldShowChapterCompleteCelebration,
+    learningEvidence,
     selectNode,
     selectChapter,
     completeNode,

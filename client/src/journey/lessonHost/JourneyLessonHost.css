@@ -1,0 +1,37 @@
+.journey-lesson-host { min-height: 100%; background: #050b17; color: #edf4ff; padding: clamp(18px, 3vw, 42px); font-family: inherit; }
+.journey-lesson-host__header { display:flex; align-items:center; justify-content:space-between; gap:18px; max-width:1180px; margin:0 auto; border-bottom:1px solid rgba(104,168,214,.25); padding-bottom:16px; }
+.journey-lesson-host__header h1, .journey-lesson-host--terminal h1 { margin:0; font-size:clamp(24px,3vw,42px); letter-spacing:0; }
+.journey-lesson-host__eyebrow, .journey-lesson-host__progress, .journey-lesson-host__feedback-label { color:#d3b45b; text-transform:uppercase; font-size:11px; letter-spacing:.12em; margin:0 0 5px; }
+.journey-lesson-host__exit, .journey-lesson-host button { border:1px solid rgba(104,168,214,.45); background:#0d1b2b; color:#edf4ff; border-radius:7px; padding:11px 15px; font:inherit; cursor:pointer; }
+.journey-lesson-host__exit { display:inline-flex; align-items:center; gap:8px; }
+.journey-lesson-host button:hover, .journey-lesson-host button:focus-visible { border-color:#5cc8ff; outline:2px solid rgba(92,200,255,.55); outline-offset:2px; }
+.journey-lesson-host button:disabled { opacity:.4; cursor:not-allowed; }
+.journey-lesson-host__main { max-width:1180px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:16px; padding-top:22px; }
+.journey-lesson-host__frame, .journey-lesson-host__lesson-stage, .journey-lesson-host__feedback { width:min(100%, 880px); background:#0a1422; border:1px solid rgba(104,168,214,.3); border-radius:12px; padding:clamp(18px,3vw,34px); box-shadow:0 18px 50px rgba(0,0,0,.25); }
+.journey-lesson-host__frame { min-height:260px; display:flex; flex-direction:column; justify-content:center; gap:18px; font-size:clamp(18px,2vw,25px); }
+.journey-lesson-host__frame p { max-width:640px; margin:0; }
+.journey-lesson-host__fritz-line { color:#d3b45b; font-style:italic; }
+.journey-lesson-host__instruction { text-align:center; font-size:18px; margin:0 0 8px; }
+.journey-lesson-host__demo-description { max-width:680px; margin:0 auto 10px; text-align:center; color:#cdd9eb; line-height:1.45; }
+.journey-lesson-host__demo-controls { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:12px; color:#cdd9eb; }
+.journey-lesson-host__consequence { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; color:#ffe8a1; font-size:14px; }
+.journey-lesson-host__board { position:relative; width:100%; min-height:300px; margin:6px 0 12px; overflow:hidden; border:1px solid rgba(104,168,214,.18); border-radius:8px; background:#07101d; }
+.journey-lesson-host__board .board-container { min-height:300px; }
+.journey-lesson-host__hand { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; padding:12px 0; }
+.journey-lesson-host__placement { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
+.journey-lesson-host__placement .is-selected { border-color:#d3b45b; color:#ffe8a1; }
+.journey-lesson-host__count { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin:14px 0 4px; padding:12px; border:1px solid rgba(104,168,214,.28); border-radius:8px; }
+.journey-lesson-host__count p { width:100%; margin:0 0 2px; text-align:center; color:#cdd9eb; font-size:14px; }
+.journey-lesson-host__count [role="radio"] { min-width:44px; padding:8px 10px; }
+.journey-lesson-host__count [role="radio"][aria-checked="true"] { border-color:#d3b45b; color:#ffe8a1; box-shadow:0 0 0 1px rgba(211,180,91,.24); }
+.journey-lesson-host__submit { display:block; margin:14px auto 0; background:#17476b !important; }
+.journey-lesson-host__feedback { border-color:rgba(211,180,91,.55); }
+.journey-lesson-host__feedback h2 { margin:0 0 8px; font-size:24px; }
+.journey-lesson-host__feedback p { line-height:1.5; }
+.journey-lesson-host__error { color:#ffb4b4; background:#3a1520; border:1px solid #9e3d4f; padding:10px 13px; border-radius:7px; }
+.journey-lesson-host--terminal { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:16px; }
+.journey-lesson-host__completion-card { width:min(100%, 540px); padding:clamp(28px, 5vw, 52px); border:1px solid rgba(104,168,214,.34); border-radius:12px; background:#0a1422; box-shadow:0 22px 60px rgba(0,0,0,.32); }
+.journey-lesson-host--terminal p { max-width:440px; }
+.journey-lesson-host--terminal div { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+@media (max-width: 640px) { .journey-lesson-host { padding:14px 12px calc(18px + env(safe-area-inset-bottom)); } .journey-lesson-host__header { align-items:flex-start; flex-wrap:wrap; } .journey-lesson-host__header > div { order:-1; width:100%; } .journey-lesson-host__progress { margin-left:auto; } .journey-lesson-host__frame, .journey-lesson-host__lesson-stage, .journey-lesson-host__feedback { border-radius:9px; padding:16px 12px; } .journey-lesson-host__board, .journey-lesson-host__board .board-container { min-height:240px; } }
+@media (prefers-reduced-motion: reduce) { .journey-lesson-host *, .journey-lesson-host *::before, .journey-lesson-host *::after { transition:none !important; animation:none !important; } }

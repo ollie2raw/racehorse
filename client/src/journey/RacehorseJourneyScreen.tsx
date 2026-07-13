@@ -9,11 +9,17 @@ import { useJourneyProgress } from './useJourneyProgress';
 import { getChapterProgressRecord, isPlayableChapterId } from './journeyChapters';
 import {
   buildJourneyBotTrial,
+  getJourneyTrialRuntime,
   isJourneyBotTrialNode,
   isJourneyCheckpointBriefingNode,
   isJourneyPuzzleNode,
 } from './journeyLaunch';
 import { getJourneyBriefing } from './journeyBriefings';
+import { getJourneyContentDescriptor } from './journeyContentResolver';
+import { getJourneyLessonDefinition } from './journeyContentResolver';
+import { getJourneyPremiumHostKind } from './journeyPremiumRuntimeRegistry';
+import { JourneyLessonHost } from './lessonHost/JourneyLessonHost';
+import { assertNever } from './journeyContentContract';
 import { JourneyBriefingModal } from './JourneyBriefingModal';
 import { getJourneyPuzzle } from './journeyPuzzles';
 import { JourneyPuzzleModal } from './JourneyPuzzleModal';
@@ -22,7 +28,6 @@ import { JourneyChapterCompleteModal } from './JourneyChapterCompleteModal';
 import type { JourneyActiveChallenge } from './journeyRuntime';
 import type {
   JourneyChapterWithStatus,
-  JourneyNodeAction,
   JourneyNodeType,
   JourneyNodeWithStatus,
 } from './journeyTypes';
@@ -60,9 +65,9 @@ function formatFritzTierLabel(tier: FritzTier): string {
 }
 
 function getJourneyWinConditionLabel(node: JourneyNodeWithStatus): string {
-  const trialAction = getJourneyTrialAction(node);
-  if (trialAction) {
-    return `Win vs ${formatFritzTierLabel(trialAction.fritzTier)} Fritz · Race to ${trialAction.winningScore ?? 60}`;
+  const trialRuntime = getJourneyTrialRuntime(node);
+  if (trialRuntime) {
+    return `Win vs ${formatFritzTierLabel(trialRuntime.fritzTier)} Fritz · Race to ${trialRuntime.winningScore}`;
   }
   return node.completionCriteria;
 }
@@ -72,13 +77,6 @@ function statusLabel(status: JourneyNodeWithStatus['status']): string {
   if (status === 'completed') return 'Completed';
   if (status === 'unlocked') return 'Unlocked';
   return 'Locked';
-}
-
-function getJourneyTrialAction(node: JourneyNodeWithStatus | null): Extract<JourneyNodeAction, { kind: 'botMatch' }> | null {
-  if (!node || node.action.kind !== 'botMatch' || (node.nodeType !== 'match' && node.nodeType !== 'boss')) {
-    return null;
-  }
-  return node.action;
 }
 
 function canSelectJourneyChapter(chapter: JourneyChapterWithStatus): boolean {
@@ -177,6 +175,8 @@ export default function RacehorseJourneyScreen({
   const [briefingModalOpen, setBriefingModalOpen] = useState(false);
   const [puzzleModalOpen, setPuzzleModalOpen] = useState(false);
   const [interactivePuzzleOpen, setInteractivePuzzleOpen] = useState(false);
+  const [activePremiumLessonContentId, setActivePremiumLessonContentId] = useState<string | null>(null);
+  const [premiumLessonInstance, setPremiumLessonInstance] = useState(0);
   const [chapterCompleteDismissed, setChapterCompleteDismissed] = useState(false);
 
   if (!shouldShowChapterCompleteCelebration && chapterCompleteDismissed) {
@@ -228,7 +228,11 @@ export default function RacehorseJourneyScreen({
   const activeBriefing =
     selectedNode && isCheckpointBriefingNode ? getJourneyBriefing(selectedNode.id) : null;
   const activePuzzle = selectedNode && isPuzzleNode ? getJourneyPuzzle(selectedNode.id) : null;
-  const selectedTrialAction = getJourneyTrialAction(selectedNode);
+  const selectedTrialRuntime = getJourneyTrialRuntime(selectedNode);
+  const selectedDescriptor = selectedNode ? getJourneyContentDescriptor(selectedNode.id) : null;
+  const selectedPremiumHost = selectedDescriptor?.migrationClass === 'premium'
+    ? getJourneyPremiumHostKind(String(selectedDescriptor.contentId))
+    : null;
 
   const canOpenBriefing =
     isCheckpointBriefingNode &&
@@ -242,18 +246,23 @@ export default function RacehorseJourneyScreen({
       selectedNode?.status === 'unlocked' ||
       selectedNode?.status === 'completed');
 
+  const canOpenPremiumLesson =
+    selectedPremiumHost === 'authored_board_lesson' &&
+    selectedDescriptor?.runtimeAvailability === 'available' &&
+    (selectedNode?.status === 'current' || selectedNode?.status === 'unlocked' || selectedNode?.status === 'completed');
+
   const detailCtaLabel = (() => {
     if (!selectedNode) return 'Play';
     if (selectedNode.status === 'locked') return 'Locked';
-    if (selectedNode.status === 'completed') return 'Completed ✓';
+    if (selectedNode.status === 'completed') return selectedPremiumHost ? 'Replay Lesson' : 'Completed ✓';
     return 'Play';
   })();
 
   const detailCtaDisabled =
     !selectedNode ||
     selectedNode.status === 'locked' ||
-    selectedNode.status === 'completed' ||
-    !(canBegin || canOpenBriefing || canOpenPuzzle);
+    (selectedNode.status === 'completed' && !selectedPremiumHost) ||
+    !(canBegin || canOpenBriefing || canOpenPuzzle || canOpenPremiumLesson);
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -272,25 +281,38 @@ export default function RacehorseJourneyScreen({
 
   const handleBegin = () => {
     if (!selectedNode) return;
-    if (isCheckpointBriefingNode && canOpenBriefing) {
-      setBriefingModalOpen(true);
-      return;
-    }
-    if (isPuzzleNode && canOpenPuzzle) {
-      if (activePuzzle?.boardState) {
-        setInteractivePuzzleOpen(true);
-      } else {
-        setPuzzleModalOpen(true);
-      }
-      return;
-    }
-    if (!canBegin) return;
-    if (isBotTrialNode && onStartBotTrial) {
-      const trial = buildJourneyBotTrial(selectedNode);
-      if (trial) {
-        onStartBotTrial(trial);
+    const descriptor = getJourneyContentDescriptor(selectedNode.id);
+    if (!descriptor) return;
+
+    switch (descriptor.runtime.kind) {
+      case 'briefing_acknowledgement':
+        if (isCheckpointBriefingNode && canOpenBriefing) setBriefingModalOpen(true);
+        return;
+      case 'static_decision':
+        if (isPuzzleNode && canOpenPuzzle) setPuzzleModalOpen(true);
+        return;
+      case 'interactive_board_decision':
+        if (isPuzzleNode && canOpenPuzzle) setInteractivePuzzleOpen(true);
+        return;
+      case 'bot_match':
+      case 'boss_match': {
+        if (!canBegin || !isBotTrialNode || !onStartBotTrial) return;
+        const trial = buildJourneyBotTrial(selectedNode);
+        if (trial) onStartBotTrial(trial);
         return;
       }
+      case 'external_navigation':
+        onNavigate?.(descriptor.runtime.mode);
+        return;
+      case 'lesson_sequence':
+        if (descriptor.runtimeAvailability !== 'available') return;
+        if (getJourneyPremiumHostKind(String(descriptor.contentId)) !== 'authored_board_lesson') return;
+        setActivePremiumLessonContentId(String(descriptor.contentId));
+        return;
+      case 'unsupported':
+        return;
+      default:
+        return assertNever(descriptor.runtime);
     }
   };
 
@@ -320,6 +342,21 @@ export default function RacehorseJourneyScreen({
     setChapterCompleteDismissed(true);
     celebrateChapterCompletion(activeChapter.chapterId);
   };
+
+  if (activePremiumLessonContentId) {
+    const lessonDefinition = getJourneyLessonDefinition(activePremiumLessonContentId);
+    if (lessonDefinition) {
+      return (
+        <JourneyLessonHost
+          key={`${activePremiumLessonContentId}-${premiumLessonInstance}`}
+          definition={lessonDefinition}
+          onExit={() => setActivePremiumLessonContentId(null)}
+          onReplay={() => setPremiumLessonInstance((current) => current + 1)}
+          onLessonCompleted={() => completeNode(lessonDefinition.nodeId)}
+        />
+      );
+    }
+  }
 
   return (
     <div
@@ -535,11 +572,11 @@ export default function RacehorseJourneyScreen({
                     <span className={`rh-journey-chip rh-journey-chip--type-${selectedNode.nodeType}`}>
                       {nodeTypeLabel(selectedNode.nodeType)}
                     </span>
-                    {selectedTrialAction ? (
+                    {selectedTrialRuntime ? (
                       <span
-                        className={`rh-journey-chip rh-journey-tier--${selectedTrialAction.fritzTier}`}
+                        className={`rh-journey-chip rh-journey-tier--${selectedTrialRuntime.fritzTier}`}
                       >
-                        {selectedTrialAction.fritzTier.toUpperCase()}
+                        {selectedTrialRuntime.fritzTier.toUpperCase()}
                       </span>
                     ) : null}
                   </div>

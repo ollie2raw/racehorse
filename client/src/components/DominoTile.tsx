@@ -162,6 +162,8 @@ function DominoTileComponent({
         className={tileClass}
         onClick={onClick}
         disabled={disabled}
+        aria-label="Domino tile back"
+        aria-pressed={selected}
         style={{
           display: 'block',
           padding: 0,
@@ -195,6 +197,8 @@ function DominoTileComponent({
       className={tileClass}
       onClick={onClick}
       disabled={disabled}
+      aria-label={`Domino ${tile.low}-${tile.high}`}
+      aria-pressed={selected}
       style={{
         display: 'block',
         padding: 0,

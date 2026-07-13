@@ -2015,6 +2015,8 @@ button.rh-journey-node--selected .rh-journey-node__icon {
   max-width: 272px;
   margin-top: 0;
   padding-top: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .rh-journey-detail--panel .rh-journey-detail__actions .rh-btn {
