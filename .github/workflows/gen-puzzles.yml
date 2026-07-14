@@ -15,6 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Workspace install required so @racehorse/game-core is linked for tsx seed scripts.
+      - name: Install dependencies
+        run: npm ci
 
       - name: Install tsx
         run: npm install -g tsx
