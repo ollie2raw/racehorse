@@ -6,6 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "prebuild": "npm run build --workspace=@racehorse/game-core",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",

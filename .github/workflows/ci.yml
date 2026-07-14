@@ -30,8 +30,17 @@ jobs:
           TZ: America/Los_Angeles
         run: npm run test --prefix server
 
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Verify game-core resolves under Node
+        run: node -e "require('@racehorse/game-core'); console.log('game-core ok')"
+
       - name: Server build
         run: npm run build --prefix server
+
+      - name: Verify server dist can load game-core
+        run: node -e "require('./server/dist/game/engine.js'); console.log('dist engine ok')"
 
   client:
     name: Client Validation
