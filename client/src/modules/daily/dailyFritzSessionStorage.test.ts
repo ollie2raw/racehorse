@@ -12,12 +12,18 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
 }
 
 describe('Daily Fritz v3 session persistence', () => {
-  beforeEach(() => sessionStorage.clear());
+  beforeEach(() => window.localStorage.clear());
   it('round-trips a valid active hand without resetting cumulative scores', () => {
     const key=buildDailyFritzStorageKey('attempt-1',1);const value=snapshot();
     expect(persistDailyFritzSnapshot(key,value)).toBe(true);
     const loaded=loadPersistedDailyFritzMatch(key,'attempt-1',2,'2026-07-12',now);
     expect(loaded?.match.players.you.score).toBe(35);expect(loaded?.match.players.bot.score).toBe(20);
+  });
+  it('keeps a newer local checkpoint when the server hand index is behind', () => {
+    const key = buildDailyFritzStorageKey('attempt-1', 1);
+    const value = snapshot({ currentHandIndex: 4 });
+    expect(persistDailyFritzSnapshot(key, value)).toBe(true);
+    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 0, '2026-07-12', now)?.currentHandIndex).toBe(4);
   });
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({},now)).toBeNull();
@@ -36,7 +42,7 @@ describe('Daily Fritz v3 session persistence', () => {
   it('prevents an older revision or timestamp from overwriting newer state', () => {
     const key=buildDailyFritzStorageKey('attempt-1',1);expect(persistDailyFritzSnapshot(key,snapshot({revision:5}))).toBe(true);
     expect(persistDailyFritzSnapshot(key,snapshot({revision:4,lastTransitionAt:'2026-07-12T18:02:00.000Z'}))).toBe(false);
-    expect(JSON.parse(sessionStorage.getItem(key)!).revision).toBe(5);
+    expect(JSON.parse(localStorage.getItem(key)!).revision).toBe(5);
   });
   it.each([
     { low: -1, high: 2 },

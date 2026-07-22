@@ -44,6 +44,10 @@ import {
   shouldAutoFailOneTurnHighScoreWithNoLegalMoves,
 } from './dailyPuzzlePlayMoveCompletion';
 import { useDailyPuzzleLadderGameplay } from './useDailyPuzzleLadderGameplay';
+import {
+  loadDailyPuzzleLadderSession,
+  persistDailyPuzzleLadderSession,
+} from './dailyPuzzleLadderSessionStorage';
 import { DailyPuzzleSoloHandDock } from './DailyPuzzleSoloHandDock';
 import { DailyPuzzleLadderOverlays } from './DailyPuzzleLadderOverlays';
 import { DailyPuzzleLadderHubView } from './DailyPuzzleLadderHubView';
@@ -150,7 +154,7 @@ export default function DailyPuzzleLadderScreen({
     };
   }, []);
 
-  const launchSlot = useCallback((slot: DailyPuzzleSlot, mode: LadderPlayMode) => {
+  const launchSlot = useCallback((slot: DailyPuzzleSlot, mode: LadderPlayMode, attemptForStorage = attempt) => {
     const puzzle = toCuratedPuzzle(slot);
     if (!puzzle) {
       setHubError(`Slot ${slot.slotIndex} is missing board data.`);
@@ -158,18 +162,21 @@ export default function DailyPuzzleLadderScreen({
     }
     setPlayMode(mode);
     setActiveSlot(slot);
-    setRuntimeState(createPuzzleMatchState(puzzle));
-    setStatus('IN_PROGRESS');
+    const saved = mode === 'scored'
+      ? loadDailyPuzzleLadderSession(attemptForStorage?.id, today.runDate, slot.id)
+      : null;
+    setRuntimeState(saved?.runtimeState ?? createPuzzleMatchState(puzzle));
+    setStatus(saved?.status ?? 'IN_PROGRESS');
     setSelectedTile(null);
-    setMovesUsed(0);
-    setFinalScore(null);
-    runningScoreRef.current = 0;
-    moveTraceRef.current = [];
-    startTimeRef.current = Date.now();
+    setMovesUsed(saved?.movesUsed ?? 0);
+    setFinalScore(saved?.finalScore ?? null);
+    runningScoreRef.current = saved?.runningScore ?? 0;
+    moveTraceRef.current = saved?.moveTrace ?? [];
+    startTimeRef.current = saved?.startedAt ?? Date.now();
     setSlotOverlay(null);
     setFinalOverlay(null);
     setPracticeOverlay(null);
-  }, []);
+  }, [attempt, today.runDate]);
 
   const handleStartScored = useCallback(async () => {
     if (startPending || finalizePending) return;
@@ -192,7 +199,7 @@ export default function DailyPuzzleLadderScreen({
         await runFinalize();
         return;
       }
-      launchSlot(response.activeSlot, response.practiceMode === 'none' ? 'scored' : 'practice');
+      launchSlot(response.activeSlot, response.practiceMode === 'none' ? 'scored' : 'practice', response.attempt);
     } catch (error) {
       setHubError(error instanceof Error ? error.message : 'Unable to start today’s ladder.');
     } finally {
@@ -365,6 +372,25 @@ export default function DailyPuzzleLadderScreen({
   );
 
   const inActivePlay = Boolean(activeSlot && runtimeState);
+
+  useEffect(() => {
+    if (playMode !== 'scored' || status !== 'IN_PROGRESS' || !attempt || !activeSlot || !runtimeState) return;
+    persistDailyPuzzleLadderSession({
+      version: 1,
+      attemptId: attempt.id,
+      runDate: today.runDate,
+      slotId: activeSlot.id,
+      slotIndex: activeSlot.slotIndex,
+      runtimeState,
+      status,
+      movesUsed,
+      finalScore,
+      runningScore: runningScoreRef.current,
+      moveTrace: [...moveTraceRef.current],
+      startedAt: startTimeRef.current || Date.now(),
+      updatedAt: Date.now(),
+    });
+  }, [activeSlot, attempt, finalScore, movesUsed, playMode, runtimeState, status, today.runDate]);
 
   const exitPlayToHub = useCallback(() => {
     setSlotOverlay(null);

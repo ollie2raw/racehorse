@@ -87,16 +87,16 @@ export function useDailyFritzSessionPersistence({
       const finalSnapshot = buildSnapshot();
       storagePendingRef.current = { key: storageKey, payload: finalSnapshot };
       persistDailyFritzSnapshot(storageKey, finalSnapshot);
+      storagePendingRef.current = null;
       return;
     }
-    if (storageTimerRef.current) clearTimeout(storageTimerRef.current);
     const snapshot = buildSnapshot();
     storagePendingRef.current = { key: storageKey, payload: snapshot };
-    storageTimerRef.current = setTimeout(() => {
-      persistDailyFritzSnapshot(storageKey, snapshot);
-      storagePendingRef.current = null;
-      storageTimerRef.current = null;
-    }, 1000);
+    // This is the recovery checkpoint for the official run. Persist every
+    // state transition synchronously so a route click immediately after a
+    // move cannot discard the latest hand/score state.
+    persistDailyFritzSnapshot(storageKey, snapshot);
+    storagePendingRef.current = null;
     return () => {
       if (storageTimerRef.current) {
         clearTimeout(storageTimerRef.current);

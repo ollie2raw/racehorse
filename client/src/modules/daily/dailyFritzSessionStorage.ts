@@ -98,10 +98,13 @@ export function resolveDailyFritzStorageKey(mode: string, dailyFritzPackage: Dai
 export function loadPersistedDailyFritzMatch(storageKey: string | null, attemptId: string | undefined, serverHandIndex: number, runDate?: string, now = new Date()): DailyFritzPersistedSnapshot | null {
   if (!storageKey || !attemptId || !runDate || typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(storageKey);
+    // Daily Fritz must survive route changes, reloads, and tab closes. The
+    // server still validates every completed hand; this is only the resume
+    // checkpoint for the in-progress match.
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(raw), now);
-    if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.currentHandIndex !== serverHandIndex || parsed.lifecyclePhase === 'completed') return null;
+    if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.currentHandIndex < serverHandIndex || parsed.lifecyclePhase === 'completed') return null;
     return parsed;
   } catch { return null; }
 }
@@ -109,7 +112,7 @@ export function loadPersistedDailyFritzMatch(storageKey: string | null, attemptI
 export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFritzPersistedSnapshot): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    const existingRaw = window.sessionStorage.getItem(storageKey);
+    const existingRaw = window.localStorage.getItem(storageKey);
     const existing = existingRaw ? JSON.parse(existingRaw) as unknown : null;
     if (object(existing)) {
       const revision = Number(existing.revision);
@@ -121,12 +124,12 @@ export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFri
         || (Number.isFinite(transitionAt) && transitionAt > Date.parse(snapshot.lastTransitionAt))
       ) return false;
     }
-    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
     return true;
   } catch { return false; }
 }
 
 export function pruneNonPlayableDailyFritzSnapshot(storageKey: string): void {
   if (typeof window === 'undefined') return;
-  try { const raw=window.sessionStorage.getItem(storageKey); if(raw && !parseDailyFritzPersistedSnapshot(JSON.parse(raw))) window.sessionStorage.removeItem(storageKey); } catch { window.sessionStorage.removeItem(storageKey); }
+  try { const raw=window.localStorage.getItem(storageKey); if(raw && !parseDailyFritzPersistedSnapshot(JSON.parse(raw))) window.localStorage.removeItem(storageKey); } catch { window.localStorage.removeItem(storageKey); }
 }
