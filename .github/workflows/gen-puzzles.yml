@@ -22,6 +22,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # @racehorse/game-core exports compiled runtime files from dist/.
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
       - name: Install tsx
         run: npm install -g tsx
 

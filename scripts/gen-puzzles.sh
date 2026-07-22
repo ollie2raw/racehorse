@@ -49,7 +49,7 @@ date_add_days() {
   if date -d "${base} +${offset} days" +%F >/dev/null 2>&1; then
     date -d "${base} +${offset} days" +%F
   else
-    date -j -f "%Y-%m-%d" "$base" -v+"${offset}"d +%F
+    date -j -f "%Y-%m-%d" -v+"${offset}"d "$base" +%F
   fi
 }
 
@@ -95,4 +95,5 @@ if [[ "${#FAILED_DATES[@]}" -gt 0 ]]; then
     echo "  - $failed_date" >&2
   done
   echo "Successful dates were still processed; re-run or inspect logs for failed dates." >&2
+  exit 1
 fi
