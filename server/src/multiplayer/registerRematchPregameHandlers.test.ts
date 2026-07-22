@@ -8,8 +8,13 @@ import {
 } from './roomSession';
 import * as roomSession from './roomSession';
 import { registerRematchPregameHandlers } from './registerRematchPregameHandlers';
+import { comparePregameDrawTiles } from './preGameDraw';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
 import { supabaseFetch } from '../supabaseUtils';
+
+async function flushPregameDrawHandler(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
@@ -251,6 +256,81 @@ describe('registerRematchPregameHandlers', () => {
     const picksAfterFirst = { ...getRoom(roomCode).preGameDraw!.picks };
     await handlers.get('game:pregame_draw_pick')?.({ slotId: 'slot-b' });
     expect(getRoom(roomCode).preGameDraw!.picks).toEqual(picksAfterFirst);
+    broadcastSpy.mockRestore();
+  });
+
+  it('compares equal totals by the higher individual pip', () => {
+    expect(comparePregameDrawTiles({ low: 2, high: 6 }, { low: 3, high: 5 })).toBeGreaterThan(0);
+    expect(comparePregameDrawTiles({ low: 3, high: 5 }, { low: 2, high: 6 })).toBeLessThan(0);
+  });
+
+  it('does not substitute a different tile for a stale multiplayer pick', async () => {
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
+    const roomCode = 'PGD03';
+    seedGameOverRoom(roomCode);
+    const room = getRoom(roomCode);
+    room.preGameDraw = {
+      phase: 'pick-player',
+      tiles: [
+        { id: 'slot-a', tile: { low: 2, high: 6 }, revealed: false, outOfPlay: false, pickedBy: null },
+        { id: 'slot-b', tile: { low: 0, high: 0 }, revealed: false, outOfPlay: false, pickedBy: null },
+      ],
+      picks: { p1: null, p2: null },
+      winnerId: null,
+      remainingDeck: null,
+    };
+
+    const io = makeIo(roomCode);
+    const { socket: socket1, handlers: handlers1 } = makeSocket('sock-p1', 'p1', roomCode);
+    const { socket: socket2, handlers: handlers2 } = makeSocket('sock-p2', 'p2', roomCode);
+    ensureSocketDataSeat(socket1, 'p1');
+    ensureSocketDataSeat(socket2, 'p2');
+    registerRematchPregameHandlers(io, socket1, { handlerDeps });
+    registerRematchPregameHandlers(io, socket2, { handlerDeps });
+
+    await handlers1.get('game:pregame_draw_pick')?.({ slotId: 'slot-a' });
+    await flushPregameDrawHandler();
+    const p1Pick = room.preGameDraw.picks.p1;
+    await handlers2.get('game:pregame_draw_pick')?.({ slotId: 'slot-a' });
+    await flushPregameDrawHandler();
+
+    expect(room.preGameDraw.picks.p1).toEqual(p1Pick);
+    expect(room.preGameDraw.picks.p2).toBeNull();
+    expect(room.preGameDraw.tiles.find((tile) => tile.id === 'slot-b')?.revealed).toBe(false);
+    broadcastSpy.mockRestore();
+  });
+
+  it('resolves a 6-2 versus 5-3 draw in favor of 6-2', async () => {
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
+    const roomCode = 'PGD04';
+    seedGameOverRoom(roomCode);
+    const room = getRoom(roomCode);
+    room.preGameDraw = {
+      phase: 'pick-player',
+      tiles: [
+        { id: 'slot-a', tile: { low: 2, high: 6 }, revealed: false, outOfPlay: false, pickedBy: null },
+        { id: 'slot-b', tile: { low: 3, high: 5 }, revealed: false, outOfPlay: false, pickedBy: null },
+      ],
+      picks: { p1: null, p2: null },
+      winnerId: null,
+      remainingDeck: null,
+    };
+
+    const io = makeIo(roomCode);
+    const { socket: socket1, handlers: handlers1 } = makeSocket('sock-p1', 'p1', roomCode);
+    const { socket: socket2, handlers: handlers2 } = makeSocket('sock-p2', 'p2', roomCode);
+    ensureSocketDataSeat(socket1, 'p1');
+    ensureSocketDataSeat(socket2, 'p2');
+    registerRematchPregameHandlers(io, socket1, { handlerDeps });
+    registerRematchPregameHandlers(io, socket2, { handlerDeps });
+
+    await handlers1.get('game:pregame_draw_pick')?.({ slotId: 'slot-a' });
+    await flushPregameDrawHandler();
+    await handlers2.get('game:pregame_draw_pick')?.({ slotId: 'slot-b' });
+    await flushPregameDrawHandler();
+
+    expect(room.preGameDraw.winnerId).toBe('p1');
+    expect(room.preGameDraw.phase).toBe('showing-reveal');
     broadcastSpy.mockRestore();
   });
 });

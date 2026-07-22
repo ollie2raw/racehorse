@@ -93,6 +93,13 @@ export function tilePipSum(tile: Tile): number {
   return tile.low + tile.high;
 }
 
+/** Compare draw tiles by total pip value, then by the higher individual pip. */
+export function comparePreGameDrawTiles(a: Tile, b: Tile): number {
+  const sumDifference = tilePipSum(a) - tilePipSum(b);
+  if (sumDifference !== 0) return sumDifference;
+  return Math.max(a.low, a.high) - Math.max(b.low, b.high);
+}
+
 export function initPreGameDraw(
   deck: readonly Tile[] = generateDoubleSixSet(),
   rng: Rng = Math.random,
@@ -312,7 +319,8 @@ export function applyOpponentPick(state: PreGameDrawState, tileId: string): PreG
   };
 
   const youPick = state.currentRound.you;
-  if (youPick.pipSum === botPick.pipSum) {
+  const comparison = comparePreGameDrawTiles(youPick.tile, botPick.tile);
+  if (comparison === 0) {
     return {
       ...state,
       phase: 'pick-opponent',
@@ -323,7 +331,7 @@ export function applyOpponentPick(state: PreGameDrawState, tileId: string): PreG
     };
   }
 
-  const winner: PreGameDrawPlayer = youPick.pipSum > botPick.pipSum ? 'you' : 'bot';
+  const winner: PreGameDrawPlayer = comparison > 0 ? 'you' : 'bot';
   return resolveWinner(
     { ...state, tiles, currentRound: { you: youPick, bot: botPick } },
     winner,

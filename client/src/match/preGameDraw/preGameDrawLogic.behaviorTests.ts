@@ -13,6 +13,7 @@ import {
   normalizePreGameDrawTile,
   simulateDrawRound,
   tilePipSum,
+  comparePreGameDrawTiles,
   toPreGameDrawTileId,
 } from './preGameDrawLogic.ts';
 
@@ -30,6 +31,13 @@ function assertTrue(value: boolean, label: string): void {
 
 function countTiles(hands: Array<{ low: number; high: number }[]>): number {
   return hands.reduce((sum, hand) => sum + hand.length, 0);
+}
+
+function exactTieState() {
+  const state = initPreGameDraw();
+  state.tiles[0] = { ...state.tiles[0], id: 'tie-a', tile: { low: 3, high: 3 } };
+  state.tiles[1] = { ...state.tiles[1], id: 'tie-b', tile: { low: 3, high: 3 } };
+  return state;
 }
 
 function testInitHasTwentyEightPickableTiles(): void {
@@ -72,8 +80,8 @@ function testResolvedWinnerKeepsBothTilesVisibleOnBoard(): void {
 }
 
 function testTieRedrawRemovesBothAndReopensPicks(): void {
-  const state = initPreGameDraw(generateDoubleSixSet(), () => 0.2);
-  const afterTie = simulateDrawRound(state, '3-3', '0-6');
+  const state = exactTieState();
+  const afterTie = simulateDrawRound(state, 'tie-a', 'tie-b');
   assertEqual(afterTie.phase, 'pick-player', 'tie returns to player pick');
   assertEqual(afterTie.currentRound.you, null, 'round picks cleared');
   assertEqual(afterTie.currentRound.bot, null, 'round picks cleared');
@@ -124,6 +132,11 @@ function testPipSumHelper(): void {
   assertEqual(tilePipSum({ low: 0, high: 1 }), 1, '0-1 pip sum');
 }
 
+function testEqualTotalsUseHigherSinglePip(): void {
+  assertTrue(comparePreGameDrawTiles({ low: 2, high: 6 }, { low: 3, high: 5 }) > 0, '6-2 wins 5-3');
+  assertEqual(comparePreGameDrawTiles({ low: 2, high: 6 }, { low: 6, high: 2 }), 0, 'same tile value ties');
+}
+
 function testApplyPlayerPickTransitionsToOpponentPhase(): void {
   const state = initPreGameDraw();
   const afterPlayer = applyPlayerPick(state, '4-5');
@@ -143,12 +156,15 @@ function testApplyOpponentPickRejectsUnavailableTile(): void {
 }
 
 function testMultipleTieRoundsBeforeWinner(): void {
-  let state = initPreGameDraw();
-  state = simulateDrawRound(state, '3-3', '0-6');
+  let state = exactTieState();
+  state = simulateDrawRound(state, 'tie-a', 'tie-b');
   assertEqual(state.phase, 'pick-player', 'first tie reopens picks');
   assertEqual(getPickableTileIds(state).length, 26, 'two tiles removed after first tie');
 
-  state = simulateDrawRound(state, '2-4', '1-5');
+  const nextTieTiles = state.tiles.filter((slot) => !slot.outOfPlay).slice(0, 2);
+  nextTieTiles[0]!.tile = { low: 2, high: 4 };
+  nextTieTiles[1]!.tile = { low: 2, high: 4 };
+  state = simulateDrawRound(state, nextTieTiles[0]!.id, nextTieTiles[1]!.id);
   assertEqual(state.phase, 'pick-player', 'second tie reopens picks');
   assertEqual(getPickableTileIds(state).length, 24, 'four tiles removed after two ties');
 
@@ -208,6 +224,7 @@ function run(): void {
   testHandTwoAlternatesFromMatchStarter();
   testBotWinsDrawStartsHandOne();
   testPipSumHelper();
+  testEqualTotalsUseHigherSinglePip();
   testApplyPlayerPickTransitionsToOpponentPhase();
   testApplyOpponentPickRejectsUnavailableTile();
   console.log('preGameDrawLogic.behaviorTests: all passed');

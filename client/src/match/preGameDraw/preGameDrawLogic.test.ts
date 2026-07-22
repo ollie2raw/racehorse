@@ -10,11 +10,18 @@ import {
   applyScriptedPlayerPick,
   applyOpponentPick,
   simulateDrawRound,
+  comparePreGameDrawTiles,
 } from './preGameDrawLogic';
 import type { Tile } from '../../types';
 
 describe('preGameDrawLogic', () => {
   const dummyTile = (low: number, high: number): Tile => ({ low, high });
+  const exactTieState = () => {
+    const state = initPreGameDraw();
+    state.tiles[0] = { ...state.tiles[0], id: 'tie-a', tile: dummyTile(3, 3) };
+    state.tiles[1] = { ...state.tiles[1], id: 'tie-b', tile: dummyTile(3, 3) };
+    return state;
+  };
 
   describe('normalizePreGameDrawTile', () => {
     it('1. normalizes array input and ensures low <= high', () => {
@@ -63,6 +70,17 @@ describe('preGameDrawLogic', () => {
     it('10. sums pips correctly', () => {
       expect(tilePipSum(dummyTile(3, 4))).toBe(7);
       expect(tilePipSum(dummyTile(0, 0))).toBe(0);
+    });
+  });
+
+  describe('comparePreGameDrawTiles', () => {
+    it('uses the higher single pip to break equal totals', () => {
+      expect(comparePreGameDrawTiles(dummyTile(2, 6), dummyTile(3, 5))).toBeGreaterThan(0);
+      expect(comparePreGameDrawTiles(dummyTile(3, 5), dummyTile(2, 6))).toBeLessThan(0);
+    });
+
+    it('returns zero only when both draw values are identical', () => {
+      expect(comparePreGameDrawTiles(dummyTile(2, 6), dummyTile(6, 2))).toBe(0);
     });
   });
 
@@ -142,10 +160,9 @@ describe('preGameDrawLogic', () => {
     });
 
     it('18. triggers tie hold state if pip sums are equal', () => {
-      const state = initPreGameDraw();
-      // find two tiles with sum 6: e.g. 3-3 and 2-4 or similar
-      const tile1 = state.tiles.find((s) => tilePipSum(s.tile) === 6)!;
-      const tile2 = state.tiles.find((s) => s.id !== tile1.id && tilePipSum(s.tile) === 6)!;
+      const state = exactTieState();
+      const tile1 = state.tiles.find((s) => s.id === 'tie-a')!;
+      const tile2 = state.tiles.find((s) => s.id === 'tie-b')!;
 
       const afterPlayer = applyPlayerPick(state, tile1.id);
       const afterOpponent = applyOpponentPick(afterPlayer, tile2.id);
@@ -154,13 +171,24 @@ describe('preGameDrawLogic', () => {
       expect(isTieHoldState(afterOpponent)).toBe(true);
       expect(afterOpponent.winner).toBeNull();
     });
+
+    it('resolves equal totals by the higher individual pip', () => {
+      const state = initPreGameDraw();
+      const player = state.tiles.find((s) => s.id === '2-6')!;
+      const opponent = state.tiles.find((s) => s.id === '3-5')!;
+      const afterPlayer = applyPlayerPick(state, player.id);
+      const afterOpponent = applyOpponentPick(afterPlayer, opponent.id);
+
+      expect(afterOpponent.phase).toBe('resolved');
+      expect(afterOpponent.winner).toBe('you');
+    });
   });
 
   describe('commitTieRedraw', () => {
     it('19. resets state to pick-player and marks tie tiles outOfPlay', () => {
-      const state = initPreGameDraw();
-      const tile1 = state.tiles.find((s) => tilePipSum(s.tile) === 6)!;
-      const tile2 = state.tiles.find((s) => s.id !== tile1.id && tilePipSum(s.tile) === 6)!;
+      const state = exactTieState();
+      const tile1 = state.tiles.find((s) => s.id === 'tie-a')!;
+      const tile2 = state.tiles.find((s) => s.id === 'tie-b')!;
 
       const afterPlayer = applyPlayerPick(state, tile1.id);
       const afterOpponent = applyOpponentPick(afterPlayer, tile2.id);
@@ -185,9 +213,9 @@ describe('preGameDrawLogic', () => {
     });
 
     it('21. simulates round with tie and automatically redraws', () => {
-      const state = initPreGameDraw();
-      const tile1 = state.tiles.find((s) => tilePipSum(s.tile) === 6)!;
-      const tile2 = state.tiles.find((s) => s.id !== tile1.id && tilePipSum(s.tile) === 6)!;
+      const state = exactTieState();
+      const tile1 = state.tiles.find((s) => s.id === 'tie-a')!;
+      const tile2 = state.tiles.find((s) => s.id === 'tie-b')!;
       const final = simulateDrawRound(state, tile1.id, tile2.id);
       // should auto-commit tie redraw
       expect(final.phase).toBe('pick-player');

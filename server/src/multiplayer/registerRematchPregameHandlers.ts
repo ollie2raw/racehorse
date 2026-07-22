@@ -11,6 +11,7 @@ import {
   type AckFn,
   type RoomSessionHandlerDeps,
 } from './roomSession';
+import { comparePregameDrawTiles } from './preGameDraw';
 
 export type RegisterRematchPregameHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -123,12 +124,13 @@ export function registerRematchPregameHandlers(
       if (!preGameDraw) return;
       if (preGameDraw.picks[playerSeatId] !== null) return;
 
-      let slot = preGameDraw.tiles.find((t) => t.id === slotId);
+      const slot = preGameDraw.tiles.find((t) => t.id === slotId);
       if (!slot || slot.outOfPlay || slot.revealed) {
-        slot = preGameDraw.tiles.find((t) => !t.revealed && !t.outOfPlay);
+        // A stale/duplicate click must not be converted into a different random
+        // pick. Leave the draw unchanged so the client can keep the real board
+        // state and the player can choose another visible tile.
+        return;
       }
-      if (!slot) return;
-
       // Record the pick
       slot.revealed = true;
       slot.pickedBy = playerSeatId;
@@ -146,8 +148,9 @@ export function registerRematchPregameHandlers(
       const bothPicked = ownPick !== null && oppPick !== null;
 
       if (bothPicked) {
-        // Both have picked! Compare pips.
-        if (ownPick.pipSum === oppPick.pipSum) {
+        // Both have picked! Compare total pips, then the higher individual pip.
+        const comparison = comparePregameDrawTiles(ownPick.tile, oppPick.tile);
+        if (comparison === 0) {
           // It's a tie!
           preGameDraw.phase = 'showing-tie';
           broadcastStateUpdate(roomCode);
@@ -174,7 +177,7 @@ export function registerRematchPregameHandlers(
           }, 800);
         } else {
           // We have a winner!
-          const winnerSeatId = ownPick.pipSum > oppPick.pipSum ? playerSeatId : opponentSeatId;
+          const winnerSeatId = comparison > 0 ? playerSeatId : opponentSeatId;
           preGameDraw.winnerId = winnerSeatId;
           preGameDraw.phase = 'showing-reveal';
           broadcastStateUpdate(roomCode);

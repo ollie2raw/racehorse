@@ -51,6 +51,13 @@ export function generateDoubleSixSet(): Tile[] {
   return tiles;
 }
 
+/** Compare draw tiles by total pip value, then by the higher individual pip. */
+export function comparePregameDrawTiles(a: Tile, b: Tile): number {
+  const sumDifference = a.low + a.high - (b.low + b.high);
+  if (sumDifference !== 0) return sumDifference;
+  return Math.max(a.low, a.high) - Math.max(b.low, b.high);
+}
+
 export function shuffleTiles(deck: readonly Tile[]): Tile[] {
   const out = deck.map((tile) => ({ low: tile.low, high: tile.high }));
   for (let i = out.length - 1; i > 0; i--) {
