@@ -128,7 +128,7 @@ export function getCoreMoves(state: BotMatchState, player: BotPlayerId): Move[] 
         : { type: 'play', tile: cloneTile(move.tile), position: move.position },
     );
   } catch (error) {
-    if (import.meta.env.DEV) console.warn('[game-core] legal move projection failed', error);
+    if (import.meta.env?.DEV) console.warn('[game-core] legal move projection failed', error);
     return [];
   }
 }
