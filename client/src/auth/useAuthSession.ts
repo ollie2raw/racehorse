@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
-import { getOrCreateGuestIdentityId } from '../match/recovery/matchRecovery';
+import { getOrCreateGuestDisplayName, getOrCreateGuestIdentityId } from '../match/recovery/matchRecovery';
 
 /**
  * useAuthSession
@@ -34,6 +34,7 @@ export function useAuthSession() {
     applyProfilePatch,
   } = useAuth();
   const [guestIdentityId] = useState(getOrCreateGuestIdentityId);
+  const [guestDisplayName] = useState(getOrCreateGuestDisplayName);
   const multiplayerIdentityUserId = authUser?.id ?? guestIdentityId;
   const multiplayerAuthToken = authUser?.id ? authAccessToken : null;
 
@@ -82,6 +83,7 @@ export function useAuthSession() {
     refreshAuthProfile,
     applyProfilePatch,
     guestIdentityId,
+    guestDisplayName,
     multiplayerIdentityUserId,
     multiplayerAuthToken,
     authUserRef,

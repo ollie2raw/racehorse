@@ -10,6 +10,7 @@ import {
   type JoinAckSnapshotResult,
 } from './joinAckCoordinator';
 import type { SessionEvent, SessionSnapshot } from './session/sessionTypes';
+import { getOrCreateGuestDisplayName } from '../match/recovery/matchRecovery';
 
 export type UseJoinAckCoordinatorParams = {
   dispatchRecovery: (event: RecoveryEvent) => void;
@@ -99,7 +100,7 @@ export function useJoinAckCoordinator(
         roomPlayersRef,
         roomIdentityRef,
         roomIdentity: {
-          username: authProfileUsername ?? 'Guest',
+          username: authProfileUsername ?? getOrCreateGuestDisplayName(),
           userId: multiplayerIdentityUserId,
           authToken: multiplayerAuthToken,
         },

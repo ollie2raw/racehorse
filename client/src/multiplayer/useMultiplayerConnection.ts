@@ -12,6 +12,7 @@ import { gameplaySocketScopeRef } from './gameplaySocketScope';
 import { registerMultiplayerConnectionGameplaySocketHandlers } from './registerMultiplayerConnectionGameplaySocketHandlers';
 import { registerMultiplayerConnectionSocketHandlers } from './registerMultiplayerConnectionSocketHandlers';
 import { emitRoomAbandonMatch, emitRoomLeave, type RoomAckResponse } from './roomTransport';
+import { getOrCreateGuestDisplayName } from '../match/recovery/matchRecovery';
 
 import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
 import {
@@ -108,7 +109,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       }
 
       const rejoinIdentity = scope.room.roomIdentityRef.current ?? {
-        username: scope.auth.authProfileRef.current?.username ?? 'Guest',
+        username: scope.auth.authProfileRef.current?.username ?? getOrCreateGuestDisplayName(),
         userId: scope.auth.multiplayerIdentityUserIdRef.current,
         authToken: scope.auth.authAccessTokenRef.current,
       };
@@ -313,7 +314,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         const joinStartedAt =
           typeof performance !== 'undefined' ? performance.now() : Date.now();
         const resp = await scope.config.emitWithAck<RoomAckResponse>(socket, 'room:join', savedCode, {
-          username: scope.state.authProfileUsername ?? 'Guest',
+          username: scope.state.authProfileUsername ?? getOrCreateGuestDisplayName(),
           userId: scope.auth.multiplayerIdentityUserIdRef.current,
           authToken: scope.auth.authAccessTokenRef.current,
         });

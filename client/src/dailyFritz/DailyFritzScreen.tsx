@@ -148,8 +148,8 @@ export default function DailyFritzScreen({
   );
 
   const hubViewModel = useMemo(
-    () => buildDailyFritzHubViewModel(today, todaySetResult, countdownTick, startActionPending),
-    [today, todaySetResult, countdownTick, startActionPending],
+    () => buildDailyFritzHubViewModel(today, todaySetResult, countdownTick, startActionPending, Boolean(user)),
+    [today, todaySetResult, countdownTick, startActionPending, user],
   );
 
   if (hasEmbeddedMatch && activeRun && embeddedMatchKey) {

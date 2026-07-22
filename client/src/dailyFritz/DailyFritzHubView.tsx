@@ -56,6 +56,7 @@ export function DailyFritzHubView({
     games,
     fritzTierShort,
     leaderboardSupportLine,
+    isAuthenticated,
     setStatusLabel,
     setStakesLabel,
     opponentBadgeLabel,
@@ -135,7 +136,13 @@ export function DailyFritzHubView({
                       <DfPvfIconRobotNav color="var(--tier-elite)" />
                       <span className="df-pvf-card-badge-title">{opponentBadgeLabel}</span>
                     </div>
-                    <div className="df-pvf-card-badge-desc">{isComplete ? leaderboardSupportLine : 'Fair, consistent, leaderboard eligible.'}</div>
+                    <div className="df-pvf-card-badge-desc">
+                      {isComplete
+                        ? leaderboardSupportLine
+                        : isAuthenticated
+                          ? 'Fair, consistent, leaderboard eligible.'
+                          : 'Sign in to compete.'}
+                    </div>
                   </div>
                 </div>
               </div>

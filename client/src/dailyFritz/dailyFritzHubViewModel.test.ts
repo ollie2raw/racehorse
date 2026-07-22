@@ -71,14 +71,14 @@ describe('buildDailyFritzHubGameCards', () => {
 
 describe('buildDailyFritzHubViewModel', () => {
   it('returns play CTA when attempt not started', () => {
-    const vm = buildDailyFritzHubViewModel(makeToday('none'), null, 0, false);
+    const vm = buildDailyFritzHubViewModel(makeToday('none'), null, 0, false, true);
     expect(vm.primaryCtaLabel).toBe("Play Today's Set");
     expect(vm.isComplete).toBe(false);
     expect(vm.isStarted).toBe(false);
   });
 
   it('returns resume CTA when attempt started', () => {
-    const vm = buildDailyFritzHubViewModel(makeToday('started'), emptySetResult, 0, false);
+    const vm = buildDailyFritzHubViewModel(makeToday('started'), emptySetResult, 0, false, true);
     expect(vm.primaryCtaLabel).toBe("Resume Today's Set");
     expect(vm.isStarted).toBe(true);
   });

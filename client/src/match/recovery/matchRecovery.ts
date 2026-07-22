@@ -3,6 +3,7 @@
 export const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
 
 export const GUEST_ID_STORAGE_KEY = 'racehorse_guest_identity_v1';
+const GUEST_NAME_STORAGE_KEY = 'racehorse_guest_display_name_v1';
 
 export function normalizeStoredRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -76,5 +77,24 @@ export function getOrCreateGuestIdentityId(): string {
     return next;
   } catch {
     return fallback();
+  }
+}
+
+export function getOrCreateGuestDisplayName(): string {
+  if (typeof window === 'undefined') return 'Guest';
+  try {
+    const existingName = window.localStorage.getItem(GUEST_NAME_STORAGE_KEY);
+    if (existingName?.startsWith('Guest ')) return existingName;
+
+    const identity = getOrCreateGuestIdentityId();
+    let hash = 0;
+    for (let index = 0; index < identity.length; index += 1) {
+      hash = (hash * 31 + identity.charCodeAt(index)) >>> 0;
+    }
+    const name = `Guest ${String(hash % 10000).padStart(4, '0')}`;
+    window.localStorage.setItem(GUEST_NAME_STORAGE_KEY, name);
+    return name;
+  } catch {
+    return 'Guest';
   }
 }

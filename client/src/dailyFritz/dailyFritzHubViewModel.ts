@@ -39,6 +39,7 @@ export type DailyFritzHubViewModel = {
   setStakesLabel: string;
   opponentBadgeLabel: string;
   resetCountdownLabel: string;
+  isAuthenticated: boolean;
 };
 
 export function buildDailyFritzHubGameCards(
@@ -118,6 +119,7 @@ export function buildDailyFritzHubViewModel(
   todaySetResult: DailyFritzSetResult | null,
   countdownTick: number,
   startActionPending: boolean,
+  isAuthenticated: boolean,
 ): DailyFritzHubViewModel {
   void countdownTick;
 
@@ -181,5 +183,6 @@ export function buildDailyFritzHubViewModel(
     setStakesLabel,
     opponentBadgeLabel,
     resetCountdownLabel,
+    isAuthenticated,
   };
 }

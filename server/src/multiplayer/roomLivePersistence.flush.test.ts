@@ -6,6 +6,7 @@ import { createInitialRoomDurabilityState } from './roomDurability';
 import {
   flushAllPendingLiveSessions,
   flushScheduledLiveRoomPersistence,
+  getLiveRoomDurabilityState,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
   schedulePersistLiveRoomSession,
@@ -16,6 +17,7 @@ const t = (low: number, high: number) => ({ low: Math.min(low, high), high: Math
 const persistenceStore = vi.hoisted(() => ({
   liveSessions: new Map<string, Record<string, unknown>>(),
   persistCalls: 0,
+  persistedSequences: [] as number[],
 }));
 
 vi.mock('../supabaseUtils', () => ({
@@ -24,6 +26,7 @@ vi.mock('../supabaseUtils', () => ({
       persistenceStore.persistCalls += 1;
       const rows = JSON.parse(String(init.body)) as Array<Record<string, unknown>>;
       for (const row of rows) {
+        persistenceStore.persistedSequences.push(Number(row.game_state_sequence));
         persistenceStore.liveSessions.set(String(row.room_code), row);
       }
       return undefined;
@@ -32,7 +35,7 @@ vi.mock('../supabaseUtils', () => ({
   }),
 }));
 
-function mkGameState(): GameState {
+function mkGameState(overrides: Partial<GameState> = {}): GameState {
   return {
     config: {
       maxPips: 6,
@@ -59,6 +62,7 @@ function mkGameState(): GameState {
     winnerId: null,
     consecutivePasses: 0,
     sequence: 14,
+    ...overrides,
   };
 }
 
@@ -106,6 +110,7 @@ describe('roomLivePersistence flush', () => {
     resetLiveRoomPersistenceForTests();
     persistenceStore.liveSessions.clear();
     persistenceStore.persistCalls = 0;
+    persistenceStore.persistedSequences = [];
     vi.mocked(supabaseFetch).mockClear();
   });
 
@@ -172,5 +177,48 @@ describe('roomLivePersistence flush', () => {
     ]);
 
     expect(persistenceStore.persistCalls).toBe(1);
+  });
+
+  it('commits the newest room fence after an older write is already in flight', async () => {
+    let releaseFirstPersist!: () => void;
+    const firstPersistGate = new Promise<void>((resolve) => {
+      releaseFirstPersist = resolve;
+    });
+    let isFirstPersist = true;
+
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+        persistenceStore.persistCalls += 1;
+        if (isFirstPersist) {
+          isFirstPersist = false;
+          await firstPersistGate;
+        }
+        const rows = JSON.parse(String(init.body)) as Array<Record<string, unknown>>;
+        for (const row of rows) {
+          persistenceStore.persistedSequences.push(Number(row.game_state_sequence));
+          persistenceStore.liveSessions.set(String(row.room_code), row);
+        }
+        return undefined;
+      }
+      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+    });
+
+    const room = mkRoom({ code: 'LATEST1' });
+    const firstPersist = persistLiveRoomSessionNow(room, roster);
+    await Promise.resolve();
+
+    room.state = mkGameState({ sequence: 15 });
+    room.eventSequence = 3;
+    schedulePersistLiveRoomSession(room, roster);
+    const latestPersist = persistLiveRoomSessionNow(room, roster);
+
+    releaseFirstPersist();
+    await expect(firstPersist).resolves.toBe(true);
+    await expect(latestPersist).resolves.toBe(true);
+
+    expect(persistenceStore.persistCalls).toBe(2);
+    expect(persistenceStore.persistedSequences).toEqual([14, 15]);
+    expect(persistenceStore.liveSessions.get('LATEST1')?.game_state_sequence).toBe(15);
+    expect(getLiveRoomDurabilityState(room).status).toBe('healthy');
   });
 });

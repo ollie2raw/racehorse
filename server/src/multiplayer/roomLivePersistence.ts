@@ -624,23 +624,27 @@ export async function persistLiveRoomSessionNow(
   const roomCode = room.code.trim().toUpperCase();
   const inFlight = inFlightPersistByRoomCode.get(roomCode);
   if (inFlight) return inFlight;
-  const commitFence = captureRoomDurabilityFence(room, room.durability.targetFence.commitId);
 
   const persistPromise = (async () => {
-    const result = await persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
-    if (result.ok) {
-      markRoomDurabilityPersistSuccess(room, commitFence);
-      return true;
+    while (true) {
+      const commitFence = captureRoomDurabilityFence(room, room.durability.targetFence.commitId);
+      const result = await persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+      if (result.ok) {
+        if (markRoomDurabilityPersistSuccess(room, commitFence)) return true;
+        // The room changed while this write was in flight. Persist the newer
+        // fence before reporting success to gameplay callers.
+        continue;
+      }
+      markRoomDurabilityPersistFailure(
+        room,
+        {
+          status: result.status,
+          error: result.error,
+        },
+        commitFence,
+      );
+      return false;
     }
-    markRoomDurabilityPersistFailure(
-      room,
-      {
-        status: result.status,
-        error: result.error,
-      },
-      commitFence,
-    );
-    return false;
   })().finally(() => {
     if (inFlightPersistByRoomCode.get(roomCode) === persistPromise) {
       inFlightPersistByRoomCode.delete(roomCode);

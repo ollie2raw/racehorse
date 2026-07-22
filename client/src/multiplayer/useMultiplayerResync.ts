@@ -12,6 +12,7 @@ import type { RecoveryEvent } from './recoveryMachine';
 import { dispatchSocketEvent } from './socketEventBus';
 import { emitRoomJoin, type RoomAckResponse } from './roomTransport';
 import type { StateUpdatePayload } from './protocol';
+import { getOrCreateGuestDisplayName } from '../match/recovery/matchRecovery';
 import {
   selectIsSeated,
   selectJoinedRoomCode,
@@ -116,7 +117,7 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
 
       const identity =
         roomIdentityRef.current ?? {
-          username: authProfileUsername ?? 'Guest',
+          username: authProfileUsername ?? getOrCreateGuestDisplayName(),
           userId: multiplayerIdentityUserId,
           authToken: multiplayerAuthToken,
         };

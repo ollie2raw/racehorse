@@ -56,7 +56,7 @@ export default function GameReviewer({
   initialMoveIndex = 1,
   opponentLabel = 'Fritz',
 }: GameReviewerProps) {
-  const hands = analysis?.hands ?? [];
+  const hands = useMemo(() => analysis?.hands ?? [], [analysis?.hands]);
   const [selectedHandNumber, setSelectedHandNumber] = useState<number | null>(null);
   const [cursor, setCursor] = useState(0);
 
