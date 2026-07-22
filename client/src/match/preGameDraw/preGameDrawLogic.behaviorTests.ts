@@ -35,8 +35,11 @@ function countTiles(hands: Array<{ low: number; high: number }[]>): number {
 
 function exactTieState() {
   const state = initPreGameDraw();
-  state.tiles[0] = { ...state.tiles[0], id: 'tie-a', tile: { low: 3, high: 3 } };
-  state.tiles[1] = { ...state.tiles[1], id: 'tie-b', tile: { low: 3, high: 3 } };
+  const tieSlots = state.tiles.filter((slot) => slot.id !== '6-6' && slot.id !== '0-1').slice(0, 2);
+  tieSlots[0]!.id = 'tie-a';
+  tieSlots[0]!.tile = { low: 3, high: 3 };
+  tieSlots[1]!.id = 'tie-b';
+  tieSlots[1]!.tile = { low: 3, high: 3 };
   return state;
 }
 
