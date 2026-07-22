@@ -1046,7 +1046,7 @@ function evaluateStrategicMove(
   let goldenBonus = 0;
   let safeFinishBonus = 0;
 
-  if (forcedDraw && handAfter.length <= 2 && outletCount >= 1) {
+  if (state.boneyard.length > 2 && handAfter.length <= 2 && exitBonus === 0 && outletTiles.some(isDoubleTile)) {
     goldenBonus = 90;
     const endFreq = countValueOccurrences(endsAfter);
     const outletPips = new Set<number>();
