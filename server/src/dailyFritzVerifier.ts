@@ -3,6 +3,7 @@ import {
   DAILY_FRITZ_VERIFIER_VERSION,
   DEFAULT_CONFIG,
   applyGameCommand,
+  canDraw,
   chooseOfficialFritzDecision,
   createDeterministicRandom,
   getOfficialFritzDecisionSeed,
@@ -147,9 +148,21 @@ export function verifyDailyFritzHand(input: {
   if (transcript.handIndex !== input.expectedHandIndex) throw new DailyFritzVerificationError('Hand mismatch.', 'hand_mismatch');
 
   let state = input.initialState;
+  // Older clients logged post-score recovery draws as separate transcript actions.
+  // applyMove now absorbs that chain inside the play, so those leftover draws are
+  // obsolete and would throw "Draw is not legal" on replay.
+  let lastPlayActor: string | null = null;
   for (const action of transcript.actions) {
     if (state.handOver || state.gameOver) throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
     const expectedActor = state.playerIds[state.currentPlayerIndex];
+    if (
+      action.kind === 'draw' &&
+      lastPlayActor === action.actor &&
+      action.actor === expectedActor &&
+      !canDraw(state, action.actor)
+    ) {
+      continue;
+    }
     if (action.actor !== expectedActor) throw new DailyFritzVerificationError('Transcript actor does not own the turn.', 'wrong_actor');
     if (action.actor === 'fritz') {
       const decision = chooseOfficialFritzDecision({
@@ -173,6 +186,7 @@ export function verifyDailyFritzHand(input: {
         'illegal_action',
       );
     }
+    lastPlayActor = action.kind === 'play' ? action.actor : null;
   }
   if (!state.handOver) throw new DailyFritzVerificationError('Transcript does not complete the hand.', 'incomplete_transcript');
 
