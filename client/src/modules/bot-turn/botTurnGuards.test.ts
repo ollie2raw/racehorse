@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOT_FORCED_DRAW_DELAY_MS,
+  BOT_THINK_DELAY_MS,
+  resolveBotTurnDelayMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
 } from './botTurnGuards.ts';
+
+describe('resolveBotTurnDelayMs', () => {
+  it('keeps a deliberate pause for legal Fritz moves', () => {
+    expect(resolveBotTurnDelayMs(true)).toBe(BOT_THINK_DELAY_MS);
+  });
+
+  it('responds quickly when Fritz must draw or pass', () => {
+    expect(resolveBotTurnDelayMs(false)).toBe(BOT_FORCED_DRAW_DELAY_MS);
+  });
+});
 
 describe('shouldScheduleBotTurn', () => {
   const base = {
