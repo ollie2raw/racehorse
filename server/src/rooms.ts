@@ -448,60 +448,37 @@ type ResolveForcedDrawResult = {
 };
 
 /**
- * Synchronously resolves a forced draw after MOVE. `stateAfterMove` already
- * contains `forcedTile` in the player's hand (applyMove put it there). This
- * function records the forced tile as the first animation step, then continues
- * drawing until the player has a legal play or the boneyard is exhausted.
- *
- * INVARIANT: all state mutations are complete before the function returns.
+ * Builds forced-draw animation metadata for a MOVE whose `applyMove` result already
+ * resolved the full recovery chain (and optional auto-pass). Does not mutate state.
  */
 function resolveForcedDrawAtomically(
+  stateBeforeMove: GameState,
   stateAfterMove: GameState,
   playerId: string,
   forcedTile: Tile,
 ): ResolveForcedDrawResult {
-  let current = stateAfterMove;
-  const animationSteps: DrawAnimationStep[] = [];
-
-  // The forced tile is already in the player's hand — record it as step 0.
-  animationSteps.push({
-    tile: forcedTile,
-    boneyardCount: current.boneyard.length,
-    drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-  });
-
-  // If the forced tile immediately gives a legal play, we're done.
-  if (getLegalMoves(current, playerId).some((move) => move.type === 'play')) {
-    return { state: current, animationSteps, stoppedReason: 'playable' };
+  const drawnCount = Math.max(0, stateBeforeMove.boneyard.length - stateAfterMove.boneyard.length);
+  const drawnTiles = stateBeforeMove.boneyard.slice(0, drawnCount);
+  if (drawnTiles.length === 0) {
+    drawnTiles.push(forcedTile);
   }
 
-  // Keep drawing. Max iterations = initial boneyard size + 1 (safety ceiling;
-  // the loop naturally exits when drawOne returns !drew).
-  const maxIterations = stateAfterMove.boneyard.length + 1;
-  for (let i = 0; i < maxIterations; i++) {
-    // Do not bump sequence per physical draw tile — the aggregated MOVE (+ forced chain)
-    // must advance sequence once overall (already bumped by applyMove for this action).
-    const step = drawOne(current, playerId, false);
-    if (!step.drew) {
-      // Boneyard exhausted — forced auto-pass.
-      const passed = applyMove(current, playerId, { type: 'pass' }).state;
-      return { state: passed, animationSteps, stoppedReason: 'locked_pass' };
-    }
+  const handBeforePlay = stateBeforeMove.players[playerId]?.hand.length ?? 0;
+  const animationSteps: DrawAnimationStep[] = drawnTiles.map((tile, index) => ({
+    tile,
+    boneyardCount: stateBeforeMove.boneyard.length - (index + 1),
+    drawerHandCount: Math.max(0, handBeforePlay - 1) + (index + 1),
+  }));
 
-    current = step.state;
-    animationSteps.push({
-      tile: step.drew,
-      boneyardCount: current.boneyard.length,
-      drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-    });
+  const playable = getLegalMoves(stateAfterMove, playerId).some((move) => move.type === 'play');
+  const stillTheirTurn = stateAfterMove.playerIds[stateAfterMove.currentPlayerIndex] === playerId;
+  const stoppedReason: ResolveForcedDrawResult['stoppedReason'] = playable
+    ? 'playable'
+    : stillTheirTurn
+      ? 'locked_no_pass'
+      : 'locked_pass';
 
-    if (getLegalMoves(current, playerId).some((move) => move.type === 'play')) {
-      return { state: current, animationSteps, stoppedReason: 'playable' };
-    }
-  }
-
-  // Safety fallback — should not be reached with correct boneyard logic.
-  return { state: current, animationSteps, stoppedReason: 'locked_no_pass' };
+  return { state: stateAfterMove, animationSteps, stoppedReason };
 }
 
 export function isPregameDrawEligible(room: Room): boolean {
@@ -985,7 +962,7 @@ async function actUnlocked(
     let authoritativeState = stateAfterMove;
     let resolvedForced: ResolveForcedDrawResult | null = null;
     if (forcedDraw) {
-      resolvedForced = resolveForcedDrawAtomically(stateAfterMove, playerSeatId, forcedDraw);
+      resolvedForced = resolveForcedDrawAtomically(state, stateAfterMove, playerSeatId, forcedDraw);
       authoritativeState = resolvedForced.state;
     }
 

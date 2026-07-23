@@ -19,6 +19,7 @@ export type RunDrawSequence = (
     beforeState: BotMatchState;
     result: BotActionResult;
   }) => void,
+  drawStepMsOverride?: number,
 ) => Promise<BotActionResult>;
 
 export type CreateRunDrawSequenceDeps = {
@@ -31,7 +32,6 @@ export type CreateRunDrawSequenceDeps = {
 
 export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawSequence {
   const {
-    setMatch,
     isMuted,
     isLocalRunCurrent,
     triggerDrawStepAnimation,
@@ -43,6 +43,7 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
     player,
     token,
     onStep,
+    drawStepMsOverride,
   ): Promise<BotActionResult> => {
     let current = initialState;
     let drewAny = false;
@@ -56,10 +57,12 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
       drewAny = true;
       current = step.state;
       if (token && !isLocalRunCurrent(token)) break;
-      setMatch(current);
+      // Do not commit intermediate draws into match React state. That races a follow-up
+      // bot turn (sees playable hand, logs only the play) while these draws never enter
+      // the Daily Fritz transcript. Animation still runs off the local step state.
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, current);
-      await new Promise<void>((resolve) => setTimeout(resolve, drawStepMs));
+      await new Promise<void>((resolve) => setTimeout(resolve, drawStepMsOverride ?? drawStepMs));
       if (token && !isLocalRunCurrent(token)) break;
     }
 

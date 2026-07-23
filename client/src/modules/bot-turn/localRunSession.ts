@@ -5,6 +5,7 @@ export type LocalRunSession = {
   invalidateLocalRuns: () => void;
   beginLocalRun: (kind: LocalRunToken['kind']) => LocalRunToken;
   isLocalRunCurrent: (token: LocalRunToken) => boolean;
+  hasActiveLocalRun: () => boolean;
   finishLocalRun: (token: LocalRunToken) => void;
   lifecycleVersionRef: MutableRefObject<number>;
 };
@@ -42,6 +43,11 @@ export function useLocalRunSession(
     );
   }, []);
 
+  const hasActiveLocalRun = useCallback((): boolean => {
+    const active = activeLocalRunRef.current;
+    return Boolean(active && lifecycleVersionRef.current === active.lifecycleVersion);
+  }, []);
+
   const finishLocalRun = useCallback((token: LocalRunToken) => {
     if (activeLocalRunRef.current?.id === token.id) {
       activeLocalRunRef.current = null;
@@ -52,6 +58,7 @@ export function useLocalRunSession(
     invalidateLocalRuns,
     beginLocalRun,
     isLocalRunCurrent,
+    hasActiveLocalRun,
     finishLocalRun,
     lifecycleVersionRef,
   };

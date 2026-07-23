@@ -47,6 +47,7 @@ export async function runBotDrawPassSequence(input: {
   let ghostChosen: BotDrawPassOutcome['ghostChosen'] = null;
   let playedTileForHighlight: BotDrawPassOutcome['playedTileForHighlight'] = null;
   let drawCount = 0;
+  const boneyardBefore = working.boneyard.length;
 
   input.ports.setDrawSequenceActiveBoth(true);
   const drawPass = await input.runDrawSequence(
@@ -78,6 +79,8 @@ export async function runBotDrawPassSequence(input: {
   }
 
   working = drawPass.state;
+  // Boneyard delta is the source of truth — onStep can undercount if a turn is interrupted.
+  drawCount = Math.max(drawCount, boneyardBefore - working.boneyard.length);
 
   if (drawPass.drew) {
     if (input.isGhostMode) {

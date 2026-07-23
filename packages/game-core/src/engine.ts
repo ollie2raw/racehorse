@@ -641,14 +641,39 @@ export function applyMove(
   const hasPlayMove = (s: GameState): boolean =>
     getLegalMoves(s, playerId).some((m) => m.type === 'play');
 
-  // After a scoring play or double, the turn continues; if nothing is playable yet
-  // and drawable tiles exist, one tile seeds the forced-draw chain (rooms.ts resolves the rest).
+  // After a scoring play or double, the turn continues. Resolve the full forced-draw
+  // chain here (same contract as multiplayer rooms.ts) so Daily Fritz transcripts do not
+  // need separate draw actions for post-score recovery draws — and cannot diverge when
+  // the client continues drawing before the next logged play.
   if (extraTurnEligible && getDrawableBoneyardCount(newState) > 0 && !hasPlayMove(newState)) {
-    const { state: afterDraw, drew } = drawOne(newState, playerId, true);
-    if (!drew) {
+    const { state: afterFirstDraw, drew: firstForced } = drawOne(newState, playerId, true);
+    if (!firstForced) {
       throw new Error('Invariant: drawable count > 0 but drawOne failed.');
     }
-    return { state: afterDraw, forcedDraw: drew };
+    let current = afterFirstDraw;
+    // First forced draw already bumped sequence; continuation tiles stay on the same
+    // command sequence (multiplayer parity).
+    const maxIterations = newState.boneyard.length + 1;
+    for (let i = 0; i < maxIterations; i += 1) {
+      if (hasPlayMove(current)) {
+        return { state: current, forcedDraw: firstForced };
+      }
+      if (getDrawableBoneyardCount(current) === 0) {
+        return {
+          state: applyMove(current, playerId, { type: 'pass' }).state,
+          forcedDraw: firstForced,
+        };
+      }
+      const step = drawOne(current, playerId, false);
+      if (!step.drew) {
+        return {
+          state: applyMove(current, playerId, { type: 'pass' }).state,
+          forcedDraw: firstForced,
+        };
+      }
+      current = step.state;
+    }
+    return { state: current, forcedDraw: firstForced };
   }
 
   if (newHand.length === 0) {

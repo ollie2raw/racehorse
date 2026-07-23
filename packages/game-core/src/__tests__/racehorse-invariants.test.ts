@@ -289,9 +289,43 @@ describe('Racehorse opening and continuation invariants', () => {
     });
 
     expect(forcedDraw).not.toBeNull();
-    expect(next.currentPlayerIndex).toBe(0);
+    // Boneyard exhausted without a playable recovery tile — turn passes.
+    expect(next.currentPlayerIndex).toBe(1);
     expect(next.handOver).toBe(false);
     expect(next.players.A.hand.length).toBe(1);
+  });
+
+  it('scoring play resolves the full forced-draw chain until a follow-up is playable', () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      players: {
+        A: { id: 'A', hand: [t(1, 6)], score: 0 },
+        B: { id: 'B', hand: [t(0, 0)], score: 0 },
+      },
+      // First two draws stay blocked; third matches the right end.
+      boneyard: [t(2, 3), t(3, 5), t(4, 4)],
+      deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
+    });
+
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
+      type: 'play',
+      tile: t(1, 6),
+      position: 'left',
+    });
+
+    expect(forcedDraw).toEqual(t(2, 3));
+    expect(next.currentPlayerIndex).toBe(0);
+    expect(next.players.A.hand).toEqual([t(2, 3), t(3, 5), t(4, 4)]);
+    expect(next.boneyard).toEqual([]);
+    expect(getLegalMoves(next, 'A').some((move) => move.type === 'play')).toBe(true);
   });
 
   it('double play keeps the turn when another tile remains in hand', () => {
@@ -344,7 +378,8 @@ describe('Racehorse opening and continuation invariants', () => {
 
     expect(lastForced).not.toBeNull();
     expect(afterLastScore.handOver).toBe(false);
-    expect(afterLastScore.currentPlayerIndex).toBe(0);
+    // Drawn 5|5 does not match the open ends, and the boneyard is empty → auto-pass.
+    expect(afterLastScore.currentPlayerIndex).toBe(1);
   });
 });
 

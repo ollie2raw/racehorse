@@ -65,6 +65,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const {
     beginLocalRun,
     isLocalRunCurrent,
+    hasActiveLocalRun,
     finishLocalRun,
   } = localRun;
   const [, setBotTurnRetryNonce] = useState(0);
@@ -84,6 +85,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       !shouldScheduleBotTurn({
         match: matchRef.current,
         drawSequenceActive: drawSequenceActiveRef.current,
+        hasActiveLocalRun: hasActiveLocalRun(),
         preGameDrawActive: preGameDrawActiveRef.current,
         isDailyFritzMode,
         dailyFritzSetResult: dailyFritzPackage?.set_result,
@@ -225,6 +227,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     runDrawSequence,
     beginLocalRun,
     isLocalRunCurrent,
+    hasActiveLocalRun,
     finishLocalRun,
     isMuted,
     isDailyFritzMode,

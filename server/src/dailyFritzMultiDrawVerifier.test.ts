@@ -96,4 +96,73 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       { sequence: 1, actor: 'fritz', kind: 'play', tile: play.tile, position: play.position },
     ])).toThrow(/Fritz action does not match the official policy/);
   });
+
+  it('accepts a post-score follow-up play without separate forced-draw transcript actions', () => {
+    const start = createOfficialDailyFritzHandState({
+      deal: {
+        player_tiles: [{ low: 0, high: 0 }],
+        fritz_tiles: [{ low: 1, high: 6 }],
+        boneyard: [
+          { low: 2, high: 3 },
+          { low: 3, high: 5 },
+          { low: 4, high: 4 },
+          { low: 0, high: 2 },
+          { low: 0, high: 5 },
+        ],
+        locked: [{ low: 0, high: 2 }, { low: 0, high: 5 }],
+      },
+      handIndex: 0,
+      drawWinner: 'bot',
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 0,
+      fritzScore: 0,
+    });
+
+    let open = {
+      ...start,
+      board: {
+        mainLine: [{ tile: { low: 1, high: 4 }, orientation: 'horizontal-normal' as const }],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      handOpen: true,
+      sequence: 0,
+      currentPlayerIndex: 1,
+    };
+
+    const scorePlay = chooseOfficialFritzDecision({
+      state: open,
+      participantId: 'fritz',
+      tier: 'elite',
+      random: createDeterministicRandom(getOfficialFritzDecisionSeed(open)),
+    });
+    expect(scorePlay).toEqual({
+      kind: 'play',
+      tile: { low: 1, high: 6 },
+      position: 'left',
+    });
+
+    open = applyGameCommand(open, {
+      version: 1,
+      commandId: 'score',
+      sequence: open.sequence,
+      actorId: 'fritz',
+      kind: 'play',
+      tile: { low: 1, high: 6 },
+      position: 'left',
+    }).state;
+
+    // Full forced-draw chain is resolved inside the play command.
+    const followUp = chooseOfficialFritzDecision({
+      state: open,
+      participantId: 'fritz',
+      tier: 'elite',
+      random: createDeterministicRandom(getOfficialFritzDecisionSeed(open)),
+    });
+    expect(followUp.kind).toBe('play');
+  });
 });

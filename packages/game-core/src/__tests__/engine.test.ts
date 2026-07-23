@@ -860,7 +860,8 @@ describe('Last-tile scoring vs non-scoring placements', () => {
     expect(next.handOver).toBe(false);
     expect(next.players.A.score).toBe(1);
     expect(next.players.A.hand.length).toBe(1);
-    expect(next.currentPlayerIndex).toBe(0);
+    // Drawn 5|5 is not playable on the resulting ends, so the chain auto-passes.
+    expect(next.currentPlayerIndex).toBe(1);
   });
 
   it('scoring last-tile placement with empty boneyard ends the hand', () => {
