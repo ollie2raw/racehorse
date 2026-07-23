@@ -13,7 +13,6 @@ import {
   DfPvfIconRobotNav,
 } from './DailyFritzIcons';
 import type { DailyFritzHubViewModel } from './dailyFritzHubViewModel';
-import type { DailyFritzHistoryEntry } from './api';
 
 export type DailyFritzHubViewProps = {
   hub: DailyFritzHubViewModel;
@@ -26,8 +25,6 @@ export type DailyFritzHubViewProps = {
   onOpenAccount?: () => void;
   onSetAction: () => void;
   onOpenLeaderboard: () => void;
-  history: DailyFritzHistoryEntry[];
-  onPractice: () => void;
 };
 
 export function DailyFritzHubView({
@@ -41,8 +38,6 @@ export function DailyFritzHubView({
   onOpenAccount,
   onSetAction,
   onOpenLeaderboard,
-  history,
-  onPractice,
 }: DailyFritzHubViewProps) {
   const {
     dateLabel,
@@ -313,8 +308,6 @@ export function DailyFritzHubView({
                   View Leaderboard →
                 </Button>
               </div>
-              {isComplete ? <Button type="button" variant="ghost" onClick={onPractice}>Practice vs Fritz</Button> : null}
-              {history.length > 0 ? <section className="df-history-preview" aria-label="Recent Daily Fritz results"><h3>Recent results</h3><ul>{history.slice(0,3).map((entry)=><li key={`${entry.challenge_date}:${entry.completed_at}`}><span>{entry.challenge_date}</span><strong>{entry.won?'Win':'Loss'} · {entry.player_score}–{entry.fritz_score}{entry.verification_status === 'verified' ? '' : ' · Unranked'}</strong></li>)}</ul></section> : null}
             </div>
           </section>
         </div>

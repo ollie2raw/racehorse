@@ -5,11 +5,13 @@ import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
 import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type DailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
 import type { DailyFritzTranscript } from '@racehorse/game-core';
 
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 4;
+// Bump when the local match state is no longer safe to replay against the
+// server verifier. Version 4 snapshots may contain pre-verifier Fritz moves.
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 5;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 4;
+  schemaVersion: 5;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
@@ -67,7 +69,7 @@ function validHandResult(value: unknown): value is BotHandReveal | null {
 }
 
 export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date()): DailyFritzPersistedSnapshot | null {
-  if (!object(value) || (value.schemaVersion !== 3 && value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION) || value.classification !== 'official') return null;
+  if (!object(value) || value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION || value.classification !== 'official') return null;
   if (!validChallenge(value.challenge) || !isDailyFritzChallengeCurrent(value.challenge, now)) return null;
   if (typeof value.attemptId !== 'string' || !value.attemptId || !nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex)) return null;
   if (!['active_hand','hand_transition','completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;

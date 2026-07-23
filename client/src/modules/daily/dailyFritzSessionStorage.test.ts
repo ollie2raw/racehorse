@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
-import { buildDailyFritzStorageKey, loadPersistedDailyFritzMatch, parseDailyFritzPersistedSnapshot, persistDailyFritzSnapshot, type DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
+import { buildDailyFritzStorageKey, DAILY_FRITZ_SESSION_SCHEMA_VERSION, loadPersistedDailyFritzMatch, parseDailyFritzPersistedSnapshot, persistDailyFritzSnapshot, type DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
 
 const now = new Date('2026-07-12T20:00:00.000Z');
 function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFritzPersistedSnapshot {
   const match = createBotMatch(60, 7);
   match.players.you.score = 35;
   match.players.bot.score = 20;
-  return { schemaVersion:4,challenge:createDailyFritzChallengeIdentity('2026-07-12'),classification:'official',attemptId:'attempt-1',gameNumber:1,currentHandIndex:2,lifecyclePhase:'active_hand',match,handResult:null,movesUsed:4,moveLog:[],transcript:null,verificationPhase:'collecting',startedAt:'2026-07-12T18:00:00.000Z',lastTransitionAt:'2026-07-12T18:01:00.000Z',revision:2,...overrides };
+  return { schemaVersion:DAILY_FRITZ_SESSION_SCHEMA_VERSION,challenge:createDailyFritzChallengeIdentity('2026-07-12'),classification:'official',attemptId:'attempt-1',gameNumber:1,currentHandIndex:2,lifecyclePhase:'active_hand',match,handResult:null,movesUsed:4,moveLog:[],transcript:null,verificationPhase:'collecting',startedAt:'2026-07-12T18:00:00.000Z',lastTransitionAt:'2026-07-12T18:01:00.000Z',revision:2,...overrides };
 }
 
 describe('Daily Fritz v3 session persistence', () => {
@@ -28,7 +28,7 @@ describe('Daily Fritz v3 session persistence', () => {
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({},now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({challenge:createDailyFritzChallengeIdentity('2026-07-11')}),now)).toBeNull();
-    expect(parseDailyFritzPersistedSnapshot({...snapshot(),schemaVersion:2},now)).toBeNull();
+    expect(parseDailyFritzPersistedSnapshot({...snapshot(),schemaVersion:4},now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({lifecyclePhase:'hand_transition'}),now)).toBeNull();
   });
   it('retains a coherent hand-transition snapshot and rejects terminal resume', () => {

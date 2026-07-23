@@ -12,7 +12,6 @@ import { buildDailyFritzHubViewModel } from './dailyFritzHubViewModel';
 import { DailyFritzHubView } from './DailyFritzHubView';
 import { DailyFritzEmbeddedMatchView } from './DailyFritzEmbeddedMatchView';
 import './dailyFritz.css';
-import { getDailyFritzHistory, type DailyFritzHistoryEntry } from './api';
 
 export default function DailyFritzScreen({
   user,
@@ -61,8 +60,6 @@ export default function DailyFritzScreen({
   });
 
   const [countdownTick, setCountdownTick] = useState(0);
-  const [history, setHistory] = useState<DailyFritzHistoryEntry[]>([]);
-  useEffect(() => { if (!user?.id) return; void getDailyFritzHistory(5).then(setHistory).catch(() => setHistory([])); }, [user?.id, today?.attempt_status]);
 
   const loadHeroAsset = useCallback(
     () => import('../assets/dailyFritz/playvsfritzdone.webp'),
@@ -208,8 +205,6 @@ export default function DailyFritzScreen({
       onOpenAccount={onOpenAccount}
       onSetAction={handleSetAction}
       onOpenLeaderboard={openLeaderboard}
-      history={history}
-      onPractice={() => onNavigate?.('botSetup')}
     />
   );
 }

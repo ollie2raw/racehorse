@@ -4,7 +4,11 @@ import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { BotHandReveal } from '../match/types.ts';
 import { pruneNonPlayableDailyFritzSnapshot } from './dailyFritzSessionStorage';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
-import { persistDailyFritzSnapshot, type DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
+import {
+  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+  persistDailyFritzSnapshot,
+  type DailyFritzPersistedSnapshot,
+} from './dailyFritzSessionStorage.ts';
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
@@ -49,7 +53,7 @@ export function useDailyFritzSessionPersistence({
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
     const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
-      schemaVersion: 4,
+      schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
       challenge: createDailyFritzChallengeIdentity(runDate),
       classification: 'official',
       attemptId,

@@ -100,8 +100,8 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
     expect(vm.primaryLabel).toBe('Retry submission');expect(vm.errorMessage).toBe('offline');vm.onPrimary();expect(actions.retryFinalSubmission).toHaveBeenCalledOnce();
   });
 
-  it('offers Practice separately from the verified final result', () => {
+  it('does not offer practice from the verified final result', () => {
     const actions=makeActions();const vm=buildDailyFritzSetOverlayViewModel({kind:'final',completedGame,setResult:{...setResult,setWinner:'player',playerGamesWon:2},rank:4,canViewLeaderboard:true},actions,{});
-    expect(vm.primaryLabel).toBe('View Leaderboard');expect(vm.secondaryLabel).toBe('Practice vs Fritz');expect(vm.tertiaryLabel).toBe('Return Home');vm.onSecondary();expect(actions.startPractice).toHaveBeenCalledOnce();
+    expect(vm.primaryLabel).toBe('View Leaderboard');expect(vm.secondaryLabel).toBeNull();expect(vm.tertiaryLabel).toBe('Return Home');
   });
 });
