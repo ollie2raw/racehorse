@@ -1,0 +1,254 @@
+.streak-strip {
+  display: flex;
+  align-items: center;
+  margin: 16px 56px 0;
+  padding: 14px 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #09101a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 20px rgba(0, 0, 0, 0.22);
+  gap: 20px;
+}
+
+.streak-strip--loading {
+  opacity: 0.75;
+}
+
+.streak-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 200px;
+}
+
+.streak-flame-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0e1b0d;
+  box-shadow: 0 0 16px rgba(103, 217, 87, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.streak-flame-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.streak-label {
+  font-size: 17px;
+  font-weight: 750;
+  color: #67d957;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.streak-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #9d98a9;
+  line-height: 1.2;
+}
+
+/* Day dots */
+.streak-days {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex: 1;
+}
+
+.streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.day-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #9090a0;
+  text-transform: uppercase;
+}
+
+.day-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.day-dot-done {
+  border: 1px solid #2e5223;
+  background: #172e14;
+  box-shadow: 0 0 12px rgba(103, 217, 87, 0.12);
+}
+
+.day-check-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.day-dot-today {
+  border: 1.5px solid #9b6cff;
+}
+
+.day-dot-today-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a77cff;
+}
+
+.day-dot-future {
+  border: 1px solid #2a3144;
+  background: transparent;
+}
+
+/* Weekly goal */
+.streak-goal {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding-left: 22px;
+  flex-shrink: 0;
+  min-width: 260px;
+}
+
+.goal-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 80px;
+}
+
+.goal-label {
+  font-size: 12px;
+  color: #b6b1bf;
+  font-weight: 500;
+}
+
+.goal-value {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.goal-value strong {
+  font-weight: 750;
+  color: #67d957;
+}
+
+.goal-value span {
+  color: #b6b1bf;
+}
+
+.goal-bar-track {
+  width: 148px;
+  height: 6px;
+  border-radius: 3px;
+  background: #161e2c;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.goal-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #67d957;
+  box-shadow: 0 0 8px rgba(103, 217, 87, 0.22);
+  transition: width 0.3s ease-out;
+}
+
+/* Skeleton Loading styles */
+.skeleton-pulse {
+  animation: streak-skeleton-pulse 1.5s ease-in-out infinite;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.streak-copy-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.skeleton-line--title {
+  width: 90px;
+  height: 14px;
+}
+
+.skeleton-line--sub {
+  width: 130px;
+  height: 10px;
+}
+
+.skeleton-line--day-label {
+  width: 24px;
+  height: 8px;
+  margin-bottom: 4px;
+}
+
+.skeleton-line--goal-label {
+  width: 70px;
+  height: 10px;
+}
+
+.skeleton-line--goal-val {
+  width: 50px;
+  height: 12px;
+}
+
+@keyframes streak-skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* Responsive / Mobile styles */
+@media (max-width: 900px) {
+  .streak-strip {
+    flex-direction: column;
+    align-items: stretch;
+    margin: 16px 16px 0;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .streak-days {
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .streak-goal {
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 0;
+    padding-top: 14px;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .goal-bar-track {
+    flex: 1;
+    max-width: 240px;
+  }
+}

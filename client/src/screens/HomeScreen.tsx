@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react';
 import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import { getHomeDailyCardState, getHomeDailyResultCopy } from '../home/homeDailyCardPresentation';
-import { HomeNextMoveBar } from '../home/components/HomeNextMoveBar';
+import { HomeStreakStrip } from '../home/components/HomeStreakStrip';
 import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
 
@@ -308,10 +308,9 @@ export default function RacehorseHomeScreen({
             </section>
           </div>
 
-          <HomeNextMoveBar
-            action={homeModel.primaryAction}
+          <HomeStreakStrip
+            summary={homeModel.daily.summary}
             loading={homeLoading}
-            onAction={(action) => navigate(action.route)}
           />
 
           <section className="home-mode-tabs mx-14 mt-4 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,13,22,0.96)_0%,rgba(6,8,14,0.98)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_8px_20px_rgba(0,0,0,0.22)]" aria-label="Game modes">
