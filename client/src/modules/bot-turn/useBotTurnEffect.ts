@@ -204,19 +204,24 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       : null;
 
     return () => {
-      console.log('[BOT-EFFECT] cleanup called', { drawSequenceActive: drawSequenceActiveRef.current });
-      if (!drawSequenceActiveRef.current) {
-        cancelled = true;
-      }
+      const drawActive = drawSequenceActiveRef.current;
+      console.log('[BOT-EFFECT] cleanup called', { drawSequenceActive: drawActive });
       clearTimeout(timer);
       if (maxThinkingTimer) clearTimeout(maxThinkingTimer);
       if (botActionRetryTimerRef.current) {
         clearTimeout(botActionRetryTimerRef.current);
         botActionRetryTimerRef.current = null;
       }
-      // Effect re-runs (match identity churn) must release the token or a stale
-      // beginLocalRun leaves Fritz permanently stuck on "thinking".
-      finishLocalRun(runToken);
+      // While a draw/pass sequence is running, keep the local-run token alive.
+      // Releasing it mid-draw aborts finalization, clears drawSequenceActive in
+      // finally, then re-schedules from the same pre-draw match — looping the
+      // flying-tile animation forever on "FRITZ THINKING".
+      // Outside an active draw, release the token so remounts cannot leave a
+      // stale beginLocalRun that blocks later turns.
+      if (!drawActive) {
+        cancelled = true;
+        finishLocalRun(runToken);
+      }
     };
   }, [
     match,
