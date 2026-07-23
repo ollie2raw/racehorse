@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BotActionResult } from '../runtime/botEngine.ts';
 import {
   DAILY_FRITZ_HAND_AUTO_ADVANCE_MS,
@@ -98,6 +98,15 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   const prefetchCoordinator = prefetchCoordinatorRef.current;
   const advanceRetry = advanceRetryRef.current;
+
+  useEffect(() => {
+    const advanceRetry = advanceRetryRef.current;
+    const prefetchCoordinator = prefetchCoordinatorRef.current;
+    return () => {
+      advanceRetry.dispose();
+      prefetchCoordinator.clear();
+    };
+  }, []);
 
   const handleAutoAdvance = useCallback(() => {
     advanceHandRef.current();

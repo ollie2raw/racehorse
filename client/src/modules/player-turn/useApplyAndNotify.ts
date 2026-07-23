@@ -8,11 +8,16 @@ import {
 export function useApplyAndNotify(
   setMatch: (updater: BotMatchState | ((prev: BotMatchState) => BotMatchState)) => void,
   notifyBotActionResult: (result: BotActionResult) => void,
+  onActionError: (message: string) => void,
 ) {
   return useCallback((result: BotActionResult) => {
+    if (result.error) {
+      onActionError(result.error.message);
+      return;
+    }
     const adjustedState = result.state;
     setMatch((prev) => mergePlayerDrawPassTracking(prev, adjustedState, result));
     logPlayerDrawFairness(result, adjustedState);
     notifyBotActionResult({ ...result, state: adjustedState });
-  }, [notifyBotActionResult, setMatch]);
+  }, [notifyBotActionResult, onActionError, setMatch]);
 }

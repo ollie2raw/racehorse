@@ -17,6 +17,7 @@ import {
 } from '@racehorse/game-core';
 import type { BoardState, Move, PlacementPosition, Tile } from '../../../types.ts';
 import type {
+  BotActionError,
   BotActionResult,
   BotHandEndReason,
   BotMatchState,
@@ -26,6 +27,10 @@ import type { BotChoice, BotDifficulty } from '../../fritz/botHeuristics.ts';
 
 function cloneTile(tile: Readonly<Tile>): Tile {
   return { low: tile.low, high: tile.high };
+}
+
+function actionFailure(state: BotMatchState, code: string, message: string): BotActionResult {
+  return { state, error: { code, message } satisfies BotActionError };
 }
 
 function cloneBoard(board: CoreGameState['board']): BoardState | null {
@@ -188,12 +193,12 @@ export function applyCorePlay(
   move: Move,
 ): BotActionResult {
   if (move.type !== 'play' || !move.tile || !move.position) return { state };
-  const coreBefore = toCoreGameState(state);
-  const immediateScore = computeCorePlayScore(
-    simulateCorePlacement(coreBefore.board, move.tile, move.position),
-    coreBefore.config,
-  );
   try {
+    const coreBefore = toCoreGameState(state);
+    const immediateScore = computeCorePlayScore(
+      simulateCorePlacement(coreBefore.board, move.tile, move.position),
+      coreBefore.config,
+    );
     const result = applyCoreMove(coreBefore, player, {
       type: 'play',
       tile: move.tile,
@@ -207,8 +212,12 @@ export function applyCorePlay(
       ...(result.forcedDraw ? { drew: { player, tile: cloneTile(result.forcedDraw) } } : {}),
       ...(details.handEnded ? { handEnded: details.handEnded } : {}),
     };
-  } catch {
-    return { state };
+  } catch (error) {
+    return actionFailure(
+      state,
+      'core_play_rejected',
+      error instanceof Error ? error.message : 'The move could not be applied. Try again.',
+    );
   }
 }
 
@@ -228,8 +237,12 @@ export function drawCoreTile(state: BotMatchState, player: BotPlayerId): BotActi
       state: fromCoreGameState(result.state, state),
       drew: { player, tile: cloneTile(drawn) },
     };
-  } catch {
-    return { state };
+  } catch (error) {
+    return actionFailure(
+      state,
+      'core_draw_rejected',
+      error instanceof Error ? error.message : 'The draw could not be applied. Try again.',
+    );
   }
 }
 
@@ -242,8 +255,12 @@ export function passCoreTurn(state: BotMatchState, player: BotPlayerId): BotActi
       passed: { player },
       ...(details.handEnded ? { handEnded: details.handEnded } : {}),
     };
-  } catch {
-    return { state };
+  } catch (error) {
+    return actionFailure(
+      state,
+      'core_pass_rejected',
+      error instanceof Error ? error.message : 'The pass could not be applied. Try again.',
+    );
   }
 }
 
@@ -267,8 +284,12 @@ export function drawUntilPlayableOrEmptyCoreState(
       state: fromCoreGameState(result.state, state),
       ...(lastDrawn ? { drew: { player, tile: cloneTile(lastDrawn) } } : {}),
     };
-  } catch {
-    return { state };
+  } catch (error) {
+    return actionFailure(
+      state,
+      'core_draw_sequence_rejected',
+      error instanceof Error ? error.message : 'The draw sequence could not be applied. Try again.',
+    );
   }
 }
 

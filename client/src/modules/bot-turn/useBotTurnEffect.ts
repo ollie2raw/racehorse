@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { BotDifficulty } from '../fritz/botHeuristics.ts';
 import { botMatchDebugLog } from '../match/runtime/botMatchDebug.ts';
@@ -9,12 +9,14 @@ import { executeBotTurn, finalizeBotTurnExecution } from './botTurnExecutor.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
 import type { LocalRunSession } from './localRunSession.ts';
 import {
+  resolveBotTurnDelayMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
 } from './botTurnGuards.ts';
+import { asPlayMoves } from '../../game/tileUtils.ts';
+import { getLegalMoves } from '../match/runtime/botEngine.ts';
 import type { BotTurnPorts } from './types.ts';
 
-const BOT_THINK_DELAY_MS = 1500;
 const BOT_MAX_THINKING_MS = 3000;
 
 export type UseBotTurnEffectArgs = {
@@ -65,6 +67,9 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     isLocalRunCurrent,
     finishLocalRun,
   } = localRun;
+  const [, setBotTurnRetryNonce] = useState(0);
+  const botActionRetryRef = useRef({ key: '', attempts: 0 });
+  const botActionRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   useEffect(() => {
     botMatchDebugLog('[BOT-EFFECT] fired', {
@@ -93,6 +98,12 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     botMatchDebugLog('[BOT-EFFECT] passed guard, scheduling turn');
     let cancelled = false;
     let actionResolved = false;
+    const retryKey = `${match.handNumber}:${match.turnIndex ?? 0}:${match.currentPlayer}`;
+    if (botActionRetryRef.current.key !== retryKey) {
+      botActionRetryRef.current = { key: retryKey, attempts: 0 };
+    }
+    const hasLegalBotMove = asPlayMoves(getLegalMoves(matchRef.current, 'bot')).length > 0;
+    const botTurnDelayMs = resolveBotTurnDelayMs(hasLegalBotMove);
     const runToken = beginLocalRun('bot-turn');
     botChainPauseRef.current = false;
 
@@ -137,24 +148,29 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
 
           if (cancelled || actionResolved || !isLocalRunCurrent(runToken)) return;
           if (execution.result) {
-            actionResolved = true;
-            if (!isLocalRunCurrent(runToken)) return;
-            if (
-              !finalizeBotTurnExecution({
-                execution,
-                ports,
-                matchRef,
-                matchSnapshotSource: match,
-                isGhostMode,
-                isDailyFritzMode,
-                moveCounter: moveCounterRef.current,
-                setBotChainPaused: (paused) => {
-                  botChainPauseRef.current = paused;
-                },
-              })
-            ) {
+            const finalized = finalizeBotTurnExecution({
+              execution,
+              ports,
+              matchRef,
+              matchSnapshotSource: match,
+              isGhostMode,
+              isDailyFritzMode,
+              moveCounter: moveCounterRef.current,
+              setBotChainPaused: (paused) => {
+                botChainPauseRef.current = paused;
+              },
+            });
+            if (!finalized) {
+              if (execution.result.error && botActionRetryRef.current.attempts < 1) {
+                botActionRetryRef.current.attempts += 1;
+                botActionRetryTimerRef.current = window.setTimeout(() => {
+                  botActionRetryTimerRef.current = null;
+                  setBotTurnRetryNonce((nonce) => nonce + 1);
+                }, 350);
+              }
               return;
             }
+            actionResolved = true;
           }
         } finally {
           if (isLocalRunCurrent(runToken)) {
@@ -163,27 +179,29 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           ports.setDrawSequenceActiveBoth(false);
         }
       })();
-    }, BOT_THINK_DELAY_MS);
+    }, botTurnDelayMs);
 
-    const maxThinkingTimer = setTimeout(() => {
-      const outcome = executeBotThinkingFallback({
-        live: matchRef.current,
-        ports,
-        runToken,
-        isLocalRunCurrent,
-        matchRef,
-        finishLocalRun,
-        setBotChainPaused: (paused) => {
-          botChainPauseRef.current = paused;
-        },
-        cancelled,
-        actionResolved,
-        isDailyFritzMode,
-        fritzDifficulty,
-      });
-      cancelled = outcome.cancelled;
-      actionResolved = outcome.actionResolved;
-    }, BOT_MAX_THINKING_MS);
+    const maxThinkingTimer = hasLegalBotMove
+      ? setTimeout(() => {
+          const outcome = executeBotThinkingFallback({
+            live: matchRef.current,
+            ports,
+            runToken,
+            isLocalRunCurrent,
+            matchRef,
+            finishLocalRun,
+            setBotChainPaused: (paused) => {
+              botChainPauseRef.current = paused;
+            },
+            cancelled,
+            actionResolved,
+            isDailyFritzMode,
+            fritzDifficulty,
+          });
+          cancelled = outcome.cancelled;
+          actionResolved = outcome.actionResolved;
+        }, BOT_MAX_THINKING_MS)
+      : null;
 
     return () => {
       console.log('[BOT-EFFECT] cleanup called', { drawSequenceActive: drawSequenceActiveRef.current });
@@ -191,7 +209,11 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
         cancelled = true;
       }
       clearTimeout(timer);
-      clearTimeout(maxThinkingTimer);
+      if (maxThinkingTimer) clearTimeout(maxThinkingTimer);
+      if (botActionRetryTimerRef.current) {
+        clearTimeout(botActionRetryTimerRef.current);
+        botActionRetryTimerRef.current = null;
+      }
     };
   }, [
     match,
@@ -214,5 +236,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     fritzDifficulty,
     moveCounterRef,
     botChainPauseRef,
+    setBotTurnRetryNonce,
+    botActionRetryRef,
+    botActionRetryTimerRef,
   ]);
 }

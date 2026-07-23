@@ -92,6 +92,8 @@ export function completeBotTurnAction(input: {
   ports: BotTurnPorts;
   matchRef: React.MutableRefObject<BotMatchState>;
   result: BotActionResult;
+  drew?: boolean;
+  passed?: boolean;
   workingHandNumber: number;
   snapshot: BotTurnSnapshot;
   chosen: BotChoice | null;
@@ -102,6 +104,24 @@ export function completeBotTurnAction(input: {
   moveCounter: number;
   setBotChainPaused: (paused: boolean) => void;
 }): boolean {
+  if (input.result.error) {
+    input.ports.showBoardToast(input.result.error.message, 'bot');
+    return false;
+  }
+
+  if (!shouldApplyBotActionResult(input.matchRef.current, input.result)) {
+    if (import.meta.env.DEV) {
+      console.log('[BOT-TURN] apply skipped — stale result', {
+        liveHandOver: input.matchRef.current.handOver,
+        liveGameOver: input.matchRef.current.gameOver,
+        resultHandOver: input.result.state.handOver,
+        resultGameOver: input.result.state.gameOver,
+        hasHandEnded: Boolean(input.result.handEnded),
+      });
+    }
+    return false;
+  }
+
   input.setBotChainPaused(computeBotChainPaused(input.result));
   input.ports.setSelectedTile(null);
 
@@ -130,19 +150,6 @@ export function completeBotTurnAction(input: {
     ghostChosen: input.ghostChosen,
     chosen: input.chosen,
   });
-
-  if (!shouldApplyBotActionResult(input.matchRef.current, input.result)) {
-    if (import.meta.env.DEV) {
-      console.log('[BOT-TURN] apply skipped — stale result', {
-        liveHandOver: input.matchRef.current.handOver,
-        liveGameOver: input.matchRef.current.gameOver,
-        resultHandOver: input.result.state.handOver,
-        resultGameOver: input.result.state.gameOver,
-        hasHandEnded: Boolean(input.result.handEnded),
-      });
-    }
-    return false;
-  }
 
   input.ports.applyAndNotify(input.result);
   input.ports.flashLastPlayed(input.playedTileForHighlight);

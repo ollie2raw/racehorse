@@ -10,6 +10,7 @@ export type BuildBotTurnPortsInput = {
   setDrawSequenceActiveBoth: BotTurnPorts['setDrawSequenceActiveBoth'];
   setLastBotChoice: BotTurnPorts['setLastBotChoice'];
   setGhostPlayedTile: BotTurnPorts['setGhostPlayedTile'];
+  showBoardToast: BotTurnPorts['showBoardToast'];
   isAuthoringMode: boolean;
   handleAuthoringFritzActionCaptured: BotTurnPorts['onAuthoringFritzActionCaptured'];
   isAuthoringV2Mode: boolean;
@@ -29,6 +30,7 @@ export function buildBotTurnPorts(input: BuildBotTurnPortsInput): BotTurnPorts {
     setDrawSequenceActiveBoth: input.setDrawSequenceActiveBoth,
     setLastBotChoice: input.setLastBotChoice,
     setGhostPlayedTile: input.setGhostPlayedTile,
+    showBoardToast: input.showBoardToast,
     onAuthoringFritzActionCaptured: input.isAuthoringMode
       ? input.handleAuthoringFritzActionCaptured
       : undefined,

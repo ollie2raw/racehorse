@@ -58,6 +58,11 @@ export function useHandRevealScheduler({
   const handRevealShownAtRef = useRef<number | null>(null);
   const dailyFritzMinAdvanceAtRef = useRef<number | null>(null);
   const handAutoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const onAutoAdvanceRef = useRef(onAutoAdvance);
+
+  useEffect(() => {
+    onAutoAdvanceRef.current = onAutoAdvance;
+  }, [onAutoAdvance]);
 
   const scheduleHandReveal = useCallback((reveal: BotHandReveal, delayMs: number) => {
     if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
@@ -209,7 +214,7 @@ export function useHandRevealScheduler({
         hypothesisId: 'A',
         data: { handNumber: matchRef.current.handNumber },
       });
-      onAutoAdvance();
+      onAutoAdvanceRef.current();
     }, DAILY_FRITZ_HAND_AUTO_ADVANCE_MS);
 
     return () => {
@@ -237,7 +242,6 @@ export function useHandRevealScheduler({
     match.handNumber,
     matchRef,
     mode,
-    onAutoAdvance,
     onRevealHidden,
     onRevealShown,
     prefetchReady,

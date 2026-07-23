@@ -62,7 +62,6 @@ export function useMatchPresentation({
     prevTurnRef,
   } = refs;
 
-  const [, setToast] = useState('');
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [scoreToast, setScoreToast] = useState<{
     message: string;
@@ -89,11 +88,6 @@ export function useMatchPresentation({
     profile.botMatchScreenRenderCount = (profile.botMatchScreenRenderCount ?? 0) + 1;
   }
 
-  const pushToast = useCallback((_msg: string, _ms = 1400) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast('');
-  }, [toastTimerRef]);
-
   const showBoardToast = useCallback((message: string, tone: 'you' | 'bot') => {
     if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
     if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
@@ -107,6 +101,11 @@ export function useMatchPresentation({
     }, 1700);
     scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
   }, [scoreToastHideTimerRef, scoreToastClearTimerRef]);
+
+  const pushToast = useCallback((message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    showBoardToast(message, 'bot');
+  }, [showBoardToast, toastTimerRef]);
 
   const showScoreToast = useCallback((player: 'you' | 'bot', points: number) => {
     showBoardToast(`${player === 'you' ? 'You' : opponentLabel} scored +${points}`, player);

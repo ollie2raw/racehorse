@@ -47,6 +47,7 @@ export type BotTurnPorts = {
   setDrawSequenceActiveBoth: (val: boolean) => void;
   setLastBotChoice: (choice: BotChoice | null) => void;
   setGhostPlayedTile: (tile: Tile | null) => void;
+  showBoardToast: (message: string, tone: 'you' | 'bot') => void;
   onAuthoringFritzActionCaptured?: (capture: AuthoringFritzActionCapture) => void;
   onAuthoringV2FritzEvent?: (capture: AuthoringV2FritzEventCapture) => void;
   onDailyFritzBotMoveApplied?: (info: DailyFritzBotMoveAppliedInfo) => void;

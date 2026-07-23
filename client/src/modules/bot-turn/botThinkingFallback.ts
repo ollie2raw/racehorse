@@ -57,6 +57,10 @@ export function executeBotThinkingFallback(input: {
 
   const snapshot = collectBotTurnSnapshot(live);
   const forcedResult = applyPlayMove(live, 'bot', fallbackPlay);
+  if (forcedResult.error) {
+    input.ports.showBoardToast(forcedResult.error.message, 'bot');
+    return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
+  }
   input.ports.captureGuidedMatchCandidateAction(
     'fritz',
     'tile-play',

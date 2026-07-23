@@ -122,6 +122,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
   const applyAndNotify = useApplyAndNotify(
     bootstrap.setMatch,
     handLifecycle.notifyBotActionResult,
+    (message) => presentation.showBoardToast(message, 'you'),
   );
 
   const { triggerDrawStepAnimation, scheduleDrawStepAnimation } = usePlayerDrawAnimation({
@@ -200,6 +201,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       setDrawSequenceActiveBoth: refs.setDrawSequenceActiveBoth,
       setLastBotChoice,
       setGhostPlayedTile: sources.ghost.setGhostPlayedTile,
+      showBoardToast: presentation.showBoardToast,
       isAuthoringMode: guidedBoot.isAuthoringMode,
       handleAuthoringFritzActionCaptured: authoring.handleAuthoringFritzActionCaptured,
       isAuthoringV2Mode: guidedBoot.isAuthoringV2Mode,
@@ -215,6 +217,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       presentation.flashLastPlayed,
       bootstrap.setSelectedTile,
       refs.setDrawSequenceActiveBoth,
+      presentation.showBoardToast,
       sources.ghost.setGhostPlayedTile,
       guidedBoot.isAuthoringMode,
       authoring.handleAuthoringFritzActionCaptured,

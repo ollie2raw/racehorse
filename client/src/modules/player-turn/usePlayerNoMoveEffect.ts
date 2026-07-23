@@ -145,6 +145,10 @@ export function usePlayerNoMoveEffect({
           captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
         });
         if (!isLocalRunCurrent(runToken)) return;
+        if (result.error) {
+          ports.showBoardToast(result.error.message, 'you');
+          return;
+        }
         setSelectedTile(null);
 
         if (result.drew) {

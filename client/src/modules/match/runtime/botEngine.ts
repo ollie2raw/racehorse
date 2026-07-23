@@ -40,6 +40,11 @@ export {
 
 export type BotPlayerId = 'you' | 'bot';
 export type BotHandEndReason = 'domino' | 'blocked';
+
+export type BotActionError = {
+  code: string;
+  message: string;
+};
 export type BotDealSize = 7 | 14;
 
 export interface BotPlayerState {
@@ -82,6 +87,7 @@ export interface BotHandDeal {
 
 export interface BotActionResult {
   state: BotMatchState;
+  error?: BotActionError;
   scored?: { player: BotPlayerId; points: number };
   drew?: { player: BotPlayerId; tile: Tile };
   passed?: { player: BotPlayerId };

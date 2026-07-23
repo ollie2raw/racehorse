@@ -127,6 +127,10 @@ export function usePlayerPlacementHandler({
 
     const snapshot = collectPlayerMoveSnapshot(match, userPlayMoves);
     const result = applyPlayMove(match, 'you', move!);
+    if (result.error) {
+      ports.showBoardToast(result.error.message, 'you');
+      return;
+    }
     captureGuidedMatchCandidateAction('player', 'tile-play', match, result, move!);
     if (isDailyFritzMode) {
       traceDailyFritzMoveApplied(move!);
