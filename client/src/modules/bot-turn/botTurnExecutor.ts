@@ -38,6 +38,9 @@ export type BotTurnExecutionInput = {
 
 export type BotTurnExecutionResult = {
   result: BotActionResult | null;
+  drew: boolean;
+  passed: boolean;
+  drawCount: number;
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
   playedTileForHighlight: Tile | null;
@@ -50,6 +53,9 @@ export async function executeBotTurn(
 ): Promise<BotTurnExecutionResult> {
   let working = input.liveAtTurn;
   let result: BotActionResult | null = null;
+  let drew = false;
+  let passed = false;
+  let drawCount = 0;
   let chosen: BotChoice | null = null;
   let ghostChosen: GhostResolvedMove | null = null;
   let playedTileForHighlight: Tile | null = null;
@@ -78,6 +84,9 @@ export async function executeBotTurn(
     if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
       return {
         result: null,
+        drew: false,
+        passed: false,
+        drawCount: 0,
         chosen: null,
         ghostChosen: null,
         playedTileForHighlight: null,
@@ -88,6 +97,9 @@ export async function executeBotTurn(
 
     working = drawPassOutcome.working;
     result = drawPassOutcome.result;
+    drew = drawPassOutcome.drew;
+    passed = drawPassOutcome.passed;
+    drawCount = drawPassOutcome.drawCount;
     chosen = drawPassOutcome.chosen;
     ghostChosen = drawPassOutcome.ghostChosen;
     playedTileForHighlight = drawPassOutcome.playedTileForHighlight;
@@ -121,6 +133,9 @@ export async function executeBotTurn(
 
   return {
     result,
+    drew,
+    passed,
+    drawCount,
     chosen,
     ghostChosen,
     playedTileForHighlight,
@@ -154,6 +169,9 @@ export function finalizeBotTurnExecution(input: {
     ports: input.ports,
     matchRef: input.matchRef,
     result: execution.result,
+    drew: execution.drew,
+    passed: execution.passed,
+    drawCount: execution.drawCount,
     workingHandNumber: execution.workingHandNumber,
     snapshot,
     chosen: execution.chosen,

@@ -8,11 +8,7 @@ import type { LocalRunToken } from '../match/types.ts';
 import type { GhostProfileSummary } from '../ghost/ghostContracts.ts';
 import { asPlayMoves } from '../../game/tileUtils.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
-import { toEngineBestFromChoice } from './fritzEvaluation.ts';
-import {
-  buildBotDrawMoveLogEntry,
-  buildBotPassMoveLogEntry,
-} from './botMoveLogEntries.ts';
+import { BOT_DRAW_STEP_MS } from './botTurnGuards.ts';
 import { buildBotGhostDrawEntry, buildBotGhostPassEntry } from './botGhostSync.ts';
 import { executeBotPlayMove, resolveBotMoveChoice } from './botMoveResolution.ts';
 import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
@@ -21,6 +17,10 @@ import type { BotTurnPorts } from './types.ts';
 export type BotDrawPassOutcome = {
   working: BotMatchState;
   result: BotActionResult | null;
+  drew: boolean;
+  passed: boolean;
+  /** Individual tiles drawn during the sequence (not including forced play draws). */
+  drawCount: number;
   chosen: import('../fritz/botHeuristics.ts').BotChoice | null;
   ghostChosen: import('../ghost/ghostContracts.ts').GhostResolvedMove | null;
   playedTileForHighlight: import('../../types.ts').Tile | null;
@@ -47,19 +47,36 @@ export async function runBotDrawPassSequence(input: {
   let chosen: BotDrawPassOutcome['chosen'] = null;
   let ghostChosen: BotDrawPassOutcome['ghostChosen'] = null;
   let playedTileForHighlight: BotDrawPassOutcome['playedTileForHighlight'] = null;
+  let drawCount = 0;
 
   input.ports.setDrawSequenceActiveBoth(true);
-  const drawPass = await input.runDrawSequence(working, 'bot', input.runToken, (step) => {
-    input.ports.captureGuidedMatchCandidateAction(
-      'fritz',
-      step.actionKind,
-      step.beforeState,
-      step.result,
-    );
-  });
+  const drawPass = await input.runDrawSequence(
+    working,
+    'bot',
+    input.runToken,
+    (step) => {
+      if (step.actionKind === 'draw') drawCount += 1;
+      input.ports.captureGuidedMatchCandidateAction(
+        'fritz',
+        step.actionKind,
+        step.beforeState,
+        step.result,
+      );
+    },
+    BOT_DRAW_STEP_MS,
+  );
 
   if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
-    return { working, result, chosen, ghostChosen, playedTileForHighlight };
+    return {
+      working,
+      result,
+      drew: false,
+      passed: false,
+      drawCount: 0,
+      chosen,
+      ghostChosen,
+      playedTileForHighlight,
+    };
   }
 
   working = drawPass.state;
@@ -75,9 +92,6 @@ export async function runBotDrawPassSequence(input: {
         }),
       );
     }
-    input.ports.appendMove(
-      buildBotDrawMoveLogEntry(input.snapshot, toEngineBestFromChoice(chosen)),
-    );
   }
 
   if (drawPass.passed) {
@@ -91,9 +105,6 @@ export async function runBotDrawPassSequence(input: {
         }),
       );
     }
-    input.ports.appendMove(
-      buildBotPassMoveLogEntry(input.snapshot, toEngineBestFromChoice(chosen)),
-    );
   }
 
   const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
@@ -127,5 +138,14 @@ export async function runBotDrawPassSequence(input: {
     });
   }
 
-  return { working, result, chosen, ghostChosen, playedTileForHighlight };
+  return {
+    working,
+    result,
+    drew: Boolean(drawPass.drew),
+    passed: Boolean(drawPass.passed),
+    drawCount,
+    chosen,
+    ghostChosen,
+    playedTileForHighlight,
+  };
 }

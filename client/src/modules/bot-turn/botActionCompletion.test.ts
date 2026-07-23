@@ -96,4 +96,43 @@ describe('completeBotTurnAction', () => {
     expect(appendMove).not.toHaveBeenCalled();
     expect(ports.applyAndNotify).not.toHaveBeenCalled();
   });
+
+  it('logs one draw entry per tile for Daily Fritz multi-draw turns', () => {
+    const match = createBotMatch(60, 7);
+    const appendMove = vi.fn<BotTurnPorts['appendMove']>();
+    const ports = makePorts(appendMove);
+
+    const applied = completeBotTurnAction(
+      completeInput(match, ports, {
+        drew: true,
+        drawCount: 3,
+        chosen: null,
+        playedTileForHighlight: null,
+      }),
+    );
+
+    expect(applied).toBe(true);
+    expect(appendMove).toHaveBeenCalledTimes(3);
+    expect(appendMove.mock.calls.every((call) => call[0].action === 'draw')).toBe(true);
+  });
+
+  it('collapses multi-draws to one move-log entry outside Daily Fritz', () => {
+    const match = createBotMatch(60, 7);
+    const appendMove = vi.fn<BotTurnPorts['appendMove']>();
+    const ports = makePorts(appendMove);
+
+    const applied = completeBotTurnAction(
+      completeInput(match, ports, {
+        isDailyFritzMode: false,
+        drew: true,
+        drawCount: 3,
+        chosen: null,
+        playedTileForHighlight: null,
+      }),
+    );
+
+    expect(applied).toBe(true);
+    expect(appendMove).toHaveBeenCalledTimes(1);
+    expect(appendMove.mock.calls[0]?.[0].action).toBe('draw');
+  });
 });

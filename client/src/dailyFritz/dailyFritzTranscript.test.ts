@@ -31,6 +31,24 @@ describe('Daily Fritz transcript adapter', () => {
     expect(JSON.stringify(transcript)).not.toContain('handBefore');
   });
 
+  it('preserves one transcript draw action per drawn tile', () => {
+    const moveLog: MoveEntry[] = [
+      { ...base, moveNumber: 1, handNumber: 1, player: 'you', action: 'place', tile: [2, 4], position: 'left' },
+      { ...base, moveNumber: 2, handNumber: 1, player: 'opponent', action: 'draw' },
+      { ...base, moveNumber: 3, handNumber: 1, player: 'opponent', action: 'draw' },
+      { ...base, moveNumber: 4, handNumber: 1, player: 'opponent', action: 'place', tile: [2, 5], position: 'left' },
+    ];
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1, moveLog,
+    });
+    expect(transcript.actions).toEqual([
+      { sequence: 0, actor: 'player', kind: 'play', tile: { low: 2, high: 4 }, position: 'left' },
+      { sequence: 1, actor: 'fritz', kind: 'draw' },
+      { sequence: 2, actor: 'fritz', kind: 'draw' },
+      { sequence: 3, actor: 'fritz', kind: 'play', tile: { low: 2, high: 5 }, position: 'left' },
+    ]);
+  });
+
   it('fails closed when a play lacks canonical evidence', () => {
     expect(() => buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1,

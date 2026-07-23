@@ -4,11 +4,16 @@ import type { BotActionResult, BotMatchState } from '../match/runtime/botEngine.
 import type { BotChoice } from '../fritz/botHeuristics.ts';
 import type { GhostResolvedMove } from '../ghost/ghostContracts.ts';
 import type { Tile } from '../../types.ts';
+import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
 import { notifyBotAuthoringCaptures } from './botAuthoringCapture.ts';
 import { computeBotChainPaused } from './botChainPause.ts';
 import { buildBotGhostPlayEntry } from './botGhostSync.ts';
 import { toEngineBestFromChoice } from './fritzEvaluation.ts';
-import { buildBotPlaceMoveLogEntry } from './botMoveLogEntries.ts';
+import {
+  buildBotDrawMoveLogEntry,
+  buildBotPassMoveLogEntry,
+  buildBotPlaceMoveLogEntry,
+} from './botMoveLogEntries.ts';
 import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
 import type { BotTurnPorts } from './types.ts';
 
@@ -17,6 +22,7 @@ export function logBotPlaceMove(input: {
   snapshot: BotTurnSnapshot;
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
+  workingHandNumber: number;
 }): void {
   const tile = input.ghostChosen?.tile ?? input.chosen?.move?.tile;
   if (!tile) return;
@@ -34,6 +40,7 @@ export function logBotPlaceMove(input: {
           }
         : toEngineBestFromChoice(input.chosen),
     }),
+    input.workingHandNumber,
   );
 }
 
@@ -94,6 +101,8 @@ export function completeBotTurnAction(input: {
   result: BotActionResult;
   drew?: boolean;
   passed?: boolean;
+  /** Individual tiles drawn before any follow-up play (excludes forced play draws). */
+  drawCount?: number;
   workingHandNumber: number;
   snapshot: BotTurnSnapshot;
   chosen: BotChoice | null;
@@ -135,11 +144,23 @@ export function completeBotTurnAction(input: {
     isGhostMode: input.isGhostMode,
   });
 
+  const drawLogCount = resolveTranscriptDrawLogCount(
+    input.isDailyFritzMode,
+    input.drawCount ?? (input.drew ? 1 : 0),
+  );
+  for (let index = 0; index < drawLogCount; index += 1) {
+    input.ports.appendMove(buildBotDrawMoveLogEntry(input.snapshot, null), input.workingHandNumber);
+  }
+  if (input.passed) {
+    input.ports.appendMove(buildBotPassMoveLogEntry(input.snapshot, null), input.workingHandNumber);
+  }
+
   logBotPlaceMove({
     ports: input.ports,
     snapshot: input.snapshot,
     chosen: input.chosen,
     ghostChosen: input.ghostChosen,
+    workingHandNumber: input.workingHandNumber,
   });
 
   notifyDailyFritzBotMove(input.ports, input.result, input.isDailyFritzMode);

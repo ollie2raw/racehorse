@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { RunDrawSequence } from '../bot-turn/drawSequence.ts';
+import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
 import {
   isDailyFritzLockedBoneyardNoMove,
   resolveDailyFritzBlockedHandPass,
@@ -141,7 +142,9 @@ export function usePlayerNoMoveEffect({
           return;
         }
 
+        let drawCount = 0;
         const result = await runDrawSequence(match, 'you', runToken, (step) => {
+          if (step.actionKind === 'draw') drawCount += 1;
           captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
         });
         if (!isLocalRunCurrent(runToken)) return;
@@ -162,7 +165,10 @@ export function usePlayerNoMoveEffect({
               }),
             );
           }
-          appendMove(buildDrawMoveLogEntry(match, snapshot, fritzDifficulty));
+          const drawLogCount = resolveTranscriptDrawLogCount(isDailyFritzMode, drawCount);
+          for (let index = 0; index < drawLogCount; index += 1) {
+            appendMove(buildDrawMoveLogEntry(match, snapshot, fritzDifficulty));
+          }
         }
 
         if (isAuthoringV2Mode && result.drew) {
