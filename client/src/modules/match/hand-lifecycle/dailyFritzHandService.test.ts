@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createBotMatch, type BotHandDeal } from '../runtime/botEngine.ts';
-import { createEndOfRunMatchState, tryApplyDailyFritzNextHand } from './dailyFritzHandService.ts';
+import {
+  createDailyFritzNextHandRequest,
+  createEndOfRunMatchState,
+  tryApplyDailyFritzNextHand,
+} from './dailyFritzHandService.ts';
+import type { DailyFritzPrefetchParams } from './types.ts';
 
 const sampleDeal: BotHandDeal = {
   player_tiles: [
@@ -79,5 +84,22 @@ describe('createEndOfRunMatchState', () => {
     expect(next.gameOver).toBe(true);
     expect(next.handOver).toBe(false);
     expect(next.winnerId).toBe('you');
+  });
+});
+
+describe('createDailyFritzNextHandRequest', () => {
+  it('does not downgrade verifier-required attempts to score-only evidence', async () => {
+    const params = {
+      dailyFritzPackage: { verification_status: 'in_progress' },
+      dailyFritzHandIndex: 2,
+      gameNumber: 1,
+      transcript: null,
+      transcriptError: 'missing placement position',
+      completedHandScores: { you: 0, fritz: 0 },
+    } as unknown as DailyFritzPrefetchParams;
+
+    await expect(createDailyFritzNextHandRequest(params)).rejects.toThrow(
+      'Reload the latest deployment and resume this attempt.',
+    );
   });
 });

@@ -46,6 +46,7 @@ export type DailyFritzPrefetchParams = {
   dailyFritzHandIndex: number;
   gameNumber: DailyFritzSetGameNumber;
   transcript: DailyFritzTranscript | null;
+  transcriptError?: string;
   completedHandScores: { you: number; fritz: number };
 };
 

@@ -54,6 +54,7 @@ export function buildDailyFritzPrefetchParams(
 ): DailyFritzPrefetchParams {
   const gameNumber = (dailyFritzPackage.current_game_number ?? 1) as DailyFritzSetGameNumber;
   let transcript: DailyFritzPrefetchParams['transcript'] = null;
+  let transcriptError: string | undefined;
   try {
     transcript = buildDailyFritzTranscript({
       challengeId: dailyFritzPackage.challenge_id
@@ -64,14 +65,17 @@ export function buildDailyFritzPrefetchParams(
       handNumber: match.handNumber,
       moveLog,
     });
-  } catch {
-    // Pre-verifier persisted logs may not contain placement positions.
+  } catch (error) {
+    transcriptError = error instanceof Error
+      ? error.message
+      : 'Daily Fritz verification evidence could not be built.';
   }
   return {
     dailyFritzPackage,
     dailyFritzHandIndex,
     gameNumber,
     transcript,
+    ...(transcriptError ? { transcriptError } : {}),
     completedHandScores: { you: match.players.you.score, fritz: match.players.bot.score },
   };
 }
@@ -80,6 +84,11 @@ export function createDailyFritzNextHandRequest(
   params: DailyFritzPrefetchParams,
 ): Promise<DailyFritzNextHandResponse> {
   const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript, completedHandScores } = params;
+  if (params.transcriptError && dailyFritzPackage.verification_status !== 'legacy_unverified') {
+    return Promise.reject(new Error(
+      'Daily Fritz verification evidence could not be built. Reload the latest deployment and resume this attempt.',
+    ));
+  }
   return nextDailyFritzHand({
     attemptId: dailyFritzPackage.attempt_id,
     verifiedMatchId: dailyFritzPackage.verified_match_id,

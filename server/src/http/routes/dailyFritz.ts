@@ -498,6 +498,10 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(409).json({ error: 'Today’s Daily Fritz attempt is already locked.', status: attempt.status });
       return;
     }
+    if (attempt && !supportsVerifier && requiresVerifiedDailyFritzEvidence(attempt.result)) {
+      res.status(426).json({ error: 'This Daily Fritz attempt requires the latest verified client. Update required.' });
+      return;
+    }
     if (!attempt) {
       attempt = await createDailyFritzAttempt(runDate, authenticatedUserId);
     }
@@ -573,6 +577,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       fritz_policy_version: FRITZ_POLICY_VERSION,
       verifier_version: DAILY_FRITZ_VERIFIER_VERSION,
       time_zone: DAILY_FRITZ_TIME_ZONE,
+      verification_status: getDailyFritzVerificationStatus(attempt.result),
       current_hand_index: attempt.currentHandIndex,
       current_game_scores: { you: currentGameScores.you, fritz: currentGameScores.fritz },
       current_game_number: currentGameNumber,

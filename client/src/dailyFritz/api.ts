@@ -270,11 +270,11 @@ export interface DailyFritzTodayResponse {
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
   verification_protocol_version?: number;
+  verification_status?: DailyFritzVerificationStatus;
   game_rules_version?: number;
   fritz_policy_version?: number;
   verifier_version?: number;
   competitive_verification_available?: boolean;
-  verification_status?: DailyFritzVerificationStatus;
 }
 
 export interface DailyFritzStartResponse {
@@ -290,6 +290,7 @@ export interface DailyFritzStartResponse {
   fritz_policy_version?: number;
   verifier_version?: number;
   time_zone?: 'America/Los_Angeles';
+  verification_status?: DailyFritzVerificationStatus;
   current_hand_index: number;
   current_game_scores?: { you: number; fritz: number };
   current_game_number?: DailyFritzSetGameNumber | null;
