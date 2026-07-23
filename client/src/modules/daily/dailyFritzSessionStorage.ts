@@ -106,7 +106,10 @@ export function loadPersistedDailyFritzMatch(storageKey: string | null, attemptI
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(raw), now);
-    if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.currentHandIndex < serverHandIndex || parsed.lifecyclePhase === 'completed') return null;
+    if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
+    // Local must not sit behind the server. If it jumped ahead (e.g. leave during
+    // hand-over before next-hand ack), discard so resume rebinds to the server hand.
+    if (parsed.currentHandIndex !== serverHandIndex) return null;
     return parsed;
   } catch { return null; }
 }

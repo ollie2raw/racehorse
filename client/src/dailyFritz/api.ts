@@ -29,24 +29,37 @@ function isDailyFritzInitPath(path: string): boolean {
   return path === '/api/daily-fritz/today' || path === '/api/daily-fritz/start';
 }
 
-/** Clears Daily Fritz–specific browser storage (today cache + in-match saves). */
-export function clearDailyFritzClientStorage(userId: string): void {
+/** Clears only the Daily Fritz "today" hub cache (sessionStorage). */
+export function clearDailyFritzTodayCache(userId: string): void {
   if (typeof window === 'undefined' || !userId) return;
   try {
     window.sessionStorage.removeItem(`${DAILY_FRITZ_TODAY_CACHE_PREFIX}${userId}`);
   } catch {
     /* noop */
   }
+}
+
+/** Clears in-match localStorage checkpoints for Daily Fritz. */
+export function clearDailyFritzMatchSnapshots(): void {
+  if (typeof window === 'undefined') return;
   try {
     const keysToRemove: string[] = [];
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
-      if (key?.startsWith('racehorse:daily-fritz:')) keysToRemove.push(key);
+      if (key?.startsWith('racehorse:daily-fritz:') && !key.startsWith(DAILY_FRITZ_TODAY_CACHE_PREFIX)) {
+        keysToRemove.push(key);
+      }
     }
     keysToRemove.forEach((key) => window.localStorage.removeItem(key));
   } catch {
     /* noop */
   }
+}
+
+/** Clears Daily Fritz today cache + in-match saves. Prefer clearDailyFritzTodayCache on soft retries. */
+export function clearDailyFritzClientStorage(userId: string): void {
+  clearDailyFritzTodayCache(userId);
+  clearDailyFritzMatchSnapshots();
 }
 
 function resolveDailyFritzApiError(path: string, error: string, status?: number): Error {

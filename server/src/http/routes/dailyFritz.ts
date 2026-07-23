@@ -119,7 +119,8 @@ function writeVerifiedGame(
 }
 
 export function requiresVerifiedDailyFritzEvidence(result: Record<string, unknown> | null): boolean {
-  return result?.verification_protocol_version === DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION
+  const protocol = Number(result?.verification_protocol_version);
+  return (protocol === 1 || protocol === DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION)
     && getDailyFritzVerificationStatus(result) !== 'legacy_unverified';
 }
 

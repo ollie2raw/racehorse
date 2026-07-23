@@ -64,6 +64,7 @@ export function useDailyFritzRunController({
 
   const activeRunRef = useRef<DailyFritzStartResponse | null>(activeRun);
   const recordGameInFlightRef = useRef(false);
+  const startActionInFlightRef = useRef(false);
   const completedAttemptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -237,7 +238,8 @@ export function useDailyFritzRunController({
   }, [buildCompletedGame, openEmbeddedRun, submitSetCompletion]);
 
   const beginRun = useCallback(async () => {
-    if (startActionPending) return;
+    if (startActionInFlightRef.current) return;
+    startActionInFlightRef.current = true;
     setStartActionPending(true);
     setHubError(null);
     setSetOverlay(null);
@@ -247,12 +249,14 @@ export function useDailyFritzRunController({
     } catch (err) {
       setHubError(friendlyDailyFritzInitError(err));
     } finally {
+      startActionInFlightRef.current = false;
       setStartActionPending(false);
     }
-  }, [handleStartResponse, startActionPending, setHubError, today]);
+  }, [handleStartResponse, setHubError, today]);
 
   const continueSet = useCallback(async () => {
-    if (startActionPending) return;
+    if (startActionInFlightRef.current) return;
+    startActionInFlightRef.current = true;
     setStartActionPending(true);
     setHubError(null);
     const fallbackSetResult =
@@ -266,9 +270,10 @@ export function useDailyFritzRunController({
     } catch (err) {
       setHubError(friendlyDailyFritzInitError(err));
     } finally {
+      startActionInFlightRef.current = false;
       setStartActionPending(false);
     }
-  }, [handleStartResponse, setOverlay, startActionPending, setHubError, today]);
+  }, [handleStartResponse, setOverlay, setHubError, today]);
 
   const submitCompletedGame = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     const run = activeRunRef.current;

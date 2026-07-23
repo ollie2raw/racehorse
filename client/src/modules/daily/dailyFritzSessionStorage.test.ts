@@ -19,11 +19,12 @@ describe('Daily Fritz v3 session persistence', () => {
     const loaded=loadPersistedDailyFritzMatch(key,'attempt-1',2,'2026-07-12',now);
     expect(loaded?.match.players.you.score).toBe(35);expect(loaded?.match.players.bot.score).toBe(20);
   });
-  it('keeps a newer local checkpoint when the server hand index is behind', () => {
+  it('rejects a local checkpoint that does not match the server hand index', () => {
     const key = buildDailyFritzStorageKey('attempt-1', 1);
     const value = snapshot({ currentHandIndex: 4 });
     expect(persistDailyFritzSnapshot(key, value)).toBe(true);
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 0, '2026-07-12', now)?.currentHandIndex).toBe(4);
+    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 0, '2026-07-12', now)).toBeNull();
+    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 4, '2026-07-12', now)?.currentHandIndex).toBe(4);
   });
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({},now)).toBeNull();

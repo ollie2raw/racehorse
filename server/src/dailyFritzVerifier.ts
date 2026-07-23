@@ -148,20 +148,24 @@ export function verifyDailyFritzHand(input: {
   if (transcript.handIndex !== input.expectedHandIndex) throw new DailyFritzVerificationError('Hand mismatch.', 'hand_mismatch');
 
   let state = input.initialState;
-  // Older clients logged post-score recovery draws as separate transcript actions.
-  // applyMove now absorbs that chain inside the play, so those leftover draws are
-  // obsolete and would throw "Draw is not legal" on replay.
+  // Older clients logged post-score recovery draws/passes as separate transcript
+  // actions. applyMove now absorbs that chain (and optional auto-pass) inside the
+  // play, so leftover recovery actions must be skipped — including when the turn
+  // has already advanced to the opponent.
   let lastPlayActor: string | null = null;
   for (const action of transcript.actions) {
     if (state.handOver || state.gameOver) throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
     const expectedActor = state.playerIds[state.currentPlayerIndex];
     if (
-      action.kind === 'draw' &&
-      lastPlayActor === action.actor &&
-      action.actor === expectedActor &&
-      !canDraw(state, action.actor)
+      lastPlayActor === action.actor
+      && (action.kind === 'draw' || action.kind === 'pass')
     ) {
-      continue;
+      if (action.actor !== expectedActor) {
+        continue;
+      }
+      if (action.kind === 'draw' && !canDraw(state, action.actor)) {
+        continue;
+      }
     }
     if (action.actor !== expectedActor) throw new DailyFritzVerificationError('Transcript actor does not own the turn.', 'wrong_actor');
     if (action.actor === 'fritz') {

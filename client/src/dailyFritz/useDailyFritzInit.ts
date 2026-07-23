@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   clearDailyFritzClientStorage,
+  clearDailyFritzTodayCache,
   DAILY_FRITZ_INIT_TIMEOUT_MS,
   DAILY_FRITZ_TODAY_CACHE_PREFIX,
   getTodayDailyFritz,
@@ -106,13 +107,15 @@ export function useDailyFritzInit({ userId }: UseDailyFritzInitParams): UseDaily
       });
 
       if (options?.clearStale) {
-        clearDailyFritzClientStorage(userId);
+        // Soft retry: drop the today hub cache only. Wiping match snapshots here
+        // destroyed mid-hand resume after a flaky init.
+        clearDailyFritzTodayCache(userId);
       } else {
         const corruptCache = readTodayCache(cacheKey);
         if (corruptCache === null && cacheKey && typeof window !== 'undefined') {
           try {
             const raw = window.sessionStorage.getItem(cacheKey);
-            if (raw) clearDailyFritzClientStorage(userId);
+            if (raw) clearDailyFritzTodayCache(userId);
           } catch {
             /* noop */
           }

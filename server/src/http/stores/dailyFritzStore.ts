@@ -607,9 +607,10 @@ export async function buildDailyFritzLeaderboard(
 export function isDailyFritzAttemptLeaderboardEligible(
   attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
 ): boolean {
+  const protocol = Number(attempt.result?.verification_protocol_version);
   return attempt.status === 'completed'
     && attempt.result?.verification_status === 'verified'
-    && attempt.result?.verification_protocol_version === 1;
+    && (protocol === 1 || protocol === 2);
 }
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(

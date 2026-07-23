@@ -22,6 +22,10 @@ describe('Daily Fritz competitive verification boundary', () => {
       result: { verification_status: 'verified', verification_protocol_version: 1 },
     })).toBe(true);
     expect(isDailyFritzAttemptLeaderboardEligible({
+      status: 'completed',
+      result: { verification_status: 'verified', verification_protocol_version: 2 },
+    })).toBe(true);
+    expect(isDailyFritzAttemptLeaderboardEligible({
       status: 'started',
       result: { verification_status: 'verified', verification_protocol_version: 1 },
     })).toBe(false);
@@ -73,7 +77,7 @@ describe('Daily Fritz competitive verification boundary', () => {
       hasTranscript: true,
     });
     expect(requiresVerifiedDailyFritzEvidence(merged)).toBe(true);
-    expect(merged.verification_protocol_version).toBe(1);
+    expect(merged.verification_protocol_version).toBe(2);
     expect(merged.verification_status).toBe('in_progress');
     expect(merged.authority).toEqual(previous.authority);
     expect(merged.playerGamesWon).toBe(1);

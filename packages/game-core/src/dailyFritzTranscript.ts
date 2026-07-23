@@ -2,8 +2,8 @@ import type { PlacementPosition, Tile } from './types';
 import { GAME_RULES_VERSION } from './versions';
 import { FRITZ_POLICY_VERSION } from './fritzPolicy';
 
-export const DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION = 1 as const;
-export const DAILY_FRITZ_VERIFIER_VERSION = 1 as const;
+export const DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION = 2 as const;
+export const DAILY_FRITZ_VERIFIER_VERSION = 2 as const;
 export const DAILY_FRITZ_MAX_ACTIONS = 512;
 export const DAILY_FRITZ_MAX_TRANSCRIPT_BYTES = 64 * 1024;
 
@@ -12,7 +12,7 @@ export type DailyFritzTranscriptAction =
   | { sequence: number; actor: 'player' | 'fritz'; kind: 'draw' | 'pass' };
 
 export type DailyFritzTranscript = {
-  protocolVersion: typeof DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION;
+  protocolVersion: 1 | 2;
   rulesVersion: typeof GAME_RULES_VERSION;
   fritzPolicyVersion: typeof FRITZ_POLICY_VERSION;
   challengeId: string;
@@ -55,7 +55,7 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
   if (!hasOnlyKeys(value, ['protocolVersion', 'rulesVersion', 'fritzPolicyVersion', 'challengeId', 'attemptId', 'gameNumber', 'handIndex', 'actions'])) {
     throw new Error('Transcript contains unsupported fields.');
   }
-  if (value.protocolVersion !== DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION) throw new Error('Unsupported transcript version.');
+  if (value.protocolVersion !== 1 && value.protocolVersion !== 2) throw new Error('Unsupported transcript version.');
   if (value.rulesVersion !== GAME_RULES_VERSION) throw new Error('Unsupported rules version.');
   if (value.fritzPolicyVersion !== FRITZ_POLICY_VERSION) throw new Error('Unsupported Fritz policy version.');
   if (typeof value.challengeId !== 'string' || value.challengeId.length < 1 || value.challengeId.length > 160) throw new Error('Invalid challenge id.');
@@ -79,7 +79,7 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
     return { sequence: index, actor: raw.actor, kind: 'play', tile, position };
   });
   return {
-    protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    protocolVersion: value.protocolVersion === 1 ? 1 : 2,
     rulesVersion: GAME_RULES_VERSION,
     fritzPolicyVersion: FRITZ_POLICY_VERSION,
     challengeId: value.challengeId,

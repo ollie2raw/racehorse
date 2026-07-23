@@ -29,10 +29,10 @@ test.describe('Daily Fritz v2 official lifecycle',()=>{
       await page.screenshot({path:testInfo.outputPath('daily-fritz-active.png'),fullPage:true});
       const playable=page.locator('.hand-container button.domino-tile:not(.unplayable):not(.disabled)').first();
       if(await playable.isVisible().catch(()=>false)){await playable.click();const end=page.locator('.placement-zone.active').first();if(await end.isVisible().catch(()=>false))await end.click();}
-      const before=await page.evaluate(()=>{const key=Object.keys(sessionStorage).find((value)=>value.startsWith('racehorse:daily-fritz:v3:'));return key?sessionStorage.getItem(key):null;});
-      expect(before).not.toBeNull();const parsed=JSON.parse(before!);expect(parsed.schemaVersion).toBe(3);
+      const before=await page.evaluate(()=>{const key=Object.keys(localStorage).find((value)=>value.startsWith('racehorse:daily-fritz:v3:'));return key?localStorage.getItem(key):null;});
+      expect(before).not.toBeNull();const parsed=JSON.parse(before!);expect(parsed.schemaVersion).toBe(5);
       await page.reload();await expect(page.getByRole('heading',{name:'Daily Fritz'})).toBeVisible({timeout:30_000});await page.locator('.df-pvf-start-btn').click();await expect(page.locator('.bot-match-screen.bot-match-mode-daily-fritz')).toBeVisible({timeout:30_000});
-      const after=await page.evaluate(()=>{const key=Object.keys(sessionStorage).find((value)=>value.startsWith('racehorse:daily-fritz:v3:'));return key?sessionStorage.getItem(key):null;});
+      const after=await page.evaluate(()=>{const key=Object.keys(localStorage).find((value)=>value.startsWith('racehorse:daily-fritz:v3:'));return key?localStorage.getItem(key):null;});
       expect(JSON.parse(after!).match.players.you.score).toBe(parsed.match.players.you.score);expect(JSON.parse(after!).match.players.bot.score).toBe(parsed.match.players.bot.score);expect(JSON.parse(after!).match.board).toEqual(parsed.match.board);
       assertClean();
     }finally{await context.close();}

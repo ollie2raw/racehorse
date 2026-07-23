@@ -251,4 +251,80 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       fritzTier: 'elite',
     })).toThrow(/does not complete the hand/i);
   });
+
+  it('skips obsolete post-score draw+pass after absorbed auto-pass advances the turn', () => {
+    const start = createOfficialDailyFritzHandState({
+      deal: {
+        player_tiles: [{ low: 0, high: 0 }],
+        fritz_tiles: [{ low: 1, high: 6 }],
+        boneyard: [
+          { low: 2, high: 3 },
+          { low: 0, high: 2 },
+          { low: 0, high: 5 },
+        ],
+        locked: [{ low: 0, high: 2 }, { low: 0, high: 5 }],
+      },
+      handIndex: 0,
+      drawWinner: 'bot',
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 0,
+      fritzScore: 0,
+    });
+
+    const open = {
+      ...start,
+      board: {
+        mainLine: [{ tile: { low: 1, high: 4 }, orientation: 'horizontal-normal' as const }],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      handOpen: true,
+      sequence: 0,
+      currentPlayerIndex: 1,
+    };
+
+    const afterScore = applyGameCommand(open, {
+      version: 1,
+      commandId: 'score',
+      sequence: open.sequence,
+      actorId: 'fritz',
+      kind: 'play',
+      tile: { low: 1, high: 6 },
+      position: 'left',
+    }).state;
+    // Forced recovery drew the only drawable tile then auto-passed — turn is player's.
+    expect(afterScore.playerIds[afterScore.currentPlayerIndex]).toBe('player');
+
+    const envelope = (actions: DailyFritzTranscriptAction[]) => ({
+      protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+      rulesVersion: GAME_RULES_VERSION,
+      fritzPolicyVersion: FRITZ_POLICY_VERSION,
+      challengeId: 'c',
+      attemptId: 'a',
+      gameNumber: 1 as const,
+      handIndex: 0,
+      actions,
+    });
+
+    // Legacy leftovers after absorbed auto-pass must not fail verification.
+    expect(() => verifyDailyFritzHand({
+      transcript: envelope([
+        { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 6 }, position: 'left' },
+        { sequence: 1, actor: 'fritz', kind: 'draw' },
+        { sequence: 2, actor: 'fritz', kind: 'pass' },
+        { sequence: 3, actor: 'player', kind: 'pass' },
+      ]),
+      initialState: open,
+      expectedChallengeId: 'c',
+      expectedAttemptId: 'a',
+      expectedGameNumber: 1,
+      expectedHandIndex: 0,
+      userId: 'u',
+      fritzTier: 'elite',
+    })).not.toThrow();
+  });
 });
