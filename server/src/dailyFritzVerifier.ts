@@ -95,6 +95,16 @@ function sameDecision(action: DailyFritzTranscript['actions'][number], decision:
       && action.position === decision.position);
 }
 
+function formatFritzDecision(decision: FritzDecision): string {
+  if (decision.kind !== 'play') return decision.kind;
+  return `play ${decision.tile.low}|${decision.tile.high} @ ${decision.position}`;
+}
+
+function formatFritzAction(action: DailyFritzTranscript['actions'][number]): string {
+  if (action.kind !== 'play') return action.kind;
+  return `play ${action.tile.low}|${action.tile.high} @ ${action.position}`;
+}
+
 function toCommand(state: GameState, action: DailyFritzTranscript['actions'][number]): GameCommand {
   const base = {
     version: 1 as const,
@@ -148,7 +158,12 @@ export function verifyDailyFritzHand(input: {
         tier: input.fritzTier,
         random: createDeterministicRandom(getOfficialFritzDecisionSeed(state)),
       });
-      if (!sameDecision(action, decision)) throw new DailyFritzVerificationError('Fritz action does not match the official policy.', 'fritz_action_mismatch');
+      if (!sameDecision(action, decision)) {
+        throw new DailyFritzVerificationError(
+          `Fritz action does not match the official policy (seq ${action.sequence}: got ${formatFritzAction(action)}, expected ${formatFritzDecision(decision)}, seed ${getOfficialFritzDecisionSeed(state)}, tier ${input.fritzTier}).`,
+          'fritz_action_mismatch',
+        );
+      }
     }
     try {
       state = applyGameCommand(state, toCommand(state, action)).state;

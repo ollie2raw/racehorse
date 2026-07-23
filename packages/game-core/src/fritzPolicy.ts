@@ -35,7 +35,12 @@ function scoreOfficialMove(state: GameState, participantId: string, move: Move, 
     ? remaining.filter((tile) => tile.low === move.tile.low || tile.high === move.tile.high).length
     : 0;
   const tierWeight = tier === 'master' ? 4 : tier === 'elite' ? 3 : tier === 'standard' ? 2 : 1;
-  return immediate * 100 + mobility * (8 + tierWeight) + doubleSupport * 4 + unload + computeOpenEndsSum(board) * 0.001;
+  // Keep pure integer scoring so client (Safari) and server (Node) never diverge on float ties.
+  return immediate * 100_000
+    + mobility * (8 + tierWeight) * 1_000
+    + doubleSupport * 4_000
+    + unload * 1_000
+    + computeOpenEndsSum(board);
 }
 
 export function chooseOfficialFritzDecision(input: {

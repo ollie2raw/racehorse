@@ -68,8 +68,9 @@ export function toCoreGameState(state: BotMatchState, visibleParticipant?: BotPl
     config: {
       ...DEFAULT_CONFIG,
       tilesPerPlayer: state.dealSize,
-      deadTileCount: state.dealSize === 14 ? 0 : 2,
+      deadTileCount: state.dealSize === 14 ? 0 : state.deadTiles.length,
       winningScore: state.winningScore,
+      skipPregameDraw: true,
     },
     playerIds: ['you', 'bot'],
     players: {

@@ -41,10 +41,17 @@ export function resolveBotMoveChoice(input: {
       legalMoves: input.legalMoves,
       profile: input.ghostProfile,
     });
+  } else if (input.isDailyFritzMode) {
+    chosen = chooseOfficialFritzBotChoice(input.state, input.fritzDifficulty);
+    logFritzFairnessDecision(input.state, chosen);
+    // Never fall back to an arbitrary legal move — the server verifier rejects that.
+    if (!chosen?.move) {
+      throw new Error(
+        'Daily Fritz official policy returned no play while legal moves exist. Refusing unsafe fallback.',
+      );
+    }
   } else {
-    chosen = input.isDailyFritzMode
-      ? chooseOfficialFritzBotChoice(input.state, input.fritzDifficulty)
-      : chooseBotMove(toBotVisibleState(input.state), input.fritzDifficulty);
+    chosen = chooseBotMove(toBotVisibleState(input.state), input.fritzDifficulty);
     logFritzFairnessDecision(input.state, chosen);
   }
 

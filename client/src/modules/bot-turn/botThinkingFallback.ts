@@ -48,9 +48,11 @@ export function executeBotThinkingFallback(input: {
   const officialChoice = input.isDailyFritzMode
     ? chooseOfficialFritzBotChoice(live, input.fritzDifficulty)?.move ?? null
     : null;
-  const fallbackPlay = officialChoice?.type === 'play'
-    ? officialChoice
-    : asPlayMoves(getLegalMoves(live, 'bot'))[0];
+  const fallbackPlay = input.isDailyFritzMode
+    ? (officialChoice?.type === 'play' ? officialChoice : null)
+    : (officialChoice?.type === 'play'
+      ? officialChoice
+      : asPlayMoves(getLegalMoves(live, 'bot'))[0]);
   if (!fallbackPlay) {
     return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
   }
