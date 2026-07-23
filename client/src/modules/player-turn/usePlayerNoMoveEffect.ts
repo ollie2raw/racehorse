@@ -115,8 +115,11 @@ export function usePlayerNoMoveEffect({
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
 
     const snapshot = collectPlayerMoveSnapshot(match, userPlayMoves);
+    const boneyardBefore = match.boneyard.length;
 
     void (async () => {
+      // Another draw may have started between the sync guard and this tick.
+      if (drawSequenceActiveRef.current) return;
       const runToken = beginLocalRun('player-draw');
       setDrawSequenceActiveBoth(true);
       try {
@@ -153,6 +156,8 @@ export function usePlayerNoMoveEffect({
           return;
         }
         setSelectedTile(null);
+        // Boneyard delta is the source of truth — onStep can undercount if interrupted.
+        drawCount = Math.max(drawCount, boneyardBefore - result.state.boneyard.length);
 
         if (result.drew) {
           if (isGhostMode) {
@@ -213,10 +218,12 @@ export function usePlayerNoMoveEffect({
 
         applyAndNotify(result);
       } finally {
+        // Only the current run may clear draw-active. A stale StrictMode/overlap
+        // finally must not unlock the board while a newer draw is in progress.
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
+          setDrawSequenceActiveBoth(false);
         }
-        setDrawSequenceActiveBoth(false);
       }
     })();
 

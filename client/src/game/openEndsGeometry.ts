@@ -1,9 +1,9 @@
 import type { BoardState, BranchArm, HubDouble, PlacedTile, PlacementPosition, Tile } from '../types';
 import { logger } from '../utils/logger';
 
-const IS_TEST =
-  Boolean((import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE === 'test') ||
-  Boolean(typeof process !== 'undefined' && process.env?.VITEST);
+const IS_TEST = Boolean(
+  (import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE === 'test',
+);
 // Dev-only board audits — keep them out of vitest or CI logs explode (100k+ lines).
 const IS_DEV =
   Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) && !IS_TEST;

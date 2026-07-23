@@ -3,6 +3,7 @@ import {
   canFinalizeDailyFritzAttempt,
   hasCompleteDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
+  buildRecordedDailyFritzAttemptResult,
   requiresVerifiedDailyFritzEvidence,
 } from './dailyFritz';
 import { isDailyFritzAttemptLeaderboardEligible } from '../stores/dailyFritzStore';
@@ -46,6 +47,44 @@ describe('Daily Fritz competitive verification boundary', () => {
       verification_status: 'legacy_unverified',
       verification_protocol_version: 1,
     })).toBe(false);
+  });
+
+  it('preserves verifier pinning when merging record-game set results', () => {
+    const previous = {
+      verification_status: 'in_progress',
+      verification_protocol_version: 1,
+      authority: {
+        version: 1,
+        hands: [{ gameNumber: 1, handIndex: 0, transcriptDigest: 'h1' }],
+        games: [],
+      },
+    };
+    const setResult = {
+      version: 2,
+      format: 'best_of_3',
+      playerGamesWon: 1,
+      fritzGamesWon: 0,
+      totalPointDiff: 20,
+      games: [{ gameNumber: 1, playerScore: 60, fritzScore: 40 }],
+    };
+    const merged = buildRecordedDailyFritzAttemptResult({
+      previousResult: previous,
+      setResult,
+      hasTranscript: true,
+    });
+    expect(requiresVerifiedDailyFritzEvidence(merged)).toBe(true);
+    expect(merged.verification_protocol_version).toBe(1);
+    expect(merged.verification_status).toBe('in_progress');
+    expect(merged.authority).toEqual(previous.authority);
+    expect(merged.playerGamesWon).toBe(1);
+
+    const legacyMerged = buildRecordedDailyFritzAttemptResult({
+      previousResult: { verification_status: 'legacy_unverified' },
+      setResult,
+      hasTranscript: false,
+    });
+    expect(requiresVerifiedDailyFritzEvidence(legacyMerged)).toBe(false);
+    expect(legacyMerged.verification_status).toBe('legacy_unverified');
   });
 
   it('does not allow a verifier-capable attempt to fall back to an unverified set', () => {

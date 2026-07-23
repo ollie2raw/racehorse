@@ -168,7 +168,16 @@ export function useHandLifecycleWatchdogs({
         lastLabel: lastDailyFlowLabelRef.current,
         revealVisible: handRevealRef.current !== null,
       });
-      handTransitionInFlightRef.current = false;
+      // Never clear in-flight here — that defeated the advanceHand guard and
+      // could start a second next-hand while one was already running.
+      if (handTransitionInFlightRef.current) {
+        logDailyFritzHandBreadcrumb('manual-advance-shown', {
+          reason: 'watchdog-while-in-flight',
+          handNumber: live.handNumber,
+        });
+        setShowManualHandAdvance(true);
+        return;
+      }
       advanceHand();
     }, watchdogMs);
 
@@ -186,5 +195,6 @@ export function useHandLifecycleWatchdogs({
     matchRef,
     pendingHandRevealRef,
     setHandReveal,
+    setShowManualHandAdvance,
   ]);
 }

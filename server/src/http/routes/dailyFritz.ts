@@ -123,6 +123,34 @@ export function requiresVerifiedDailyFritzEvidence(result: Record<string, unknow
     && getDailyFritzVerificationStatus(result) !== 'legacy_unverified';
 }
 
+/**
+ * Merges set-result scores onto the attempt result without dropping verifier pinning.
+ * Previous bug: spreading setResult alone wiped verification_protocol_version mid-set,
+ * which reopened legacy score-only next-hand submissions.
+ */
+export function buildRecordedDailyFritzAttemptResult(input: {
+  previousResult: Record<string, unknown> | null;
+  setResult: object;
+  hasTranscript: boolean;
+}): Record<string, unknown> {
+  const previous = input.previousResult ?? {};
+  const authority = readAuthorityLedger(previous);
+  if (!input.hasTranscript) {
+    return {
+      ...input.setResult as Record<string, unknown>,
+      authority,
+      verification_status: 'legacy_unverified',
+    };
+  }
+  const previousStatus = getDailyFritzVerificationStatus(previous);
+  return {
+    ...input.setResult as Record<string, unknown>,
+    authority,
+    verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
+    verification_status: previousStatus === 'verified' ? 'verified' : 'in_progress',
+  };
+}
+
 export function hasCompleteDailyFritzGameAuthority(
   result: Record<string, unknown> | null,
   setResult: { games: DailyFritzSetGameResult[] },
@@ -983,11 +1011,11 @@ export function registerDailyFritzRoutes(app: Application): void {
       });
     }
 
-    attempt.result = {
-      ...setResult as unknown as Record<string, unknown>,
-      authority: readAuthorityLedger(attempt.result),
-      ...(!parsedTranscript ? { verification_status: 'legacy_unverified' } : {}),
-    };
+    attempt.result = buildRecordedDailyFritzAttemptResult({
+      previousResult: attempt.result,
+      setResult,
+      hasTranscript: Boolean(parsedTranscript),
+    });
     if (!setResult.setWinner) {
       attempt.currentHandIndex = 0;
     }
