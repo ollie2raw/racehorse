@@ -8,7 +8,6 @@ import type { LocalRunToken } from '../match/types.ts';
 import type { GhostProfileSummary } from '../ghost/ghostContracts.ts';
 import { asPlayMoves } from '../../game/tileUtils.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
-import { BOT_DRAW_STEP_MS } from './botTurnGuards.ts';
 import { buildBotGhostDrawEntry, buildBotGhostPassEntry } from './botGhostSync.ts';
 import { executeBotPlayMove, resolveBotMoveChoice } from './botMoveResolution.ts';
 import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
@@ -63,7 +62,6 @@ export async function runBotDrawPassSequence(input: {
         step.result,
       );
     },
-    BOT_DRAW_STEP_MS,
   );
 
   if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
