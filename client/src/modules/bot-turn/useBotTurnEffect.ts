@@ -65,7 +65,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const {
     beginLocalRun,
     isLocalRunCurrent,
-    hasActiveLocalRun,
     finishLocalRun,
   } = localRun;
   const [, setBotTurnRetryNonce] = useState(0);
@@ -85,7 +84,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       !shouldScheduleBotTurn({
         match: matchRef.current,
         drawSequenceActive: drawSequenceActiveRef.current,
-        hasActiveLocalRun: hasActiveLocalRun(),
         preGameDrawActive: preGameDrawActiveRef.current,
         isDailyFritzMode,
         dailyFritzSetResult: dailyFritzPackage?.set_result,
@@ -216,6 +214,9 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
         clearTimeout(botActionRetryTimerRef.current);
         botActionRetryTimerRef.current = null;
       }
+      // Effect re-runs (match identity churn) must release the token or a stale
+      // beginLocalRun leaves Fritz permanently stuck on "thinking".
+      finishLocalRun(runToken);
     };
   }, [
     match,
@@ -227,7 +228,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     runDrawSequence,
     beginLocalRun,
     isLocalRunCurrent,
-    hasActiveLocalRun,
     finishLocalRun,
     isMuted,
     isDailyFritzMode,

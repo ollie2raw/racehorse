@@ -15,8 +15,6 @@ export function resolveBotTurnDelayMs(hasLegalMove: boolean): number {
 export type BotTurnSchedulingContext = {
   match: BotMatchLifecycleSnapshot;
   drawSequenceActive: boolean;
-  /** True while an in-flight bot/player local run still owns the turn. */
-  hasActiveLocalRun?: boolean;
   preGameDrawActive: boolean;
   isDailyFritzMode: boolean;
   dailyFritzSetResult?: { setWinner?: string | null } | null;
@@ -27,7 +25,6 @@ export type BotTurnSchedulingContext = {
 
 export function shouldScheduleBotTurn(ctx: BotTurnSchedulingContext): boolean {
   if (!shouldAllowBotAction(ctx.match) || ctx.drawSequenceActive) return false;
-  if (ctx.hasActiveLocalRun) return false;
   if (ctx.preGameDrawActive) return false;
   if (ctx.isDailyFritzMode && isDailyFritzSetTerminal(ctx.dailyFritzSetResult)) return false;
   if (ctx.isGuidedTranscriptMode) return false;

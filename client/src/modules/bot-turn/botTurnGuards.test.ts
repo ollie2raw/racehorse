@@ -45,10 +45,6 @@ describe('shouldScheduleBotTurn', () => {
     expect(shouldScheduleBotTurn({ ...base, drawSequenceActive: true })).toBe(false);
   });
 
-  it('blocks while another local run is still active', () => {
-    expect(shouldScheduleBotTurn({ ...base, hasActiveLocalRun: true })).toBe(false);
-  });
-
   it('blocks guided transcript mode', () => {
     expect(shouldScheduleBotTurn({ ...base, isGuidedTranscriptMode: true })).toBe(false);
   });
