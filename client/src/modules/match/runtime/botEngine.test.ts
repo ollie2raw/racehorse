@@ -186,11 +186,15 @@ describe('botEngine', () => {
   });
 
   it('15. getLegalMoves returns pass if player cannot play and boneyard is empty/locked', () => {
+    // Locked tiles stay in `boneyard` but are counted via `locked`/`deadTiles`
+    // (drawable = boneyard.length - deadTileCount). An empty `locked` list means
+    // both remaining tiles are still drawable, so pass is illegal.
+    const locked = [dummyTile(0, 1), dummyTile(0, 2)];
     const handDeal = {
       player_tiles: [dummyTile(3, 3)],
       fritz_tiles: [dummyTile(2, 2)],
-      boneyard: [dummyTile(0, 1), dummyTile(0, 2)], // size 2 -> considered locked
-      locked: [],
+      boneyard: locked,
+      locked,
     };
     const state = createFixedBotMatch(handDeal, 60, 7);
     state.board = {

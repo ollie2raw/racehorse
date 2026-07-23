@@ -32,6 +32,7 @@ export type CreateRunDrawSequenceDeps = {
 
 export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawSequence {
   const {
+    setMatch,
     isMuted,
     isLocalRunCurrent,
     triggerDrawStepAnimation,
@@ -57,9 +58,11 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
       drewAny = true;
       current = step.state;
       if (token && !isLocalRunCurrent(token)) break;
-      // Do not commit intermediate draws into match React state. That races a follow-up
-      // bot turn (sees playable hand, logs only the play) while these draws never enter
-      // the Daily Fritz transcript. Animation still runs off the local step state.
+      // Commit each draw so the Fritz/player tile rack ticks with the flying-tile
+      // animation. Safe while drawSequenceActive is true: bot-turn cleanup keeps
+      // the local-run token alive and shouldScheduleBotTurn blocks a follow-up
+      // turn that could log a play without these draws.
+      setMatch(current);
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, current);
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMsOverride ?? drawStepMs));
