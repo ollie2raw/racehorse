@@ -121,8 +121,9 @@ function testShouldShowHandRevealForHand(): void {
 }
 
 function testHandRevealScheduleMode(): void {
-  assertEqual(resolveHandRevealScheduleMode(true), 'immediate', 'daily fritz immediate reveal');
+  assertEqual(resolveHandRevealScheduleMode(true), 'delayed', 'daily fritz delayed reveal');
   assertEqual(resolveHandRevealScheduleMode(false), 'delayed', 'non-daily delayed reveal');
+  assertEqual(DAILY_FRITZ_HAND_REVEAL_DELAY_MS, 2000, 'hand-over waits 2s after last tile');
 }
 
 function testDailyFritzWatchdogGuards(): void {

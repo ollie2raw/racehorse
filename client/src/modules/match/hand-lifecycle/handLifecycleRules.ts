@@ -72,12 +72,16 @@ export function shouldShowHandRevealForHand(
   return liveHandNumber === endedHandNumber;
 }
 
-export const DAILY_FRITZ_HAND_REVEAL_DELAY_MS = 1400;
+/** Pause after the last tile so the board beat lands before the hand-over modal. */
+export const DAILY_FRITZ_HAND_REVEAL_DELAY_MS = 2000;
 export const DAILY_FRITZ_HAND_AUTO_ADVANCE_MS = 5000;
 
-/** Daily Fritz shows hand result immediately; guided/bot modes keep a short delay. */
-export function resolveHandRevealScheduleMode(isDailyFritzMode: boolean): 'immediate' | 'delayed' {
-  return isDailyFritzMode ? 'immediate' : 'delayed';
+/**
+ * Bot / Daily Fritz hand-over always waits after the final play.
+ * `isDailyFritzMode` is kept for call-site clarity; both paths use delayed reveal.
+ */
+export function resolveHandRevealScheduleMode(_isDailyFritzMode: boolean): 'immediate' | 'delayed' {
+  return 'delayed';
 }
 
 export function getDailyFritzWatchdogDelayMs(handRevealVisible: boolean): number {
