@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { BOT_FLY_TILE_MS } from '../bot-turn/botTurnGuards.ts';
 import { logDailyFritzHandBreadcrumb } from '../match/hand-lifecycle/handLifecycleRules.ts';
 import { logLayoutDebug } from '../../match/layoutDebug.ts';
 import type { BotMatchState, BotPlayerId } from '../match/runtime/botEngine.ts';
@@ -64,7 +65,7 @@ export function usePlayerDrawAnimation({ drawAnimation, showBoardToast }: UsePla
         id,
       },
     ]);
-    setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), 1800);
+    setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), BOT_FLY_TILE_MS);
     logLayoutDebug(drawer === 'you' ? 'player-draw' : 'fritz-draw', {
       rootRef,
       boardStageRef,

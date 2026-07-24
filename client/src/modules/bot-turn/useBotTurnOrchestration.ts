@@ -5,7 +5,7 @@ import type { UseBotTurnEffectArgs } from './useBotTurnEffect.ts';
 
 export type UseBotTurnOrchestrationArgs = Omit<
   UseBotTurnEffectArgs,
-  'botChainPauseRef'
+  'botChainPauseRef' | 'botTurnInFlightRef'
 > & {
   lastBotChoice: BotChoice | null;
   setLastBotChoice: (choice: BotChoice | null) => void;
@@ -22,11 +22,13 @@ export function useBotTurnOrchestration(
 ): UseBotTurnOrchestrationResult {
   const { lastBotChoice, setLastBotChoice, ...effectArgs } = args;
   const botChainPauseRef = useRef(false);
+  const botTurnInFlightRef = useRef(false);
   const isBotChainPaused = useCallback(() => botChainPauseRef.current, []);
 
   useBotTurnEffect({
     ...effectArgs,
     botChainPauseRef,
+    botTurnInFlightRef,
   });
 
   return {

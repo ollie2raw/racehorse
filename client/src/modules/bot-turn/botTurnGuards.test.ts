@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOT_DRAW_STEP_MS,
+  BOT_FLY_TILE_MS,
   BOT_FORCED_DRAW_DELAY_MS,
+  BOT_POST_DRAW_PLAY_DELAY_MS,
   BOT_THINK_DELAY_MS,
   resolveBotTurnDelayMs,
   shouldContinueBotTurnAtTimer,
@@ -8,14 +11,16 @@ import {
 } from './botTurnGuards.ts';
 
 describe('resolveBotTurnDelayMs', () => {
-  it('keeps a deliberate pause for legal Fritz moves', () => {
+  it('uses one turn-start beat for plays and forced draws', () => {
     expect(resolveBotTurnDelayMs(true)).toBe(BOT_THINK_DELAY_MS);
+    expect(resolveBotTurnDelayMs(false)).toBe(BOT_THINK_DELAY_MS);
+    expect(BOT_FORCED_DRAW_DELAY_MS).toBe(BOT_THINK_DELAY_MS);
+    expect(BOT_THINK_DELAY_MS).toBe(1000);
   });
 
-  it('keeps at least a half-second pause before forced draw or pass', () => {
-    expect(resolveBotTurnDelayMs(false)).toBe(BOT_FORCED_DRAW_DELAY_MS);
-    expect(BOT_FORCED_DRAW_DELAY_MS).toBeGreaterThanOrEqual(500);
-    expect(BOT_THINK_DELAY_MS).toBeGreaterThanOrEqual(500);
+  it('keeps draw step aligned with fly duration', () => {
+    expect(BOT_DRAW_STEP_MS).toBeGreaterThanOrEqual(BOT_FLY_TILE_MS);
+    expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBeGreaterThanOrEqual(500);
   });
 });
 
@@ -23,6 +28,7 @@ describe('shouldScheduleBotTurn', () => {
   const base = {
     match: { currentPlayer: 'bot' as const, handOver: false, gameOver: false },
     drawSequenceActive: false,
+    botTurnInFlight: false,
     preGameDrawActive: false,
     isDailyFritzMode: false,
     isGuidedTranscriptMode: false,
@@ -45,6 +51,10 @@ describe('shouldScheduleBotTurn', () => {
 
   it('blocks when draw sequence is active', () => {
     expect(shouldScheduleBotTurn({ ...base, drawSequenceActive: true })).toBe(false);
+  });
+
+  it('blocks while a bot action/chain is in flight', () => {
+    expect(shouldScheduleBotTurn({ ...base, botTurnInFlight: true })).toBe(false);
   });
 
   it('blocks guided transcript mode', () => {

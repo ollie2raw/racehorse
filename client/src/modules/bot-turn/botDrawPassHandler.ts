@@ -12,6 +12,7 @@ import { buildBotGhostDrawEntry, buildBotGhostPassEntry } from './botGhostSync.t
 import { executeBotPlayMove, resolveBotMoveChoice } from './botMoveResolution.ts';
 import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
 import type { BotTurnPorts } from './types.ts';
+import { BOT_POST_DRAW_PLAY_DELAY_MS, waitMs } from './botTurnGuards.ts';
 
 export type BotDrawPassOutcome = {
   working: BotMatchState;
@@ -112,6 +113,22 @@ export async function runBotDrawPassSequence(input: {
   if (afterDraw.length === 0) {
     result = drawPass;
   } else {
+    // Draw-until-legal found a play — pause so the tile does not slam in.
+    if (drawPass.drew && !input.cancelled()) {
+      await waitMs(BOT_POST_DRAW_PLAY_DELAY_MS);
+      if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
+        return {
+          working,
+          result: null,
+          drew: Boolean(drawPass.drew),
+          passed: false,
+          drawCount,
+          chosen,
+          ghostChosen,
+          playedTileForHighlight,
+        };
+      }
+    }
     const resolution = resolveBotMoveChoice({
       state: working,
       legalMoves: afterDraw,

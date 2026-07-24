@@ -4,17 +4,39 @@ import {
   type BotMatchLifecycleSnapshot,
 } from '../match/hand-lifecycle/handLifecycleRules.ts';
 
+/** Single Fritz turn-start beat (play, draw start, and score/double chain continues). */
 export const BOT_THINK_DELAY_MS = 1000;
-export const BOT_FORCED_DRAW_DELAY_MS = 500;
-export const BOT_DRAW_STEP_MS = 420;
 
-export function resolveBotTurnDelayMs(hasLegalMove: boolean): number {
-  return hasLegalMove ? BOT_THINK_DELAY_MS : BOT_FORCED_DRAW_DELAY_MS;
+/**
+ * @deprecated Use BOT_THINK_DELAY_MS — kept as an alias so older imports stay aligned.
+ * Forced-draw starts use the same beat as plays.
+ */
+export const BOT_FORCED_DRAW_DELAY_MS = BOT_THINK_DELAY_MS;
+
+/** Per-tile draw cadence; keep ≥ flying-tile CSS duration so tiles do not overlap. */
+export const BOT_DRAW_STEP_MS = 750;
+
+/** Flying-tile animation duration (CSS + DOM cleanup should match). */
+export const BOT_FLY_TILE_MS = 750;
+
+/** Breath after draw-until-legal before Fritz plays the found tile. */
+export const BOT_POST_DRAW_PLAY_DELAY_MS = 500;
+
+export function resolveBotTurnDelayMs(_hasLegalMove = true): number {
+  return BOT_THINK_DELAY_MS;
+}
+
+export function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export type BotTurnSchedulingContext = {
   match: BotMatchLifecycleSnapshot;
   drawSequenceActive: boolean;
+  /** True while a bot action (including chain continues) is executing. */
+  botTurnInFlight: boolean;
   preGameDrawActive: boolean;
   isDailyFritzMode: boolean;
   dailyFritzSetResult?: { setWinner?: string | null } | null;
@@ -24,7 +46,9 @@ export type BotTurnSchedulingContext = {
 };
 
 export function shouldScheduleBotTurn(ctx: BotTurnSchedulingContext): boolean {
-  if (!shouldAllowBotAction(ctx.match) || ctx.drawSequenceActive) return false;
+  if (!shouldAllowBotAction(ctx.match) || ctx.drawSequenceActive || ctx.botTurnInFlight) {
+    return false;
+  }
   if (ctx.preGameDrawActive) return false;
   if (ctx.isDailyFritzMode && isDailyFritzSetTerminal(ctx.dailyFritzSetResult)) return false;
   if (ctx.isGuidedTranscriptMode) return false;

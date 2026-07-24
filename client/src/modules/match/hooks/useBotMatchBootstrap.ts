@@ -19,7 +19,10 @@ import { resolveInitialBotMatchState } from '../bootstrap/resolveInitialBotMatch
 import { useMatchRuntimeBridge } from './useMatchRuntimeBridge.ts';
 import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
 
-export const DRAW_STEP_MS = 700;
+import { BOT_DRAW_STEP_MS } from '../../bot-turn/botTurnGuards.ts';
+
+/** Shared draw cadence for Fritz and player forced-draw presentation. */
+export const DRAW_STEP_MS = BOT_DRAW_STEP_MS;
 
 export function createLocalMatchId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
