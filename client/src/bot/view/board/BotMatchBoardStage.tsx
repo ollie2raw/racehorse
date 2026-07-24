@@ -34,6 +34,7 @@ export type BotMatchBoardStageProps = {
   isLessonLayoutMode: boolean;
   openEndsSum: number;
   boneyardRef: RefObject<HTMLDivElement | null>;
+  boneyardDisplayCount?: number | null;
   isGhostMode: boolean;
   ghostAgreementType: 'agrees' | 'heuristic' | null;
   ghostPlayedTile: Tile | null;
@@ -78,6 +79,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
     isLessonLayoutMode,
     openEndsSum,
     boneyardRef,
+    boneyardDisplayCount = null,
     boardRef,
     lessonBoardPlacementMoves,
     activePlacementMoves,
@@ -123,7 +125,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
       {!match.gameOver && !isLessonLayoutMode && (
         <div className="rh-board-meta-bar" data-ui="board-meta">
           <BoardOpenEndsPill board={match.board} openEndsSum={openEndsSum} />
-          <BoneyardCountPill ref={boneyardRef} count={match.boneyard.length} />
+          <BoneyardCountPill ref={boneyardRef} count={boneyardDisplayCount ?? match.boneyard.length} />
         </div>
       )}
       <BotMatchGhostBoardOverlays

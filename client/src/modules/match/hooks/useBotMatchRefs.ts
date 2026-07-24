@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { BoardHandle } from '../../../components/index.ts';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import type { AuthoredStep } from '../../../learn/guidedAuthoring.ts';
+import type { BotMatchState, BotPlayerId } from '../runtime/botEngine.ts';
 
 export type UseBotMatchRefsArgs = {
   initialMoveLog?: MoveEntry[];
@@ -20,9 +21,22 @@ export function useBotMatchRefs({ initialMoveLog = [] }: UseBotMatchRefsArgs = {
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const [drawSequenceActive, setDrawSequenceActive] = useState(false);
   const drawSequenceActiveRef = useRef(false);
+  const [drawStepBotHandCount, setDrawStepBotHandCount] = useState<number | null>(null);
+  const [boneyardDisplayCount, setBoneyardDisplayCount] = useState<number | null>(null);
   const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
     drawSequenceActiveRef.current = val;
     setDrawSequenceActive(val);
+    if (!val) {
+      setDrawStepBotHandCount(null);
+      setBoneyardDisplayCount(null);
+    }
+  }, []);
+
+  const onDrawVisualStep = useCallback((player: BotPlayerId, state: BotMatchState) => {
+    setBoneyardDisplayCount(state.boneyard.length);
+    if (player === 'bot') {
+      setDrawStepBotHandCount(state.players.bot.hand.length);
+    }
   }, []);
 
   const [flyingTiles, setFlyingTiles] = useState<
@@ -67,6 +81,9 @@ export function useBotMatchRefs({ initialMoveLog = [] }: UseBotMatchRefsArgs = {
     drawSequenceActive,
     drawSequenceActiveRef,
     setDrawSequenceActiveBoth,
+    drawStepBotHandCount,
+    boneyardDisplayCount,
+    onDrawVisualStep,
     flyingTiles,
     setFlyingTiles,
     flyingTileIdRef,

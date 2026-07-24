@@ -12,6 +12,10 @@ export function buildBotTurnArgs(
   ports: BotTurnPorts,
   lastBotChoice: BotChoice | null,
   setLastBotChoice: (choice: BotChoice | null) => void,
+  drawPresentation: {
+    triggerDrawStepAnimation: UseBotTurnOrchestrationArgs['triggerDrawStepAnimation'];
+    drawStepMs: number;
+  },
 ): UseBotTurnOrchestrationArgs {
   const { bootstrap, refs, guidedBoot, chrome, ghostProfile, localRun } = sources;
   const { isGuidedTranscriptMode, isGuidedV2Mode } = guidedBoot;
@@ -36,5 +40,9 @@ export function buildBotTurnArgs(
     moveCounterRef: refs.moveCounterRef,
     lastBotChoice,
     setLastBotChoice,
+    setMatch: bootstrap.setMatch,
+    onDrawVisualStep: refs.onDrawVisualStep,
+    triggerDrawStepAnimation: drawPresentation.triggerDrawStepAnimation,
+    drawStepMs: drawPresentation.drawStepMs,
   };
 }

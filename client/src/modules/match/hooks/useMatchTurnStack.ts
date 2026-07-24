@@ -13,6 +13,7 @@ import { usePlayerDrawAnimation } from '../../player-turn/usePlayerDrawAnimation
 import { usePlayerTurnOrchestration } from '../../player-turn/index.ts';
 import { useBotTurnOrchestration } from '../../bot-turn/index.ts';
 import { useDailyFritzDiagnostics } from '../../daily/index.ts';
+import { DRAW_STEP_MS } from './useBotMatchBootstrap.ts';
 import { assembleMatchTurnStackResult } from '../match-turn-stack/assembleMatchTurnStackResult.ts';
 import { countAuthoringV2PlayerPlays } from '../match-turn-stack/authoringV2Metrics.ts';
 import { buildBotTurnArgs } from '../match-turn-stack/buildBotTurnArgs.ts';
@@ -236,6 +237,10 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       botTurnPorts,
       lastBotChoice,
       setLastBotChoice,
+      {
+        triggerDrawStepAnimation,
+        drawStepMs: DRAW_STEP_MS,
+      },
     ),
   );
 
@@ -260,6 +265,8 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
     botTurn,
     drawPulseIndex: refs.drawPulseIndex,
     drawSequenceActive: refs.drawSequenceActive,
+    drawStepBotHandCount: refs.drawStepBotHandCount,
+    boneyardDisplayCount: refs.boneyardDisplayCount,
     flyingTiles: refs.flyingTiles,
     authoringV2Events: authoring.authoringV2Events,
     authoringV2PlayerMoveIndex,

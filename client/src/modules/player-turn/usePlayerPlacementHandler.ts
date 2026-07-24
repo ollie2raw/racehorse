@@ -1,5 +1,9 @@
 import { useCallback } from 'react';
 import { applyPlayMove } from '../match/runtime/botEngine.ts';
+import {
+  listEmbeddedForcedDrawTiles,
+  presentEmbeddedForcedDraws,
+} from '../bot-turn/embeddedForcedDrawPresentation.ts';
 import { findMoveForSelection, sumTilePips } from '../../game/tileUtils.ts';
 import { toTileKey } from '../../game/tileKeys.ts';
 import type { PlacementPosition } from '../../types.ts';
@@ -34,6 +38,12 @@ type UsePlayerPlacementHandlerArgs = Pick<
   | 'isDailyFritzMode'
   | 'fritzDifficulty'
   | 'moveCounterRef'
+  | 'setMatch'
+  | 'onDrawVisualStep'
+  | 'triggerDrawStepAnimation'
+  | 'setDrawSequenceActiveBoth'
+  | 'drawStepMs'
+  | 'isMuted'
 > & {
   applyAndNotify: (result: import('../match/runtime/botEngine.ts').BotActionResult) => void;
 };
@@ -49,6 +59,12 @@ export function usePlayerPlacementHandler({
   isDailyFritzMode,
   fritzDifficulty,
   moveCounterRef,
+  setMatch,
+  onDrawVisualStep,
+  triggerDrawStepAnimation,
+  setDrawSequenceActiveBoth,
+  drawStepMs,
+  isMuted,
   applyAndNotify,
 }: UsePlayerPlacementHandlerArgs) {
   const {
@@ -170,36 +186,61 @@ export function usePlayerPlacementHandler({
         fritzDifficulty,
       ),
     );
-    applyAndNotify(result);
-    console.log('[guided-click-applied]', {
-      currentPlayerAfter: result.state.currentPlayer,
-      lessonStepIndexCurrent: lessonStepIndex,
-    });
-    flashLastPlayed(move!.tile ?? null);
-    setSelectedTile(null);
-    setSelectedController(null);
 
-    if (isGhostMode && selectedTile && ghostSuggestedPlayerMove) {
-      const feedback = resolveGhostAgreementFeedback(move!, position, ghostSuggestedPlayerMove);
-      if (feedback.kind === 'agreement') {
-        setGhostAgreementType(feedback.type);
-        window.setTimeout(() => setGhostAgreementType(null), 1300);
-      } else {
-        setGhostBoardPulse(true);
-        window.setTimeout(() => setGhostBoardPulse(false), 520);
+    const drawnTiles = listEmbeddedForcedDrawTiles(match, result.state);
+    const commitResult = (): void => {
+      applyAndNotify(result);
+      console.log('[guided-click-applied]', {
+        currentPlayerAfter: result.state.currentPlayer,
+        lessonStepIndexCurrent: lessonStepIndex,
+      });
+      flashLastPlayed(move!.tile ?? null);
+      setSelectedTile(null);
+      setSelectedController(null);
+
+      if (isGhostMode && selectedTile && ghostSuggestedPlayerMove) {
+        const feedback = resolveGhostAgreementFeedback(move!, position, ghostSuggestedPlayerMove);
+        if (feedback.kind === 'agreement') {
+          setGhostAgreementType(feedback.type);
+          window.setTimeout(() => setGhostAgreementType(null), 1300);
+        } else {
+          setGhostBoardPulse(true);
+          window.setTimeout(() => setGhostBoardPulse(false), 520);
+        }
+        appendGhostMove(
+          buildGhostPlacementMoveLogEntry({
+            moveCounter: moveCounterRef.current,
+            handNumber: match.handNumber,
+            snapshot,
+            selectedTile,
+            position,
+            pointsScored: result.scored?.points ?? 0,
+            forcedDraw: Boolean(result.drew?.player === 'you') || drawnTiles.length > 0,
+          }),
+        );
       }
-      appendGhostMove(
-        buildGhostPlacementMoveLogEntry({
-          moveCounter: moveCounterRef.current,
-          handNumber: match.handNumber,
-          snapshot,
-          selectedTile,
-          position,
-          pointsScored: result.scored?.points ?? 0,
-          forcedDraw: Boolean(result.drew?.player === 'you'),
-        }),
-      );
+    };
+
+    if (drawnTiles.length > 0) {
+      void (async () => {
+        await presentEmbeddedForcedDraws({
+          player: 'you',
+          beforePlay: match,
+          afterPlay: result.state,
+          drawnTiles,
+          setMatch,
+          onDrawVisualStep,
+          triggerDrawStepAnimation,
+          setDrawSequenceActiveBoth,
+          drawStepMs,
+          isMuted,
+        });
+        commitResult();
+      })();
+      return;
     }
+
+    commitResult();
 
   }, [
     applyAndNotify,
@@ -210,6 +251,7 @@ export function usePlayerPlacementHandler({
     captureGuidedMatchCandidateAction,
     createV2Event,
     currentLessonStep?.chosenMove,
+    drawStepMs,
     flashLastPlayed,
     fritzDifficulty,
     ghostSuggestedPlayerMove,
@@ -218,19 +260,24 @@ export function usePlayerPlacementHandler({
     isAuthoringV2Mode,
     isDailyFritzMode,
     isGhostMode,
+    isMuted,
     isOffAuthoredLine,
     lessonStepIndex,
     match,
     moveCounterRef,
+    onDrawVisualStep,
     recordAuthoringStep,
     recordPlayerMove,
     selectedTile,
     setAuthoringV2Events,
+    setDrawSequenceActiveBoth,
     setGhostAgreementType,
     setGhostBoardPulse,
+    setMatch,
     setMovesUsed,
     setSelectedController,
     setSelectedTile,
+    triggerDrawStepAnimation,
     userPlayMoves,
   ]);
 }

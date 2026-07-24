@@ -11,6 +11,7 @@ type BotMatchLiveHudProps = {
   match: BotMatchState;
   botTurn: boolean;
   onOpenScoreTrack: () => void;
+  drawStepBotHandCount?: number | null;
 };
 
 export function BotMatchLiveHudLeft({
@@ -20,7 +21,9 @@ export function BotMatchLiveHudLeft({
   match,
   botTurn,
   onOpenScoreTrack,
+  drawStepBotHandCount = null,
 }: BotMatchLiveHudProps) {
+  const botHandCount = drawStepBotHandCount ?? match.players.bot.hand.length;
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <button
@@ -40,7 +43,7 @@ export function BotMatchLiveHudLeft({
           <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
         </div>
       </button>
-      <TileRack count={match.players.bot.hand.length} isActive={botTurn} variant="default" />
+      <TileRack count={botHandCount} isActive={botTurn} variant="default" />
     </div>
   );
 }

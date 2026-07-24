@@ -10,6 +10,8 @@ export type AssembleMatchTurnStackResultInput = {
   botTurn: Pick<UseBotTurnOrchestrationResult, 'lastBotChoice' | 'setLastBotChoice'>;
   drawPulseIndex: number | null;
   drawSequenceActive: boolean;
+  drawStepBotHandCount: number | null;
+  boneyardDisplayCount: number | null;
   flyingTiles: { x: number; y: number; toX: number; toY: number; id: number }[];
   authoringV2Events: LessonV2Event[];
   authoringV2PlayerMoveIndex: number;
@@ -69,6 +71,8 @@ export function assembleMatchTurnStackResult(
     setLastBotChoice: botTurn.setLastBotChoice,
     drawPulseIndex: input.drawPulseIndex,
     drawSequenceActive: input.drawSequenceActive,
+    drawStepBotHandCount: input.drawStepBotHandCount,
+    boneyardDisplayCount: input.boneyardDisplayCount,
     flyingTiles: input.flyingTiles,
     authoringV2Events: input.authoringV2Events,
     authoringV2PlayerMoveIndex: input.authoringV2PlayerMoveIndex,

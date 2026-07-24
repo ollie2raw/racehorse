@@ -21,12 +21,13 @@ export function usePlayerTurnOrchestration(
   const runDrawSequence = useMemo(
     () => createRunDrawSequence({
       setMatch: args.setMatch,
+      onDrawVisualStep: args.onDrawVisualStep,
       isMuted,
       isLocalRunCurrent,
       triggerDrawStepAnimation,
       drawStepMs,
     }),
-    [args.setMatch, isMuted, isLocalRunCurrent, triggerDrawStepAnimation, drawStepMs],
+    [args.setMatch, args.onDrawVisualStep, isMuted, isLocalRunCurrent, triggerDrawStepAnimation, drawStepMs],
   );
 
   const onPositionClick = usePlayerPlacementHandler({

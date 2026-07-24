@@ -38,6 +38,8 @@ export type BotTurnExecutionInput = {
 
 export type BotTurnExecutionResult = {
   result: BotActionResult | null;
+  /** Match state immediately before a play (after any pre-play draw sequence). */
+  playBeforeState: BotMatchState | null;
   drew: boolean;
   passed: boolean;
   drawCount: number;
@@ -53,6 +55,7 @@ export async function executeBotTurn(
 ): Promise<BotTurnExecutionResult> {
   let working = input.liveAtTurn;
   let result: BotActionResult | null = null;
+  let playBeforeState: BotMatchState | null = null;
   let drew = false;
   let passed = false;
   let drawCount = 0;
@@ -84,6 +87,7 @@ export async function executeBotTurn(
     if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
       return {
         result: null,
+        playBeforeState: null,
         drew: false,
         passed: false,
         drawCount: 0,
@@ -103,6 +107,9 @@ export async function executeBotTurn(
     chosen = drawPassOutcome.chosen;
     ghostChosen = drawPassOutcome.ghostChosen;
     playedTileForHighlight = drawPassOutcome.playedTileForHighlight;
+    if (chosen || ghostChosen) {
+      playBeforeState = working;
+    }
   } else {
     const resolution = resolveBotMoveChoice({
       state: working,
@@ -115,6 +122,7 @@ export async function executeBotTurn(
     chosen = resolution.chosen;
     ghostChosen = resolution.ghostChosen;
     playedTileForHighlight = resolution.playedTileForHighlight;
+    playBeforeState = working;
     result = executeBotPlayMove({
       working,
       resolution,
@@ -133,6 +141,7 @@ export async function executeBotTurn(
 
   return {
     result,
+    playBeforeState,
     drew,
     passed,
     drawCount,

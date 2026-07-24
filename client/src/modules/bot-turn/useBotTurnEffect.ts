@@ -7,6 +7,10 @@ import type { GhostProfileSummary } from '../ghost/ghostContracts.ts';
 import { executeBotThinkingFallback } from './botThinkingFallback.ts';
 import { executeBotTurn, finalizeBotTurnExecution } from './botTurnExecutor.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
+import {
+  listEmbeddedForcedDrawTiles,
+  presentEmbeddedForcedDraws,
+} from './embeddedForcedDrawPresentation.ts';
 import type { LocalRunSession } from './localRunSession.ts';
 import {
   resolveBotTurnDelayMs,
@@ -14,7 +18,7 @@ import {
   shouldScheduleBotTurn,
 } from './botTurnGuards.ts';
 import { asPlayMoves } from '../../game/tileUtils.ts';
-import { getLegalMoves } from '../match/runtime/botEngine.ts';
+import { getLegalMoves, type BotPlayerId } from '../match/runtime/botEngine.ts';
 import type { BotTurnPorts } from './types.ts';
 
 const BOT_MAX_THINKING_MS = 3000;
@@ -38,6 +42,10 @@ export type UseBotTurnEffectArgs = {
   isMuted: boolean;
   moveCounterRef: React.MutableRefObject<number>;
   botChainPauseRef: React.MutableRefObject<boolean>;
+  setMatch: (updater: BotMatchState | ((prev: BotMatchState) => BotMatchState)) => void;
+  onDrawVisualStep?: (player: BotPlayerId, state: BotMatchState) => void;
+  triggerDrawStepAnimation: (drawer: BotPlayerId, nextState: BotMatchState) => void;
+  drawStepMs: number;
 };
 
 export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
@@ -60,6 +68,10 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     isMuted,
     moveCounterRef,
     botChainPauseRef,
+    setMatch,
+    onDrawVisualStep,
+    triggerDrawStepAnimation,
+    drawStepMs,
   } = args;
 
   const {
@@ -148,6 +160,27 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
 
           if (cancelled || actionResolved || !isLocalRunCurrent(runToken)) return;
           if (execution.result) {
+            if (execution.playBeforeState) {
+              const drawnTiles = listEmbeddedForcedDrawTiles(
+                execution.playBeforeState,
+                execution.result.state,
+              );
+              if (drawnTiles.length > 0) {
+                await presentEmbeddedForcedDraws({
+                  player: 'bot',
+                  beforePlay: execution.playBeforeState,
+                  afterPlay: execution.result.state,
+                  drawnTiles,
+                  setMatch,
+                  onDrawVisualStep,
+                  triggerDrawStepAnimation,
+                  setDrawSequenceActiveBoth: ports.setDrawSequenceActiveBoth,
+                  drawStepMs,
+                  isMuted,
+                });
+                if (cancelled || !isLocalRunCurrent(runToken)) return;
+              }
+            }
             const finalized = finalizeBotTurnExecution({
               execution,
               ports,
@@ -247,5 +280,9 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     setBotTurnRetryNonce,
     botActionRetryRef,
     botActionRetryTimerRef,
+    setMatch,
+    onDrawVisualStep,
+    triggerDrawStepAnimation,
+    drawStepMs,
   ]);
 }

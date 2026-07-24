@@ -119,6 +119,7 @@ export function buildPlayerTurnArgs(
       finishLocalRun,
     },
     drawStepMs: DRAW_STEP_MS,
+    onDrawVisualStep: refs.onDrawVisualStep,
     ...commands,
   };
 }

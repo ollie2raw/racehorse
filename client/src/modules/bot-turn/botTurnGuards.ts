@@ -4,8 +4,8 @@ import {
   type BotMatchLifecycleSnapshot,
 } from '../match/hand-lifecycle/handLifecycleRules.ts';
 
-export const BOT_THINK_DELAY_MS = 900;
-export const BOT_FORCED_DRAW_DELAY_MS = 80;
+export const BOT_THINK_DELAY_MS = 1000;
+export const BOT_FORCED_DRAW_DELAY_MS = 500;
 export const BOT_DRAW_STEP_MS = 420;
 
 export function resolveBotTurnDelayMs(hasLegalMove: boolean): number {

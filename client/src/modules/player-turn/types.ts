@@ -109,6 +109,7 @@ export type UsePlayerTurnOrchestrationArgs = {
   applyAndNotify: (result: BotActionResult) => void;
   triggerDrawStepAnimation: (drawer: 'you' | 'bot', nextState: BotMatchState) => void;
   scheduleDrawStepAnimation: (drawer: 'you' | 'bot', nextState: BotMatchState) => void;
+  onDrawVisualStep?: (player: 'you' | 'bot', state: BotMatchState) => void;
 };
 
 export type UsePlayerTurnOrchestrationResult = {

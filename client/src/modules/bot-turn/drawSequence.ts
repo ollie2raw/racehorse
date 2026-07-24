@@ -23,7 +23,10 @@ export type RunDrawSequence = (
 ) => Promise<BotActionResult>;
 
 export type CreateRunDrawSequenceDeps = {
+  /** Player tray needs committed tiles mid-draw; Fritz rack uses overlay counts instead. */
   setMatch: (updater: BotMatchState | ((prev: BotMatchState) => BotMatchState)) => void;
+  /** Step-local Fritz rack + boneyard without committing match identity each tile. */
+  onDrawVisualStep?: (player: BotPlayerId, state: BotMatchState) => void;
   isMuted: boolean;
   isLocalRunCurrent: (token: LocalRunToken) => boolean;
   triggerDrawStepAnimation: (drawer: BotPlayerId, nextState: BotMatchState) => void;
@@ -33,6 +36,7 @@ export type CreateRunDrawSequenceDeps = {
 export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawSequence {
   const {
     setMatch,
+    onDrawVisualStep,
     isMuted,
     isLocalRunCurrent,
     triggerDrawStepAnimation,
@@ -58,11 +62,12 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
       drewAny = true;
       current = step.state;
       if (token && !isLocalRunCurrent(token)) break;
-      // Commit each draw so the Fritz/player tile rack ticks with the flying-tile
-      // animation. Safe while drawSequenceActive is true: bot-turn cleanup keeps
-      // the local-run token alive and shouldScheduleBotTurn blocks a follow-up
-      // turn that could log a play without these draws.
-      setMatch(current);
+      // Tick rack/boneyard via overlay for Fritz; only commit match for the player's
+      // face-up tray. Avoids mid-draw bot-turn effect remounts from setMatch churn.
+      onDrawVisualStep?.(player, current);
+      if (player === 'you') {
+        setMatch(current);
+      }
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, current);
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMsOverride ?? drawStepMs));

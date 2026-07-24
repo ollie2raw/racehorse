@@ -12,8 +12,10 @@ describe('resolveBotTurnDelayMs', () => {
     expect(resolveBotTurnDelayMs(true)).toBe(BOT_THINK_DELAY_MS);
   });
 
-  it('responds quickly when Fritz must draw or pass', () => {
+  it('keeps at least a half-second pause before forced draw or pass', () => {
     expect(resolveBotTurnDelayMs(false)).toBe(BOT_FORCED_DRAW_DELAY_MS);
+    expect(BOT_FORCED_DRAW_DELAY_MS).toBeGreaterThanOrEqual(500);
+    expect(BOT_THINK_DELAY_MS).toBeGreaterThanOrEqual(500);
   });
 });
 
