@@ -4,8 +4,11 @@ import {
   type BotMatchLifecycleSnapshot,
 } from '../match/hand-lifecycle/handLifecycleRules.ts';
 
-/** Single Fritz turn-start beat (play, draw start, and score/double chain continues). */
-export const BOT_THINK_DELAY_MS = 1000;
+/**
+ * Single Fritz turn-start beat (play, draw start, and score/double chain continues).
+ * Kept deliberately human-paced so Daily Fritz feels like a real match.
+ */
+export const BOT_THINK_DELAY_MS = 2000;
 
 /**
  * @deprecated Use BOT_THINK_DELAY_MS — kept as an alias so older imports stay aligned.
@@ -13,14 +16,14 @@ export const BOT_THINK_DELAY_MS = 1000;
  */
 export const BOT_FORCED_DRAW_DELAY_MS = BOT_THINK_DELAY_MS;
 
-/** Per-tile draw cadence; keep ≥ flying-tile CSS duration so tiles do not overlap. */
-export const BOT_DRAW_STEP_MS = 750;
+/** Per-tile draw cadence; one tile at a time. Must match flying-tile CSS duration. */
+export const BOT_DRAW_STEP_MS = 1600;
 
 /** Flying-tile animation duration (CSS + DOM cleanup should match). */
-export const BOT_FLY_TILE_MS = 750;
+export const BOT_FLY_TILE_MS = 1600;
 
 /** Breath after draw-until-legal before Fritz plays the found tile. */
-export const BOT_POST_DRAW_PLAY_DELAY_MS = 500;
+export const BOT_POST_DRAW_PLAY_DELAY_MS = 1000;
 
 export function resolveBotTurnDelayMs(_hasLegalMove = true): number {
   return BOT_THINK_DELAY_MS;

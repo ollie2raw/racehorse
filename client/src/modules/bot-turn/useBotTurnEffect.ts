@@ -4,7 +4,6 @@ import type { BotDifficulty } from '../fritz/botHeuristics.ts';
 import { botMatchDebugLog } from '../match/runtime/botMatchDebug.ts';
 import type { DailyFritzStartResponse } from '../daily/dailyFritzContracts.ts';
 import type { GhostProfileSummary } from '../ghost/ghostContracts.ts';
-import { executeBotThinkingFallback } from './botThinkingFallback.ts';
 import { executeBotTurn, finalizeBotTurnExecution } from './botTurnExecutor.ts';
 import { computeBotChainPaused } from './botChainPause.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
@@ -15,14 +14,11 @@ import {
 import type { LocalRunSession } from './localRunSession.ts';
 import {
   BOT_THINK_DELAY_MS,
-  resolveBotTurnDelayMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
   waitMs,
 } from './botTurnGuards.ts';
 import type { BotTurnPorts } from './types.ts';
-
-const BOT_MAX_THINKING_MS = 3000;
 
 export type UseBotTurnEffectArgs = {
   match: BotMatchState;
@@ -53,6 +49,10 @@ export type UseBotTurnEffectArgs = {
   drawStepMs: number;
 };
 
+/**
+ * Owns Fritz's tenure: claim in-flight immediately, then wait/think/act inside that
+ * lock so effect remounts cannot clearTimeout the think delay down to milliseconds.
+ */
 export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const {
     match,
@@ -85,18 +85,30 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     isLocalRunCurrent,
     finishLocalRun,
   } = localRun;
-  const [, setBotTurnRetryNonce] = useState(0);
+  const [botTurnRetryNonce, setBotTurnRetryNonce] = useState(0);
   const botActionRetryRef = useRef({ key: '', attempts: 0 });
   const botActionRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
+  // Schedule from turn identity, not every match field churn.
+  const botScheduleKey = [
+    match.currentPlayer,
+    match.handNumber,
+    match.turnIndex ?? 0,
+    match.handOver,
+    match.gameOver,
+    match.players.bot.hand.length,
+    match.players.you.hand.length,
+    match.boneyard.length,
+    match.board?.mainLine.length ?? 0,
+    botTurnRetryNonce,
+  ].join(':');
+
   useEffect(() => {
     botMatchDebugLog('[BOT-EFFECT] fired', {
-      currentPlayer: match.currentPlayer,
-      handOver: match.handOver,
-      gameOver: match.gameOver,
+      botScheduleKey,
+      currentPlayer: matchRef.current.currentPlayer,
       drawSequenceActive: drawSequenceActiveRef.current,
       botTurnInFlight: botTurnInFlightRef.current,
-      cancelled: false,
     });
 
     if (
@@ -115,187 +127,152 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       return;
     }
 
-    botMatchDebugLog('[BOT-EFFECT] passed guard, scheduling turn');
+    botMatchDebugLog('[BOT-EFFECT] claiming tenure', { delayMs: BOT_THINK_DELAY_MS });
     let cancelled = false;
-    let actionResolved = false;
-    const retryKey = `${match.handNumber}:${match.turnIndex ?? 0}:${match.currentPlayer}`;
+    const retryKey = botScheduleKey;
     if (botActionRetryRef.current.key !== retryKey) {
       botActionRetryRef.current = { key: retryKey, attempts: 0 };
     }
-    const botTurnDelayMs = resolveBotTurnDelayMs();
-    const runToken = beginLocalRun('bot-turn');
+
+    // Claim immediately so remounts cannot clear a pending think timer.
+    botTurnInFlightRef.current = true;
     botChainPauseRef.current = false;
+    const runToken = beginLocalRun('bot-turn');
 
-    const timer = setTimeout(() => {
-      void (async () => {
-        botMatchDebugLog('[BOT-TURN] timer fired', {
-          cancelled,
-          currentPlayer: matchRef.current.currentPlayer,
-        });
-        botTurnInFlightRef.current = true;
-        try {
-          if (!isLocalRunCurrent(runToken)) return;
+    void (async () => {
+      try {
+        // Initial think beat lives inside the lock (not a clearable outer setTimeout).
+        await waitMs(BOT_THINK_DELAY_MS);
+        if (cancelled || !isLocalRunCurrent(runToken)) return;
 
-          let isFirstAction = true;
-          while (!cancelled && isLocalRunCurrent(runToken)) {
-            const liveAtTurn = matchRef.current;
+        let isFirstAction = true;
+        while (!cancelled && isLocalRunCurrent(runToken)) {
+          if (
+            !shouldContinueBotTurnAtTimer({
+              match: matchRef.current,
+              isDailyFritzMode,
+              dailyFritzSetResult: dailyFritzPackage?.set_result,
+            })
+          ) {
+            break;
+          }
+
+          if (!isFirstAction) {
+            botMatchDebugLog('[BOT-TURN] chain continue pause', {
+              delayMs: BOT_THINK_DELAY_MS,
+            });
+            await waitMs(BOT_THINK_DELAY_MS);
+            if (cancelled || !isLocalRunCurrent(runToken)) break;
             if (
               !shouldContinueBotTurnAtTimer({
-                match: liveAtTurn,
+                match: matchRef.current,
                 isDailyFritzMode,
                 dailyFritzSetResult: dailyFritzPackage?.set_result,
               })
             ) {
               break;
             }
+          }
+          isFirstAction = false;
 
-            if (!isFirstAction) {
-              // Score/double keeps Fritz's turn — enforce the same think beat
-              // instead of racing a remounted effect (which felt instant).
-              botMatchDebugLog('[BOT-TURN] chain continue pause', {
-                delayMs: BOT_THINK_DELAY_MS,
+          const execution = await executeBotTurn({
+            liveAtTurn: matchRef.current,
+            matchSnapshotSource: matchRef.current,
+            ports,
+            matchRef,
+            runDrawSequence,
+            runToken,
+            isLocalRunCurrent,
+            cancelled: () => cancelled,
+            isGhostMode,
+            ghostProfile,
+            fritzDifficulty,
+            isDailyFritzMode,
+            isMuted,
+            moveCounter: moveCounterRef.current,
+            setBotChainPaused: (paused) => {
+              botChainPauseRef.current = paused;
+            },
+          });
+
+          if (cancelled || !isLocalRunCurrent(runToken)) break;
+          if (!execution.result) break;
+
+          if (execution.playBeforeState) {
+            const drawnTiles = listEmbeddedForcedDrawTiles(
+              execution.playBeforeState,
+              execution.result.state,
+            );
+            if (drawnTiles.length > 0) {
+              await presentEmbeddedForcedDraws({
+                player: 'bot',
+                beforePlay: execution.playBeforeState,
+                afterPlay: execution.result.state,
+                drawnTiles,
+                setMatch,
+                onDrawVisualStep,
+                triggerDrawStepAnimation,
+                setDrawSequenceActiveBoth: ports.setDrawSequenceActiveBoth,
+                drawStepMs,
+                isMuted,
               });
-              await waitMs(BOT_THINK_DELAY_MS);
               if (cancelled || !isLocalRunCurrent(runToken)) break;
-              if (
-                !shouldContinueBotTurnAtTimer({
-                  match: matchRef.current,
-                  isDailyFritzMode,
-                  dailyFritzSetResult: dailyFritzPackage?.set_result,
-                })
-              ) {
-                break;
-              }
-            }
-            isFirstAction = false;
-
-            const execution = await executeBotTurn({
-              liveAtTurn: matchRef.current,
-              matchSnapshotSource: matchRef.current,
-              ports,
-              matchRef,
-              runDrawSequence,
-              runToken,
-              isLocalRunCurrent,
-              cancelled: () => cancelled,
-              isGhostMode,
-              ghostProfile,
-              fritzDifficulty,
-              isDailyFritzMode,
-              isMuted,
-              moveCounter: moveCounterRef.current,
-              setBotChainPaused: (paused) => {
-                botChainPauseRef.current = paused;
-              },
-            });
-
-            if (cancelled || !isLocalRunCurrent(runToken)) break;
-            if (!execution.result) break;
-
-            if (execution.playBeforeState) {
-              const drawnTiles = listEmbeddedForcedDrawTiles(
-                execution.playBeforeState,
-                execution.result.state,
-              );
-              if (drawnTiles.length > 0) {
-                await presentEmbeddedForcedDraws({
-                  player: 'bot',
-                  beforePlay: execution.playBeforeState,
-                  afterPlay: execution.result.state,
-                  drawnTiles,
-                  setMatch,
-                  onDrawVisualStep,
-                  triggerDrawStepAnimation,
-                  setDrawSequenceActiveBoth: ports.setDrawSequenceActiveBoth,
-                  drawStepMs,
-                  isMuted,
-                });
-                if (cancelled || !isLocalRunCurrent(runToken)) break;
-              }
-            }
-
-            const finalized = finalizeBotTurnExecution({
-              execution,
-              ports,
-              matchRef,
-              matchSnapshotSource: matchRef.current,
-              isGhostMode,
-              isDailyFritzMode,
-              moveCounter: moveCounterRef.current,
-              setBotChainPaused: (paused) => {
-                botChainPauseRef.current = paused;
-              },
-            });
-
-            if (!finalized) {
-              if (execution.result.error && botActionRetryRef.current.attempts < 1) {
-                botActionRetryRef.current.attempts += 1;
-                botActionRetryTimerRef.current = window.setTimeout(() => {
-                  botActionRetryTimerRef.current = null;
-                  setBotTurnRetryNonce((nonce) => nonce + 1);
-                }, 350);
-              }
-              break;
-            }
-
-            actionResolved = true;
-            if (!computeBotChainPaused(execution.result)) {
-              break;
             }
           }
-        } finally {
-          botTurnInFlightRef.current = false;
-          if (isLocalRunCurrent(runToken)) {
-            finishLocalRun(runToken);
+
+          const finalized = finalizeBotTurnExecution({
+            execution,
+            ports,
+            matchRef,
+            matchSnapshotSource: matchRef.current,
+            isGhostMode,
+            isDailyFritzMode,
+            moveCounter: moveCounterRef.current,
+            setBotChainPaused: (paused) => {
+              botChainPauseRef.current = paused;
+            },
+          });
+
+          if (!finalized) {
+            if (execution.result.error && botActionRetryRef.current.attempts < 1) {
+              botActionRetryRef.current.attempts += 1;
+              botActionRetryTimerRef.current = window.setTimeout(() => {
+                botActionRetryTimerRef.current = null;
+                setBotTurnRetryNonce((nonce) => nonce + 1);
+              }, 350);
+            }
+            break;
           }
-          ports.setDrawSequenceActiveBoth(false);
+
+          if (!computeBotChainPaused(execution.result)) {
+            break;
+          }
         }
-      })();
-    }, botTurnDelayMs);
-
-    const maxThinkingTimer = setTimeout(() => {
-      if (botTurnInFlightRef.current || actionResolved || cancelled) return;
-      const outcome = executeBotThinkingFallback({
-        live: matchRef.current,
-        ports,
-        runToken,
-        isLocalRunCurrent,
-        matchRef,
-        finishLocalRun,
-        setBotChainPaused: (paused) => {
-          botChainPauseRef.current = paused;
-        },
-        cancelled,
-        actionResolved,
-        isDailyFritzMode,
-        fritzDifficulty,
-      });
-      cancelled = outcome.cancelled;
-      actionResolved = outcome.actionResolved;
-    }, BOT_MAX_THINKING_MS);
+      } finally {
+        botTurnInFlightRef.current = false;
+        if (isLocalRunCurrent(runToken)) {
+          finishLocalRun(runToken);
+        }
+        ports.setDrawSequenceActiveBoth(false);
+      }
+    })();
 
     return () => {
-      const drawActive = drawSequenceActiveRef.current;
       const inFlight = botTurnInFlightRef.current;
-      console.log('[BOT-EFFECT] cleanup called', {
-        drawSequenceActive: drawActive,
-        botTurnInFlight: inFlight,
-      });
-      clearTimeout(timer);
-      clearTimeout(maxThinkingTimer);
+      botMatchDebugLog('[BOT-EFFECT] cleanup', { inFlight, cancelled });
       if (botActionRetryTimerRef.current) {
         clearTimeout(botActionRetryTimerRef.current);
         botActionRetryTimerRef.current = null;
       }
-      // While a draw/pass or chain continue is running, keep the local-run token
-      // alive so remounts cannot abort mid-animation / mid-chain.
-      if (!drawActive && !inFlight) {
+      // Tenure owns cancellation. Remounts while in-flight must not abort the
+      // think/draw/chain waits — that was collapsing delays to milliseconds.
+      if (!inFlight) {
         cancelled = true;
         finishLocalRun(runToken);
       }
     };
   }, [
-    match,
+    botScheduleKey,
     matchRef,
     ports,
     ghostProfile,
@@ -316,9 +293,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     fritzDifficulty,
     moveCounterRef,
     botChainPauseRef,
-    setBotTurnRetryNonce,
-    botActionRetryRef,
-    botActionRetryTimerRef,
     setMatch,
     onDrawVisualStep,
     triggerDrawStepAnimation,

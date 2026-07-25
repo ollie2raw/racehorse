@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBotMatch, type BotMatchState } from '../match/runtime/botEngine.ts';
 import { createRunDrawSequence } from './drawSequence.ts';
 
@@ -36,7 +36,34 @@ function stateNeedingDraw(player: 'you' | 'bot'): BotMatchState {
   };
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('createRunDrawSequence visual steps', () => {
+  it('returns immediately once a player draw produces a playable tile', async () => {
+    vi.useFakeTimers();
+    const setMatch = vi.fn();
+    const run = createRunDrawSequence({
+      setMatch,
+      onDrawVisualStep: vi.fn(),
+      isMuted: true,
+      isLocalRunCurrent: vi.fn(() => true),
+      triggerDrawStepAnimation: vi.fn(),
+      drawStepMs: 1600,
+    });
+
+    const sequence = run(stateNeedingDraw('you'), 'you');
+    let resolved = false;
+    void sequence.then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+
+    expect(setMatch).toHaveBeenCalledTimes(1);
+    expect(resolved).toBe(true);
+  });
+
   it('does not commit match identity for bot draws; uses onDrawVisualStep instead', async () => {
     const setMatch = vi.fn();
     const onDrawVisualStep = vi.fn();

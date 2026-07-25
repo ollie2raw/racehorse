@@ -128,6 +128,11 @@ export async function presentEmbeddedForcedDraws(
       }
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, stepState);
+      // Final player tile is already in the tray. Release input immediately;
+      // its fly animation can finish without blocking the next legal play.
+      if (player === 'you' && index === drawnTiles.length - 1) {
+        continue;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMs));
     }
   } finally {

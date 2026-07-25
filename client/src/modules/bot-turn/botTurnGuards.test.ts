@@ -11,16 +11,18 @@ import {
 } from './botTurnGuards.ts';
 
 describe('resolveBotTurnDelayMs', () => {
-  it('uses one turn-start beat for plays and forced draws', () => {
+  it('uses one human-paced turn-start beat for plays and forced draws', () => {
     expect(resolveBotTurnDelayMs(true)).toBe(BOT_THINK_DELAY_MS);
     expect(resolveBotTurnDelayMs(false)).toBe(BOT_THINK_DELAY_MS);
     expect(BOT_FORCED_DRAW_DELAY_MS).toBe(BOT_THINK_DELAY_MS);
-    expect(BOT_THINK_DELAY_MS).toBe(1000);
+    expect(BOT_THINK_DELAY_MS).toBe(2000);
   });
 
-  it('keeps draw step aligned with fly duration', () => {
+  it('keeps draw step at 1.6s and aligned with fly duration', () => {
+    expect(BOT_DRAW_STEP_MS).toBe(1600);
+    expect(BOT_FLY_TILE_MS).toBe(1600);
     expect(BOT_DRAW_STEP_MS).toBeGreaterThanOrEqual(BOT_FLY_TILE_MS);
-    expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBeGreaterThanOrEqual(500);
+    expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBeGreaterThanOrEqual(1000);
   });
 });
 

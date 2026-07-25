@@ -70,6 +70,12 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
       }
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, current);
+      // The player's final draw is already committed to the face-up tray. Once
+      // it creates a legal move, release input immediately while the 1.6s fly
+      // animation finishes independently.
+      if (player === 'you' && asPlayMoves(getLegalMoves(current, player)).length > 0) {
+        continue;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMsOverride ?? drawStepMs));
       if (token && !isLocalRunCurrent(token)) break;
     }
