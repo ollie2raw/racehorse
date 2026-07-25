@@ -88,7 +88,12 @@ export function BotMatchScreenView({
     && !hud.handReveal
     && !layout.isTransitioningRef.current;
 
-  const turnLabel = selectTurnLabel(match, hud.opponentLabel, hud.botTurn);
+  const turnLabel = selectTurnLabel(
+    match,
+    hud.opponentLabel,
+    hud.botTurn,
+    hud.fritzPresentation,
+  );
 
   const boardStageInner = (
     <BotMatchBoardStage
@@ -213,6 +218,7 @@ export function BotMatchScreenView({
                 opponentPillRef={hud.opponentPillRef}
                 match={match}
                 botTurn={hud.botTurn}
+                drawStepBotHandCount={hud.drawStepBotHandCount}
                 onOpenScoreTrack={() => layout.setScoreTrackOpen(true)}
               />
             )}

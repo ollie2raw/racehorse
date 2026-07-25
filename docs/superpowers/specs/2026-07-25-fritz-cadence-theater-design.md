@@ -1,7 +1,7 @@
 # Fritz Cadence Theater
 
 **Date:** 2026-07-25
-**Status:** Approved design — awaiting written-spec review before implementation plan
+**Status:** Implemented locally — awaiting playtest before commit
 **Anchor:** Play vs Fritz matte/neon panel system; Daily Fritz brass emphasis, Play vs Fritz shares the same bot-turn spine
 **Approach:** Option C — full tabletop theater (approved over timing-only polish and readable-chain-only)
 

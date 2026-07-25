@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { asPlayMoves } from '../../game/tileUtils.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
+import { getLegalMoves } from '../match/runtime/botEngine.ts';
 import type { BotDifficulty } from '../fritz/botHeuristics.ts';
 import { botMatchDebugLog } from '../match/runtime/botMatchDebug.ts';
 import type { DailyFritzStartResponse } from '../daily/dailyFritzContracts.ts';
@@ -13,11 +15,19 @@ import {
 } from './embeddedForcedDrawPresentation.ts';
 import type { LocalRunSession } from './localRunSession.ts';
 import {
-  BOT_THINK_DELAY_MS,
+  BOT_PLAYER_HANDOFF_DELAY_MS,
+  resolveBotChainContinueDelayMs,
+  resolveBotOpeningDelayMs,
+  resolveBotPostActionSettleMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
   waitMs,
 } from './botTurnGuards.ts';
+import {
+  IDLE_FRITZ_PRESENTATION,
+  type FritzPresentationState,
+  buildFritzScoreCeremonyMessage,
+} from './fritzPresentation.ts';
 import type { BotTurnPorts } from './types.ts';
 
 export type UseBotTurnEffectArgs = {
@@ -47,11 +57,14 @@ export type UseBotTurnEffectArgs = {
     nextState: BotMatchState,
   ) => void;
   drawStepMs: number;
+  opponentLabel: string;
+  setFritzPresentation: (next: FritzPresentationState) => void;
 };
 
 /**
  * Owns Fritz's tenure: claim in-flight immediately, then wait/think/act inside that
  * lock so effect remounts cannot clearTimeout the think delay down to milliseconds.
+ * Cadence theater: variable beats, honest phase strip, place/score settles, handoff.
  */
 export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const {
@@ -78,6 +91,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     onDrawVisualStep,
     triggerDrawStepAnimation,
     drawStepMs,
+    opponentLabel,
+    setFritzPresentation,
   } = args;
 
   const {
@@ -127,7 +142,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       return;
     }
 
-    botMatchDebugLog('[BOT-EFFECT] claiming tenure', { delayMs: BOT_THINK_DELAY_MS });
     let cancelled = false;
     const retryKey = botScheduleKey;
     if (botActionRetryRef.current.key !== retryKey) {
@@ -138,11 +152,37 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     botTurnInFlightRef.current = true;
     botChainPauseRef.current = false;
     const runToken = beginLocalRun('bot-turn');
+    let turnScoreTotal = 0;
+
+    const setPhase = (patch: Partial<FritzPresentationState> & { phase: FritzPresentationState['phase'] }) => {
+      setFritzPresentation({
+        phase: patch.phase,
+        drawCount: patch.drawCount ?? 0,
+        turnScoreTotal: patch.turnScoreTotal ?? turnScoreTotal,
+        lastScorePoints: patch.lastScorePoints ?? 0,
+      });
+    };
 
     void (async () => {
       try {
-        // Initial think beat lives inside the lock (not a clearable outer setTimeout).
-        await waitMs(BOT_THINK_DELAY_MS);
+        // Player → Fritz handoff: settle the previous play before thinking starts.
+        setPhase({ phase: 'thinking', turnScoreTotal: 0, lastScorePoints: 0, drawCount: 0 });
+        await waitMs(BOT_PLAYER_HANDOFF_DELAY_MS);
+        if (cancelled || !isLocalRunCurrent(runToken)) return;
+
+        const openingLegal = asPlayMoves(getLegalMoves(matchRef.current, 'bot')).length > 0;
+        const openingDelay = resolveBotOpeningDelayMs(openingLegal);
+        setPhase({
+          phase: openingLegal ? 'thinking' : 'drawing',
+          turnScoreTotal: 0,
+          lastScorePoints: 0,
+          drawCount: 0,
+        });
+        botMatchDebugLog('[BOT-EFFECT] opening think', {
+          delayMs: openingDelay,
+          hasLegalMove: openingLegal,
+        });
+        await waitMs(openingDelay);
         if (cancelled || !isLocalRunCurrent(runToken)) return;
 
         let isFirstAction = true;
@@ -158,10 +198,15 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           if (!isFirstAction) {
-            botMatchDebugLog('[BOT-TURN] chain continue pause', {
-              delayMs: BOT_THINK_DELAY_MS,
+            const chainDelay = resolveBotChainContinueDelayMs();
+            setPhase({
+              phase: 'chaining',
+              turnScoreTotal,
+              lastScorePoints: 0,
+              drawCount: 0,
             });
-            await waitMs(BOT_THINK_DELAY_MS);
+            botMatchDebugLog('[BOT-TURN] chain continue pause', { delayMs: chainDelay });
+            await waitMs(chainDelay);
             if (cancelled || !isLocalRunCurrent(runToken)) break;
             if (
               !shouldContinueBotTurnAtTimer({
@@ -172,15 +217,74 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             ) {
               break;
             }
+            const nextLegal = asPlayMoves(getLegalMoves(matchRef.current, 'bot')).length > 0;
+            setPhase({
+              phase: nextLegal ? 'thinking' : 'drawing',
+              turnScoreTotal,
+              lastScorePoints: 0,
+              drawCount: 0,
+            });
           }
           isFirstAction = false;
+
+          let drawCountSeen = 0;
+          const theaterRunDrawSequence: typeof runDrawSequence = async (
+            initialState,
+            player,
+            token,
+            onStep,
+            drawStepMsOverride,
+          ) => {
+            if (player === 'bot') {
+              setPhase({
+                phase: 'drawing',
+                drawCount: drawCountSeen,
+                turnScoreTotal,
+                lastScorePoints: 0,
+              });
+            }
+            return runDrawSequence(
+              initialState,
+              player,
+              token,
+              (step) => {
+                if (player === 'bot' && step.actionKind === 'draw') {
+                  drawCountSeen += 1;
+                  setPhase({
+                    phase: 'drawing',
+                    drawCount: drawCountSeen,
+                    turnScoreTotal,
+                    lastScorePoints: 0,
+                  });
+                }
+                onStep?.(step);
+              },
+              drawStepMsOverride,
+            );
+          };
+
+          const wrappedOnDrawVisualStep = (
+            player: import('../match/runtime/botEngine.ts').BotPlayerId,
+            state: BotMatchState,
+          ) => {
+            if (player === 'bot') {
+              drawCountSeen += 1;
+              setPhase({
+                phase: 'drawing',
+                drawCount: drawCountSeen,
+                turnScoreTotal,
+                lastScorePoints: 0,
+              });
+            }
+            onDrawVisualStep?.(player, state);
+          };
 
           const execution = await executeBotTurn({
             liveAtTurn: matchRef.current,
             matchSnapshotSource: matchRef.current,
             ports,
             matchRef,
-            runDrawSequence,
+            runDrawSequence: theaterRunDrawSequence,
             runToken,
             isLocalRunCurrent,
             cancelled: () => cancelled,
@@ -204,13 +308,19 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
               execution.result.state,
             );
             if (drawnTiles.length > 0) {
+              setPhase({
+                phase: 'drawing',
+                drawCount: drawnTiles.length,
+                turnScoreTotal,
+                lastScorePoints: 0,
+              });
               await presentEmbeddedForcedDraws({
                 player: 'bot',
                 beforePlay: execution.playBeforeState,
                 afterPlay: execution.result.state,
                 drawnTiles,
                 setMatch,
-                onDrawVisualStep,
+                onDrawVisualStep: wrappedOnDrawVisualStep,
                 triggerDrawStepAnimation,
                 setDrawSequenceActiveBoth: ports.setDrawSequenceActiveBoth,
                 drawStepMs,
@@ -219,6 +329,19 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
               if (cancelled || !isLocalRunCurrent(runToken)) break;
             }
           }
+
+          const scoredPoints = execution.result.scored?.points ?? 0;
+          if (scoredPoints > 0) {
+            turnScoreTotal += scoredPoints;
+          }
+
+          const willPlace = Boolean(execution.playedTileForHighlight);
+          setPhase({
+            phase: scoredPoints > 0 ? 'scoring' : willPlace ? 'placing' : 'thinking',
+            turnScoreTotal,
+            lastScorePoints: scoredPoints,
+            drawCount: 0,
+          });
 
           const finalized = finalizeBotTurnExecution({
             execution,
@@ -244,12 +367,36 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             break;
           }
 
+          // One score surface: sticky running total while Fritz still holds the turn.
+          if (scoredPoints > 0) {
+            ports.showBoardToast(
+              buildFritzScoreCeremonyMessage(opponentLabel, scoredPoints, turnScoreTotal),
+              'bot',
+              {
+                sticky: true,
+                points: scoredPoints,
+                turnTotal: turnScoreTotal,
+                actorLabel: opponentLabel.toUpperCase().slice(0, 10),
+              },
+            );
+          }
+
+          const settleMs = willPlace || scoredPoints > 0
+            ? resolveBotPostActionSettleMs(scoredPoints)
+            : 0;
+          if (settleMs > 0) {
+            await waitMs(settleMs);
+            if (cancelled || !isLocalRunCurrent(runToken)) break;
+          }
+
           if (!computeBotChainPaused(execution.result)) {
+            ports.clearBoardToast();
             break;
           }
         }
       } finally {
         botTurnInFlightRef.current = false;
+        setFritzPresentation(IDLE_FRITZ_PRESENTATION);
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
         }
@@ -297,5 +444,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     onDrawVisualStep,
     triggerDrawStepAnimation,
     drawStepMs,
+    opponentLabel,
+    setFritzPresentation,
   ]);
 }

@@ -47,7 +47,19 @@ export type BotTurnPorts = {
   setDrawSequenceActiveBoth: (val: boolean) => void;
   setLastBotChoice: (choice: BotChoice | null) => void;
   setGhostPlayedTile: (tile: Tile | null) => void;
-  showBoardToast: (message: string, tone: 'you' | 'bot') => void;
+  showBoardToast: (
+    message: string,
+    tone: 'you' | 'bot',
+    options?: {
+      sticky?: boolean;
+      holdMs?: number;
+      points?: number;
+      turnTotal?: number;
+      actorLabel?: string;
+    },
+  ) => void;
+  /** Clears a sticky score toast when Fritz's turn ends. */
+  clearBoardToast: () => void;
   onAuthoringFritzActionCaptured?: (capture: AuthoringFritzActionCapture) => void;
   onAuthoringV2FritzEvent?: (capture: AuthoringV2FritzEventCapture) => void;
   onDailyFritzBotMoveApplied?: (info: DailyFritzBotMoveAppliedInfo) => void;

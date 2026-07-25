@@ -16,3 +16,12 @@ export type {
   BotTurnPorts,
   DailyFritzBotMoveAppliedInfo,
 } from './types.ts';
+export type {
+  FritzPresentationPhase,
+  FritzPresentationState,
+} from './fritzPresentation.ts';
+export {
+  IDLE_FRITZ_PRESENTATION,
+  buildFritzScoreCeremonyMessage,
+  buildFritzTurnLabel,
+} from './fritzPresentation.ts';

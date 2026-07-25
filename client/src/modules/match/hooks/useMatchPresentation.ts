@@ -20,9 +20,23 @@ import {
   hasDebugLocalStorageFlag,
 } from '../runtime/botMatchDebug.ts';
 import { traceDailyFritzEvent } from '../../daily/dailyFritzMatchDiagnostics.ts';
+import {
+  BOT_LAST_PLAYED_HOLD_MS,
+  BOT_SCORE_HOLD_MS,
+  BOT_SCORE_TOAST_CLEAR_MS,
+  BOT_SCORE_TOAST_HIDE_MS,
+} from '../../bot-turn/botTurnGuards.ts';
 import type { UseBotMatchBootstrapResult } from './useBotMatchBootstrap.ts';
 import type { UseBotMatchRefsResult } from './useBotMatchRefs.ts';
 import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
+
+export type BoardToastOptions = {
+  sticky?: boolean;
+  holdMs?: number;
+  points?: number;
+  turnTotal?: number;
+  actorLabel?: string;
+};
 
 export type UseMatchPresentationArgs = {
   bootstrap: UseBotMatchBootstrapResult;
@@ -67,6 +81,9 @@ export function useMatchPresentation({
     message: string;
     tone: 'you' | 'bot';
     visible: boolean;
+    actorLabel?: string;
+    points?: number;
+    turnTotal?: number;
   } | null>(null);
   const [handTileSize, setHandTileSize] = useState(56);
   const [lessonHandRowCount, setLessonHandRowCount] = useState(1);
@@ -88,18 +105,35 @@ export function useMatchPresentation({
     profile.botMatchScreenRenderCount = (profile.botMatchScreenRenderCount ?? 0) + 1;
   }
 
-  const showBoardToast = useCallback((message: string, tone: 'you' | 'bot') => {
+  const showBoardToast = useCallback((
+    message: string,
+    tone: 'you' | 'bot',
+    options?: BoardToastOptions,
+  ) => {
     if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
     if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     setScoreToast({
       message,
       tone,
       visible: true,
+      actorLabel: options?.actorLabel,
+      points: options?.points,
+      turnTotal: options?.turnTotal,
     });
+
+    // Sticky toasts stay until the next ceremony update (chain continuity).
+    if (options?.sticky) {
+      scoreToastHideTimerRef.current = null;
+      scoreToastClearTimerRef.current = null;
+      return;
+    }
+
+    const holdMs = options?.holdMs ?? BOT_SCORE_TOAST_HIDE_MS;
+    const clearMs = Math.max(holdMs + 300, BOT_SCORE_TOAST_CLEAR_MS);
     scoreToastHideTimerRef.current = setTimeout(() => {
       setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
-    }, 1700);
-    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
+    }, holdMs);
+    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), clearMs);
   }, [scoreToastHideTimerRef, scoreToastClearTimerRef]);
 
   const pushToast = useCallback((message: string) => {
@@ -107,8 +141,25 @@ export function useMatchPresentation({
     showBoardToast(message, 'bot');
   }, [showBoardToast, toastTimerRef]);
 
+  const clearBoardToast = useCallback(() => {
+    if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
+    if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+    scoreToastHideTimerRef.current = null;
+    scoreToastClearTimerRef.current = null;
+    setScoreToast(null);
+  }, [scoreToastHideTimerRef, scoreToastClearTimerRef]);
+
   const showScoreToast = useCallback((player: 'you' | 'bot', points: number) => {
-    showBoardToast(`${player === 'you' ? 'You' : opponentLabel} scored +${points}`, player);
+    showBoardToast(
+      `${player === 'you' ? 'You' : opponentLabel} scored +${points}`,
+      player,
+      {
+        holdMs: BOT_SCORE_HOLD_MS,
+        points,
+        turnTotal: points,
+        actorLabel: player === 'you' ? 'YOU' : opponentLabel.toUpperCase().slice(0, 10),
+      },
+    );
   }, [opponentLabel, showBoardToast]);
 
   const flashLastPlayed = useCallback((tile: Tile | null) => {
@@ -118,7 +169,7 @@ export function useMatchPresentation({
       lastPlayedTileTimerRef.current = setTimeout(() => {
         setLastPlayedTile(null);
         lastPlayedTileTimerRef.current = null;
-      }, 2400);
+      }, BOT_LAST_PLAYED_HOLD_MS);
     }
   }, [lastPlayedTileTimerRef]);
 
@@ -277,6 +328,7 @@ export function useMatchPresentation({
   return {
     pushToast,
     showBoardToast,
+    clearBoardToast,
     showScoreToast,
     flashLastPlayed,
     lastPlayedTile,

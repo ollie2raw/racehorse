@@ -11,8 +11,11 @@ export function applyBotActionUiEffects(
   isMuted: boolean,
 ): void {
   if (result.scored) {
-    const points = result.scored.points;
-    ports.showScoreToast(result.scored.player, points);
+    // Fritz score ceremony is owned by the bot-turn cadence theater
+    // (running turn total + sticky chain toast). Player scores still toast here.
+    if (result.scored.player === 'you') {
+      ports.showScoreToast(result.scored.player, result.scored.points);
+    }
     playScoreAudioEffect(result, isMuted);
   }
   if (result.drew && result.drew.player === 'you') {

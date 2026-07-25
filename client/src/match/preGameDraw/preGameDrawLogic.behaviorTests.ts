@@ -201,9 +201,15 @@ function testScriptedPlayerPickRevealsTappedSlotWithScriptedPips(): void {
   assertTrue(tapped.revealed, 'tapped slot flips face-up');
   assertEqual(tapped.tile, { low: 0, high: 4 }, 'tapped slot shows scripted pips');
 
-  const hiddenScripted = after.tiles.find((slot) => slot.id === scriptedId)!;
-  assertTrue(hiddenScripted.outOfPlay, 'true scripted slot removed from scatter');
-  assertTrue(!hiddenScripted.revealed, 'true scripted slot stays face-down off-board');
+  const swappedScriptedSlot = after.tiles.find((slot) => slot.id === scriptedId)!;
+  assertTrue(!swappedScriptedSlot.outOfPlay, 'scripted slot stays visible in scatter');
+  assertTrue(!swappedScriptedSlot.revealed, 'scripted slot stays face-down');
+  assertEqual(swappedScriptedSlot.tile, { low: 3, high: 5 }, 'tapped tile moves into scripted slot');
+  assertEqual(
+    after.tiles.filter((slot) => !slot.outOfPlay).length,
+    28,
+    'scripted player pick preserves all scatter positions',
+  );
 }
 
 function testScriptedPlayerPickFritzTapFallsBackToScriptedPlayerSlot(): void {

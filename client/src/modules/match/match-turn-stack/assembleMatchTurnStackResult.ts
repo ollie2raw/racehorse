@@ -7,7 +7,10 @@ export type AssembleMatchTurnStackResultInput = {
   guidedRuntime: UseGuidedMatchRuntimeResult;
   handLifecycle: UseHandLifecycleResult;
   playerTurn: Pick<UsePlayerTurnOrchestrationResult, 'onPositionClick'>;
-  botTurn: Pick<UseBotTurnOrchestrationResult, 'lastBotChoice' | 'setLastBotChoice'>;
+  botTurn: Pick<
+    UseBotTurnOrchestrationResult,
+    'lastBotChoice' | 'setLastBotChoice' | 'fritzPresentation'
+  >;
   drawPulseIndex: number | null;
   drawSequenceActive: boolean;
   drawStepBotHandCount: number | null;
@@ -69,6 +72,7 @@ export function assembleMatchTurnStackResult(
     onPositionClick: playerTurn.onPositionClick,
     lastBotChoice: botTurn.lastBotChoice,
     setLastBotChoice: botTurn.setLastBotChoice,
+    fritzPresentation: botTurn.fritzPresentation,
     drawPulseIndex: input.drawPulseIndex,
     drawSequenceActive: input.drawSequenceActive,
     drawStepBotHandCount: input.drawStepBotHandCount,

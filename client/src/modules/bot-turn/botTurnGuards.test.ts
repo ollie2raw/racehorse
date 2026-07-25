@@ -1,28 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOT_CHAIN_CONTINUE_DELAY_MS,
   BOT_DRAW_STEP_MS,
   BOT_FLY_TILE_MS,
   BOT_FORCED_DRAW_DELAY_MS,
+  BOT_FORCED_DRAW_THINK_DELAY_MS,
+  BOT_OPENING_THINK_DELAY_MS,
+  BOT_PLACE_SETTLE_MS,
+  BOT_PLAYER_HANDOFF_DELAY_MS,
   BOT_POST_DRAW_PLAY_DELAY_MS,
+  BOT_SCORE_HOLD_MS,
   BOT_THINK_DELAY_MS,
+  resolveBotChainContinueDelayMs,
+  resolveBotOpeningDelayMs,
+  resolveBotPostActionSettleMs,
   resolveBotTurnDelayMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
 } from './botTurnGuards.ts';
 
 describe('resolveBotTurnDelayMs', () => {
-  it('uses one human-paced turn-start beat for plays and forced draws', () => {
-    expect(resolveBotTurnDelayMs(true)).toBe(BOT_THINK_DELAY_MS);
-    expect(resolveBotTurnDelayMs(false)).toBe(BOT_THINK_DELAY_MS);
-    expect(BOT_FORCED_DRAW_DELAY_MS).toBe(BOT_THINK_DELAY_MS);
-    expect(BOT_THINK_DELAY_MS).toBe(2000);
+  it('uses longer opening think for legal plays and dig beat for forced draws', () => {
+    expect(resolveBotOpeningDelayMs(true)).toBe(BOT_OPENING_THINK_DELAY_MS);
+    expect(resolveBotOpeningDelayMs(false)).toBe(BOT_FORCED_DRAW_THINK_DELAY_MS);
+    expect(resolveBotTurnDelayMs(true)).toBe(BOT_OPENING_THINK_DELAY_MS);
+    expect(resolveBotTurnDelayMs(false)).toBe(BOT_FORCED_DRAW_THINK_DELAY_MS);
+    expect(BOT_THINK_DELAY_MS).toBe(BOT_OPENING_THINK_DELAY_MS);
+    expect(BOT_FORCED_DRAW_DELAY_MS).toBe(BOT_FORCED_DRAW_THINK_DELAY_MS);
+    expect(BOT_OPENING_THINK_DELAY_MS).toBe(1300);
+    expect(BOT_FORCED_DRAW_THINK_DELAY_MS).toBeGreaterThanOrEqual(2000);
   });
 
-  it('keeps draw step at 1.6s and aligned with fly duration', () => {
-    expect(BOT_DRAW_STEP_MS).toBe(1600);
-    expect(BOT_FLY_TILE_MS).toBe(1600);
-    expect(BOT_DRAW_STEP_MS).toBeGreaterThanOrEqual(BOT_FLY_TILE_MS);
+  it('keeps chain continues shorter than opening thinks', () => {
+    expect(resolveBotChainContinueDelayMs()).toBe(BOT_CHAIN_CONTINUE_DELAY_MS);
+    expect(BOT_CHAIN_CONTINUE_DELAY_MS).toBeLessThan(BOT_OPENING_THINK_DELAY_MS);
+    expect(BOT_CHAIN_CONTINUE_DELAY_MS).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('keeps draw step aligned with fly duration and place/score settles readable', () => {
+    expect(BOT_DRAW_STEP_MS).toBe(BOT_FLY_TILE_MS);
+    expect(BOT_DRAW_STEP_MS).toBeGreaterThanOrEqual(1600);
     expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBeGreaterThanOrEqual(1000);
+    expect(BOT_PLACE_SETTLE_MS).toBe(850);
+    expect(BOT_SCORE_HOLD_MS).toBeGreaterThanOrEqual(BOT_PLACE_SETTLE_MS);
+    expect(BOT_PLAYER_HANDOFF_DELAY_MS).toBeGreaterThanOrEqual(600);
+    expect(resolveBotPostActionSettleMs(0)).toBe(BOT_PLACE_SETTLE_MS);
+    expect(resolveBotPostActionSettleMs(5)).toBe(Math.max(BOT_PLACE_SETTLE_MS, BOT_SCORE_HOLD_MS));
   });
 });
 

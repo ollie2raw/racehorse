@@ -38,6 +38,12 @@ export type BotMatchViewScoreToast = {
   message: string;
   tone: 'you' | 'bot';
   visible: boolean;
+  /** Compact HUD label (YOU / FRITZ / etc). */
+  actorLabel?: string;
+  /** Immediate points for this play (HUD chip value). */
+  points?: number;
+  /** Running turn total while a chain is live. */
+  turnTotal?: number;
 };
 
 export type BotMatchViewFlyingTile = {
@@ -114,6 +120,10 @@ export type MatchHudViewModel = {
   preGameDraw: BotMatchViewPreGameDraw;
   dailyFritzPackage: DailyFritzStartResponse | null;
   opponentPillRef: RefObject<HTMLButtonElement | null>;
+  /** Mid-draw overlay count for Fritz rack; falls back to match hand length. */
+  drawStepBotHandCount: number | null;
+  /** Cadence theater phase for honest turn chrome. */
+  fritzPresentation: import('../../modules/bot-turn/fritzPresentation.ts').FritzPresentationState | null;
 };
 
 export type BoardViewModel = {

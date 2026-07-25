@@ -11,7 +11,19 @@ describe('selectTurnLabel', () => {
 
   it('shows opponent thinking on bot turn', () => {
     const match = { ...createBotMatch(60, 7), currentPlayer: 'bot' as const };
-    expect(selectTurnLabel(match, 'Fritz', true)).toBe('Fritz thinking');
+    expect(selectTurnLabel(match, 'Fritz', true)).toBe('Fritz is thinking…');
+  });
+
+  it('shows drawing phase without a tile count', () => {
+    const match = { ...createBotMatch(60, 7), currentPlayer: 'bot' as const };
+    expect(
+      selectTurnLabel(match, 'Fritz', true, {
+        phase: 'drawing',
+        drawCount: 2,
+        turnScoreTotal: 0,
+        lastScorePoints: 0,
+      }),
+    ).toBe('Fritz is drawing…');
   });
 });
 

@@ -252,6 +252,7 @@ export function applyScriptedPlayerPick(
   }
 
   const scriptedTile = scriptedSlot.tile;
+  const tappedTile = tappedSlot.tile;
   const tiles = state.tiles.map((entry) => {
     if (entry.id === tappedTileId) {
       return {
@@ -261,7 +262,12 @@ export function applyScriptedPlayerPick(
       };
     }
     if (entry.id === scriptedPlayerTileId) {
-      return { ...entry, outOfPlay: true };
+      // Preserve every scatter position: move the tapped tile into the scripted
+      // tile's original face-down slot instead of removing that slot visually.
+      return {
+        ...entry,
+        tile: { low: tappedTile.low, high: tappedTile.high },
+      };
     }
     return entry;
   });

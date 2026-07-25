@@ -1140,3 +1140,83 @@
   opacity: 0.85;
   flex: 0 0 auto;
 }
+
+/* ─── Score callout: +N chip — gold you / electric blue Fritz ─── */
+.bot-match-screen .rh-score-chip {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translate(-50%, -6px) scale(0.96);
+  opacity: 0;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: rgba(8, 14, 24, 0.94) !important;
+  border: 1px solid rgba(148, 170, 204, 0.22);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.bot-match-screen .rh-score-chip.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.bot-match-screen .rh-score-chip--bot {
+  background: rgba(8, 18, 30, 0.94) !important;
+  border-color: rgba(90, 170, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(90, 170, 255, 0.12),
+    0 6px 18px rgba(0, 0, 0, 0.32),
+    0 0 18px rgba(90, 170, 255, 0.18);
+}
+
+.bot-match-screen .rh-score-chip--you {
+  background: rgba(28, 22, 10, 0.94) !important;
+  border-color: rgba(231, 182, 74, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(231, 182, 74, 0.12),
+    0 6px 18px rgba(0, 0, 0, 0.32),
+    0 0 18px rgba(231, 182, 74, 0.16);
+}
+
+.bot-match-screen .rh-score-chip__value {
+  font-family: 'Barlow Condensed', var(--font-display), sans-serif;
+  font-size: 1.35rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  color: rgba(244, 247, 251, 0.96);
+}
+
+.bot-match-screen .rh-score-chip--bot .rh-score-chip__value {
+  color: #7dc0ff;
+}
+
+.bot-match-screen .rh-score-chip--you .rh-score-chip__value {
+  color: #f2dc9a;
+}
+
+.bot-match-screen .rh-score-chip__value--text {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-match-screen .rh-score-chip {
+    transition: opacity 120ms ease;
+    transform: translate(-50%, 0);
+  }
+
+  .bot-match-screen .rh-score-chip.is-visible {
+    transform: translate(-50%, 0);
+  }
+}

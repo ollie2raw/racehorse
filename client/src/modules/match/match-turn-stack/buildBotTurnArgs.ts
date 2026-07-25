@@ -44,5 +44,6 @@ export function buildBotTurnArgs(
     onDrawVisualStep: refs.onDrawVisualStep,
     triggerDrawStepAnimation: drawPresentation.triggerDrawStepAnimation,
     drawStepMs: drawPresentation.drawStepMs,
+    opponentLabel: bootstrap.opponentLabel,
   };
 }

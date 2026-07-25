@@ -5,28 +5,80 @@ import {
 } from '../match/hand-lifecycle/handLifecycleRules.ts';
 
 /**
- * Single Fritz turn-start beat (play, draw start, and score/double chain continues).
- * Kept deliberately human-paced so Daily Fritz feels like a real match.
+ * Fritz cadence theater timings (Daily Fritz + Play vs Fritz).
+ * Variable beats: opening reads are longer than chain continues.
+ * Keep CSS durations (fly / place) aligned with the matching *_MS constants.
  */
-export const BOT_THINK_DELAY_MS = 2000;
+
+/** Opening think when Fritz has a legal play. */
+export const BOT_OPENING_THINK_DELAY_MS = 1300;
+
+/** Think between score/double chain continues (shorter than opening). */
+export const BOT_CHAIN_CONTINUE_DELAY_MS = 1100;
+
+/** Opening beat when Fritz must dig the boneyard. */
+export const BOT_FORCED_DRAW_THINK_DELAY_MS = 2200;
 
 /**
- * @deprecated Use BOT_THINK_DELAY_MS — kept as an alias so older imports stay aligned.
- * Forced-draw starts use the same beat as plays.
+ * @deprecated Prefer BOT_OPENING_THINK_DELAY_MS / resolveBotOpeningDelayMs.
+ * Kept so older imports stay aligned with the opening think.
  */
-export const BOT_FORCED_DRAW_DELAY_MS = BOT_THINK_DELAY_MS;
+export const BOT_THINK_DELAY_MS = BOT_OPENING_THINK_DELAY_MS;
+
+/**
+ * @deprecated Prefer BOT_FORCED_DRAW_THINK_DELAY_MS.
+ */
+export const BOT_FORCED_DRAW_DELAY_MS = BOT_FORCED_DRAW_THINK_DELAY_MS;
 
 /** Per-tile draw cadence; one tile at a time. Must match flying-tile CSS duration. */
-export const BOT_DRAW_STEP_MS = 1600;
+export const BOT_DRAW_STEP_MS = 1750;
 
 /** Flying-tile animation duration (CSS + DOM cleanup should match). */
-export const BOT_FLY_TILE_MS = 1600;
+export const BOT_FLY_TILE_MS = 1750;
 
 /** Breath after draw-until-legal before Fritz plays the found tile. */
-export const BOT_POST_DRAW_PLAY_DELAY_MS = 1000;
+export const BOT_POST_DRAW_PLAY_DELAY_MS = 1200;
 
-export function resolveBotTurnDelayMs(_hasLegalMove = true): number {
-  return BOT_THINK_DELAY_MS;
+/** Board place motion + settle after a tile lands. Must match place CSS. */
+export const BOT_PLACE_SETTLE_MS = 850;
+
+/** Score callout hold while points are on screen. */
+export const BOT_SCORE_HOLD_MS = 1400;
+
+/** Settle your play before Fritz's thinking state begins. */
+export const BOT_PLAYER_HANDOFF_DELAY_MS = 750;
+
+/** Final “scored N this turn” settle when a scoring chain ends. */
+export const BOT_CHAIN_END_SETTLE_MS = 1400;
+
+/** Keep last-played highlight through chain steps. */
+export const BOT_LAST_PLAYED_HOLD_MS = 4500;
+
+/** Default score-toast hide/clear when not sticky (player scores, non-chain). */
+export const BOT_SCORE_TOAST_HIDE_MS = 1600;
+export const BOT_SCORE_TOAST_CLEAR_MS = 2000;
+
+export function resolveBotOpeningDelayMs(hasLegalMove: boolean): number {
+  return hasLegalMove ? BOT_OPENING_THINK_DELAY_MS : BOT_FORCED_DRAW_THINK_DELAY_MS;
+}
+
+export function resolveBotChainContinueDelayMs(): number {
+  return BOT_CHAIN_CONTINUE_DELAY_MS;
+}
+
+/** After apply+flash(+score), how long to hold before the next beat. */
+export function resolveBotPostActionSettleMs(scoredPoints: number): number {
+  if (scoredPoints > 0) {
+    return Math.max(BOT_PLACE_SETTLE_MS, BOT_SCORE_HOLD_MS);
+  }
+  return BOT_PLACE_SETTLE_MS;
+}
+
+/**
+ * @deprecated Prefer resolveBotOpeningDelayMs — kept for older call sites.
+ */
+export function resolveBotTurnDelayMs(hasLegalMove = true): number {
+  return resolveBotOpeningDelayMs(hasLegalMove);
 }
 
 export function waitMs(ms: number): Promise<void> {

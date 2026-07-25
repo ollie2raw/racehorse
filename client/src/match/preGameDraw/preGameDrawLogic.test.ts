@@ -129,8 +129,12 @@ describe('preGameDrawLogic', () => {
       const scriptedSlot = state.tiles.find((s) => s.id === scriptedId)!;
       expect(tappedSlot.revealed).toBe(true);
       expect(tappedSlot.tile).toEqual(scriptedSlot.tile);
-      // Scripted slot index becomes outOfPlay
-      expect(next.tiles.find((s) => s.id === scriptedId)!.outOfPlay).toBe(true);
+      // The original scripted position stays occupied by the tapped tile.
+      const swappedScriptedSlot = next.tiles.find((s) => s.id === scriptedId)!;
+      expect(swappedScriptedSlot.outOfPlay).toBe(false);
+      expect(swappedScriptedSlot.revealed).toBe(false);
+      expect(swappedScriptedSlot.tile).toEqual(state.tiles.find((s) => s.id === tappedId)!.tile);
+      expect(next.tiles.filter((slot) => !slot.outOfPlay)).toHaveLength(28);
     });
   });
 

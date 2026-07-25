@@ -128,6 +128,8 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     preGameDraw,
     dailyFritzPackage: bootstrap.dailyFritzPackage,
     opponentPillRef: refs.opponentPillRef,
+    drawStepBotHandCount: turns.drawStepBotHandCount,
+    fritzPresentation: turns.fritzPresentation ?? null,
   };
 
   const board = {

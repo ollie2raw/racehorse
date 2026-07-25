@@ -17,6 +17,7 @@ function makePorts(appendMove: BotTurnPorts['appendMove']): BotTurnPorts {
     setLastBotChoice: vi.fn(),
     setGhostPlayedTile: vi.fn(),
     showBoardToast: vi.fn(),
+    clearBoardToast: vi.fn(),
   };
 }
 

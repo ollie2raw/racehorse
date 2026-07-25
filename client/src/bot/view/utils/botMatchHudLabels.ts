@@ -1,20 +1,22 @@
 import type { BotMatchState } from '../../botEngine.ts';
 import type { BotMatchViewPreGameDraw } from '../../view-model/botMatchViewModelTypes.ts';
+import type { FritzPresentationState } from '../../../modules/bot-turn/fritzPresentation.ts';
+import { buildFritzTurnLabel } from '../../../modules/bot-turn/fritzPresentation.ts';
 
 export function selectTurnLabel(
   match: BotMatchState,
   opponentLabel: string,
   botTurn: boolean,
+  presentation?: FritzPresentationState | null,
 ): string {
-  if (match.handOver) {
-    if (match.gameOver) {
-      return match.winnerId === 'you'
-        ? 'You win the match'
-        : `${opponentLabel} wins the match`;
-    }
-    return '';
-  }
-  return botTurn ? `${opponentLabel} thinking` : 'Your move';
+  return buildFritzTurnLabel({
+    opponentLabel,
+    botTurn,
+    presentation,
+    handOver: match.handOver,
+    gameOver: match.gameOver,
+    winnerId: match.winnerId,
+  });
 }
 
 export type PreGameDrawHudContent = {
@@ -36,7 +38,7 @@ export function buildPreGameDrawHudContent(
   }
   if (preGameDraw.isOpponentThinking) {
     return {
-      label: `${opponentLabel} thinking`,
+      label: `${opponentLabel} is thinking…`,
       tone: 'opp-turn',
     };
   }
