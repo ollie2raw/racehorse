@@ -5,10 +5,8 @@ import {
   applyGameCommand,
   canDraw,
   chooseOfficialFritzDecision,
-  createDeterministicRandom,
-  getOfficialFritzDecisionSeed,
+  isOptimalOfficialFritzPlay,
   parseDailyFritzTranscript,
-  tileEquals,
   type DailyFritzTranscript,
   type FritzDecision,
   type GameCommand,
@@ -88,12 +86,22 @@ export function createOfficialDailyFritzHandState(input: {
   };
 }
 
-function sameDecision(action: DailyFritzTranscript['actions'][number], decision: FritzDecision): boolean {
+function sameDecision(
+  state: GameState,
+  action: DailyFritzTranscript['actions'][number],
+  decision: FritzDecision,
+  tier: DailyFritzTier,
+): boolean {
   if (action.kind !== decision.kind) return false;
-  return action.kind !== 'play'
-    || (decision.kind === 'play'
-      && tileEquals(action.tile, decision.tile)
-      && action.position === decision.position);
+  if (action.kind !== 'play' || decision.kind !== 'play') return true;
+  // Accept any top-score official play so historical RNG / sibling-arm ties still verify.
+  return isOptimalOfficialFritzPlay({
+    state,
+    participantId: 'fritz',
+    tier,
+    tile: action.tile,
+    position: action.position,
+  });
 }
 
 function formatFritzDecision(decision: FritzDecision): string {
@@ -148,16 +156,19 @@ export function verifyDailyFritzHand(input: {
   if (transcript.handIndex !== input.expectedHandIndex) throw new DailyFritzVerificationError('Hand mismatch.', 'hand_mismatch');
 
   let state = input.initialState;
-  // Older clients logged post-score recovery draws/passes as separate transcript
-  // actions. applyMove now absorbs that chain (and optional auto-pass) inside the
-  // play, so leftover recovery actions must be skipped — including when the turn
-  // has already advanced to the opponent.
+  // Protocol 1 only: older clients logged post-score recovery draws/passes as
+  // separate transcript actions. applyMove now absorbs that chain (and optional
+  // auto-pass) inside the play, so leftover recovery actions must be skipped —
+  // including when the turn has already advanced to the opponent.
+  // Protocol 2+ must log exactly the actions the engine expects.
+  const allowLegacyRecoverySkip = transcript.protocolVersion === 1;
   let lastPlayActor: string | null = null;
   for (const action of transcript.actions) {
     if (state.handOver || state.gameOver) throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
     const expectedActor = state.playerIds[state.currentPlayerIndex];
     if (
-      lastPlayActor === action.actor
+      allowLegacyRecoverySkip
+      && lastPlayActor === action.actor
       && (action.kind === 'draw' || action.kind === 'pass')
     ) {
       if (action.actor !== expectedActor) {
@@ -173,11 +184,10 @@ export function verifyDailyFritzHand(input: {
         state,
         participantId: 'fritz',
         tier: input.fritzTier,
-        random: createDeterministicRandom(getOfficialFritzDecisionSeed(state)),
       });
-      if (!sameDecision(action, decision)) {
+      if (!sameDecision(state, action, decision, input.fritzTier)) {
         throw new DailyFritzVerificationError(
-          `Fritz action does not match the official policy (seq ${action.sequence}: got ${formatFritzAction(action)}, expected ${formatFritzDecision(decision)}, seed ${getOfficialFritzDecisionSeed(state)}, tier ${input.fritzTier}).`,
+          `Fritz action does not match the official policy (seq ${action.sequence}: got ${formatFritzAction(action)}, expected ${formatFritzDecision(decision)}, stateSeq ${state.handNumber}:${state.sequence}, tier ${input.fritzTier}).`,
           'fritz_action_mismatch',
         );
       }

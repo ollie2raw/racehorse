@@ -3,12 +3,11 @@ import {
   applyGameCommand,
   canDraw,
   chooseOfficialFritzDecision,
-  createDeterministicRandom,
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
   getLegalMoves,
-  getOfficialFritzDecisionSeed,
+  simulatePlacement,
   type DailyFritzTranscriptAction,
   type DailyFritzTranscript,
   type GameCommand,
@@ -80,7 +79,6 @@ function buildHonestTranscript(initialState: GameState): DailyFritzTranscript {
           state: current,
           participantId: 'fritz',
           tier: 'standard',
-          random: createDeterministicRandom(getOfficialFritzDecisionSeed(current)),
         })
       : (() => {
           const plays = getLegalMoves(current, 'player').filter((move) => move.type === 'play');
@@ -219,5 +217,28 @@ describe('Daily Fritz server replay verifier', () => {
       ...honest,
       actions: [{ sequence: 0, actor: 'player', kind: 'pass' }],
     }));
+  });
+
+  it('accepts a historically logged empty sibling branch arm that ties the official pick', () => {
+    let board = simulatePlacement(null, { low: 5, high: 5 }, 'left');
+    board = simulatePlacement(board, { low: 3, high: 5 }, 'right');
+    board = simulatePlacement(board, { low: 2, high: 5 }, 'left');
+    const initial: GameState = {
+      ...state('bot'),
+      board,
+      handOpen: true,
+      players: {
+        player: { id: 'player', hand: [{ low: 0, high: 0 }], score: 0 },
+        fritz: { id: 'fritz', hand: [{ low: 1, high: 5 }], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+      currentPlayerIndex: 1,
+    };
+    // Policy chooses branch-0-0; transcript logged the equal-score sibling arm.
+    const verified = verify(transcript([
+      { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 5 }, position: 'branch-0-1' },
+    ]), initial);
+    expect(verified.terminalState.handOver).toBe(true);
   });
 });

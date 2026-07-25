@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  chooseOfficialFritzDecision,
-  createDeterministicRandom,
-  getOfficialFritzDecisionSeed,
-} from '@racehorse/game-core';
+import { chooseOfficialFritzDecision } from '@racehorse/game-core';
 import { createFixedBotHand } from './botEngine.ts';
 import {
   chooseOfficialFritzBotChoice,
@@ -30,7 +26,6 @@ describe('game-core browser adapter parity', () => {
       state: coreState,
       participantId: 'bot',
       tier: 'standard',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(coreState)),
     });
     const adapted = chooseOfficialFritzBotChoice(state, 'standard');
 

@@ -16,6 +16,7 @@ type UseDailyFritzSessionPersistenceArgs = {
   storageKey: string | null;
   attemptId: string | null | undefined;
   runDate: string | null | undefined;
+  runFingerprint: string | null | undefined;
   gameNumber: number;
   dailyFritzHandIndex: number;
   match: BotMatchState;
@@ -32,6 +33,7 @@ export function useDailyFritzSessionPersistence({
   storageKey,
   attemptId,
   runDate,
+  runFingerprint,
   gameNumber,
   dailyFritzHandIndex,
   match,
@@ -48,7 +50,7 @@ export function useDailyFritzSessionPersistence({
   const revisionRef = useRef(initialRevision);
 
   useEffect(() => {
-    if (!enabled || !storageKey || !attemptId || !runDate || typeof window === 'undefined') return;
+    if (!enabled || !storageKey || !attemptId || !runDate || !runFingerprint || typeof window === 'undefined') return;
     if (preGameDrawActive) return;
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
@@ -57,6 +59,7 @@ export function useDailyFritzSessionPersistence({
       challenge: createDailyFritzChallengeIdentity(runDate),
       classification: 'official',
       attemptId,
+      runFingerprint,
       gameNumber,
       currentHandIndex: dailyFritzHandIndex,
       lifecyclePhase,
@@ -110,6 +113,7 @@ export function useDailyFritzSessionPersistence({
   }, [
     attemptId,
     runDate,
+    runFingerprint,
     gameNumber,
     handResult,
     dailyFritzHandIndex,

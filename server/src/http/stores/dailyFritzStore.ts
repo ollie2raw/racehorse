@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   generateDailyFritzRun,
   generateSingleDailyFritzGameHand,
@@ -320,7 +321,32 @@ export function getDailyFritzHandForGame(
   gameNumber: DailyFritzSetGameNumber,
   handIndex: number,
 ): DailyFritzHandDeal {
+  // Game 1 hands 0..N-1 were snapshotted at run creation. Prefer that snapshot so
+  // verification stays stable if generation code later changes.
+  if (gameNumber === 1 && handIndex >= 0 && handIndex < run.handDeals.length) {
+    return run.handDeals[handIndex]!;
+  }
   return generateSingleDailyFritzGameHand(run.runDate, gameNumber, handIndex, run.dealSize as 7 | 14);
+}
+
+/** Stable fingerprint for resume/session binding to a specific published run. */
+export function buildDailyFritzRunFingerprint(run: Pick<
+  DailyFritzRunRecord,
+  'runDate' | 'seed' | 'fritzTier' | 'dealSize' | 'winningScore' | 'status' | 'generatedAt' | 'handDeals'
+>): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      runDate: run.runDate,
+      seed: run.seed,
+      fritzTier: run.fritzTier,
+      dealSize: run.dealSize,
+      winningScore: run.winningScore,
+      status: run.status,
+      generatedAt: run.generatedAt,
+      handDeals: run.handDeals,
+    }))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export function isMissingDailyFritzTable(error: unknown): boolean {

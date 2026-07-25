@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   canFinalizeDailyFritzAttempt,
   hasCompleteDailyFritzGameAuthority,
+  hasPriorDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
   buildRecordedDailyFritzAttemptResult,
   requiresVerifiedDailyFritzEvidence,
-} from './dailyFritz';
+} from './dailyFritzVerificationPolicy';
 import { isDailyFritzAttemptLeaderboardEligible } from '../stores/dailyFritzStore';
 
 describe('Daily Fritz competitive verification boundary', () => {
@@ -82,6 +83,15 @@ describe('Daily Fritz competitive verification boundary', () => {
     expect(merged.authority).toEqual(previous.authority);
     expect(merged.playerGamesWon).toBe(1);
 
+    // S1 regression: after a verified record-game merge, score-only evidence stays forbidden.
+    expect(requiresVerifiedDailyFritzEvidence(
+      buildRecordedDailyFritzAttemptResult({
+        previousResult: merged,
+        setResult: { ...setResult, playerGamesWon: 2 },
+        hasTranscript: true,
+      }),
+    )).toBe(true);
+
     const legacyMerged = buildRecordedDailyFritzAttemptResult({
       previousResult: { verification_status: 'legacy_unverified' },
       setResult,
@@ -97,6 +107,56 @@ describe('Daily Fritz competitive verification boundary', () => {
       verification_status: 'in_progress',
       verification_protocol_version: 1,
     }, setResult)).toBe(false);
+    expect(canFinalizeDailyFritzAttempt({
+      verification_status: 'legacy_unverified',
+      verification_protocol_version: 1,
+    }, setResult)).toBe(true);
+  });
+
+  it('blocks silent unranked finalize when only later games have authority', () => {
+    const setResult = {
+      games: [
+        {
+          gameNumber: 1 as const,
+          seed: 'g1',
+          playerWon: true,
+          playerScore: 64,
+          fritzScore: 42,
+          pointDiff: 22,
+          completedAt: '2026-07-23T10:00:00.000Z',
+        },
+        {
+          gameNumber: 2 as const,
+          seed: 'g2',
+          playerWon: true,
+          playerScore: 64,
+          fritzScore: 38,
+          pointDiff: 26,
+          completedAt: '2026-07-23T11:00:00.000Z',
+        },
+      ],
+    };
+    const partialAuthority = {
+      verification_status: 'legacy_unverified' as const,
+      verification_protocol_version: 1,
+      authority: {
+        version: 1,
+        hands: [],
+        games: [{
+          gameNumber: 2,
+          playerScore: 64,
+          fritzScore: 38,
+          handDigests: ['h2'],
+          resultDigest: 'g2',
+          verificationVersion: 1,
+        }],
+      },
+    };
+    expect(hasPriorDailyFritzGameAuthority(partialAuthority, {
+      games: [setResult.games[0]!],
+    })).toBe(false);
+    expect(hasCompleteDailyFritzGameAuthority(partialAuthority, setResult)).toBe(false);
+    expect(canFinalizeDailyFritzAttempt(partialAuthority, setResult)).toBe(false);
     expect(canFinalizeDailyFritzAttempt({
       verification_status: 'legacy_unverified',
       verification_protocol_version: 1,

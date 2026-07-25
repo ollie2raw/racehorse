@@ -298,6 +298,7 @@ export interface DailyFritzStartResponse {
   challenge_id?: string;
   rules_version?: number;
   seed_version?: number;
+  run_fingerprint?: string;
   verification_protocol_version?: number;
   game_rules_version?: number;
   fritz_policy_version?: number;

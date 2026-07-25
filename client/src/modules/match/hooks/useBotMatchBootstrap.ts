@@ -67,6 +67,8 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     dailyFritzPackage?.attempt_id,
     Number(dailyFritzPackage?.current_hand_index ?? 0),
     dailyFritzPackage?.run_date,
+    undefined,
+    dailyFritzPackage?.run_fingerprint,
   );
   const resumablePersistedDailyFritzMatch =
     initialPersistedDailyFritzMatch?.match &&

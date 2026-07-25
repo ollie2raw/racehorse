@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyGameCommand,
   chooseOfficialFritzDecision,
-  createDeterministicRandom,
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
-  getOfficialFritzDecisionSeed,
   type DailyFritzTranscriptAction,
 } from '@racehorse/game-core';
 import { createOfficialDailyFritzHandState, verifyDailyFritzHand } from './dailyFritzVerifier';
@@ -38,7 +36,6 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: cur,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(cur)),
     })).toEqual({ kind: 'draw' });
     cur = applyGameCommand(cur, {
       version: 1, commandId: 'd1', sequence: cur.sequence, actorId: 'fritz', kind: 'draw',
@@ -47,7 +44,6 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: cur,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(cur)),
     })).toEqual({ kind: 'draw' });
     cur = applyGameCommand(cur, {
       version: 1, commandId: 'd2', sequence: cur.sequence, actorId: 'fritz', kind: 'draw',
@@ -56,7 +52,6 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: cur,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(cur)),
     });
     expect(play.kind).toBe('play');
     if (play.kind !== 'play') throw new Error('expected play');
@@ -138,7 +133,6 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: open,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(open)),
     });
     expect(scorePlay).toEqual({
       kind: 'play',
@@ -161,7 +155,6 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: open,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(open)),
     });
     expect(followUp.kind).toBe('play');
   });
@@ -217,13 +210,12 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       state: afterScore,
       participantId: 'fritz',
       tier: 'elite',
-      random: createDeterministicRandom(getOfficialFritzDecisionSeed(afterScore)),
     });
     expect(followUp.kind).toBe('play');
     if (followUp.kind !== 'play') throw new Error('expected follow-up play');
 
-    const envelope = (actions: DailyFritzTranscriptAction[]) => ({
-      protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    const envelope = (actions: DailyFritzTranscriptAction[], protocolVersion: 1 | 2 = 1) => ({
+      protocolVersion,
       rulesVersion: GAME_RULES_VERSION,
       fritzPolicyVersion: FRITZ_POLICY_VERSION,
       challengeId: 'c',
@@ -233,7 +225,7 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       actions,
     });
 
-    // Legacy shape: play then client-logged recovery draws, then follow-up play.
+    // Legacy shape (protocol 1): play then client-logged recovery draws, then follow-up play.
     // Without the skip, replay throws "Draw is not legal".
     expect(() => verifyDailyFritzHand({
       transcript: envelope([
@@ -241,7 +233,7 @@ describe('Daily Fritz multi-draw transcript verification', () => {
         { sequence: 1, actor: 'fritz', kind: 'draw' },
         { sequence: 2, actor: 'fritz', kind: 'draw' },
         { sequence: 3, actor: 'fritz', kind: 'play', tile: followUp.tile, position: followUp.position },
-      ]),
+      ], 1),
       initialState: open,
       expectedChallengeId: 'c',
       expectedAttemptId: 'a',
@@ -250,6 +242,21 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       userId: 'u',
       fritzTier: 'elite',
     })).toThrow(/does not complete the hand/i);
+
+    // Protocol 2 must not silently skip obsolete recovery draws.
+    expect(() => verifyDailyFritzHand({
+      transcript: envelope([
+        { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 6 }, position: 'left' },
+        { sequence: 1, actor: 'fritz', kind: 'draw' },
+      ], 2),
+      initialState: open,
+      expectedChallengeId: 'c',
+      expectedAttemptId: 'a',
+      expectedGameNumber: 1,
+      expectedHandIndex: 0,
+      userId: 'u',
+      fritzTier: 'elite',
+    })).toThrow(/not legal|Illegal|official policy|wrong_actor|Draw/i);
   });
 
   it('skips obsolete post-score draw+pass after absorbed auto-pass advances the turn', () => {
@@ -300,7 +307,7 @@ describe('Daily Fritz multi-draw transcript verification', () => {
     expect(afterScore.playerIds[afterScore.currentPlayerIndex]).toBe('player');
 
     const envelope = (actions: DailyFritzTranscriptAction[]) => ({
-      protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+      protocolVersion: 1 as const,
       rulesVersion: GAME_RULES_VERSION,
       fritzPolicyVersion: FRITZ_POLICY_VERSION,
       challengeId: 'c',

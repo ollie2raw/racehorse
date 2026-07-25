@@ -120,6 +120,7 @@ export function useDailyFritzRuntime({
     storageKey: dailyFritzStorageKey,
     attemptId: dailyFritzPackage?.attempt_id,
     runDate: dailyFritzPackage?.run_date,
+    runFingerprint: dailyFritzPackage?.run_fingerprint,
     gameNumber: dailyFritzPackage?.current_game_number ?? 1,
     dailyFritzHandIndex,
     match,

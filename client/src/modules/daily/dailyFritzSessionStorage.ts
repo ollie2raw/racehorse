@@ -6,15 +6,17 @@ import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type D
 import type { DailyFritzTranscript } from '@racehorse/game-core';
 
 // Bump when the local match state is no longer safe to replay against the
-// server verifier. Version 4 snapshots may contain pre-verifier Fritz moves.
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 5;
+// server verifier. Version 6 requires a server run fingerprint.
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 6;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 5;
+  schemaVersion: 6;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
+  /** Binds resume to the exact published run (seed/deals/status). */
+  runFingerprint: string;
   gameNumber: number;
   currentHandIndex: number;
   lifecyclePhase: DailyFritzPersistedPhase;
@@ -71,7 +73,8 @@ function validHandResult(value: unknown): value is BotHandReveal | null {
 export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date()): DailyFritzPersistedSnapshot | null {
   if (!object(value) || value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION || value.classification !== 'official') return null;
   if (!validChallenge(value.challenge) || !isDailyFritzChallengeCurrent(value.challenge, now)) return null;
-  if (typeof value.attemptId !== 'string' || !value.attemptId || !nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex)) return null;
+  if (typeof value.attemptId !== 'string' || !value.attemptId || typeof value.runFingerprint !== 'string' || !value.runFingerprint) return null;
+  if (!nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex)) return null;
   if (!['active_hand','hand_transition','completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;
   if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog) || !validHandResult(value.handResult) || !validIso(value.startedAt) || !validIso(value.lastTransitionAt) || Date.parse(value.lastTransitionAt) < Date.parse(value.startedAt) || !nonNegativeInteger(value.revision)) return null;
   const phase = value.lifecyclePhase as DailyFritzPersistedPhase;
@@ -83,6 +86,7 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
   return {
     ...value,
     schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    runFingerprint: value.runFingerprint,
     transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
     verificationPhase,
   } as unknown as DailyFritzPersistedSnapshot;
@@ -97,7 +101,14 @@ export function resolveDailyFritzStorageKey(mode: string, dailyFritzPackage: Dai
   return buildDailyFritzStorageKey(dailyFritzPackage.attempt_id, dailyFritzPackage.current_game_number ?? 1);
 }
 
-export function loadPersistedDailyFritzMatch(storageKey: string | null, attemptId: string | undefined, serverHandIndex: number, runDate?: string, now = new Date()): DailyFritzPersistedSnapshot | null {
+export function loadPersistedDailyFritzMatch(
+  storageKey: string | null,
+  attemptId: string | undefined,
+  serverHandIndex: number,
+  runDate?: string,
+  now = new Date(),
+  runFingerprint?: string | null,
+): DailyFritzPersistedSnapshot | null {
   if (!storageKey || !attemptId || !runDate || typeof window === 'undefined') return null;
   try {
     // Daily Fritz must survive route changes, reloads, and tab closes. The
@@ -107,6 +118,7 @@ export function loadPersistedDailyFritzMatch(storageKey: string | null, attemptI
     if (!raw) return null;
     const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(raw), now);
     if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
+    if (runFingerprint && parsed.runFingerprint !== runFingerprint) return null;
     // Local must not sit behind the server. If it jumped ahead (e.g. leave during
     // hand-over before next-hand ack), discard so resume rebinds to the server hand.
     if (parsed.currentHandIndex !== serverHandIndex) return null;

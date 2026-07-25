@@ -2,8 +2,6 @@ import {
   DEFAULT_CONFIG,
   applyGameCommand,
   chooseOfficialFritzDecision,
-  createDeterministicRandom,
-  getOfficialFritzDecisionSeed,
   applyMove as applyCoreMove,
   drawUntilPlayableOrEmpty as drawUntilPlayableOrEmptyCore,
   computeGoOutBonusPoints,
@@ -307,7 +305,6 @@ export function chooseOfficialFritzBotChoice(
     state: toCoreGameState(state),
     participantId: 'bot',
     tier,
-    random: createDeterministicRandom(getOfficialFritzDecisionSeed(toCoreGameState(state))),
   });
   if (decision.kind !== 'play') return null;
   const move: Move = {

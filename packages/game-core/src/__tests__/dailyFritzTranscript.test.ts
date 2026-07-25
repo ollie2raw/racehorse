@@ -22,6 +22,10 @@ describe('Daily Fritz transcript parser', () => {
     expect(parseDailyFritzTranscript(valid()).actions).toHaveLength(1);
   });
 
+  it('accepts historical policy version 1 transcripts for Retry compatibility', () => {
+    expect(parseDailyFritzTranscript({ ...valid(), fritzPolicyVersion: 1 }).fritzPolicyVersion).toBe(1);
+  });
+
   it.each([
     { actions: [{ sequence: 1, actor: 'player', kind: 'draw' }] },
     { actions: [{ sequence: 0, actor: 'unknown', kind: 'draw' }] },
