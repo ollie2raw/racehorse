@@ -126,6 +126,39 @@ describe('Daily Fritz v3 session persistence', () => {
     expect(JSON.parse(window.localStorage.getItem(key)!).schemaVersion)
       .toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
   });
+  it('repairs duplicate physical-tile evidence before a saved hand resumes', () => {
+    const duplicatePlacement = {
+      moveNumber: 1,
+      handNumber: 1,
+      player: 'you' as const,
+      action: 'place' as const,
+      tile: [0, 5] as [number, number],
+      position: 'left' as const,
+      boardEnds: [-1, -1] as [number, number],
+      handBefore: [[0, 5]] as [number, number][],
+      validMoves: [[0, 5]] as [number, number][],
+      pipDelta: 5,
+      pointsScored: 1,
+      boardState: [],
+      boardRenderState: null,
+      handSnapshot: [[0, 5]] as [number, number][],
+      engineBestMove: null,
+    };
+    const parsed = parseDailyFritzPersistedSnapshot(snapshot({
+      moveLog: [
+        duplicatePlacement,
+        {
+          ...duplicatePlacement,
+          moveNumber: 3,
+          position: 'right',
+          boardEnds: [5, 5],
+        },
+      ],
+    }), now);
+
+    expect(parsed?.moveLog).toHaveLength(1);
+    expect(parsed?.moveLog[0]?.moveNumber).toBe(1);
+  });
   it.each([
     { low: -1, high: 2 },
     { low: 1, high: -1 },

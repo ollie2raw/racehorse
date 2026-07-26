@@ -23,6 +23,7 @@ import { playHandEndAudioEffects } from '../hand-lifecycle/handAudioEffects.ts';
 import { applyBotActionUiEffects } from '../hand-lifecycle/handUiEffects.ts';
 import { HandPrefetchCoordinator } from '../hand-lifecycle/handPrefetchCoordinator.ts';
 import {
+  buildDailyFritzCompletedHandEvidenceKey,
   buildDailyFritzPrefetchParams,
   computeDailyFritzMinAdvanceAtOnHandComplete,
   createDailyFritzNextHandRequest,
@@ -35,6 +36,7 @@ import { planGuidedV2HandAdvance } from '../bootstrap/lessonV2LazyRegistry.ts';
 import { useHandRevealScheduler } from '../hand-lifecycle/useHandRevealScheduler.ts';
 import { useHandLifecycleWatchdogs } from '../hand-lifecycle/useHandLifecycleWatchdogs.ts';
 import type {
+  DailyFritzPrefetchParams,
   HandLifecycleDebugSnapshot,
   HandLifecyclePorts,
   UseHandLifecycleArgs,
@@ -84,6 +86,10 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   const reloadRequiredRef = useRef(false);
   const transitionStateRef = useRef({ dailyFritzNextHandFailureCount: 0 });
   const prefetchCoordinatorRef = useRef(new HandPrefetchCoordinator());
+  const completedHandEvidenceRef = useRef<{
+    key: string;
+    params: DailyFritzPrefetchParams;
+  } | null>(null);
   const advanceRetryRef = useRef(new HandAdvanceRetryScheduler());
   const advanceHandRef = useRef<() => void>(() => {});
 
@@ -114,6 +120,11 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       prefetchCoordinator.clear();
     };
   }, []);
+
+  useEffect(() => {
+    completedHandEvidenceRef.current = null;
+    prefetchCoordinatorRef.current.clear();
+  }, [dailyFritzPackage?.attempt_id, dailyFritzPackage?.current_game_number]);
 
   const handleAutoAdvance = useCallback(() => {
     advanceHandRef.current();
@@ -195,6 +206,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       });
 
       prefetchCoordinator.clear();
+      completedHandEvidenceRef.current = null;
       handTransitionInFlightRef.current = false;
       if (applied) {
         traceHandLifecycle('playing', { source, handIndex: response.current_hand_index });
@@ -281,6 +293,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         lastDailyFlowLabelRef.current = 'match-complete';
         handTransitionInFlightRef.current = false;
         prefetchCoordinator.clear();
+        completedHandEvidenceRef.current = null;
         reveal.dailyFritzMinAdvanceAtRef.current = null;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
@@ -300,12 +313,25 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         return;
       }
 
-      const prefetchParams = buildDailyFritzPrefetchParams(
+      const gameNumber = (dailyFritzPackage.current_game_number ?? 1);
+      const evidenceKey = buildDailyFritzCompletedHandEvidenceKey(
         dailyFritzPackage,
+        gameNumber,
         dailyFritzHandIndex,
-        matchRef.current,
-        getMoveLog(),
+        matchRef.current.handNumber,
       );
+      const frozenEvidence = completedHandEvidenceRef.current;
+      const prefetchParams = frozenEvidence?.key === evidenceKey
+        ? frozenEvidence.params
+        : buildDailyFritzPrefetchParams(
+            dailyFritzPackage,
+            dailyFritzHandIndex,
+            matchRef.current,
+            getMoveLog(),
+          );
+      if (frozenEvidence?.key !== evidenceKey) {
+        completedHandEvidenceRef.current = { key: evidenceKey, params: prefetchParams };
+      }
       const source = cacheSnapshot?.promise ? 'advance-await-prefetch' : 'advance-fetch';
       const activeCache = prefetchCoordinator.ensureRequest(prefetchParams, source);
 
@@ -352,6 +378,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           });
           if (!isRetryable) {
             const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
+            const verifierCode = err instanceof DailyFritzNextHandHttpError
+              ? err.verifierCode
+              : null;
             if (status === 400) {
               discardDailyFritzSnapshot(buildDailyFritzStorageKey(
                 dailyFritzPackage.attempt_id,
@@ -359,7 +388,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               ));
               reloadRequiredRef.current = true;
               setHandAdvanceError(
-                'This saved hand fell out of sync with the official deal. Reload the hand to restore it; your verified score is safe.',
+                'This hand could not be verified. Restore the official hand to continue; your verified score is safe.',
               );
             } else {
               setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
@@ -369,6 +398,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               source,
               failureAttempt,
               status,
+              verifierCode,
               error: errMsg,
             });
             setShowManualHandAdvance(true);
@@ -377,6 +407,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               error: errMsg,
               failureAttempt,
               status,
+              verifierCode,
               willRetry: false,
             }, 'C');
             return;
@@ -461,6 +492,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     frozenLesson,
     frozenV2Lesson,
     fritzV2LastAppliedIndexRef,
+    getMoveLog,
     isAuthoringMode,
     isDailyFritzMode,
     isGuidedMode,
@@ -494,6 +526,25 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           lastDailyFlowLabelRef.current = 'hand-complete';
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
           logDailyFritzHandComplete(result);
+          if (dailyFritzPackage && !result.state.gameOver) {
+            const gameNumber = (dailyFritzPackage.current_game_number ?? 1);
+            const evidenceKey = buildDailyFritzCompletedHandEvidenceKey(
+              dailyFritzPackage,
+              gameNumber,
+              dailyFritzHandIndex,
+              result.state.handNumber,
+            );
+            if (completedHandEvidenceRef.current?.key !== evidenceKey) {
+              const params = buildDailyFritzPrefetchParams(
+                dailyFritzPackage,
+                dailyFritzHandIndex,
+                result.state,
+                getMoveLog(),
+              );
+              completedHandEvidenceRef.current = { key: evidenceKey, params };
+              prefetchCoordinator.startPrefetch(params);
+            }
+          }
         }
         ports.flashLastPlayed(null);
         const plan = reveal.planHandEndedReveal(result);
@@ -504,6 +555,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       applyBotActionUiEffects(result, ports, opponentLabel, isMuted);
     },
     [
+      dailyFritzHandIndex,
+      dailyFritzPackage,
+      getMoveLog,
       isDailyFritzMode,
       isMuted,
       lastDailyFlowLabelRef,

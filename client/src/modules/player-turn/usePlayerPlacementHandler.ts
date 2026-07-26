@@ -169,6 +169,22 @@ export function usePlayerPlacementHandler({
       traceDailyFritzMoveApplied(move!);
     }
     const afterPips = sumTilePips(result.state.players.you.hand);
+    const placementRecorded = appendMove(
+      buildPlacementMoveLogEntry(
+        match,
+        snapshot,
+        selectedTile!,
+        position,
+        afterPips,
+        result.scored?.points ?? 0,
+        fritzDifficulty,
+      ),
+      match.handNumber,
+    );
+    if (placementRecorded === false) {
+      placementInFlightRef.current = false;
+      return;
+    }
     setMovesUsed((prev) => prev + 1);
     recordPlayerMove(match, move!);
 
@@ -191,19 +207,6 @@ export function usePlayerPlacementHandler({
     console.log('[guided-move] applying result to match state');
     console.log('[guided-move] result.state player hand =', result.state.players.you.hand.map(toTileKey));
     console.log('[guided-move] result.state board mainLine length =', result.state.board?.mainLine.length);
-
-    appendMove(
-      buildPlacementMoveLogEntry(
-        match,
-        snapshot,
-        selectedTile!,
-        position,
-        afterPips,
-        result.scored?.points ?? 0,
-        fritzDifficulty,
-      ),
-      match.handNumber,
-    );
 
     const drawnTiles = listEmbeddedForcedDrawTiles(match, result.state);
     const commitResult = (): void => {

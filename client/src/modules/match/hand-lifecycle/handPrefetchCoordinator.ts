@@ -38,6 +38,9 @@ export class HandPrefetchCoordinator {
   }
 
   startPrefetch(params: DailyFritzPrefetchParams): void {
+    // Hand completion can be observed by more than one presentation/lifecycle
+    // callback. Never replace the request for its frozen evidence.
+    if (this.cache?.promise || this.cache?.result) return;
     const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
     dailyFritzDebugLog('[daily-fritz-hand] requesting next hand', {
       source: 'prefetch',

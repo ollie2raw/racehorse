@@ -18,7 +18,7 @@ export type PlayerTurnPorts = {
   appendMove: (
     entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>,
     handNumber?: number,
-  ) => void;
+  ) => boolean | void;
   appendGhostMove: (entry: GhostMoveLogEntry) => void;
   recordAuthoringStep: (chosenMove: string | null) => void;
   handleGuidedPlacement: (move: Move, position: PlacementPosition) => GuidedPlacementResult;

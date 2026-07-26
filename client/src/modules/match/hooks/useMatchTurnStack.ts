@@ -118,6 +118,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
     bootstrap.matchRef,
     sources.replayRecorder,
     refs.moveCounterRef,
+    bootstrap.isDailyFritzMode,
   );
 
   const applyAndNotify = useApplyAndNotify(

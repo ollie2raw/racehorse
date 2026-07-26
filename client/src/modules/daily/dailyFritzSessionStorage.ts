@@ -4,6 +4,7 @@ import type { BotHandReveal } from '../match/types.ts';
 import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
 import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type DailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
 import type { DailyFritzTranscript } from '@racehorse/game-core';
+import { canonicalizeDailyFritzMoveLog } from '../../dailyFritz/dailyFritzMoveEvidence.ts';
 
 // Bump when the local match state is no longer safe to replay against the
 // server verifier. Version 7 excludes checkpoints captured during draw
@@ -89,6 +90,7 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
     schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
     runFingerprint: value.runFingerprint,
     transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
+    moveLog: canonicalizeDailyFritzMoveLog(value.moveLog as MoveEntry[]),
     verificationPhase,
   } as unknown as DailyFritzPersistedSnapshot;
 }

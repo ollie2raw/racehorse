@@ -456,14 +456,17 @@ export function formatDailyFritzNextHandUserMessage(raw: string): string {
 
 export class DailyFritzNextHandHttpError extends Error {
   readonly status: number | null;
+  readonly verifierCode: string | null;
 
   constructor(
     message: string,
     status: number | null,
+    verifierCode: string | null = null,
   ) {
     super(message);
     this.name = 'DailyFritzNextHandHttpError';
     this.status = status;
+    this.verifierCode = verifierCode;
   }
 }
 
@@ -556,7 +559,11 @@ export async function nextDailyFritzHand(input: {
   if (result.status === 409) {
     const message = parsedError || 'No hands remain in this Daily Fritz run.';
     if (!String(message).toLowerCase().includes('no hands remain')) {
-      throw new DailyFritzNextHandHttpError(message, result.status);
+      throw new DailyFritzNextHandHttpError(
+        message,
+        result.status,
+        result.errorCode ?? null,
+      );
     }
     throw new DailyFritzEndOfRunError(message);
   }
@@ -569,6 +576,7 @@ export async function nextDailyFritzHand(input: {
       data: {
         url: path,
         status: result.status,
+        verifierCode: result.errorCode ?? null,
         error: parsedError || null,
         bodySnippet: parsedError.slice(0, 240),
       },
@@ -577,12 +585,14 @@ export async function nextDailyFritzHand(input: {
       console.warn('[daily-fritz:next-hand] non-OK response', {
         url: path,
         status: result.status,
+        verifierCode: result.errorCode ?? null,
         error: parsedError || null,
       });
     }
     throw new DailyFritzNextHandHttpError(
       parsedError || `${path} failed with ${result.status ?? 'unknown'}`,
       result.status ?? null,
+      result.errorCode ?? null,
     );
   }
 

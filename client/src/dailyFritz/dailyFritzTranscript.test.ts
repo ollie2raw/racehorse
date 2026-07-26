@@ -81,6 +81,49 @@ describe('Daily Fritz transcript adapter', () => {
     ]);
   });
 
+  it('repairs a repeated physical tile even when other actions separate stale captures', () => {
+    const firstPlacement: MoveEntry = {
+      ...base,
+      moveNumber: 1,
+      handNumber: 1,
+      player: 'you',
+      action: 'place',
+      tile: [0, 5],
+      position: 'left',
+      handBefore: [[0, 5], [1, 1]],
+      handSnapshot: [[0, 5], [1, 1]],
+    };
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      moveLog: [
+        firstPlacement,
+        { ...base, moveNumber: 2, handNumber: 1, player: 'opponent', action: 'draw' },
+        {
+          ...firstPlacement,
+          moveNumber: 3,
+          position: 'right',
+          boardEnds: [5, 5],
+          boardState: [{ tile: [0, 5], position: 'left', source: 'mainline' }],
+        },
+      ],
+    });
+
+    expect(transcript.actions).toEqual([
+      {
+        sequence: 0,
+        actor: 'player',
+        kind: 'play',
+        tile: { low: 0, high: 5 },
+        position: 'left',
+      },
+      { sequence: 1, actor: 'fritz', kind: 'draw' },
+    ]);
+  });
+
   it('fails closed when a play lacks canonical evidence', () => {
     expect(() => buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1,

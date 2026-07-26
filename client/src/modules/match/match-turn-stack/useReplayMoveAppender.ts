@@ -2,17 +2,27 @@ import { useCallback } from 'react';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import type { BotMatchState } from '../runtime/botEngine.ts';
 import type { ReplayRecorder } from '../../replay/index.ts';
+import { isDuplicateDailyFritzPlacement } from '../../../dailyFritz/dailyFritzMoveEvidence.ts';
 
 export function useReplayMoveAppender(
   matchRef: React.MutableRefObject<BotMatchState>,
   replayRecorder: ReplayRecorder,
   moveCounterRef: React.MutableRefObject<number>,
+  isDailyFritzMode = false,
 ): (
   entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>,
   handNumber?: number,
-) => void {
+) => boolean {
   return useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>, handNumber?: number) => {
-    replayRecorder.recordMove(entry, handNumber ?? matchRef.current.handNumber);
+    const targetHandNumber = handNumber ?? matchRef.current.handNumber;
+    if (
+      isDailyFritzMode
+      && isDuplicateDailyFritzPlacement(replayRecorder.getMoveLog(), entry, targetHandNumber)
+    ) {
+      return false;
+    }
+    replayRecorder.recordMove(entry, targetHandNumber);
     moveCounterRef.current = replayRecorder.getNextMoveNumber();
-  }, [matchRef, replayRecorder, moveCounterRef]);
+    return true;
+  }, [isDailyFritzMode, matchRef, replayRecorder, moveCounterRef]);
 }

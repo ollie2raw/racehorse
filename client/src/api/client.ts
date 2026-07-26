@@ -18,6 +18,8 @@ import { resolveGameServerUrl } from '../lib/gameServerUrl';
 export type ApiResult<T> = {
   data: T | null;
   error: string | null;
+  /** Stable application error code returned by the server, when available. */
+  errorCode?: string;
   status?: number;
 };
 
@@ -112,9 +114,14 @@ async function apiFetch<T>(
 
   if (!response.ok) {
     let errorMessage = `Request failed (${response.status})`;
+    let errorCode: string | undefined;
     try {
-      const body = await response.json();
-      if (typeof body?.error === 'string') errorMessage = body.error;
+      const body = await response.json() as unknown;
+      if (body && typeof body === 'object') {
+        const record = body as Record<string, unknown>;
+        if (typeof record.error === 'string') errorMessage = record.error;
+        if (typeof record.code === 'string') errorCode = record.code;
+      }
     } catch {
       try {
         const text = await response.text();
@@ -123,7 +130,12 @@ async function apiFetch<T>(
         /* ignore */
       }
     }
-    return { data: null, error: errorMessage, status: response.status };
+    return {
+      data: null,
+      error: errorMessage,
+      ...(errorCode ? { errorCode } : {}),
+      status: response.status,
+    };
   }
 
   try {

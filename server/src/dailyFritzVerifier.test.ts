@@ -16,6 +16,7 @@ import {
 import { generateSingleDailyFritzGameHand } from './dailyFritz';
 import {
   createOfficialDailyFritzHandState,
+  DailyFritzVerificationError,
   digestDailyFritzTranscript,
   verifyDailyFritzHand,
 } from './dailyFritzVerifier';
@@ -135,6 +136,36 @@ describe('Daily Fritz server replay verifier', () => {
 
   it('rejects incomplete and post-terminal transcripts', () => {
     expect(() => verify(transcript([{ sequence: 0, actor: 'player', kind: 'play', tile: { low: 6, high: 6 }, position: 'left' }, { sequence: 1, actor: 'fritz', kind: 'pass' }]))).toThrow(/after hand completion/i);
+  });
+
+  it('rejects a repeated scoring-chain tile with actionable sequence context', () => {
+    const initial = createOfficialDailyFritzHandState({
+      deal: {
+        player_tiles: [{ low: 0, high: 5 }, { low: 1, high: 1 }],
+        fritz_tiles: [{ low: 2, high: 2 }, { low: 3, high: 3 }],
+        boneyard: [],
+        locked: [],
+      },
+      handIndex: 0,
+      drawWinner: 'you',
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 0,
+      fritzScore: 0,
+    });
+    const repeated = transcript([
+      { sequence: 0, actor: 'player', kind: 'play', tile: { low: 0, high: 5 }, position: 'left' },
+      { sequence: 1, actor: 'player', kind: 'play', tile: { low: 0, high: 5 }, position: 'right' },
+    ]);
+
+    try {
+      verify(repeated, initial);
+      throw new Error('Expected duplicate play verification to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DailyFritzVerificationError);
+      expect((error as DailyFritzVerificationError).code).toBe('illegal_action');
+      expect((error as Error).message).toMatch(/action 1.*0\|5.*does not have tile/i);
+    }
   });
 
   it('replays a complete deterministic official hand to the honest terminal result', () => {

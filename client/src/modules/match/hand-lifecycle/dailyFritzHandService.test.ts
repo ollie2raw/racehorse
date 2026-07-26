@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBotMatch, type BotHandDeal } from '../runtime/botEngine.ts';
 import {
+  buildDailyFritzCompletedHandEvidenceKey,
   createDailyFritzNextHandRequest,
   createEndOfRunMatchState,
   tryApplyDailyFritzNextHand,
@@ -37,6 +38,17 @@ const sampleDeal: BotHandDeal = {
   ],
   locked: [{ low: 3, high: 6 }],
 };
+
+describe('buildDailyFritzCompletedHandEvidenceKey', () => {
+  it('binds retries to one attempt, game, hand index, and local hand', () => {
+    expect(buildDailyFritzCompletedHandEvidenceKey(
+      { attempt_id: 'attempt-1' },
+      2,
+      4,
+      5,
+    )).toBe('attempt-1:2:4:5');
+  });
+});
 
 describe('tryApplyDailyFritzNextHand', () => {
   it('refuses when the hand is still live', () => {

@@ -80,6 +80,15 @@ export function buildDailyFritzPrefetchParams(
   };
 }
 
+export function buildDailyFritzCompletedHandEvidenceKey(
+  dailyFritzPackage: Pick<DailyFritzStartResponse, 'attempt_id'>,
+  gameNumber: DailyFritzSetGameNumber,
+  handIndex: number,
+  handNumber: number,
+): string {
+  return `${dailyFritzPackage.attempt_id}:${gameNumber}:${handIndex}:${handNumber}`;
+}
+
 export function createDailyFritzNextHandRequest(
   params: DailyFritzPrefetchParams,
 ): Promise<DailyFritzNextHandResponse> {

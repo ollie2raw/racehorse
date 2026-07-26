@@ -195,8 +195,9 @@ export function verifyDailyFritzHand(input: {
     try {
       state = applyGameCommand(state, toCommand(state, action)).state;
     } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Illegal action.';
       throw new DailyFritzVerificationError(
-        error instanceof Error ? error.message : 'Illegal action.',
+        `Transcript action ${action.sequence} (${action.actor} ${formatFritzAction(action)}) is illegal: ${reason}`,
         'illegal_action',
       );
     }
@@ -235,4 +236,3 @@ export function verifyDailyFritzHand(input: {
     },
   };
 }
-

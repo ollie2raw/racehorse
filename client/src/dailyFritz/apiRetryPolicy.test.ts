@@ -6,9 +6,13 @@ import {
 
 describe('Daily Fritz next-hand retry policy', () => {
   it('does not retry deterministic verification rejection responses', () => {
-    expect(isRetryableDailyFritzNextHandError(
-      new DailyFritzNextHandHttpError('Player player does not have tile [4|6] in hand.', 400),
-    )).toBe(false);
+    const error = new DailyFritzNextHandHttpError(
+      'Player player does not have tile [4|6] in hand.',
+      400,
+      'illegal_action',
+    );
+    expect(isRetryableDailyFritzNextHandError(error)).toBe(false);
+    expect(error.verifierCode).toBe('illegal_action');
   });
 
   it('retries transient network and server failures', () => {
