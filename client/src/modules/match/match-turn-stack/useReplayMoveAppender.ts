@@ -7,9 +7,12 @@ export function useReplayMoveAppender(
   matchRef: React.MutableRefObject<BotMatchState>,
   replayRecorder: ReplayRecorder,
   moveCounterRef: React.MutableRefObject<number>,
-): (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => void {
-  return useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => {
-    replayRecorder.recordMove(entry, matchRef.current.handNumber);
+): (
+  entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>,
+  handNumber?: number,
+) => void {
+  return useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>, handNumber?: number) => {
+    replayRecorder.recordMove(entry, handNumber ?? matchRef.current.handNumber);
     moveCounterRef.current = replayRecorder.getNextMoveNumber();
   }, [matchRef, replayRecorder, moveCounterRef]);
 }

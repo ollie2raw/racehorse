@@ -139,7 +139,7 @@ export function usePlayerNoMoveEffect({
                 }),
               );
             }
-            appendMove(buildPassMoveLogEntry(match, snapshot, fritzDifficulty));
+            appendMove(buildPassMoveLogEntry(match, snapshot, fritzDifficulty), match.handNumber);
           }
           applyAndNotify(fastResult);
           return;
@@ -172,7 +172,7 @@ export function usePlayerNoMoveEffect({
           }
           const drawLogCount = resolveTranscriptDrawLogCount(isDailyFritzMode, drawCount);
           for (let index = 0; index < drawLogCount; index += 1) {
-            appendMove(buildDrawMoveLogEntry(match, snapshot, fritzDifficulty));
+            appendMove(buildDrawMoveLogEntry(match, snapshot, fritzDifficulty), match.handNumber);
           }
         }
 
@@ -213,7 +213,7 @@ export function usePlayerNoMoveEffect({
               }),
             );
           }
-          appendMove(buildPassMoveLogEntry(match, snapshot, fritzDifficulty));
+          appendMove(buildPassMoveLogEntry(match, snapshot, fritzDifficulty), match.handNumber);
         }
 
         applyAndNotify(result);

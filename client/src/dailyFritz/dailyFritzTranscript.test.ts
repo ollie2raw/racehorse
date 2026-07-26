@@ -49,6 +49,38 @@ describe('Daily Fritz transcript adapter', () => {
     ]);
   });
 
+  it('repairs an adjacent duplicate placement captured from the same mobile click', () => {
+    const placement: MoveEntry = {
+      ...base,
+      moveNumber: 1,
+      handNumber: 1,
+      player: 'you',
+      action: 'place',
+      tile: [5, 6],
+      position: 'right',
+      handBefore: [[5, 6], [1, 1]],
+      handSnapshot: [[5, 6], [1, 1]],
+    };
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      moveLog: [placement, { ...placement, moveNumber: 2 }],
+    });
+
+    expect(transcript.actions).toEqual([
+      {
+        sequence: 0,
+        actor: 'player',
+        kind: 'play',
+        tile: { low: 5, high: 6 },
+        position: 'right',
+      },
+    ]);
+  });
+
   it('fails closed when a play lacks canonical evidence', () => {
     expect(() => buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1,

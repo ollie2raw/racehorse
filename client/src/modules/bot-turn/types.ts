@@ -33,7 +33,7 @@ export type DailyFritzBotMoveAppliedInfo = {
 
 export type BotTurnPorts = {
   applyAndNotify: (result: BotActionResult) => void;
-  appendMove: (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => void;
+  appendMove: (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>, handNumber?: number) => void;
   appendGhostMove: (entry: GhostMoveLogEntry) => void;
   captureGuidedMatchCandidateAction: (
     actor: 'player' | 'fritz',

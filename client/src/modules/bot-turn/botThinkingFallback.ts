@@ -86,6 +86,7 @@ export function executeBotThinkingFallback(input: {
             }
           : null,
       }),
+      live.handNumber,
     );
   }
 

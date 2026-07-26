@@ -15,7 +15,10 @@ export type { GuidedPlacementResult };
 
 export type PlayerTurnPorts = {
   notifyBotActionResult: (result: BotActionResult) => void;
-  appendMove: (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => void;
+  appendMove: (
+    entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>,
+    handNumber?: number,
+  ) => void;
   appendGhostMove: (entry: GhostMoveLogEntry) => void;
   recordAuthoringStep: (chosenMove: string | null) => void;
   handleGuidedPlacement: (move: Move, position: PlacementPosition) => GuidedPlacementResult;

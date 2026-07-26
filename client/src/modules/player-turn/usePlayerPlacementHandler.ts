@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { applyPlayMove } from '../match/runtime/botEngine.ts';
 import {
   listEmbeddedForcedDrawTiles,
@@ -38,6 +38,7 @@ type UsePlayerPlacementHandlerArgs = Pick<
   | 'isDailyFritzMode'
   | 'fritzDifficulty'
   | 'moveCounterRef'
+  | 'drawSequenceActiveRef'
   | 'setMatch'
   | 'onDrawVisualStep'
   | 'triggerDrawStepAnimation'
@@ -59,6 +60,7 @@ export function usePlayerPlacementHandler({
   isDailyFritzMode,
   fritzDifficulty,
   moveCounterRef,
+  drawSequenceActiveRef,
   setMatch,
   onDrawVisualStep,
   triggerDrawStepAnimation,
@@ -98,6 +100,12 @@ export function usePlayerPlacementHandler({
   } = authoring;
 
   const { isGhostMode, ghostSuggestedPlayerMove } = ghost;
+  const placementInFlightRef = useRef(false);
+
+  useEffect(() => {
+    // A committed match/selection render retires the previous click handler.
+    placementInFlightRef.current = false;
+  }, [match, selectedTile]);
 
   return useCallback((position: PlacementPosition) => {
     console.log('[guided-path-root]', {
@@ -122,7 +130,12 @@ export function usePlayerPlacementHandler({
     const move = selectedTile
       ? findMoveForSelection(userPlayMoves, selectedTile, position)
       : null;
-    const blockReason = getPlacementClickBlockReason(match, selectedTile, Boolean(move));
+    const blockReason = getPlacementClickBlockReason(
+      match,
+      selectedTile,
+      Boolean(move),
+      placementInFlightRef.current || drawSequenceActiveRef.current,
+    );
     if (blockReason) {
       console.log(`[guided-click-blocked] reason = ${blockReason}`);
       return;
@@ -141,9 +154,13 @@ export function usePlayerPlacementHandler({
     const guidedPlacement = handleGuidedPlacement(move!, position);
     if (guidedPlacement === 'handled') return;
 
+    // Claim synchronously so a rapid/synthesized second mobile click cannot
+    // append the same tile twice before React commits the first result.
+    placementInFlightRef.current = true;
     const snapshot = collectPlayerMoveSnapshot(match, userPlayMoves);
     const result = applyPlayMove(match, 'you', move!);
     if (result.error) {
+      placementInFlightRef.current = false;
       ports.showBoardToast(result.error.message, 'you');
       return;
     }
@@ -185,6 +202,7 @@ export function usePlayerPlacementHandler({
         result.scored?.points ?? 0,
         fritzDifficulty,
       ),
+      match.handNumber,
     );
 
     const drawnTiles = listEmbeddedForcedDrawTiles(match, result.state);
@@ -252,6 +270,7 @@ export function usePlayerPlacementHandler({
     createV2Event,
     currentLessonStep?.chosenMove,
     drawStepMs,
+    drawSequenceActiveRef,
     flashLastPlayed,
     fritzDifficulty,
     ghostSuggestedPlayerMove,

@@ -78,6 +78,24 @@ describe('completeBotTurnAction', () => {
     expect(ports.applyAndNotify).not.toHaveBeenCalled();
   });
 
+  it('does not log or apply a result produced for an older hand', () => {
+    const resultState = createBotMatch(60, 7);
+    const liveState = { ...resultState, handNumber: resultState.handNumber + 1 };
+    const appendMove = vi.fn<BotTurnPorts['appendMove']>();
+    const ports = makePorts(appendMove);
+
+    const applied = completeBotTurnAction(
+      completeInput(resultState, ports, {
+        matchRef: { current: liveState },
+        result: { state: resultState } as BotActionResult,
+      }),
+    );
+
+    expect(applied).toBe(false);
+    expect(appendMove).not.toHaveBeenCalled();
+    expect(ports.applyAndNotify).not.toHaveBeenCalled();
+  });
+
   it('surfaces action failures without logging or applying them', () => {
     const match = createBotMatch(60, 7);
     const appendMove = vi.fn<BotTurnPorts['appendMove']>();
@@ -115,6 +133,7 @@ describe('completeBotTurnAction', () => {
     expect(applied).toBe(true);
     expect(appendMove).toHaveBeenCalledTimes(3);
     expect(appendMove.mock.calls.every((call) => call[0].action === 'draw')).toBe(true);
+    expect(appendMove.mock.calls.every((call) => call[1] === match.handNumber)).toBe(true);
   });
 
   it('collapses multi-draws to one move-log entry outside Daily Fritz', () => {
@@ -135,5 +154,6 @@ describe('completeBotTurnAction', () => {
     expect(applied).toBe(true);
     expect(appendMove).toHaveBeenCalledTimes(1);
     expect(appendMove.mock.calls[0]?.[0].action).toBe('draw');
+    expect(appendMove.mock.calls[0]?.[1]).toBe(match.handNumber);
   });
 });

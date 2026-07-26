@@ -22,6 +22,7 @@ export function logBotPlaceMove(input: {
   snapshot: BotTurnSnapshot;
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
+  workingHandNumber: number;
 }): void {
   const tile = input.ghostChosen?.tile ?? input.chosen?.move?.tile;
   if (!tile) return;
@@ -39,6 +40,7 @@ export function logBotPlaceMove(input: {
           }
         : toEngineBestFromChoice(input.chosen),
     }),
+    input.workingHandNumber,
   );
 }
 
@@ -147,10 +149,16 @@ export function completeBotTurnAction(input: {
     input.drawCount ?? (input.drew ? 1 : 0),
   );
   for (let index = 0; index < drawLogCount; index += 1) {
-    input.ports.appendMove(buildBotDrawMoveLogEntry(input.snapshot, null));
+    input.ports.appendMove(
+      buildBotDrawMoveLogEntry(input.snapshot, null),
+      input.workingHandNumber,
+    );
   }
   if (input.passed) {
-    input.ports.appendMove(buildBotPassMoveLogEntry(input.snapshot, null));
+    input.ports.appendMove(
+      buildBotPassMoveLogEntry(input.snapshot, null),
+      input.workingHandNumber,
+    );
   }
 
   logBotPlaceMove({
@@ -158,6 +166,7 @@ export function completeBotTurnAction(input: {
     snapshot: input.snapshot,
     chosen: input.chosen,
     ghostChosen: input.ghostChosen,
+    workingHandNumber: input.workingHandNumber,
   });
 
   notifyDailyFritzBotMove(input.ports, input.result, input.isDailyFritzMode);

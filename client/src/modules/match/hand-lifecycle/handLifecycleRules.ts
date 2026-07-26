@@ -40,6 +40,7 @@ export function shouldAllowBotAction(match: BotMatchLifecycleSnapshot): boolean 
 export type BotActionApplySnapshot = {
   handOver: boolean;
   gameOver: boolean;
+  handNumber?: number;
 };
 
 /**
@@ -50,6 +51,13 @@ export function shouldApplyBotActionResult(
   live: BotActionApplySnapshot,
   result: { handEnded?: unknown; state: BotActionApplySnapshot },
 ): boolean {
+  if (
+    typeof live.handNumber === 'number'
+    && typeof result.state.handNumber === 'number'
+    && live.handNumber !== result.state.handNumber
+  ) {
+    return false;
+  }
   if (live.gameOver && !result.state.gameOver) return false;
   if (live.handOver && !result.handEnded) return false;
   return true;

@@ -5,7 +5,7 @@ import type { BotHandReveal } from '../types.ts';
 export type MatchTurnCommandPorts = {
   notifyBotActionResult: (result: BotActionResult) => void;
   applyAndNotify: (result: BotActionResult) => void;
-  appendMove: (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => void;
+  appendMove: (entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>, handNumber?: number) => void;
   recordAuthoringStep: (chosenMove: string | null) => void;
   scheduleHandReveal: (reveal: BotHandReveal, delayMs: number) => void;
   clearHandReveal: () => void;
