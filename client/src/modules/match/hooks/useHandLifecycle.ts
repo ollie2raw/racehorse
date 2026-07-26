@@ -552,7 +552,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         reveal.showHandEndedReveal(plan, result.state.handNumber);
         playHandEndAudioEffects(result, isMuted);
       }
-      applyBotActionUiEffects(result, ports, opponentLabel, isMuted);
+      applyBotActionUiEffects(result, ports, opponentLabel, isMuted, isDailyFritzMode);
     },
     [
       dailyFritzHandIndex,

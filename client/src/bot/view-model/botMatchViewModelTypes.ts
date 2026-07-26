@@ -35,6 +35,8 @@ export type BotMatchViewPreGameDraw = {
 };
 
 export type BotMatchViewScoreToast = {
+  eventId: number;
+  kind: 'score' | 'notice';
   message: string;
   tone: 'you' | 'bot';
   visible: boolean;

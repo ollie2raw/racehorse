@@ -52,4 +52,41 @@ describe('applyBotActionUiEffects', () => {
     expect(ports.showBoardToast).not.toHaveBeenCalled();
     expect(ports.pushToast).not.toHaveBeenCalled();
   });
+
+  it('leaves Daily Fritz score cues to committed score observation', () => {
+    const state = createBotMatch(60, 7);
+    const ports = makePorts();
+
+    applyBotActionUiEffects(
+      {
+        state,
+        scored: { player: 'you', points: 5 },
+      } as BotActionResult,
+      ports,
+      'Fritz',
+      true,
+      true,
+    );
+
+    expect(ports.showScoreToast).not.toHaveBeenCalled();
+    expect(ports.showBoardToast).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing Play vs Fritz player score cue', () => {
+    const state = createBotMatch(60, 7);
+    const ports = makePorts();
+
+    applyBotActionUiEffects(
+      {
+        state,
+        scored: { player: 'you', points: 10 },
+      } as BotActionResult,
+      ports,
+      'Fritz',
+      true,
+      false,
+    );
+
+    expect(ports.showScoreToast).toHaveBeenCalledWith('you', 10);
+  });
 });

@@ -14,7 +14,8 @@ export function BotMatchScoreToastOverlay({ scoreToast }: BotMatchScoreToastOver
 
   return (
     <div
-      className={`rh-score-chip ${scoreToast.tone === 'you' ? 'rh-score-chip--you' : 'rh-score-chip--bot'}${
+      key={scoreToast.eventId}
+      className={`rh-score-chip ${scoreToast.kind === 'notice' ? 'rh-score-chip--notice' : scoreToast.tone === 'you' ? 'rh-score-chip--you' : 'rh-score-chip--bot'}${
         scoreToast.visible ? ' is-visible' : ''
       }`}
       data-ui="score-toast"

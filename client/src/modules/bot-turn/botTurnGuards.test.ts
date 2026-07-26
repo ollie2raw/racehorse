@@ -10,6 +10,7 @@ import {
   BOT_PLAYER_HANDOFF_DELAY_MS,
   BOT_POST_DRAW_PLAY_DELAY_MS,
   BOT_SCORE_HOLD_MS,
+  BOT_SCORE_CUE_DELAY_MS,
   BOT_THINK_DELAY_MS,
   resolveBotChainContinueDelayMs,
   resolveBotOpeningDelayMs,
@@ -43,6 +44,7 @@ describe('resolveBotTurnDelayMs', () => {
     expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBe(900);
     expect(BOT_PLACE_SETTLE_MS).toBe(650);
     expect(BOT_SCORE_HOLD_MS).toBeGreaterThanOrEqual(BOT_PLACE_SETTLE_MS);
+    expect(BOT_SCORE_CUE_DELAY_MS).toBeLessThan(BOT_PLACE_SETTLE_MS);
     expect(BOT_PLAYER_HANDOFF_DELAY_MS).toBe(560);
     expect(resolveBotPostActionSettleMs(0)).toBe(BOT_PLACE_SETTLE_MS);
     expect(resolveBotPostActionSettleMs(5)).toBe(Math.max(BOT_PLACE_SETTLE_MS, BOT_SCORE_HOLD_MS));

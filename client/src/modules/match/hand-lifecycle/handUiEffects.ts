@@ -8,13 +8,16 @@ export function applyBotActionUiEffects(
   ports: HandLifecyclePorts,
   _opponentLabel: string,
   isMuted: boolean,
+  isDailyFritzMode = false,
 ): void {
   if (result.scored) {
     // Fritz score ceremony is owned by the bot-turn cadence theater
     // (running turn total + sticky chain toast). Player scores still toast here.
-    if (result.scored.player === 'you') {
+    if (!isDailyFritzMode && result.scored.player === 'you') {
       ports.showScoreToast(result.scored.player, result.scored.points);
     }
-    playScoreAudioEffect(result, isMuted);
+    if (!isDailyFritzMode) {
+      playScoreAudioEffect(result, isMuted);
+    }
   }
 }

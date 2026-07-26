@@ -368,7 +368,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           // One score surface: sticky running total while Fritz still holds the turn.
-          if (scoredPoints > 0) {
+          if (scoredPoints > 0 && !isDailyFritzMode) {
             ports.showBoardToast(
               buildFritzScoreCeremonyMessage(opponentLabel, scoredPoints, turnScoreTotal),
               'bot',
@@ -379,6 +379,9 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                 actorLabel: opponentLabel.toUpperCase().slice(0, 10),
               },
             );
+          } else if (scoredPoints === 0 && isDailyFritzMode) {
+            // A non-scoring chain step must not leave the prior +N on screen.
+            ports.clearBoardToast();
           }
 
           const settleMs = willPlace || scoredPoints > 0
@@ -390,7 +393,9 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           if (!computeBotChainPaused(execution.result)) {
-            ports.clearBoardToast();
+            if (!isDailyFritzMode) {
+              ports.clearBoardToast();
+            }
             break;
           }
         }

@@ -45,6 +45,9 @@ export const BOT_PLACE_SETTLE_MS = 650;
 /** Score callout hold while points are on screen. */
 export const BOT_SCORE_HOLD_MS = 1050;
 
+/** Cue the score chip near the end of the tile's landing motion. */
+export const BOT_SCORE_CUE_DELAY_MS = 400;
+
 /** Settle your play before Fritz's thinking state begins. */
 export const BOT_PLAYER_HANDOFF_DELAY_MS = 560;
 

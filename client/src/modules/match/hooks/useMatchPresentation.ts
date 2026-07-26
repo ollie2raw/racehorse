@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { Tile } from '../../../types.ts';
 import { buildPlayableTileKeys } from '../../../utils/handTileLegality.ts';
@@ -13,6 +13,7 @@ import { asPlayMoves } from '../../../game/tileUtils.ts';
 import {
   playMatchLoseSound,
   playMatchWinSound,
+  playScoreSound,
   playYourTurnSound,
   queueSound,
 } from '../../../utils/sound.ts';
@@ -22,10 +23,17 @@ import {
 import { traceDailyFritzEvent } from '../../daily/dailyFritzMatchDiagnostics.ts';
 import {
   BOT_LAST_PLAYED_HOLD_MS,
+  BOT_SCORE_CUE_DELAY_MS,
   BOT_SCORE_HOLD_MS,
   BOT_SCORE_TOAST_CLEAR_MS,
   BOT_SCORE_TOAST_HIDE_MS,
 } from '../../bot-turn/botTurnGuards.ts';
+import {
+  clearScoreToastEvent,
+  hideScoreToastEvent,
+  resolveCommittedScoreEvent,
+  type MatchScoreSnapshot,
+} from '../presentation/scoreToastEvents.ts';
 import type { UseBotMatchBootstrapResult } from './useBotMatchBootstrap.ts';
 import type { UseBotMatchRefsResult } from './useBotMatchRefs.ts';
 import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
@@ -61,6 +69,7 @@ export function useMatchPresentation({
     mode,
     opponentLabel,
     isDailyFritzMode,
+    dailyFritzPackage,
   } = bootstrap;
   const { isMuted } = chrome;
   const { lessonLayoutMode } = guidedBoot;
@@ -78,6 +87,8 @@ export function useMatchPresentation({
 
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [scoreToast, setScoreToast] = useState<{
+    eventId: number;
+    kind: 'score' | 'notice';
     message: string;
     tone: 'you' | 'bot';
     visible: boolean;
@@ -85,6 +96,19 @@ export function useMatchPresentation({
     points?: number;
     turnTotal?: number;
   } | null>(null);
+  const scoreToastEventIdRef = useRef(0);
+  const scoreCueTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const scoreIdentity = `${mode}:${dailyFritzPackage?.attempt_id ?? 'no-attempt'}`;
+  const scoreBaselineRef = useRef<{
+    identity: string;
+    scores: MatchScoreSnapshot;
+  }>({
+    identity: scoreIdentity,
+    scores: {
+      you: match.players.you.score,
+      bot: match.players.bot.score,
+    },
+  });
   const [handTileSize, setHandTileSize] = useState(56);
   const [lessonHandRowCount, setLessonHandRowCount] = useState(1);
 
@@ -110,9 +134,13 @@ export function useMatchPresentation({
     tone: 'you' | 'bot',
     options?: BoardToastOptions,
   ) => {
+    const eventId = scoreToastEventIdRef.current + 1;
+    scoreToastEventIdRef.current = eventId;
     if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
     if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     setScoreToast({
+      eventId,
+      kind: typeof options?.points === 'number' ? 'score' : 'notice',
       message,
       tone,
       visible: true,
@@ -131,9 +159,11 @@ export function useMatchPresentation({
     const holdMs = options?.holdMs ?? BOT_SCORE_TOAST_HIDE_MS;
     const clearMs = Math.max(holdMs + 300, BOT_SCORE_TOAST_CLEAR_MS);
     scoreToastHideTimerRef.current = setTimeout(() => {
-      setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
+      setScoreToast((prev) => hideScoreToastEvent(prev, eventId));
     }, holdMs);
-    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), clearMs);
+    scoreToastClearTimerRef.current = setTimeout(() => {
+      setScoreToast((prev) => clearScoreToastEvent(prev, eventId));
+    }, clearMs);
   }, [scoreToastHideTimerRef, scoreToastClearTimerRef]);
 
   const pushToast = useCallback((message: string) => {
@@ -142,6 +172,7 @@ export function useMatchPresentation({
   }, [showBoardToast, toastTimerRef]);
 
   const clearBoardToast = useCallback(() => {
+    scoreToastEventIdRef.current += 1;
     if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
     if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     scoreToastHideTimerRef.current = null;
@@ -161,6 +192,42 @@ export function useMatchPresentation({
       },
     );
   }, [opponentLabel, showBoardToast]);
+
+  useEffect(() => {
+    const currentScores = {
+      you: match.players.you.score,
+      bot: match.players.bot.score,
+    };
+    const baseline = scoreBaselineRef.current;
+
+    if (baseline.identity !== scoreIdentity) {
+      baseline.identity = scoreIdentity;
+      baseline.scores = currentScores;
+      if (scoreCueTimerRef.current) {
+        clearTimeout(scoreCueTimerRef.current);
+        scoreCueTimerRef.current = null;
+      }
+      return;
+    }
+
+    const scoreEvent = resolveCommittedScoreEvent(baseline.scores, currentScores);
+    baseline.scores = currentScores;
+    if (!isDailyFritzMode || !scoreEvent) return;
+
+    if (scoreCueTimerRef.current) clearTimeout(scoreCueTimerRef.current);
+    scoreCueTimerRef.current = window.setTimeout(() => {
+      scoreCueTimerRef.current = null;
+      showScoreToast(scoreEvent.player, scoreEvent.points);
+      queueSound(() => playScoreSound(scoreEvent.points, isMuted), 0);
+    }, BOT_SCORE_CUE_DELAY_MS);
+  }, [
+    isDailyFritzMode,
+    isMuted,
+    match.players.bot.score,
+    match.players.you.score,
+    scoreIdentity,
+    showScoreToast,
+  ]);
 
   const flashLastPlayed = useCallback((tile: Tile | null) => {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -259,6 +326,7 @@ export function useMatchPresentation({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+      if (scoreCueTimerRef.current) clearTimeout(scoreCueTimerRef.current);
       if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, [invalidateLocalRuns, toastTimerRef, scoreToastHideTimerRef, scoreToastClearTimerRef, lastPlayedTileTimerRef]);
