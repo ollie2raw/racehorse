@@ -126,6 +126,25 @@ function toCommand(state: GameState, action: DailyFritzTranscript['actions'][num
     : { ...base, kind: action.kind };
 }
 
+function applyOmittedMandatoryDraws(
+  state: GameState,
+  actorId: string,
+  transcriptSequence: number,
+): GameState {
+  let current = state;
+  const maxDraws = state.boneyard.length;
+  for (let drawIndex = 0; drawIndex < maxDraws && canDraw(current, actorId); drawIndex += 1) {
+    current = applyGameCommand(current, {
+      version: 1,
+      commandId: `daily-fritz:${transcriptSequence}:inferred-draw:${drawIndex}`,
+      sequence: current.sequence,
+      actorId,
+      kind: 'draw',
+    }).state;
+  }
+  return current;
+}
+
 export function digestDailyFritzTranscript(transcript: DailyFritzTranscript): string {
   return createHash('sha256').update(JSON.stringify(transcript)).digest('hex');
 }
@@ -179,6 +198,14 @@ export function verifyDailyFritzHand(input: {
       }
     }
     if (action.actor !== expectedActor) throw new DailyFritzVerificationError('Transcript actor does not own the turn.', 'wrong_actor');
+    // Draws are deterministic and mandatory whenever `canDraw` is true. Some
+    // clients can commit the resulting rack state before the presentation layer
+    // appends every draw event. Reconstruct only those omitted forced draws
+    // before a submitted play/pass. This cannot grant an optional draw: the
+    // engine stops at the first legal play and rejects any substituted tile.
+    if (action.kind !== 'draw' && canDraw(state, action.actor)) {
+      state = applyOmittedMandatoryDraws(state, action.actor, action.sequence);
+    }
     if (action.actor === 'fritz') {
       const decision = chooseOfficialFritzDecision({
         state,

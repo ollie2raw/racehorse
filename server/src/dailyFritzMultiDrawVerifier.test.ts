@@ -10,7 +10,7 @@ import {
 import { createOfficialDailyFritzHandState, verifyDailyFritzHand } from './dailyFritzVerifier';
 
 describe('Daily Fritz multi-draw transcript verification', () => {
-  it('accepts one draw action per tile and rejects collapsed multi-draws', () => {
+  it('accepts explicit draws and safely reconstructs omitted mandatory draws', () => {
     const start = createOfficialDailyFritzHandState({
       deal: {
         player_tiles: [{ low: 1, high: 3 }],
@@ -89,7 +89,7 @@ describe('Daily Fritz multi-draw transcript verification', () => {
     expect(() => verify([
       { sequence: 0, actor: 'fritz', kind: 'draw' },
       { sequence: 1, actor: 'fritz', kind: 'play', tile: play.tile, position: play.position },
-    ])).toThrow(/Fritz action does not match the official policy/);
+    ])).toThrow(/does not complete the hand/i);
   });
 
   it('accepts a post-score follow-up play without separate forced-draw transcript actions', () => {

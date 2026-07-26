@@ -168,6 +168,52 @@ describe('Daily Fritz server replay verifier', () => {
     }
   });
 
+  it('reconstructs an omitted mandatory player draw before the submitted play', () => {
+    const initial = createOfficialDailyFritzHandState({
+      deal: {
+        player_tiles: [{ low: 1, high: 2 }],
+        fritz_tiles: [{ low: 0, high: 0 }],
+        boneyard: [{ low: 5, high: 5 }],
+        locked: [],
+      },
+      handIndex: 0,
+      drawWinner: 'you',
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 0,
+      fritzScore: 0,
+    });
+
+    const verified = verify(transcript([
+      { sequence: 0, actor: 'player', kind: 'play', tile: { low: 5, high: 5 }, position: 'left' },
+      { sequence: 1, actor: 'player', kind: 'pass' },
+      { sequence: 2, actor: 'fritz', kind: 'pass' },
+    ]), initial);
+
+    expect(verified.terminalState.handOver).toBe(true);
+  });
+
+  it('does not infer draws beyond the first tile that creates a legal play', () => {
+    const initial = createOfficialDailyFritzHandState({
+      deal: {
+        player_tiles: [{ low: 1, high: 2 }],
+        fritz_tiles: [{ low: 0, high: 0 }],
+        boneyard: [{ low: 5, high: 5 }, { low: 6, high: 6 }],
+        locked: [],
+      },
+      handIndex: 0,
+      drawWinner: 'you',
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 0,
+      fritzScore: 0,
+    });
+
+    expect(() => verify(transcript([
+      { sequence: 0, actor: 'player', kind: 'play', tile: { low: 6, high: 6 }, position: 'left' },
+    ]), initial)).toThrow(/does not have tile/i);
+  });
+
   it('replays a complete deterministic official hand to the honest terminal result', () => {
     const initial = createOfficialDailyFritzHandState({
       deal: generateSingleDailyFritzGameHand('2026-07-13', 1, 0, 7),
