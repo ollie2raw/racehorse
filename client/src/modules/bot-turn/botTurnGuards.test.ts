@@ -27,23 +27,23 @@ describe('resolveBotTurnDelayMs', () => {
     expect(resolveBotTurnDelayMs(false)).toBe(BOT_FORCED_DRAW_THINK_DELAY_MS);
     expect(BOT_THINK_DELAY_MS).toBe(BOT_OPENING_THINK_DELAY_MS);
     expect(BOT_FORCED_DRAW_DELAY_MS).toBe(BOT_FORCED_DRAW_THINK_DELAY_MS);
-    expect(BOT_OPENING_THINK_DELAY_MS).toBe(1300);
-    expect(BOT_FORCED_DRAW_THINK_DELAY_MS).toBeGreaterThanOrEqual(2000);
+    expect(BOT_OPENING_THINK_DELAY_MS).toBe(1000);
+    expect(BOT_FORCED_DRAW_THINK_DELAY_MS).toBe(1650);
   });
 
   it('keeps chain continues shorter than opening thinks', () => {
     expect(resolveBotChainContinueDelayMs()).toBe(BOT_CHAIN_CONTINUE_DELAY_MS);
     expect(BOT_CHAIN_CONTINUE_DELAY_MS).toBeLessThan(BOT_OPENING_THINK_DELAY_MS);
-    expect(BOT_CHAIN_CONTINUE_DELAY_MS).toBeGreaterThanOrEqual(1000);
+    expect(BOT_CHAIN_CONTINUE_DELAY_MS).toBe(825);
   });
 
   it('keeps draw step aligned with fly duration and place/score settles readable', () => {
     expect(BOT_DRAW_STEP_MS).toBe(BOT_FLY_TILE_MS);
-    expect(BOT_DRAW_STEP_MS).toBeGreaterThanOrEqual(1600);
-    expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBeGreaterThanOrEqual(1000);
-    expect(BOT_PLACE_SETTLE_MS).toBe(850);
+    expect(BOT_DRAW_STEP_MS).toBe(1325);
+    expect(BOT_POST_DRAW_PLAY_DELAY_MS).toBe(900);
+    expect(BOT_PLACE_SETTLE_MS).toBe(650);
     expect(BOT_SCORE_HOLD_MS).toBeGreaterThanOrEqual(BOT_PLACE_SETTLE_MS);
-    expect(BOT_PLAYER_HANDOFF_DELAY_MS).toBeGreaterThanOrEqual(600);
+    expect(BOT_PLAYER_HANDOFF_DELAY_MS).toBe(560);
     expect(resolveBotPostActionSettleMs(0)).toBe(BOT_PLACE_SETTLE_MS);
     expect(resolveBotPostActionSettleMs(5)).toBe(Math.max(BOT_PLACE_SETTLE_MS, BOT_SCORE_HOLD_MS));
   });

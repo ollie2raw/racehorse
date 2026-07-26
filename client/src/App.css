@@ -2984,7 +2984,7 @@ button:hover:not(:disabled) {
 }
 
 .bot-match-screen .board-tile-wrapper {
-  animation: board-tile-enter 850ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: board-tile-enter 650ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes board-tile-enter {

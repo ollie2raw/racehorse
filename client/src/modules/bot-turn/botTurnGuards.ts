@@ -11,13 +11,13 @@ import {
  */
 
 /** Opening think when Fritz has a legal play. */
-export const BOT_OPENING_THINK_DELAY_MS = 1300;
+export const BOT_OPENING_THINK_DELAY_MS = 1000;
 
 /** Think between score/double chain continues (shorter than opening). */
-export const BOT_CHAIN_CONTINUE_DELAY_MS = 1100;
+export const BOT_CHAIN_CONTINUE_DELAY_MS = 825;
 
 /** Opening beat when Fritz must dig the boneyard. */
-export const BOT_FORCED_DRAW_THINK_DELAY_MS = 2200;
+export const BOT_FORCED_DRAW_THINK_DELAY_MS = 1650;
 
 /**
  * @deprecated Prefer BOT_OPENING_THINK_DELAY_MS / resolveBotOpeningDelayMs.
@@ -31,32 +31,32 @@ export const BOT_THINK_DELAY_MS = BOT_OPENING_THINK_DELAY_MS;
 export const BOT_FORCED_DRAW_DELAY_MS = BOT_FORCED_DRAW_THINK_DELAY_MS;
 
 /** Per-tile draw cadence; one tile at a time. Must match flying-tile CSS duration. */
-export const BOT_DRAW_STEP_MS = 1750;
+export const BOT_DRAW_STEP_MS = 1325;
 
 /** Flying-tile animation duration (CSS + DOM cleanup should match). */
-export const BOT_FLY_TILE_MS = 1750;
+export const BOT_FLY_TILE_MS = 1325;
 
 /** Breath after draw-until-legal before Fritz plays the found tile. */
-export const BOT_POST_DRAW_PLAY_DELAY_MS = 1200;
+export const BOT_POST_DRAW_PLAY_DELAY_MS = 900;
 
 /** Board place motion + settle after a tile lands. Must match place CSS. */
-export const BOT_PLACE_SETTLE_MS = 850;
+export const BOT_PLACE_SETTLE_MS = 650;
 
 /** Score callout hold while points are on screen. */
-export const BOT_SCORE_HOLD_MS = 1400;
+export const BOT_SCORE_HOLD_MS = 1050;
 
 /** Settle your play before Fritz's thinking state begins. */
-export const BOT_PLAYER_HANDOFF_DELAY_MS = 750;
+export const BOT_PLAYER_HANDOFF_DELAY_MS = 560;
 
 /** Final “scored N this turn” settle when a scoring chain ends. */
-export const BOT_CHAIN_END_SETTLE_MS = 1400;
+export const BOT_CHAIN_END_SETTLE_MS = 1050;
 
 /** Keep last-played highlight through chain steps. */
-export const BOT_LAST_PLAYED_HOLD_MS = 4500;
+export const BOT_LAST_PLAYED_HOLD_MS = 3400;
 
 /** Default score-toast hide/clear when not sticky (player scores, non-chain). */
-export const BOT_SCORE_TOAST_HIDE_MS = 1600;
-export const BOT_SCORE_TOAST_CLEAR_MS = 2000;
+export const BOT_SCORE_TOAST_HIDE_MS = 1200;
+export const BOT_SCORE_TOAST_CLEAR_MS = 1500;
 
 export function resolveBotOpeningDelayMs(hasLegalMove: boolean): number {
   return hasLegalMove ? BOT_OPENING_THINK_DELAY_MS : BOT_FORCED_DRAW_THINK_DELAY_MS;
