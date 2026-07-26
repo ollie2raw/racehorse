@@ -82,7 +82,6 @@ export type DrawAnimationDeps = {
   setFlyingTiles: React.Dispatch<
     React.SetStateAction<{ x: number; y: number; toX: number; toY: number; id: number }[]>
   >;
-  opponentLabel: string;
 };
 
 export type UsePlayerTurnOrchestrationArgs = {

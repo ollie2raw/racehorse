@@ -56,7 +56,7 @@ describe('Daily Fritz v3 session persistence', () => {
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({}, now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({ challenge: createDailyFritzChallengeIdentity('2026-07-11') }), now)).toBeNull();
-    expect(parseDailyFritzPersistedSnapshot({ ...snapshot(), schemaVersion: 5 }, now)).toBeNull();
+    expect(parseDailyFritzPersistedSnapshot({ ...snapshot(), schemaVersion: 6 }, now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({ lifecyclePhase: 'hand_transition' }), now)).toBeNull();
   });
   it('retains a coherent hand-transition snapshot and rejects terminal resume', () => {
@@ -103,6 +103,28 @@ describe('Daily Fritz v3 session persistence', () => {
     expect(persistDailyFritzSnapshot(key, snapshot({ revision: 5 }))).toBe(true);
     expect(persistDailyFritzSnapshot(key, snapshot({ revision: 4, lastTransitionAt: '2026-07-12T18:02:00.000Z' }))).toBe(false);
     expect(JSON.parse(localStorage.getItem(key)!).revision).toBe(5);
+  });
+  it('removes and replaces a checkpoint from the unsafe draw-presentation schema', () => {
+    const key = buildDailyFritzStorageKey('attempt-1', 1);
+    window.localStorage.setItem(key, JSON.stringify({
+      ...snapshot(),
+      schemaVersion: 6,
+      revision: 99,
+    }));
+
+    expect(loadPersistedDailyFritzMatch(
+      key,
+      'attempt-1',
+      2,
+      '2026-07-12',
+      now,
+      RUN_FP,
+    )).toBeNull();
+    expect(window.localStorage.getItem(key)).toBeNull();
+
+    expect(persistDailyFritzSnapshot(key, snapshot({ revision: 1 }))).toBe(true);
+    expect(JSON.parse(window.localStorage.getItem(key)!).schemaVersion)
+      .toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
   });
   it.each([
     { low: -1, high: 2 },

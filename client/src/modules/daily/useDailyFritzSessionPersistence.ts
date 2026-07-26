@@ -23,6 +23,7 @@ type UseDailyFritzSessionPersistenceArgs = {
   moveLog: readonly MoveEntry[];
   movesUsed: number;
   preGameDrawActive: boolean;
+  drawSequenceActive: boolean;
   handResult: BotHandReveal | null;
   initialRevision?: number;
   initialStartedAt?: string;
@@ -40,6 +41,7 @@ export function useDailyFritzSessionPersistence({
   moveLog,
   movesUsed,
   preGameDrawActive,
+  drawSequenceActive,
   handResult,
   initialRevision = 0,
   initialStartedAt,
@@ -51,7 +53,10 @@ export function useDailyFritzSessionPersistence({
 
   useEffect(() => {
     if (!enabled || !storageKey || !attemptId || !runDate || !runFingerprint || typeof window === 'undefined') return;
-    if (preGameDrawActive) return;
+    // Draw animation commits intermediate rack/boneyard states so the player
+    // can see each tile arrive. Those states are not authoritative resume
+    // points until the matching transcript actions and final state commit.
+    if (preGameDrawActive || drawSequenceActive) return;
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
     const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
@@ -122,6 +127,7 @@ export function useDailyFritzSessionPersistence({
     moveLog,
     movesUsed,
     preGameDrawActive,
+    drawSequenceActive,
     storageKey,
   ]);
 

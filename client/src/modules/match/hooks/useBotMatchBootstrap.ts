@@ -20,6 +20,7 @@ import { useMatchRuntimeBridge } from './useMatchRuntimeBridge.ts';
 import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
 
 import { BOT_DRAW_STEP_MS } from '../../bot-turn/botTurnGuards.ts';
+import { shouldRunDailyFritzPreGameDraw } from '../../daily/createDailyFritzOfficialMatch.ts';
 
 /** Shared draw cadence for Fritz and player forced-draw presentation. */
 export const DRAW_STEP_MS = BOT_DRAW_STEP_MS;
@@ -90,7 +91,13 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   const preGameDrawEligibleBase = isPreGameDrawEligible(preGameDrawEligibilityInput);
   const preGameDrawEligible =
     preGameDrawEligibleBase &&
-    (mode !== 'daily-fritz' || dailyFritzScriptedDrawReady);
+    (
+      mode !== 'daily-fritz'
+      || (
+        dailyFritzScriptedDrawReady
+        && shouldRunDailyFritzPreGameDraw(dailyFritzPackage)
+      )
+    );
 
   const [preGameDrawCompleted, setPreGameDrawCompleted] = useState(() =>
     Boolean(resumablePersistedDailyFritzMatch),

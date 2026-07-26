@@ -124,7 +124,11 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
                   className="mode-inline-btn"
                   onClick={onRetryHandAdvance}
                 >
-                  {handAdvanceError ? 'Retry' : 'Continue'}
+                  {handAdvanceError?.includes('Reload the hand')
+                    ? 'Reload Hand'
+                    : handAdvanceError
+                      ? 'Retry'
+                      : 'Continue'}
                 </button>
               </div>
             </footer>

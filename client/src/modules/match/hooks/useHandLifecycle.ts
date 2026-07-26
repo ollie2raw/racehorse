@@ -11,7 +11,9 @@ import {
 import {
   DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
   DailyFritzEndOfRunError,
+  DailyFritzNextHandHttpError,
   formatDailyFritzNextHandUserMessage,
+  isRetryableDailyFritzNextHandError,
   type DailyFritzNextHandResponse,
 } from '../../daily/dailyFritzContracts.ts';
 import { dailyFritzDebugLog, shouldLogDailyFritzDebug } from '../../daily/dailyFritzMatchDiagnostics.ts';
@@ -38,6 +40,10 @@ import type {
   UseHandLifecycleArgs,
   UseHandLifecycleResult,
 } from '../hand-lifecycle/types.ts';
+import {
+  buildDailyFritzStorageKey,
+  discardDailyFritzSnapshot,
+} from '../../daily/dailyFritzSessionStorage.ts';
 
 export type { HandLifecyclePorts, HandLifecycleDebugSnapshot, UseHandLifecycleArgs, UseHandLifecycleResult };
 export const autoAdvanceMs = DAILY_FRITZ_HAND_AUTO_ADVANCE_MS;
@@ -75,6 +81,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   const [showManualHandAdvance, setShowManualHandAdvance] = useState(false);
 
   const handTransitionInFlightRef = useRef(false);
+  const reloadRequiredRef = useRef(false);
   const transitionStateRef = useRef({ dailyFritzNextHandFailureCount: 0 });
   const prefetchCoordinatorRef = useRef(new HandPrefetchCoordinator());
   const advanceRetryRef = useRef(new HandAdvanceRetryScheduler());
@@ -160,6 +167,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       setDailyFritzHandIndex(response.current_hand_index);
       setDailyFritzHandResult(null);
       transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
+      reloadRequiredRef.current = false;
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
       reveal.dismissRevealForAdvance();
@@ -327,6 +335,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           transitionStateRef.current.dailyFritzNextHandFailureCount += 1;
           const failureAttempt = transitionStateRef.current.dailyFritzNextHandFailureCount;
           const isAbort = err instanceof Error && err.message.toLowerCase().includes('timed out');
+          const isRetryable = isRetryableDailyFritzNextHandError(err);
           emitHandLifecycleDebugLog({
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
@@ -338,8 +347,40 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               handNumber: matchRef.current.handNumber,
               timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
               nextHandUrl: `${resolveGameServerUrl()}/api/daily-fritz/next-hand`,
+              isRetryable,
             },
           });
+          if (!isRetryable) {
+            const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
+            if (status === 400) {
+              discardDailyFritzSnapshot(buildDailyFritzStorageKey(
+                dailyFritzPackage.attempt_id,
+                prefetchParams.gameNumber,
+              ));
+              reloadRequiredRef.current = true;
+              setHandAdvanceError(
+                'This saved hand fell out of sync with the official deal. Reload the hand to restore it; your verified score is safe.',
+              );
+            } else {
+              setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
+            }
+            logDailyFritzHandBreadcrumb('manual-advance-shown', {
+              reason: 'next-hand-request-rejected',
+              source,
+              failureAttempt,
+              status,
+              error: errMsg,
+            });
+            setShowManualHandAdvance(true);
+            traceHandLifecycle('error', {
+              source,
+              error: errMsg,
+              failureAttempt,
+              status,
+              willRetry: false,
+            }, 'C');
+            return;
+          }
           if (failureAttempt < 2) {
             logDailyFritzHandBreadcrumb('manual-advance-shown', {
               reason: 'next-hand-fetch-retry',
@@ -477,6 +518,10 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   );
 
   const retryHandAdvance = useCallback(() => {
+    if (reloadRequiredRef.current) {
+      window.location.reload();
+      return;
+    }
     setHandAdvanceError(null);
     handTransitionInFlightRef.current = false;
     prefetchCoordinator.clear();

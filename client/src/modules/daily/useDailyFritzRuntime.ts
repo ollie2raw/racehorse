@@ -29,6 +29,7 @@ export type UseDailyFritzRuntimeArgs = {
   ghostResultError: string | null;
   setGhostResultLoading: (loading: boolean) => void;
   setGhostResultError: (error: string | null) => void;
+  drawSequenceActive: boolean;
 };
 
 export function useDailyFritzRuntime({
@@ -40,6 +41,7 @@ export function useDailyFritzRuntime({
   ghostResultError,
   setGhostResultLoading,
   setGhostResultError,
+  drawSequenceActive,
 }: UseDailyFritzRuntimeArgs) {
   const {
     dailyFritzSetOverlay = null,
@@ -127,6 +129,7 @@ export function useDailyFritzRuntime({
     moveLog,
     movesUsed,
     preGameDrawActive,
+    drawSequenceActive,
     handResult: persistedHandResult,
     initialRevision: resumablePersistedDailyFritzMatch?.revision,
     initialStartedAt: resumablePersistedDailyFritzMatch?.startedAt,

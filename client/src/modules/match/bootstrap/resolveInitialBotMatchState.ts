@@ -2,7 +2,6 @@ import type { MoveEntry } from '../../../game/moveLogger.ts';
 import {
   createBotMatch,
   createFixedBotMatch,
-  createFixedBotMatchWithStarter,
   type BotMatchState,
   type BotDealSize,
 } from '../runtime/botEngine.ts';
@@ -17,6 +16,7 @@ import { resolveLessonV2InitialState } from './lessonV2LazyRegistry.ts';
 import type { DailyFritzStartResponse } from '../../daily/dailyFritzContracts.ts';
 import { createPreGameDrawShellMatch } from '../../../match/preGameDraw/preGameDrawEligibility.ts';
 import type { LocalMatchMode } from '@racehorse/match-protocol';
+import { createDailyFritzOfficialMatch } from '../../daily/createDailyFritzOfficialMatch.ts';
 
 export type ResolveInitialBotMatchStateInput = {
   mode: LocalMatchMode;
@@ -95,16 +95,7 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
     ?? (preGameDrawEligible
       ? createPreGameDrawShellMatch(winningScore, dealSize)
       : mode === 'daily-fritz' && dailyFritzPackage
-        ? (() => {
-          const created = createFixedBotMatchWithStarter(
-            dailyFritzPackage.first_hand,
-            dailyFritzPackage.draw_winner === 'bot' ? 'bot' : 'you',
-            winningScore,
-            dealSize,
-          );
-          const scores = dailyFritzPackage.current_game_scores;
-          return scores ? { ...created, players: { you: { ...created.players.you, score: scores.you }, bot: { ...created.players.bot, score: scores.fritz } } } : created;
-        })()
+        ? createDailyFritzOfficialMatch(dailyFritzPackage, winningScore)
         : createBotMatch(winningScore, dealSize))
   );
 }

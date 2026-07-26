@@ -104,7 +104,6 @@ export function buildPlayerTurnArgs(
       flyingTileIdRef: refs.flyingTileIdRef,
       setDrawPulseIndex: refs.setDrawPulseIndex,
       setFlyingTiles: refs.setFlyingTiles,
-      opponentLabel: bootstrap.opponentLabel,
     },
     isDailyFritzMode,
     isMuted: chrome.isMuted,

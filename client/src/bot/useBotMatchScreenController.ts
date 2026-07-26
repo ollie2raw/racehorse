@@ -89,6 +89,7 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     ghostResultError: ghost.ghostResultError,
     setGhostResultLoading: ghost.setGhostResultLoading,
     setGhostResultError: ghost.setGhostResultError,
+    drawSequenceActive: refs.drawSequenceActive,
   });
 
   const review = useReviewRuntime({

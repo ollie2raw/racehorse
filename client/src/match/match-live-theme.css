@@ -759,6 +759,16 @@
   -webkit-backdrop-filter: none !important;
 }
 
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you),
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you) {
+  border-color: rgba(88, 166, 255, 0.28) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.is-you {
+  border-color: rgba(231, 182, 74, 0.28) !important;
+}
+
 .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-turn-label.opp-turn {
   border-color: rgba(231, 182, 74, 0.28) !important;
   color: rgba(242, 226, 186, 0.92) !important;
@@ -768,12 +778,12 @@
 @media (prefers-reduced-motion: no-preference) {
   .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you)::before,
   .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you)::before {
-    animation: active-accent-pulse-you 1.8s ease-in-out infinite !important;
+    animation: active-accent-pulse-opp 1.8s ease-in-out infinite !important;
   }
 
   .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you),
   .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you) {
-    animation: active-pill-pulse-you 1.8s ease-in-out infinite !important;
+    animation: active-pill-pulse-opp 1.8s ease-in-out infinite !important;
   }
 }
 

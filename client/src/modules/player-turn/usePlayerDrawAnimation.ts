@@ -7,10 +7,9 @@ import type { DrawAnimationDeps } from './types.ts';
 
 type UsePlayerDrawAnimationArgs = {
   drawAnimation: DrawAnimationDeps;
-  showBoardToast: (message: string, tone: 'you' | 'bot') => void;
 };
 
-export function usePlayerDrawAnimation({ drawAnimation, showBoardToast }: UsePlayerDrawAnimationArgs) {
+export function usePlayerDrawAnimation({ drawAnimation }: UsePlayerDrawAnimationArgs) {
   const {
     boneyardRef,
     handAreaRef,
@@ -22,7 +21,6 @@ export function usePlayerDrawAnimation({ drawAnimation, showBoardToast }: UsePla
     flyingTileIdRef,
     setDrawPulseIndex,
     setFlyingTiles,
-    opponentLabel,
   } = drawAnimation;
 
   const triggerDrawStepAnimation = useCallback((drawer: BotPlayerId, nextState: BotMatchState) => {
@@ -47,9 +45,6 @@ export function usePlayerDrawAnimation({ drawAnimation, showBoardToast }: UsePla
         handSize: drawer === 'you' ? nextState.players.you.hand.length : nextState.players.bot.hand.length,
         usedPulse: drawer === 'you',
       });
-      if (drawer === 'bot') {
-        showBoardToast(`${opponentLabel} drew a tile`, 'bot');
-      }
       return;
     }
     const from = boneyardEl.getBoundingClientRect();
@@ -83,8 +78,6 @@ export function usePlayerDrawAnimation({ drawAnimation, showBoardToast }: UsePla
     flyingTileIdRef,
     setDrawPulseIndex,
     setFlyingTiles,
-    opponentLabel,
-    showBoardToast,
     rootRef,
     boardStageRef,
   ]);

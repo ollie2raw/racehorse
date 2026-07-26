@@ -138,9 +138,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       flyingTileIdRef: refs.flyingTileIdRef,
       setDrawPulseIndex: refs.setDrawPulseIndex,
       setFlyingTiles: refs.setFlyingTiles,
-      opponentLabel: bootstrap.opponentLabel,
     },
-    showBoardToast: presentation.showBoardToast,
   });
 
   const commands = useMemo(

@@ -454,6 +454,24 @@ export function formatDailyFritzNextHandUserMessage(raw: string): string {
   return raw.length > 220 ? "Couldn't load the next hand. Check connection and retry." : raw;
 }
 
+export class DailyFritzNextHandHttpError extends Error {
+  readonly status: number | null;
+
+  constructor(
+    message: string,
+    status: number | null,
+  ) {
+    super(message);
+    this.name = 'DailyFritzNextHandHttpError';
+    this.status = status;
+  }
+}
+
+export function isRetryableDailyFritzNextHandError(error: unknown): boolean {
+  if (!(error instanceof DailyFritzNextHandHttpError)) return true;
+  return error.status === null || error.status === 408 || error.status === 429 || error.status >= 500;
+}
+
 export async function nextDailyFritzHand(input: {
   attemptId: string;
   verifiedMatchId: string;
@@ -538,7 +556,7 @@ export async function nextDailyFritzHand(input: {
   if (result.status === 409) {
     const message = parsedError || 'No hands remain in this Daily Fritz run.';
     if (!String(message).toLowerCase().includes('no hands remain')) {
-      throw new Error(message);
+      throw new DailyFritzNextHandHttpError(message, result.status);
     }
     throw new DailyFritzEndOfRunError(message);
   }
@@ -562,7 +580,10 @@ export async function nextDailyFritzHand(input: {
         error: parsedError || null,
       });
     }
-    throw new Error(parsedError || `${path} failed with ${result.status ?? 'unknown'}`);
+    throw new DailyFritzNextHandHttpError(
+      parsedError || `${path} failed with ${result.status ?? 'unknown'}`,
+      result.status ?? null,
+    );
   }
 
   return result.data as DailyFritzNextHandResponse;

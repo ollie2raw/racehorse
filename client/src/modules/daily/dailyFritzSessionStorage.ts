@@ -6,12 +6,13 @@ import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type D
 import type { DailyFritzTranscript } from '@racehorse/game-core';
 
 // Bump when the local match state is no longer safe to replay against the
-// server verifier. Version 6 requires a server run fingerprint.
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 6;
+// server verifier. Version 7 excludes checkpoints captured during draw
+// presentation, when the visual state can be ahead of its transcript.
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 7;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 6;
+  schemaVersion: 7;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
@@ -117,7 +118,11 @@ export function loadPersistedDailyFritzMatch(
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(raw), now);
-    if (!parsed || parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
+    if (!parsed) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+    if (parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
     if (runFingerprint && parsed.runFingerprint !== runFingerprint) return null;
     // Local must not sit behind the server. If it jumped ahead (e.g. leave during
     // hand-over before next-hand ack), discard so resume rebinds to the server hand.
@@ -131,7 +136,7 @@ export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFri
   try {
     const existingRaw = window.localStorage.getItem(storageKey);
     const existing = existingRaw ? JSON.parse(existingRaw) as unknown : null;
-    if (object(existing)) {
+    if (object(existing) && existing.schemaVersion === DAILY_FRITZ_SESSION_SCHEMA_VERSION) {
       const revision = Number(existing.revision);
       const transitionAt = typeof existing.lastTransitionAt === 'string'
         ? Date.parse(existing.lastTransitionAt)
@@ -144,6 +149,15 @@ export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFri
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
     return true;
   } catch { return false; }
+}
+
+export function discardDailyFritzSnapshot(storageKey: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    /* localStorage may be unavailable */
+  }
 }
 
 export function pruneNonPlayableDailyFritzSnapshot(storageKey: string): void {
