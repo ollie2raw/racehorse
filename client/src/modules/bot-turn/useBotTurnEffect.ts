@@ -410,18 +410,14 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     })();
 
     return () => {
-      const inFlight = botTurnInFlightRef.current;
-      botMatchDebugLog('[BOT-EFFECT] cleanup', { inFlight, cancelled });
+      cancelled = true;
+      botMatchDebugLog('[BOT-EFFECT] cleanup', { cancelled });
       if (botActionRetryTimerRef.current) {
         clearTimeout(botActionRetryTimerRef.current);
         botActionRetryTimerRef.current = null;
       }
-      // Tenure owns cancellation. Remounts while in-flight must not abort the
-      // think/draw/chain waits — that was collapsing delays to milliseconds.
-      if (!inFlight) {
-        cancelled = true;
-        finishLocalRun(runToken);
-      }
+      botTurnInFlightRef.current = false;
+      finishLocalRun(runToken);
     };
   }, [
     botScheduleKey,

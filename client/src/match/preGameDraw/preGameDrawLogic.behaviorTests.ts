@@ -164,7 +164,7 @@ function testMultipleTieRoundsBeforeWinner(): void {
   assertEqual(state.phase, 'pick-player', 'first tie reopens picks');
   assertEqual(getPickableTileIds(state).length, 26, 'two tiles removed after first tie');
 
-  const nextTieTiles = state.tiles.filter((slot) => !slot.outOfPlay).slice(0, 2);
+  const nextTieTiles = state.tiles.filter((slot) => !slot.outOfPlay && slot.id !== '6-6' && slot.id !== '0-1').slice(0, 2);
   nextTieTiles[0]!.tile = { low: 2, high: 4 };
   nextTieTiles[1]!.tile = { low: 2, high: 4 };
   state = simulateDrawRound(state, nextTieTiles[0]!.id, nextTieTiles[1]!.id);

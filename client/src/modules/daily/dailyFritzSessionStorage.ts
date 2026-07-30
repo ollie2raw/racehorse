@@ -126,8 +126,7 @@ export function loadPersistedDailyFritzMatch(
     }
     if (parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
     if (runFingerprint && parsed.runFingerprint !== runFingerprint) return null;
-    // Local must not sit behind the server. If it jumped ahead (e.g. leave during
-    // hand-over before next-hand ack), discard so resume rebinds to the server hand.
+    // Local must match the server hand index.
     if (parsed.currentHandIndex !== serverHandIndex) return null;
     return parsed;
   } catch { return null; }

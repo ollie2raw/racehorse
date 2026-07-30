@@ -197,7 +197,7 @@ describe('DailyPuzzleLadderOverlays', () => {
     );
 
     expect(screen.getByLabelText('Practice complete')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Replay P2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replay' }));
     expect(actions.onPracticeReplay).toHaveBeenCalledWith(2);
   });
 
@@ -218,7 +218,7 @@ describe('DailyPuzzleLadderOverlays', () => {
 
     expect(screen.getByLabelText('Ladder complete')).toBeTruthy();
     expect(screen.getByText('Rank #5')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '← Home' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review Ladder' }));
     fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
     fireEvent.click(screen.getByRole('button', { name: 'Share Result' }));
