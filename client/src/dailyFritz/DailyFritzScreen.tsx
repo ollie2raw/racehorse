@@ -169,7 +169,7 @@ export default function DailyFritzScreen({
           void loadToday();
         }}
         onDailyFritzGameComplete={(result) => {
-          void handleDailyFritzGameComplete(result);
+          return handleDailyFritzGameComplete(result);
         }}
         onDailyFritzComplete={() => {
           void finishEmbeddedRun();

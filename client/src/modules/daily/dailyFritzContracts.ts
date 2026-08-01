@@ -5,6 +5,7 @@ export {
   DailyFritzEndOfRunError,
   DailyFritzNextHandHttpError,
   formatDailyFritzNextHandUserMessage,
+  isRecoverableDailyFritzAuthorityCode,
   isRetryableDailyFritzNextHandError,
   nextDailyFritzHand,
 } from '../../dailyFritz/api.ts';

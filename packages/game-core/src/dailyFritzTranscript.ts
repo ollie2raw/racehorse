@@ -1,6 +1,12 @@
 import type { PlacementPosition, Tile } from './types';
 import { GAME_RULES_VERSION } from './versions';
-import { FRITZ_POLICY_MIN_SUPPORTED_VERSION, FRITZ_POLICY_VERSION } from './fritzPolicy';
+import {
+  FRITZ_POLICY_MIN_SUPPORTED_VERSION,
+  FRITZ_POLICY_VERSION,
+  getFritzPolicyContract,
+  isSupportedFritzPolicyVersion,
+  type FritzPolicyVersion,
+} from './fritzPolicy';
 
 export const DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION = 2 as const;
 export const DAILY_FRITZ_VERIFIER_VERSION = 2 as const;
@@ -8,14 +14,17 @@ export const DAILY_FRITZ_MAX_ACTIONS = 512;
 export const DAILY_FRITZ_MAX_TRANSCRIPT_BYTES = 64 * 1024;
 
 export type DailyFritzTranscriptAction =
-  | { sequence: number; actor: 'player' | 'fritz'; kind: 'play'; tile: Tile; position: PlacementPosition }
-  | { sequence: number; actor: 'player' | 'fritz'; kind: 'draw' | 'pass' };
+  | { sequence: number; actor: 'player' | 'fritz'; kind: 'play'; tile: Tile; position: PlacementPosition; preStateDigest?: string }
+  | { sequence: number; actor: 'player' | 'fritz'; kind: 'draw' | 'pass'; preStateDigest?: string };
 
 export type DailyFritzTranscript = {
   protocolVersion: 1 | 2;
   rulesVersion: typeof GAME_RULES_VERSION;
   /** Client-reported policy version; 1 transcripts remain parseable for Retry after the v2 bump. */
   fritzPolicyVersion: typeof FRITZ_POLICY_MIN_SUPPORTED_VERSION | typeof FRITZ_POLICY_VERSION;
+  fritzPolicyContract?: string;
+  stateDigestVersion?: 1;
+  clientRelease?: string;
   challengeId: string;
   attemptId: string;
   gameNumber: 1 | 2 | 3;
@@ -48,12 +57,16 @@ function parsePosition(value: unknown): PlacementPosition | null {
   return value as PlacementPosition;
 }
 
+function validStateDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^df-state-v1:[0-9a-f]{8}$/.test(value);
+}
+
 export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript {
   let serialized = '';
   try { serialized = JSON.stringify(value); } catch { throw new Error('Malformed transcript.'); }
   if (serialized.length > DAILY_FRITZ_MAX_TRANSCRIPT_BYTES) throw new Error('Transcript exceeds size limit.');
   if (!isRecord(value)) throw new Error('Malformed transcript.');
-  if (!hasOnlyKeys(value, ['protocolVersion', 'rulesVersion', 'fritzPolicyVersion', 'challengeId', 'attemptId', 'gameNumber', 'handIndex', 'actions'])) {
+  if (!hasOnlyKeys(value, ['protocolVersion', 'rulesVersion', 'fritzPolicyVersion', 'fritzPolicyContract', 'stateDigestVersion', 'clientRelease', 'challengeId', 'attemptId', 'gameNumber', 'handIndex', 'actions'])) {
     throw new Error('Transcript contains unsupported fields.');
   }
   if (value.protocolVersion !== 1 && value.protocolVersion !== 2) throw new Error('Unsupported transcript version.');
@@ -63,6 +76,19 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
     && value.fritzPolicyVersion !== FRITZ_POLICY_VERSION
   ) {
     throw new Error('Unsupported Fritz policy version.');
+  }
+  const policyVersion = value.fritzPolicyVersion as FritzPolicyVersion;
+  if (
+    value.fritzPolicyContract != null
+    && value.fritzPolicyContract !== getFritzPolicyContract(policyVersion)
+  ) {
+    throw new Error('Fritz policy contract does not match its version.');
+  }
+  if (value.stateDigestVersion != null && value.stateDigestVersion !== 1) {
+    throw new Error('Unsupported authority state digest version.');
+  }
+  if (value.clientRelease != null && (typeof value.clientRelease !== 'string' || value.clientRelease.length > 120)) {
+    throw new Error('Invalid client release.');
   }
   if (typeof value.challengeId !== 'string' || value.challengeId.length < 1 || value.challengeId.length > 160) throw new Error('Invalid challenge id.');
   if (typeof value.attemptId !== 'string' || value.attemptId.length < 1 || value.attemptId.length > 160) throw new Error('Invalid attempt id.');
@@ -74,22 +100,27 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
       throw new Error('Transcript action sequence is invalid.');
     }
     if (raw.kind === 'draw' || raw.kind === 'pass') {
-      if (!hasOnlyKeys(raw, ['sequence', 'actor', 'kind'])) throw new Error('Transcript action contains unsupported fields.');
-      return { sequence: index, actor: raw.actor, kind: raw.kind };
+      if (!hasOnlyKeys(raw, ['sequence', 'actor', 'kind', 'preStateDigest'])) throw new Error('Transcript action contains unsupported fields.');
+      if (raw.preStateDigest != null && !validStateDigest(raw.preStateDigest)) throw new Error('Invalid pre-action state digest.');
+      return { sequence: index, actor: raw.actor, kind: raw.kind, ...(raw.preStateDigest ? { preStateDigest: raw.preStateDigest } : {}) };
     }
     if (raw.kind !== 'play') throw new Error('Transcript action kind is invalid.');
-    if (!hasOnlyKeys(raw, ['sequence', 'actor', 'kind', 'tile', 'position'])) throw new Error('Transcript action contains unsupported fields.');
+    if (!hasOnlyKeys(raw, ['sequence', 'actor', 'kind', 'tile', 'position', 'preStateDigest'])) throw new Error('Transcript action contains unsupported fields.');
+    if (raw.preStateDigest != null && !validStateDigest(raw.preStateDigest)) throw new Error('Invalid pre-action state digest.');
     const tile = parseTile(raw.tile);
     const position = parsePosition(raw.position);
     if (!tile || !position) throw new Error('Transcript play action is invalid.');
-    return { sequence: index, actor: raw.actor, kind: 'play', tile, position };
+    return { sequence: index, actor: raw.actor, kind: 'play', tile, position, ...(raw.preStateDigest ? { preStateDigest: raw.preStateDigest } : {}) };
   });
   return {
     protocolVersion: value.protocolVersion === 1 ? 1 : 2,
     rulesVersion: GAME_RULES_VERSION,
-    fritzPolicyVersion: value.fritzPolicyVersion === FRITZ_POLICY_MIN_SUPPORTED_VERSION
-      ? FRITZ_POLICY_MIN_SUPPORTED_VERSION
+    fritzPolicyVersion: isSupportedFritzPolicyVersion(value.fritzPolicyVersion)
+      ? value.fritzPolicyVersion
       : FRITZ_POLICY_VERSION,
+    ...(typeof value.fritzPolicyContract === 'string' ? { fritzPolicyContract: value.fritzPolicyContract } : {}),
+    ...(value.stateDigestVersion === 1 ? { stateDigestVersion: 1 as const } : {}),
+    ...(typeof value.clientRelease === 'string' ? { clientRelease: value.clientRelease } : {}),
     challengeId: value.challengeId,
     attemptId: value.attemptId,
     gameNumber: value.gameNumber,

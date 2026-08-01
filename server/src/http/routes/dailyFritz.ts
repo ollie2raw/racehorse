@@ -3,6 +3,8 @@ import {
   DAILY_FRITZ_VERIFIER_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
+  getFritzPolicyContract,
+  isSupportedFritzPolicyVersion,
   parseDailyFritzTranscript,
 } from '@racehorse/game-core';
 import type { Application, Response } from 'express';
@@ -70,6 +72,10 @@ import {
   hasPriorDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
   readAuthorityLedger,
+  buildDailyFritzAuthorityContract,
+  clientSupportsDailyFritzAuthorityContract,
+  readDailyFritzAuthorityContract,
+  writeDailyFritzAuthorityContract,
   requiresVerifiedDailyFritzEvidence,
   type VerifiedDailyFritzGameRecord,
 } from './dailyFritzVerificationPolicy';
@@ -112,7 +118,9 @@ function writeVerifiedHand(
     ...(result ?? {}),
     authority: { ...ledger, hands: [...ledger.hands, hand] },
     verification_status: 'in_progress',
-    verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
+    verification_protocol_version:
+      readDailyFritzAuthorityContract(result)?.transcriptProtocolVersion
+      ?? DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
   };
 }
 
@@ -125,6 +133,27 @@ function writeVerifiedGame(
     ...(result ?? {}),
     authority: { ...ledger, games: [...ledger.games, game] },
   };
+}
+
+function pinAuthorityContractFromVerifiedTranscript(input: {
+  result: Record<string, unknown> | null;
+  run: DailyFritzRunRecord;
+  transcript: ReturnType<typeof parseDailyFritzTranscript>;
+}): Record<string, unknown> {
+  if (readDailyFritzAuthorityContract(input.result)) return input.result ?? {};
+  return writeDailyFritzAuthorityContract(
+    input.result,
+    buildDailyFritzAuthorityContract({
+      fritzPolicyVersion: input.transcript.fritzPolicyVersion,
+      challengeId: buildDailyFritzChallengeId(input.run.runDate),
+      runFingerprint: buildDailyFritzRunFingerprint(input.run),
+      clientRelease: input.transcript.clientRelease ?? null,
+      transcriptProtocolVersion: input.transcript.protocolVersion,
+      // Existing in-flight attempts can contain earlier actions without state
+      // fingerprints. Pin their policy, but do not retroactively invalidate them.
+      stateDigestRequired: false,
+    }),
+  );
 }
 
 function findVerifiedHand(
@@ -177,6 +206,7 @@ function verifyAttemptHand(input: {
     throw new DailyFritzVerificationError('Daily Fritz challenge identity is invalid.', 'challenge_mismatch');
   }
   const progress = readActiveGameProgress(input.attempt.result, input.gameNumber);
+  const authorityContract = readDailyFritzAuthorityContract(input.attempt.result);
   const deal = getDailyFritzHandForGame(input.run, input.gameNumber, input.handIndex);
   const drawWinner = resolveDailyFritzDrawWinner({
     runDate: input.run.runDate,
@@ -200,13 +230,30 @@ function verifyAttemptHand(input: {
     expectedHandIndex: input.handIndex,
     userId: input.userId,
     fritzTier: input.run.fritzTier,
+    expectedFritzPolicyVersion: authorityContract?.fritzPolicyVersion,
+    expectedFritzPolicyContract: authorityContract?.fritzPolicyContract,
+    requireStateDigests: authorityContract?.stateDigestRequired === true,
   });
 }
 
 function respondVerificationError(res: Response, error: unknown): boolean {
   if (!(error instanceof DailyFritzVerificationError)) return false;
   const status = error.code.endsWith('_mismatch') || error.code === 'wrong_actor' ? 409 : 400;
-  res.status(status).json({ error: error.message, code: error.code });
+  const recoverable = [
+    'fritz_action_mismatch',
+    'fritz_state_mismatch',
+    'fritz_policy_version_mismatch',
+    'fritz_policy_contract_mismatch',
+    'missing_fritz_state_digest',
+  ].includes(error.code);
+  res.status(status).json({
+    error: recoverable
+      ? 'Daily Fritz detected a synchronization issue. Refresh to resume from the last verified hand.'
+      : error.message,
+    code: error.code,
+    recoverable,
+    recovery_action: recoverable ? 'reload_official_hand' : null,
+  });
   return true;
 }
 
@@ -356,6 +403,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       });
     }
     const attemptSetResult = attempt ? normalizeDailyFritzSetResult(attempt.result) : null;
+    const attemptAuthorityContract = readDailyFritzAuthorityContract(attempt?.result ?? null);
     const needsCompletion = attempt?.status === 'started' && Boolean(attemptSetResult?.setWinner);
     let ownRank: number | null = null;
     if (attempt?.status === 'completed') {
@@ -380,9 +428,16 @@ export function registerDailyFritzRoutes(app: Application): void {
       deal_size: run.dealSize,
       winning_score: run.winningScore,
       attempt_status: attempt?.status ?? 'none',
-      verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-      game_rules_version: GAME_RULES_VERSION,
-      fritz_policy_version: FRITZ_POLICY_VERSION,
+      verification_protocol_version:
+        attemptAuthorityContract?.transcriptProtocolVersion
+        ?? DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
+      game_rules_version: attemptAuthorityContract?.gameRulesVersion ?? GAME_RULES_VERSION,
+      fritz_policy_version: attemptAuthorityContract?.fritzPolicyVersion ?? FRITZ_POLICY_VERSION,
+      fritz_policy_contract:
+        attemptAuthorityContract?.fritzPolicyContract
+        ?? getFritzPolicyContract(FRITZ_POLICY_VERSION),
+      state_digest_version: attemptAuthorityContract?.stateDigestVersion ?? 1,
+      state_digest_required: attemptAuthorityContract?.stateDigestRequired ?? true,
       verifier_version: DAILY_FRITZ_VERIFIER_VERSION,
       competitive_verification_available: DAILY_FRITZ_COMPETITIVE_VERIFICATION_AVAILABLE,
       verification_status: getDailyFritzVerificationStatus(attempt?.result ?? null),
@@ -435,18 +490,37 @@ export function registerDailyFritzRoutes(app: Application): void {
     const requestedProtocol = Number(req.body?.verification_protocol_version);
     const requestedRules = Number(req.body?.game_rules_version);
     const requestedFritz = Number(req.body?.fritz_policy_version);
+    const requestedPolicyContract =
+      typeof req.body?.fritz_policy_contract === 'string'
+        ? req.body.fritz_policy_contract.trim()
+        : '';
+    const requestedStateDigestVersion = Number(req.body?.state_digest_version);
+    const requestedClientRelease =
+      typeof req.body?.client_release === 'string' ? req.body.client_release.trim().slice(0, 120) : '';
+    const supportedTranscriptProtocols = Array.isArray(req.body?.supported_transcript_protocol_versions)
+      ? req.body.supported_transcript_protocol_versions.map(Number).filter(Number.isInteger)
+      : [requestedProtocol];
+    const supportedStateDigests = Array.isArray(req.body?.supported_state_digest_versions)
+      ? req.body.supported_state_digest_versions.map(Number).filter(Number.isInteger)
+      : [requestedStateDigestVersion];
+    const supportedFritzPolicies = Array.isArray(req.body?.supported_fritz_policies)
+      ? req.body.supported_fritz_policies.flatMap((value: unknown) => {
+          if (!value || typeof value !== 'object') return [];
+          const record = value as Record<string, unknown>;
+          const version = Number(record.version);
+          const contract = typeof record.contract === 'string' ? record.contract.trim() : '';
+          return isSupportedFritzPolicyVersion(version) && contract === getFritzPolicyContract(version)
+            ? [{ version, contract }]
+            : [];
+        })
+      : isSupportedFritzPolicyVersion(requestedFritz) && requestedPolicyContract
+        ? [{ version: requestedFritz, contract: requestedPolicyContract }]
+        : [];
     const supportsVerifier = requestedProtocol === DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION
       && requestedRules === GAME_RULES_VERSION
-      && requestedFritz === FRITZ_POLICY_VERSION;
-    if (
-      req.body?.verification_protocol_version != null
-      && (requestedProtocol !== DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION
-        || requestedRules !== GAME_RULES_VERSION
-        || requestedFritz !== FRITZ_POLICY_VERSION)
-    ) {
-      res.status(426).json({ error: 'Daily Fritz verification protocol is not supported. Update required.' });
-      return;
-    }
+      && requestedFritz === FRITZ_POLICY_VERSION
+      && requestedPolicyContract === getFritzPolicyContract(FRITZ_POLICY_VERSION)
+      && requestedStateDigestVersion === 1;
 
     const runDate = getPacificDateKey();
     console.log('[daily-fritz:init] request', { userId: authenticatedUserId, date: runDate });
@@ -465,8 +539,35 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(409).json({ error: 'Today’s Daily Fritz attempt is already locked.', status: attempt.status });
       return;
     }
-    if (attempt && !supportsVerifier && requiresVerifiedDailyFritzEvidence(attempt.result)) {
-      res.status(426).json({ error: 'This Daily Fritz attempt requires the latest verified client. Update required.' });
+    const existingAuthorityContract = readDailyFritzAuthorityContract(attempt?.result ?? null);
+    const canResumePinnedContract = Boolean(
+      attempt
+      && existingAuthorityContract
+      && clientSupportsDailyFritzAuthorityContract(existingAuthorityContract, {
+        transcriptProtocolVersions: supportedTranscriptProtocols,
+        gameRulesVersion: requestedRules,
+        fritzPolicies: supportedFritzPolicies,
+        stateDigestVersions: supportedStateDigests,
+      })
+    );
+    if (!attempt && !supportsVerifier) {
+      res.status(426).json({
+        error: 'Daily Fritz requires the latest verified client. Update required.',
+        code: 'authority_contract_unsupported',
+      });
+      return;
+    }
+    if (
+      attempt
+      && (
+        (existingAuthorityContract && !canResumePinnedContract)
+        || (!existingAuthorityContract && !supportsVerifier)
+      )
+    ) {
+      res.status(426).json({
+        error: 'This Daily Fritz attempt requires a compatible verified client. Update required.',
+        code: 'authority_contract_unsupported',
+      });
       return;
     }
     if (!attempt) {
@@ -493,16 +594,27 @@ export function registerDailyFritzRoutes(app: Application): void {
         payload: { operation: 'start', status: attempt.status },
       });
     }
-    if (
-      supportsVerifier
-      && attempt.currentHandIndex === 0
-      && readAuthorityLedger(attempt.result).hands.length === 0
-      && !(normalizeDailyFritzSetResult(attempt.result)?.games.length)
-    ) {
+    let authorityContract = existingAuthorityContract;
+    if (!authorityContract) {
+      const hasExistingEvidence =
+        attempt.currentHandIndex > 0
+        || readAuthorityLedger(attempt.result).hands.length > 0
+        || Boolean(normalizeDailyFritzSetResult(attempt.result)?.games.length);
+      const policyVersion = isSupportedFritzPolicyVersion(requestedFritz)
+        ? requestedFritz
+        : FRITZ_POLICY_VERSION;
+      authorityContract = buildDailyFritzAuthorityContract({
+        fritzPolicyVersion: policyVersion,
+        challengeId: buildDailyFritzChallengeId(run.runDate),
+        runFingerprint: buildDailyFritzRunFingerprint(run),
+        clientRelease: requestedClientRelease,
+        transcriptProtocolVersion: requestedProtocol,
+        stateDigestRequired: !hasExistingEvidence,
+      });
+      attempt.result = writeDailyFritzAuthorityContract(attempt.result, authorityContract);
       attempt.result = {
-        ...(attempt.result ?? {}),
+        ...attempt.result,
         verification_status: 'in_progress',
-        verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
       };
       attempt = await upsertDailyFritzAttempt(attempt);
     }
@@ -561,9 +673,13 @@ export function registerDailyFritzRoutes(app: Application): void {
       rules_version: DAILY_FRITZ_RULES_VERSION,
       seed_version: DAILY_FRITZ_SEED_VERSION,
       run_fingerprint: buildDailyFritzRunFingerprint(run),
-      verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-      game_rules_version: GAME_RULES_VERSION,
-      fritz_policy_version: FRITZ_POLICY_VERSION,
+      verification_protocol_version: authorityContract.transcriptProtocolVersion,
+      game_rules_version: authorityContract.gameRulesVersion,
+      fritz_policy_version: authorityContract.fritzPolicyVersion,
+      fritz_policy_contract: authorityContract.fritzPolicyContract,
+      state_digest_version: authorityContract.stateDigestVersion,
+      state_digest_required: authorityContract.stateDigestRequired,
+      authority_client_release: authorityContract.clientRelease,
       verifier_version: DAILY_FRITZ_VERIFIER_VERSION,
       time_zone: DAILY_FRITZ_TIME_ZONE,
       verification_status: getDailyFritzVerificationStatus(attempt.result),
@@ -808,6 +924,11 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(409).json({ error: 'Daily Fritz game is complete; finalize the verified game.' });
       return;
     }
+    attempt.result = pinAuthorityContractFromVerifiedTranscript({
+      result: attempt.result,
+      run,
+      transcript: verified.transcript,
+    });
     attempt.result = writeVerifiedHand(attempt.result, verified.result);
     attempt.result = writeActiveGameProgress(attempt.result, {
       gameNumber,
@@ -1025,6 +1146,11 @@ export function registerDailyFritzRoutes(app: Application): void {
         res.status(409).json({ error: 'Daily Fritz game is not complete.' });
         return;
       }
+      attempt.result = pinAuthorityContractFromVerifiedTranscript({
+        result: attempt.result,
+        run,
+        transcript: verified.transcript,
+      });
       attempt.result = writeVerifiedHand(attempt.result, verified.result);
       attempt.result = writeActiveGameProgress(attempt.result, { gameNumber, you: playerScore, fritz: fritzScore });
       const gameHands = readAuthorityLedger(attempt.result).hands.filter((hand) => hand.gameNumber === gameNumber);

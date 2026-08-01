@@ -56,6 +56,10 @@ export type PresentEmbeddedForcedDrawsDeps = {
 /**
  * Animate embedded forced draws after a scoring/double play, then leave the caller
  * to commit the authoritative afterPlay state.
+ *
+ * Fritz (`bot`) never mutates match here — only overlays. Committing
+ * `currentPlayer`/`hand` mid-animation remounts the bot-turn effect and can leave
+ * live state ahead of the move log (Daily Fritz `fritz_action_mismatch`).
  */
 export async function presentEmbeddedForcedDraws(
   deps: PresentEmbeddedForcedDrawsDeps,
@@ -91,8 +95,11 @@ export async function presentEmbeddedForcedDraws(
 
   setDrawSequenceActiveBoth(true);
   try {
-    // Land the scored/double play on the board first, then animate recovery draws.
-    setMatch(postPlayState);
+    // Player tray: land the scored/double play, then animate recovery draws.
+    // Fritz: overlay-only (authoritative match must already be committed by caller).
+    if (player === 'you') {
+      setMatch(postPlayState);
+    }
     onDrawVisualStep?.(player, postPlayState);
 
     for (let index = 0; index < drawnTiles.length; index += 1) {
@@ -112,19 +119,6 @@ export async function presentEmbeddedForcedDraws(
       onDrawVisualStep?.(player, stepState);
       if (player === 'you') {
         setMatch(stepState);
-      } else {
-        // Fritz rack is face-down; keep board committed and tick overlay counts.
-        setMatch({
-          ...stepState,
-          players: {
-            ...stepState.players,
-            bot: {
-              ...stepState.players.bot,
-              // Keep authoritative hand length in sync for HUD fallbacks.
-              hand: stepHand,
-            },
-          },
-        });
       }
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, stepState);

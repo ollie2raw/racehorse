@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDailyFritzTranscript } from './dailyFritzTranscript';
 import type { MoveEntry } from '../game/moveLogger';
+import { getFritzPolicyContract } from '@racehorse/game-core';
 
 const base = {
   boardEnds: [-1, -1] as [number, number],
@@ -143,5 +144,31 @@ describe('Daily Fritz transcript adapter', () => {
     });
 
     expect(transcript.protocolVersion).toBe(1);
+  });
+
+  it('pins policy provenance and forwards Fritz pre-action state evidence', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      fritzPolicyVersion: 1,
+      clientRelease: 'deploy-123',
+      moveLog: [{
+        ...base,
+        moveNumber: 1,
+        handNumber: 1,
+        player: 'opponent',
+        action: 'place',
+        tile: [2, 4],
+        position: 'left',
+        authorityPreStateDigest: 'df-state-v1:12345678',
+      }],
+    });
+    expect(transcript.fritzPolicyVersion).toBe(1);
+    expect(transcript.fritzPolicyContract).toBe(getFritzPolicyContract(1));
+    expect(transcript.clientRelease).toBe('deploy-123');
+    expect(transcript.actions[0]).toMatchObject({ preStateDigest: 'df-state-v1:12345678' });
   });
 });

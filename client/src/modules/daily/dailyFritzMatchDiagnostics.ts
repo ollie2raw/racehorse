@@ -58,6 +58,7 @@ export function isDailyFritzScriptedDrawReady(
 }
 
 export function logDailyFritzScriptedDrawMount(payload: Record<string, unknown>): void {
+  if (!shouldLogDailyFritzDebug()) return;
   console.log('[df-scripted-draw] mount', payload);
 }
 

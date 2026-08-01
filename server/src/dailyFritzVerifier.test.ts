@@ -4,8 +4,11 @@ import {
   canDraw,
   chooseOfficialFritzDecision,
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
+  getDailyFritzAuthorityStateDigest,
+  getFritzPolicyContract,
   getLegalMoves,
   simulatePlacement,
   type DailyFritzTranscriptAction,
@@ -55,7 +58,11 @@ function state(starter: 'you' | 'bot' = 'you') {
   });
 }
 
-function verify(value: unknown, initialState = state()) {
+function verify(value: unknown, initialState = state(), options: {
+  requireStateDigests?: boolean;
+  expectedFritzPolicyVersion?: 1 | 2;
+  expectedFritzPolicyContract?: string;
+} = {}) {
   return verifyDailyFritzHand({
     transcript: value,
     initialState,
@@ -66,6 +73,7 @@ function verify(value: unknown, initialState = state()) {
     userId: 'user-1',
     fritzTier: 'standard',
     now: () => '2026-07-13T07:00:00.000Z',
+    ...options,
   });
 }
 
@@ -117,6 +125,55 @@ describe('Daily Fritz server replay verifier', () => {
       { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 0, high: 5 }, position: 'left' },
     ]), state('bot')).result;
     expect(result.winner).toBe('fritz');
+  });
+
+  it('accepts a matching pre-action state digest and rejects state drift before policy comparison', () => {
+    const initial = state('bot');
+    const honest = {
+      ...transcript([{
+      sequence: 0,
+      actor: 'fritz',
+      kind: 'play',
+      tile: { low: 0, high: 5 },
+      position: 'left',
+      preStateDigest: getDailyFritzAuthorityStateDigest(initial),
+      }]),
+      fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+      stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    };
+    expect(verify(honest, initial, { requireStateDigests: true }).result.winner).toBe('fritz');
+
+    try {
+      verify({
+        ...honest,
+        actions: [{ ...honest.actions[0], preStateDigest: 'df-state-v1:00000000' }],
+      }, initial, { requireStateDigests: true });
+      throw new Error('Expected state drift verification to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DailyFritzVerificationError);
+      expect((error as DailyFritzVerificationError).code).toBe('fritz_state_mismatch');
+    }
+  });
+
+  it('rejects missing state evidence and deployment-skewed policy contracts', () => {
+    const initial = state('bot');
+    const evidence = {
+      ...transcript([{
+        sequence: 0,
+        actor: 'fritz',
+        kind: 'play',
+        tile: { low: 0, high: 5 },
+        position: 'left',
+      }]),
+      fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+      stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    };
+    expect(() => verify(evidence, initial, { requireStateDigests: true }))
+      .toThrow(/fingerprint/i);
+    expect(() => verify(evidence, initial, {
+      expectedFritzPolicyVersion: 1,
+      expectedFritzPolicyContract: getFritzPolicyContract(1),
+    })).toThrow(/different Fritz policy/i);
   });
 
   it.each([

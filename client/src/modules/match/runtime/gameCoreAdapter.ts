@@ -2,6 +2,8 @@ import {
   DEFAULT_CONFIG,
   applyGameCommand,
   chooseOfficialFritzDecision,
+  chooseOfficialFritzDecisionForVersion,
+  isSupportedFritzPolicyVersion,
   applyMove as applyCoreMove,
   drawUntilPlayableOrEmpty as drawUntilPlayableOrEmptyCore,
   computeGoOutBonusPoints,
@@ -295,17 +297,25 @@ export function drawUntilPlayableOrEmptyCoreState(
 export function chooseOfficialFritzBotChoice(
   state: BotMatchState,
   difficulty: BotDifficulty,
+  policyVersion?: number,
 ): BotChoice | null {
   const tier = difficulty === 'casual'
     ? 'rookie'
     : difficulty === 'hard'
       ? 'elite'
       : difficulty;
-  const decision = chooseOfficialFritzDecision({
-    state: toCoreGameState(state),
-    participantId: 'bot',
-    tier,
-  });
+  const decision = isSupportedFritzPolicyVersion(policyVersion)
+    ? chooseOfficialFritzDecisionForVersion({
+        version: policyVersion,
+        state: toCoreGameState(state),
+        participantId: 'bot',
+        tier,
+      })
+    : chooseOfficialFritzDecision({
+        state: toCoreGameState(state),
+        participantId: 'bot',
+        tier,
+      });
   if (decision.kind !== 'play') return null;
   const move: Move = {
     type: 'play',

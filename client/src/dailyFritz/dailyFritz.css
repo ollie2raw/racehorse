@@ -5022,14 +5022,14 @@
   z-index: 0;
 }
 
-/* Shelf gradient: stat pills read on table tone, not on tiles */
+/* Shelf gradient: lighter so Fritz art stays visible under matte badge pills */
 .df-pvf-opponent-card .df-pvf-card-overlay {
   background:
     linear-gradient(
       to top,
-      rgba(5, 9, 16, 0.78) 0%,
-      rgba(5, 9, 16, 0.32) 28%,
-      transparent 48%
+      rgba(5, 9, 16, 0.62) 0%,
+      rgba(5, 9, 16, 0.22) 24%,
+      transparent 44%
     ),
     rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-veil-alpha));
   box-shadow:
@@ -5037,7 +5037,7 @@
       rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-alpha)),
     inset var(--rh-img-hero-left-fade-spread) 0 92px -54px
       rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-fade-alpha)),
-    inset 0 -40px 58px -26px rgba(var(--rh-img-ink-rgb), 0.26);
+    inset 0 -32px 48px -26px rgba(var(--rh-img-ink-rgb), 0.2);
 }
 
 /* Scrim + media tuning: rh-image-surface.css */
@@ -5094,6 +5094,13 @@
   gap: 6px;
 }
 
+.df-page .df-pvf-card-badge {
+  border-radius: 12px;
+  border: 1px solid rgba(231, 182, 74, 0.16);
+  background: rgba(7, 11, 20, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
 .df-pvf-card-badge-title {
   color: var(--tier-elite);
 }
@@ -5144,16 +5151,17 @@
 }
 
 .df-pvf-overview-icon {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--tier-elite) 44%, transparent);
-  background: color-mix(in srgb, var(--tier-elite) 8%, transparent);
+  border: 2px solid color-mix(in srgb, var(--tier-elite) 52%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 10%, transparent);
   color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-elite) 28%, transparent);
 }
 
 .df-pvf-overview-body {
@@ -5194,14 +5202,27 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: opacity 0.2s ease, filter 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.df-pvf-progress-grid:has(.df-game-card--active) .df-pvf-progress-card:not(.df-game-card--active) {
+  opacity: 0.5;
+  filter: saturate(0.45);
 }
 
 .df-game-card--active {
   border: 2px solid var(--tier-elite);
-  background: color-mix(in srgb, var(--tier-elite) 7%, rgba(255, 255, 255, 0.03));
+  background: color-mix(in srgb, var(--tier-elite) 9%, rgba(255, 255, 255, 0.03));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--tier-elite) 18%, transparent),
-    inset 0 0 18px color-mix(in srgb, var(--tier-elite) 7%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--tier-elite) 14%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--tier-elite) 8%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-pvf-progress-card {
+    transition: none;
+  }
 }
 
 .df-game-card--locked {
@@ -5407,20 +5428,20 @@
 
 .df-pvf-summary-divider {
   width: 1px;
-  background: rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+  background: var(--fritz-summary-divider, linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.08), transparent));
 }
 
 .df-pvf-summary-icon {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tier-elite) 18%, transparent);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: none;
+  background: transparent;
   color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
 }
 
@@ -5453,6 +5474,7 @@
   width: 100%;
   height: 48px;
   min-height: 48px;
+  border: none;
   border-radius: var(--pvf-radius-sm);
   color: var(--text-on-elite);
   font-family: 'Outfit', sans-serif;
@@ -5460,7 +5482,30 @@
   font-weight: 800;
   letter-spacing: 0.01em;
   background: var(--tier-elite);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.df-pvf-start-btn.rh-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 40px color-mix(in srgb, var(--tier-elite) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.df-pvf-start-btn.rh-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-pvf-start-btn.rh-btn,
+  .df-pvf-start-btn.rh-btn:hover:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
 }
 
 .df-pvf-footer {

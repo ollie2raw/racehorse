@@ -4,8 +4,10 @@ import {
   DEFAULT_CONFIG,
   applyGameCommand,
   canDraw,
-  chooseOfficialFritzDecision,
-  isOptimalOfficialFritzPlay,
+  chooseOfficialFritzDecisionForVersion,
+  getDailyFritzAuthorityStateDigest,
+  getFritzPolicyContract,
+  isOptimalOfficialFritzPlayForVersion,
   parseDailyFritzTranscript,
   type DailyFritzTranscript,
   type FritzDecision,
@@ -31,6 +33,9 @@ export type VerifiedDailyFritzHandRecord = {
   playerScoreAfter: number;
   fritzScoreAfter: number;
   actionCount: number;
+  fritzPolicyVersion: 1 | 2;
+  fritzPolicyContract: string;
+  lastAuthorityStateDigest: string | null;
   verifiedAt: string;
 };
 
@@ -91,11 +96,13 @@ function sameDecision(
   action: DailyFritzTranscript['actions'][number],
   decision: FritzDecision,
   tier: DailyFritzTier,
+  policyVersion: 1 | 2,
 ): boolean {
   if (action.kind !== decision.kind) return false;
   if (action.kind !== 'play' || decision.kind !== 'play') return true;
   // Accept any top-score official play so historical RNG / sibling-arm ties still verify.
-  return isOptimalOfficialFritzPlay({
+  return isOptimalOfficialFritzPlayForVersion({
+    version: policyVersion,
     state,
     participantId: 'fritz',
     tier,
@@ -158,6 +165,9 @@ export function verifyDailyFritzHand(input: {
   expectedHandIndex: number;
   userId: string;
   fritzTier: DailyFritzTier;
+  expectedFritzPolicyVersion?: 1 | 2;
+  expectedFritzPolicyContract?: string;
+  requireStateDigests?: boolean;
   now?: () => string;
 }): { transcript: DailyFritzTranscript; result: VerifiedDailyFritzHandRecord; terminalState: GameState } {
   let transcript: DailyFritzTranscript;
@@ -173,6 +183,34 @@ export function verifyDailyFritzHand(input: {
   if (transcript.attemptId !== input.expectedAttemptId) throw new DailyFritzVerificationError('Attempt mismatch.', 'attempt_mismatch');
   if (transcript.gameNumber !== input.expectedGameNumber) throw new DailyFritzVerificationError('Game mismatch.', 'game_mismatch');
   if (transcript.handIndex !== input.expectedHandIndex) throw new DailyFritzVerificationError('Hand mismatch.', 'hand_mismatch');
+  if (
+    input.expectedFritzPolicyVersion != null
+    && transcript.fritzPolicyVersion !== input.expectedFritzPolicyVersion
+  ) {
+    throw new DailyFritzVerificationError(
+      'This Daily Fritz attempt was started with a different Fritz policy. Refresh to resume the official state.',
+      'fritz_policy_version_mismatch',
+    );
+  }
+  const policyContract = getFritzPolicyContract(transcript.fritzPolicyVersion);
+  if (
+    (transcript.fritzPolicyContract != null && transcript.fritzPolicyContract !== policyContract)
+    || (
+      input.expectedFritzPolicyContract != null
+      && transcript.fritzPolicyContract !== input.expectedFritzPolicyContract
+    )
+  ) {
+    throw new DailyFritzVerificationError(
+      'This Daily Fritz attempt uses an incompatible Fritz policy contract. Refresh to resume the official state.',
+      'fritz_policy_contract_mismatch',
+    );
+  }
+  if (input.requireStateDigests && transcript.stateDigestVersion !== 1) {
+    throw new DailyFritzVerificationError(
+      'Daily Fritz evidence is missing its authority state digest contract.',
+      'missing_fritz_state_digest',
+    );
+  }
 
   let state = input.initialState;
   // Protocol 1 only: older clients logged post-score recovery draws/passes as
@@ -207,12 +245,29 @@ export function verifyDailyFritzHand(input: {
       state = applyOmittedMandatoryDraws(state, action.actor, action.sequence);
     }
     if (action.actor === 'fritz') {
-      const decision = chooseOfficialFritzDecision({
+      const authorityStateDigest = getDailyFritzAuthorityStateDigest(state);
+      // Policy parity only depends on Fritz play decisions. Draw/pass actions
+      // are deterministic engine commands and older clients do not log a
+      // decision snapshot for them.
+      if (input.requireStateDigests && action.kind === 'play' && !action.preStateDigest) {
+        throw new DailyFritzVerificationError(
+          'Fritz action is missing its official pre-action state fingerprint.',
+          'missing_fritz_state_digest',
+        );
+      }
+      if (action.preStateDigest && action.preStateDigest !== authorityStateDigest) {
+        throw new DailyFritzVerificationError(
+          `Fritz state diverged before action ${action.sequence} (client ${action.preStateDigest}, server ${authorityStateDigest}).`,
+          'fritz_state_mismatch',
+        );
+      }
+      const decision = chooseOfficialFritzDecisionForVersion({
+        version: transcript.fritzPolicyVersion,
         state,
         participantId: 'fritz',
         tier: input.fritzTier,
       });
-      if (!sameDecision(state, action, decision, input.fritzTier)) {
+      if (!sameDecision(state, action, decision, input.fritzTier, transcript.fritzPolicyVersion)) {
         throw new DailyFritzVerificationError(
           `Fritz action does not match the official policy (seq ${action.sequence}: got ${formatFritzAction(action)}, expected ${formatFritzDecision(decision)}, stateSeq ${state.handNumber}:${state.sequence}, tier ${input.fritzTier}).`,
           'fritz_action_mismatch',
@@ -259,6 +314,9 @@ export function verifyDailyFritzHand(input: {
       playerScoreAfter: playerAfter,
       fritzScoreAfter: fritzAfter,
       actionCount: transcript.actions.length,
+      fritzPolicyVersion: transcript.fritzPolicyVersion,
+      fritzPolicyContract: policyContract,
+      lastAuthorityStateDigest: [...transcript.actions].reverse().find((action) => action.actor === 'fritz')?.preStateDigest ?? null,
       verifiedAt: input.now?.() ?? new Date().toISOString(),
     },
   };

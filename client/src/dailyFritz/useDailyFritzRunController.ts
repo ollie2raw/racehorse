@@ -3,6 +3,7 @@ import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
   DAILY_FRITZ_INIT_TIMEOUT_MS,
+  DailyFritzAuthorityRecoveryError,
   recordDailyFritzGame,
   startDailyFritz,
   type DailyFritzSetGameNumber,
@@ -27,6 +28,10 @@ import type {
 import { buildDailyFritzTranscript } from './dailyFritzTranscript';
 import { createDailyFritzChallengeIdentity } from './dailyFritzChallengeIdentity';
 import type { MoveEntry } from '../game/moveLogger';
+import {
+  buildDailyFritzStorageKey,
+  discardDailyFritzSnapshot,
+} from '../modules/daily/dailyFritzSessionStorage';
 
 export type UseDailyFritzRunControllerParams = {
   today: DailyFritzTodayResponse | null;
@@ -302,9 +307,20 @@ export function useDailyFritzRunController({
           handIndex: game.currentHandIndex,
           handNumber: game.handsPlayed,
           moveLog: game.moveLog as MoveEntry[],
+          fritzPolicyVersion: run.fritz_policy_version,
         });
-      } catch {
-        // Existing pre-verifier sessions finalize through the unranked legacy path.
+      } catch (transcriptError) {
+        // Competitive attempts must not silently drop evidence and finish unranked.
+        const competitive =
+          run.verification_status != null
+          && run.verification_status !== 'legacy_unverified'
+          && Number(run.verification_protocol_version) > 0;
+        if (competitive) {
+          throw transcriptError instanceof Error
+            ? transcriptError
+            : new Error('Failed to build Daily Fritz verification transcript.');
+        }
+        // Pre-verifier / legacy sessions may still finalize unranked.
       }
       const recorded = await recordDailyFritzGame({
         attemptId: run.attempt_id,
@@ -362,6 +378,18 @@ export function useDailyFritzRunController({
         return;
       }
     } catch (err) {
+      if (err instanceof DailyFritzAuthorityRecoveryError) {
+        discardDailyFritzSnapshot(buildDailyFritzStorageKey(run.attempt_id, gameNumber));
+        setSetOverlay(null);
+        closeEmbeddedRun();
+        setHubError('Daily Fritz restored the last verified hand. Your verified progress is safe.');
+        try {
+          await loadToday();
+        } catch {
+          // The hub keeps the recovery message and its normal retry affordance.
+        }
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
       setSetOverlay({
         kind: 'record-error',
@@ -370,10 +398,11 @@ export function useDailyFritzRunController({
         error: message,
         game,
       });
+      throw err instanceof Error ? err : new Error(message);
     } finally {
       recordGameInFlightRef.current = false;
     }
-  }, [buildCompletedGame, setHubError, submitSetCompletion]);
+  }, [buildCompletedGame, closeEmbeddedRun, loadToday, setHubError, submitSetCompletion]);
 
   const handleDailyFritzGameComplete = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     await submitCompletedGame(game);

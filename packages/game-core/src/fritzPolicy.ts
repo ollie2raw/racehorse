@@ -1,5 +1,6 @@
 import { canDraw, getLegalMoves } from './engine';
 import { branchHasPlayableTiles, hubIdAt } from './openEndsGeometry';
+import { createDeterministicRandom } from './random';
 import { computeOpenEndsSum, computePlayScore, getOpenEnds, simulatePlacement } from './scoring';
 import type { GameState, Move, PlacementPosition, Tile } from './types';
 import { tileEquals } from './types';
@@ -8,6 +9,11 @@ import { tileEquals } from './types';
 export const FRITZ_POLICY_VERSION = 2 as const;
 /** Oldest policy version the verifier still accepts on historical transcripts. */
 export const FRITZ_POLICY_MIN_SUPPORTED_VERSION = 1 as const;
+export type FritzPolicyVersion = 1 | 2;
+export const FRITZ_POLICY_CONTRACTS = {
+  1: 'fritz-policy-v1-seeded-top-score',
+  2: 'fritz-policy-v2-deterministic-canonical-ties',
+} as const satisfies Record<FritzPolicyVersion, string>;
 export type FritzTier = 'rookie' | 'standard' | 'elite' | 'master';
 export type FritzDecision =
   | { kind: 'play'; tile: Tile; position: PlacementPosition }
@@ -134,6 +140,14 @@ function scoreSortedPlays(
     .sort((left, right) => right.score - left.score || canonicalMoveKey(left.move).localeCompare(canonicalMoveKey(right.move)));
 }
 
+export function getFritzPolicyContract(version: FritzPolicyVersion): string {
+  return FRITZ_POLICY_CONTRACTS[version];
+}
+
+export function isSupportedFritzPolicyVersion(value: unknown): value is FritzPolicyVersion {
+  return value === 1 || value === 2;
+}
+
 /**
  * All legal plays that share the top official score (no empty-arm collapse).
  * Used by the verifier so historical RNG / sibling-arm transcripts still pass.
@@ -163,21 +177,54 @@ export function isOptimalOfficialFritzPlay(input: {
   );
 }
 
-export function chooseOfficialFritzDecision(input: {
+export function isOptimalOfficialFritzPlayForVersion(input: {
+  version: FritzPolicyVersion;
+  state: GameState;
+  participantId: string;
+  tier: FritzTier;
+  tile: Tile;
+  position: PlacementPosition;
+}): boolean {
+  // Policy v1 and v2 use the same integer strategic score. V2 changed tie
+  // selection and symmetric empty-arm canonicalization, not what counts as a
+  // top-scoring play. Historical v1 evidence can therefore be verified without
+  // executing the mutable current-policy wrapper.
+  return isOptimalOfficialFritzPlay(input);
+}
+
+export function chooseOfficialFritzDecisionForVersion(input: {
+  version: FritzPolicyVersion;
   state: GameState;
   participantId: string;
   tier: FritzTier;
 }): FritzDecision {
   const legalPlays = getLegalMoves(input.state, input.participantId)
     .filter((move): move is PlayMove => move.type === 'play');
-  const plays = collapseSymmetricEmptyBranchPlays(input.state, legalPlays);
-  if (plays.length === 0) {
+  if (legalPlays.length === 0) {
     return canDraw(input.state, input.participantId) ? { kind: 'draw' } : { kind: 'pass' };
   }
+  if (input.version === 1) {
+    const scored = scoreSortedPlays(input.state, input.participantId, input.tier, legalPlays);
+    const topScore = scored[0].score;
+    const tied = scored.filter((entry) => entry.score === topScore);
+    const selected = tied[
+      createDeterministicRandom(getOfficialFritzDecisionSeed(input.state)).nextInt(tied.length)
+    ].move;
+    return { kind: 'play', tile: selected.tile, position: selected.position };
+  }
+  const plays = collapseSymmetricEmptyBranchPlays(input.state, legalPlays);
   const scored = scoreSortedPlays(input.state, input.participantId, input.tier, plays);
-  // Fully deterministic: highest score, then stable canonical move key. No RNG —
-  // seed-tied picks previously diverged when candidate set size differed (e.g.
-  // empty-arm collapse), producing errors like branch-1-1 vs right at the same seed.
   const selected = scored[0].move;
   return { kind: 'play', tile: selected.tile, position: selected.position };
+}
+
+export function chooseOfficialFritzDecision(input: {
+  state: GameState;
+  participantId: string;
+  tier: FritzTier;
+}): FritzDecision {
+  return chooseOfficialFritzDecisionForVersion({
+    version: FRITZ_POLICY_VERSION,
+    ...input,
+  });
 }

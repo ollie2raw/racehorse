@@ -76,12 +76,13 @@ export function buildDailyFritzSetOverlayViewModel(
       kind: 'saving' as const,
       headline: 'Saving game',
       subheadline: setOverlay.message,
-      primaryLabel: 'Please wait…',
+      primaryLabel: 'Saving…',
       primaryDisabled: true,
       gameScoreLabel: 'This game',
       gameScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
       setScoreValue: '—',
       marginValue: '—',
+      statsPending: true,
     };
   }
 
@@ -117,7 +118,7 @@ export function buildDailyFritzSetOverlayViewModel(
       kind: 'finalizing' as const,
       headline: 'Posting set',
       subheadline: setOverlay.message,
-      primaryLabel: 'Please wait…',
+      primaryLabel: 'Posting…',
       primaryDisabled: true,
       gameScoreLabel: 'Set score',
       gameScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
@@ -125,6 +126,7 @@ export function buildDailyFritzSetOverlayViewModel(
       marginValue: formatMargin(sr.totalPointDiff),
       marginTone:
         sr.totalPointDiff > 0 ? ('win' as const) : sr.totalPointDiff < 0 ? ('loss' as const) : ('idle' as const),
+      statsPending: true,
     };
   }
 

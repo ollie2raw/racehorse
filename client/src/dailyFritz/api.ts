@@ -210,6 +210,37 @@ function throwApiResult<T>(result: ApiResult<T>): T {
   return result.data as T;
 }
 
+const DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES = new Set([
+  'fritz_action_mismatch',
+  'fritz_state_mismatch',
+  'fritz_policy_version_mismatch',
+  'fritz_policy_contract_mismatch',
+  'missing_fritz_state_digest',
+]);
+
+export function isRecoverableDailyFritzAuthorityCode(code: string | null | undefined): boolean {
+  return Boolean(code && DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES.has(code));
+}
+
+export class DailyFritzAuthorityRecoveryError extends Error {
+  readonly status: number | null;
+  readonly verifierCode: string;
+
+  constructor(message: string, status: number | null, verifierCode: string) {
+    super(message);
+    this.name = 'DailyFritzAuthorityRecoveryError';
+    this.status = status;
+    this.verifierCode = verifierCode;
+  }
+}
+
+function throwDailyFritzAuthorityError<T>(result: ApiResult<T>): T {
+  if (result.error && result.errorCode && isRecoverableDailyFritzAuthorityCode(result.errorCode)) {
+    throw new DailyFritzAuthorityRecoveryError(result.error, result.status ?? null, result.errorCode);
+  }
+  return throwApiResult(result);
+}
+
 export interface DailyFritzLeaderboardRow {
   rank: number;
   username: string;
@@ -299,6 +330,9 @@ export interface DailyFritzTodayResponse {
   verification_status?: DailyFritzVerificationStatus;
   game_rules_version?: number;
   fritz_policy_version?: number;
+  fritz_policy_contract?: string;
+  state_digest_version?: number;
+  state_digest_required?: boolean;
   verifier_version?: number;
   competitive_verification_available?: boolean;
 }
@@ -315,6 +349,10 @@ export interface DailyFritzStartResponse {
   verification_protocol_version?: number;
   game_rules_version?: number;
   fritz_policy_version?: number;
+  fritz_policy_contract?: string;
+  state_digest_version?: number;
+  state_digest_required?: boolean;
+  authority_client_release?: string | null;
   verifier_version?: number;
   time_zone?: 'America/Los_Angeles';
   verification_status?: DailyFritzVerificationStatus;
@@ -330,6 +368,8 @@ export interface DailyFritzStartResponse {
   draw_winner: DailyFritzDrawWinner;
   draw_player_tile: Tile;
   draw_fritz_tile: Tile;
+  /** Present for asynchronous fixed-deal Fritz challenges. */
+  challenge_code?: string;
 }
 
 export interface DailyFritzNextHandResponse {
@@ -398,12 +438,22 @@ export async function getTodayDailyFritz(options?: {
 export async function startDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzStartResponse> {
+  const core = await import('@racehorse/game-core');
   const response = await dfRequestJsonWithTimeout<DailyFritzStartResponse>('/api/daily-fritz/start', {
     method: 'POST',
     body: JSON.stringify({
-      verification_protocol_version: (await import('@racehorse/game-core')).DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
-      game_rules_version: (await import('@racehorse/game-core')).GAME_RULES_VERSION,
-      fritz_policy_version: (await import('@racehorse/game-core')).FRITZ_POLICY_VERSION,
+      verification_protocol_version: core.DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+      game_rules_version: core.GAME_RULES_VERSION,
+      fritz_policy_version: core.FRITZ_POLICY_VERSION,
+      fritz_policy_contract: core.getFritzPolicyContract(core.FRITZ_POLICY_VERSION),
+      state_digest_version: core.DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+      supported_transcript_protocol_versions: [1, core.DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION],
+      supported_fritz_policies: ([1, 2] as const).map((version) => ({
+        version,
+        contract: core.getFritzPolicyContract(version),
+      })),
+      supported_state_digest_versions: [core.DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
+      client_release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
     }),
     timeoutMs: options?.timeoutMs,
   });
@@ -692,7 +742,7 @@ export async function recordDailyFritzGame(input: {
   movesUsed: number;
   handsPlayed: number;
 }): Promise<DailyFritzRecordGameResponse> {
-  return throwApiResult(
+  return throwDailyFritzAuthorityError(
     await timedApiPost<DailyFritzRecordGameResponse>('/api/daily-fritz/record-game', {
       attempt_id: input.attemptId,
       verified_match_id: input.verifiedMatchId,

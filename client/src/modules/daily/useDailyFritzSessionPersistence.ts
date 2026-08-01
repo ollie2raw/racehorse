@@ -10,6 +10,7 @@ import {
   type DailyFritzPersistedSnapshot,
 } from './dailyFritzSessionStorage.ts';
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
+import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
@@ -28,6 +29,7 @@ type UseDailyFritzSessionPersistenceArgs = {
   initialRevision?: number;
   initialStartedAt?: string;
   transcriptProtocolVersion?: 1 | 2;
+  fritzPolicyVersion?: number;
 };
 
 export function useDailyFritzSessionPersistence({
@@ -47,6 +49,7 @@ export function useDailyFritzSessionPersistence({
   initialRevision = 0,
   initialStartedAt,
   transcriptProtocolVersion = 2,
+  fritzPolicyVersion,
 }: UseDailyFritzSessionPersistenceArgs): void {
   const storageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
@@ -83,6 +86,7 @@ export function useDailyFritzSessionPersistence({
             handIndex: dailyFritzHandIndex,
             handNumber: match.handNumber,
             moveLog,
+            fritzPolicyVersion,
           });
         } catch {
           return null;
@@ -93,6 +97,12 @@ export function useDailyFritzSessionPersistence({
       lastTransitionAt: now,
       revision: ++revisionRef.current,
       transcriptProtocolVersion,
+      fritzPolicyVersion: isSupportedFritzPolicyVersion(fritzPolicyVersion)
+        ? fritzPolicyVersion
+        : undefined,
+      fritzPolicyContract: isSupportedFritzPolicyVersion(fritzPolicyVersion)
+        ? getFritzPolicyContract(fritzPolicyVersion)
+        : undefined,
     });
     if (match.gameOver || match.handOver) {
       if (storageTimerRef.current) {
@@ -133,6 +143,7 @@ export function useDailyFritzSessionPersistence({
     drawSequenceActive,
     storageKey,
     transcriptProtocolVersion,
+    fritzPolicyVersion,
   ]);
 
   useEffect(() => {

@@ -86,7 +86,7 @@ export function DailyFritzFinalResultOverlay({
               {overlay.shareStreak ? (
                 <div className="df-result-meta-pill">
                   <span className="df-result-meta-label">Streak</span>
-                  <span className="df-result-meta-value">🔥 {overlay.shareStreak}</span>
+                  <span className="df-result-meta-value">{overlay.shareStreak}</span>
                 </div>
               ) : null}
             </div>
@@ -103,10 +103,6 @@ export function DailyFritzFinalResultOverlay({
           {overlay.practiceHint ? (
             <p className="daily-fritz-practice-hint">{overlay.practiceHint}</p>
           ) : null}
-
-          <button type="button" className="df-result-share-btn" onClick={onShare}>
-            {shareDone ? '✓ Shared!' : 'Share Result'}
-          </button>
 
           <div className="df-result-actions">
             <button
@@ -125,6 +121,9 @@ export function DailyFritzFinalResultOverlay({
             {overlay.tertiaryLabel ? (
               <button type="button" className="df-result-secondary" onClick={overlay.onTertiary}>{overlay.tertiaryLabel}</button>
             ) : null}
+            <button type="button" className="df-result-share-btn" onClick={onShare}>
+              {shareDone ? 'Copied' : 'Share Result'}
+            </button>
           </div>
         </div>
       </div>

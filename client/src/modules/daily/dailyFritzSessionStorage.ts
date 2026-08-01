@@ -7,13 +7,13 @@ import type { DailyFritzTranscript } from '@racehorse/game-core';
 import { canonicalizeDailyFritzMoveLog } from '../../dailyFritz/dailyFritzMoveEvidence.ts';
 
 // Bump when the local match state is no longer safe to replay against the
-// server verifier. Version 7 excludes checkpoints captured during draw
-// presentation, when the visual state can be ahead of its transcript.
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 7;
+// server verifier. Version 8 invalidates checkpoints whose Fritz fingerprints
+// included non-policy starter-history metadata.
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 8;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 7;
+  schemaVersion: 8;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
@@ -33,6 +33,8 @@ export type DailyFritzPersistedSnapshot = {
   revision: number;
   /** Protocol used to encode the persisted move log. Missing means legacy v1. */
   transcriptProtocolVersion?: 1 | 2;
+  fritzPolicyVersion?: 1 | 2;
+  fritzPolicyContract?: string;
 };
 
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -88,6 +90,8 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
   if (phase === 'completed' && !match.gameOver) return null;
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
+  if (value.fritzPolicyVersion != null && value.fritzPolicyVersion !== 1 && value.fritzPolicyVersion !== 2) return null;
+  if (value.fritzPolicyContract != null && typeof value.fritzPolicyContract !== 'string') return null;
   return {
     ...value,
     schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
@@ -115,6 +119,8 @@ export function loadPersistedDailyFritzMatch(
   runDate?: string,
   now = new Date(),
   runFingerprint?: string | null,
+  expectedFritzPolicyVersion?: number | null,
+  expectedFritzPolicyContract?: string | null,
 ): DailyFritzPersistedSnapshot | null {
   if (!storageKey || !attemptId || !runDate || typeof window === 'undefined') return null;
   try {
@@ -130,6 +136,14 @@ export function loadPersistedDailyFritzMatch(
     }
     if (parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
     if (runFingerprint && parsed.runFingerprint !== runFingerprint) return null;
+    if (
+      expectedFritzPolicyVersion != null
+      && parsed.fritzPolicyVersion !== expectedFritzPolicyVersion
+    ) return null;
+    if (
+      expectedFritzPolicyContract
+      && parsed.fritzPolicyContract !== expectedFritzPolicyContract
+    ) return null;
     // Local must match the server hand index.
     if (parsed.currentHandIndex !== serverHandIndex) return null;
     return parsed;

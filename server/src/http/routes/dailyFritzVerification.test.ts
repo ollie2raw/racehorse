@@ -5,11 +5,47 @@ import {
   hasPriorDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
   buildRecordedDailyFritzAttemptResult,
+  buildDailyFritzAuthorityContract,
+  clientSupportsDailyFritzAuthorityContract,
+  readDailyFritzAuthorityContract,
+  writeDailyFritzAuthorityContract,
   requiresVerifiedDailyFritzEvidence,
 } from './dailyFritzVerificationPolicy';
 import { isDailyFritzAttemptLeaderboardEligible } from '../stores/dailyFritzStore';
 
 describe('Daily Fritz competitive verification boundary', () => {
+  it('round-trips the immutable attempt authority contract', () => {
+    const contract = buildDailyFritzAuthorityContract({
+      fritzPolicyVersion: 1,
+      challengeId: 'daily-fritz:2026-07-31:r2:s1',
+      runFingerprint: 'run-fingerprint',
+      clientRelease: 'deploy-123',
+    });
+    expect(readDailyFritzAuthorityContract(writeDailyFritzAuthorityContract({ keep: true }, contract)))
+      .toEqual(contract);
+    expect(contract.fritzPolicyContract).toBe('fritz-policy-v1-seeded-top-score');
+  });
+
+  it('resumes a pinned historical policy only when the client advertises that exact contract', () => {
+    const contract = buildDailyFritzAuthorityContract({
+      fritzPolicyVersion: 1,
+      challengeId: 'daily-fritz:2026-07-31:r2:s1',
+      runFingerprint: 'run-fingerprint',
+    });
+    const base = {
+      transcriptProtocolVersions: [1, 2],
+      gameRulesVersion: contract.gameRulesVersion,
+      stateDigestVersions: [1],
+    };
+    expect(clientSupportsDailyFritzAuthorityContract(contract, {
+      ...base,
+      fritzPolicies: [{ version: 1, contract: contract.fritzPolicyContract }],
+    })).toBe(true);
+    expect(clientSupportsDailyFritzAuthorityContract(contract, {
+      ...base,
+      fritzPolicies: [{ version: 2, contract: 'fritz-policy-v2-deterministic-canonical-ties' }],
+    })).toBe(false);
+  });
   it('excludes completed client-reported results from the verified leaderboard', () => {
     expect(isDailyFritzAttemptLeaderboardEligible({
       status: 'completed',

@@ -134,6 +134,7 @@ export function useDailyFritzRuntime({
     initialRevision: resumablePersistedDailyFritzMatch?.revision,
     initialStartedAt: resumablePersistedDailyFritzMatch?.startedAt,
     transcriptProtocolVersion: resumablePersistedDailyFritzMatch?.transcriptProtocolVersion ?? 2,
+    fritzPolicyVersion: dailyFritzPackage?.fritz_policy_version,
   });
 
   const {

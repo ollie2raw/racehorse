@@ -4,6 +4,8 @@ import type { BotActionResult, BotMatchState } from '../match/runtime/botEngine.
 import type { BotChoice } from '../fritz/botHeuristics.ts';
 import type { GhostResolvedMove } from '../ghost/ghostContracts.ts';
 import type { Tile } from '../../types.ts';
+import { getDailyFritzAuthorityStateDigest } from '@racehorse/game-core';
+import { toCoreGameState } from '../match/runtime/gameCoreAdapter.ts';
 import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
 import { notifyBotAuthoringCaptures } from './botAuthoringCapture.ts';
 import { computeBotChainPaused } from './botChainPause.ts';
@@ -23,6 +25,7 @@ export function logBotPlaceMove(input: {
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
   workingHandNumber: number;
+  preActionState: BotMatchState | null;
 }): void {
   const tile = input.ghostChosen?.tile ?? input.chosen?.move?.tile;
   if (!tile) return;
@@ -39,6 +42,9 @@ export function logBotPlaceMove(input: {
             score: 0,
           }
         : toEngineBestFromChoice(input.chosen),
+      authorityPreStateDigest: input.preActionState
+        ? getDailyFritzAuthorityStateDigest(toCoreGameState(input.preActionState))
+        : undefined,
     }),
     input.workingHandNumber,
   );
@@ -108,6 +114,7 @@ export function completeBotTurnAction(input: {
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
   playedTileForHighlight: Tile | null;
+  playBeforeState?: BotMatchState | null;
   isGhostMode: boolean;
   isDailyFritzMode: boolean;
   moveCounter: number;
@@ -167,6 +174,7 @@ export function completeBotTurnAction(input: {
     chosen: input.chosen,
     ghostChosen: input.ghostChosen,
     workingHandNumber: input.workingHandNumber,
+    preActionState: input.playBeforeState ?? null,
   });
 
   notifyDailyFritzBotMove(input.ports, input.result, input.isDailyFritzMode);

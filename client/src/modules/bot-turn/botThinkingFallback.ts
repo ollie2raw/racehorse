@@ -13,6 +13,8 @@ import { collectBotTurnSnapshot } from './botMoveSnapshot.ts';
 import { buildBotPlaceMoveLogEntry } from './botMoveLogEntries.ts';
 import type { BotTurnPorts } from './types.ts';
 import { chooseOfficialFritzBotChoice } from '../match/runtime/gameCoreAdapter.ts';
+import { getDailyFritzAuthorityStateDigest } from '@racehorse/game-core';
+import { toCoreGameState } from '../match/runtime/gameCoreAdapter.ts';
 
 export type BotThinkingFallbackOutcome = {
   applied: boolean;
@@ -32,6 +34,7 @@ export function executeBotThinkingFallback(input: {
   actionResolved: boolean;
   isDailyFritzMode: boolean;
   fritzDifficulty: import('../fritz/botHeuristics.ts').BotDifficulty;
+  fritzPolicyVersion?: number;
 }): BotThinkingFallbackOutcome {
   if (input.cancelled || input.actionResolved) {
     return { applied: false, cancelled: input.cancelled, actionResolved: input.actionResolved };
@@ -46,7 +49,7 @@ export function executeBotThinkingFallback(input: {
   }
 
   const officialChoice = input.isDailyFritzMode
-    ? chooseOfficialFritzBotChoice(live, input.fritzDifficulty)?.move ?? null
+    ? chooseOfficialFritzBotChoice(live, input.fritzDifficulty, input.fritzPolicyVersion)?.move ?? null
     : null;
   const fallbackPlay = input.isDailyFritzMode
     ? (officialChoice?.type === 'play' ? officialChoice : null)
@@ -84,7 +87,8 @@ export function executeBotThinkingFallback(input: {
               position: fallbackPlay.position,
               score: 0,
             }
-          : null,
+            : null,
+        authorityPreStateDigest: getDailyFritzAuthorityStateDigest(toCoreGameState(live)),
       }),
       live.handNumber,
     );

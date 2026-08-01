@@ -3,6 +3,9 @@ import {
   DEFAULT_CONFIG,
   areEquivalentEmptyBranchFritzPlays,
   chooseOfficialFritzDecision,
+  chooseOfficialFritzDecisionForVersion,
+  FRITZ_POLICY_VERSION,
+  getFritzPolicyContract,
   isOptimalOfficialFritzPlay,
   listOptimalOfficialFritzPlays,
   simulatePlacement,
@@ -47,6 +50,17 @@ function decide(game: GameState, tier: 'rookie' | 'standard' | 'elite' | 'master
 }
 
 describe('official deterministic Fritz fixed vectors', () => {
+  it('keeps current selection pinned to the explicit v2 implementation', () => {
+    const game = state({ hand: [{ low: 0, high: 5 }, { low: 1, high: 4 }] });
+    expect(chooseOfficialFritzDecision({ state: game, participantId: 'fritz', tier: 'elite' }))
+      .toEqual(chooseOfficialFritzDecisionForVersion({
+        version: FRITZ_POLICY_VERSION,
+        state: game,
+        participantId: 'fritz',
+        tier: 'elite',
+      }));
+    expect(getFritzPolicyContract(1)).not.toBe(getFritzPolicyContract(2));
+  });
   it('takes the immediate scoring opening instead of a non-scoring double', () => {
     expect(decide(state({ hand: [{ low: 6, high: 6 }, { low: 0, high: 5 }] }))).toEqual({
       kind: 'play',

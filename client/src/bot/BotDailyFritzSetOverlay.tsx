@@ -2,7 +2,6 @@ import React from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
-import { FRITZ_POSTGAME_TRUST_LINE } from './fritzTrustCopy';
 
 export interface BotDailyFritzSetOverlayProps {
   overlay: DailyFritzSetOverlayViewModel | null;
@@ -51,13 +50,15 @@ export const BotDailyFritzSetOverlay: React.FC<BotDailyFritzSetOverlayProps> = (
               <span>{overlay.gameScoreLabel || 'This game'}</span>
               <strong>{overlay.gameScoreValue || '—'}</strong>
             </div>
-            <div className="daily-fritz-set-overlay-stat">
+            <div className={`daily-fritz-set-overlay-stat${overlay.statsPending ? ' is-pending' : ''}`}>
               <span>Set Score</span>
-              <strong>{overlay.setScoreValue || '—'}</strong>
+              <strong className={overlay.statsPending ? 'is-pending' : undefined}>
+                {overlay.setScoreValue || '—'}
+              </strong>
             </div>
-            <div className="daily-fritz-set-overlay-stat">
+            <div className={`daily-fritz-set-overlay-stat${overlay.statsPending ? ' is-pending' : ''}`}>
               <span>Set Margin</span>
-              <strong className={`is-${overlay.marginTone}`}>
+              <strong className={`is-${overlay.marginTone}${overlay.statsPending ? ' is-pending' : ''}`}>
                 {overlay.marginValue || '—'}
               </strong>
             </div>
@@ -78,12 +79,6 @@ export const BotDailyFritzSetOverlay: React.FC<BotDailyFritzSetOverlayProps> = (
               <p>{overlay.objective}</p>
             </div>
           ) : null}
-
-          {overlay.practiceHint ? (
-            <p className="daily-fritz-practice-hint">{overlay.practiceHint}</p>
-          ) : null}
-
-          <p className="daily-fritz-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
 
           {overlay.errorMessage ? (
             <div className="hand-over-error-zone">

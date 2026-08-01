@@ -6,6 +6,7 @@ import {
   dailyFritzDebugLog,
   isPersistedDailyFritzPlayableResume,
   logDailyFritzScriptedDrawMount,
+  shouldLogDailyFritzDebug,
 } from './dailyFritzMatchDiagnostics.ts';
 import {
   initPreGameDraw,
@@ -66,6 +67,7 @@ export function useDailyFritzDiagnostics(args: UseDailyFritzDiagnosticsArgs): vo
 
   useEffect(() => {
     if (!isDailyFritzMode) return;
+    if (!shouldLogDailyFritzDebug()) return;
     console.log('[df-scripted-draw] BotMatchScreen mount', {
       matchInstanceKey,
       attemptId: dailyFritzPackage?.attempt_id ?? null,

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
+  getFritzPolicyContract,
   parseDailyFritzTranscript,
 } from '../index';
 
@@ -10,6 +12,8 @@ const valid = () => ({
   protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
   rulesVersion: GAME_RULES_VERSION,
   fritzPolicyVersion: FRITZ_POLICY_VERSION,
+  fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+  stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   challengeId: 'daily-fritz:2026-07-13:r2:s1',
   attemptId: 'attempt-1',
   gameNumber: 1,
@@ -23,7 +27,18 @@ describe('Daily Fritz transcript parser', () => {
   });
 
   it('accepts historical policy version 1 transcripts for Retry compatibility', () => {
-    expect(parseDailyFritzTranscript({ ...valid(), fritzPolicyVersion: 1 }).fritzPolicyVersion).toBe(1);
+    expect(parseDailyFritzTranscript({
+      ...valid(),
+      fritzPolicyVersion: 1,
+      fritzPolicyContract: getFritzPolicyContract(1),
+    }).fritzPolicyVersion).toBe(1);
+  });
+
+  it('rejects a policy contract that does not match its implementation version', () => {
+    expect(() => parseDailyFritzTranscript({
+      ...valid(),
+      fritzPolicyContract: getFritzPolicyContract(1),
+    })).toThrow(/contract/i);
   });
 
   it.each([

@@ -1,179 +1,36 @@
-/* Daily Fritz in-match board — Pass A (HUD + race track) & Pass B (play mat + watermark) */
+/* Daily Fritz in-match — brass identity on live matte shell (rh-match-live). */
 
-/* ─── Pass A: always-visible race track ─── */
-
-.bot-match-screen.bot-match-mode-daily-fritz .df-match-score-header-wrap {
-  flex: 0 0 auto;
-  width: 100%;
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz .df-match-score-header-wrap .wl-score-header {
-  --score-header-height: 62px;
-  height: 62px;
-  min-height: 62px;
-  max-height: 62px;
-  border-bottom: 1px solid rgba(231, 182, 74, 0.2);
-  background: rgba(7, 11, 20, 0.98);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 6px 18px rgba(0, 0, 0, 0.18);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz .df-match-score-header-wrap .wl-score-tracks {
-  border: 1px solid rgba(231, 182, 74, 0.1);
-  background: rgba(0, 0, 0, 0.32);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz .df-match-score-header-wrap .wl-score-header__player-line--opp .wl-score-header__player-name {
-  color: rgba(240, 210, 150, 0.96);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .bot-top-rail {
+.bot-match-screen.bot-match-mode-daily-fritz.rh-match-live .bot-top-rail {
   border-bottom-color: rgba(231, 182, 74, 0.14) !important;
 }
 
-.bot-match-screen.bot-match-mode-daily-fritz .wl-turn-label.your-turn {
-  border-color: rgba(231, 182, 74, 0.42);
-  color: #f2dc9a;
-  background: rgba(22, 18, 10, 0.92);
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-turn-label.your-turn {
+  border-color: rgba(231, 182, 74, 0.48) !important;
+  color: #f2dc9a !important;
+  background: rgba(22, 18, 10, 0.92) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 22px rgba(231, 182, 74, 0.14);
+    0 0 22px rgba(231, 182, 74, 0.16) !important;
 }
 
-.bot-match-screen.bot-match-mode-daily-fritz .wl-turn-label.opp-turn {
-  border-color: rgba(196, 212, 232, 0.28);
-  color: rgba(210, 224, 244, 0.92);
-}
-
-/* ─── Frosted glass HUD pills (brown-board legacy look on navy mat) ─── */
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-corner-pill,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .boneyard-pill,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-zoom-tray.control-pill,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill.score-card,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill-btn.score-card,
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .daily-fritz-progress-pill {
-  background: rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.28) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 6px 20px rgba(0, 0, 0, 0.28) !important;
-  color: rgba(255, 255, 255, 0.98) !important;
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .rh-board-meta-bar .open-ends-pill__label,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .rh-board-meta-bar .boneyard-meta,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-corner-pill .open-ends-pill__label,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-corner-pill .boneyard-meta {
-  color: rgba(255, 255, 255, 0.88) !important;
-  opacity: 1 !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .rh-board-meta-bar .open-ends-count,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .rh-board-meta-bar .boneyard-count,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-corner-pill .open-ends-count,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-corner-pill .boneyard-count {
-  color: rgba(255, 255, 255, 1) !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .boneyard-icon {
-  color: rgba(255, 255, 255, 0.92) !important;
-  opacity: 0.9 !important;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-zoom-tray.control-pill .board-zoom-btn,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill > button,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill > .btn,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill .rr-pill {
-  color: rgba(255, 255, 255, 0.95) !important;
-  opacity: 0.88;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill > button:hover,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill > .btn:hover,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-controls-tray.control-pill .rr-pill:hover,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .board-zoom-tray.control-pill .board-zoom-btn:hover {
-  opacity: 1;
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .daily-fritz-progress-pill .hud-pill-label {
-  color: rgba(255, 255, 255, 0.9) !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .daily-fritz-progress-pill .hud-pill-value {
-  color: rgba(255, 255, 255, 1) !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill.score-card::before,
-.screen.game-screen.walnut-live.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill-btn.score-card::before {
-  content: none !important;
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill.score-card .wl-player-label,
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill-btn.score-card .wl-player-label {
-  color: rgba(255, 255, 255, 0.88) !important;
-  opacity: 1 !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill.score-card .wl-player-score,
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .wl-player-pill-btn.score-card .wl-player-score {
-  color: rgba(255, 255, 255, 1) !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-/* ─── Pass B: play mat + watermark ─── */
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .walnut-nbl-stage .nbl-board-frame {
-  border-color: rgba(231, 182, 74, 0.22);
-  background-color: #0d1524;
-  background-image:
-    linear-gradient(rgba(148, 170, 204, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 170, 204, 0.045) 1px, transparent 1px);
-  background-size: 26px 26px, 26px 26px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 28px 56px rgba(0, 0, 0, 0.22),
-    inset 0 -28px 56px rgba(0, 0, 0, 0.22),
-    inset 0 0 0 1px rgba(18, 28, 44, 0.85),
-    0 16px 36px rgba(0, 0, 0, 0.28);
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .walnut-nbl-stage .nbl-board-frame::after {
-  border-color: rgba(231, 182, 74, 0.12);
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-turn-label.opp-turn {
+  border-color: rgba(231, 182, 74, 0.28) !important;
+  color: rgba(242, 226, 186, 0.92) !important;
+  background: rgba(14, 12, 8, 0.92) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 0 64px rgba(0, 0, 0, 0.38);
+    0 0 16px rgba(231, 182, 74, 0.08) !important;
 }
 
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .nbl-board-canvas::before {
-  content: '';
-  position: absolute;
-  inset: 10px;
-  z-index: 1;
-  border-radius: 12px;
-  pointer-events: none;
-  background: rgba(10, 16, 28, 0.42);
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card {
+  border-color: rgba(226, 176, 72, 0.28) !important;
   box-shadow:
-    inset 0 0 0 1px rgba(22, 34, 52, 0.75),
-    inset 0 16px 40px rgba(0, 0, 0, 0.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 30px rgba(0, 0, 0, 0.32) !important;
 }
 
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live) .nbl-board-watermark {
-  opacity: 0.045;
-  transition: opacity 0.35s ease;
-}
-
-.bot-match-screen.bot-match-mode-daily-fritz:not(.rh-match-live).df-board-has-play .nbl-board-watermark {
-  opacity: 0;
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you)::before,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you)::before {
+  background: rgba(231, 182, 74, 0.72) !important;
 }

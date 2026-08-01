@@ -66,6 +66,7 @@ export function buildDailyFritzPrefetchParams(
       handNumber: match.handNumber,
       moveLog,
       protocolVersion: transcriptProtocolVersion,
+      fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
     });
   } catch (error) {
     transcriptError = error instanceof Error
@@ -145,6 +146,7 @@ export function tryApplyDailyFritzNextHand(
 export function createEndOfRunMatchState(prev: BotMatchState): BotMatchState {
   const yourScore = prev.players.you.score;
   const botScore = prev.players.bot.score;
-  const winnerId = yourScore >= botScore ? 'you' : 'bot';
+  // Align with server: ties are rejected; never invent a winner from `>=`.
+  const winnerId = yourScore > botScore ? 'you' : yourScore < botScore ? 'bot' : null;
   return { ...prev, handOver: false, gameOver: true, winnerId };
 }

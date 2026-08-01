@@ -53,6 +53,37 @@ describe('Daily Fritz v3 session persistence', () => {
     expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
     expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 2, '2026-07-12', now, 'different-fingerprint')).toBeNull();
   });
+  it('rejects a checkpoint pinned to a different Fritz policy deployment', () => {
+    const key = buildDailyFritzStorageKey('attempt-1', 1);
+    expect(persistDailyFritzSnapshot(key, snapshot({
+      fritzPolicyVersion: 1,
+      fritzPolicyContract: 'fritz-policy-v1-seeded-top-score',
+    }))).toBe(true);
+    expect(loadPersistedDailyFritzMatch(
+      key,
+      'attempt-1',
+      2,
+      '2026-07-12',
+      now,
+      RUN_FP,
+      2,
+      'fritz-policy-v2-deterministic-canonical-ties',
+    )).toBeNull();
+  });
+  it('rejects an unversioned legacy checkpoint when the attempt is policy-pinned', () => {
+    const key = buildDailyFritzStorageKey('attempt-1', 1);
+    expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
+    expect(loadPersistedDailyFritzMatch(
+      key,
+      'attempt-1',
+      2,
+      '2026-07-12',
+      now,
+      RUN_FP,
+      2,
+      'fritz-policy-v2-deterministic-canonical-ties',
+    )).toBeNull();
+  });
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({}, now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({ challenge: createDailyFritzChallengeIdentity('2026-07-11') }), now)).toBeNull();

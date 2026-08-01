@@ -40,6 +40,8 @@ export type MoveEntry = {
   boardRenderState: BoardState | null;
   handSnapshot: TileTuple[];
   engineBestMove: EngineBestMove | null;
+  /** Canonical official state immediately before this action, when available. */
+  authorityPreStateDigest?: string;
 };
 
 export function toTileTuple(tile: Tile): TileTuple {

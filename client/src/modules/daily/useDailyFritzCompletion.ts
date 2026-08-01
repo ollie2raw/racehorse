@@ -29,7 +29,10 @@ type UseDailyFritzCompletionArgs = {
   userId: string | null | undefined;
   isGuidedMode: boolean;
   isAuthoringMode: boolean;
-  onDailyFritzGameComplete: ((result: DailyFritzGameCompleteResult) => void) | null | undefined;
+  onDailyFritzGameComplete:
+    | ((result: DailyFritzGameCompleteResult) => void | Promise<void>)
+    | null
+    | undefined;
   setResultLoading: (loading: boolean) => void;
   setResultError: (error: string | null) => void;
   resultLoading: boolean;
@@ -65,6 +68,8 @@ export function useDailyFritzCompletion({
 
   const completeKeyRef = useRef('');
   const gameCompleteKeyRef = useRef('');
+  const gameCompleteInFlightRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const submitSucceededRef = useRef(false);
   const autoSubmitBlockedRef = useRef(false);
   const [submitRetryNonce, setSubmitRetryNonce] = useState(0);
@@ -73,6 +78,14 @@ export function useDailyFritzCompletion({
     if (!enabled || !onDailyFritzGameComplete) return;
     if (!match.gameOver) {
       gameCompleteKeyRef.current = '';
+      return;
+    }
+    if (
+      dailyFritzPackage?.challenge_code
+      && Math.max(match.players.you.score, match.players.bot.score) < dailyFritzPackage.winning_score
+    ) {
+      // A challenge hand can end without ending the current game. The server
+      // remains authoritative; never submit such a hand as record-game.
       return;
     }
     const key = [
@@ -84,21 +97,32 @@ export function useDailyFritzCompletion({
       match.players.bot.score,
       movesUsed,
     ].join(':');
-    if (gameCompleteKeyRef.current === key) return;
-    gameCompleteKeyRef.current = key;
-    onDailyFritzGameComplete({
+    if (gameCompleteKeyRef.current === key || gameCompleteInFlightRef.current) return;
+    gameCompleteInFlightRef.current = true;
+    const payload = {
       winner: match.winnerId,
       yourScore: match.players.you.score,
       botScore: match.players.bot.score,
       movesUsed,
       handsPlayed: match.handNumber,
       currentHandIndex: dailyFritzHandIndex,
-      moveLog: JSON.parse(JSON.stringify(moveLog)),
-    });
+      moveLog: JSON.parse(JSON.stringify(moveLog)) as MoveEntry[],
+    };
+    void Promise.resolve(onDailyFritzGameComplete(payload))
+      .then(() => {
+        gameCompleteKeyRef.current = key;
+      })
+      .catch(() => {
+        // Leave key empty so the effect can retry after overlay/manual recovery.
+      })
+      .finally(() => {
+        gameCompleteInFlightRef.current = false;
+      });
   }, [
     dailyFritzHandIndex,
     dailyFritzPackage?.attempt_id,
     dailyFritzPackage?.current_game_number,
+    dailyFritzPackage?.winning_score,
     enabled,
     match.gameOver,
     match.handNumber,
@@ -112,7 +136,7 @@ export function useDailyFritzCompletion({
 
   const submitDailyFritzCompletion = useCallback(() => {
     if (!enabled || onDailyFritzGameComplete || !dailyFritzPackage || !userId || !match.gameOver) return;
-    if (submitSucceededRef.current || autoSubmitBlockedRef.current) return;
+    if (submitSucceededRef.current || autoSubmitBlockedRef.current || submitInFlightRef.current) return;
 
     dailyFritzDebugLog('[daily-complete] game over reached');
 
@@ -128,7 +152,6 @@ export function useDailyFritzCompletion({
       dailyFritzDebugLog('[daily-complete] modal state = dedup-skipped key=' + completionKey);
       return;
     }
-    completeKeyRef.current = completionKey;
 
     dailyFritzDebugLog('[daily-complete] submit start key=' + completionKey);
     dailyFritzDebugLog('[daily-flow] submit start', {
@@ -139,12 +162,14 @@ export function useDailyFritzCompletion({
     });
     setResultLoading(true);
     setResultError(null);
+    submitInFlightRef.current = true;
 
     const capturedMoveLog = JSON.parse(JSON.stringify(moveLog));
 
     void (async () => {
       if (isGuidedMode || isAuthoringMode) {
         setResultLoading(false);
+        submitInFlightRef.current = false;
         return;
       }
       try {
@@ -173,6 +198,7 @@ export function useDailyFritzCompletion({
           handsPlayed: match.handNumber,
           moveLog: capturedMoveLog,
         });
+        completeKeyRef.current = completionKey;
         submitSucceededRef.current = true;
         autoSubmitBlockedRef.current = false;
         dailyFritzDebugLog('[daily-complete] submit success');
@@ -193,6 +219,8 @@ export function useDailyFritzCompletion({
         setResultLoading(false);
         setResultError(errMsg);
         dailyFritzDebugLog('[daily-complete] modal state = error');
+      } finally {
+        submitInFlightRef.current = false;
       }
     })();
   }, [

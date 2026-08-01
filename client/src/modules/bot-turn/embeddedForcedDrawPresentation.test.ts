@@ -145,8 +145,7 @@ describe('presentEmbeddedForcedDraws', () => {
     expect(setDrawSequenceActiveBoth).toHaveBeenCalledWith(false);
     expect(onDrawVisualStep).toHaveBeenCalled();
     expect(triggerDrawStepAnimation).toHaveBeenCalledTimes(2);
-    // Post-play board commit + one commit per draw step.
-    expect(setMatch).toHaveBeenCalled();
-    expect(setMatch.mock.calls.length).toBeGreaterThanOrEqual(3);
+    // Fritz recovery draws are overlay-only — never mutate authoritative match.
+    expect(setMatch).not.toHaveBeenCalled();
   });
 });

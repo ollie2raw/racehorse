@@ -156,7 +156,6 @@ function LeaderboardRow({
 }) {
   const topRank = row.rank <= 3 ? (row.rank as 1 | 2 | 3) : null;
   const isSelf = isCurrentUserRow(row, currentUsername);
-  const showTier = row.rank <= 10;
 
   return (
     <article
@@ -183,7 +182,6 @@ function LeaderboardRow({
             {row.username}
             {isSelf ? <span className="dflb-you-tag">You</span> : null}
           </strong>
-          {showTier ? <span className="dflb-tier-chip">Elite</span> : null}
         </div>
       </div>
       <div className={`dflb-cell dflb-result ${row.won ? 'is-win' : 'is-loss'}`}>
@@ -230,8 +228,8 @@ function PodiumSlot({
         <span className="dflb-podium-avatar dflb-podium-avatar--empty" aria-hidden="true">
           <span className="dflb-podium-avatar__glyph">+</span>
         </span>
-        <span className="dflb-podium-name">Open spot</span>
-        <span className="dflb-podium-empty-hint">Awaiting racer</span>
+        <span className="dflb-podium-name">—</span>
+        <span className="dflb-podium-empty-hint">Unclaimed</span>
       </div>
     );
   }
@@ -376,11 +374,14 @@ export default function DailyFritzLeaderboardScreen({
   );
 
   const hasCompletedSetToday = Boolean(
-    selfRow && today?.attempt_status === 'completed' && today.set_result?.setWinner,
+    today?.attempt_status === 'completed' && today.set_result?.setWinner,
+  );
+  const completedButUnranked = Boolean(
+    hasCompletedSetToday && !selfRow,
   );
 
   useEffect(() => {
-    if (!selfRow) {
+    if (!user?.id) {
       setToday(null);
       return;
     }
@@ -395,7 +396,7 @@ export default function DailyFritzLeaderboardScreen({
     return () => {
       cancelled = true;
     };
-  }, [selfRow, runDate]);
+  }, [user?.id, runDate]);
 
   const resultOverlayConfig = useMemo(() => {
     if (!hasCompletedSetToday || !today) return null;
@@ -614,7 +615,13 @@ export default function DailyFritzLeaderboardScreen({
                       </div>
                     ) : (
                       <div className="dflb-you-empty">
-                        <p>Play today&apos;s set to appear on the board.</p>
+                        <p>
+                          {completedButUnranked
+                            ? today?.verification_status === 'verified'
+                              ? 'Your result is still syncing to the board.'
+                              : 'Finished today — not on the ranked board.'
+                            : "Play today's set to take your place."}
+                        </p>
                       </div>
                     )}
                   </section>

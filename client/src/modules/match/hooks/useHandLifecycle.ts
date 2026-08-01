@@ -13,6 +13,7 @@ import {
   DailyFritzEndOfRunError,
   DailyFritzNextHandHttpError,
   formatDailyFritzNextHandUserMessage,
+  isRecoverableDailyFritzAuthorityCode,
   isRetryableDailyFritzNextHandError,
   type DailyFritzNextHandResponse,
 } from '../../daily/dailyFritzContracts.ts';
@@ -182,29 +183,41 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       reloadRequiredRef.current = false;
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
-      reveal.dismissRevealForAdvance();
       traceHandLifecycle('dealing-next-hand', { source }, 'D');
 
-      let applied = false;
-      setMatch((prev) => {
-        const result = tryApplyDailyFritzNextHand(prev, response.hand, response.current_game_scores);
-        if (!result.applied) {
-          warnHandLifecycleStuck('setMatch skipped — hand not over', {
-            handOver: prev.handOver,
-            gameOver: prev.gameOver,
-            source,
-          });
-          emitHandLifecycleDebugLog({
-            location: 'BotMatchScreen.tsx:applyDailyFritzNextHandResponse',
-            message: 'setMatch-noop',
-            hypothesisId: 'D',
-            data: { handOver: prev.handOver, gameOver: prev.gameOver, source },
-          });
-          return prev;
-        }
-        applied = true;
-        return result.nextState;
-      });
+      const live = matchRef.current;
+      const challengeHandOnlyGameOver = Boolean(
+        dailyFritzPackage?.challenge_code
+        && Math.max(live.players.you.score, live.players.bot.score) < dailyFritzPackage.winning_score,
+      );
+      const challengeStateForHandAdvance = challengeHandOnlyGameOver && live.gameOver
+        ? { ...live, gameOver: false, winnerId: null }
+        : live;
+      const nextStateResult = tryApplyDailyFritzNextHand(
+        challengeStateForHandAdvance,
+        response.hand,
+        response.current_game_scores,
+      );
+      const applied = nextStateResult.applied;
+      if (nextStateResult.applied) {
+        // Keep the hand-over surface mounted until the new deal is accepted.
+        // If application fails, the same reveal must remain available to show
+        // the retry/error state instead of leaving the old board uncovered.
+        reveal.dismissRevealForAdvance();
+        setMatch(nextStateResult.nextState);
+      } else {
+        warnHandLifecycleStuck('setMatch skipped — hand not over', {
+          handOver: live.handOver,
+          gameOver: live.gameOver,
+          source,
+        });
+        emitHandLifecycleDebugLog({
+          location: 'BotMatchScreen.tsx:applyDailyFritzNextHandResponse',
+          message: 'setMatch-noop',
+          hypothesisId: 'D',
+          data: { handOver: live.handOver, gameOver: live.gameOver, source },
+        });
+      }
 
       prefetchCoordinator.clear();
       completedHandEvidenceRef.current = null;
@@ -219,7 +232,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       }
     },
     [
+      dailyFritzPackage?.challenge_code,
       dailyFritzPackage?.current_game_number,
+      dailyFritzPackage?.winning_score,
       lastDailyFlowLabelRef,
       matchRef,
       prefetchCoordinator,
@@ -233,8 +248,13 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   const advanceHand = useCallback(() => {
     const live = matchRef.current;
+    const challengeHandOnlyGameOver = Boolean(
+      isDailyFritzMode
+      && dailyFritzPackage?.challenge_code
+      && Math.max(live.players.you.score, live.players.bot.score) < dailyFritzPackage.winning_score,
+    );
 
-    if (!isDailyFritzMode && live.gameOver) {
+    if (live.gameOver && !challengeHandOnlyGameOver) {
       traceHandLifecycle('match-complete', { reason: 'advance-skipped-game-over' });
       return;
     }
@@ -383,7 +403,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             const verifierCode = err instanceof DailyFritzNextHandHttpError
               ? err.verifierCode
               : null;
-            if (status === 400) {
+            if (status === 400 || isRecoverableDailyFritzAuthorityCode(verifierCode)) {
               discardDailyFritzSnapshot(buildDailyFritzStorageKey(
                 dailyFritzPackage.attempt_id,
                 prefetchParams.gameNumber,
@@ -414,16 +434,17 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             }, 'C');
             return;
           }
-          if (failureAttempt < 2) {
-            logDailyFritzHandBreadcrumb('manual-advance-shown', {
-              reason: 'next-hand-fetch-retry',
+          const retryDelaysMs = [1000, 2500, 5000];
+          if (failureAttempt <= retryDelaysMs.length) {
+            const retryDelayMs = retryDelaysMs[failureAttempt - 1]!;
+            logDailyFritzHandBreadcrumb('next-hand-silent-retry', {
               source,
               failureAttempt,
+              retryDelayMs,
               error: errMsg,
             });
-            setShowManualHandAdvance(true);
-            traceHandLifecycle('error', { source, error: errMsg, failureAttempt, willRetry: true }, 'C');
-            advanceRetry.schedule(2500, 'next-hand-fetch-failed', () => advanceHandRef.current());
+            traceHandLifecycle('error', { source, error: errMsg, failureAttempt, retryDelayMs, willRetry: true }, 'C');
+            advanceRetry.schedule(retryDelayMs, 'next-hand-fetch-failed', () => advanceHandRef.current());
             return;
           }
           setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));

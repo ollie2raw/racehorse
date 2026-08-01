@@ -30,6 +30,7 @@ export function resolveBotMoveChoice(input: {
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
   isDailyFritzMode: boolean;
+  fritzPolicyVersion?: number;
 }): BotMoveResolution {
   let chosen: BotChoice | null = null;
   let ghostChosen: GhostResolvedMove | null = null;
@@ -42,7 +43,11 @@ export function resolveBotMoveChoice(input: {
       profile: input.ghostProfile,
     });
   } else if (input.isDailyFritzMode) {
-    chosen = chooseOfficialFritzBotChoice(input.state, input.fritzDifficulty);
+    chosen = chooseOfficialFritzBotChoice(
+      input.state,
+      input.fritzDifficulty,
+      input.fritzPolicyVersion,
+    );
     logFritzFairnessDecision(input.state, chosen);
     // Never fall back to an arbitrary legal move — the server verifier rejects that.
     if (!chosen?.move) {

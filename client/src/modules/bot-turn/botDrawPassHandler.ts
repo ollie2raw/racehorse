@@ -38,6 +38,7 @@ export async function runBotDrawPassSequence(input: {
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
   isDailyFritzMode: boolean;
+  fritzPolicyVersion?: number;
   isMuted: boolean;
   moveCounter: number;
   matchHandNumber: number;
@@ -136,6 +137,7 @@ export async function runBotDrawPassSequence(input: {
       ghostProfile: input.ghostProfile,
       fritzDifficulty: input.fritzDifficulty,
       isDailyFritzMode: input.isDailyFritzMode,
+      fritzPolicyVersion: input.fritzPolicyVersion,
     });
     chosen = resolution.chosen;
     ghostChosen = resolution.ghostChosen;

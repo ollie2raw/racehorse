@@ -1,4 +1,11 @@
-import { DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION } from '@racehorse/game-core';
+import {
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+  DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+  GAME_RULES_VERSION,
+  getFritzPolicyContract,
+  isSupportedFritzPolicyVersion,
+  type FritzPolicyVersion,
+} from '@racehorse/game-core';
 import type { DailyFritzSetGameNumber, DailyFritzSetGameResult } from '../../dailyFritz';
 import type { VerifiedDailyFritzHandRecord } from '../../dailyFritzVerifier';
 
@@ -25,6 +32,107 @@ export type DailyFritzVerificationStatus =
   | 'verified'
   | 'rejected'
   | 'legacy_unverified';
+
+export type DailyFritzAttemptAuthorityContract = {
+  version: 1;
+  transcriptProtocolVersion: number;
+  gameRulesVersion: number;
+  fritzPolicyVersion: FritzPolicyVersion;
+  fritzPolicyContract: string;
+  stateDigestVersion: 1;
+  stateDigestRequired: boolean;
+  challengeId: string;
+  runFingerprint: string;
+  clientRelease: string | null;
+};
+
+export type DailyFritzClientAuthorityCapabilities = {
+  transcriptProtocolVersions: readonly number[];
+  gameRulesVersion: number;
+  fritzPolicies: readonly { version: FritzPolicyVersion; contract: string }[];
+  stateDigestVersions: readonly number[];
+};
+
+export function clientSupportsDailyFritzAuthorityContract(
+  contract: DailyFritzAttemptAuthorityContract,
+  capabilities: DailyFritzClientAuthorityCapabilities,
+): boolean {
+  return capabilities.transcriptProtocolVersions.includes(contract.transcriptProtocolVersion)
+    && capabilities.gameRulesVersion === contract.gameRulesVersion
+    && capabilities.fritzPolicies.some(
+      (policy) => policy.version === contract.fritzPolicyVersion
+        && policy.contract === contract.fritzPolicyContract,
+    )
+    && (
+      !contract.stateDigestRequired
+      || capabilities.stateDigestVersions.includes(contract.stateDigestVersion)
+    );
+}
+
+export function readDailyFritzAuthorityContract(
+  result: Record<string, unknown> | null,
+): DailyFritzAttemptAuthorityContract | null {
+  const raw = result?.authority_contract;
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Record<string, unknown>;
+  if (
+    rec.version !== 1
+    || (rec.transcriptProtocolVersion !== 1 && rec.transcriptProtocolVersion !== 2)
+    || rec.gameRulesVersion !== GAME_RULES_VERSION
+    || !isSupportedFritzPolicyVersion(rec.fritzPolicyVersion)
+    || rec.fritzPolicyContract !== getFritzPolicyContract(rec.fritzPolicyVersion)
+    || rec.stateDigestVersion !== DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION
+    || typeof rec.stateDigestRequired !== 'boolean'
+    || typeof rec.challengeId !== 'string'
+    || typeof rec.runFingerprint !== 'string'
+  ) return null;
+  return {
+    version: 1,
+    transcriptProtocolVersion: rec.transcriptProtocolVersion,
+    gameRulesVersion: rec.gameRulesVersion,
+    fritzPolicyVersion: rec.fritzPolicyVersion,
+    fritzPolicyContract: rec.fritzPolicyContract,
+    stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    stateDigestRequired: rec.stateDigestRequired,
+    challengeId: rec.challengeId,
+    runFingerprint: rec.runFingerprint,
+    clientRelease: typeof rec.clientRelease === 'string' ? rec.clientRelease : null,
+  };
+}
+
+export function buildDailyFritzAuthorityContract(input: {
+  fritzPolicyVersion: FritzPolicyVersion;
+  challengeId: string;
+  runFingerprint: string;
+  clientRelease?: string | null;
+  transcriptProtocolVersion?: number;
+  stateDigestRequired?: boolean;
+}): DailyFritzAttemptAuthorityContract {
+  return {
+    version: 1,
+    transcriptProtocolVersion:
+      input.transcriptProtocolVersion ?? DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    gameRulesVersion: GAME_RULES_VERSION,
+    fritzPolicyVersion: input.fritzPolicyVersion,
+    fritzPolicyContract: getFritzPolicyContract(input.fritzPolicyVersion),
+    stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    stateDigestRequired: input.stateDigestRequired ?? true,
+    challengeId: input.challengeId,
+    runFingerprint: input.runFingerprint,
+    clientRelease: input.clientRelease?.trim().slice(0, 120) || null,
+  };
+}
+
+export function writeDailyFritzAuthorityContract(
+  result: Record<string, unknown> | null,
+  contract: DailyFritzAttemptAuthorityContract,
+): Record<string, unknown> {
+  return {
+    ...(result ?? {}),
+    authority_contract: contract,
+    verification_protocol_version: contract.transcriptProtocolVersion,
+  };
+}
 
 export function readAuthorityLedger(result: Record<string, unknown> | null): DailyFritzAuthorityLedger {
   const raw = result?.authority;

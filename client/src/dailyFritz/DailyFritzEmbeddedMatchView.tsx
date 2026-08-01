@@ -26,7 +26,7 @@ export type DailyFritzEmbeddedMatchViewProps = {
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
   onBack: () => void;
   onEmbeddedBack: () => void;
-  onDailyFritzGameComplete: (result: DailyFritzGameCompletionPayload) => void;
+  onDailyFritzGameComplete: (result: DailyFritzGameCompletionPayload) => void | Promise<void>;
   onDailyFritzComplete: () => void;
   socket: Socket | null;
 };
@@ -133,7 +133,7 @@ function DailyFritzCoreMatchView({
         dailyFritzPackage={dailyFritzPackageForMatch}
         dailyFritzSetOverlay={setOverlayConfig}
         onDailyFritzGameComplete={(result) => {
-          onDailyFritzGameComplete(result);
+          return onDailyFritzGameComplete(result);
         }}
         onDailyFritzComplete={() => {
           onDailyFritzComplete();

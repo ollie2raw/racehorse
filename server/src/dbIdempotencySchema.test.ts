@@ -47,6 +47,22 @@ describe('DB idempotency schema guardrails', () => {
     expect(verifiedSql).toContain('create unique index if not exists idx_verified_single_player_matches_user_local on public.verified_single_player_matches (user_id, local_match_id)');
   });
 
+  it('keeps Fritz Challenge participants, attempts, and hands idempotent', () => {
+    const sql = compactSql(readRepoFile('supabase/fritz_challenges.sql'));
+
+    expect(sql).toContain('share_code text not null unique');
+    expect(sql).toContain('unique (challenge_id, user_id)');
+    expect(sql).toContain('primary key (challenge_id, game_number, hand_index)');
+    expect(sql).toContain('for update');
+    expect(sql).toContain('and opponent_user_id is null and status = \'open\'');
+    expect(sql).toContain('create or replace function public.start_fritz_challenge_attempt');
+    expect(sql).toContain('on conflict do nothing');
+    expect(sql).toContain('create or replace function public.get_or_create_fritz_challenge_hand');
+    expect(sql).toContain('create or replace function public.advance_fritz_challenge_hand');
+    expect(sql).toContain('create or replace function public.record_fritz_challenge_game');
+    expect(sql.match(/on conflict do nothing/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
     const sql = compactSql(readRepoFile('supabase/migrations/2026-05-14_scheduled_tournaments.sql'));
 

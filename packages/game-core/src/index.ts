@@ -1,5 +1,6 @@
 export * from './commands';
 export * from './dailyFritzTranscript';
+export * from './dailyFritzAuthority';
 export * from './engine';
 export * from './fritzPolicy';
 export * from './invariants';

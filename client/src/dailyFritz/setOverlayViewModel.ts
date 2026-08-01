@@ -48,6 +48,8 @@ export interface DailyFritzSetOverlayViewModel {
     skunkLabel?: string | null;
   }>;
   practiceHint?: string | null;
+  /** Em-dash / incomplete stats while saving or posting */
+  statsPending?: boolean;
   onPrimary: () => void;
   onSecondary: () => void;
   onTertiary?: () => void;

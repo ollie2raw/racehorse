@@ -9,6 +9,7 @@ type OpponentMoveLogEntry = Omit<MoveEntry, 'moveNumber' | 'handNumber'>;
 function baseFields(
   snapshot: BotTurnSnapshot,
   engineBestMove: EngineBestMove | null,
+  authorityPreStateDigest?: string,
 ): Omit<OpponentMoveLogEntry, 'player' | 'action' | 'tile'> {
   return {
     boardEnds: snapshot.boardEnds,
@@ -20,6 +21,7 @@ function baseFields(
     boardRenderState: snapshot.boardRenderState,
     handSnapshot: snapshot.handSnapshot,
     engineBestMove,
+    ...(authorityPreStateDigest ? { authorityPreStateDigest } : {}),
   };
 }
 
@@ -50,12 +52,13 @@ export function buildBotPlaceMoveLogEntry(input: {
   tile: Tile;
   position: PlacementPosition;
   engineBestMove: EngineBestMove | null;
+  authorityPreStateDigest?: string;
 }): OpponentMoveLogEntry {
   return {
     player: 'opponent',
     action: 'place',
     tile: toTileTuple(input.tile),
     position: input.position,
-    ...baseFields(input.snapshot, input.engineBestMove),
+    ...baseFields(input.snapshot, input.engineBestMove, input.authorityPreStateDigest),
   };
 }
