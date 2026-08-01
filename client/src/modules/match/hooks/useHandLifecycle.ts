@@ -65,6 +65,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     isMuted,
     opponentLabel,
     dailyFritzPackage,
+    dailyFritzTranscriptProtocolVersion,
     dailyFritzHandIndex,
     setDailyFritzHandIndex,
     initialDailyFritzHandResult,
@@ -328,6 +329,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             dailyFritzHandIndex,
             matchRef.current,
             getMoveLog(),
+            dailyFritzTranscriptProtocolVersion,
           );
       if (frozenEvidence?.key !== evidenceKey) {
         completedHandEvidenceRef.current = { key: evidenceKey, params: prefetchParams };
@@ -489,6 +491,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     advanceRetry,
     dailyFritzHandIndex,
     dailyFritzPackage,
+    dailyFritzTranscriptProtocolVersion,
     frozenLesson,
     frozenV2Lesson,
     fritzV2LastAppliedIndexRef,
@@ -540,6 +543,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
                 dailyFritzHandIndex,
                 result.state,
                 getMoveLog(),
+                dailyFritzTranscriptProtocolVersion,
               );
               completedHandEvidenceRef.current = { key: evidenceKey, params };
               prefetchCoordinator.startPrefetch(params);
@@ -557,6 +561,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     [
       dailyFritzHandIndex,
       dailyFritzPackage,
+      dailyFritzTranscriptProtocolVersion,
       getMoveLog,
       isDailyFritzMode,
       isMuted,

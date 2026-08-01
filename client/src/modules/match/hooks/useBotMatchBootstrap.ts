@@ -21,6 +21,7 @@ import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
 
 import { BOT_DRAW_STEP_MS } from '../../bot-turn/botTurnGuards.ts';
 import { shouldRunDailyFritzPreGameDraw } from '../../daily/createDailyFritzOfficialMatch.ts';
+import { DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION } from '@racehorse/game-core';
 
 /** Shared draw cadence for Fritz and player forced-draw presentation. */
 export const DRAW_STEP_MS = BOT_DRAW_STEP_MS;
@@ -76,6 +77,8 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     isPersistedDailyFritzPlayableResume(initialPersistedDailyFritzMatch.match)
       ? initialPersistedDailyFritzMatch
       : null;
+  const dailyFritzTranscriptProtocolVersion: 1 | 2 =
+    resumablePersistedDailyFritzMatch?.transcriptProtocolVersion ?? DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION;
   const dailyFritzScriptedDrawReady = isDailyFritzScriptedDrawReady(dailyFritzPackage);
 
   const preGameDrawEligibilityInput = {
@@ -253,6 +256,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     matchInstanceKey,
     enableGuidedMatchCandidateCapture,
     dailyFritzStorageKey,
+    dailyFritzTranscriptProtocolVersion,
     createLocalMatchId,
     initialPersistedDailyFritzMatch,
     resumablePersistedDailyFritzMatch,

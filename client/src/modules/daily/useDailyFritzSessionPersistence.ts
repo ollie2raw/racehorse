@@ -27,6 +27,7 @@ type UseDailyFritzSessionPersistenceArgs = {
   handResult: BotHandReveal | null;
   initialRevision?: number;
   initialStartedAt?: string;
+  transcriptProtocolVersion?: 1 | 2;
 };
 
 export function useDailyFritzSessionPersistence({
@@ -45,6 +46,7 @@ export function useDailyFritzSessionPersistence({
   handResult,
   initialRevision = 0,
   initialStartedAt,
+  transcriptProtocolVersion = 2,
 }: UseDailyFritzSessionPersistenceArgs): void {
   const storageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
@@ -90,6 +92,7 @@ export function useDailyFritzSessionPersistence({
       startedAt: startedAtRef.current,
       lastTransitionAt: now,
       revision: ++revisionRef.current,
+      transcriptProtocolVersion,
     });
     if (match.gameOver || match.handOver) {
       if (storageTimerRef.current) {
@@ -129,6 +132,7 @@ export function useDailyFritzSessionPersistence({
     preGameDrawActive,
     drawSequenceActive,
     storageKey,
+    transcriptProtocolVersion,
   ]);
 
   useEffect(() => {

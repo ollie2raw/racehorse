@@ -159,6 +159,19 @@ describe('Daily Fritz v3 session persistence', () => {
     expect(parsed?.moveLog).toHaveLength(1);
     expect(parsed?.moveLog[0]?.moveNumber).toBe(1);
   });
+
+  it('treats checkpoints without protocol provenance as legacy transcript v1', () => {
+    const parsed = parseDailyFritzPersistedSnapshot(snapshot(), now);
+    expect(parsed?.transcriptProtocolVersion).toBe(1);
+  });
+
+  it('preserves explicit protocol v2 provenance for new checkpoints', () => {
+    const parsed = parseDailyFritzPersistedSnapshot(
+      snapshot({ transcriptProtocolVersion: 2 }),
+      now,
+    );
+    expect(parsed?.transcriptProtocolVersion).toBe(2);
+  });
   it.each([
     { low: -1, high: 2 },
     { low: 1, high: -1 },

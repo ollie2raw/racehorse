@@ -51,6 +51,7 @@ export function buildDailyFritzPrefetchParams(
   dailyFritzHandIndex: number,
   match: BotMatchState,
   moveLog: readonly MoveEntry[],
+  transcriptProtocolVersion: 1 | 2 = 2,
 ): DailyFritzPrefetchParams {
   const gameNumber = (dailyFritzPackage.current_game_number ?? 1) as DailyFritzSetGameNumber;
   let transcript: DailyFritzPrefetchParams['transcript'] = null;
@@ -64,6 +65,7 @@ export function buildDailyFritzPrefetchParams(
       handIndex: dailyFritzHandIndex,
       handNumber: match.handNumber,
       moveLog,
+      protocolVersion: transcriptProtocolVersion,
     });
   } catch (error) {
     transcriptError = error instanceof Error

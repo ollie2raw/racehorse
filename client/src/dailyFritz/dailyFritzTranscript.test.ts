@@ -130,4 +130,18 @@ describe('Daily Fritz transcript adapter', () => {
       moveLog: [{ ...base, moveNumber: 1, handNumber: 1, player: 'you', action: 'place', tile: [1, 2] }],
     })).toThrow(/placement/i);
   });
+
+  it('preserves the protocol version selected for a resumed checkpoint', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 2,
+      handIndex: 1,
+      handNumber: 2,
+      protocolVersion: 1,
+      moveLog: [{ ...base, moveNumber: 1, handNumber: 2, player: 'opponent', action: 'pass' }],
+    });
+
+    expect(transcript.protocolVersion).toBe(1);
+  });
 });

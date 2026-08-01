@@ -30,6 +30,7 @@ export function buildHandLifecycleArgs(
     isMuted: chrome.isMuted,
     opponentLabel: bootstrap.opponentLabel,
     dailyFritzPackage: bootstrap.dailyFritzPackage,
+    dailyFritzTranscriptProtocolVersion: bootstrap.dailyFritzTranscriptProtocolVersion,
     dailyFritzHandIndex: sources.dailyFritz.dailyFritzHandIndex,
     setDailyFritzHandIndex: sources.dailyFritz.setDailyFritzHandIndex,
     initialDailyFritzHandResult: sources.dailyFritz.persistedHandResult,

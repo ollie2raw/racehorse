@@ -31,6 +31,8 @@ export type DailyFritzPersistedSnapshot = {
   startedAt: string;
   lastTransitionAt: string;
   revision: number;
+  /** Protocol used to encode the persisted move log. Missing means legacy v1. */
+  transcriptProtocolVersion?: 1 | 2;
 };
 
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -85,6 +87,7 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
   if (phase === 'hand_transition' && (!match.handOver || match.gameOver || value.handResult === null)) return null;
   if (phase === 'completed' && !match.gameOver) return null;
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
+  const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
   return {
     ...value,
     schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
@@ -92,6 +95,7 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
     transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
     moveLog: canonicalizeDailyFritzMoveLog(value.moveLog as MoveEntry[]),
     verificationPhase,
+    transcriptProtocolVersion,
   } as unknown as DailyFritzPersistedSnapshot;
 }
 

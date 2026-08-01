@@ -14,6 +14,7 @@ export function buildDailyFritzTranscript(input: {
   handIndex: number;
   handNumber: number;
   moveLog: readonly MoveEntry[];
+  protocolVersion?: 1 | 2;
 }): DailyFritzTranscript {
   const entries = canonicalizeDailyFritzMoveLog(input.moveLog)
     .filter((entry) => entry.handNumber === input.handNumber);
@@ -35,7 +36,7 @@ export function buildDailyFritzTranscript(input: {
   });
 
   return {
-    protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    protocolVersion: input.protocolVersion ?? DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
     rulesVersion: GAME_RULES_VERSION,
     fritzPolicyVersion: FRITZ_POLICY_VERSION,
     challengeId: input.challengeId,

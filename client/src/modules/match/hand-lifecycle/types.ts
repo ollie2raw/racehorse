@@ -81,6 +81,7 @@ export type UseHandLifecycleArgs = {
   isMuted: boolean;
   opponentLabel: string;
   dailyFritzPackage: DailyFritzStartResponse | null;
+  dailyFritzTranscriptProtocolVersion: 1 | 2;
   dailyFritzHandIndex: number;
   setDailyFritzHandIndex: (index: number) => void;
   initialDailyFritzHandResult: BotHandReveal | null;

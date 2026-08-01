@@ -36,5 +36,6 @@ describe('useDailyFritzSessionPersistence', () => {
     rerender({ drawSequenceActive: false });
 
     expect(window.localStorage.getItem(storageKey)).not.toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(storageKey)!).transcriptProtocolVersion).toBe(2);
   });
 });

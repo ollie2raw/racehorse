@@ -133,6 +133,7 @@ export function useDailyFritzRuntime({
     handResult: persistedHandResult,
     initialRevision: resumablePersistedDailyFritzMatch?.revision,
     initialStartedAt: resumablePersistedDailyFritzMatch?.startedAt,
+    transcriptProtocolVersion: resumablePersistedDailyFritzMatch?.transcriptProtocolVersion ?? 2,
   });
 
   const {
