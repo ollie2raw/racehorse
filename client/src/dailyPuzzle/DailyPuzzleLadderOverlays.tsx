@@ -82,7 +82,7 @@ export function DailyPuzzleLadderOverlays({
                 {finalizePending ? 'Finalizing ladder…' : 'Submitting puzzle…'}
               </div>
             </header>
-            <p className="dpl-ladder-pending-copy">Please wait.</p>
+            <p className="dpl-ladder-pending-copy is-pending">Saving your result…</p>
           </div>
         </div>
       ) : null}
@@ -145,9 +145,9 @@ export function DailyPuzzleLadderOverlays({
 
       {practiceOverlay ? (
         <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="dialog" aria-modal="true" aria-label="Practice complete">
-          <div className="rh-result">
+          <div className="rh-result dpl-ladder-result">
             <header className="rh-result__head">
-              <div className="claude-mode-hero__eyebrow" style={{ color: 'var(--tier-standard)' }}>PRACTICE COMPLETE</div>
+              <div className="claude-mode-hero__eyebrow">PRACTICE COMPLETE</div>
               <div className="rh-result__score">
                 <span>{practiceOverlay.rawScore}</span>
                 <span className="rh-result__score-suffix">PTS</span>
@@ -166,51 +166,51 @@ export function DailyPuzzleLadderOverlays({
                 <span className="rh-result__summary-value">Practice</span>
               </div>
               <div>
-                <span className="rh-result__summary-label">Slot</span>
-                <span className="rh-result__summary-value">P{practiceOverlay.slotIndex}</span>
+                <span className="rh-result__summary-label">Puzzle</span>
+                <span className="rh-result__summary-value">
+                  {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
+                </span>
               </div>
             </div>
             <footer
-              className="rh-result__actions"
-              style={{ gridTemplateColumns: practiceOverlay.slotIndex < 3 ? '1fr 1.2fr' : '1fr 1fr' }}
+              className={`rh-result__actions dpl-ladder-result__actions${
+                practiceOverlay.slotIndex < 3 ? ' dpl-ladder-result__actions--triple' : ''
+              }`}
             >
               <button
                 type="button"
-                className="rh-btn-leave"
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
                 onClick={() => actions.onPracticeReplay(practiceOverlay.slotIndex as 1 | 2 | 3)}
               >
-                Replay P{practiceOverlay.slotIndex}
+                Replay
               </button>
               {practiceOverlay.slotIndex < 3 ? (
                 <button
                   type="button"
-                  className="rh-btn-cancel"
+                  className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
                   onClick={() => actions.onPracticeNext((practiceOverlay.slotIndex + 1) as 1 | 2 | 3)}
                 >
-                  Practice P{practiceOverlay.slotIndex + 1}
+                  {`Practice ${getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex + 1)}`}
                 </button>
               ) : (
                 <button
                   type="button"
-                  className="rh-btn-cancel"
+                  className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
                   onClick={actions.onPracticeExitToHub}
                 >
-                  ← Back to Ladder
+                  Back to Ladder
                 </button>
               )}
-            </footer>
-            {practiceOverlay.slotIndex < 3 && (
-              <div style={{ padding: '0 22px 22px', marginTop: '-10px', textAlign: 'center' }}>
+              {practiceOverlay.slotIndex < 3 ? (
                 <button
                   type="button"
-                  className="btn text compact"
-                  style={{ opacity: 0.5, fontSize: '11px' }}
+                  className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
                   onClick={actions.onPracticeExitToHub}
                 >
-                  Return to Ladder Home
+                  Ladder Home
                 </button>
-              </div>
-            )}
+              ) : null}
+            </footer>
           </div>
         </div>
       ) : null}
@@ -245,21 +245,12 @@ export function DailyPuzzleLadderOverlays({
               </div>
             </div>
             <footer className="rh-result__actions dpl-ladder-result__actions dpl-ladder-result__actions--with-share">
-              {finalLadderShareText ? (
-                <button
-                  type="button"
-                  className="dpl-ladder-result-btn dpl-ladder-share-result-btn"
-                  onClick={() => actions.onShareResult(finalLadderShareText)}
-                >
-                  {shareDone ? '✓ Shared!' : 'Share Result'}
-                </button>
-              ) : null}
               <button
                 type="button"
-                className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
-                onClick={actions.onFinalHome}
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
+                onClick={actions.onFinalLeaderboard}
               >
-                ← Home
+                Leaderboard
               </button>
               <button
                 type="button"
@@ -270,11 +261,20 @@ export function DailyPuzzleLadderOverlays({
               </button>
               <button
                 type="button"
-                className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
-                onClick={actions.onFinalLeaderboard}
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
+                onClick={actions.onFinalHome}
               >
-                Leaderboard
+                Home
               </button>
+              {finalLadderShareText ? (
+                <button
+                  type="button"
+                  className="dpl-ladder-result-btn dpl-ladder-share-result-btn"
+                  onClick={() => actions.onShareResult(finalLadderShareText)}
+                >
+                  {shareDone ? 'Copied' : 'Share Result'}
+                </button>
+              ) : null}
             </footer>
           </div>
         </div>

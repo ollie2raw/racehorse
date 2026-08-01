@@ -32,7 +32,7 @@ export function buildLadderShareData(params: {
     const result = slots.find((entry) => entry.slotIndex === slotIndex);
     const step = getDailyPuzzleStepPresentation(slotIndex);
     if (!result) return `${step.shortLabel} —`;
-    const perfect = result.perfect ? ' ✓' : '';
+    const perfect = result.perfect ? ' PERFECT' : '';
     return `${step.shortLabel} ${result.awardedPoints}${perfect}`;
   });
 
@@ -49,12 +49,12 @@ export function buildLadderShareData(params: {
 export function buildLadderShareText(data: DailyPuzzleLadderShareData): string {
   const rankPart =
     data.rank != null ? `${data.totalScore} PTS · Rank #${data.rank}` : `${data.totalScore} PTS`;
-  const streak = data.shareStreak ? `🔥 ${data.shareStreak} day streak` : '';
+  const streak = data.shareStreak ? `${data.shareStreak}-day streak` : '';
   const rating = data.shareRating ? `${data.shareRating} rating` : '';
   const meta = [streak, rating].filter(Boolean).join(' · ');
 
   const lines = [
-    `🧩 Daily Puzzle Ladder · ${data.shareDate}`,
+    `Daily Puzzle Ladder · ${data.shareDate}`,
     rankPart,
     data.slotLines.join(' · '),
     meta,
