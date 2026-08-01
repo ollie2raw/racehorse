@@ -3,7 +3,7 @@
  * Shared by Daily Fritz and Play vs Fritz (same bot-turn spine).
  *
  * HUD pill stays calm (thinking / drawing / your move).
- * Score toast owns the ceremony (sticky running total during chains).
+ * Score toast owns the ceremony (timed +N; never sticky forever).
  */
 
 export type FritzPresentationPhase =

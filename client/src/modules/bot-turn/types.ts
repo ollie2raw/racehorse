@@ -58,7 +58,7 @@ export type BotTurnPorts = {
       actorLabel?: string;
     },
   ) => void;
-  /** Clears a sticky score toast when Fritz's turn ends. */
+  /** Clears a score toast when Fritz's turn ends or a non-scoring step follows. */
   clearBoardToast: () => void;
   onAuthoringFritzActionCaptured?: (capture: AuthoringFritzActionCapture) => void;
   onAuthoringV2FritzEvent?: (capture: AuthoringV2FritzEventCapture) => void;
