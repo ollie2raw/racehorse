@@ -6,7 +6,7 @@ vi.mock('../lib/gameServerUrl', () => ({ resolveGameServerUrl: () => 'http://tes
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-const { apiGet, getAuthHeaders } = await import('./client');
+const { apiGet, apiPost, getAuthHeaders } = await import('./client');
 
 beforeEach(() => mockFetch.mockReset());
 
@@ -42,5 +42,19 @@ describe('apiGet', () => {
     const result = await apiGet('/api/test', { auth: false });
     expect(result.data).toBeNull();
     expect(result.error).toBe('Network error');
+  });
+});
+
+describe('apiPost request correlation', () => {
+  it('forwards caller-provided headers without dropping JSON headers', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+    await apiPost('/api/daily-fritz/next-hand', { attempt_id: 'a' }, {
+      headers: { 'x-racehorse-request-id': 'request-1' },
+    });
+
+    expect(mockFetch.mock.calls[0][1].headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-racehorse-request-id': 'request-1',
+    });
   });
 });

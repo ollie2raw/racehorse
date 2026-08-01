@@ -277,6 +277,10 @@ import { registerLeagueRoutes } from './http/routes/league';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerDailyPuzzleRoutes } from './http/routes/dailyPuzzle';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
+import {
+  getDailyFritzEventsPersistenceAvailability,
+  probeDailyFritzEventsPersistence,
+} from './http/stores/dailyFritzEventStore';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
 import {
   listCompletedDailyFritzDatesForUser,
@@ -368,6 +372,8 @@ app.use('/api/daily-fritz/complete', dailySubmitLimit);
 app.use('/api/daily-fritz/generate', adminLimit);
 app.use('/api/daily-fritz/invalidate', adminLimit);
 app.use('/api/daily-fritz/reset-attempt', adminLimit);
+app.use('/api/daily-fritz/metrics', adminLimit);
+app.use('/api/daily-fritz/events', adminLimit);
 app.use('/api/ranking/process', adminLimit);
 app.use('/league/run-forfeits', adminLimit);
 app.use('/league/run-rollover', adminLimit);
@@ -778,6 +784,8 @@ registerHealthRoutes({
   getRoomMatchLogsPersistenceAvailability,
   probeRoomMatchLogsTable,
   isRoomMatchLogsPersistenceAvailable,
+  getDailyFritzEventsPersistenceAvailability,
+  probeDailyFritzEventsPersistence,
 });
 
 server.listen(PORT, () => {
@@ -792,6 +800,13 @@ server.listen(PORT, () => {
     })
     .catch((err) => {
       console.warn('[room-match-logs] startup probe error', err instanceof Error ? err.message : err);
+    });
+  void probeDailyFritzEventsPersistence()
+    .then((ok) => {
+      console.log('[daily-fritz-events] startup probe', { tableAvailable: ok });
+    })
+    .catch((err) => {
+      console.warn('[daily-fritz-events] startup probe error', err instanceof Error ? err.message : err);
     });
   const serverUrl = config.serverUrl;
   if (serverUrl) {

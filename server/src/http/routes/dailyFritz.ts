@@ -73,6 +73,9 @@ import {
   requiresVerifiedDailyFritzEvidence,
   type VerifiedDailyFritzGameRecord,
 } from './dailyFritzVerificationPolicy';
+import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
+import { listDailyFritzEvents, listDailyFritzPersistedMetrics, recordDailyFritzEvent, type DailyFritzEventInput } from '../stores/dailyFritzEventStore';
+import { getDailyFritzMetricRates, getDailyFritzMetrics, incrementDailyFritzMetric } from './dailyFritzMetrics';
 
 export {
   buildRecordedDailyFritzAttemptResult,
@@ -82,6 +85,20 @@ export {
   isIdenticalDailyFritzGameReplay,
   requiresVerifiedDailyFritzEvidence,
 } from './dailyFritzVerificationPolicy';
+
+async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Promise<void> {
+  try {
+    await recordDailyFritzEvent(event);
+  } catch (error) {
+    incrementDailyFritzMetric('event_persistence_failed');
+    console.error('[daily-fritz-event] persistence failed', {
+      eventType: event.eventType,
+      attemptId: event.attemptId ?? null,
+      idempotencyKey: event.idempotencyKey,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 type DailyFritzActiveGameProgress = { gameNumber: DailyFritzSetGameNumber; you: number; fritz: number };
 const DAILY_FRITZ_COMPETITIVE_VERIFICATION_AVAILABLE = true;
@@ -407,6 +424,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/start', async (req, res) => {
+  const diagnostics = startDailyFritzRequestDiagnostics(req, res, 'start');
+  incrementDailyFritzMetric('mutation_request');
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req);
     if (!authenticatedUserId) {
@@ -452,6 +471,27 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
     if (!attempt) {
       attempt = await createDailyFritzAttempt(runDate, authenticatedUserId);
+      incrementDailyFritzMetric('attempt_started');
+      await recordDailyFritzEventBestEffort({
+        attemptId: attempt.id,
+        runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'attempt_started',
+        idempotencyKey: `${attempt.id}:attempt_started`,
+        payload: { verificationCapable: supportsVerifier },
+      });
+    } else {
+      incrementDailyFritzMetric('retry_request');
+      await recordDailyFritzEventBestEffort({
+        attemptId: attempt.id,
+        runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'retry_request',
+        idempotencyKey: `${attempt.id}:start:retry:${diagnostics.requestId}`,
+        payload: { operation: 'start', status: attempt.status },
+      });
     }
     if (
       supportsVerifier
@@ -553,6 +593,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/next-hand', async (req, res) => {
+  const diagnostics = startDailyFritzRequestDiagnostics(req, res, 'next-hand');
+  incrementDailyFritzMetric('mutation_request');
   const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
   const verifiedMatchId =
     typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
@@ -569,6 +611,7 @@ export function registerDailyFritzRoutes(app: Application): void {
   const requestedGameNumber =
     rawGameNumber == null ? null : normalizeDailyFritzSetGameNumber(Number(rawGameNumber));
   console.log('[daily-fritz-next-hand] request', {
+    requestId: diagnostics.requestId,
     attemptId,
     runDateFromClient,
     rawGameNumber,
@@ -682,6 +725,19 @@ export function registerDailyFritzRoutes(app: Application): void {
         return;
       }
       if (attempt.currentHandIndex === completedHandIndex + 1) {
+        incrementDailyFritzMetric('next_hand_replayed');
+        incrementDailyFritzMetric('retry_request');
+        await recordDailyFritzEventBestEffort({
+          attemptId,
+          runDate: attempt.runDate,
+          userId: authenticatedUserId,
+          requestId: diagnostics.requestId,
+          eventType: 'next_hand_replayed',
+          gameNumber,
+          handIndex: completedHandIndex,
+          idempotencyKey: `${attemptId}:next_hand_replayed:${gameNumber}:${completedHandIndex}:${diagnostics.requestId}`,
+          payload: { reason: 'server_already_advanced' },
+        });
         respondWithCurrentHand(attempt.currentHandIndex, { replayed: true });
         return;
       }
@@ -715,6 +771,20 @@ export function registerDailyFritzRoutes(app: Application): void {
         res.status(409).json({ error: 'Daily Fritz hand was already verified with different evidence.' });
         return;
       }
+      incrementDailyFritzMetric('next_hand_replayed');
+      incrementDailyFritzMetric('retry_request');
+      await recordDailyFritzEventBestEffort({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'next_hand_replayed',
+        gameNumber,
+        handIndex: completedHandIndex,
+        transcriptDigest: existingHand.transcriptDigest,
+        idempotencyKey: `${attemptId}:next_hand_replayed:${gameNumber}:${completedHandIndex}:${diagnostics.requestId}`,
+        payload: { reason: 'hand_already_verified' },
+      });
       respondWithCurrentHand(attempt.currentHandIndex, { replayed: true });
       return;
     }
@@ -746,9 +816,48 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
     attempt.currentHandIndex += 1;
     const saved = await upsertDailyFritzAttempt(attempt);
+    incrementDailyFritzMetric('hand_verified');
+    await recordDailyFritzEventBestEffort({
+      attemptId,
+      runDate: attempt.runDate,
+      userId: authenticatedUserId,
+      requestId: diagnostics.requestId,
+      eventType: 'hand_verified',
+      gameNumber,
+      handIndex: completedHandIndex,
+      transcriptDigest: verified.result.transcriptDigest,
+      idempotencyKey: `${attemptId}:hand_verified:${gameNumber}:${completedHandIndex}:${verified.result.transcriptDigest}`,
+      payload: {
+        actionCount: verified.result.actionCount,
+        winner: verified.result.winner,
+        playerScoreAfter: verified.result.playerScoreAfter,
+        fritzScoreAfter: verified.result.fritzScoreAfter,
+      },
+    });
     respondWithCurrentHand(saved.currentHandIndex);
     });
   } catch (error) {
+    if (error instanceof DailyFritzVerificationError) {
+      incrementDailyFritzMetric('verification_failed', error.code);
+      await recordDailyFritzEventBestEffort({
+        attemptId: attemptId || null,
+        requestId: diagnostics.requestId,
+        eventType: 'verification_failed',
+        verifierCode: error.code,
+        idempotencyKey: `${attemptId || 'unknown'}:verification_failed:${diagnostics.requestId}`,
+        payload: { operation: 'next-hand', message: error.message },
+      });
+    } else {
+      incrementDailyFritzMetric('request_failed');
+      await recordDailyFritzEventBestEffort({
+        attemptId: attemptId || null,
+        requestId: diagnostics.requestId,
+        eventType: 'request_failed',
+        statusCode: 500,
+        idempotencyKey: `${attemptId || 'unknown'}:request_failed:next-hand:${diagnostics.requestId}`,
+        payload: { operation: 'next-hand', message: error instanceof Error ? error.message : String(error) },
+      });
+    }
     if (respondVerificationError(res, error)) return;
     console.warn('[daily-fritz-next-hand] error', {
       attemptId,
@@ -761,6 +870,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/record-game', async (req, res) => {
+  const diagnostics = startDailyFritzRequestDiagnostics(req, res, 'record-game');
+  incrementDailyFritzMetric('mutation_request');
   const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
   const verifiedMatchId =
     typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
@@ -868,6 +979,17 @@ export function registerDailyFritzRoutes(app: Application): void {
           res.status(409).json({ error: 'Daily Fritz game was already recorded with a different result.' });
           return;
         }
+        incrementDailyFritzMetric('retry_request');
+        await recordDailyFritzEventBestEffort({
+          attemptId,
+          runDate: attempt.runDate,
+          userId: authenticatedUserId,
+          requestId: diagnostics.requestId,
+          eventType: 'game_recorded',
+          gameNumber,
+          idempotencyKey: `${attemptId}:game_recorded:${gameNumber}:replay:${diagnostics.requestId}`,
+          payload: { replayed: true },
+        });
         res.json({
           ok: true,
           replayed: true,
@@ -965,6 +1087,26 @@ export function registerDailyFritzRoutes(app: Application): void {
         skunkBy: recordedGame.skunkBy,
       }).catch(() => {});
     }
+    incrementDailyFritzMetric('game_recorded');
+    const eventTranscriptDigest = parsedTranscript ? digestDailyFritzTranscript(parsedTranscript) : null;
+    await recordDailyFritzEventBestEffort({
+      attemptId,
+      runDate: attempt.runDate,
+      userId: authenticatedUserId,
+      requestId: diagnostics.requestId,
+      eventType: 'game_recorded',
+      gameNumber,
+      handIndex: parsedTranscript?.handIndex ?? null,
+      transcriptDigest: eventTranscriptDigest,
+      idempotencyKey: `${attemptId}:game_recorded:${gameNumber}:${parsedTranscript?.handIndex ?? 'legacy'}:${eventTranscriptDigest ?? 'legacy'}`,
+      payload: {
+        playerScore,
+        fritzScore,
+        movesUsed,
+        handsPlayed,
+        setWinner: setResult.setWinner ?? null,
+      },
+    });
     res.json({
       ok: true,
       set_result: savedSetResult ?? setResult,
@@ -972,6 +1114,27 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
     });
   } catch (error) {
+    if (error instanceof DailyFritzVerificationError) {
+      incrementDailyFritzMetric('verification_failed', error.code);
+      await recordDailyFritzEventBestEffort({
+        attemptId: attemptId || null,
+        requestId: diagnostics.requestId,
+        eventType: 'verification_failed',
+        verifierCode: error.code,
+        idempotencyKey: `${attemptId || 'unknown'}:verification_failed:record-game:${diagnostics.requestId}`,
+        payload: { operation: 'record-game', message: error.message },
+      });
+    } else {
+      incrementDailyFritzMetric('request_failed');
+      await recordDailyFritzEventBestEffort({
+        attemptId: attemptId || null,
+        requestId: diagnostics.requestId,
+        eventType: 'request_failed',
+        statusCode: 500,
+        idempotencyKey: `${attemptId || 'unknown'}:request_failed:record-game:${diagnostics.requestId}`,
+        payload: { operation: 'record-game', message: error instanceof Error ? error.message : String(error) },
+      });
+    }
     if (respondVerificationError(res, error)) return;
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to record Daily Fritz game.',
@@ -980,6 +1143,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/complete', async (req, res) => {
+  const diagnostics = startDailyFritzRequestDiagnostics(req, res, 'complete');
+  incrementDailyFritzMetric('mutation_request');
   const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
   const verifiedMatchId =
     typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
@@ -1020,6 +1185,16 @@ export function registerDailyFritzRoutes(app: Application): void {
       return;
     }
     if (attempt.status === 'completed') {
+      incrementDailyFritzMetric('retry_request');
+      await recordDailyFritzEventBestEffort({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'attempt_completed',
+        idempotencyKey: `${attemptId}:attempt_completed:replay:${diagnostics.requestId}`,
+        payload: { replayed: true },
+      });
       const leaderboard = await buildDailyFritzLeaderboard(runDate);
       const isVerified = getDailyFritzVerificationStatus(attempt.result) === 'verified';
       const rank = isVerified
@@ -1094,6 +1269,22 @@ export function registerDailyFritzRoutes(app: Application): void {
           hands_played: attempt.handsPlayed,
         };
     await upsertDailyFritzAttempt(attempt);
+    incrementDailyFritzMetric('attempt_completed');
+    await recordDailyFritzEventBestEffort({
+      attemptId,
+      runDate,
+      userId: authenticatedUserId,
+      requestId: diagnostics.requestId,
+      eventType: 'attempt_completed',
+      idempotencyKey: `${attemptId}:attempt_completed:${serverReceipt}`,
+      payload: {
+        verified: isVerified,
+        finalScore: attempt.finalScore,
+        opponentScore: attempt.opponentScore,
+        movesUsed: attempt.movesUsed,
+        handsPlayed: attempt.handsPlayed,
+      },
+    });
 
     const verifiedMatch = await getVerifiedSinglePlayerMatch(verifiedMatchId);
     if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
@@ -1115,6 +1306,15 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
     });
   } catch (error) {
+    incrementDailyFritzMetric('request_failed');
+    await recordDailyFritzEventBestEffort({
+      attemptId: attemptId || null,
+      requestId: diagnostics.requestId,
+      eventType: 'request_failed',
+      statusCode: 500,
+      idempotencyKey: `${attemptId || 'unknown'}:request_failed:complete:${diagnostics.requestId}`,
+      payload: { operation: 'complete', message: error instanceof Error ? error.message : String(error) },
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to complete Daily Fritz attempt.',
     });
@@ -1122,6 +1322,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/abandon', async (req, res) => {
+  const diagnostics = startDailyFritzRequestDiagnostics(req, res, 'abandon');
+  incrementDailyFritzMetric('mutation_request');
   const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
   if (!attemptId) {
     res.status(400).json({ error: 'attempt_id is required.' });
@@ -1146,6 +1348,16 @@ export function registerDailyFritzRoutes(app: Application): void {
     attempt.status = 'abandoned';
     attempt.completedAt = new Date().toISOString();
     await upsertDailyFritzAttempt(attempt);
+    incrementDailyFritzMetric('attempt_abandoned');
+    await recordDailyFritzEventBestEffort({
+      attemptId,
+      runDate,
+      userId: authenticatedUserId,
+      requestId: diagnostics.requestId,
+      eventType: 'attempt_abandoned',
+      idempotencyKey: `${attemptId}:attempt_abandoned`,
+      payload: { completedAt: attempt.completedAt },
+    });
     if (attempt.verifiedMatchId) {
       const verifiedMatch = await getVerifiedSinglePlayerMatch(attempt.verifiedMatchId);
       if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
@@ -1156,10 +1368,57 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
     res.json({ ok: true });
   } catch (error) {
+    incrementDailyFritzMetric('request_failed');
+    await recordDailyFritzEventBestEffort({
+      attemptId: attemptId || null,
+      requestId: diagnostics.requestId,
+      eventType: 'request_failed',
+      statusCode: 500,
+      idempotencyKey: `${attemptId || 'unknown'}:request_failed:abandon:${diagnostics.requestId}`,
+      payload: { operation: 'abandon', message: error instanceof Error ? error.message : String(error) },
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to abandon Daily Fritz attempt.',
     });
    }
+});
+
+  app.get('/api/daily-fritz/metrics', async (req, res) => {
+  const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+  if (!isAdminSecret(suppliedAdminSecret)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  let persistedMetrics: Awaited<ReturnType<typeof listDailyFritzPersistedMetrics>> | null = null;
+  try {
+    persistedMetrics = await listDailyFritzPersistedMetrics();
+  } catch (error) {
+    console.warn('[daily-fritz-metrics] persisted metrics unavailable', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  res.json({
+    ok: true,
+    metrics: getDailyFritzMetrics(),
+    rates: getDailyFritzMetricRates(),
+    persisted_metrics: persistedMetrics,
+  });
+  });
+
+  app.get('/api/daily-fritz/events/:attemptId', async (req, res) => {
+  const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+  if (!isAdminSecret(suppliedAdminSecret)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const events = await listDailyFritzEvents(req.params.attemptId, Number(req.query.limit ?? 200));
+    res.json({ ok: true, attempt_id: req.params.attemptId, events });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Daily Fritz event history is unavailable.',
+    });
+  }
 });
 
   app.get('/api/daily-fritz/leaderboard/:date', async (req, res) => {

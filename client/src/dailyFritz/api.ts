@@ -7,6 +7,15 @@ import { normalizePreGameDrawTile } from '../match/preGameDraw/preGameDrawLogic.
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
 
+export const DAILY_FRITZ_REQUEST_ID_HEADER = 'x-racehorse-request-id';
+
+export function createDailyFritzRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `df-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Init/today/start requests — 8–12s window before the UI leaves infinite loading. */
 export const DAILY_FRITZ_INIT_TIMEOUT_MS = 10_000;
 
@@ -81,6 +90,7 @@ async function dfRequestJsonWithTimeout<T>(path: string, init?: RequestJsonOptio
     init?.timeoutMs ??
     (isDailyFritzInitPath(path) ? DAILY_FRITZ_INIT_TIMEOUT_MS : undefined);
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const requestId = createDailyFritzRequestId();
   let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
   let timedOut = false;
 
@@ -93,6 +103,7 @@ async function dfRequestJsonWithTimeout<T>(path: string, init?: RequestJsonOptio
     const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const requestOptions = {
       signal: controller?.signal ?? init?.signal ?? undefined,
+      headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: requestId },
     };
     const result: ApiResult<T> =
       method === 'POST'
@@ -182,7 +193,9 @@ async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
 
 async function timedApiPost<T>(path: string, body: unknown): Promise<ApiResult<T>> {
   const start = performance.now();
-  const result = await apiPost<T>(path, body);
+  const result = await apiPost<T>(path, body, {
+    headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
+  });
   dfClientDebug('[daily-fritz-client] request', {
     path,
     ms: Number((performance.now() - start).toFixed(1)),
@@ -519,7 +532,10 @@ export async function nextDailyFritzHand(input: {
           ? { transcript: input.transcript }
           : { completed_hand_scores: input.completedHandScores }),
       },
-      { signal: controller.signal },
+      {
+        signal: controller.signal,
+        headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
+      },
     );
   } catch (error) {
     const name = error instanceof Error ? error.name : 'unknown';

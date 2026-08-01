@@ -153,7 +153,7 @@ function serverUrl(): string {
 
 export async function apiGet<T>(
   path: string,
-  options?: { auth?: boolean; signal?: AbortSignal },
+  options?: { auth?: boolean; signal?: AbortSignal; headers?: Record<string, string> },
 ): Promise<ApiResult<T>> {
   const { headers } =
     options?.auth !== false
@@ -161,7 +161,7 @@ export async function apiGet<T>(
       : { headers: {} as Record<string, string> };
   return apiFetch<T>(`${serverUrl()}${path}`, {
     method: 'GET',
-    headers,
+    headers: { ...headers, ...(options?.headers ?? {}) },
     signal: options?.signal,
   });
 }
@@ -169,7 +169,12 @@ export async function apiGet<T>(
 export async function apiPost<T>(
   path: string,
   body: unknown,
-  options?: { auth?: boolean; keepalive?: boolean; signal?: AbortSignal },
+  options?: {
+    auth?: boolean;
+    keepalive?: boolean;
+    signal?: AbortSignal;
+    headers?: Record<string, string>;
+  },
 ): Promise<ApiResult<T>> {
   const { headers } =
     options?.auth !== false
@@ -177,7 +182,7 @@ export async function apiPost<T>(
       : { headers: { 'Content-Type': 'application/json' } };
   return apiFetch<T>(`${serverUrl()}${path}`, {
     method: 'POST',
-    headers,
+    headers: { ...headers, ...(options?.headers ?? {}) },
     body: JSON.stringify(body),
     keepalive: options?.keepalive ?? false,
     signal: options?.signal,

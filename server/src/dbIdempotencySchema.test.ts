@@ -22,6 +22,20 @@ describe('DB idempotency schema guardrails', () => {
     const sql = compactSql(readRepoFile('supabase/daily_fritz.sql'));
 
     expect(sql).toContain('create unique index if not exists idx_daily_fritz_attempts_run_user on public.daily_fritz_attempts (run_date, user_id)');
+    expect(sql).toContain('create unique index if not exists idx_daily_fritz_events_idempotency on public.daily_fritz_events (idempotency_key)');
+    expect(sql).toContain('create or replace view public.daily_fritz_event_metrics with (security_invoker = true) as');
+    expect(sql).toContain('security_invoker = true');
+    expect(sql).toContain('revoke all on public.daily_fritz_event_metrics from anon, authenticated');
+  });
+
+  it('ships the Daily Fritz operational event migration with append-only idempotency', () => {
+    const sql = compactSql(readRepoFile('supabase/migrations/2026-07-31_daily_fritz_events.sql'));
+    expect(sql).toContain('create table if not exists public.daily_fritz_events');
+    expect(sql).toContain('event_type text not null');
+    expect(sql).toContain('idempotency_key text not null');
+    expect(sql).toContain('alter table public.daily_fritz_events enable row level security');
+    expect(sql).toContain('create or replace view public.daily_fritz_event_metrics with (security_invoker = true) as');
+    expect(sql).toContain('security_invoker = true');
   });
 
   it('keeps Ghost and verified single-player completion idempotency keys', () => {

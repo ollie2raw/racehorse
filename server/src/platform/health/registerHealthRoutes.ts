@@ -76,6 +76,8 @@ export type HealthRouteDeps = {
   getRoomMatchLogsPersistenceAvailability: () => boolean | null;
   probeRoomMatchLogsTable: () => Promise<boolean>;
   isRoomMatchLogsPersistenceAvailable: () => boolean;
+  getDailyFritzEventsPersistenceAvailability: () => boolean | null;
+  probeDailyFritzEventsPersistence: () => Promise<boolean>;
 };
 
 export function registerHealthRoutes(deps: HealthRouteDeps): void {
@@ -88,6 +90,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     getRoomMatchLogsPersistenceAvailability,
     probeRoomMatchLogsTable,
     isRoomMatchLogsPersistenceAvailable,
+    getDailyFritzEventsPersistenceAvailability,
+    probeDailyFritzEventsPersistence,
   } = deps;
 
   const getRuntimeStatusPayload = () => {
@@ -136,6 +140,16 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
             return { ok: available, available };
           })()
         : { ok: false, available: false };
+    const dailyFritzEvents =
+      requiredEnvOk && supabase.ok
+        ? await (async () => {
+            if (getDailyFritzEventsPersistenceAvailability() !== true) {
+              await probeDailyFritzEventsPersistence();
+            }
+            const available = getDailyFritzEventsPersistenceAvailability() === true;
+            return { ok: available, available };
+          })()
+        : { ok: false, available: false };
 
     const todayPt = getPacificDateKey();
     let dailyPuzzleLadder: ReturnType<typeof assessDailyPuzzleLadderReadiness> & { ok: boolean };
@@ -168,7 +182,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     }
 
     const shuttingDown = isGracefulShutdownInProgress();
-    const ok = !shuttingDown && requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok;
+    const ok = !shuttingDown && requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok && dailyFritzEvents.ok;
 
     res.status(ok ? 200 : 503).json({
       ...getRuntimeStatusPayload(),
@@ -179,6 +193,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         recommendedEnv,
         supabase,
         roomMatchLogs,
+        dailyFritzEvents,
         dailyPuzzleLadder,
       },
     });
