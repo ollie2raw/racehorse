@@ -201,6 +201,34 @@
   text-shadow: none;
 }
 
+/* Daily Fritz actor state — match Play vs Fritz: Fritz blue, player brass. */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you),
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you) {
+  border-color: rgba(88, 166, 255, 0.34) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you)::before,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you)::before {
+  background: #58a6ff !important;
+  box-shadow: 0 0 22px rgba(88, 166, 255, 0.58) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .wl-turn-label.opp-turn {
+  border-color: rgba(88, 166, 255, 0.5) !important;
+  background: rgba(8, 18, 34, 0.94) !important;
+  color: #8fc4ff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 20px rgba(88, 166, 255, 0.14),
+    0 12px 30px rgba(0, 0, 0, 0.32) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill .hud-pill-label,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill .hud-pill-value {
+  color: #8fc4ff !important;
+}
+
 /* Ivory tiles — bone grain + bevel (hand + board) */
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body {
   position: relative;
