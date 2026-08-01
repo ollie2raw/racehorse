@@ -1,4 +1,4 @@
-/* Daily Fritz in-match — brass identity on live matte shell (rh-match-live). */
+/* Daily Fritz in-match — Fritz blue, player brass on the live matte shell. */
 
 .bot-match-screen.bot-match-mode-daily-fritz.rh-match-live .bot-top-rail {
   border-bottom-color: rgba(231, 182, 74, 0.14) !important;
@@ -14,17 +14,25 @@
 }
 
 .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-turn-label.opp-turn {
-  border-color: rgba(231, 182, 74, 0.28) !important;
-  color: rgba(242, 226, 186, 0.92) !important;
-  background: rgba(14, 12, 8, 0.92) !important;
+  border-color: rgba(88, 166, 255, 0.5) !important;
+  color: #8fc4ff !important;
+  background: rgba(8, 18, 34, 0.94) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 16px rgba(231, 182, 74, 0.08) !important;
+    0 0 20px rgba(88, 166, 255, 0.14) !important;
 }
 
-.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card,
-.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card {
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.is-you {
   border-color: rgba(226, 176, 72, 0.28) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 30px rgba(0, 0, 0, 0.32) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you),
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you) {
+  border-color: rgba(88, 166, 255, 0.3) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 12px 30px rgba(0, 0, 0, 0.32) !important;
@@ -32,5 +40,19 @@
 
 .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card:not(.is-you)::before,
 .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card:not(.is-you)::before {
-  background: rgba(231, 182, 74, 0.72) !important;
+  background: #58a6ff !important;
+  box-shadow: 0 0 22px rgba(88, 166, 255, 0.58) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill {
+  border-color: rgba(88, 166, 255, 0.38);
+  background: rgba(8, 18, 34, 0.94);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.22),
+    0 0 16px rgba(88, 166, 255, 0.1);
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill .hud-pill-label,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-center-status.is-fritz-turn .daily-fritz-progress-pill .hud-pill-value {
+  color: #8fc4ff;
 }

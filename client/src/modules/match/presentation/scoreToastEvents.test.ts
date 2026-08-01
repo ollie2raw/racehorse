@@ -34,6 +34,22 @@ describe('resolveCommittedScoreEvent', () => {
       { you: 10, bot: 5 },
     )).toBeNull();
   });
+
+  it('suppresses hand-end award points when no played tile scored', () => {
+    expect(resolveCommittedScoreEvent(
+      { you: 25, bot: 20 },
+      { you: 35, bot: 20 },
+      { handOver: true, playedTilePoints: 0 },
+    )).toBeNull();
+  });
+
+  it('announces only tile points when a scoring play also ends the hand', () => {
+    expect(resolveCommittedScoreEvent(
+      { you: 25, bot: 20 },
+      { you: 45, bot: 20 },
+      { handOver: true, playedTilePoints: 5 },
+    )).toEqual({ player: 'you', points: 5 });
+  });
 });
 
 describe('score toast timer ownership', () => {

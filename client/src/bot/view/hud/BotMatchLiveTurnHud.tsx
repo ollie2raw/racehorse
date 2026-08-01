@@ -14,7 +14,10 @@ export function BotMatchLiveTurnHud({
   botTurn,
 }: BotMatchLiveTurnHudProps) {
   return (
-    <div className="wl-center-status" data-ui="turn-status">
+    <div
+      className={`wl-center-status ${botTurn ? 'is-fritz-turn' : 'is-player-turn'}`}
+      data-ui="turn-status"
+    >
       {isDailyFritzMode && dailyFritzPackage && (
         <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
           <span className="hud-pill-label">GAME</span>

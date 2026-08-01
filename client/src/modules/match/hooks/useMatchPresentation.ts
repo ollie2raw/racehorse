@@ -5,6 +5,7 @@ import { buildPlayableTileKeys } from '../../../utils/handTileLegality.ts';
 import { logger } from '../../../utils/logger.ts';
 import {
   assertDisplayedOpenCountMatchesCanonical,
+  computePlayScore,
   computeOpenEndsSum,
   getDisplayOpenEnds,
   getLegalMoves,
@@ -210,7 +211,15 @@ export function useMatchPresentation({
       return;
     }
 
-    const scoreEvent = resolveCommittedScoreEvent(baseline.scores, currentScores);
+    const playedTilePoints = match.handOver
+      && match.lastHandReason === 'domino'
+      && match.board
+      ? computePlayScore(match.board)
+      : 0;
+    const scoreEvent = resolveCommittedScoreEvent(baseline.scores, currentScores, {
+      handOver: match.handOver,
+      playedTilePoints,
+    });
     baseline.scores = currentScores;
     if (!isDailyFritzMode || !scoreEvent) return;
 
@@ -225,6 +234,9 @@ export function useMatchPresentation({
     isMuted,
     match.players.bot.score,
     match.players.you.score,
+    match.board,
+    match.handOver,
+    match.lastHandReason,
     scoreIdentity,
     showScoreToast,
   ]);
