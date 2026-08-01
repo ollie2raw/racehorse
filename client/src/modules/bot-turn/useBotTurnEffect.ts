@@ -30,6 +30,26 @@ import {
 } from './fritzPresentation.ts';
 import type { BotTurnPorts } from './types.ts';
 
+/**
+ * Tenure identity only — never include hand/board/boneyard sizes (mid-turn churn
+ * remounts the effect, cancels before finalize, and desyncs Daily Fritz transcripts).
+ */
+export function buildBotTurnScheduleKey(input: {
+  currentPlayer: string;
+  handNumber: number;
+  handOver: boolean;
+  gameOver: boolean;
+  retryNonce: number;
+}): string {
+  return [
+    input.currentPlayer,
+    input.handNumber,
+    input.handOver,
+    input.gameOver,
+    input.retryNonce,
+  ].join(':');
+}
+
 export type UseBotTurnEffectArgs = {
   match: BotMatchState;
   matchRef: React.MutableRefObject<BotMatchState>;
@@ -63,36 +83,20 @@ export type UseBotTurnEffectArgs = {
 
 /**
  * Owns Fritz's tenure: claim in-flight immediately, then wait/think/act inside that
- * lock so effect remounts cannot clearTimeout the think delay down to milliseconds.
- * Cadence theater: variable beats, honest phase strip, place/score settles, handoff.
+ * lock. The effect only re-runs when the turn schedule key changes — unstable ports /
+ * presentation callbacks must not abort mid-think.
+ *
+ * Invariant: finalizeBotTurnExecution (move-log evidence + applyAndNotify) runs
+ * synchronously after a successful executeBotTurn result and BEFORE any cancellable
+ * presentation / settle await. Cancel after that boundary may skip theater only.
  */
 export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const {
     match,
     matchRef,
-    ports,
-    localRun,
-    runDrawSequence,
-    fritzDifficulty,
-    isDailyFritzMode,
-    dailyFritzPackage,
-    isGuidedTranscriptMode,
-    isGuidedV2Mode,
-    isGuidedV2OffLine,
-    preGameDrawActiveRef,
-    drawSequenceActiveRef,
-    isGhostMode,
-    ghostProfile,
-    isMuted,
-    moveCounterRef,
     botChainPauseRef,
     botTurnInFlightRef,
-    setMatch,
-    onDrawVisualStep,
-    triggerDrawStepAnimation,
-    drawStepMs,
-    opponentLabel,
-    setFritzPresentation,
+    localRun,
   } = args;
 
   const {
@@ -104,39 +108,38 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const botActionRetryRef = useRef({ key: '', attempts: 0 });
   const botActionRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
-  // Schedule from turn identity, not every match field churn.
-  const botScheduleKey = [
-    match.currentPlayer,
-    match.handNumber,
-    match.turnIndex ?? 0,
-    match.handOver,
-    match.gameOver,
-    match.players.bot.hand.length,
-    match.players.you.hand.length,
-    match.boneyard.length,
-    match.board?.mainLine.length ?? 0,
-    botTurnRetryNonce,
-  ].join(':');
+  // Keep latest args without putting them in the effect dep list (remount cancel race).
+  const liveRef = useRef(args);
+  liveRef.current = args;
+
+  const botScheduleKey = buildBotTurnScheduleKey({
+    currentPlayer: match.currentPlayer,
+    handNumber: match.handNumber,
+    handOver: match.handOver,
+    gameOver: match.gameOver,
+    retryNonce: botTurnRetryNonce,
+  });
 
   useEffect(() => {
+    const live = () => liveRef.current;
     botMatchDebugLog('[BOT-EFFECT] fired', {
       botScheduleKey,
       currentPlayer: matchRef.current.currentPlayer,
-      drawSequenceActive: drawSequenceActiveRef.current,
+      drawSequenceActive: live().drawSequenceActiveRef.current,
       botTurnInFlight: botTurnInFlightRef.current,
     });
 
     if (
       !shouldScheduleBotTurn({
         match: matchRef.current,
-        drawSequenceActive: drawSequenceActiveRef.current,
+        drawSequenceActive: live().drawSequenceActiveRef.current,
         botTurnInFlight: botTurnInFlightRef.current,
-        preGameDrawActive: preGameDrawActiveRef.current,
-        isDailyFritzMode,
-        dailyFritzSetResult: dailyFritzPackage?.set_result,
-        isGuidedTranscriptMode,
-        isGuidedV2Mode,
-        isGuidedV2OffLine,
+        preGameDrawActive: live().preGameDrawActiveRef.current,
+        isDailyFritzMode: live().isDailyFritzMode,
+        dailyFritzSetResult: live().dailyFritzPackage?.set_result,
+        isGuidedTranscriptMode: live().isGuidedTranscriptMode,
+        isGuidedV2Mode: live().isGuidedV2Mode,
+        isGuidedV2OffLine: live().isGuidedV2OffLine,
       })
     ) {
       return;
@@ -155,7 +158,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     let turnScoreTotal = 0;
 
     const setPhase = (patch: Partial<FritzPresentationState> & { phase: FritzPresentationState['phase'] }) => {
-      setFritzPresentation({
+      live().setFritzPresentation({
         phase: patch.phase,
         drawCount: patch.drawCount ?? 0,
         turnScoreTotal: patch.turnScoreTotal ?? turnScoreTotal,
@@ -190,8 +193,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           if (
             !shouldContinueBotTurnAtTimer({
               match: matchRef.current,
-              isDailyFritzMode,
-              dailyFritzSetResult: dailyFritzPackage?.set_result,
+              isDailyFritzMode: live().isDailyFritzMode,
+              dailyFritzSetResult: live().dailyFritzPackage?.set_result,
             })
           ) {
             break;
@@ -211,8 +214,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             if (
               !shouldContinueBotTurnAtTimer({
                 match: matchRef.current,
-                isDailyFritzMode,
-                dailyFritzSetResult: dailyFritzPackage?.set_result,
+                isDailyFritzMode: live().isDailyFritzMode,
+                dailyFritzSetResult: live().dailyFritzPackage?.set_result,
               })
             ) {
               break;
@@ -228,7 +231,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           isFirstAction = false;
 
           let drawCountSeen = 0;
-          const theaterRunDrawSequence: typeof runDrawSequence = async (
+          const step = live();
+          const theaterRunDrawSequence: typeof step.runDrawSequence = async (
             initialState,
             player,
             token,
@@ -243,12 +247,12 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                 lastScorePoints: 0,
               });
             }
-            return runDrawSequence(
+            return live().runDrawSequence(
               initialState,
               player,
               token,
-              (step) => {
-                if (player === 'bot' && step.actionKind === 'draw') {
+              (drawStep) => {
+                if (player === 'bot' && drawStep.actionKind === 'draw') {
                   drawCountSeen += 1;
                   setPhase({
                     phase: 'drawing',
@@ -257,7 +261,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                     lastScorePoints: 0,
                   });
                 }
-                onStep?.(step);
+                onStep?.(drawStep);
               },
               drawStepMsOverride,
             );
@@ -276,24 +280,24 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                 lastScorePoints: 0,
               });
             }
-            onDrawVisualStep?.(player, state);
+            live().onDrawVisualStep?.(player, state);
           };
 
           const execution = await executeBotTurn({
             liveAtTurn: matchRef.current,
             matchSnapshotSource: matchRef.current,
-            ports,
+            ports: step.ports,
             matchRef,
             runDrawSequence: theaterRunDrawSequence,
             runToken,
             isLocalRunCurrent,
             cancelled: () => cancelled,
-            isGhostMode,
-            ghostProfile,
-            fritzDifficulty,
-            isDailyFritzMode,
-            isMuted,
-            moveCounter: moveCounterRef.current,
+            isGhostMode: step.isGhostMode,
+            ghostProfile: step.ghostProfile,
+            fritzDifficulty: step.fritzDifficulty,
+            isDailyFritzMode: step.isDailyFritzMode,
+            isMuted: step.isMuted,
+            moveCounter: step.moveCounterRef.current,
             setBotChainPaused: (paused) => {
               botChainPauseRef.current = paused;
             },
@@ -302,33 +306,15 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           if (cancelled || !isLocalRunCurrent(runToken)) break;
           if (!execution.result) break;
 
-          if (execution.playBeforeState) {
-            const drawnTiles = listEmbeddedForcedDrawTiles(
+          // Commit move-log + authoritative match BEFORE any presentation await.
+          // Presenting first used to setMatch mid-animation; effect cleanup could
+          // abort before finalize and leave live state ahead of the transcript.
+          const drawnTiles = execution.playBeforeState
+            ? listEmbeddedForcedDrawTiles(
               execution.playBeforeState,
               execution.result.state,
-            );
-            if (drawnTiles.length > 0) {
-              setPhase({
-                phase: 'drawing',
-                drawCount: drawnTiles.length,
-                turnScoreTotal,
-                lastScorePoints: 0,
-              });
-              await presentEmbeddedForcedDraws({
-                player: 'bot',
-                beforePlay: execution.playBeforeState,
-                afterPlay: execution.result.state,
-                drawnTiles,
-                setMatch,
-                onDrawVisualStep: wrappedOnDrawVisualStep,
-                triggerDrawStepAnimation,
-                setDrawSequenceActiveBoth: ports.setDrawSequenceActiveBoth,
-                drawStepMs,
-                isMuted,
-              });
-              if (cancelled || !isLocalRunCurrent(runToken)) break;
-            }
-          }
+            )
+            : [];
 
           const scoredPoints = execution.result.scored?.points ?? 0;
           if (scoredPoints > 0) {
@@ -343,14 +329,17 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             drawCount: 0,
           });
 
+          const finalizeLive = live();
           const finalized = finalizeBotTurnExecution({
             execution,
-            ports,
+            ports: finalizeLive.ports,
             matchRef,
-            matchSnapshotSource: matchRef.current,
-            isGhostMode,
-            isDailyFritzMode,
-            moveCounter: moveCounterRef.current,
+            // Prefer pre-play state (after any pre-play draws) so place evidence
+            // is not keyed off a stale matchRef that never received mid-draw setMatch.
+            matchSnapshotSource: execution.playBeforeState ?? matchRef.current,
+            isGhostMode: finalizeLive.isGhostMode,
+            isDailyFritzMode: finalizeLive.isDailyFritzMode,
+            moveCounter: finalizeLive.moveCounterRef.current,
             setBotChainPaused: (paused) => {
               botChainPauseRef.current = paused;
             },
@@ -367,21 +356,49 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             break;
           }
 
+          if (drawnTiles.length > 0 && execution.playBeforeState) {
+            setPhase({
+              phase: 'drawing',
+              drawCount: drawnTiles.length,
+              turnScoreTotal,
+              lastScorePoints: scoredPoints,
+            });
+            const drawLive = live();
+            await presentEmbeddedForcedDraws({
+              player: 'bot',
+              beforePlay: execution.playBeforeState,
+              afterPlay: execution.result.state,
+              drawnTiles,
+              setMatch: drawLive.setMatch,
+              onDrawVisualStep: wrappedOnDrawVisualStep,
+              triggerDrawStepAnimation: drawLive.triggerDrawStepAnimation,
+              setDrawSequenceActiveBoth: drawLive.ports.setDrawSequenceActiveBoth,
+              drawStepMs: drawLive.drawStepMs,
+              isMuted: drawLive.isMuted,
+            });
+            // Evidence already committed — cancel only skips settle/chain wait.
+            if (cancelled || !isLocalRunCurrent(runToken)) break;
+          }
+
           // One score surface: sticky running total while Fritz still holds the turn.
-          if (scoredPoints > 0 && !isDailyFritzMode) {
-            ports.showBoardToast(
-              buildFritzScoreCeremonyMessage(opponentLabel, scoredPoints, turnScoreTotal),
+          if (scoredPoints > 0 && !finalizeLive.isDailyFritzMode) {
+            finalizeLive.ports.showBoardToast(
+              buildFritzScoreCeremonyMessage(
+                finalizeLive.opponentLabel,
+                scoredPoints,
+                turnScoreTotal,
+              ),
               'bot',
               {
                 sticky: true,
                 points: scoredPoints,
                 turnTotal: turnScoreTotal,
-                actorLabel: opponentLabel.toUpperCase().slice(0, 10),
+                actorLabel: finalizeLive.opponentLabel.toUpperCase().slice(0, 10),
               },
             );
-          } else if (scoredPoints === 0 && isDailyFritzMode) {
+          } else if (scoredPoints === 0 && finalizeLive.isDailyFritzMode) {
             // A non-scoring chain step must not leave the prior +N on screen.
-            ports.clearBoardToast();
+            finalizeLive.ports.clearBoardToast();
           }
 
           const settleMs = willPlace || scoredPoints > 0
@@ -393,59 +410,36 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           if (!computeBotChainPaused(execution.result)) {
-            if (!isDailyFritzMode) {
-              ports.clearBoardToast();
+            if (!live().isDailyFritzMode) {
+              live().ports.clearBoardToast();
             }
             break;
           }
         }
       } finally {
         botTurnInFlightRef.current = false;
-        setFritzPresentation(IDLE_FRITZ_PRESENTATION);
+        live().setFritzPresentation(IDLE_FRITZ_PRESENTATION);
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
         }
-        ports.setDrawSequenceActiveBoth(false);
+        live().ports.setDrawSequenceActiveBoth(false);
       }
     })();
 
     return () => {
+      // Schedule-key changed (or unmount): abort this tenure so the next key can claim.
       cancelled = true;
-      botMatchDebugLog('[BOT-EFFECT] cleanup', { cancelled });
+      botMatchDebugLog('[BOT-EFFECT] cleanup', { cancelled: true, botScheduleKey });
       if (botActionRetryTimerRef.current) {
         clearTimeout(botActionRetryTimerRef.current);
         botActionRetryTimerRef.current = null;
       }
       botTurnInFlightRef.current = false;
       finishLocalRun(runToken);
+      // Don't leave draw lock stuck — that blocks the next schedule forever.
+      live().ports.setDrawSequenceActiveBoth(false);
     };
-  }, [
-    botScheduleKey,
-    matchRef,
-    ports,
-    ghostProfile,
-    isGhostMode,
-    isGuidedTranscriptMode,
-    runDrawSequence,
-    beginLocalRun,
-    isLocalRunCurrent,
-    finishLocalRun,
-    isMuted,
-    isDailyFritzMode,
-    dailyFritzPackage?.set_result,
-    isGuidedV2Mode,
-    isGuidedV2OffLine,
-    preGameDrawActiveRef,
-    drawSequenceActiveRef,
-    botTurnInFlightRef,
-    fritzDifficulty,
-    moveCounterRef,
-    botChainPauseRef,
-    setMatch,
-    onDrawVisualStep,
-    triggerDrawStepAnimation,
-    drawStepMs,
-    opponentLabel,
-    setFritzPresentation,
-  ]);
+  // Intentionally schedule-key only — liveRef carries ports/callbacks without aborting tenure.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botScheduleKey]);
 }

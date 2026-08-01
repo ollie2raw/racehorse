@@ -54,8 +54,12 @@ export type PresentEmbeddedForcedDrawsDeps = {
 };
 
 /**
- * Animate embedded forced draws after a scoring/double play, then leave the caller
- * to commit the authoritative afterPlay state.
+ * Animate embedded forced draws after a scoring/double play.
+ *
+ * Fritz (`bot`) is overlay-only: never mutate authoritative match. The caller must
+ * finalizeBotTurnExecution (move log + applyAndNotify) before awaiting this, so
+ * cancellation during animation cannot leave the board ahead of transcript evidence.
+ * Player tray still commits mid-animation so face-up tiles appear one-by-one.
  */
 export async function presentEmbeddedForcedDraws(
   deps: PresentEmbeddedForcedDrawsDeps,
@@ -91,8 +95,11 @@ export async function presentEmbeddedForcedDraws(
 
   setDrawSequenceActiveBoth(true);
   try {
-    // Land the scored/double play on the board first, then animate recovery draws.
-    setMatch(postPlayState);
+    // Player tray: land the scored/double play, then animate recovery draws.
+    // Fritz: overlay-only (authoritative match must already be committed by caller).
+    if (player === 'you') {
+      setMatch(postPlayState);
+    }
     onDrawVisualStep?.(player, postPlayState);
 
     for (let index = 0; index < drawnTiles.length; index += 1) {
@@ -112,19 +119,6 @@ export async function presentEmbeddedForcedDraws(
       onDrawVisualStep?.(player, stepState);
       if (player === 'you') {
         setMatch(stepState);
-      } else {
-        // Fritz rack is face-down; keep board committed and tick overlay counts.
-        setMatch({
-          ...stepState,
-          players: {
-            ...stepState.players,
-            bot: {
-              ...stepState.players.bot,
-              // Keep authoritative hand length in sync for HUD fallbacks.
-              hand: stepHand,
-            },
-          },
-        });
       }
       queueSound(() => playDrawSound(isMuted), 0);
       triggerDrawStepAnimation(player, stepState);
