@@ -646,7 +646,7 @@ body {
 }
 
 .walnut-live .wl-hand-area .hand-container .domino-tile.new-draw {
-  animation: wl-draw-in 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: wl-draw-in 234ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .rh-tile-rack {
@@ -1231,11 +1231,11 @@ body {
   top: 0;
   left: 0;
   transform: translate(var(--fly-from-x), var(--fly-from-y)) translate(-50%, -50%);
-  animation: fly-tile-to-hand 1750ms cubic-bezier(0.19, 1, 0.22, 1) forwards;
+  animation: fly-tile-to-hand 1138ms cubic-bezier(0.19, 1, 0.22, 1) forwards;
 }
 
 .bot-match-screen .flying-tile-overlay {
-  animation-duration: 1325ms;
+  animation-duration: 861ms;
 }
 
 .flying-tile-overlay::before {

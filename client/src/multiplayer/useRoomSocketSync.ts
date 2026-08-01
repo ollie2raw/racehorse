@@ -55,9 +55,9 @@ export {
   STATE_REPLAY_SILENT_DROP_GAP,
 } from './projection/projectionGates';
 
-/** Per-step stagger; chain runs to completion before final hand is shown. */
-const FORCED_DRAW_STAGGER_MS = 500;
-const FORCED_DRAW_FLY_MS = 1800;
+/** Draw-only presentation timings, reduced to 65% of their original duration. */
+const FORCED_DRAW_STAGGER_MS = 325;
+const FORCED_DRAW_FLY_MS = 1170;
 
 export type UseRoomSocketSyncParams = MultiplayerRoomSyncScopeSource;
 

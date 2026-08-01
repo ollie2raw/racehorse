@@ -30,11 +30,11 @@ export const BOT_THINK_DELAY_MS = BOT_OPENING_THINK_DELAY_MS;
  */
 export const BOT_FORCED_DRAW_DELAY_MS = BOT_FORCED_DRAW_THINK_DELAY_MS;
 
-/** Per-tile draw cadence; one tile at a time. Must match flying-tile CSS duration. */
-export const BOT_DRAW_STEP_MS = 1325;
+/** Per-tile draw cadence; 35% faster than the original 1325ms. */
+export const BOT_DRAW_STEP_MS = 861;
 
 /** Flying-tile animation duration (CSS + DOM cleanup should match). */
-export const BOT_FLY_TILE_MS = 1325;
+export const BOT_FLY_TILE_MS = 861;
 
 /** Breath after draw-until-legal before Fritz plays the found tile. */
 export const BOT_POST_DRAW_PLAY_DELAY_MS = 900;
