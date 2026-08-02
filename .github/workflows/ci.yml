@@ -34,9 +34,9 @@ jobs:
       - name: Server tests
         env:
           TZ: America/Los_Angeles
-          # Vitest workers on Node 24 routinely OOM the default ~2GB heap on ubuntu-latest.
-          NODE_OPTIONS: --max-old-space-size=6144
-        run: npm run test --prefix server -- --maxWorkers=1
+          # Also mirrored in server/vitest.config.ts poolOptions.forks.execArgv.
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: npm run test --prefix server
 
       - name: Typecheck Daily Fritz authority soak harness
         run: npm run typecheck:scripts --prefix server
