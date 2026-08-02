@@ -162,6 +162,7 @@ jobs:
           MP_PRIVATE_CERT_MODE: '1'
           SMOKE_REQUIRE_CERT: '1'
           MP_SOAK_WAVES: '3'
+          SMOKE_TIMEOUT_MS: '30000'
           SMOKE_SERVER_URL: http://127.0.0.1:3001
         run: npm run soak:mp-private-authority --prefix client
 

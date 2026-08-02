@@ -248,6 +248,7 @@ function latestRoomCount(client) {
 }
 
 function latestState(client, type = 'state:update') {
+  if (!client?.state) return null;
   const list = type === 'state:spectate' ? client.state.spectateUpdates : client.state.stateUpdates;
   return list[list.length - 1] ?? null;
 }
@@ -692,6 +693,7 @@ async function scenarioLifecycleReconnect() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -905,6 +907,7 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -999,6 +1002,7 @@ async function scenarioMidHandActionReliability() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -1135,6 +1139,7 @@ async function scenarioManualDrawActionGuards() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1267,6 +1272,7 @@ async function scenarioForcedDrawAtomicBehavior() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1494,6 +1500,7 @@ async function scenarioPostMoveStability() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1593,6 +1600,7 @@ async function scenarioStartAndHandReadyGuards() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1764,6 +1772,7 @@ async function scenarioHandEndedReplay() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1830,6 +1839,7 @@ async function scenarioIdentityFreeze() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       const roomCode = createResp.roomCode;
@@ -1906,6 +1916,7 @@ async function scenarioSameUserActiveSeatTakeover() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -1971,6 +1982,7 @@ async function scenarioHandMaskingAfterMove() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -2035,6 +2047,7 @@ async function scenarioConcurrentActionSerialization() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'alpha failed to create room');
       captureJoinSeat(alpha, createResp);
@@ -2258,6 +2271,7 @@ async function scenarioPrivateCreateJoinStartMove() {
       const createResp = await emitAck(alpha.socket, 'room:create', {
         username: alpha.state.username,
         userId: alpha.state.userId,
+        skipPregameDraw: true,
       });
       assert(createResp?.ok, 'host failed to create private room');
       captureJoinSeat(alpha, createResp);
@@ -2279,6 +2293,7 @@ async function scenarioPrivateCreateJoinStartMove() {
       await waitForStateCount(bravo, 1);
 
       const active = await waitForPlayableClient([alpha, bravo], roomCode);
+      assert(active, 'no playable client after private match start (need skipPregameDraw)');
       const inactive = active === alpha ? bravo : alpha;
       const move = getPlayableMove(active);
       assert(move, 'active player missing legal move');
