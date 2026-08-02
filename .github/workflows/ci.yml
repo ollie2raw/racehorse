@@ -35,8 +35,8 @@ jobs:
         env:
           TZ: America/Los_Angeles
           # Vitest workers on Node 24 routinely OOM the default ~2GB heap on ubuntu-latest.
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: npm run test --prefix server -- --maxWorkers=2
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npm run test --prefix server -- --maxWorkers=1
 
       - name: Server build
         run: npm run build --prefix server

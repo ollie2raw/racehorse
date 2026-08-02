@@ -16,6 +16,10 @@ function normalizeRoomCode(roomCode: string): string {
   return roomCode.trim().toUpperCase();
 }
 
+function hasSupabaseCredentials(): boolean {
+  return Boolean(process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_KEY?.trim());
+}
+
 function isMissingRoomCommandReceiptsTable(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return (
@@ -36,6 +40,10 @@ export function isRoomCommandReceiptsPersistenceAvailable(): boolean {
 
 /** Lightweight probe so startup does not inherit a stale "table missing" flag. */
 export async function probeRoomCommandReceiptsTable(): Promise<boolean> {
+  if (!hasSupabaseCredentials()) {
+    persistentRoomCommandReceiptsAvailable = false;
+    return false;
+  }
   try {
     await supabaseFetch<Array<{ room_code: string }>>(
       '/rest/v1/room_command_receipts?select=room_code&limit=1',
@@ -67,6 +75,10 @@ export type PersistRoomCommandReceiptInput = {
 export async function persistRoomCommandReceipt(
   input: PersistRoomCommandReceiptInput,
 ): Promise<void> {
+  if (!hasSupabaseCredentials()) {
+    persistentRoomCommandReceiptsAvailable = false;
+    return;
+  }
   if (persistentRoomCommandReceiptsAvailable === false) return;
   if (!input.ack.ok && !input.ack.uncertain) return;
 
@@ -115,6 +127,10 @@ export async function loadRoomCommandReceiptsForRoom(
   roomCode: string,
   now = Date.now(),
 ): Promise<PersistedGameActionReceipt[]> {
+  if (!hasSupabaseCredentials()) {
+    persistentRoomCommandReceiptsAvailable = false;
+    return [];
+  }
   if (persistentRoomCommandReceiptsAvailable === false) return [];
 
   const code = normalizeRoomCode(roomCode);
@@ -162,6 +178,10 @@ export async function loadRoomCommandReceiptsForRoom(
 }
 
 export async function deleteRoomCommandReceiptsForRoom(roomCode: string): Promise<void> {
+  if (!hasSupabaseCredentials()) {
+    persistentRoomCommandReceiptsAvailable = false;
+    return;
+  }
   if (persistentRoomCommandReceiptsAvailable === false) return;
   const code = normalizeRoomCode(roomCode);
   try {
