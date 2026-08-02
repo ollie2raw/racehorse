@@ -20,8 +20,10 @@ do $$
 declare
   routine record;
   definition text;
-  old_conflict_target constant text :=
-    'on conflict (challenge_id, operation_id, event_type) do nothing';
+  legacy_conflict_pattern constant text :=
+    'on[[:space:]]+conflict[[:space:]]*[(][[:space:]]*challenge_id[[:space:]]*,[[:space:]]*operation_id[[:space:]]*,[[:space:]]*event_type[[:space:]]*[)][[:space:]]+do[[:space:]]+nothing';
+  attempt_conflict_pattern constant text :=
+    'on[[:space:]]+conflict[[:space:]]*[(][[:space:]]*attempt_id[[:space:]]*,[[:space:]]*operation_id[[:space:]]*,[[:space:]]*event_type[[:space:]]*[)][[:space:]]+do[[:space:]]+nothing';
   new_conflict_target constant text :=
     'on conflict (attempt_id, operation_id, event_type) do nothing';
 begin
@@ -33,13 +35,23 @@ begin
       and p.proname in (
         'start_daily_fritz_attempt_command',
         'commit_daily_fritz_attempt_command'
-      )
+    )
   loop
     definition := pg_get_functiondef(routine.oid);
-    if position(old_conflict_target in definition) = 0 then
+    if definition ~* legacy_conflict_pattern then
+      execute regexp_replace(
+        definition,
+        legacy_conflict_pattern,
+        new_conflict_target,
+        'gi'
+      );
+    elsif definition ~* attempt_conflict_pattern then
+      -- The function may already have been manually updated before this
+      -- forward migration. Keep it and only repair the table constraint.
+      null;
+    else
       raise exception 'daily_fritz_outbox_conflict_target_not_found:%', routine.proname;
     end if;
-    execute replace(definition, old_conflict_target, new_conflict_target);
   end loop;
 end;
 $$;
