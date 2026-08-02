@@ -63,6 +63,23 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql.match(/on conflict do nothing/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('ships Fritz Challenge CAS, immutable verification receipts, and attempt-scoped outbox primitives', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_fritz_challenge_authority_primitives.sql',
+    ));
+    expect(sql).toContain('add column if not exists revision bigint not null default 0');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_attempt_operations');
+    expect(sql).toContain('unique (attempt_id, operation_id)');
+    expect(sql).toContain('unique (user_id, challenge_id, operation_id)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_verified_hands');
+    expect(sql).toContain('primary key (attempt_id, game_number, hand_index)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_verified_games');
+    expect(sql).toContain('primary key (attempt_id, game_number)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_outbox');
+    expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
+    expect(sql).toContain('where delivered_at is null');
+  });
+
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
     const sql = compactSql(readRepoFile('supabase/migrations/2026-05-14_scheduled_tournaments.sql'));
 
