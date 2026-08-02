@@ -17,7 +17,16 @@ Move private multiplayer from ~7.2 toward 9–9.5 on authority, recovery proof, 
 5. **MP soak harness** — `npm run soak:mp-private-authority --prefix client` (socket smoke waves).
 6. **E2E hardening** — stable Guest NNNN seeding, numeric HUD scores, post-reconnect play attempt, leave/forfeit coverage (skip if control absent).
 
+## Slice 2 additions
+
+- Socket smoke auto-injects `requestId` on `game:action` (required for soak against current server).
+- New smoke scenarios: `private-midmatch-leave-forfeit`, `private-rematch-after-short-match` (requires server `MP_PRIVATE_CERT_MODE=1` for winningScore=5).
+- Action receipt round-trip tests via `room_shell` serialize/hydrate + `applyLiveSessionRow`.
+- Rematch clears in-memory receipts and emits `private_rematch_started`; abandon emits `private_match_abandoned`.
+- Cert-only winningScore `5` when `MP_PRIVATE_CERT_MODE=1` (production still 30/60 only).
+
 ## Explicit non-goals (still below 9.5)
+
 
 - Multi-instance / shared Redis rooms (process-local Map remains)
 - Ranked queue / tournament certification

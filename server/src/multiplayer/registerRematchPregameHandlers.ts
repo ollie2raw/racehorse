@@ -12,6 +12,8 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import { comparePregameDrawTiles } from './preGameDraw';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
 
 export type RegisterRematchPregameHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -104,6 +106,11 @@ export function registerRematchPregameHandlers(
       io.to(roomAfterRematch.code).emit('game:rematch:started', { roomCode: roomAfterRematch.code });
       broadcastStateUpdate(roomAfterRematch.code);
       emitRematchStatus(roomAfterRematch.code);
+      clearGameActionIdempotencyForRoom(roomAfterRematch.code);
+      emitMpAuthorityFunnel('private_rematch_started', {
+        roomCode: roomAfterRematch.code,
+        seatId: playerSeatId,
+      });
       cb?.({ ok: true, started: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
