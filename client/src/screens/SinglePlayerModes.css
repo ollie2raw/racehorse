@@ -142,6 +142,15 @@
   min-height: 332px;
 }
 
+/* Fritz + Ghost only — keep cards premium width instead of a sparse 3-col row */
+.sp-solo-grid--pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1080px;
+  width: 100%;
+  margin-inline: auto;
+}
+
 /* ─── /solo hub only: two-layer editorial zone (not Learn, not Home) ─── */
 
 .home-main.sp-solo-main:not(.learn-hub-main) .home-card-scrim {

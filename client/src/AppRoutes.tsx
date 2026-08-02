@@ -183,7 +183,7 @@ export default function AppRoutes({
         <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
           <NoBrainerLabScreen
             userId={authUser?.id ?? null}
-            onBack={() => setAppMode('singlePlayerHub')}
+            onBack={() => setAppMode('learn')}
           />
         </Suspense>
       </div>,
@@ -910,9 +910,9 @@ export default function AppRoutes({
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
                 <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
-                No Brainer Lab
+                The Lab
               </div>
-              <div className="welcome-mode-desc">Practice clearing all 7 tiles in one turn</div>
+              <div className="welcome-mode-desc">Drill no-brainer combos in Learn</div>
             </div>
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
@@ -966,11 +966,11 @@ export default function AppRoutes({
               <div className="claude-accordion-home__body">
                 {[
                   { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
-                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
+                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz and Ghost Mode', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
                   { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Set', desc: 'One fixed best of 3 Fritz set per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
                   { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
                   { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },
-                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'New to dominoes? Learn how to play and win.', accent: '#34d399', action: () => setAppMode('learn') },
+                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'How to Play, Guided Match, and The Lab.', accent: '#34d399', action: () => setAppMode('learn') },
                 ].map((mode, index, all) => {
                   const isActive = activeHomeMode === mode.id;
                   const hasActive = activeHomeMode !== null;

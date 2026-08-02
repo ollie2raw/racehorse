@@ -91,16 +91,6 @@ const MODES: CardConfig[] = [
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
   },
-  {
-    key: "noBrainer" as AppMode,
-    containerClass: "sp-lab-mode-card-container",
-    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
-    title: "The Lab",
-    titleColor: "#C77DFF",
-    desc: "Drill every no brainer combination until you never miss one.",
-    variant: "tier-master",
-    chevronColor: "#C77DFF",
-  },
 ];
 
 const themeVars = {
@@ -123,7 +113,6 @@ function statsForMode(
 ): HubStatRow[] {
   if (modeKey === "botSetup") return hubStats.fritz;
   if (modeKey === "ghostSetup") return hubStats.ghost;
-  if (modeKey === "noBrainer") return hubStats.lab;
   return [];
 }
 
@@ -143,20 +132,14 @@ export default function SinglePlayerHubScreen({
     () => import("../assets/singlePlayerHub/fritzghost2.webp"),
     [],
   );
-  const loadLabArt = useCallback(
-    () => import("../assets/singlePlayerHub/leftfacingfritzNOBRAINER.webp"),
-    [],
-  );
   const artFritzSrc = useDeferredAsset("single-player-fritz-art", loadFritzArt);
   const artGhostSrc = useDeferredAsset("single-player-ghost-art", loadGhostArt);
-  const artLabSrc = useDeferredAsset("single-player-lab-art", loadLabArt);
   const modeArtByKey = useMemo(
     () => ({
       botSetup: artFritzSrc,
       ghostSetup: artGhostSrc,
-      noBrainer: artLabSrc,
     }),
-    [artFritzSrc, artGhostSrc, artLabSrc],
+    [artFritzSrc, artGhostSrc],
   );
 
   return (
@@ -211,7 +194,7 @@ export default function SinglePlayerHubScreen({
           </div>
 
           <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
-            <div className="grid grid-cols-3 items-stretch gap-5">
+            <div className="sp-solo-grid sp-solo-grid--pair items-stretch gap-5">
             {MODES.map((mode) => (
               <section
                 key={mode.key}

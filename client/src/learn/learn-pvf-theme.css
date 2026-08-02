@@ -338,8 +338,7 @@
   text-shadow: none;
 }
 
-@media (max-width: 640px) {
-  .learn-pvf-root .learn-hub-back.pvf-back-btn,
+@media (max-width: 767px) {
   .learn-pvf-root .learn-howto-back.pvf-back-btn {
     left: 1.25rem;
     top: 1rem;
