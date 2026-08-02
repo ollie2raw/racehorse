@@ -1,6 +1,9 @@
 import { dailyFritzRunCache, ensureDailyFritzRunForDate } from '../http/stores/dailyFritzStore';
+import { buildDailyFritzPublishedChallenge } from '../dailyFritzPublishedChallenge';
+import { publishDailyFritzChallenge } from '../http/stores/dailyFritzPublishedChallengeStore';
 import { ensureDailyPuzzleLadderForDate } from '../seedDailyPuzzleLadder';
 import { getNextPacificWarmupAt, getPacificDateKeyDaysFromNow } from '../shared/pacificDate';
+import { isDailyFritzTransactionalAuthorityEnabled } from '../dailyFritzAuthorityFeature';
 
 export function isTruthyEnvFlag(value: string | undefined): boolean {
   if (!value) return false;
@@ -30,12 +33,23 @@ async function warmDailyFritzRuns(reason: 'startup' | 'scheduled', runDates: str
         const beforeCached = dailyFritzRunCache.has(runDate);
         const warmedStartedAt = Date.now();
         const run = await ensureDailyFritzRunForDate(runDate);
+        const published = run && isDailyFritzTransactionalAuthorityEnabled()
+          ? await publishDailyFritzChallenge(buildDailyFritzPublishedChallenge({
+              runDate: run.runDate,
+              fritzTier: run.fritzTier,
+              dealSize: run.dealSize,
+              winningScore: run.winningScore,
+              publishedAt: run.generatedAt,
+            }))
+          : null;
         return {
           runDate,
           ms: Date.now() - warmedStartedAt,
           beforeCached,
           afterCached: dailyFritzRunCache.has(runDate),
           status: run?.status ?? null,
+          challengeId: published?.challengeId ?? null,
+          challengeDigest: published?.contentDigest ?? null,
         };
       }),
     );

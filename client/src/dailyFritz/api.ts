@@ -4,9 +4,6 @@ import type { FritzTier } from '../bot/fritzConfig';
 import type { Tile } from '../types.ts';
 import { normalizePreGameDrawTile } from '../match/preGameDraw/preGameDrawLogic.ts';
 
-const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
-  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
-
 export const DAILY_FRITZ_REQUEST_ID_HEADER = 'x-racehorse-request-id';
 
 export function createDailyFritzRequestId(): string {
@@ -24,14 +21,13 @@ export const DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS = 10_000;
 
 export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 
-function dfClientDebug(...args: unknown[]): void {
-  if (DAILY_FRITZ_CLIENT_DEBUG_LOGS) console.log(...args);
+function dfClientDebug(..._args: unknown[]): void {
+  void _args;
 }
 
-function dfInitLog(event: string, payload?: Record<string, unknown>): void {
-  if (DAILY_FRITZ_CLIENT_DEBUG_LOGS) {
-    console.log(`[daily-fritz:init] ${event}`, payload ?? {});
-  }
+function dfInitLog(_event: string, _payload?: Record<string, unknown>): void {
+  void _event;
+  void _payload;
 }
 
 function isDailyFritzInitPath(path: string): boolean {
@@ -216,6 +212,8 @@ const DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES = new Set([
   'fritz_policy_version_mismatch',
   'fritz_policy_contract_mismatch',
   'missing_fritz_state_digest',
+  'stale_revision',
+  'command_slot_conflict',
 ]);
 
 export function isRecoverableDailyFritzAuthorityCode(code: string | null | undefined): boolean {
@@ -319,6 +317,7 @@ export interface DailyFritzTodayResponse {
   deal_size: BotDealSize;
   winning_score: number;
   attempt_status: 'none' | 'started' | 'completed' | 'abandoned';
+  authority_revision?: number | null;
   current_game_number: DailyFritzSetGameNumber | null;
   needs_completion?: boolean;
   streak: number;
@@ -341,6 +340,7 @@ export interface DailyFritzStartResponse {
   ok: true;
   attempt_id: string;
   verified_match_id: string;
+  authority_revision?: number;
   run_date: string;
   challenge_id?: string;
   rules_version?: number;
@@ -379,6 +379,7 @@ export interface DailyFritzNextHandResponse {
   current_game_number?: DailyFritzSetGameNumber | null;
   set_result?: DailyFritzSetResult | null;
   current_hand_index: number;
+  authority_revision?: number;
   current_game_scores: { you: number; fritz: number };
   hand: BotHandDeal;
   draw_winner: DailyFritzDrawWinner;
@@ -391,6 +392,7 @@ export interface DailyFritzNextHandResponse {
 export interface DailyFritzCompleteResponse {
   ok: true;
   replayed?: boolean;
+  authority_revision?: number;
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
 }
@@ -398,6 +400,7 @@ export interface DailyFritzCompleteResponse {
 export interface DailyFritzRecordGameResponse {
   ok: true;
   replayed?: boolean;
+  authority_revision?: number;
   set_result: DailyFritzSetResult;
   next_game_number: DailyFritzSetGameNumber | null;
 }
@@ -458,13 +461,6 @@ export async function startDailyFritz(options?: {
     timeoutMs: options?.timeoutMs,
   });
   const normalized = normalizeDailyFritzStartDrawFields(response);
-  console.log('[df-scripted-draw] start response', {
-    drawWinner: normalized.draw_winner ?? null,
-    rawDrawPlayerTile: response.draw_player_tile ?? null,
-    rawDrawFritzTile: response.draw_fritz_tile ?? null,
-    normalizedDrawPlayerTile: normalized.draw_player_tile ?? null,
-    normalizedDrawFritzTile: normalized.draw_fritz_tile ?? null,
-  });
   return normalized;
 }
 
@@ -762,4 +758,46 @@ export async function recordDailyFritzGame(input: {
 
 export async function abandonDailyFritz(attemptId: string): Promise<void> {
   throwApiResult(await timedApiPost<{ ok: true }>('/api/daily-fritz/abandon', { attempt_id: attemptId }));
+}
+
+export type DailyFritzClientTelemetryEvent =
+  | 'mode_impression'
+  | 'start_requested'
+  | 'first_move'
+  | 'recovery_started'
+  | 'recovery_succeeded'
+  | 'recovery_failed'
+  | 'review_opened'
+  | 'leaderboard_opened'
+  | 'share_requested'
+  | 'share_completed';
+
+/** Analytics is intentionally best-effort and can never block gameplay authority. */
+export async function recordDailyFritzTelemetry(input: {
+  eventId: string;
+  eventType: DailyFritzClientTelemetryEvent;
+  attemptId?: string | null;
+  runDate?: string | null;
+  challengeId?: string | null;
+  sessionId?: string | null;
+  durationMs?: number | null;
+  failureCode?: string | null;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await timedApiPost<{ ok: true }>('/api/daily-fritz/telemetry', {
+      event_id: input.eventId,
+      event_type: input.eventType,
+      attempt_id: input.attemptId ?? null,
+      run_date: input.runDate ?? null,
+      challenge_id: input.challengeId ?? null,
+      session_id: input.sessionId ?? null,
+      duration_ms: input.durationMs ?? null,
+      failure_code: input.failureCode ?? null,
+      client_release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
+      payload: input.payload ?? {},
+    });
+  } catch {
+    // Telemetry never changes the official run or surfaces an error to players.
+  }
 }

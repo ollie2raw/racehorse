@@ -18,6 +18,7 @@ import {
   BOT_PLAYER_HANDOFF_DELAY_MS,
   resolveBotChainContinueDelayMs,
   resolveBotOpeningDelayMs,
+  BOT_SCORE_HOLD_MS,
   resolveBotPostActionSettleMs,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
@@ -380,7 +381,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             if (cancelled || !isLocalRunCurrent(runToken)) break;
           }
 
-          // One score surface: sticky running total while Fritz still holds the turn.
+          // Score toast is always timed. Clear immediately on non-scoring steps so a
+          // prior +N cannot linger into the next Fritz tile / your-move handoff.
           if (scoredPoints > 0 && !finalizeLive.isDailyFritzMode) {
             finalizeLive.ports.showBoardToast(
               buildFritzScoreCeremonyMessage(
@@ -390,14 +392,13 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
               ),
               'bot',
               {
-                sticky: true,
+                holdMs: BOT_SCORE_HOLD_MS,
                 points: scoredPoints,
                 turnTotal: turnScoreTotal,
                 actorLabel: finalizeLive.opponentLabel.toUpperCase().slice(0, 10),
               },
             );
-          } else if (scoredPoints === 0 && finalizeLive.isDailyFritzMode) {
-            // A non-scoring chain step must not leave the prior +N on screen.
+          } else if (scoredPoints === 0) {
             finalizeLive.ports.clearBoardToast();
           }
 
@@ -410,15 +411,15 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           if (!computeBotChainPaused(execution.result)) {
-            if (!live().isDailyFritzMode) {
-              live().ports.clearBoardToast();
-            }
+            live().ports.clearBoardToast();
             break;
           }
         }
       } finally {
         botTurnInFlightRef.current = false;
         live().setFritzPresentation(IDLE_FRITZ_PRESENTATION);
+        // Tenure end / cancel must not leave a score toast on your-move.
+        live().ports.clearBoardToast();
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
         }

@@ -9,6 +9,7 @@ export type DailyFritzMetricName =
   | 'verification_failed'
   | 'retry_request'
   | 'mutation_request'
+  | 'command_conflict'
   | 'event_persistence_failed';
 
 type MetricBucket = {

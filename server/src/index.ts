@@ -285,6 +285,11 @@ import {
   getDailyFritzEventsPersistenceAvailability,
   probeDailyFritzEventsPersistence,
 } from './http/stores/dailyFritzEventStore';
+import {
+  getDailyFritzAuthoritySchemaAvailability,
+  probeDailyFritzAuthoritySchema,
+} from './http/stores/dailyFritzAuthorityReadiness';
+import { isDailyFritzTransactionalAuthorityEnabled } from './dailyFritzAuthorityFeature';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
 import {
   listCompletedDailyFritzDatesForUser,
@@ -790,6 +795,9 @@ registerHealthRoutes({
   isRoomMatchLogsPersistenceAvailable,
   getDailyFritzEventsPersistenceAvailability,
   probeDailyFritzEventsPersistence,
+  isDailyFritzTransactionalAuthorityEnabled,
+  getDailyFritzAuthoritySchemaAvailability,
+  probeDailyFritzAuthoritySchema,
 });
 
 server.listen(PORT, () => {
@@ -824,6 +832,16 @@ server.listen(PORT, () => {
     })
     .catch((err) => {
       console.warn('[daily-fritz-events] startup probe error', err instanceof Error ? err.message : err);
+    });
+  void probeDailyFritzAuthoritySchema()
+    .then((ok) => {
+      console.log('[daily-fritz-authority] startup probe', {
+        enabled: isDailyFritzTransactionalAuthorityEnabled(),
+        schemaAvailable: ok,
+      });
+    })
+    .catch((err) => {
+      console.warn('[daily-fritz-authority] startup probe error', err instanceof Error ? err.message : err);
     });
   const serverUrl = config.serverUrl;
   if (serverUrl) {

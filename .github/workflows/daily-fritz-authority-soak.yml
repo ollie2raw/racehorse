@@ -1,0 +1,62 @@
+name: Daily Fritz Authority Soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed server origin to exercise
+        required: true
+        default: https://racehorse.onrender.com
+        type: string
+      users:
+        description: Number of ephemeral authenticated players
+        required: true
+        default: '5'
+        type: string
+      concurrency:
+        description: Concurrent player wave size
+        required: true
+        default: '2'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-fritz-authority-soak
+  cancel-in-progress: false
+
+jobs:
+  authority-soak:
+    name: Game 1 authority and recovery soak
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-soak
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared game core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Typecheck authority harness
+        run: npm run typecheck:scripts --prefix server
+
+      - name: Run authority soak
+        env:
+          DAILY_FRITZ_SOAK_BASE_URL: ${{ inputs.base_url }}
+          DAILY_FRITZ_SOAK_USERS: ${{ inputs.users }}
+          DAILY_FRITZ_SOAK_CONCURRENCY: ${{ inputs.concurrency }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run soak:daily-fritz-authority --prefix server

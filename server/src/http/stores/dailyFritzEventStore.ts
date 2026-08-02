@@ -1,19 +1,18 @@
 import { supabaseFetch } from '../../supabaseUtils';
+import {
+  DAILY_FRITZ_TELEMETRY_VERSION,
+  classifyDailyFritzFailure,
+  type DailyFritzEventType,
+  type DailyFritzFailurePhase,
+  type DailyFritzRecoveryClass,
+} from '../../dailyFritzTelemetry';
+import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
+
+export type { DailyFritzEventType } from '../../dailyFritzTelemetry';
 
 export const DAILY_FRITZ_EVENT_WRITE_TIMEOUT_MS = 2_500;
 
 let dailyFritzEventsPersistenceAvailable: boolean | null = null;
-
-export type DailyFritzEventType =
-  | 'attempt_started'
-  | 'hand_verified'
-  | 'next_hand_replayed'
-  | 'game_recorded'
-  | 'attempt_completed'
-  | 'attempt_abandoned'
-  | 'verification_failed'
-  | 'request_failed'
-  | 'retry_request';
 
 export type DailyFritzEventInput = {
   attemptId?: string | null;
@@ -26,6 +25,14 @@ export type DailyFritzEventInput = {
   statusCode?: number | null;
   verifierCode?: string | null;
   transcriptDigest?: string | null;
+  challengeId?: string | null;
+  authorityRevision?: number | null;
+  source?: 'server' | 'client' | 'outbox';
+  sessionId?: string | null;
+  clientRelease?: string | null;
+  durationMs?: number | null;
+  failurePhase?: DailyFritzFailurePhase | null;
+  recoveryClass?: DailyFritzRecoveryClass | null;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
 };
@@ -46,6 +53,7 @@ export type DailyFritzPersistedMetricRow = {
  * retries safe even when a client loses the response after the DB write.
  */
 export async function recordDailyFritzEvent(event: DailyFritzEventInput): Promise<void> {
+  const failure = classifyDailyFritzFailure(event.verifierCode);
   await supabaseFetch('/rest/v1/daily_fritz_events?on_conflict=idempotency_key', {
     method: 'POST',
     headers: {
@@ -63,6 +71,17 @@ export async function recordDailyFritzEvent(event: DailyFritzEventInput): Promis
       status_code: event.statusCode ?? null,
       verifier_code: event.verifierCode ?? null,
       transcript_digest: event.transcriptDigest ?? null,
+      ...(isDailyFritzTransactionalAuthorityEnabled() ? {
+        challenge_id: event.challengeId ?? null,
+        authority_revision: event.authorityRevision ?? null,
+        event_version: DAILY_FRITZ_TELEMETRY_VERSION,
+        source: event.source ?? 'server',
+        session_id: event.sessionId ?? null,
+        client_release: event.clientRelease ?? null,
+        duration_ms: event.durationMs ?? null,
+        failure_phase: event.failurePhase ?? failure.phase,
+        recovery_class: event.recoveryClass ?? failure.recoveryClass,
+      } : {}),
       idempotency_key: event.idempotencyKey,
       payload: event.payload ?? {},
     }]),

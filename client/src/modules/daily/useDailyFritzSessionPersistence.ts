@@ -11,6 +11,8 @@ import {
 } from './dailyFritzSessionStorage.ts';
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
+import { recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
+import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../dailyFritz/telemetry.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
@@ -55,6 +57,25 @@ export function useDailyFritzSessionPersistence({
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
   const startedAtRef = useRef(initialStartedAt ?? new Date().toISOString());
   const revisionRef = useRef(initialRevision);
+  const firstMoveReportedRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled || !attemptId || !runDate || firstMoveReportedRef.current) return;
+    const firstPlayerMove = moveLog.find((entry) => entry.player === 'you');
+    if (!firstPlayerMove) return;
+    firstMoveReportedRef.current = true;
+    const sessionId = getDailyFritzTelemetrySession(runDate);
+    void recordDailyFritzTelemetry({
+      eventId: dailyFritzTelemetryEventId(attemptId, 'first_move'),
+      eventType: 'first_move',
+      attemptId,
+      runDate,
+      challengeId: createDailyFritzChallengeIdentity(runDate).challengeId,
+      sessionId,
+      durationMs: Math.max(0, Date.now() - new Date(startedAtRef.current).getTime()),
+      payload: { gameNumber, handIndex: dailyFritzHandIndex },
+    });
+  }, [attemptId, dailyFritzHandIndex, enabled, gameNumber, moveLog, runDate]);
 
   useEffect(() => {
     if (!enabled || !storageKey || !attemptId || !runDate || !runFingerprint || typeof window === 'undefined') return;

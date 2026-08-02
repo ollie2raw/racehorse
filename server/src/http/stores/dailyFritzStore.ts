@@ -19,6 +19,15 @@ import {
 } from '../../dailyFritzSkunk';
 import { supabaseFetch } from '../../supabaseUtils';
 import { getPacificDateKey } from '../../shared/pacificDate';
+import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
+
+const DAILY_FRITZ_ATTEMPT_LEGACY_COLUMNS =
+  'id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played';
+const DAILY_FRITZ_ATTEMPT_AUTHORITY_COLUMNS =
+  'current_game_number,revision,challenge_id,challenge_contract_version,generation_version,game_rules_version,transcript_protocol_version,fritz_policy_version,ranking_version,authority_schema_version';
+const getDailyFritzAttemptSelect = (): string => isDailyFritzTransactionalAuthorityEnabled()
+  ? `${DAILY_FRITZ_ATTEMPT_LEGACY_COLUMNS},${DAILY_FRITZ_ATTEMPT_AUTHORITY_COLUMNS}`
+  : DAILY_FRITZ_ATTEMPT_LEGACY_COLUMNS;
 
 export type DailyFritzRunRow = {
   run_date: string;
@@ -39,6 +48,16 @@ export type DailyFritzAttemptRow = {
   user_id: string;
   status: DailyFritzAttemptStatus;
   current_hand_index: number;
+  current_game_number?: number;
+  revision?: number;
+  challenge_id?: string | null;
+  challenge_contract_version?: number | null;
+  generation_version?: number | null;
+  game_rules_version?: number | null;
+  transcript_protocol_version?: number | null;
+  fritz_policy_version?: number | null;
+  ranking_version?: number | null;
+  authority_schema_version?: number;
   started_at: string;
   completed_at: string | null;
   verified_match_id: string | null;
@@ -79,6 +98,16 @@ export type DailyFritzAttemptRecord = {
   userId: string;
   status: DailyFritzAttemptStatus;
   currentHandIndex: number;
+  currentGameNumber: DailyFritzSetGameNumber;
+  revision: number;
+  challengeId: string | null;
+  challengeContractVersion: number | null;
+  generationVersion: number | null;
+  gameRulesVersion: number | null;
+  transcriptProtocolVersion: number | null;
+  fritzPolicyVersion: number | null;
+  rankingVersion: number | null;
+  authoritySchemaVersion: number;
   startedAt: string;
   completedAt: string | null;
   verifiedMatchId: string | null;
@@ -194,6 +223,16 @@ export function toDailyFritzAttemptRecord(row: DailyFritzAttemptRow): DailyFritz
     userId: row.user_id,
     status: row.status,
     currentHandIndex: Number(row.current_hand_index) || 0,
+    currentGameNumber: normalizeDailyFritzSetGameNumber(Number(row.current_game_number)) ?? 1,
+    revision: Math.max(0, Number(row.revision) || 0),
+    challengeId: typeof row.challenge_id === 'string' ? row.challenge_id : null,
+    challengeContractVersion: row.challenge_contract_version == null ? null : Number(row.challenge_contract_version),
+    generationVersion: row.generation_version == null ? null : Number(row.generation_version),
+    gameRulesVersion: row.game_rules_version == null ? null : Number(row.game_rules_version),
+    transcriptProtocolVersion: row.transcript_protocol_version == null ? null : Number(row.transcript_protocol_version),
+    fritzPolicyVersion: row.fritz_policy_version == null ? null : Number(row.fritz_policy_version),
+    rankingVersion: row.ranking_version == null ? null : Number(row.ranking_version),
+    authoritySchemaVersion: Math.max(1, Number(row.authority_schema_version) || 1),
     startedAt: row.started_at,
     completedAt: row.completed_at,
     verifiedMatchId: row.verified_match_id,
@@ -215,6 +254,18 @@ export function toDailyFritzAttemptRow(record: DailyFritzAttemptRecord): DailyFr
     user_id: record.userId,
     status: record.status,
     current_hand_index: record.currentHandIndex,
+    ...(isDailyFritzTransactionalAuthorityEnabled() ? {
+      current_game_number: record.currentGameNumber,
+      revision: record.revision,
+      challenge_id: record.challengeId,
+      challenge_contract_version: record.challengeContractVersion,
+      generation_version: record.generationVersion,
+      game_rules_version: record.gameRulesVersion,
+      transcript_protocol_version: record.transcriptProtocolVersion,
+      fritz_policy_version: record.fritzPolicyVersion,
+      ranking_version: record.rankingVersion,
+      authority_schema_version: record.authoritySchemaVersion,
+    } : {}),
     started_at: record.startedAt,
     completed_at: record.completedAt,
     verified_match_id: record.verifiedMatchId,
@@ -485,7 +536,7 @@ export async function ensureDailyFritzRunForDate(
 }
 export async function getDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord | null> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&run_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
     { method: 'GET' },
   );
   return rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
@@ -496,7 +547,7 @@ export async function getDailyFritzAttemptById(
   userId: string,
 ): Promise<DailyFritzAttemptRecord | null> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&id=eq.${encodeURIComponent(attemptId)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&id=eq.${encodeURIComponent(attemptId)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
     { method: 'GET' },
   );
   return rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
@@ -541,7 +592,7 @@ export async function createDailyFritzAttempt(runDate: string, userId: string): 
 
 export async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc`,
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc`,
     { method: 'GET' },
   );
   return rows.map(toDailyFritzAttemptRecord);
@@ -550,7 +601,7 @@ export async function listDailyFritzAttemptsForDate(runDate: string): Promise<Da
 export async function listDailyFritzAttemptsForUser(userId: string, limit = 10): Promise<DailyFritzAttemptRecord[]> {
   const bounded = Math.max(1, Math.min(30, Math.floor(limit)));
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc,completed_at.desc&limit=${bounded}`,
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc,completed_at.desc&limit=${bounded}`,
     { method: 'GET' },
   );
   return rows.map(toDailyFritzAttemptRecord);
