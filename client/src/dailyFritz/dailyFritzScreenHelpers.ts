@@ -12,13 +12,9 @@ const DAILY_FRITZ_SET_VERSION = 2;
 
 export const DAILY_FRITZ_INIT_SLOW_MS = 10_000;
 
-const DAILY_FRITZ_INIT_DEBUG =
-  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
-
-export function dfInitLog(event: string, payload?: Record<string, unknown>): void {
-  if (DAILY_FRITZ_INIT_DEBUG) {
-    console.log(`[daily-fritz:init] ${event}`, payload ?? {});
-  }
+export function dfInitLog(_event: string, _payload?: Record<string, unknown>): void {
+  void _event;
+  void _payload;
 }
 
 export function readTodayCache(cacheKey: string | null): DailyFritzTodayResponse | null {

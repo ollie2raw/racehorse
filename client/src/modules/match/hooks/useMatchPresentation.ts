@@ -150,19 +150,16 @@ export function useMatchPresentation({
       turnTotal: options?.turnTotal,
     });
 
-    // Sticky toasts stay until the next ceremony update (chain continuity).
-    if (options?.sticky) {
-      scoreToastHideTimerRef.current = null;
-      scoreToastClearTimerRef.current = null;
-      return;
-    }
-
-    const holdMs = options?.holdMs ?? BOT_SCORE_TOAST_HIDE_MS;
+    // Always time-dismiss. "Sticky" only lengthens the hold for chain ceremony —
+    // never leave a toast without an expiry (bot-tenure cancel can skip clearBoardToast).
+    const holdMs = options?.sticky
+      ? (options?.holdMs ?? Math.max(BOT_SCORE_HOLD_MS * 2, 2100))
+      : (options?.holdMs ?? BOT_SCORE_TOAST_HIDE_MS);
     const clearMs = Math.max(holdMs + 300, BOT_SCORE_TOAST_CLEAR_MS);
-    scoreToastHideTimerRef.current = setTimeout(() => {
+    scoreToastHideTimerRef.current = window.setTimeout(() => {
       setScoreToast((prev) => hideScoreToastEvent(prev, eventId));
     }, holdMs);
-    scoreToastClearTimerRef.current = setTimeout(() => {
+    scoreToastClearTimerRef.current = window.setTimeout(() => {
       setScoreToast((prev) => clearScoreToastEvent(prev, eventId));
     }, clearMs);
   }, [scoreToastHideTimerRef, scoreToastClearTimerRef]);

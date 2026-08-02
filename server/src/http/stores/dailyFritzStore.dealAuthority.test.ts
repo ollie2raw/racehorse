@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { generateDailyFritzRun } from '../../dailyFritz';
 import {
   buildDailyFritzRunFingerprint,
   getDailyFritzHandForGame,
+  toDailyFritzAttemptRow,
 } from './dailyFritzStore';
 
 describe('Daily Fritz run deal authority', () => {
+  const originalAuthority = process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
+  afterEach(() => {
+    if (originalAuthority === undefined) delete process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
+    else process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = originalAuthority;
+  });
   it('prefers persisted game-1 hand deals over regenerated tiles', () => {
     const run = generateDailyFritzRun('2026-07-24', 'elite', 7, 60);
     const mutated = {
@@ -49,5 +55,22 @@ describe('Daily Fritz run deal authority', () => {
       )),
     };
     expect(buildDailyFritzRunFingerprint(altered)).not.toBe(a);
+  });
+
+  it('omits expanded columns until migration rollout is explicitly enabled', () => {
+    const record = {
+      id: 'attempt-1', runDate: '2026-08-01', userId: 'user-1', status: 'started' as const,
+      currentHandIndex: 0, currentGameNumber: 1 as const, revision: 2,
+      challengeId: 'challenge-1', challengeContractVersion: 1, generationVersion: 1,
+      gameRulesVersion: 1, transcriptProtocolVersion: 2, fritzPolicyVersion: 2,
+      rankingVersion: 1, authoritySchemaVersion: 1, startedAt: '2026-08-01T07:00:00Z',
+      completedAt: null, verifiedMatchId: null, completionHash: null, result: null,
+      finalScore: null, opponentScore: null, pointDiff: null, won: null,
+      movesUsed: null, handsPlayed: null,
+    };
+    delete process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
+    expect(toDailyFritzAttemptRow(record)).not.toHaveProperty('revision');
+    process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = 'true';
+    expect(toDailyFritzAttemptRow(record)).toMatchObject({ revision: 2, challenge_id: 'challenge-1' });
   });
 });
