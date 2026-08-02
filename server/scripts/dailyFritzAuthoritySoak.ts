@@ -361,7 +361,14 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify({ ok: true, users, concurrency, baseUrl, results }, null, 2)}\n`);
 }
 
-void main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
-  process.exitCode = 1;
-});
+void main()
+  .then(() => {
+    process.stdout.write(`${JSON.stringify({ phase: 'complete' })}\n`);
+  })
+  .catch((error) => {
+    process.stdout.write(`${JSON.stringify({
+      phase: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    })}\n`);
+    process.exitCode = 1;
+  });
