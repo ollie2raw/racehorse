@@ -65,6 +65,7 @@ const anonKey = required('VITE_SUPABASE_ANON_KEY');
 const users = positiveInt(process.env.DAILY_FRITZ_SOAK_USERS, 1);
 const concurrency = positiveInt(process.env.DAILY_FRITZ_SOAK_CONCURRENCY, 1);
 const timeoutMs = positiveInt(process.env.DAILY_FRITZ_SOAK_TIMEOUT_MS, 20_000);
+const runDateOverride = process.env.DAILY_FRITZ_SOAK_RUN_DATE?.trim() ?? '';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -150,6 +151,7 @@ const startBody = {
   }],
   supported_state_digest_versions: [DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
   client_release: 'daily-fritz-authority-soak',
+  ...(runDateOverride ? { debug_date: runDateOverride } : {}),
 };
 
 function handCommand(
@@ -392,7 +394,10 @@ async function runOne(index: number): Promise<Json> {
       scores = next.current_game_scores;
 
       if (handCount === 2) {
-        const today = await api(user.accessToken, '/api/daily-fritz/today');
+        const today = await api(
+          user.accessToken,
+          `/api/daily-fritz/today${runDateOverride ? `?debugDate=${encodeURIComponent(runDateOverride)}` : ''}`,
+        );
         const resumed = await api(user.accessToken, '/api/daily-fritz/start', startBody) as StartPackage;
         if (today.attempt_status !== 'started' || resumed.current_hand_index !== handIndex) {
           throw new Error('Refresh/reconnect did not return the authoritative hand index.');
@@ -443,7 +448,10 @@ async function runOne(index: number): Promise<Json> {
     if (!completions.some((completion) => completion.replayed === true)) {
       throw new Error('Duplicate Daily Fritz completion did not replay the authoritative result.');
     }
-    const completedToday = await api(user.accessToken, '/api/daily-fritz/today');
+    const completedToday = await api(
+      user.accessToken,
+      `/api/daily-fritz/today${runDateOverride ? `?debugDate=${encodeURIComponent(runDateOverride)}` : ''}`,
+    );
     if (completedToday.attempt_status !== 'completed' || completedToday.rank == null) {
       throw new Error('Verified Daily Fritz completion was not eligible for the leaderboard.');
     }
