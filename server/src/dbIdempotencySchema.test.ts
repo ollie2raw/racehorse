@@ -68,6 +68,9 @@ describe('DB idempotency schema guardrails', () => {
       'supabase/migrations/2026-08-02_fritz_challenge_authority_primitives.sql',
     ));
     expect(sql).toContain('add column if not exists revision bigint not null default 0');
+    expect(sql).toContain('create trigger protect_fritz_challenge_contract');
+    expect(sql).toContain('fritz_challenge_contract_is_immutable');
+    expect(sql).toContain('create trigger protect_fritz_challenge_hand');
     expect(sql).toContain('create table if not exists public.fritz_challenge_attempt_operations');
     expect(sql).toContain('unique (attempt_id, operation_id)');
     expect(sql).toContain('unique (user_id, challenge_id, operation_id)');
@@ -86,6 +89,9 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('insert into public.fritz_challenge_verified_hands');
     expect(sql).toContain('insert into public.fritz_challenge_verified_games');
     expect(sql).toContain('insert into public.fritz_challenge_outbox');
+    expect(sql).toContain('create or replace function public.start_fritz_challenge_attempt_command');
+    expect(sql).toContain('pg_advisory_xact_lock');
+    expect(sql).toContain("'operation_id_reused'");
   });
 
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
@@ -198,6 +204,9 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('idempotency_key text not null unique');
     expect(sql).toContain("'attempt_completed'");
     expect(sql).toContain("'verification_failed'");
+    expect(sql).toContain('create or replace function public.project_fritz_challenge_outbox_event');
+    expect(sql).toContain("'outbox:' || new.id::text");
+    expect(sql).toContain('analytics_projected_at');
     expect(sql).toContain('create or replace view public.fritz_challenge_funnel_metrics');
     expect(sql).toContain('create or replace view public.fritz_challenge_failure_metrics');
   });

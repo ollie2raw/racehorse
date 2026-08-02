@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   commitFritzChallengeAttemptCommand,
   digestFritzChallengeCommand,
+  startFritzChallengeAttemptCommand,
 } from './fritzChallengeCommandStore';
 
 describe('Fritz Challenge transactional command store', () => {
@@ -29,5 +30,26 @@ describe('Fritz Challenge transactional command store', () => {
       p_hand_receipt: { gameNumber: 1, handIndex: 2 },
       p_outbox_event_type: 'hand_verified',
     });
+  });
+
+  it('starts attempts through an idempotent participant/challenge command', async () => {
+    const fetch = vi.fn(async () => [{
+      outcome: 'committed', error_code: null, replayed: false,
+      committed_revision: 1, response: { attempt_id: 'attempt-1', created: true },
+    }]);
+    await startFritzChallengeAttemptCommand({
+      userId: 'user-1', challengeId: 'challenge-1', operationId: 'start:challenge-1',
+      authorityResult: { challenge_id: 'fritz-challenge:challenge-1', verifier_version: 2 },
+    }, { fetch: fetch as any });
+    expect(fetch).toHaveBeenCalledWith(
+      '/rest/v1/rpc/start_fritz_challenge_attempt_command',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+    expect(body).toMatchObject({
+      p_operation_id: 'start:challenge-1',
+      p_challenge_id: 'challenge-1',
+    });
+    expect(body.p_request_digest).toMatch(/^[0-9a-f]{64}$/);
   });
 });

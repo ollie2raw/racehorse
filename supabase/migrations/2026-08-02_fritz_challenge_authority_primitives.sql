@@ -9,6 +9,44 @@ create index if not exists idx_fritz_challenge_attempts_active_revision
   on public.fritz_challenge_attempts (id, revision)
   where status = 'started';
 
+-- A challenge's deal-generating and verification contract is published at
+-- creation. Status and opponent ownership may evolve, but no privileged
+-- process may silently change the fairness contract mid-match.
+create or replace function public.fritz_challenge_contract_is_immutable()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.seed is distinct from old.seed
+    or new.format is distinct from old.format
+    or new.fritz_tier is distinct from old.fritz_tier
+    or new.deal_size is distinct from old.deal_size
+    or new.winning_score is distinct from old.winning_score
+    or new.rules_version is distinct from old.rules_version
+    or new.fritz_policy_version is distinct from old.fritz_policy_version
+    or new.verifier_version is distinct from old.verifier_version
+    or new.generator_version is distinct from old.generator_version then
+    raise exception 'fritz_challenge_contract_is_immutable';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_fritz_challenge_contract on public.fritz_challenges;
+create trigger protect_fritz_challenge_contract
+before update on public.fritz_challenges
+for each row execute function public.fritz_challenge_contract_is_immutable();
+
+create or replace function public.fritz_challenge_hand_is_immutable()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  raise exception 'fritz_challenge_hand_is_immutable';
+end;
+$$;
+
+drop trigger if exists protect_fritz_challenge_hand on public.fritz_challenge_hands;
+create trigger protect_fritz_challenge_hand
+before update on public.fritz_challenge_hands
+for each row execute function public.fritz_challenge_hand_is_immutable();
+
 create table if not exists public.fritz_challenge_attempt_operations (
   id uuid primary key default gen_random_uuid(),
   attempt_id uuid not null references public.fritz_challenge_attempts(id) on delete cascade,
@@ -180,3 +218,96 @@ $$;
 
 revoke all on function public.commit_fritz_challenge_attempt_command(uuid, uuid, text, text, text, bigint, text, int, int, jsonb, int, int, int, boolean, int, int, jsonb, jsonb, text, jsonb) from public, authenticated;
 grant execute on function public.commit_fritz_challenge_attempt_command(uuid, uuid, text, text, text, bigint, text, int, int, jsonb, int, int, int, boolean, int, int, jsonb, jsonb, text, jsonb) to service_role;
+
+-- Starting an attempt is also a command.  There is no attempt row to lock on
+-- the first request, so serialize the participant/challenge pair explicitly.
+-- This prevents two tabs or two server instances from creating divergent
+-- starts before the per-attempt revision lock exists.
+create or replace function public.start_fritz_challenge_attempt_command(
+  p_user_id uuid, p_challenge_id uuid, p_operation_id text,
+  p_request_digest text, p_authority_result jsonb
+)
+returns table (outcome text, error_code text, replayed boolean, committed_revision bigint, response jsonb)
+language plpgsql security definer set search_path = public as $$
+declare
+  challenge public.fritz_challenges%rowtype;
+  attempt public.fritz_challenge_attempts%rowtype;
+  existing_operation public.fritz_challenge_attempt_operations%rowtype;
+  created_attempt boolean := false;
+  command_response jsonb;
+begin
+  if char_length(p_operation_id) < 8 or char_length(p_operation_id) > 160
+    or p_request_digest !~ '^[0-9a-f]{64}$' then
+    return query select 'rejected', 'invalid_start_command', false, null::bigint, null::jsonb; return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text || ':' || p_challenge_id::text, 0));
+
+  select * into existing_operation
+    from public.fritz_challenge_attempt_operations
+    where user_id = p_user_id and challenge_id = p_challenge_id and operation_id = p_operation_id;
+  if found then
+    if existing_operation.command_type <> 'start_attempt'
+      or existing_operation.request_digest <> p_request_digest then
+      return query select 'conflict', 'operation_id_reused', false,
+        existing_operation.committed_revision, existing_operation.response; return;
+    end if;
+    return query select existing_operation.status, existing_operation.error_code, true,
+      existing_operation.committed_revision, existing_operation.response; return;
+  end if;
+
+  select * into challenge from public.fritz_challenges where id = p_challenge_id for update;
+  if not found then
+    return query select 'rejected', 'challenge_not_found', false, null::bigint, null::jsonb; return;
+  end if;
+  if challenge.expires_at <= now() then
+    update public.fritz_challenges set status = 'expired'
+      where id = challenge.id and status in ('open', 'active');
+    return query select 'rejected', 'challenge_expired', false, null::bigint, null::jsonb; return;
+  end if;
+  if p_user_id <> challenge.creator_user_id
+    and p_user_id is distinct from challenge.opponent_user_id then
+    return query select 'rejected', 'not_participant', false, null::bigint, null::jsonb; return;
+  end if;
+
+  select * into attempt from public.fritz_challenge_attempts
+    where challenge_id = p_challenge_id and user_id = p_user_id for update;
+  if not found then
+    insert into public.fritz_challenge_attempts (
+      challenge_id, user_id, status, current_game_number, current_hand_index,
+      revision, authority_schema_version, result
+    ) values (
+      p_challenge_id, p_user_id, 'started', 1, 0, 1, 1, p_authority_result
+    ) returning * into attempt;
+    created_attempt := true;
+  elsif attempt.status <> 'started' then
+    return query select 'rejected', 'attempt_not_startable', false, attempt.revision,
+      jsonb_build_object('attempt_id', attempt.id, 'status', attempt.status, 'revision', attempt.revision); return;
+  end if;
+
+  command_response := jsonb_build_object(
+    'attempt_id', attempt.id, 'challenge_id', attempt.challenge_id,
+    'status', attempt.status, 'revision', attempt.revision,
+    'current_game_number', attempt.current_game_number,
+    'current_hand_index', attempt.current_hand_index,
+    'created', created_attempt
+  );
+  insert into public.fritz_challenge_attempt_operations (
+    attempt_id, user_id, challenge_id, operation_id, command_type, request_digest,
+    expected_revision, committed_revision, status, response, committed_at
+  ) values (
+    attempt.id, p_user_id, p_challenge_id, p_operation_id, 'start_attempt', p_request_digest,
+    0, attempt.revision, 'committed', command_response, now()
+  );
+  insert into public.fritz_challenge_outbox (attempt_id, challenge_id, operation_id, event_type, payload)
+    values (
+      attempt.id, p_challenge_id, p_operation_id,
+      case when created_attempt then 'attempt_started' else 'attempt_resumed' end,
+      jsonb_build_object('revision', attempt.revision, 'created', created_attempt)
+    ) on conflict (attempt_id, operation_id, event_type) do nothing;
+  return query select 'committed', null::text, false, attempt.revision, command_response;
+end;
+$$;
+
+revoke all on function public.start_fritz_challenge_attempt_command(uuid, uuid, text, text, jsonb) from public, authenticated;
+grant execute on function public.start_fritz_challenge_attempt_command(uuid, uuid, text, text, jsonb) to service_role;

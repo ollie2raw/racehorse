@@ -42,6 +42,36 @@ function result<T extends Record<string, unknown>>(rows: CommandRow<T>[] | undef
   };
 }
 
+export async function startFritzChallengeAttemptCommand<T extends Record<string, unknown>>(
+  input: {
+    userId: string;
+    challengeId: string;
+    operationId: string;
+    authorityResult: Record<string, unknown>;
+  },
+  deps: FritzChallengeCommandStoreDeps = DEFAULT_DEPS,
+): Promise<FritzChallengeCommandResult<T>> {
+  const requestDigest = digestFritzChallengeCommand({
+    commandType: 'start_attempt',
+    challengeId: input.challengeId,
+    authorityResult: input.authorityResult,
+  });
+  const rows = await deps.fetch<CommandRow<T>[]>(
+    '/rest/v1/rpc/start_fritz_challenge_attempt_command',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        p_user_id: input.userId,
+        p_challenge_id: input.challengeId,
+        p_operation_id: input.operationId,
+        p_request_digest: requestDigest,
+        p_authority_result: input.authorityResult,
+      }),
+    },
+  );
+  return result(rows);
+}
+
 export async function commitFritzChallengeAttemptCommand<T extends Record<string, unknown>>(
   input: {
     userId: string;
