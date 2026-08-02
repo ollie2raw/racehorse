@@ -15,7 +15,12 @@ import {
 } from './roomCommandReceiptStore';
 
 describe('roomCommandReceiptStore', () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_KEY;
+
   beforeEach(() => {
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_KEY = 'test-service-key';
     resetRoomCommandReceiptStoreForTests();
     vi.mocked(supabaseFetch).mockReset();
     vi.mocked(supabaseFetch).mockResolvedValue([]);
@@ -23,6 +28,10 @@ describe('roomCommandReceiptStore', () => {
 
   afterEach(() => {
     resetRoomCommandReceiptStoreForTests();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+    else process.env.SUPABASE_SERVICE_KEY = previousKey;
   });
 
   it('persists receipts via upsert on conflict', async () => {
