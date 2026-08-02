@@ -10,6 +10,7 @@ import {
   readDailyFritzAuthorityContract,
   writeDailyFritzAuthorityContract,
   requiresVerifiedDailyFritzEvidence,
+  classifyDailyFritzGameRecordingPosition,
 } from './dailyFritzVerificationPolicy';
 import { isDailyFritzAttemptLeaderboardEligible } from '../stores/dailyFritzStore';
 
@@ -77,6 +78,30 @@ describe('Daily Fritz competitive verification boundary', () => {
     expect(isIdenticalDailyFritzGameReplay(existing, existing)).toBe(true);
     expect(isIdenticalDailyFritzGameReplay(existing, { ...existing, playerScore: 600 })).toBe(false);
     expect(isIdenticalDailyFritzGameReplay(existing, { ...existing, fritzScore: 0 })).toBe(false);
+  });
+
+  it('replays a recorded game before enforcing a terminal set', () => {
+    const game = {
+      gameNumber: 1 as const,
+      seed: 'seed',
+      playerWon: true,
+      playerScore: 60,
+      fritzScore: 0,
+      pointDiff: 60,
+      movesUsed: 20,
+      handsPlayed: 3,
+      completedAt: '2026-08-01T12:00:00.000Z',
+    };
+    expect(classifyDailyFritzGameRecordingPosition({
+      games: [game],
+      setWinner: 'player',
+    }, 1)).toEqual({ kind: 'replay', existing: game });
+    expect(classifyDailyFritzGameRecordingPosition({
+      games: [game],
+      setWinner: 'player',
+    }, 2)).toEqual({ kind: 'set_decided' });
+    expect(classifyDailyFritzGameRecordingPosition({ games: [] }, 2))
+      .toEqual({ kind: 'invalid_order' });
   });
 
   it('pins a verifier-capable attempt to transcript evidence', () => {
