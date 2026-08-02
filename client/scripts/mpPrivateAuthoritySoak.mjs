@@ -3,10 +3,11 @@
  * Private-match authority soak — repeated socket-protocol waves.
  *
  * Usage (server must already be running, same as socket smoke):
- *   SMOKE_REPEAT=25 npm run soak:mp-private-authority --prefix client
+ *   MP_PRIVATE_CERT_MODE=1 SMOKE_REPEAT=10 npm run soak:mp-private-authority --prefix client
  *
  * This is the MP twin of Daily Fritz authority soak: prove create/join/start/move/
- * reconnect/takeover scenarios remain green under repeated concurrency waves.
+ * reconnect/takeover/leave/rematch scenarios remain green under repeated waves.
+ * Set MP_PRIVATE_CERT_MODE=1 on the server so winningScore=5 is accepted for rematch cert.
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -19,6 +20,8 @@ const scenarios =
   process.env.MP_SOAK_SCENARIOS ??
   [
     'private-create-join-start-move',
+    'private-midmatch-leave-forfeit',
+    'private-rematch-after-short-match',
     'concurrent-action-serialization',
     'lifecycle-reconnect',
     'mid-hand-action-reliability',

@@ -30,4 +30,15 @@ describe('sanitizePrivateRoomConfig', () => {
     );
     expect(sanitizePrivateRoomConfig({ winningScore: 30 }).winningScore).toBe(30);
   });
+
+  it('allows winningScore 5 only in MP_PRIVATE_CERT_MODE', () => {
+    const previous = process.env.MP_PRIVATE_CERT_MODE;
+    process.env.MP_PRIVATE_CERT_MODE = '1';
+    expect(sanitizePrivateRoomConfig({ winningScore: 5 }).winningScore).toBe(5);
+    delete process.env.MP_PRIVATE_CERT_MODE;
+    expect(sanitizePrivateRoomConfig({ winningScore: 5 }).winningScore).toBe(
+      DEFAULT_CONFIG.winningScore,
+    );
+    if (previous !== undefined) process.env.MP_PRIVATE_CERT_MODE = previous;
+  });
 });

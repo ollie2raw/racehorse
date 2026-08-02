@@ -8,6 +8,7 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { LeaveTrackedRoomFn } from './registerRoomLifecycleHandlers';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 
 export type RegisterRoomAbandonHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -98,6 +99,13 @@ export function registerRoomAbandonHandlers(
         roomCode,
         abandonedUserId: authenticatedUserId,
         winnerId: result.winnerUserId,
+      });
+      emitMpAuthorityFunnel('private_match_abandoned', {
+        roomCode,
+        extra: {
+          abandonedUserId: authenticatedUserId,
+          winnerId: result.winnerUserId,
+        },
       });
       cb?.({
         ok: true,

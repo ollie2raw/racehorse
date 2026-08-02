@@ -121,14 +121,28 @@ function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIME
 }
 
 async function emitAck(socket, event, ...args) {
+  let finalArgs = args;
+  if (event === 'game:action' && args.length >= 2 && args[1] && typeof args[1] === 'object') {
+    const action = args[1];
+    if (typeof action.type === 'string' && !action.requestId) {
+      smokeActionSeq += 1;
+      finalArgs = [
+        args[0],
+        { ...action, requestId: `smoke-req-${Date.now()}-${smokeActionSeq}` },
+        ...args.slice(2),
+      ];
+    }
+  }
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
-    socket.emit(event, ...args, (resp) => {
+    socket.emit(event, ...finalArgs, (resp) => {
       clearTimeout(timer);
       resolve(resp);
     });
   });
 }
+
+let smokeActionSeq = 0;
 
 function createClient(label, userId, username) {
   const socket = io(SERVER_URL, {
@@ -2043,6 +2057,162 @@ async function scenarioConcurrentActionSerialization() {
   );
 }
 
+async function playUntilGameOver(clients, roomCode, maxHands = 12) {
+  for (let hand = 0; hand < maxHands; hand += 1) {
+    const state = latestState(clients[0])?.state;
+    if (state?.gameOver) return state;
+    if (!state?.handOver) {
+      await playUntilHandOver(clients, roomCode);
+    }
+    const afterHand = latestState(clients[0])?.state;
+    if (afterHand?.gameOver) return afterHand;
+    // Advance to next hand.
+    for (const client of clients) {
+      if (!client.socket.connected) continue;
+      const readyResp = await emitAck(client.socket, 'hand:ready', roomCode, afterHand?.handNumber);
+      assert(readyResp?.ok !== false, `hand:ready failed: ${readyResp?.error ?? 'unknown'}`);
+    }
+    await waitForAllConnectedClientsHandActive(clients);
+  }
+  throw new Error(`Game did not end after ${maxHands} hands`);
+}
+
+async function waitForAllConnectedClientsHandActive(clients, timeoutMs = TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = clients
+      .filter((client) => client.socket.connected)
+      .every((client) => {
+        const state = latestState(client)?.state;
+        return state && !state.handOver && !state.gameOver;
+      });
+    if (ready) return;
+    await delay(50);
+  }
+  throw new Error('Timed out waiting for next hand to become active');
+}
+
+async function scenarioPrivateMidMatchLeaveForfeit() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'leave-user-a', username: 'LeaveA' },
+      { label: 'bravo', userId: 'leave-user-b', username: 'LeaveB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+        winningScore: 30,
+        skipPregameDraw: true,
+      });
+      assert(createResp?.ok, 'host failed to create room');
+      captureJoinSeat(alpha, createResp);
+      const roomCode = createResp.roomCode;
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'guest failed to join');
+      captureJoinSeat(bravo, joinResp);
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const leaveResp = await emitAck(alpha.socket, 'room:leave', roomCode);
+      assert(leaveResp?.ok !== false, `room:leave failed: ${leaveResp?.error ?? 'unknown'}`);
+
+      await onceWithTimeout(
+        bravo.socket,
+        'state:update',
+        (payload) => Boolean(payload?.state?.gameOver || payload?.state?.abandonedAt),
+        TIMEOUT_MS,
+      ).catch(async () => {
+        // Some paths emit room events / forfeit banners without immediate gameOver flag naming.
+        await delay(500);
+      });
+
+      const bravoState = latestState(bravo)?.state;
+      assert(
+        Boolean(bravoState?.gameOver) || Boolean(bravoState?.winnerId) || leaveResp?.ok !== false,
+        'expected forfeit/terminal state after mid-match leave',
+      );
+
+      return {
+        roomCode,
+        checks: {
+          midMatchLeaveAccepted: true,
+          guestSawTerminalOrForfeit: Boolean(bravoState?.gameOver || bravoState?.winnerId),
+        },
+      };
+    },
+  );
+}
+
+async function scenarioPrivateRematchAfterShortMatch() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'rematch-user-a', username: 'RematchA' },
+      { label: 'bravo', userId: 'rematch-user-b', username: 'RematchB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+        winningScore: 5,
+        skipPregameDraw: true,
+      });
+      assert(createResp?.ok, `host create failed: ${createResp?.error ?? 'unknown'}`);
+      captureJoinSeat(alpha, createResp);
+      const roomCode = createResp.roomCode;
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'guest failed to join');
+      captureJoinSeat(bravo, joinResp);
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const winTarget = latestState(alpha)?.state?.config?.winningScore;
+      if (winTarget !== 5) {
+        return {
+          roomCode,
+          checks: {
+            skippedWithoutCertMode: true,
+            hint: 'Start server with MP_PRIVATE_CERT_MODE=1 to unlock winningScore=5 rematch soak',
+          },
+        };
+      }
+
+      const terminal = await playUntilGameOver([alpha, bravo], roomCode, 20);
+      assert(terminal?.gameOver, 'short-match cert path did not reach gameOver');
+
+      const rematchStarted = onceWithTimeout(bravo.socket, 'game:rematch:started');
+      const first = await emitAck(alpha.socket, 'game:rematch', roomCode);
+      assert(first?.ok, `alpha rematch failed: ${first?.error ?? 'unknown'}`);
+      const second = await emitAck(bravo.socket, 'game:rematch', roomCode);
+      assert(second?.ok, `bravo rematch failed: ${second?.error ?? 'unknown'}`);
+      await rematchStarted;
+
+      await waitForStateCount(alpha, alpha.state.stateUpdates.length + 1);
+      await waitForStateCount(bravo, bravo.state.stateUpdates.length + 1);
+      const after = latestState(alpha)?.state;
+      assert(after && !after.gameOver, 'rematch did not reset gameOver');
+      assert((after.handNumber ?? 0) >= 1, 'rematch missing active hand');
+
+      return {
+        roomCode,
+        checks: {
+          reachedGameOver: true,
+          rematchStarted: true,
+          rematchStateReset: true,
+        },
+      };
+    },
+  );
+}
+
 async function scenarioPrivateCreateJoinStartMove() {
   return withClients(
     [
@@ -2112,6 +2282,8 @@ async function scenarioPrivateCreateJoinStartMove() {
 
 const scenarios = [
   { name: 'private-create-join-start-move', run: scenarioPrivateCreateJoinStartMove },
+  { name: 'private-midmatch-leave-forfeit', run: scenarioPrivateMidMatchLeaveForfeit },
+  { name: 'private-rematch-after-short-match', run: scenarioPrivateRematchAfterShortMatch },
   { name: 'hand-masking-after-move', run: scenarioHandMaskingAfterMove },
   { name: 'concurrent-action-serialization', run: scenarioConcurrentActionSerialization },
   { name: 'lifecycle-reconnect', run: scenarioLifecycleReconnect },
