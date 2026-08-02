@@ -56,7 +56,7 @@ function makeAttempt(challenge: GeneratedFritzChallenge): FritzChallengeAttemptR
 }
 
 describe('Fritz Challenge lifecycle authority', () => {
-  it('runs a real shared-core game one through verified server progression and an idempotent game record', async () => {
+  it('runs a real shared-core best-of-three set through verified completion and replay-safe game records', async () => {
     const routes = new Map<string, Handler>();
     const app = {
       get: (path: string, handler: Handler) => routes.set(`GET ${path}`, handler),
@@ -145,48 +145,54 @@ describe('Fritz Challenge lifecycle authority', () => {
     expect(attempt.revision).toBe(1);
 
     let terminalRequest: Record<string, unknown> | null = null;
-    for (let handCount = 0; handCount < 32; handCount += 1) {
-      const active = (attempt.result?.active_game ?? {}) as Record<string, unknown>;
-      const driven = buildHonestDailyFritzHandTranscript({
-        challengeId: buildFritzChallengeIdentity(challenge),
-        attemptId: ATTEMPT_ID,
-        gameNumber: 1,
-        handIndex: attempt.currentHandIndex,
-        deal: generateFritzChallengeHand(
-          challenge.seed, 1, attempt.currentHandIndex, challenge.config.dealSize,
-        ),
-        drawWinner: getFritzChallengeDrawWinner(challenge.seed, 1),
-        winningScore: challenge.config.winningScore,
-        dealSize: challenge.config.dealSize,
-        playerScore: Number(active.you) || 0,
-        fritzScore: Number(active.fritz) || 0,
-        fritzTier: challenge.config.fritzTier,
-        fritzPolicyVersion: challenge.versions.fritzPolicyVersion as 1 | 2,
-      });
-      const common = { attempt_id: ATTEMPT_ID, game_number: 1, transcript: driven.transcript };
-      if (driven.terminalState.gameOver) {
-        terminalRequest = common;
-        break;
+    for (let gameNumber = 1 as 1 | 2 | 3; gameNumber <= 3; gameNumber = (gameNumber + 1) as 1 | 2 | 3) {
+      for (let handCount = 0; handCount < 32; handCount += 1) {
+        const active = (attempt.result?.active_game ?? {}) as Record<string, unknown>;
+        const driven = buildHonestDailyFritzHandTranscript({
+          challengeId: buildFritzChallengeIdentity(challenge),
+          attemptId: ATTEMPT_ID,
+          gameNumber,
+          handIndex: attempt.currentHandIndex,
+          deal: generateFritzChallengeHand(
+            challenge.seed, gameNumber, attempt.currentHandIndex, challenge.config.dealSize,
+          ),
+          drawWinner: getFritzChallengeDrawWinner(challenge.seed, gameNumber),
+          winningScore: challenge.config.winningScore,
+          dealSize: challenge.config.dealSize,
+          playerScore: Number(active.you) || 0,
+          fritzScore: Number(active.fritz) || 0,
+          fritzTier: challenge.config.fritzTier,
+          fritzPolicyVersion: challenge.versions.fritzPolicyVersion as 1 | 2,
+        });
+        const common = { attempt_id: ATTEMPT_ID, game_number: gameNumber, transcript: driven.transcript };
+        if (driven.terminalState.gameOver) {
+          terminalRequest = common;
+          const record = await request('/api/fritz-challenges/:shareCode/record-game', terminalRequest);
+          expect(record.status).toBe(200);
+          break;
+        }
+        const next = await request('/api/fritz-challenges/:shareCode/next-hand', {
+          ...common,
+          verified_match_id: ATTEMPT_ID,
+          completed_hand_index: attempt.currentHandIndex,
+        });
+        expect(next.status).toBe(200);
       }
-      const next = await request('/api/fritz-challenges/:shareCode/next-hand', {
-        ...common,
-        verified_match_id: ATTEMPT_ID,
-        completed_hand_index: attempt.currentHandIndex,
-      });
-      expect(next.status).toBe(200);
+      expect(terminalRequest).not.toBeNull();
+      if (attempt.status === 'completed') break;
+      expect(attempt.currentGameNumber).toBe((gameNumber + 1) as 1 | 2 | 3);
+      expect(attempt.currentHandIndex).toBe(0);
     }
 
-    expect(terminalRequest).not.toBeNull();
-    const record = await request('/api/fritz-challenges/:shareCode/record-game', terminalRequest!);
-    expect(record.status).toBe(200);
-    expect(record.body).toMatchObject({ ok: true, next_game_number: 2 });
-    expect(attempt.currentGameNumber).toBe(2);
-    expect(attempt.currentHandIndex).toBe(0);
-    expect(attempt.result?.set_result).toMatchObject({ games: [expect.objectContaining({ gameNumber: 1 })] });
+    expect(attempt.status).toBe('completed');
+    const games = (attempt.result?.set_result as { games?: unknown[] } | undefined)?.games ?? [];
+    expect(games.length).toBeGreaterThanOrEqual(2);
+    expect(games.length).toBeLessThanOrEqual(3);
+    expect(attempt.result?.set_result).toMatchObject({ setWinner: expect.any(String) });
 
     const replay = await request('/api/fritz-challenges/:shareCode/record-game', terminalRequest!);
     expect(replay.status).toBe(200);
-    expect(replay.body).toMatchObject({ ok: true, replayed: true, next_game_number: 2 });
-    expect(commitCalls.filter((call) => call.commandType === 'record_verified_game')).toHaveLength(1);
+    expect(replay.body).toMatchObject({ ok: true, replayed: true, next_game_number: null });
+    expect(commitCalls.filter((call) => call.commandType === 'record_verified_game').length).toBe(games.length);
   });
 });
