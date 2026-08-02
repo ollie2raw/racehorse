@@ -25,6 +25,10 @@ import {
   markRoomDurabilityPersistSuccess,
   type RoomDurabilityFence,
 } from './roomDurability';
+import {
+  snapshotGameActionReceiptsForRoom,
+  type PersistedGameActionReceipt,
+} from './gameActionIdempotency';
 
 const LIVE_PERSIST_DEBOUNCE_MS = 75;
 export const DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS = 10_000;
@@ -62,6 +66,8 @@ export type PersistedRoomShell = {
   abandonedWinnerUserId?: string | null;
   abandonedReason?: 'forfeit' | 'abandon';
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
+  /** Durable game:action receipts for restart-safe idempotency replay. */
+  actionReceipts?: PersistedGameActionReceipt[];
 };
 
 export type RoomLiveSessionRow = {
@@ -223,6 +229,7 @@ export function isTerminalLiveSessionStatus(status: RoomLiveSessionStatus): bool
 }
 
 export function serializeRoomShell(room: Room): PersistedRoomShell {
+  const actionReceipts = snapshotGameActionReceiptsForRoom(room.code);
   return {
     config: room.config,
     asyncStateVersion: room.asyncStateVersion,
@@ -246,6 +253,7 @@ export function serializeRoomShell(room: Room): PersistedRoomShell {
     ...(room.scheduledTournamentBotTier
       ? { scheduledTournamentBotTier: room.scheduledTournamentBotTier }
       : {}),
+    ...(actionReceipts.length > 0 ? { actionReceipts } : {}),
   };
 }
 
@@ -297,6 +305,9 @@ export function parseRoomShell(raw: unknown): PersistedRoomShell {
     shell.scheduledTournamentBotTier === 'elite' ||
     shell.scheduledTournamentBotTier === 'master'
       ? { scheduledTournamentBotTier: shell.scheduledTournamentBotTier }
+      : {}),
+    ...(Array.isArray(shell.actionReceipts)
+      ? { actionReceipts: shell.actionReceipts as PersistedGameActionReceipt[] }
       : {}),
   };
 }

@@ -11,6 +11,7 @@ import {
   resumeMultiplayerAfterReload,
   seedPlayerIdentity,
   startPrivateMatchFromLobby,
+  tryPlayOneHandTileIfMyTurn,
   waitForActiveMatch,
   waitForGameServerReady,
   waitForHostBackInMatch,
@@ -58,6 +59,54 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     expect(hostScoresAfter).toEqual(hostScoresBefore);
     expect(guestScoresAfter).toEqual(guestScoresBefore);
     expect(await readLastRoomCode(hostPage)).toBe(roomCode);
+
+    // Post-recovery gameplay proof: if either seat owns the turn, a tile click must not crash the match.
+    const hostPlayed = await tryPlayOneHandTileIfMyTurn(hostPage);
+    const guestPlayed = hostPlayed ? false : await tryPlayOneHandTileIfMyTurn(guestPage);
+    await expect(hostPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
+    await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
+    if (hostPlayed || guestPlayed) {
+      await expect(hostPage.locator('.wl-turn-label, .rh-turn-label').first()).toBeVisible();
+    }
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
+  test('leave mid-match — host leave forfeits and guest remains on a terminal/game screen', async ({
+    browser,
+  }, testInfo) => {
+    const runId = testInfo.testId;
+    const hostContext = await browser.newContext();
+    const guestContext = await browser.newContext();
+    await seedPlayerIdentity(hostContext, makeRunIdentity('a', runId));
+    await seedPlayerIdentity(guestContext, makeRunIdentity('b', runId));
+
+    const hostPage = await hostContext.newPage();
+    const guestPage = await guestContext.newPage();
+
+    const roomCode = await createPrivateLobbyAsHost(hostPage);
+    await joinPrivateLobby(guestPage, roomCode);
+    await startPrivateMatchFromLobby(hostPage, guestPage);
+
+    const leaveButton = hostPage.getByRole('button', { name: /Leave|Exit|Forfeit/i }).first();
+    const hasLeave = await leaveButton.isVisible().catch(() => false);
+    test.skip(!hasLeave, 'Leave/forfeit control not visible in current match chrome');
+
+    await leaveButton.click();
+    const confirm = hostPage.getByRole('button', { name: /Leave|Confirm|Yes|Forfeit/i }).last();
+    if (await confirm.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await confirm.click();
+    }
+
+    await expect
+      .poll(async () => {
+        const guestText = (await guestPage.locator('body').innerText().catch(() => '')) ?? '';
+        return /opponent left|forfeit|victory|defeat|match complete|abandoned/i.test(guestText);
+      }, { timeout: 45_000 })
+      .toBeTruthy();
+
+    expect(await readLastRoomCode(guestPage)).toBe(roomCode);
 
     await hostContext.close();
     await guestContext.close();

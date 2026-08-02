@@ -31,6 +31,8 @@ export type MpTelemetryCounters = {
   rejoinLatencyMs: number;
   joinAckTimeout: number;
   reconnectSuccess: number;
+  uncertainActionAck: number;
+  uncertainActionResync: number;
 };
 
 const counters: MpTelemetryCounters = {
@@ -51,6 +53,8 @@ const counters: MpTelemetryCounters = {
   rejoinLatencyMs: 0,
   joinAckTimeout: 0,
   reconnectSuccess: 0,
+  uncertainActionAck: 0,
+  uncertainActionResync: 0,
 };
 
 const episodeStartedAt = new Map<number, number>();
@@ -190,6 +194,16 @@ export function recordJoinLatency(latencyMs: number, kind: 'join' | 'rejoin'): v
 export function recordJoinAckTimeout(event: string, elapsedMs: number): void {
   counters.joinAckTimeout += 1;
   emit('join', 'ack_timeout', { event, elapsedMs });
+}
+
+export function recordUncertainActionAck(actionType: string, extra?: Record<string, unknown>): void {
+  counters.uncertainActionAck += 1;
+  emit('gameplay', 'uncertain_action_ack', { actionType, ...extra });
+}
+
+export function recordUncertainActionResync(reason: string, extra?: Record<string, unknown>): void {
+  counters.uncertainActionResync += 1;
+  emit('gameplay', 'uncertain_action_resync', { reason, ...extra });
 }
 
 declare global {

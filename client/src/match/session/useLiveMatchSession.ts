@@ -208,6 +208,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     onGameStart,
     appendMultiplayerMove,
     flashLastPlayed: transientUi.flashLastPlayed,
+    fetchGameState: params.fetchGameState,
   });
 
   const handRevealSequence = useHandRevealSequence({

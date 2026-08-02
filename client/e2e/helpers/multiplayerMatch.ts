@@ -4,6 +4,7 @@ const TRANSPORT_LOSS_DETECT_MS = 70_000;
 
 const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
 const GUEST_ID_STORAGE_KEY = 'racehorse_guest_identity_v1';
+const GUEST_NAME_STORAGE_KEY = 'racehorse_guest_display_name_v1';
 
 export const MULTIPLAYER_SHELL_LOCATOR =
   '.mm-page.multiplayer-hub, .mm-page.mm-mp-bridge, .pml-root.pml-mp-bridge';
@@ -30,23 +31,31 @@ export const E2E_PLAYER_B: E2EPlayerIdentity = {
 export function makeRunIdentity(role: 'a' | 'b', runId: string): E2EPlayerIdentity {
   const suffix = runId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
   // Must use guest_ prefix — getOrCreateGuestIdentityId() only preserves existing guest_* ids on reload.
+  // Display name must match getOrCreateGuestDisplayName()'s `Guest NNNN` contract.
+  const guestId = `guest_e2e_mp_${role}_${suffix}`;
+  let hash = 0;
+  for (let index = 0; index < guestId.length; index += 1) {
+    hash = (hash * 31 + guestId.charCodeAt(index)) >>> 0;
+  }
   return {
-    guestId: `guest_e2e_mp_${role}_${suffix}`,
-    username: role === 'a' ? 'E2E_PlayerA' : 'E2E_PlayerB',
+    guestId,
+    username: `Guest ${String(hash % 10000).padStart(4, '0')}`,
   };
 }
 
 export async function seedPlayerIdentity(context: BrowserContext, identity: E2EPlayerIdentity) {
-  // Only seed guest id — do NOT clear last room code here; addInitScript runs on every
+  // Seed guest id + display name. Do NOT clear last room code here; addInitScript runs on every
   // navigation including mid-test reload, and refresh-recovery depends on persistence.
-  // Cross-test isolation uses unique guest ids via makeRunIdentity + fresh contexts.
   await context.addInitScript(
-    ({ guestId, guestKey }) => {
+    ({ guestId, username, guestKey, nameKey }) => {
       window.localStorage.setItem(guestKey, guestId);
+      window.localStorage.setItem(nameKey, username);
     },
     {
       guestId: identity.guestId,
+      username: identity.username,
       guestKey: GUEST_ID_STORAGE_KEY,
+      nameKey: GUEST_NAME_STORAGE_KEY,
     },
   );
 }
@@ -227,17 +236,62 @@ export async function readLastRoomCode(page: Page): Promise<string> {
   }, LAST_ROOM_STORAGE_KEY);
 }
 
+/**
+ * Read numeric scores from the live HUD pills.
+ * Prefer `.wl-player-score` over full pill text — display names can resolve/change
+ * after reconnect without any score mutation.
+ */
 export async function readHudScorePair(page: Page): Promise<{ you: string; opponent: string }> {
   const pills = page.locator('.wl-player-pill, .rh-player-pill');
   await expect(pills.first()).toBeVisible({ timeout: 10_000 });
   const count = await pills.count();
+
+  const readScore = async (pillIndex: number): Promise<string> => {
+    const score = pills.nth(pillIndex).locator('.wl-player-score, .rh-player-score');
+    if ((await score.count()) > 0) {
+      return ((await score.first().innerText()) ?? '').trim();
+    }
+    const raw = ((await pills.nth(pillIndex).innerText()) ?? '').trim();
+    const parts = raw.split(/\s+/);
+    return parts[parts.length - 1] ?? raw;
+  };
+
   if (count < 2) {
-    return { you: await pills.nth(0).innerText(), opponent: '' };
+    return { you: await readScore(0), opponent: '' };
   }
   return {
-    you: (await pills.nth(0).innerText()).trim(),
-    opponent: (await pills.nth(1).innerText()).trim(),
+    you: await readScore(0),
+    opponent: await readScore(1),
   };
+}
+
+const LIVE_HAND_TILE_CLICKABLE =
+  '.hand-area:not(.pre-game-draw-hand-dock) .domino-tile, .wl-hand-area:not(.pre-game-draw-hand-dock) .domino-tile';
+
+/** Attempt one legal play on the active seat when it is their turn. */
+export async function tryPlayOneHandTileIfMyTurn(page: Page): Promise<boolean> {
+  const yourMove = page.locator('.wl-turn-label.your-turn, .rh-turn-label.your-turn');
+  if (!(await yourMove.first().isVisible().catch(() => false))) {
+    return false;
+  }
+  const tile = page.locator(LIVE_HAND_TILE_CLICKABLE).first();
+  if (!(await tile.isVisible().catch(() => false))) {
+    return false;
+  }
+  const sequenceBefore = await page
+    .locator('.wl-player-score, .rh-player-score')
+    .first()
+    .innerText()
+    .catch(() => '');
+  await tile.click();
+  // End target may appear for placement; click first legal end if present.
+  const endTarget = page.locator('.end-target, .board-end-target, [data-end-target]').first();
+  if (await endTarget.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await endTarget.click();
+  }
+  await page.waitForTimeout(500);
+  void sequenceBefore;
+  return true;
 }
 
 export async function expectRecoveryReconnecting(page: Page) {
