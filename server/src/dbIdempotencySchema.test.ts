@@ -78,6 +78,14 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('create table if not exists public.fritz_challenge_outbox');
     expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
     expect(sql).toContain('where delivered_at is null');
+    expect(sql).toContain('create or replace function public.commit_fritz_challenge_attempt_command');
+    expect(sql).toContain('for update');
+    expect(sql).toContain("'stale_revision'");
+    expect(sql).toContain("'command_slot_conflict'");
+    expect(sql).toContain('revision = next_revision');
+    expect(sql).toContain('insert into public.fritz_challenge_verified_hands');
+    expect(sql).toContain('insert into public.fritz_challenge_verified_games');
+    expect(sql).toContain('insert into public.fritz_challenge_outbox');
   });
 
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
