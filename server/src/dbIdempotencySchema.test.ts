@@ -189,4 +189,16 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('analytics_projected_at');
     expect(sql).toContain('idx_daily_fritz_events_user_retention');
   });
+
+  it('ships Fritz Challenge canonical funnel and failure metrics', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_fritz_challenge_canonical_telemetry.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.fritz_challenge_events');
+    expect(sql).toContain('idempotency_key text not null unique');
+    expect(sql).toContain("'attempt_completed'");
+    expect(sql).toContain("'verification_failed'");
+    expect(sql).toContain('create or replace view public.fritz_challenge_funnel_metrics');
+    expect(sql).toContain('create or replace view public.fritz_challenge_failure_metrics');
+  });
 });
