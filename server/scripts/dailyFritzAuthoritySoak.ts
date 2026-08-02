@@ -341,10 +341,22 @@ async function runOne(index: number): Promise<Json> {
 
 async function main(): Promise<void> {
   const results: Json[] = [];
+  process.stdout.write(`${JSON.stringify({
+    phase: 'started',
+    users,
+    concurrency,
+    baseUrl,
+  })}\n`);
   for (let offset = 0; offset < users; offset += concurrency) {
     const wave = Array.from({ length: Math.min(concurrency, users - offset) }, (_, waveIndex) =>
       runOne(offset + waveIndex));
-    results.push(...await Promise.all(wave));
+    const completed = await Promise.all(wave);
+    results.push(...completed);
+    process.stdout.write(`${JSON.stringify({
+      phase: 'wave_completed',
+      completedUsers: results.length,
+      users,
+    })}\n`);
   }
   process.stdout.write(`${JSON.stringify({ ok: true, users, concurrency, baseUrl, results }, null, 2)}\n`);
 }
