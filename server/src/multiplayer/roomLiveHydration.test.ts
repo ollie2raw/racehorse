@@ -36,6 +36,9 @@ vi.mock('../supabaseUtils', () => ({
       const row = persistenceStore.liveSessions.get(roomCode);
       return row ? [row] : [];
     }
+    if (path.includes('/room_command_receipts') && (!init?.method || init.method === 'GET')) {
+      return [];
+    }
     throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
   }),
 }));

@@ -1,3 +1,8 @@
+import {
+  deleteRoomCommandReceiptsForRoom,
+  persistRoomCommandReceipt,
+} from './roomCommandReceiptStore';
+
 export type GameActionAck = {
   ok: boolean;
   sequence?: number | null;
@@ -225,6 +230,20 @@ export async function withGameActionIdempotency(
     const result = await execute();
     if (result.ok || result.uncertain) {
       storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
+      const expiresAtMs = Date.now() + ACTION_IDEMPOTENCY_TTL_MS;
+      void persistRoomCommandReceipt({
+        roomCode,
+        playerSeatId,
+        requestId: normalizedRequestId,
+        ack: {
+          ok: result.ok,
+          sequence: result.sequence ?? null,
+          ...(result.forcedDraw ? { forcedDraw: result.forcedDraw } : {}),
+          ...(result.error ? { error: result.error } : {}),
+          ...(result.uncertain ? { uncertain: result.uncertain } : {}),
+        },
+        expiresAtMs,
+      });
     }
     return result;
   })().finally(() => {
@@ -243,6 +262,7 @@ export function clearGameActionIdempotencyForRoom(roomCode: string): void {
       inFlightByKey.delete(key);
     }
   }
+  void deleteRoomCommandReceiptsForRoom(code);
 }
 
 export function getGameActionIdempotencyCacheSize(roomCode: string): number {

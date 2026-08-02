@@ -26,9 +26,12 @@ import {
   type RoomDurabilityFence,
 } from './roomDurability';
 import {
+  hydrateGameActionReceiptsForRoom,
   snapshotGameActionReceiptsForRoom,
   type PersistedGameActionReceipt,
 } from './gameActionIdempotency';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { loadRoomCommandReceiptsForRoom } from './roomCommandReceiptStore';
 
 const LIVE_PERSIST_DEBOUNCE_MS = 75;
 export const DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS = 10_000;
@@ -971,6 +974,17 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
     }
 
     try {
+      // Supplement shell-embedded receipts with dedicated table rows (if migrated).
+      const dbReceipts = await loadRoomCommandReceiptsForRoom(code);
+      if (dbReceipts.length > 0) {
+        const restored = hydrateGameActionReceiptsForRoom(code, dbReceipts);
+        if (restored > 0) {
+          emitMpAuthorityFunnel('private_receipts_hydrated', {
+            roomCode: code,
+            extra: { restored, source: 'room_command_receipts' },
+          });
+        }
+      }
       return {
         kind: 'hydrated',
         room: applied.room,

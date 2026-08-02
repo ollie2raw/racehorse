@@ -21,6 +21,9 @@ vi.mock('../supabaseUtils', () => ({
     if (path.includes('/room_live_sessions') && init?.method === 'POST') {
       return undefined;
     }
+    if (path.includes('/room_command_receipts')) {
+      return undefined;
+    }
     throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
   }),
 }));

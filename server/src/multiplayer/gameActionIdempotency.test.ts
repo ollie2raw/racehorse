@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./roomCommandReceiptStore', () => ({
+  persistRoomCommandReceipt: vi.fn(async () => undefined),
+  deleteRoomCommandReceiptsForRoom: vi.fn(async () => undefined),
+}));
+
 import {
   clearGameActionIdempotencyForRoom,
   GAME_ACTION_IDEMPOTENCY_TTL_MS,
@@ -8,6 +14,7 @@ import {
   snapshotGameActionReceiptsForRoom,
   withGameActionIdempotency,
 } from './gameActionIdempotency';
+import { persistRoomCommandReceipt } from './roomCommandReceiptStore';
 
 describe('gameActionIdempotency', () => {
   beforeEach(() => {
@@ -33,6 +40,14 @@ describe('gameActionIdempotency', () => {
     expect(second).toEqual({ ok: true, sequence: 12, duplicate: true });
     expect(execute).toHaveBeenCalledTimes(1);
     expect(mutations).toBe(1);
+    expect(persistRoomCommandReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomCode: 'room1',
+        playerSeatId: 'seat-a',
+        requestId: 'req-1',
+        ack: expect.objectContaining({ ok: true, sequence: 12 }),
+      }),
+    );
   });
 
   it('treats same requestId from different players independently', async () => {

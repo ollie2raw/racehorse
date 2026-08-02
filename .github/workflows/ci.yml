@@ -109,3 +109,62 @@ jobs:
 
       - name: Bot match lazy-load boundaries
         run: npm run check:bot-match-lazy --prefix client
+
+  mp-private-soak:
+    name: MP Private Authority Soak
+    runs-on: ubuntu-latest
+    needs: [server]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Build server
+        run: npm run build --prefix server
+
+      - name: Start server (cert mode)
+        env:
+          MP_PRIVATE_CERT_MODE: '1'
+          # Minimal env so server boots without real Supabase for socket protocol soak.
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_KEY: soak-placeholder-service-key
+        run: |
+          node server/dist/index.js > /tmp/mp-soak-server.log 2>&1 &
+          echo $! > /tmp/mp-soak-server.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3001/ping >/dev/null; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server failed to become ready"
+          tail -n 200 /tmp/mp-soak-server.log || true
+          exit 1
+
+      - name: Run private authority soak (3 waves)
+        env:
+          MP_PRIVATE_CERT_MODE: '1'
+          SMOKE_REQUIRE_CERT: '1'
+          MP_SOAK_WAVES: '3'
+          SMOKE_SERVER_URL: http://127.0.0.1:3001
+        run: npm run soak:mp-private-authority --prefix client
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f /tmp/mp-soak-server.pid ]; then
+            kill "$(cat /tmp/mp-soak-server.pid)" || true
+          fi
+          tail -n 100 /tmp/mp-soak-server.log || true
