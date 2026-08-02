@@ -237,3 +237,24 @@ export function isIdenticalDailyFritzGameReplay(
     && existing.movesUsed === Math.round(submitted.movesUsed)
     && existing.handsPlayed === Math.round(submitted.handsPlayed);
 }
+
+export type DailyFritzGameRecordingPosition =
+  | { kind: 'next' }
+  | { kind: 'replay'; existing: DailyFritzSetGameResult }
+  | { kind: 'set_decided' }
+  | { kind: 'invalid_order' };
+
+/**
+ * Durable replay always wins over terminal-set rejection. A duplicate response
+ * retry must remain idempotent even when game one clinched the set by skunk.
+ */
+export function classifyDailyFritzGameRecordingPosition(
+  setResult: { games: DailyFritzSetGameResult[]; setWinner?: 'player' | 'fritz' },
+  gameNumber: DailyFritzSetGameNumber,
+): DailyFritzGameRecordingPosition {
+  const existing = setResult.games.find((game) => game.gameNumber === gameNumber);
+  if (existing) return { kind: 'replay', existing };
+  if (setResult.setWinner) return { kind: 'set_decided' };
+  if (gameNumber !== setResult.games.length + 1) return { kind: 'invalid_order' };
+  return { kind: 'next' };
+}

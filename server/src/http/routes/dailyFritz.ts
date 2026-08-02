@@ -71,6 +71,7 @@ import {
   hasCompleteDailyFritzGameAuthority,
   hasPriorDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
+  classifyDailyFritzGameRecordingPosition,
   readAuthorityLedger,
   buildDailyFritzAuthorityContract,
   clientSupportsDailyFritzAuthorityContract,
@@ -1264,13 +1265,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       });
       return;
     }
-    if (currentSetResult.setWinner) {
-      res.status(409).json({ error: 'Daily Fritz set is already decided.' });
-      return;
-    }
-    if (gameNumber !== currentSetResult.games.length + 1) {
-      const existing = currentSetResult.games.find((game) => game.gameNumber === gameNumber);
-      if (existing) {
+    const recordingPosition = classifyDailyFritzGameRecordingPosition(currentSetResult, gameNumber);
+    if (recordingPosition.kind === 'replay') {
+      const existing = recordingPosition.existing;
         const identical = parsedTranscript
           ? (() => {
               const authorityGame = readAuthorityLedger(attempt.result).games.find(
@@ -1319,7 +1316,12 @@ export function registerDailyFritzRoutes(app: Application): void {
           next_game_number: currentSetResult.setWinner ? null : Math.min(currentSetResult.games.length + 1, 3),
         });
         return;
-      }
+    }
+    if (recordingPosition.kind === 'set_decided') {
+      res.status(409).json({ error: 'Daily Fritz set is already decided.' });
+      return;
+    }
+    if (recordingPosition.kind === 'invalid_order') {
       res.status(409).json({ error: 'Daily Fritz game order is invalid.' });
       return;
     }
