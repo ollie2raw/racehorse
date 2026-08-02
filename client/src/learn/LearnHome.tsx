@@ -392,7 +392,7 @@ export default function LearnHome({
               >
                 Learn
               </h1>
-              <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">
+              <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
                 Coach-led practice modes to sharpen your Racehorse strategy.
               </p>
               {guidedV2StartError ? (
