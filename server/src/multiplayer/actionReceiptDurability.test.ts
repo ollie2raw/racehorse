@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./roomCommandReceiptStore', () => ({
+  persistRoomCommandReceipt: vi.fn(async () => undefined),
+  deleteRoomCommandReceiptsForRoom: vi.fn(async () => undefined),
+  loadRoomCommandReceiptsForRoom: vi.fn(async () => []),
+}));
+
 import { createReservedRoom, deleteRoom, resetRoomRuntimeForTests } from '../rooms';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
 import {

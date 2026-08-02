@@ -196,6 +196,10 @@ import {
   queryPersistedRoomMatchLog,
 } from './multiplayer/roomMatchLogPersistence';
 import {
+  isRoomCommandReceiptsPersistenceAvailable,
+  probeRoomCommandReceiptsTable,
+} from './multiplayer/roomCommandReceiptStore';
+import {
   handleRoomPlayerDisconnect,
   registerRoomSessionHandlers,
 } from './multiplayer/registerRoomSessionHandlers';
@@ -800,6 +804,19 @@ server.listen(PORT, () => {
     })
     .catch((err) => {
       console.warn('[room-match-logs] startup probe error', err instanceof Error ? err.message : err);
+    });
+  void probeRoomCommandReceiptsTable()
+    .then((ok) => {
+      console.log('[room-command-receipts] startup probe', {
+        tableAvailable: ok,
+        persistenceEnabled: isRoomCommandReceiptsPersistenceAvailable(),
+      });
+    })
+    .catch((err) => {
+      console.warn(
+        '[room-command-receipts] startup probe error',
+        err instanceof Error ? err.message : err,
+      );
     });
   void probeDailyFritzEventsPersistence()
     .then((ok) => {

@@ -2176,6 +2176,12 @@ async function scenarioPrivateRematchAfterShortMatch() {
 
       const winTarget = latestState(alpha)?.state?.config?.winningScore;
       if (winTarget !== 5) {
+        if (process.env.SMOKE_REQUIRE_CERT === '1') {
+          assert(
+            false,
+            'expected winningScore=5 under SMOKE_REQUIRE_CERT=1 (start server with MP_PRIVATE_CERT_MODE=1)',
+          );
+        }
         return {
           roomCode,
           checks: {

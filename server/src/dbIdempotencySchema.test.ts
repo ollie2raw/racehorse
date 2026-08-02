@@ -68,4 +68,20 @@ describe('DB idempotency schema guardrails', () => {
 
     expect(sql).toContain('unique (tournament_id, round, match_number)');
   });
+
+  it('ships room_command_receipts for durable game:action idempotency', () => {
+    const standalone = compactSql(readRepoFile('supabase/room_command_receipts.sql'));
+    const migration = compactSql(
+      readRepoFile('supabase/migrations/2026-08-01_room_command_receipts.sql'),
+    );
+
+    for (const sql of [standalone, migration]) {
+      expect(sql).toContain('create table if not exists public.room_command_receipts');
+      expect(sql).toContain('primary key (room_code, player_seat_id, request_id)');
+      expect(sql).toContain('ack jsonb not null');
+      expect(sql).toContain('expires_at timestamptz not null');
+      expect(sql).toContain('alter table public.room_command_receipts enable row level security');
+      expect(sql).toContain('room_command_receipts_no_client_write');
+    }
+  });
 });

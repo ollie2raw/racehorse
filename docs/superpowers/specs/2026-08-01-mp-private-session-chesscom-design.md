@@ -1,4 +1,4 @@
-# Private Match Chess.com Reliability Track — Slice 1
+# Private Match Chess.com Reliability Track — Slices 1–3
 
 Date: 2026-08-01  
 Branch: `fix/mp-private-session-chesscom`  
@@ -25,17 +25,24 @@ Move private multiplayer from ~7.2 toward 9–9.5 on authority, recovery proof, 
 - Rematch clears in-memory receipts and emits `private_rematch_started`; abandon emits `private_match_abandoned`.
 - Cert-only winningScore `5` when `MP_PRIVATE_CERT_MODE=1` (production still 30/60 only).
 
-## Explicit non-goals (still below 9.5)
+## Slice 3 additions
 
+1. **E2E cert mode** — Playwright server `webServer.env.MP_PRIVATE_CERT_MODE=1`.
+2. **Rematch Playwright** — `multiplayer-private-rematch.spec.ts` runs protocol rematch smoke with `SMOKE_REQUIRE_CERT=1` (fail-closed if winningScore≠5).
+3. **CI soak job** — `mp-private-soak` in `.github/workflows/ci.yml` (3 waves, cert mode).
+4. **Dedicated `room_command_receipts`** — SQL + `roomCommandReceiptStore` with PGRST205 graceful skip; persist on successful/uncertain acks; delete on rematch/clear; hydrate alongside shell receipts on live-session restore.
+5. Soak defaults `SMOKE_REQUIRE_CERT=1` so rematch soft-skip cannot greenwash CI.
+
+## Explicit non-goals (still below 9.5)
 
 - Multi-instance / shared Redis rooms (process-local Map remains)
 - Ranked queue / tournament certification
-- Full rematch UI E2E through second hand (server unit covered; Playwright rematch deferred)
-- Dedicated analytics warehouse (logs/breadcrumbs only in this slice)
+- Full rematch UI playthrough (protocol rematch certified; UI win-target still 30/60)
+- Production dashboards/alerts on `mp.authority` + recovery SLOs (logs only)
+- Applying `room_command_receipts` migration in hosted Supabase (shipped in repo; ops apply separately)
 
 ## Next slices
 
-1. Rematch + archive Playwright vertical with low winning-score private config
-2. Persist receipts in dedicated table if live-shell size becomes a concern
-3. Production dashboards/alerts on `mp.authority` + recovery SLOs
-4. Multi-instance affinity decision
+1. Production dashboards/alerts on `mp.authority` + recovery SLOs
+2. Multi-instance affinity decision / shared room map
+3. Ops apply `room_command_receipts` migration + verify probe green in prod
