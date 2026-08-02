@@ -25,6 +25,7 @@
     "debug:learn": "ts-node --esm src/devtools/debugHarness.ts",
     "test:smoke:sockets": "node scripts/socketSmoke.mjs",
     "test:smoke:sockets:stress": "SMOKE_REPEAT=10 node scripts/socketSmoke.mjs",
+    "soak:mp-private-authority": "node scripts/mpPrivateAuthoritySoak.mjs",
     "ci:bot": "npm run test:bot && npm run build",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --max-warnings 401",
     "lint:css": "stylelint \"src/**/*.css\"",

@@ -32,6 +32,10 @@ import {
   shouldClearLogicalActionForState,
   type LogicalGameplayAction,
 } from './gameplayActionIdentity';
+import {
+  recordUncertainActionAck,
+  recordUncertainActionResync,
+} from '../../../multiplayer/mpTelemetry';
 
 export type UseLiveMatchActionsParams = {
   socket: Socket | null;
@@ -81,6 +85,8 @@ export type UseLiveMatchActionsParams = {
   onGameStart: () => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
   flashLastPlayed: (tile: Tile | null) => void;
+  /** Authority resync when server returns uncertain after mutate-then-persist failure. */
+  fetchGameState?: (reason: string) => Promise<boolean>;
 };
 
 export type UseLiveMatchActionsResult = {
@@ -148,6 +154,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     onGameStart,
     appendMultiplayerMove,
     flashLastPlayed,
+    fetchGameState,
   } = params;
 
   const emitDraggingState = useCallback(
@@ -172,6 +179,24 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
   const connectionBlockedTrueSinceRef = useRef<number | null>(null);
   const ownedLogicalGameplayActionRef = useRef<LogicalGameplayAction | null>(null);
   const logicalGameplayActionRef = providedLogicalGameplayActionRef ?? ownedLogicalGameplayActionRef;
+
+  const markUncertainAndResync = useCallback(
+    (requestId: string, error?: string) => {
+      if (logicalGameplayActionRef.current?.requestId === requestId) {
+        logicalGameplayActionRef.current = {
+          ...logicalGameplayActionRef.current,
+          uncertain: true,
+        };
+      }
+      recordUncertainActionAck('game:action', { requestId, error });
+      recordUncertainActionResync('game_action_uncertain', { requestId });
+      void fetchGameState?.('game_action_uncertain');
+      if (error) {
+        showToast(error, 2500);
+      }
+    },
+    [fetchGameState, logicalGameplayActionRef, showToast],
+  );
   const prevDrawSequenceActiveRef = useRef(drawSequenceActive);
   const prevFlyingTilesCountRef = useRef(flyingTiles.length);
 
@@ -501,7 +526,11 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         error: resp?.error,
       });
       if (!resp?.ok) {
-        setActionError(resp?.error ?? 'Unable to draw.');
+        if (resp?.uncertain) {
+          markUncertainAndResync(requestId, resp.error ?? 'Move uncertain — resyncing.');
+        } else {
+          setActionError(resp?.error ?? 'Unable to draw.');
+        }
         return;
       }
       if (logicalGameplayActionRef.current?.requestId === requestId) {
@@ -562,6 +591,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     autoTurnActionKeyRef,
     setActionError,
     setPendingUiAction,
+    markUncertainAndResync,
   ]);
 
   const pass = useCallback(async () => {
@@ -604,7 +634,11 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
-        setActionError(resp?.error ?? 'Unable to pass.');
+        if (resp?.uncertain) {
+          markUncertainAndResync(requestId, resp.error ?? 'Pass uncertain — resyncing.');
+        } else {
+          setActionError(resp?.error ?? 'Unable to pass.');
+        }
         return;
       }
       if (logicalGameplayActionRef.current?.requestId === requestId) {
@@ -658,6 +692,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     setPendingActionRefDiag,
     setActionError,
     setPendingUiAction,
+    markUncertainAndResync,
   ]);
 
   const play = useCallback(
@@ -752,7 +787,11 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
 
         mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
         if (!resp?.ok) {
-          setActionError(resp?.error ?? 'Unable to play tile.');
+          if (resp?.uncertain) {
+            markUncertainAndResync(requestId, resp.error ?? 'Play uncertain — resyncing.');
+          } else {
+            setActionError(resp?.error ?? 'Unable to play tile.');
+          }
           return;
         }
         if (logicalGameplayActionRef.current?.requestId === requestId) {
@@ -836,6 +875,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       setPendingUiAction,
       setSelectedTile,
       setDrawStepMyHand,
+      markUncertainAndResync,
     ],
   );
 

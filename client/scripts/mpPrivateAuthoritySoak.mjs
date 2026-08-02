@@ -1,0 +1,83 @@
+#!/usr/bin/env node
+/**
+ * Private-match authority soak — repeated socket-protocol waves.
+ *
+ * Usage (server must already be running, same as socket smoke):
+ *   SMOKE_REPEAT=25 npm run soak:mp-private-authority --prefix client
+ *
+ * This is the MP twin of Daily Fritz authority soak: prove create/join/start/move/
+ * reconnect/takeover scenarios remain green under repeated concurrency waves.
+ */
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const smokeScript = path.join(__dirname, 'socketSmoke.mjs');
+const waves = Math.max(1, Number(process.env.MP_SOAK_WAVES ?? process.env.SMOKE_REPEAT ?? 10));
+const scenarios =
+  process.env.MP_SOAK_SCENARIOS ??
+  [
+    'private-create-join-start-move',
+    'concurrent-action-serialization',
+    'lifecycle-reconnect',
+    'mid-hand-action-reliability',
+    'guest-seat-reconnect',
+    'same-user-active-seat-takeover',
+    'hand-ended-replay',
+  ].join(',');
+
+function runWave(wave) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [smokeScript], {
+      cwd: path.join(__dirname, '..'),
+      env: {
+        ...process.env,
+        SMOKE_REPEAT: '1',
+        SMOKE_ONLY: scenarios,
+      },
+      stdio: 'inherit',
+    });
+    child.on('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`MP soak wave ${wave} failed with exit ${code}`));
+    });
+  });
+}
+
+async function main() {
+  console.log(
+    JSON.stringify({
+      channel: 'mp.soak',
+      event: 'start',
+      waves,
+      scenarios: scenarios.split(',').map((s) => s.trim()),
+    }),
+  );
+  const started = Date.now();
+  for (let wave = 1; wave <= waves; wave += 1) {
+    const waveStarted = Date.now();
+    await runWave(wave);
+    console.log(
+      JSON.stringify({
+        channel: 'mp.soak',
+        event: 'wave_ok',
+        wave,
+        durationMs: Date.now() - waveStarted,
+      }),
+    );
+  }
+  console.log(
+    JSON.stringify({
+      channel: 'mp.soak',
+      event: 'complete',
+      waves,
+      durationMs: Date.now() - started,
+    }),
+  );
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});

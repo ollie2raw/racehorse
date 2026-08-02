@@ -11,6 +11,13 @@ export type GameActionAck = {
   uncertain?: boolean;
 };
 
+export type PersistedGameActionReceipt = {
+  playerSeatId: string;
+  requestId: string;
+  ack: Omit<GameActionAck, 'duplicate'>;
+  expiresAt: number;
+};
+
 type CacheEntry = {
   ack: GameActionAck;
   expiresAt: number;
@@ -110,8 +117,88 @@ function storeCachedAck(
 }
 
 /**
+ * Snapshot in-memory receipts for durable live-session persistence.
+ * Survives process restart when rehydrated from `room_shell.actionReceipts`.
+ */
+export function snapshotGameActionReceiptsForRoom(
+  roomCode: string,
+  now = Date.now(),
+): PersistedGameActionReceipt[] {
+  pruneExpiredEntries(roomCode, now);
+  const roomCache = cacheByRoomCode.get(normalizeRoomCode(roomCode));
+  if (!roomCache || roomCache.size === 0) return [];
+
+  const receipts: PersistedGameActionReceipt[] = [];
+  for (const [key, entry] of roomCache.entries()) {
+    if (entry.expiresAt <= now) continue;
+    const separator = key.indexOf(':');
+    if (separator <= 0) continue;
+    const playerSeatId = key.slice(0, separator);
+    const requestId = key.slice(separator + 1);
+    if (!playerSeatId || !requestId) continue;
+    receipts.push({
+      playerSeatId,
+      requestId,
+      ack: {
+        ok: entry.ack.ok,
+        sequence: entry.ack.sequence ?? null,
+        ...(entry.ack.forcedDraw ? { forcedDraw: entry.ack.forcedDraw } : {}),
+        ...(entry.ack.error ? { error: entry.ack.error } : {}),
+        ...(entry.ack.uncertain ? { uncertain: entry.ack.uncertain } : {}),
+      },
+      expiresAt: entry.expiresAt,
+    });
+  }
+  return receipts;
+}
+
+/**
+ * Restore receipts after live-session hydration / process restart.
+ * Does not clear newer in-memory entries for the same room.
+ */
+export function hydrateGameActionReceiptsForRoom(
+  roomCode: string,
+  receipts: unknown,
+  now = Date.now(),
+): number {
+  if (!Array.isArray(receipts) || receipts.length === 0) return 0;
+  const roomCache = getRoomCache(roomCode);
+  let restored = 0;
+  for (const raw of receipts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Partial<PersistedGameActionReceipt>;
+    if (typeof entry.playerSeatId !== 'string' || !entry.playerSeatId.trim()) continue;
+    if (typeof entry.requestId !== 'string' || !entry.requestId.trim()) continue;
+    if (typeof entry.expiresAt !== 'number' || !Number.isFinite(entry.expiresAt)) continue;
+    if (entry.expiresAt <= now) continue;
+    if (!entry.ack || typeof entry.ack !== 'object') continue;
+    const ack = entry.ack as GameActionAck;
+    if (typeof ack.ok !== 'boolean') continue;
+    if (!ack.ok && !ack.uncertain) continue;
+
+    const key = cacheKeyFor(entry.playerSeatId, entry.requestId);
+    const existing = roomCache.get(key);
+    if (existing && existing.expiresAt >= entry.expiresAt) continue;
+
+    roomCache.set(key, {
+      ack: {
+        ok: ack.ok,
+        sequence: typeof ack.sequence === 'number' ? ack.sequence : null,
+        ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
+        ...(typeof ack.error === 'string' ? { error: ack.error } : {}),
+        ...(ack.uncertain ? { uncertain: true } : {}),
+      },
+      expiresAt: entry.expiresAt,
+    });
+    restored += 1;
+  }
+  enforceRoomCacheLimit(roomCode);
+  return restored;
+}
+
+/**
  * Server-authoritative idempotency for retried `game:action` submissions.
- * Only successful mutations are cached; failures are not replay-blocked.
+ * Successful and uncertain mutations are cached; plain failures are not replay-blocked.
  */
 export async function withGameActionIdempotency(
   roomCode: string,

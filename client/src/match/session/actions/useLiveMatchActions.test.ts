@@ -200,4 +200,33 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
     expect(vi.mocked(emitGameAction).mock.calls[1][2].requestId).toBe(firstRequestId);
     expect(logicalGameplayActionRef.current).toBe(null);
   });
+
+  it('resyncs when server returns uncertain after mutate-then-persist failure', async () => {
+    const logicalGameplayActionRef = { current: null as LogicalGameplayAction | null };
+    const fetchGameState = vi.fn(async () => true);
+    const selectedTile = { low: 3, high: 4 };
+    const params = makeParams({
+      selectedTileRef: { current: selectedTile },
+      legalMoves: [{ type: 'play', tile: selectedTile, position: 'left' } as any],
+      legalMovesRef: { current: [{ type: 'play', tile: selectedTile, position: 'left' } as any] },
+      logicalGameplayActionRef,
+      fetchGameState,
+    });
+    vi.mocked(emitGameAction).mockResolvedValueOnce({
+      ok: false,
+      uncertain: true,
+      error: 'room_persistence_failed',
+      sequence: 17,
+    });
+
+    const { result } = renderHook(() => useLiveMatchActions(params));
+
+    await act(async () => {
+      await result.current.play('left');
+    });
+
+    expect(logicalGameplayActionRef.current?.uncertain).toBe(true);
+    expect(fetchGameState).toHaveBeenCalledWith('game_action_uncertain');
+    expect(params.showToast).toHaveBeenCalled();
+  });
 });

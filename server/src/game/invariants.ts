@@ -15,8 +15,13 @@ import {
 function reportViolations(violations: string[], context: string): void {
   if (violations.length === 0) return;
   const message = `[invariant:${context}] ${violations.length} violation(s):\n${violations.map((value) => `  - ${value}`).join('\n')}`;
-  if (process.env.NODE_ENV === 'production') console.error(message);
-  else throw new Error(message);
+  // Fail closed by default — soft logging only when explicitly opted in.
+  // Chess.com-grade private matches must not continue on tile accounting corruption.
+  if (process.env.SOFT_GAME_INVARIANTS === 'true') {
+    console.error(message);
+    return;
+  }
+  throw new Error(message);
 }
 
 export function assertTileCountInvariant(

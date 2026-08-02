@@ -3,7 +3,9 @@ import {
   clearGameActionIdempotencyForRoom,
   GAME_ACTION_IDEMPOTENCY_TTL_MS,
   getGameActionIdempotencyCacheSize,
+  hydrateGameActionReceiptsForRoom,
   resetGameActionIdempotencyForTests,
+  snapshotGameActionReceiptsForRoom,
   withGameActionIdempotency,
 } from './gameActionIdempotency';
 
@@ -118,5 +120,29 @@ describe('gameActionIdempotency', () => {
 
     clearGameActionIdempotencyForRoom('room1');
     expect(getGameActionIdempotencyCacheSize('room1')).toBe(0);
+  });
+
+  it('survives process-local cache clear via snapshot hydrate (restart simulation)', async () => {
+    await withGameActionIdempotency('ROOM42', 'seat-a', 'restart-req', async () => ({
+      ok: true,
+      sequence: 44,
+    }));
+    const receipts = snapshotGameActionReceiptsForRoom('ROOM42');
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]?.requestId).toBe('restart-req');
+
+    resetGameActionIdempotencyForTests();
+    expect(getGameActionIdempotencyCacheSize('ROOM42')).toBe(0);
+
+    const restored = hydrateGameActionReceiptsForRoom('ROOM42', receipts);
+    expect(restored).toBe(1);
+
+    let mutations = 0;
+    const ack = await withGameActionIdempotency('ROOM42', 'seat-a', 'restart-req', async () => {
+      mutations += 1;
+      return { ok: true, sequence: 99 };
+    });
+    expect(mutations).toBe(0);
+    expect(ack).toEqual({ ok: true, sequence: 44, duplicate: true });
   });
 });

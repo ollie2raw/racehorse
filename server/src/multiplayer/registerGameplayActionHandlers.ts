@@ -14,6 +14,7 @@ import {
   type AckFn,
   type RoomSessionHandlerDeps,
 } from './roomSession';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 
 export type RegisterGameplayActionHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -117,6 +118,29 @@ export function registerGameplayActionHandlers(
           return { ok: true, sequence: room.state?.sequence ?? null, forcedDraw: forcedMeta };
         },
       );
+      if (ack.uncertain) {
+        emitMpAuthorityFunnel('private_action_uncertain', {
+          roomCode,
+          seatId: playerSeatId,
+          requestId,
+          sequence: ack.sequence ?? null,
+          failureCode: 'room_persistence_failed',
+        });
+      } else if (ack.duplicate) {
+        emitMpAuthorityFunnel('private_action_duplicate', {
+          roomCode,
+          seatId: playerSeatId,
+          requestId,
+          sequence: ack.sequence ?? null,
+        });
+      } else if (ack.ok) {
+        emitMpAuthorityFunnel('private_action_committed', {
+          roomCode,
+          seatId: playerSeatId,
+          requestId,
+          sequence: ack.sequence ?? null,
+        });
+      }
       if (typeof cb === 'function') {
         cb(ack);
       }

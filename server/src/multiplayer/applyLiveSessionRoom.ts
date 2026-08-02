@@ -3,6 +3,8 @@ import { createReservedRoom, deleteRoom, peekRoom, type Room } from '../rooms';
 import type { LiveRosterEntry, RoomLiveSessionRow } from './roomLivePersistence';
 import { parseRoomShell } from './roomLivePersistence';
 import { createHydratedRoomDurabilityState } from './roomDurability';
+import { hydrateGameActionReceiptsForRoom } from './gameActionIdempotency';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 
 function cloneGameState(state: GameState): GameState {
   return structuredClone(state) as GameState;
@@ -55,6 +57,15 @@ export function applyLiveSessionRow(
     }
     if (shell.abandonedReason) room.abandonedReason = shell.abandonedReason;
     room.durability = createHydratedRoomDurabilityState(room, row.room_shell.durabilityCommit!);
+    if (shell.actionReceipts?.length) {
+      const restored = hydrateGameActionReceiptsForRoom(code, shell.actionReceipts);
+      if (restored > 0) {
+        emitMpAuthorityFunnel('private_receipts_hydrated', {
+          roomCode: code,
+          extra: { restored },
+        });
+      }
+    }
   } catch {
     deleteRoom(code);
     return null;
