@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../supabaseUtils', () => ({ supabaseFetch: vi.fn() }));
 
@@ -11,7 +11,12 @@ import {
 } from './dailyFritzEventStore';
 
 describe('Daily Fritz event store', () => {
+  const originalAuthority = process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
   beforeEach(() => vi.mocked(supabaseFetch).mockReset());
+  afterEach(() => {
+    if (originalAuthority === undefined) delete process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
+    else process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = originalAuthority;
+  });
 
   it('writes a normalized idempotent event to PostgREST', async () => {
     vi.mocked(supabaseFetch).mockResolvedValue(undefined);
@@ -105,5 +110,27 @@ describe('Daily Fritz event store', () => {
     const firstBody = vi.mocked(supabaseFetch).mock.calls[0]?.[1]?.body;
     const secondBody = vi.mocked(supabaseFetch).mock.calls[1]?.[1]?.body;
     expect(secondBody).toBe(firstBody);
+  });
+
+  it('writes canonical dimensions only after the authority schema is enabled', async () => {
+    vi.mocked(supabaseFetch).mockResolvedValue(undefined);
+    process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = 'true';
+    await recordDailyFritzEvent({
+      eventType: 'recovery_failed',
+      verifierCode: 'stale_revision',
+      challengeId: 'daily-fritz:2026-08-01:r2:s1',
+      authorityRevision: 4,
+      source: 'client',
+      idempotencyKey: 'recovery-failed-1',
+    });
+    const body = JSON.parse(String(vi.mocked(supabaseFetch).mock.calls[0]?.[1]?.body))[0];
+    expect(body).toMatchObject({
+      challenge_id: 'daily-fritz:2026-08-01:r2:s1',
+      authority_revision: 4,
+      event_version: 1,
+      source: 'client',
+      failure_phase: 'command',
+      recovery_class: 'authoritative_refresh',
+    });
   });
 });

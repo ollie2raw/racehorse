@@ -18,6 +18,61 @@ VITE_ADMIN_EMAIL=you@example.com
 8. Start the client normally (`npm run dev` in `client/`).
 9. In `supabase/daily_puzzle.sql`, replace `admin@example.com` with the same email as `VITE_ADMIN_EMAIL` before running it.
 
+## Daily Fritz transactional-authority upgrade (2026-08-01)
+
+Keep `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=false` while applying these files in this exact order:
+
+1. `supabase/migrations/2026-08-01_daily_fritz_published_challenges.sql`
+2. `supabase/migrations/2026-08-01_daily_fritz_command_primitives.sql`
+3. `supabase/migrations/2026-08-01_daily_fritz_transactional_commands.sql`
+4. `supabase/migrations/2026-08-01_daily_fritz_canonical_telemetry.sql`
+
+`supabase/verified_matches.sql` must already be installed because transactional
+attempt creation links its verified match in the same transaction.
+
+Verify the expansion before enabling writes:
+
+```sql
+select
+  to_regclass('public.daily_fritz_published_challenges') as published_challenges,
+  to_regclass('public.daily_fritz_attempt_operations') as operation_receipts,
+  to_regclass('public.daily_fritz_verified_hands') as verified_hands,
+  to_regclass('public.daily_fritz_verified_games') as verified_games,
+  to_regclass('public.daily_fritz_outbox') as outbox,
+  to_regclass('public.daily_fritz_funnel_metrics') as funnel_metrics,
+  to_regclass('public.daily_fritz_failure_metrics') as failure_metrics,
+  to_regclass('public.daily_fritz_retention_metrics') as retention_metrics;
+
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'daily_fritz_attempts'
+  and column_name in ('revision', 'challenge_id', 'current_game_number')
+order by column_name;
+
+select routine_name
+from information_schema.routines
+where routine_schema = 'public'
+  and routine_name in (
+    'publish_daily_fritz_challenge',
+    'invalidate_daily_fritz_challenge',
+    'start_daily_fritz_attempt_command',
+    'commit_daily_fritz_attempt_command'
+  )
+order by routine_name;
+```
+
+All eight objects, all three columns, and all four routines must be present.
+Then set `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=true` on every server instance and
+redeploy. `/ready` reports `checks.dailyFritzAuthority.enabled=true` and must
+report `available=true` before traffic is considered ready.
+
+Rollback is application-only: set the flag to `false` and redeploy. The schema
+is additive and should remain in place; do not drop authority records during a
+rollback. Legacy attempts remain available. Challenge-bound modern attempts
+fail closed with `authority_temporarily_unavailable` until transactional
+authority is re-enabled; they never fall back to legacy writes.
+
 ## Daily Fritz migration verification
 
 Run this in the Supabase SQL Editor after the migration:

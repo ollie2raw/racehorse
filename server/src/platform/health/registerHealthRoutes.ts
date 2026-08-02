@@ -78,6 +78,9 @@ export type HealthRouteDeps = {
   isRoomMatchLogsPersistenceAvailable: () => boolean;
   getDailyFritzEventsPersistenceAvailability: () => boolean | null;
   probeDailyFritzEventsPersistence: () => Promise<boolean>;
+  isDailyFritzTransactionalAuthorityEnabled: () => boolean;
+  getDailyFritzAuthoritySchemaAvailability: () => boolean | null;
+  probeDailyFritzAuthoritySchema: () => Promise<boolean>;
 };
 
 export function registerHealthRoutes(deps: HealthRouteDeps): void {
@@ -92,6 +95,9 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     isRoomMatchLogsPersistenceAvailable,
     getDailyFritzEventsPersistenceAvailability,
     probeDailyFritzEventsPersistence,
+    isDailyFritzTransactionalAuthorityEnabled,
+    getDailyFritzAuthoritySchemaAvailability,
+    probeDailyFritzAuthoritySchema,
   } = deps;
 
   const getRuntimeStatusPayload = () => {
@@ -150,6 +156,17 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
             return { ok: available, available };
           })()
         : { ok: false, available: false };
+    const dailyFritzAuthority =
+      requiredEnvOk && supabase.ok
+        ? await (async () => {
+            const enabled = isDailyFritzTransactionalAuthorityEnabled();
+            if (enabled && getDailyFritzAuthoritySchemaAvailability() !== true) {
+              await probeDailyFritzAuthoritySchema();
+            }
+            const available = !enabled || getDailyFritzAuthoritySchemaAvailability() === true;
+            return { ok: available, available, enabled };
+          })()
+        : { ok: false, available: false, enabled: isDailyFritzTransactionalAuthorityEnabled() };
 
     const todayPt = getPacificDateKey();
     let dailyPuzzleLadder: ReturnType<typeof assessDailyPuzzleLadderReadiness> & { ok: boolean };
@@ -182,7 +199,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     }
 
     const shuttingDown = isGracefulShutdownInProgress();
-    const ok = !shuttingDown && requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok && dailyFritzEvents.ok;
+    const ok = !shuttingDown && requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok
+      && dailyFritzEvents.ok && dailyFritzAuthority.ok;
 
     res.status(ok ? 200 : 503).json({
       ...getRuntimeStatusPayload(),
@@ -194,6 +212,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         supabase,
         roomMatchLogs,
         dailyFritzEvents,
+        dailyFritzAuthority,
         dailyPuzzleLadder,
       },
     });

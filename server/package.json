@@ -10,6 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "soak:daily-fritz-authority": "tsx scripts/dailyFritzAuthoritySoak.ts",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
     "seed:daily-ladder": "node dist/seedDailyPuzzleLadder.js",
     "gen:puzzles": "bash ../scripts/gen-puzzles.sh",

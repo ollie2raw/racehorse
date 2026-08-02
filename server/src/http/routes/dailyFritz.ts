@@ -82,6 +82,25 @@ import {
 import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
 import { listDailyFritzEvents, listDailyFritzPersistedMetrics, recordDailyFritzEvent, type DailyFritzEventInput } from '../stores/dailyFritzEventStore';
 import { getDailyFritzMetricRates, getDailyFritzMetrics, incrementDailyFritzMetric } from './dailyFritzMetrics';
+import {
+  buildDailyFritzPublishedChallenge,
+  canonicalizeDailyFritzChallenge,
+} from '../../dailyFritzPublishedChallenge';
+import {
+  invalidateDailyFritzPublishedChallenge,
+  publishDailyFritzChallenge,
+} from '../stores/dailyFritzPublishedChallengeStore';
+import {
+  commitDailyFritzAttemptCommand,
+  startDailyFritzAttemptCommand,
+} from '../stores/dailyFritzCommandStore';
+import { isDailyFritzEventType } from '../../dailyFritzTelemetry';
+import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
+import type { DailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
+import {
+  loadDailyFritzPublishedAuthority,
+  resolveDailyFritzPublishedGameAuthority,
+} from './dailyFritzPublishedAuthority';
 
 export {
   buildRecordedDailyFritzAttemptResult,
@@ -108,6 +127,24 @@ async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Pro
 
 type DailyFritzActiveGameProgress = { gameNumber: DailyFritzSetGameNumber; you: number; fritz: number };
 const DAILY_FRITZ_COMPETITIVE_VERIFICATION_AVAILABLE = true;
+const DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED =
+  isDailyFritzTransactionalAuthorityEnabled();
+const isRecoverableDailyFritzCommandConflict = (code: string | null): boolean =>
+  code === 'stale_revision' || code === 'command_slot_conflict';
+
+function rejectModernAttemptWhenAuthorityDisabled(
+  attempt: DailyFritzAttemptRecord,
+  res: Response,
+): boolean {
+  if (!attempt.challengeId || DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED) return false;
+  res.status(503).json({
+    error: 'Daily Fritz verified authority is temporarily unavailable. Your progress is safe.',
+    code: 'authority_temporarily_unavailable',
+    recoverable: true,
+    recovery_action: 'retry',
+  });
+  return true;
+}
 
 function writeVerifiedHand(
   result: Record<string, unknown> | null,
@@ -197,6 +234,7 @@ function verifyAttemptHand(input: {
   userId: string;
   gameNumber: DailyFritzSetGameNumber;
   handIndex: number;
+  publishedChallenge: DailyFritzPublishedChallenge | null;
 }) {
   const expectedSeed = getDailyFritzSeed(input.run.runDate);
   if (input.run.seed !== expectedSeed) {
@@ -207,29 +245,43 @@ function verifyAttemptHand(input: {
   }
   const progress = readActiveGameProgress(input.attempt.result, input.gameNumber);
   const authorityContract = readDailyFritzAuthorityContract(input.attempt.result);
-  const deal = getDailyFritzHandForGame(input.run, input.gameNumber, input.handIndex);
-  const drawWinner = resolveDailyFritzDrawWinner({
-    runDate: input.run.runDate,
-    gameNumber: input.gameNumber,
-    metadata: input.run.metadata,
-  });
+  const publishedAuthority = input.publishedChallenge
+    ? resolveDailyFritzPublishedGameAuthority({
+        challenge: input.publishedChallenge,
+        gameNumber: input.gameNumber,
+        handIndex: input.handIndex,
+      })
+    : null;
+  const deal = publishedAuthority?.deal
+    ?? getDailyFritzHandForGame(input.run, input.gameNumber, input.handIndex);
+  const drawWinner = publishedAuthority?.drawWinner
+    ?? resolveDailyFritzDrawWinner({
+      runDate: input.run.runDate,
+      gameNumber: input.gameNumber,
+      metadata: input.run.metadata,
+    });
+  const challengeId = input.publishedChallenge?.challengeId
+    ?? buildDailyFritzChallengeId(input.run.runDate);
+  const fritzTier = input.publishedChallenge?.fritzTier ?? input.run.fritzTier;
+  const winningScore = input.publishedChallenge?.winningScore ?? input.run.winningScore;
+  const dealSize = input.publishedChallenge?.dealSize ?? input.run.dealSize;
   return verifyDailyFritzHand({
     transcript: input.transcript,
     initialState: createOfficialDailyFritzHandState({
       deal,
       handIndex: input.handIndex,
       drawWinner,
-      winningScore: input.run.winningScore,
-      dealSize: input.run.dealSize,
+      winningScore,
+      dealSize,
       playerScore: progress.you,
       fritzScore: progress.fritz,
     }),
-    expectedChallengeId: buildDailyFritzChallengeId(input.run.runDate),
+    expectedChallengeId: challengeId,
     expectedAttemptId: input.attempt.id,
     expectedGameNumber: input.gameNumber,
     expectedHandIndex: input.handIndex,
     userId: input.userId,
-    fritzTier: input.run.fritzTier,
+    fritzTier,
     expectedFritzPolicyVersion: authorityContract?.fritzPolicyVersion,
     expectedFritzPolicyContract: authorityContract?.fritzPolicyContract,
     requireStateDigests: authorityContract?.stateDigestRequired === true,
@@ -428,6 +480,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       deal_size: run.dealSize,
       winning_score: run.winningScore,
       attempt_status: attempt?.status ?? 'none',
+      authority_revision: attempt?.revision ?? null,
       verification_protocol_version:
         attemptAuthorityContract?.transcriptProtocolVersion
         ?? DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
@@ -535,11 +588,12 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
 
     let attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    if (attempt && rejectModernAttemptWhenAuthorityDisabled(attempt, res)) return;
     if (attempt?.status === 'completed' || attempt?.status === 'abandoned') {
       res.status(409).json({ error: 'Today’s Daily Fritz attempt is already locked.', status: attempt.status });
       return;
     }
-    const existingAuthorityContract = readDailyFritzAuthorityContract(attempt?.result ?? null);
+    let existingAuthorityContract = readDailyFritzAuthorityContract(attempt?.result ?? null);
     const canResumePinnedContract = Boolean(
       attempt
       && existingAuthorityContract
@@ -570,6 +624,66 @@ export function registerDailyFritzRoutes(app: Application): void {
       });
       return;
     }
+    let createdTransactionally = false;
+    if (!attempt && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED) {
+      const policyVersion = isSupportedFritzPolicyVersion(requestedFritz)
+        ? requestedFritz
+        : FRITZ_POLICY_VERSION;
+      const initialAuthorityContract = buildDailyFritzAuthorityContract({
+        fritzPolicyVersion: policyVersion,
+        challengeId: buildDailyFritzChallengeId(run.runDate),
+        runFingerprint: buildDailyFritzRunFingerprint(run),
+        clientRelease: requestedClientRelease,
+        transcriptProtocolVersion: requestedProtocol,
+        stateDigestRequired: true,
+      });
+      const initialResult = {
+        ...writeDailyFritzAuthorityContract(null, initialAuthorityContract),
+        verification_status: 'in_progress',
+      };
+      const publishedChallenge = buildDailyFritzPublishedChallenge({
+        runDate: run.runDate,
+        fritzTier: run.fritzTier,
+        dealSize: run.dealSize,
+        winningScore: run.winningScore,
+        publishedAt: run.generatedAt,
+      });
+      if (
+        canonicalizeDailyFritzChallenge(publishedChallenge.games[0].hands)
+        !== canonicalizeDailyFritzChallenge(run.handDeals)
+      ) {
+        res.status(409).json({
+          error: 'Published Daily Fritz authority does not match the stored run.',
+          code: 'challenge_publication_mismatch',
+        });
+        return;
+      }
+      await publishDailyFritzChallenge(publishedChallenge);
+      const command = await startDailyFritzAttemptCommand<Record<string, unknown>>({
+        userId: authenticatedUserId,
+        challengeId: publishedChallenge.challengeId,
+        operationId: `start:${publishedChallenge.challengeId}`,
+        authorityResult: initialResult,
+      });
+      if (command.outcome !== 'committed' || !command.response) {
+        res.status(command.errorCode === 'operation_id_reused' ? 409 : 422).json({
+          error: 'Daily Fritz attempt could not be started transactionally.',
+          code: command.errorCode ?? 'transactional_start_failed',
+          authority_revision: command.committedRevision,
+        });
+        return;
+      }
+      const commandAttemptId = typeof command.response.attempt_id === 'string'
+        ? command.response.attempt_id
+        : '';
+      attempt = commandAttemptId
+        ? await getDailyFritzAttemptById(commandAttemptId, authenticatedUserId)
+        : null;
+      if (!attempt) throw new Error('Transactional Daily Fritz attempt was not readable after commit.');
+      existingAuthorityContract = readDailyFritzAuthorityContract(attempt.result);
+      createdTransactionally = command.response.created === true;
+      incrementDailyFritzMetric(createdTransactionally ? 'attempt_started' : 'retry_request');
+    }
     if (!attempt) {
       attempt = await createDailyFritzAttempt(runDate, authenticatedUserId);
       incrementDailyFritzMetric('attempt_started');
@@ -582,7 +696,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         idempotencyKey: `${attempt.id}:attempt_started`,
         payload: { verificationCapable: supportsVerifier },
       });
-    } else {
+    } else if (!createdTransactionally) {
       incrementDailyFritzMetric('retry_request');
       await recordDailyFritzEventBestEffort({
         attemptId: attempt.id,
@@ -640,18 +754,29 @@ export function registerDailyFritzRoutes(app: Application): void {
     const currentGameNumber = needsCompletion ? null : getCurrentDailyFritzGameNumber(attempt.result);
     const gameNumberForDraw: DailyFritzSetGameNumber = (currentGameNumber ?? 1) as DailyFritzSetGameNumber;
     const currentGameScores = readActiveGameProgress(attempt.result, gameNumberForDraw);
-    const handDeal = getDailyFritzHandForGame(run, gameNumberForDraw, attempt.currentHandIndex);
-    const drawWinner: DailyFritzDrawWinner = resolveDailyFritzDrawWinner({
-      runDate: run.runDate,
-      gameNumber: gameNumberForDraw,
-      metadata: run.metadata,
-    });
-    const drawTiles: DailyFritzDrawTiles = resolveDailyFritzDrawTiles({
-      runDate: run.runDate,
-      gameNumber: gameNumberForDraw,
-      metadata: run.metadata,
-      drawWinner,
-    });
+    const publishedAuthority = await loadDailyFritzPublishedAuthority({ attempt, run });
+    const publishedGameAuthority = publishedAuthority
+      ? resolveDailyFritzPublishedGameAuthority({
+          challenge: publishedAuthority,
+          gameNumber: gameNumberForDraw,
+          handIndex: attempt.currentHandIndex,
+        })
+      : null;
+    const handDeal = publishedGameAuthority?.deal
+      ?? getDailyFritzHandForGame(run, gameNumberForDraw, attempt.currentHandIndex);
+    const drawWinner: DailyFritzDrawWinner = publishedGameAuthority?.drawWinner
+      ?? resolveDailyFritzDrawWinner({
+        runDate: run.runDate,
+        gameNumber: gameNumberForDraw,
+        metadata: run.metadata,
+      });
+    const drawTiles: DailyFritzDrawTiles = publishedGameAuthority?.drawTiles
+      ?? resolveDailyFritzDrawTiles({
+        runDate: run.runDate,
+        gameNumber: gameNumberForDraw,
+        metadata: run.metadata,
+        drawWinner,
+      });
     console.log('[daily-fritz:start] draw package', {
       runDate: run.runDate,
       gameNumber: gameNumberForDraw,
@@ -668,8 +793,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       ok: true,
       attempt_id: attempt.id,
       verified_match_id: verifiedMatchId,
+      authority_revision: attempt.revision,
       run_date: run.runDate,
-      challenge_id: buildDailyFritzChallengeId(run.runDate),
+      challenge_id: publishedAuthority?.challengeId ?? buildDailyFritzChallengeId(run.runDate),
       rules_version: DAILY_FRITZ_RULES_VERSION,
       seed_version: DAILY_FRITZ_SEED_VERSION,
       run_fingerprint: buildDailyFritzRunFingerprint(run),
@@ -750,6 +876,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz attempt not found.' });
       return;
     }
+    if (rejectModernAttemptWhenAuthorityDisabled(attempt, res)) return;
     if (runDateFromClient && runDateFromClient !== attempt.runDate) {
       res.status(400).json({ error: 'Daily Fritz run date does not match this attempt.' });
       return;
@@ -780,6 +907,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz run not found.' });
       return;
     }
+    const publishedAuthority = await loadDailyFritzPublishedAuthority({ attempt, run });
     if (completedHandIndex > attempt.currentHandIndex) {
       res.status(400).json({ error: 'Requested completed hand is ahead of the persisted attempt.' });
       return;
@@ -789,19 +917,25 @@ export function registerDailyFritzRoutes(app: Application): void {
       currentHandIndex: number,
       options: { replayed?: boolean; ignored?: boolean } = {},
     ) => {
-      const hand = getDailyFritzHandForGame(run, gameNumber, currentHandIndex);
+      const publishedGameAuthority = publishedAuthority
+        ? resolveDailyFritzPublishedGameAuthority({
+            challenge: publishedAuthority,
+            gameNumber,
+            handIndex: currentHandIndex,
+          })
+        : null;
+      const hand = publishedGameAuthority?.deal
+        ?? getDailyFritzHandForGame(run, gameNumber, currentHandIndex);
       const scores = readActiveGameProgress(attempt.result, gameNumber);
-      const drawWinner: DailyFritzDrawWinner = resolveDailyFritzDrawWinner({
-        runDate: run.runDate,
-        gameNumber,
-        metadata: run.metadata,
-      });
-      const drawTiles: DailyFritzDrawTiles = resolveDailyFritzDrawTiles({
-        runDate: run.runDate,
-        gameNumber,
-        metadata: run.metadata,
-        drawWinner,
-      });
+      const drawWinner: DailyFritzDrawWinner = publishedGameAuthority?.drawWinner
+        ?? resolveDailyFritzDrawWinner({ runDate: run.runDate, gameNumber, metadata: run.metadata });
+      const drawTiles: DailyFritzDrawTiles = publishedGameAuthority?.drawTiles
+        ?? resolveDailyFritzDrawTiles({
+          runDate: run.runDate,
+          gameNumber,
+          metadata: run.metadata,
+          drawWinner,
+        });
       console.log('[daily-fritz-next-hand] draw package', {
         attemptId,
         runDate: run.runDate,
@@ -825,6 +959,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         current_game_number: gameNumber,
         set_result: attempt.result ?? null,
         current_hand_index: currentHandIndex,
+        authority_revision: attempt.revision,
         current_game_scores: { you: scores.you, fritz: scores.fritz },
         hand,
         draw_winner: drawWinner,
@@ -884,7 +1019,26 @@ export function registerDailyFritzRoutes(app: Application): void {
           completedHandIndex,
           userId: authenticatedUserId,
         });
-        res.status(409).json({ error: 'Daily Fritz hand was already verified with different evidence.' });
+        incrementDailyFritzMetric('command_conflict', 'verified_hand_conflict');
+        await recordDailyFritzEventBestEffort({
+          attemptId,
+          runDate: attempt.runDate,
+          userId: authenticatedUserId,
+          requestId: diagnostics.requestId,
+          eventType: 'command_conflict',
+          gameNumber,
+          handIndex: completedHandIndex,
+          verifierCode: 'verified_hand_conflict',
+          idempotencyKey: `${attemptId}:command_conflict:${gameNumber}:${completedHandIndex}:${diagnostics.requestId}`,
+          payload: { reason: 'verified_hand_evidence_differs' },
+        });
+        res.status(409).json({
+          error: 'Daily Fritz advanced on another session. Resume from the authoritative state.',
+          code: 'verified_hand_conflict',
+          recoverable: true,
+          recovery_action: 'reload_official_hand',
+          authority_revision: attempt.revision,
+        });
         return;
       }
       incrementDailyFritzMetric('next_hand_replayed');
@@ -919,6 +1073,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       userId: authenticatedUserId,
       gameNumber,
       handIndex: completedHandIndex,
+      publishedChallenge: publishedAuthority,
     });
     if (verified.terminalState.gameOver) {
       res.status(409).json({ error: 'Daily Fritz game is complete; finalize the verified game.' });
@@ -936,9 +1091,53 @@ export function registerDailyFritzRoutes(app: Application): void {
       fritz: verified.result.fritzScoreAfter,
     });
     attempt.currentHandIndex += 1;
-    const saved = await upsertDailyFritzAttempt(attempt);
+    let saved: DailyFritzAttemptRecord;
+    const transactionalHand = Boolean(attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED);
+    if (transactionalHand) {
+      const command = await commitDailyFritzAttemptCommand<Record<string, unknown>>({
+        userId: authenticatedUserId,
+        attemptId: attempt.id,
+        operationId: `hand:${gameNumber}:${completedHandIndex}`,
+        commandType: 'accept_verified_hand',
+        expectedRevision: attempt.revision,
+        next: {
+          status: 'started',
+          currentGameNumber: gameNumber,
+          currentHandIndex: attempt.currentHandIndex,
+          result: attempt.result,
+        },
+        handReceipt: verified.result,
+        outbox: {
+          eventType: 'hand_verified',
+          payload: {
+            gameNumber,
+            handIndex: completedHandIndex,
+            transcriptDigest: verified.result.transcriptDigest,
+          },
+        },
+      });
+      if (command.outcome !== 'committed') {
+        const recoverable = isRecoverableDailyFritzCommandConflict(command.errorCode);
+        res.status(409).json({
+          error: recoverable
+            ? 'Daily Fritz advanced on another session. Resume from the authoritative state.'
+            : 'Daily Fritz could not commit the verified hand.',
+          code: command.errorCode ?? 'transactional_hand_commit_failed',
+          recoverable,
+          recovery_action: recoverable ? 'reload_official_hand' : null,
+          authority_revision: command.committedRevision,
+          authoritative_state: command.response,
+        });
+        return;
+      }
+      saved = await getDailyFritzAttemptById(attempt.id, authenticatedUserId)
+        ?? (() => { throw new Error('Committed Daily Fritz hand was not readable.'); })();
+      attempt.revision = saved.revision;
+    } else {
+      saved = await upsertDailyFritzAttempt(attempt);
+    }
     incrementDailyFritzMetric('hand_verified');
-    await recordDailyFritzEventBestEffort({
+    if (!transactionalHand) await recordDailyFritzEventBestEffort({
       attemptId,
       runDate: attempt.runDate,
       userId: authenticatedUserId,
@@ -1023,6 +1222,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz attempt not found.' });
       return;
     }
+    if (rejectModernAttemptWhenAuthorityDisabled(attempt, res)) return;
     if (runDateFromClient && runDateFromClient !== attempt.runDate) {
       res.status(400).json({ error: 'Daily Fritz run date does not match this attempt.' });
       return;
@@ -1040,6 +1240,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz run not found.' });
       return;
     }
+    const publishedAuthority = await loadDailyFritzPublishedAuthority({ attempt, run });
     const parsedTranscript = transcriptInput == null ? null : parseTranscriptForRequest(transcriptInput);
     if (!parsedTranscript && requiresVerifiedDailyFritzEvidence(attempt.result)) {
       res.status(426).json({ error: 'This attempt requires verified game evidence. Update required.' });
@@ -1131,6 +1332,7 @@ export function registerDailyFritzRoutes(app: Application): void {
     let fritzScore = Math.round(legacyFritzScore);
     let movesUsed = Math.round(legacyMovesUsed);
     let handsPlayed = Math.round(legacyHandsPlayed);
+    let terminalHandReceipt: VerifiedDailyFritzHandRecord | null = null;
     if (parsedTranscript) {
       const verified = verifyAttemptHand({
         transcript: parsedTranscript,
@@ -1139,6 +1341,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         userId: authenticatedUserId,
         gameNumber,
         handIndex: attempt.currentHandIndex,
+        publishedChallenge: publishedAuthority,
       });
       playerScore = verified.result.playerScoreAfter;
       fritzScore = verified.result.fritzScoreAfter;
@@ -1146,6 +1349,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         res.status(409).json({ error: 'Daily Fritz game is not complete.' });
         return;
       }
+      terminalHandReceipt = verified.result;
       attempt.result = pinAuthorityContractFromVerifiedTranscript({
         result: attempt.result,
         run,
@@ -1196,8 +1400,64 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
     if (!setResult.setWinner) {
       attempt.currentHandIndex = 0;
+      attempt.currentGameNumber = Math.min(gameNumber + 1, 3) as DailyFritzSetGameNumber;
     }
-    const saved = await upsertDailyFritzAttempt(attempt);
+    let saved: DailyFritzAttemptRecord;
+    const transactionalGame = Boolean(attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED);
+    if (transactionalGame) {
+      const authorityGame = readAuthorityLedger(attempt.result).games.find(
+        (game) => game.gameNumber === gameNumber,
+      );
+      if (!authorityGame) throw new Error('Verified Daily Fritz game receipt is missing.');
+      const command = await commitDailyFritzAttemptCommand<Record<string, unknown>>({
+        userId: authenticatedUserId,
+        attemptId: attempt.id,
+        operationId: `game:${gameNumber}:record`,
+        commandType: 'record_verified_game',
+        expectedRevision: attempt.revision,
+        next: {
+          status: 'started',
+          currentGameNumber: setResult.setWinner ? gameNumber : attempt.currentGameNumber,
+          currentHandIndex: setResult.setWinner ? attempt.currentHandIndex : 0,
+          result: attempt.result ?? {},
+        },
+        gameReceipt: {
+          ...authorityGame,
+          pointDiff: gameResult.pointDiff,
+          playerWon: gameResult.playerWon,
+          actionCount: movesUsed,
+          handsPlayed,
+        },
+        handReceipt: terminalHandReceipt,
+        outbox: {
+          eventType: 'game_recorded',
+          payload: {
+            gameNumber,
+            playerScore,
+            fritzScore,
+            setWinner: setResult.setWinner ?? null,
+          },
+        },
+      });
+      if (command.outcome !== 'committed') {
+        const recoverable = isRecoverableDailyFritzCommandConflict(command.errorCode);
+        res.status(409).json({
+          error: recoverable
+            ? 'Daily Fritz advanced on another session. Resume from the authoritative state.'
+            : 'Daily Fritz could not commit the verified game.',
+          code: command.errorCode ?? 'transactional_game_commit_failed',
+          recoverable,
+          recovery_action: recoverable ? 'reload_official_hand' : null,
+          authority_revision: command.committedRevision,
+          authoritative_state: command.response,
+        });
+        return;
+      }
+      saved = await getDailyFritzAttemptById(attempt.id, authenticatedUserId)
+        ?? (() => { throw new Error('Committed Daily Fritz game was not readable.'); })();
+    } else {
+      saved = await upsertDailyFritzAttempt(attempt);
+    }
     const savedSetResult = normalizeDailyFritzSetResult(saved.result);
     const recordedGame = (savedSetResult ?? setResult).games.find(
       (game: DailyFritzSetGameResult) => game.gameNumber === gameNumber,
@@ -1215,7 +1475,7 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
     incrementDailyFritzMetric('game_recorded');
     const eventTranscriptDigest = parsedTranscript ? digestDailyFritzTranscript(parsedTranscript) : null;
-    await recordDailyFritzEventBestEffort({
+    if (!transactionalGame) await recordDailyFritzEventBestEffort({
       attemptId,
       runDate: attempt.runDate,
       userId: authenticatedUserId,
@@ -1235,6 +1495,7 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
     res.json({
       ok: true,
+      authority_revision: saved.revision,
       set_result: savedSetResult ?? setResult,
       next_game_number: setResult.setWinner ? null : Math.min(setResult.games.length + 1, 3),
     });
@@ -1296,6 +1557,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz attempt not found.' });
       return;
     }
+    if (rejectModernAttemptWhenAuthorityDisabled(attempt, res)) return;
     if (runDateFromClient && runDateFromClient !== attempt.runDate) {
       res.status(400).json({ error: 'Daily Fritz run date does not match this attempt.' });
       return;
@@ -1329,6 +1591,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.json({
         ok: true,
         replayed: true,
+        authority_revision: attempt.revision,
         rank,
         leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
       });
@@ -1394,9 +1657,62 @@ export function registerDailyFritzRoutes(app: Application): void {
           moves_used: attempt.movesUsed,
           hands_played: attempt.handsPlayed,
         };
-    await upsertDailyFritzAttempt(attempt);
+    const transactionalCompletion = Boolean(
+      attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED,
+    );
+    if (transactionalCompletion) {
+      const command = await commitDailyFritzAttemptCommand<Record<string, unknown>>({
+        userId: authenticatedUserId,
+        attemptId: attempt.id,
+        operationId: 'finalize:set',
+        commandType: 'finalize_verified_attempt',
+        expectedRevision: attempt.revision,
+        next: {
+          status: 'completed',
+          currentGameNumber: attempt.currentGameNumber,
+          currentHandIndex: attempt.currentHandIndex,
+          result: attempt.result ?? {},
+          finalScore: attempt.finalScore,
+          opponentScore: attempt.opponentScore,
+          pointDiff: attempt.pointDiff,
+          won: attempt.won,
+          movesUsed: attempt.movesUsed,
+          handsPlayed: attempt.handsPlayed,
+          completionHash: serverReceipt,
+        },
+        outbox: {
+          eventType: 'attempt_completed',
+          payload: {
+            verified: isVerified,
+            finalScore: attempt.finalScore,
+            opponentScore: attempt.opponentScore,
+            setOutcome: `${attempt.finalScore}-${attempt.opponentScore}`,
+            setWinner: setResult?.setWinner ?? null,
+            movesUsed: attempt.movesUsed,
+            handsPlayed: attempt.handsPlayed,
+          },
+        },
+      });
+      if (command.outcome !== 'committed') {
+        const recoverable = isRecoverableDailyFritzCommandConflict(command.errorCode);
+        res.status(409).json({
+          error: recoverable
+            ? 'Daily Fritz completed on another session. Loading the authoritative result.'
+            : 'Daily Fritz could not commit the verified completion.',
+          code: command.errorCode ?? 'transactional_completion_failed',
+          recoverable,
+          recovery_action: recoverable ? 'reload_official_hand' : null,
+          authority_revision: command.committedRevision,
+          authoritative_state: command.response,
+        });
+        return;
+      }
+      attempt.revision = command.committedRevision ?? attempt.revision + 1;
+    } else {
+      await upsertDailyFritzAttempt(attempt);
+    }
     incrementDailyFritzMetric('attempt_completed');
-    await recordDailyFritzEventBestEffort({
+    if (!transactionalCompletion) await recordDailyFritzEventBestEffort({
       attemptId,
       runDate,
       userId: authenticatedUserId,
@@ -1412,13 +1728,15 @@ export function registerDailyFritzRoutes(app: Application): void {
       },
     });
 
-    const verifiedMatch = await getVerifiedSinglePlayerMatch(verifiedMatchId);
-    if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
-      verifiedMatch.status = 'completed';
-      verifiedMatch.completedAt = attempt.completedAt;
-      verifiedMatch.completionHash = serverReceipt;
-      verifiedMatch.completionResult = attempt.result;
-      await persistVerifiedSinglePlayerMatch(verifiedMatch);
+    if (!transactionalCompletion) {
+      const verifiedMatch = await getVerifiedSinglePlayerMatch(verifiedMatchId);
+      if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
+        verifiedMatch.status = 'completed';
+        verifiedMatch.completedAt = attempt.completedAt;
+        verifiedMatch.completionHash = serverReceipt;
+        verifiedMatch.completionResult = attempt.result;
+        await persistVerifiedSinglePlayerMatch(verifiedMatch);
+      }
     }
 
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
@@ -1427,6 +1745,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       : null;
     res.json({
       ok: true,
+      authority_revision: attempt.revision,
       rank,
       leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
     });
@@ -1461,21 +1780,64 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    const runDate = getPacificDateKey();
-    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    const attempt = await getDailyFritzAttemptById(attemptId, authenticatedUserId);
     if (!attempt || attempt.id !== attemptId) {
       res.status(404).json({ error: 'Daily Fritz attempt not found.' });
       return;
     }
-    if (attempt.status === 'completed' || attempt.status === 'abandoned') {
+    if (rejectModernAttemptWhenAuthorityDisabled(attempt, res)) return;
+    const runDate = attempt.runDate;
+    if (attempt.status === 'abandoned') {
+      res.json({ ok: true, replayed: true, authority_revision: attempt.revision });
+      return;
+    }
+    if (attempt.status === 'completed') {
       res.status(409).json({ error: 'Daily Fritz attempt is already locked.', status: attempt.status });
       return;
     }
     attempt.status = 'abandoned';
     attempt.completedAt = new Date().toISOString();
-    await upsertDailyFritzAttempt(attempt);
+    const transactionalAbandon = Boolean(
+      attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED,
+    );
+    if (transactionalAbandon) {
+      const command = await commitDailyFritzAttemptCommand<Record<string, unknown>>({
+        userId: authenticatedUserId,
+        attemptId: attempt.id,
+        operationId: 'abandon:set',
+        commandType: 'abandon_attempt',
+        expectedRevision: attempt.revision,
+        next: {
+          status: 'abandoned',
+          currentGameNumber: attempt.currentGameNumber,
+          currentHandIndex: attempt.currentHandIndex,
+          result: attempt.result ?? {},
+        },
+        outbox: {
+          eventType: 'attempt_abandoned',
+          payload: { previousRevision: attempt.revision },
+        },
+      });
+      if (command.outcome !== 'committed') {
+        const recoverable = isRecoverableDailyFritzCommandConflict(command.errorCode);
+        res.status(409).json({
+          error: recoverable
+            ? 'Daily Fritz changed on another session. Loading the authoritative state.'
+            : 'Daily Fritz could not commit the abandonment.',
+          code: command.errorCode ?? 'transactional_abandon_failed',
+          recoverable,
+          recovery_action: recoverable ? 'reload_official_hand' : null,
+          authority_revision: command.committedRevision,
+          authoritative_state: command.response,
+        });
+        return;
+      }
+      attempt.revision = command.committedRevision ?? attempt.revision + 1;
+    } else {
+      await upsertDailyFritzAttempt(attempt);
+    }
     incrementDailyFritzMetric('attempt_abandoned');
-    await recordDailyFritzEventBestEffort({
+    if (!transactionalAbandon) await recordDailyFritzEventBestEffort({
       attemptId,
       runDate,
       userId: authenticatedUserId,
@@ -1484,7 +1846,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       idempotencyKey: `${attemptId}:attempt_abandoned`,
       payload: { completedAt: attempt.completedAt },
     });
-    if (attempt.verifiedMatchId) {
+    if (!transactionalAbandon && attempt.verifiedMatchId) {
       const verifiedMatch = await getVerifiedSinglePlayerMatch(attempt.verifiedMatchId);
       if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
         verifiedMatch.status = 'abandoned';
@@ -1492,7 +1854,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         await persistVerifiedSinglePlayerMatch(verifiedMatch);
       }
     }
-    res.json({ ok: true });
+    res.json({ ok: true, authority_revision: attempt.revision });
   } catch (error) {
     incrementDailyFritzMetric('request_failed');
     await recordDailyFritzEventBestEffort({
@@ -1508,6 +1870,65 @@ export function registerDailyFritzRoutes(app: Application): void {
     });
    }
 });
+
+  app.post('/api/daily-fritz/telemetry', async (req, res) => {
+  const authenticatedUserId = await getAuthenticatedUserId(req);
+  if (!authenticatedUserId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const eventType = req.body?.event_type;
+  const eventId = typeof req.body?.event_id === 'string' ? req.body.event_id.trim() : '';
+  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
+  const clientEvents = new Set([
+    'mode_impression', 'start_requested', 'first_move',
+    'recovery_started', 'recovery_succeeded', 'recovery_failed',
+    'review_opened', 'leaderboard_opened', 'share_requested', 'share_completed',
+  ]);
+  if (!isDailyFritzEventType(eventType) || !clientEvents.has(eventType) || eventId.length < 8 || eventId.length > 160) {
+    res.status(400).json({ error: 'A valid Daily Fritz client event and event_id are required.' });
+    return;
+  }
+  const attempt = attemptId
+    ? await getDailyFritzAttemptById(attemptId, authenticatedUserId)
+    : null;
+  if (attemptId && !attempt) {
+    res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+    return;
+  }
+  const payload = req.body?.payload && typeof req.body.payload === 'object'
+    ? req.body.payload as Record<string, unknown>
+    : {};
+  if (JSON.stringify(payload).length > 4_096) {
+    res.status(413).json({ error: 'Daily Fritz telemetry payload is too large.' });
+    return;
+  }
+  try {
+    await recordDailyFritzEvent({
+      attemptId: attempt?.id ?? null,
+      runDate: attempt?.runDate
+        ?? (typeof req.body?.run_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.run_date)
+          ? req.body.run_date : null),
+      userId: authenticatedUserId,
+      eventType,
+      idempotencyKey: `client:${authenticatedUserId}:${eventId}`,
+      challengeId: attempt?.challengeId
+        ?? (typeof req.body?.challenge_id === 'string' ? req.body.challenge_id.slice(0, 200) : null),
+      authorityRevision: attempt?.revision ?? null,
+      source: 'client',
+      sessionId: typeof req.body?.session_id === 'string' ? req.body.session_id.slice(0, 160) : null,
+      clientRelease: typeof req.body?.client_release === 'string' ? req.body.client_release.slice(0, 120) : null,
+      durationMs: Number.isInteger(req.body?.duration_ms) && req.body.duration_ms >= 0
+        ? Math.min(req.body.duration_ms, 86_400_000) : null,
+      verifierCode: typeof req.body?.failure_code === 'string' ? req.body.failure_code.slice(0, 120) : null,
+      payload,
+    });
+    res.status(202).json({ ok: true });
+  } catch (error) {
+    incrementDailyFritzMetric('event_persistence_failed');
+    res.status(503).json({ error: 'Daily Fritz telemetry is temporarily unavailable.' });
+  }
+  });
 
   app.get('/api/daily-fritz/metrics', async (req, res) => {
   const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
@@ -1611,6 +2032,15 @@ export function registerDailyFritzRoutes(app: Application): void {
       invalidatedAt: generated.invalidatedAt,
       metadata: generated.metadata,
     });
+    if (DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED) {
+      await publishDailyFritzChallenge(buildDailyFritzPublishedChallenge({
+        runDate: saved.runDate,
+        fritzTier: saved.fritzTier,
+        dealSize: saved.dealSize,
+        winningScore: saved.winningScore,
+        publishedAt: saved.generatedAt,
+      }));
+    }
     res.json({ ok: true, run_date: saved.runDate, seed: getDailyFritzSeed(saved.runDate) });
   } catch (error) {
     res.status(500).json({
@@ -1636,11 +2066,24 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(404).json({ error: 'Daily Fritz run not found.' });
       return;
     }
-    run.status = 'invalidated';
-    run.invalidatedAt = new Date().toISOString();
-    run.metadata = { ...(run.metadata ?? {}), invalidation_reason: reason || null };
-    await upsertDailyFritzRun(run);
-    res.json({ ok: true });
+    if (!DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED) {
+      run.status = 'invalidated';
+      run.invalidatedAt = new Date().toISOString();
+      run.metadata = { ...(run.metadata ?? {}), invalidation_reason: reason || null };
+      await upsertDailyFritzRun(run);
+      res.json({ ok: true, status: run.status });
+      return;
+    }
+    await publishDailyFritzChallenge(buildDailyFritzPublishedChallenge({
+      runDate: run.runDate,
+      fritzTier: run.fritzTier,
+      dealSize: run.dealSize,
+      winningScore: run.winningScore,
+      publishedAt: run.generatedAt,
+    }));
+    const invalidated = await invalidateDailyFritzPublishedChallenge(runDate, reason);
+    dailyFritzRunCache.delete(runDate);
+    res.json({ ok: true, challenge_id: invalidated.challengeId, status: invalidated.status });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to invalidate Daily Fritz run.',

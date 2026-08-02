@@ -68,4 +68,85 @@ describe('DB idempotency schema guardrails', () => {
 
     expect(sql).toContain('unique (tournament_id, round, match_number)');
   });
+
+  it('ships immutable, idempotent Daily Fritz challenge publication', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-01_daily_fritz_published_challenges.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.daily_fritz_published_challenges');
+    expect(sql).toContain('unique (run_date, contract_version)');
+    expect(sql).toContain('unique (content_digest)');
+    expect(sql).toContain('create trigger protect_daily_fritz_published_challenge');
+    expect(sql).toContain('daily_fritz_published_challenge_is_immutable');
+    expect(sql).toContain('daily_fritz_invalidated_challenge_is_final');
+    expect(sql).toContain('daily_fritz_published_challenge_delete_forbidden');
+    expect(sql).toContain('create or replace function public.publish_daily_fritz_challenge');
+    expect(sql).toContain('on conflict (challenge_id) do nothing');
+    expect(sql).toContain('daily_fritz_challenge_identity_conflict');
+    expect(sql).toContain('grant execute on function public.publish_daily_fritz_challenge');
+    expect(sql).toContain('create or replace function public.invalidate_daily_fritz_challenge');
+    expect(sql).toContain('v_invalidated_at timestamptz := now()');
+    expect(sql).toContain('grant execute on function public.invalidate_daily_fritz_challenge');
+  });
+
+  it('ships Daily Fritz CAS, durable receipts, normalized authority, and outbox primitives', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-01_daily_fritz_command_primitives.sql',
+    ));
+    expect(sql).toContain('add column if not exists revision bigint not null default 0');
+    expect(sql).toContain('add column if not exists current_game_number int not null default 1');
+    expect(sql).toContain('foreign key (challenge_id) references public.daily_fritz_published_challenges(challenge_id)');
+    expect(sql).toContain('create table if not exists public.daily_fritz_attempt_operations');
+    expect(sql).toContain('unique (attempt_id, operation_id)');
+    expect(sql).toContain('unique (user_id, challenge_id, operation_id)');
+    expect(sql).toContain('create table if not exists public.daily_fritz_verified_hands');
+    expect(sql).toContain('primary key (attempt_id, game_number, hand_index)');
+    expect(sql).toContain('create table if not exists public.daily_fritz_verified_games');
+    expect(sql).toContain('primary key (attempt_id, game_number)');
+    expect(sql).toContain('create table if not exists public.daily_fritz_outbox');
+    expect(sql).toContain('where delivered_at is null');
+    expect(sql).toContain('daily_fritz_attempt_operations_no_client_access');
+  });
+
+  it('ships transactional Daily Fritz start and mutation commands', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-01_daily_fritz_transactional_commands.sql',
+    ));
+    expect(sql).toContain('create or replace function public.start_daily_fritz_attempt_command');
+    expect(sql).toContain('pg_advisory_xact_lock');
+    expect(sql).toContain('for update');
+    expect(sql).toContain("'operation_id_reused'");
+    expect(sql).toContain('create or replace function public.commit_daily_fritz_attempt_command');
+    expect(sql).toContain("'stale_revision'");
+    expect(sql).toContain("'command_slot_conflict'");
+    expect(sql.indexOf('where id = p_attempt_id and user_id = p_user_id for update'))
+      .toBeLessThan(sql.indexOf('where attempt_id = p_attempt_id and operation_id = p_operation_id'));
+    expect(sql).toContain('revision = revision + 1');
+    expect(sql).toContain('insert into public.daily_fritz_verified_hands');
+    expect(sql).toContain('daily_fritz_terminal_hand_receipt_required');
+    expect(sql).toContain('insert into public.daily_fritz_verified_games');
+    expect(sql).toContain("jsonb_array_length(p_new_result->'games')");
+    expect(sql).toContain('update public.verified_single_player_matches');
+    expect(sql).toContain('insert into public.daily_fritz_attempt_operations');
+    expect(sql).toContain('insert into public.daily_fritz_outbox');
+    expect(sql).toContain('grant execute on function public.commit_daily_fritz_attempt_command');
+  });
+
+  it('ships canonical Daily Fritz funnel, failure taxonomy, and outbox projection', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-01_daily_fritz_canonical_telemetry.sql',
+    ));
+    expect(sql).toContain("'mode_impression'");
+    expect(sql).toContain("'first_move'");
+    expect(sql).toContain("'recovery_succeeded'");
+    expect(sql).toContain('create or replace function public.project_daily_fritz_outbox_event');
+    expect(sql).toContain("'outbox:' || new.id::text");
+    expect(sql).toContain('create or replace view public.daily_fritz_funnel_metrics');
+    expect(sql).toContain('create or replace view public.daily_fritz_failure_metrics');
+    expect(sql).toContain('create or replace view public.daily_fritz_retention_metrics');
+    expect(sql).toContain('next_day_returned_users');
+    expect(sql).toContain('seven_day_returned_users');
+    expect(sql).toContain('analytics_projected_at');
+    expect(sql).toContain('idx_daily_fritz_events_user_retention');
+  });
 });

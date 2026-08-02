@@ -5,6 +5,7 @@ import {
   DAILY_FRITZ_INIT_TIMEOUT_MS,
   DailyFritzAuthorityRecoveryError,
   recordDailyFritzGame,
+  recordDailyFritzTelemetry,
   startDailyFritz,
   type DailyFritzSetGameNumber,
   type DailyFritzSetGameResult,
@@ -28,6 +29,7 @@ import type {
 import { buildDailyFritzTranscript } from './dailyFritzTranscript';
 import { createDailyFritzChallengeIdentity } from './dailyFritzChallengeIdentity';
 import type { MoveEntry } from '../game/moveLogger';
+import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from './telemetry';
 import {
   buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
@@ -248,6 +250,16 @@ export function useDailyFritzRunController({
     setStartActionPending(true);
     setHubError(null);
     setSetOverlay(null);
+    if (today?.run_date) {
+      const sessionId = getDailyFritzTelemetrySession(today.run_date);
+      void recordDailyFritzTelemetry({
+        eventId: dailyFritzTelemetryEventId(sessionId, 'start_requested'),
+        eventType: 'start_requested',
+        runDate: today.run_date,
+        challengeId: today.challenge_id ?? null,
+        sessionId,
+      });
+    }
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       await handleStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
@@ -268,6 +280,17 @@ export function useDailyFritzRunController({
       setOverlay != null && 'setResult' in setOverlay
         ? setOverlay.setResult
         : normalizeSetResult(today?.set_result ?? today?.result);
+    if (today?.run_date) {
+      const sessionId = getDailyFritzTelemetrySession(today.run_date);
+      void recordDailyFritzTelemetry({
+        eventId: dailyFritzTelemetryEventId(sessionId, 'start_requested', 'resume'),
+        eventType: 'start_requested',
+        runDate: today.run_date,
+        challengeId: today.challenge_id ?? null,
+        sessionId,
+        payload: { resume: true },
+      });
+    }
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       setSetOverlay(null);
@@ -379,13 +402,42 @@ export function useDailyFritzRunController({
       }
     } catch (err) {
       if (err instanceof DailyFritzAuthorityRecoveryError) {
+        const sessionId = getDailyFritzTelemetrySession(run.run_date);
+        const recoveryScope = `${run.attempt_id}:${gameNumber}:${game.currentHandIndex}`;
+        void recordDailyFritzTelemetry({
+          eventId: dailyFritzTelemetryEventId(recoveryScope, 'recovery_started'),
+          eventType: 'recovery_started',
+          attemptId: run.attempt_id,
+          runDate: run.run_date,
+          challengeId: run.challenge_id ?? null,
+          sessionId,
+          failureCode: err.verifierCode,
+        });
         discardDailyFritzSnapshot(buildDailyFritzStorageKey(run.attempt_id, gameNumber));
         setSetOverlay(null);
         closeEmbeddedRun();
         setHubError('Daily Fritz restored the last verified hand. Your verified progress is safe.');
         try {
           await loadToday();
-        } catch {
+          void recordDailyFritzTelemetry({
+            eventId: dailyFritzTelemetryEventId(recoveryScope, 'recovery_succeeded'),
+            eventType: 'recovery_succeeded',
+            attemptId: run.attempt_id,
+            runDate: run.run_date,
+            challengeId: run.challenge_id ?? null,
+            sessionId,
+            failureCode: err.verifierCode,
+          });
+        } catch (recoveryError) {
+          void recordDailyFritzTelemetry({
+            eventId: dailyFritzTelemetryEventId(recoveryScope, 'recovery_failed'),
+            eventType: 'recovery_failed',
+            attemptId: run.attempt_id,
+            runDate: run.run_date,
+            challengeId: run.challenge_id ?? null,
+            sessionId,
+            failureCode: recoveryError instanceof Error ? recoveryError.name : 'reload_failed',
+          });
           // The hub keeps the recovery message and its normal retry affordance.
         }
         return;

@@ -5,6 +5,7 @@ import {
   DAILY_FRITZ_INIT_TIMEOUT_MS,
   DAILY_FRITZ_TODAY_CACHE_PREFIX,
   getTodayDailyFritz,
+  recordDailyFritzTelemetry,
   type DailyFritzTodayResponse,
 } from './api';
 import {
@@ -14,6 +15,7 @@ import {
   readTodayCache,
   shouldClearStaleClientState,
 } from './dailyFritzScreenHelpers';
+import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from './telemetry';
 import type { DailyFritzInitPhase } from './dailyFritzScreenTypes';
 
 export type UseDailyFritzInitParams = {
@@ -153,6 +155,15 @@ export function useDailyFritzInit({ userId }: UseDailyFritzInitParams): UseDaily
         setToday(response);
         persistTodayCache(response);
         setInitPhase('ready');
+        const sessionId = getDailyFritzTelemetrySession(response.run_date);
+        void recordDailyFritzTelemetry({
+          eventId: dailyFritzTelemetryEventId(sessionId, 'mode_impression'),
+          eventType: 'mode_impression',
+          runDate: response.run_date,
+          challengeId: response.challenge_id ?? null,
+          sessionId,
+          payload: { attemptStatus: response.attempt_status },
+        });
         dfInitLog('state', { phase: 'ready' });
       } catch {
         if (initRequestIdRef.current !== requestId) return;
