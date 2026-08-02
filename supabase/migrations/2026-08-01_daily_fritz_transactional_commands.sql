@@ -132,7 +132,7 @@ begin
     attempt.id, p_challenge_id, p_operation_id,
     case when created_attempt then 'attempt_started' else 'attempt_resumed' end,
     jsonb_build_object('revision', attempt.revision)
-  ) on conflict (challenge_id, operation_id, event_type) do nothing;
+  ) on conflict (attempt_id, operation_id, event_type) do nothing;
 
   return query select 'committed', null::text, false,
     attempt.revision, command_response;
@@ -386,7 +386,7 @@ begin
     ) values (
       attempt.id, attempt.challenge_id, p_operation_id, p_outbox_event_type,
       p_outbox_payload || jsonb_build_object('revision', attempt.revision)
-    ) on conflict (challenge_id, operation_id, event_type) do nothing;
+    ) on conflict (attempt_id, operation_id, event_type) do nothing;
   end if;
 
   return query select 'committed', null::text, false, attempt.revision, command_response;

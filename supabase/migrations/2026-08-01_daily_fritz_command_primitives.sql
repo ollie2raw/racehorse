@@ -116,7 +116,8 @@ create table if not exists public.daily_fritz_outbox (
   delivery_attempts int not null default 0 check (delivery_attempts >= 0),
   last_error text null,
   constraint daily_fritz_outbox_operation_event_key
-    unique (challenge_id, operation_id, event_type)
+  constraint daily_fritz_outbox_attempt_operation_event_key
+    unique (attempt_id, operation_id, event_type)
 );
 
 create index if not exists idx_daily_fritz_outbox_pending

@@ -26,6 +26,7 @@ Keep `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=false` while applying these files in th
 2. `supabase/migrations/2026-08-01_daily_fritz_command_primitives.sql`
 3. `supabase/migrations/2026-08-01_daily_fritz_transactional_commands.sql`
 4. `supabase/migrations/2026-08-01_daily_fritz_canonical_telemetry.sql`
+5. `supabase/migrations/2026-08-02_daily_fritz_outbox_attempt_scope.sql`
 
 `supabase/verified_matches.sql` must already be installed because transactional
 attempt creation links its verified match in the same transaction.

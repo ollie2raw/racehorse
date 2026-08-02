@@ -271,7 +271,8 @@ create table if not exists public.daily_fritz_outbox (
   event_type text not null, event_version int not null default 1, payload jsonb not null,
   occurred_at timestamptz not null default now(), available_at timestamptz not null default now(), delivered_at timestamptz null,
   delivery_attempts int not null default 0 check (delivery_attempts >= 0), last_error text null,
-  unique (challenge_id, operation_id, event_type)
+  constraint daily_fritz_outbox_attempt_operation_event_key
+    unique (attempt_id, operation_id, event_type)
 );
 
 create index if not exists idx_daily_fritz_outbox_pending on public.daily_fritz_outbox (available_at, occurred_at) where delivered_at is null;

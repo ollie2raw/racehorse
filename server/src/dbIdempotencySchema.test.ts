@@ -104,6 +104,7 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('create table if not exists public.daily_fritz_verified_games');
     expect(sql).toContain('primary key (attempt_id, game_number)');
     expect(sql).toContain('create table if not exists public.daily_fritz_outbox');
+    expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
     expect(sql).toContain('where delivered_at is null');
     expect(sql).toContain('daily_fritz_attempt_operations_no_client_access');
   });
@@ -130,6 +131,20 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('insert into public.daily_fritz_attempt_operations');
     expect(sql).toContain('insert into public.daily_fritz_outbox');
     expect(sql).toContain('grant execute on function public.commit_daily_fritz_attempt_command');
+    expect(sql.match(/on conflict \(attempt_id, operation_id, event_type\) do nothing/g)?.length)
+      .toBeGreaterThanOrEqual(2);
+  });
+
+  it('repairs Daily Fritz outbox idempotency to be player-attempt scoped', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_daily_fritz_outbox_attempt_scope.sql',
+    ));
+    expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
+    expect(sql).toContain("pg_get_functiondef(routine.oid)");
+    expect(sql).toContain("'on conflict (attempt_id, operation_id, event_type) do nothing'");
+    expect(sql).toContain("alter table public.daily_fritz_outbox drop constraint");
+    expect(sql).toContain("'backfilled', true");
+    expect(sql).toContain('on conflict (attempt_id, operation_id, event_type) do nothing');
   });
 
   it('ships canonical Daily Fritz funnel, failure taxonomy, and outbox projection', () => {
