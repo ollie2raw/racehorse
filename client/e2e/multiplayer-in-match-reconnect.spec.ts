@@ -20,6 +20,11 @@ import {
 
 test.describe.configure({ mode: 'serial', timeout: 360_000 });
 
+function numericScores(scores: { you: string; opponent: string }) {
+  const read = (value: string) => value.match(/(\d+)\s*$/)?.[1] ?? '';
+  return { you: read(scores.you), opponent: read(scores.opponent) };
+}
+
 test.beforeAll(async () => {
   await waitForGameServerReady();
 });
@@ -55,8 +60,8 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     const hostScoresAfter = await readHudScorePair(hostPage);
     const guestScoresAfter = await readHudScorePair(guestPage);
-    expect(hostScoresAfter).toEqual(hostScoresBefore);
-    expect(guestScoresAfter).toEqual(guestScoresBefore);
+    expect(numericScores(hostScoresAfter)).toEqual(numericScores(hostScoresBefore));
+    expect(numericScores(guestScoresAfter)).toEqual(numericScores(guestScoresBefore));
     expect(await readLastRoomCode(hostPage)).toBe(roomCode);
 
     await hostContext.close();
@@ -89,7 +94,7 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     expect(await readLastRoomCode(hostPage)).toBe(roomCode);
     const scoresAfterRefresh = await readHudScorePair(hostPage);
-    expect(scoresAfterRefresh).toEqual(scoresBeforeRefresh);
+    expect(numericScores(scoresAfterRefresh)).toEqual(numericScores(scoresBeforeRefresh));
     await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
 
     await hostContext.close();

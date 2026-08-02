@@ -164,27 +164,53 @@ function handCommand(pkg: StartPackage, handIndex: number, transcript: DailyFrit
 
 async function assertAuthorityRows(attemptId: string, expectedHands: number): Promise<void> {
   const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` };
-  const [hands, games, operations, outbox, events] = await Promise.all([
-    fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_verified_hands?select=hand_index&attempt_id=eq.${attemptId}`, { headers }),
-    fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_verified_games?select=game_number&attempt_id=eq.${attemptId}`, { headers }),
-    fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_attempt_operations?select=operation_id,status&attempt_id=eq.${attemptId}`, { headers }),
-    fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_outbox?select=event_type,analytics_projected_at&attempt_id=eq.${attemptId}`, { headers }),
-    fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_events?select=event_type,source,idempotency_key&attempt_id=eq.${attemptId}&source=eq.outbox`, { headers }),
-  ]);
+  let rows: {
+    hands: Json[]; games: Json[]; operations: Json[]; outbox: Json[]; events: Json[];
+  } | null = null;
+  const auditDeadline = Date.now() + 10_000;
+  do {
+    const [hands, games, operations, outbox, events] = await Promise.all([
+      fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_verified_hands?select=hand_index&attempt_id=eq.${attemptId}`, { headers }),
+      fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_verified_games?select=game_number&attempt_id=eq.${attemptId}`, { headers }),
+      fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_attempt_operations?select=operation_id,status&attempt_id=eq.${attemptId}`, { headers }),
+      fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_outbox?select=event_type,analytics_projected_at&attempt_id=eq.${attemptId}`, { headers }),
+      fetchJson<Json[]>(`${supabaseUrl}/rest/v1/daily_fritz_events?select=event_type,source,idempotency_key&attempt_id=eq.${attemptId}&source=eq.outbox`, { headers }),
+    ]);
+    rows = { hands, games, operations, outbox, events };
+    const auditComplete = hands.length === expectedHands
+      && games.length === 1
+      && outbox.some((row) => row.event_type === 'game_recorded')
+      && outbox.every((row) => Boolean(row.analytics_projected_at))
+      && events.filter((row) => row.event_type === 'game_recorded').length === 1;
+    if (auditComplete) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  } while (Date.now() < auditDeadline);
+
+  if (!rows) throw new Error('Authority audit returned no database response.');
+  const { hands, games, operations, outbox, events } = rows;
+  const evidence = JSON.stringify({
+    attemptId,
+    expectedHands,
+    handCount: hands.length,
+    gameCount: games.length,
+    operations: operations.map((row) => row.operation_id),
+    outbox: outbox.map((row) => ({ type: row.event_type, projected: Boolean(row.analytics_projected_at) })),
+    events: events.map((row) => ({ type: row.event_type, source: row.source })),
+  });
   if (hands.length !== expectedHands) throw new Error(`Expected ${expectedHands} verified hands, found ${hands.length}.`);
   if (games.length !== 1) throw new Error(`Expected one verified game, found ${games.length}.`);
   if (new Set(operations.map((row) => row.operation_id)).size !== operations.length) {
     throw new Error('Duplicate durable operation receipts detected.');
   }
   if (!outbox.some((row) => row.event_type === 'game_recorded')) {
-    throw new Error('Game authority committed without its transactional outbox event.');
+    throw new Error(`Game authority committed without its transactional outbox event: ${evidence}`);
   }
   if (outbox.some((row) => !row.analytics_projected_at)) {
-    throw new Error('Committed authority outbox event was not projected into canonical analytics.');
+    throw new Error(`Committed authority outbox event was not projected into canonical analytics: ${evidence}`);
   }
   const gameEvents = events.filter((row) => row.event_type === 'game_recorded');
   if (gameEvents.length !== 1 || gameEvents[0]?.source !== 'outbox') {
-    throw new Error(`Expected exactly one canonical outbox game event, found ${gameEvents.length}.`);
+    throw new Error(`Expected exactly one canonical outbox game event, found ${gameEvents.length}: ${evidence}`);
   }
   if (new Set(events.map((row) => row.idempotency_key)).size !== events.length) {
     throw new Error('Duplicate canonical analytics identities detected.');
