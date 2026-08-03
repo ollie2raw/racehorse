@@ -384,6 +384,18 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           const failureAttempt = transitionStateRef.current.dailyFritzNextHandFailureCount;
           const isAbort = err instanceof Error && err.message.toLowerCase().includes('timed out');
           const isRetryable = isRetryableDailyFritzNextHandError(err);
+          const verifierCode = err instanceof DailyFritzNextHandHttpError
+            ? err.verifierCode
+            : null;
+          // A hand-end callback can run before the final move-log write is
+          // observable. Never make the player recover from that local timing
+          // race: discard the frozen prefetch evidence and rebuild it once.
+          if (verifierCode === 'incomplete_transcript' && failureAttempt <= 2) {
+            prefetchCoordinator.clear();
+            completedHandEvidenceRef.current = null;
+            advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+            return;
+          }
           emitHandLifecycleDebugLog({
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
@@ -400,9 +412,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           });
           if (!isRetryable) {
             const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
-            const verifierCode = err instanceof DailyFritzNextHandHttpError
-              ? err.verifierCode
-              : null;
             if (status === 400 || isRecoverableDailyFritzAuthorityCode(verifierCode)) {
               discardDailyFritzSnapshot(buildDailyFritzStorageKey(
                 dailyFritzPackage.attempt_id,
@@ -550,26 +559,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           lastDailyFlowLabelRef.current = 'hand-complete';
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
           logDailyFritzHandComplete(result);
-          if (dailyFritzPackage && !result.state.gameOver) {
-            const gameNumber = (dailyFritzPackage.current_game_number ?? 1);
-            const evidenceKey = buildDailyFritzCompletedHandEvidenceKey(
-              dailyFritzPackage,
-              gameNumber,
-              dailyFritzHandIndex,
-              result.state.handNumber,
-            );
-            if (completedHandEvidenceRef.current?.key !== evidenceKey) {
-              const params = buildDailyFritzPrefetchParams(
-                dailyFritzPackage,
-                dailyFritzHandIndex,
-                result.state,
-                getMoveLog(),
-                dailyFritzTranscriptProtocolVersion,
-              );
-              completedHandEvidenceRef.current = { key: evidenceKey, params };
-              prefetchCoordinator.startPrefetch(params);
-            }
-          }
         }
         ports.flashLastPlayed(null);
         const plan = reveal.planHandEndedReveal(result);

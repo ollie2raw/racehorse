@@ -11,8 +11,10 @@ import { resolveDailyFritzNextHandCache } from './handLifecycleRules.ts';
 import type { DailyFritzNextHandCacheEntry, DailyFritzPrefetchParams } from './types.ts';
 
 /**
- * Owns the Daily Fritz next-hand prefetch cache: kick off on hand-end,
- * resolve on advance, and expose in-flight/ready state for debug.
+ * Owns the Daily Fritz next-hand request cache. Daily Fritz deliberately
+ * starts this request during advance, after the hand reveal has allowed the
+ * replay recorder to include the terminal action; callers may still use this
+ * coordinator to deduplicate the request and expose its state for debug.
  */
 export class HandPrefetchCoordinator {
   private cache: DailyFritzNextHandCacheEntry | null = null;
