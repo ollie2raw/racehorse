@@ -41,7 +41,11 @@ export function canonicalizeDailyFritzMoveLog(
   const seenPlacements = new Set<string>();
   const canonical: MoveEntry[] = [];
 
-  for (const entry of moveLog) {
+  // Persisted checkpoints can be assembled from more than one synchronous
+  // capture path. Move numbers are the recorder's ordering authority; never
+  // make the verifier infer turn order from array insertion order.
+  const orderedMoveLog = [...moveLog].sort((a, b) => a.moveNumber - b.moveNumber);
+  for (const entry of orderedMoveLog) {
     const handNumber = entry.handNumber;
     const key = typeof handNumber === 'number'
       ? placementKey(entry, handNumber)

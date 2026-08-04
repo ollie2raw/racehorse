@@ -235,7 +235,12 @@ export function verifyDailyFritzHand(input: {
         continue;
       }
     }
-    if (action.actor !== expectedActor) throw new DailyFritzVerificationError('Transcript actor does not own the turn.', 'wrong_actor');
+    if (action.actor !== expectedActor) {
+      throw new DailyFritzVerificationError(
+        `Transcript actor does not own the turn (action ${action.sequence}: got ${action.actor}, expected ${expectedActor}, stateSeq ${state.handNumber}:${state.sequence}).`,
+        'wrong_actor',
+      );
+    }
     // Draws are deterministic and mandatory whenever `canDraw` is true. Some
     // clients can commit the resulting rack state before the presentation layer
     // appends every draw event. Reconstruct only those omitted forced draws
