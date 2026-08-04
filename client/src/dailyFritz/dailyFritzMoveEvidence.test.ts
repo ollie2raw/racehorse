@@ -68,4 +68,14 @@ describe('Daily Fritz move evidence', () => {
     expect(canonicalizeDailyFritzMoveLog(log).map((entry) => entry.moveNumber))
       .toEqual([1, 2, 4]);
   });
+
+  it('orders resumed evidence by recorder move number before verification', () => {
+    const log: MoveEntry[] = [
+      { ...base, moveNumber: 3, handNumber: 1, player: 'you', action: 'pass' },
+      { ...base, moveNumber: 1, handNumber: 1, player: 'you', action: 'pass' },
+      { ...base, moveNumber: 2, handNumber: 1, player: 'opponent', action: 'pass' },
+    ];
+    expect(canonicalizeDailyFritzMoveLog(log).map((entry) => entry.moveNumber))
+      .toEqual([1, 2, 3]);
+  });
 });

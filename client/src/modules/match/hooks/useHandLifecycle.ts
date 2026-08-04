@@ -396,6 +396,16 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
             return;
           }
+          // A concurrent resume or a checkpoint assembled during a move-log
+          // write can briefly submit actions out of order. Rebuild the frozen
+          // evidence once or twice before surfacing recovery UI; the server
+          // still verifies the rebuilt transcript exactly.
+          if (verifierCode === 'wrong_actor' && failureAttempt <= 2) {
+            prefetchCoordinator.clear();
+            completedHandEvidenceRef.current = null;
+            advanceRetry.schedule(150, 'rebuild-wrong-actor-transcript', () => advanceHandRef.current());
+            return;
+          }
           emitHandLifecycleDebugLog({
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
