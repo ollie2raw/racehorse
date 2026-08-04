@@ -152,6 +152,44 @@ function applyOmittedMandatoryDraws(
   return current;
 }
 
+/**
+ * A resumed client can persist the player's next action before the preceding
+ * Fritz action is visible in its move log. Fritz's action is not user input:
+ * it is fully determined by the pinned policy and authoritative state. Apply
+ * that one official turn before replaying the submitted player action.
+ */
+function applyOmittedOfficialFritzTurn(
+  state: GameState,
+  transcriptSequence: number,
+  policyVersion: 1 | 2,
+  tier: DailyFritzTier,
+): GameState {
+  let current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
+  const decision = chooseOfficialFritzDecisionForVersion({
+    version: policyVersion,
+    state: current,
+    participantId: 'fritz',
+    tier,
+  });
+  const action: DailyFritzTranscript['actions'][number] = decision.kind === 'play'
+    ? {
+        sequence: transcriptSequence,
+        actor: 'fritz',
+        kind: 'play',
+        tile: decision.tile,
+        position: decision.position,
+      }
+    : { sequence: transcriptSequence, actor: 'fritz', kind: decision.kind };
+  try {
+    return applyGameCommand(current, toCommand(current, action)).state;
+  } catch (error) {
+    throw new DailyFritzVerificationError(
+      `The official Fritz recovery action could not be applied before transcript action ${transcriptSequence}: ${error instanceof Error ? error.message : 'illegal action.'}`,
+      'fritz_recovery_failed',
+    );
+  }
+}
+
 export function digestDailyFritzTranscript(transcript: DailyFritzTranscript): string {
   return createHash('sha256').update(JSON.stringify(transcript)).digest('hex');
 }
@@ -222,7 +260,27 @@ export function verifyDailyFritzHand(input: {
   let lastPlayActor: string | null = null;
   for (const action of transcript.actions) {
     if (state.handOver || state.gameOver) throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
-    const expectedActor = state.playerIds[state.currentPlayerIndex];
+    let expectedActor = state.playerIds[state.currentPlayerIndex];
+    // Protocol 2 clients should record Fritz actions, but a checkpoint can
+    // still capture the player's next action before that append is durable.
+    // Recover exactly one omitted official Fritz turn; never infer player
+    // actions or accept a player action against the wrong authoritative state.
+    if (
+      transcript.protocolVersion >= 2
+      && action.actor === 'player'
+      && expectedActor === 'fritz'
+    ) {
+      state = applyOmittedOfficialFritzTurn(
+        state,
+        action.sequence,
+        transcript.fritzPolicyVersion,
+        input.fritzTier,
+      );
+      if (state.handOver || state.gameOver) {
+        throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
+      }
+      expectedActor = state.playerIds[state.currentPlayerIndex];
+    }
     if (
       allowLegacyRecoverySkip
       && lastPlayActor === action.actor
@@ -244,8 +302,9 @@ export function verifyDailyFritzHand(input: {
     // Draws are deterministic and mandatory whenever `canDraw` is true. Some
     // clients can commit the resulting rack state before the presentation layer
     // appends every draw event. Reconstruct only those omitted forced draws
-    // before a submitted play/pass. This cannot grant an optional draw: the
-    // engine stops at the first legal play and rejects any substituted tile.
+    // before a submitted play/pass, including Fritz actions before policy
+    // comparison. This cannot grant an optional draw: the engine stops at the
+    // first legal play and rejects any substituted tile.
     if (action.kind !== 'draw' && canDraw(state, action.actor)) {
       state = applyOmittedMandatoryDraws(state, action.actor, action.sequence);
     }

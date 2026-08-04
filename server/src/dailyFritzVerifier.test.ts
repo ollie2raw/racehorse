@@ -328,9 +328,13 @@ describe('Daily Fritz server replay verifier', () => {
       fritzScore: 0,
     });
     const honest = buildHonestTranscript(initial);
+    const skippedPlayerIndex = honest.actions.findIndex((action) => action.actor === 'player');
+    expect(skippedPlayerIndex).toBeGreaterThanOrEqual(0);
     const skipped = {
       ...honest,
-      actions: honest.actions.slice(1).map((action, sequence) => ({ ...action, sequence })),
+      actions: honest.actions
+        .filter((_, index) => index !== skippedPlayerIndex)
+        .map((action, sequence) => ({ ...action, sequence })),
     };
     expect(() => verify(skipped, initial)).toThrow();
     const fritzIndex = honest.actions.findIndex((action) => action.actor === 'fritz');
@@ -342,6 +346,35 @@ describe('Daily Fritz server replay verifier', () => {
         : action),
     };
     expect(() => verify(substituted, initial)).toThrow(/official policy|legal|turn/i);
+  });
+
+  it('reconstructs one omitted official Fritz turn before a resumed player action', () => {
+    const initial = {
+      ...state('bot'),
+      board: simulatePlacement(null, { low: 0, high: 0 }, 'left'),
+      handOpen: true,
+      players: {
+        player: { id: 'player', hand: [{ low: 0, high: 1 }], score: 0 },
+        fritz: { id: 'fritz', hand: [{ low: 5, high: 6 }], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+      currentPlayerIndex: 1,
+    } satisfies GameState;
+    expect(chooseOfficialFritzDecision({
+      state: initial,
+      participantId: 'fritz',
+      tier: 'standard',
+    }).kind).toBe('pass');
+
+    const verified = verify(transcript([{
+      sequence: 0,
+      actor: 'player',
+      kind: 'play',
+      tile: { low: 0, high: 1 },
+      position: 'left',
+    }]), initial);
+    expect(verified.terminalState.handOver).toBe(true);
   });
 
   it('produces stable digests for idempotent retries and different digests for conflicts', () => {
