@@ -141,7 +141,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     }
     const finalizeReady = isDailyPuzzleAttemptFinalizeReady(attempt);
     const nextAvailableSlotIndex = attempt.status === 'completed'
-      ? (Math.min(Math.max(attempt.result.slots.length, 1), 3) as DailyPuzzleSlotIndex)
+      ? (Math.min(Math.max(attempt.result.slots.length, 1), DAILY_PUZZLE_SLOT_COUNT) as DailyPuzzleSlotIndex)
       : finalizeReady
         ? null
         : attempt.currentSlotIndex;
