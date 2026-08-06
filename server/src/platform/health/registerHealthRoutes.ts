@@ -6,7 +6,7 @@ import {
   assessDailyPuzzleLadderReadiness,
   isPastLadderReadinessGracePt,
 } from '../../dailyPuzzleLadderReadiness';
-import type { DailyPuzzleSlot } from '../../dailyPuzzle';
+import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlot } from '../../dailyPuzzle';
 
 const READY_REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'] as const;
 const READY_RECOMMENDED_ENV_VARS = [
@@ -190,7 +190,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         runDate: todayPt,
         ready: false,
         publishedSlotCount: 0,
-        missingSlotIndexes: [1, 2, 3],
+        missingSlotIndexes: [...DAILY_PUZZLE_SLOT_INDICES],
         legacySinglePuzzleDay: true,
         shouldAlert: isPastLadderReadinessGracePt(todayPt),
         alertReason: error instanceof Error ? error.message : String(error),

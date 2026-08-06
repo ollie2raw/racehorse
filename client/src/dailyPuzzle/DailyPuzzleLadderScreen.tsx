@@ -14,13 +14,14 @@ import { tileEquals } from '../game/tileUtils';
 import { startDailyPuzzleLadder } from './api';
 import { createPuzzleMatchState } from './validator';
 import type {
+  DailyPuzzleSlotIndex,
   DailyPuzzleAttempt,
   DailyPuzzleCompleteResponse,
   DailyPuzzleSlot,
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import type { DailyPuzzleSlotIndex } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -120,7 +121,7 @@ export default function DailyPuzzleLadderScreen({
       Boolean(
         attempt &&
           attempt.status === 'started' &&
-          attempt.result.slots.length >= 3,
+          attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT,
       ),
     [attempt],
   );
