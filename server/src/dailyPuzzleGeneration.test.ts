@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { isDailyPuzzleLadderReady, type DailyPuzzleSlot } from './dailyPuzzle';
 import { createHighScorePuzzle } from './generatePuzzles';
 import {
+  DAILY_PUZZLE_LADDER_PROFILES,
   choosePuzzleForSlot,
   type LadderSlotGenerationProfile,
 } from './seedDailyPuzzleLadder';
@@ -23,6 +24,17 @@ const tacticalProfile: LadderSlotGenerationProfile = {
 };
 
 describe('Daily Puzzle ladder generation budgets', () => {
+  it('publishes five equal 300-point high-score slots with 8–10 starting tiles', () => {
+    expect(DAILY_PUZZLE_LADDER_PROFILES).toHaveLength(5);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotIndex)).toEqual([1, 2, 3, 4, 5]);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.every((profile) =>
+      profile.slotMaxPoints === 300
+      && profile.targetHandSizeRange[0] === 8
+      && profile.targetHandSizeRange[1] === 10
+      && profile.preferredPuzzleTypes.length === 1
+      && profile.preferredPuzzleTypes[0] === 'one_turn_high_score')).toBe(true);
+  });
+
   it('turns repeated null Tactical Setup candidates into a structured failure', async () => {
     const result = await choosePuzzleForSlot('2026-05-17', tacticalProfile, {
       purpose: 'request',
@@ -177,7 +189,7 @@ function slot(overrides: Partial<DailyPuzzleSlot>): DailyPuzzleSlot {
 }
 
 describe('Daily Puzzle ladder readiness and unavailable copy', () => {
-  it('returns false when fewer than three slots exist', () => {
+  it('returns false when fewer than five slots exist', () => {
     expect(isDailyPuzzleLadderReady([slot({ slotIndex: 1 }), slot({ slotIndex: 2 })])).toBe(false);
   });
 
@@ -191,7 +203,9 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
         slotMaxPoints: 250,
         bestPossibleScore: null,
       }),
-      slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 300 }),
+      slot({ slotIndex: 4, slotTitle: 'Puzzle 4', tier: 'master_chain', slotMaxPoints: 300 }),
+      slot({ slotIndex: 5, slotTitle: 'Puzzle 5', tier: 'master_chain', slotMaxPoints: 300 }),
     ])).toBe(false);
   });
 

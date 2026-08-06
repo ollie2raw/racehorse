@@ -32,7 +32,7 @@ export type DailyPuzzleGenerationRejectionReason =
   | 'attempt_limit';
 
 export type LadderSlotGenerationProfile = {
-  slotIndex: 1 | 2 | 3;
+  slotIndex: 1 | 2 | 3 | 4 | 5;
   tier: 'quick_line' | 'tactical_setup' | 'master_chain';
   slotTitle: string;
   slotMaxPoints: number;
@@ -41,34 +41,14 @@ export type LadderSlotGenerationProfile = {
   preferredPuzzleTypes: ('one_turn_high_score' | 'setup_and_strike')[];
 };
 
-const LADDER_PROFILES: LadderSlotGenerationProfile[] = [
-  {
-    slotIndex: 1,
-    tier: 'quick_line',
-    slotTitle: 'Quick Line',
-    slotMaxPoints: 150,
-    targetHandSizeRange: [3, 4],
-    targetBestScoreRange: [25, 50],
-    preferredPuzzleTypes: ['one_turn_high_score'],
-  },
-  {
-    slotIndex: 2,
-    tier: 'tactical_setup',
-    slotTitle: 'Tactical Setup',
-    slotMaxPoints: 250,
-    targetHandSizeRange: [5, 6],
-    targetBestScoreRange: [35, 75],
-    preferredPuzzleTypes: ['setup_and_strike', 'one_turn_high_score'],
-  },
-  {
-    slotIndex: 3,
-    tier: 'master_chain',
-    slotTitle: 'Master Chain',
-    slotMaxPoints: 400,
-    targetHandSizeRange: [8, 10],
-    preferredPuzzleTypes: ['one_turn_high_score'],
-  },
-];
+export const DAILY_PUZZLE_LADDER_PROFILES: LadderSlotGenerationProfile[] = [1, 2, 3, 4, 5].map((slotIndex) => ({
+  slotIndex: slotIndex as 1 | 2 | 3 | 4 | 5,
+  tier: 'master_chain',
+  slotTitle: `Puzzle ${slotIndex}`,
+  slotMaxPoints: 300,
+  targetHandSizeRange: [8, 10],
+  preferredPuzzleTypes: ['one_turn_high_score'],
+}));
 
 type CuratedDailyPuzzle = ReturnType<typeof createHighScorePuzzle>;
 
@@ -246,43 +226,9 @@ function isCuratedPuzzle(value: unknown): value is CuratedDailyPuzzle {
   );
 }
 
-function minScoreForProfile(profile: LadderSlotGenerationProfile): number {
-  if (profile.slotIndex === 1) return 15;
-  if (profile.slotIndex === 2) return 25;
-  return 35;
-}
-
 function generationPlansForProfile(profile: LadderSlotGenerationProfile): GenerationPlan[] {
   const [minHandSize, maxHandSize] = profile.targetHandSizeRange;
-  if (profile.slotIndex === 1) {
-    return [
-      {
-        puzzleType: 'one_turn_high_score',
-        fallbackTier: 'primary',
-        minHandSize,
-        maxHandSize,
-        minBestScore: 15,
-        enforceTargetBestScoreRange: true,
-      },
-      {
-        puzzleType: 'one_turn_high_score',
-        fallbackTier: 'relax_score',
-        minHandSize,
-        maxHandSize,
-        minBestScore: 10,
-        enforceTargetBestScoreRange: false,
-      },
-      {
-        puzzleType: 'one_turn_high_score',
-        fallbackTier: 'wider_hand',
-        minHandSize: Math.max(3, minHandSize - 1),
-        maxHandSize: Math.min(6, maxHandSize + 1),
-        minBestScore: 10,
-        enforceTargetBestScoreRange: false,
-      },
-    ];
-  }
-  if (profile.slotIndex === 2) {
+  if (profile.preferredPuzzleTypes.includes('setup_and_strike')) {
     return [
       {
         puzzleType: 'setup_and_strike',
@@ -312,7 +258,7 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
         puzzleType: 'one_turn_high_score',
         fallbackTier: 'fallback_type',
         minHandSize: Math.max(5, minHandSize),
-        maxHandSize: Math.min(7, maxHandSize + 1),
+        maxHandSize: Math.min(10, maxHandSize + 1),
         minBestScore: 20,
         enforceTargetBestScoreRange: false,
       },
@@ -324,8 +270,8 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
       fallbackTier: 'primary',
       minHandSize,
       maxHandSize,
-      minBestScore: minScoreForProfile(profile),
-      enforceTargetBestScoreRange: Boolean(profile.targetBestScoreRange),
+      minBestScore: 35,
+      enforceTargetBestScoreRange: false,
     },
     {
       puzzleType: 'one_turn_high_score',
@@ -338,8 +284,10 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
     {
       puzzleType: 'one_turn_high_score',
       fallbackTier: 'wider_hand',
-      minHandSize: Math.max(6, minHandSize - 2),
-      maxHandSize: Math.min(10, maxHandSize),
+      // The five-puzzle contract intentionally never falls below the
+      // published 8–10 starting-tile range, even when relaxing score checks.
+      minHandSize,
+      maxHandSize,
       minBestScore: 15,
       enforceTargetBestScoreRange: false,
     },
@@ -533,7 +481,7 @@ export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
     slots: slots.map((slot) => {
       const missing: string[] = [];
       if (!slot.published) missing.push('published');
-      if (slot.slotIndex < 1 || slot.slotIndex > 3) missing.push('slot_index');
+      if (slot.slotIndex < 1 || slot.slotIndex > 5) missing.push('slot_index');
       if (slot.slotMaxPoints <= 0) missing.push('slot_max_points');
       if ((slot.bestPossibleScore ?? 0) <= 0) missing.push('best_possible_score');
       if (!slot.startingBoard) missing.push('starting_board');
@@ -554,7 +502,7 @@ export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
 }
 
 /**
- * Idempotently writes three published `daily_puzzles` rows for the Pacific calendar date.
+ * Idempotently writes five published `daily_puzzles` rows for the Pacific calendar date.
  * Used by CLI, server startup/schedule, and lazy `/api/daily-puzzle/today` when missing.
  */
 export async function ensureDailyPuzzleLadderForDate(
@@ -601,7 +549,7 @@ export async function ensureDailyPuzzleLadderForDate(
       topRejectionReasons: Array<{ reason: string; count: number }>;
     }> = [];
 
-    for (const profile of LADDER_PROFILES) {
+    for (const profile of DAILY_PUZZLE_LADDER_PROFILES) {
       await yieldEventLoop();
       const result = await choosePuzzleForSlot(date, profile, { purpose });
       if (!result.ok) {

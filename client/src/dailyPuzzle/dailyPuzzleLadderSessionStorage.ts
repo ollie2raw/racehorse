@@ -1,5 +1,6 @@
 import type { BotMatchState } from '../bot/botEngine';
 import type { PlayStatus } from './dailyPuzzleScreenTypes';
+import type { DailyPuzzleSlotIndex } from './types';
 
 const SESSION_KEY_PREFIX = 'racehorse:daily-puzzle-ladder:v1:';
 
@@ -8,7 +9,7 @@ export type DailyPuzzleLadderSessionSnapshot = {
   attemptId: string;
   runDate: string;
   slotId: string;
-  slotIndex: 1 | 2 | 3;
+  slotIndex: DailyPuzzleSlotIndex;
   runtimeState: BotMatchState;
   status: PlayStatus;
   movesUsed: number;
@@ -40,7 +41,7 @@ function isValidRuntimeState(value: unknown): value is BotMatchState {
 function parseSnapshot(value: unknown): DailyPuzzleLadderSessionSnapshot | null {
   if (!isObject(value) || value.version !== 1 || typeof value.attemptId !== 'string'
     || typeof value.runDate !== 'string' || typeof value.slotId !== 'string'
-    || ![1, 2, 3].includes(Number(value.slotIndex)) || !isValidRuntimeState(value.runtimeState)
+    || ![1, 2, 3, 4, 5].includes(Number(value.slotIndex)) || !isValidRuntimeState(value.runtimeState)
     || !['IN_PROGRESS', 'SOLVED', 'FAILED'].includes(String(value.status))
     || !Number.isInteger(Number(value.movesUsed)) || Number(value.movesUsed) < 0
     || (value.finalScore !== null && !Number.isFinite(value.finalScore))

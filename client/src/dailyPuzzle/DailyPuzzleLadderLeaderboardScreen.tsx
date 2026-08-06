@@ -17,7 +17,8 @@ import {
   getDailyPuzzleLeaderboardSlotCode,
   getDailyPuzzleLeaderboardSlotTitle,
 } from './presentation';
-import type { DailyPuzzleLeaderboardRow } from './types';
+import type { DailyPuzzleLeaderboardRow, DailyPuzzleSlotIndex } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT, DAILY_PUZZLE_SLOT_INDICES } from './types';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import '../components/hub/hubDesignTokens.css';
 import '../social/hub/hubShared.css';
@@ -31,7 +32,7 @@ const FILTER_OPTIONS = [
   { id: 'topRated' as const, label: 'Top Rated' },
 ];
 
-const SLOT_INDICES = [1, 2, 3] as const;
+const SLOT_INDICES = DAILY_PUZZLE_SLOT_INDICES;
 const SPARSE_ROW_THRESHOLD = 8;
 
 interface DailyPuzzleLadderLeaderboardScreenProps {
@@ -112,7 +113,7 @@ function PuzzleBreakdown({
   bestSlotIndex,
 }: {
   row: DailyPuzzleLeaderboardRow;
-  bestSlotIndex: 1 | 2 | 3 | null;
+  bestSlotIndex: DailyPuzzleSlotIndex | null;
 }) {
   const slotsByIndex = new Map(row.breakdown.map((slot) => [slot.slotIndex, slot] as const));
 
@@ -167,8 +168,7 @@ function LeaderboardRow({
 }) {
   const topRank = row.rank <= 3 ? (row.rank as 1 | 2 | 3) : null;
   const isSelf = isCurrentUserRow(row, currentUserId, currentUsername);
-  const showTier = row.rank <= 10;
-  const ladderComplete = row.puzzlesCompleted >= 3;
+  const ladderComplete = row.puzzlesCompleted >= DAILY_PUZZLE_SLOT_COUNT;
   const bestSlot = getDailyPuzzleBestSlotDisplay(row.breakdown);
 
   return (
@@ -196,11 +196,10 @@ function LeaderboardRow({
             {row.username}
             {isSelf ? <span className="dflb-you-tag">You</span> : null}
           </strong>
-          {showTier ? <span className="dflb-tier-chip dflb-tier-chip--puzzle">Puzzle</span> : null}
         </div>
       </div>
       <div className={`dflb-cell dpl-ladder-cell${ladderComplete ? ' is-complete' : ''}`}>
-        <span className="dpl-ladder-cell__ratio">{row.puzzlesCompleted}/3</span>
+        <span className="dpl-ladder-cell__ratio">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT}</span>
         {ladderComplete ? <span className="dpl-ladder-cell__status">Complete</span> : null}
       </div>
       <div className="dflb-cell dpl-total-score">{row.totalScore}</div>
@@ -242,8 +241,8 @@ function PodiumSlot({
         <span className="dflb-podium-avatar dflb-podium-avatar--empty" aria-hidden="true">
           <span className="dflb-podium-avatar__glyph">+</span>
         </span>
-        <span className="dflb-podium-name">Open spot</span>
-        <span className="dflb-podium-empty-hint">Awaiting climber</span>
+        <span className="dflb-podium-name">—</span>
+        <span className="dflb-podium-empty-hint">Unclaimed</span>
       </div>
     );
   }
@@ -255,7 +254,7 @@ function PodiumSlot({
       <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
       <span className="dflb-podium-name">{row.username}</span>
       <span className="dflb-podium-score">{row.totalScore} pts</span>
-      <span className="dflb-podium-margin">{row.puzzlesCompleted}/3 · M3 {row.masterChainScore}</span>
+      <span className="dflb-podium-margin">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT} · M5 {row.masterChainScore}</span>
     </div>
   );
 }
@@ -476,7 +475,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   <span className="rh-hub-tag dflb-eyebrow dflb-eyebrow--ladder">Daily Puzzle Ladder</span>
                   <h1 className="dflb-command__title">Leaderboard</h1>
                   <p className="dflb-command__sub">
-                    Global ranking · Climb three puzzles for today's ladder total.
+                    Global ranking · Climb five puzzles for today's ladder total.
                   </p>
                 </div>
                 <div className="dflb-command__aside">
@@ -487,7 +486,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                         className="dpl-share-result-btn dflb-share-result-btn"
                         onClick={handleShareResult}
                       >
-                        {shareDone ? '✓ Shared!' : 'Share Result'}
+                        {shareDone ? 'Copied' : 'Share Result'}
                       </button>
                     ) : null}
                     <button type="button" className="dflb-back-link rh-back-button" onClick={onBack}>
@@ -569,7 +568,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                           </div>
                           <div>
                             <dt>Ladder</dt>
-                            <dd>{selfRow.puzzlesCompleted}/3</dd>
+                            <dd>{selfRow.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT}</dd>
                           </div>
                           <div>
                             <dt>Best</dt>
@@ -579,7 +578,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                       </div>
                     ) : (
                       <div className="dflb-you-empty">
-                        <p>Complete today&apos;s ladder run to appear on the board.</p>
+                        <p>Finish today&apos;s ladder to take your place.</p>
                       </div>
                     )}
                   </section>

@@ -1,5 +1,6 @@
 import { getDailyPuzzleStepPresentation } from './presentation';
 import type { DailyPuzzleAttempt } from './types';
+import { DAILY_PUZZLE_SLOT_INDICES } from './types';
 
 export type DailyPuzzleLadderShareData = {
   shareDate: string;
@@ -28,7 +29,7 @@ export function buildLadderShareData(params: {
   shareRating?: number;
 }): DailyPuzzleLadderShareData {
   const slots = params.attempt.result.slots;
-  const slotLines = ([1, 2, 3] as const).map((slotIndex) => {
+  const slotLines = DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const result = slots.find((entry) => entry.slotIndex === slotIndex);
     const step = getDailyPuzzleStepPresentation(slotIndex);
     if (!result) return `${step.shortLabel} —`;

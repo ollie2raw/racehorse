@@ -37,8 +37,8 @@ export type DailyPuzzleLadderOverlayFlags = {
 export type DailyPuzzleLadderOverlayActions = {
   exitPlayToHub: () => void;
   onSlotNext: (nextSlot: DailyPuzzleSlot) => void;
-  onPracticeReplay: (slotIndex: 1 | 2 | 3) => void;
-  onPracticeNext: (slotIndex: 1 | 2 | 3) => void;
+  onPracticeReplay: (slotIndex: 1 | 2 | 3 | 4 | 5) => void;
+  onPracticeNext: (slotIndex: 1 | 2 | 3 | 4 | 5) => void;
   onPracticeExitToHub: () => void;
   onShareResult: (text: string) => void;
   onFinalHome: () => void;
@@ -174,21 +174,21 @@ export function DailyPuzzleLadderOverlays({
             </div>
             <footer
               className={`rh-result__actions dpl-ladder-result__actions${
-                practiceOverlay.slotIndex < 3 ? ' dpl-ladder-result__actions--triple' : ''
+                practiceOverlay.slotIndex < 5 ? ' dpl-ladder-result__actions--triple' : ''
               }`}
             >
               <button
                 type="button"
                 className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
-                onClick={() => actions.onPracticeReplay(practiceOverlay.slotIndex as 1 | 2 | 3)}
+                onClick={() => actions.onPracticeReplay(practiceOverlay.slotIndex as 1 | 2 | 3 | 4 | 5)}
               >
                 Replay
               </button>
-              {practiceOverlay.slotIndex < 3 ? (
+              {practiceOverlay.slotIndex < 5 ? (
                 <button
                   type="button"
                   className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
-                  onClick={() => actions.onPracticeNext((practiceOverlay.slotIndex + 1) as 1 | 2 | 3)}
+                  onClick={() => actions.onPracticeNext((practiceOverlay.slotIndex + 1) as 1 | 2 | 3 | 4 | 5)}
                 >
                   {`Practice ${getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex + 1)}`}
                 </button>
@@ -201,7 +201,7 @@ export function DailyPuzzleLadderOverlays({
                   Back to Ladder
                 </button>
               )}
-              {practiceOverlay.slotIndex < 3 ? (
+              {practiceOverlay.slotIndex < 5 ? (
                 <button
                   type="button"
                   className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
@@ -231,10 +231,10 @@ export function DailyPuzzleLadderOverlays({
             <div className="rh-result__summary">
               <div>
                 <span className="rh-result__summary-label">Completed</span>
-                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/3</span>
+                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/5</span>
               </div>
               <div>
-                <span className="rh-result__summary-label">Puzzle 3</span>
+                <span className="rh-result__summary-label">Puzzle 5</span>
                 <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
               </div>
               <div>

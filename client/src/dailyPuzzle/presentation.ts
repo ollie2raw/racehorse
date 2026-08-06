@@ -19,15 +19,13 @@ export function getDailyPuzzleStepPresentation(slotIndex: number): DailyPuzzleSt
       shortLabel: 'P2',
     };
   }
-  return {
-    title: 'Puzzle 3',
-    subtitle: 'Final',
-    shortLabel: 'P3',
-  };
+  if (slotIndex === 3) return { title: 'Puzzle 3', subtitle: 'Final', shortLabel: 'P3' };
+  if (slotIndex === 4) return { title: 'Puzzle 4', subtitle: 'Final stretch', shortLabel: 'P4' };
+  return { title: 'Puzzle 5', subtitle: 'Finale', shortLabel: 'P5' };
 }
 
 export function getDailyPuzzleDisplayTitle(slotIndex: number, fallback?: string | null): string {
-  if (slotIndex >= 1 && slotIndex <= 3) {
+  if (slotIndex >= 1 && slotIndex <= 5) {
     return getDailyPuzzleStepPresentation(slotIndex).title;
   }
   const safeFallback = fallback?.trim();
@@ -35,18 +33,16 @@ export function getDailyPuzzleDisplayTitle(slotIndex: number, fallback?: string 
 }
 
 /** Compact ladder pill labels for leaderboard rows. */
-export function getDailyPuzzleLeaderboardSlotCode(slotIndex: 1 | 2 | 3): string {
+export function getDailyPuzzleLeaderboardSlotCode(slotIndex: 1 | 2 | 3 | 4 | 5): string {
   return `P${slotIndex}`;
 }
 
-export function getDailyPuzzleLeaderboardSlotTitle(slotIndex: 1 | 2 | 3): string {
-  if (slotIndex === 1) return 'Quick Line';
-  if (slotIndex === 2) return 'Tactical Setup';
-  return 'Master Chain';
+export function getDailyPuzzleLeaderboardSlotTitle(slotIndex: 1 | 2 | 3 | 4 | 5): string {
+  return `Puzzle ${slotIndex}`;
 }
 
 type PuzzleBreakdownSlot = {
-  slotIndex: 1 | 2 | 3;
+  slotIndex: 1 | 2 | 3 | 4 | 5;
   awardedPoints: number | null;
   perfect: boolean;
   solved: boolean;
@@ -54,8 +50,8 @@ type PuzzleBreakdownSlot = {
 
 export function getDailyPuzzleBestSlotDisplay(
   breakdown: PuzzleBreakdownSlot[],
-): { slotIndex: 1 | 2 | 3 | null; label: string } {
-  let bestSlot: 1 | 2 | 3 | null = null;
+): { slotIndex: 1 | 2 | 3 | 4 | 5 | null; label: string } {
+  let bestSlot: 1 | 2 | 3 | 4 | 5 | null = null;
   let bestPoints = -Infinity;
 
   for (const slot of breakdown) {

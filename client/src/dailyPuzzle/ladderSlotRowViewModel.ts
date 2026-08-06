@@ -3,9 +3,10 @@ import {
   type DailyPuzzleStepPresentation,
 } from './presentation';
 import type { DailyPuzzleSlot, DailyPuzzleSlotResult } from './types';
+import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlotIndex } from './types';
 
 export type LadderSlotBreakdownChip = {
-  slotIndex: number;
+  slotIndex: DailyPuzzleSlotIndex;
   label: string;
   value: string;
 };
@@ -13,7 +14,7 @@ export type LadderSlotBreakdownChip = {
 export type LadderSlotRowVariant = 'done' | 'active' | 'muted';
 
 export type LadderSlotRowViewModel = {
-  slotIndex: number;
+  slotIndex: DailyPuzzleSlotIndex;
   slot: DailyPuzzleSlot | undefined;
   slotResult: DailyPuzzleSlotResult | undefined;
   step: DailyPuzzleStepPresentation;
@@ -27,7 +28,7 @@ export type LadderSlotRowViewModel = {
 export function buildLadderSlotBreakdown(
   completedSlots: DailyPuzzleSlotResult[],
 ): LadderSlotBreakdownChip[] {
-  return [1, 2, 3].map((slotIndex) => {
+  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const result = completedSlots.find((entry) => entry.slotIndex === slotIndex);
     const step = getDailyPuzzleStepPresentation(slotIndex);
     return {
@@ -42,10 +43,10 @@ export function buildLadderSlotRows(params: {
   hubSlots: DailyPuzzleSlot[];
   completedSlots: DailyPuzzleSlotResult[];
   attemptStatus: 'started' | 'completed' | undefined;
-  nextSlotIndex: 1 | 2 | 3 | null;
+  nextSlotIndex: DailyPuzzleSlotIndex | null;
 }): LadderSlotRowViewModel[] {
   const { hubSlots, completedSlots, attemptStatus, nextSlotIndex } = params;
-  return [1, 2, 3].map((slotIndex) => {
+  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const slot = hubSlots.find((s) => s.slotIndex === slotIndex);
     const slotResult = completedSlots.find((e) => e.slotIndex === slotIndex);
     const isCompleteRun = attemptStatus === 'completed';
@@ -62,7 +63,7 @@ export function buildLadderSlotRows(params: {
       statusSub = 'Available now';
     } else if (isLocked) {
       statusSub = 'Locked';
-      unlockHint = slotIndex === 2 ? 'Complete puzzle 1 to unlock' : 'Complete puzzle 2 to unlock';
+      unlockHint = `Complete puzzle ${slotIndex - 1} to unlock`;
     } else {
       statusSub = 'Up next';
     }

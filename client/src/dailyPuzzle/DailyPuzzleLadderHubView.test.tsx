@@ -95,7 +95,7 @@ function makeViewModel(overrides: Partial<LadderHubViewModel> = {}): LadderHubVi
     runDate: '2026-07-05',
     attemptTotalScore: 0,
     streakDisplay: 3,
-    ladderTotalPoints: 45,
+    ladderTotalPoints: 1500,
     ladderSlotRows: buildLadderSlotRows({
       hubSlots,
       completedSlots: [],
@@ -137,7 +137,7 @@ describe('DailyPuzzleLadderHubView', () => {
 
     expect(container.querySelector('.dpl-ladder-hub')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Daily Ladder', level: 1 })).toBeTruthy();
-    expect(screen.getAllByText('45 pts').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('1500 pts').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('3 days')).toBeTruthy();
     expect(screen.getByLabelText('Ladder progress')).toBeTruthy();
     expect(screen.getByTestId('overlays-stub')).toBeTruthy();
@@ -181,11 +181,12 @@ describe('DailyPuzzleLadderHubView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Practice Mode/i }));
     fireEvent.click(screen.getByRole('button', { name: 'View Leaderboard →' }));
     fireEvent.click(screen.getByRole('button', { name: 'Share Result' }));
-    fireEvent.click(screen.getByRole('button', { name: 'P2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Puzzle 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Puzzle 2' }));
 
-    expect(actions.onStartPractice).toHaveBeenCalledWith(1);
     expect(actions.onOpenLeaderboard).toHaveBeenCalledTimes(1);
     expect(actions.onShareResult).toHaveBeenCalledWith('Share me');
+    expect(actions.onStartPractice).toHaveBeenCalledWith(1);
     expect(actions.onStartPractice).toHaveBeenCalledWith(2);
   });
 
@@ -210,6 +211,6 @@ describe('DailyPuzzleLadderHubView', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to start today’s ladder.');
-    expect(screen.getByRole('button', { name: '✓ Shared!' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();
   });
 });
