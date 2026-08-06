@@ -576,7 +576,7 @@ export default function DailyPuzzleScreen({
       <LayoutScreen
         className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title="Today’s Puzzle Ladder is being prepared"
-        subtitle="Three fixed puzzles. Same ladder for everyone."
+        subtitle="Five fixed puzzles. Same ladder for everyone."
         contentClassName="screen-shell"
       >
         <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }} role="alert">
