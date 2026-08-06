@@ -2450,6 +2450,7 @@
   min-width: 0;
   padding: 20px 24px 22px;
   gap: 14px;
+  justify-content: space-between;
 }
 
 .dpl-ladder-hub .df-pvf-section {
@@ -2493,15 +2494,60 @@
 }
 
 .dpl-ladder-hub .df-pvf-progress-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
 .dpl-ladder-hub .df-pvf-progress-card {
-  padding: 12px 11px;
+  gap: 8px;
+  padding: 11px 9px;
+}
+
+.dpl-ladder-hub .df-pvf-progress-index {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
 }
 
 .dpl-ladder-hub .df-pvf-progress-body {
   min-width: 0;
+}
+
+.dpl-ladder-hub .df-pvf-progress-eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dpl-ladder-hub .df-pvf-progress-title {
+  margin: 4px 0 3px;
+  font-size: clamp(14px, 1.2vw, 17px);
+}
+
+.dpl-ladder-hub .df-pvf-progress-status {
+  margin-bottom: 5px;
+  font-size: clamp(13px, 1.1vw, 15px);
+}
+
+.dpl-ladder-hub .df-pvf-progress-hint {
+  font-size: 10px;
+}
+
+.dpl-ladder-hub .df-pvf-progress-footer {
+  gap: 5px;
+  padding-top: 6px;
+}
+
+.dpl-ladder-hub .df-pvf-progress-meta {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.dpl-ladder-hub .df-pvf-progress-lock {
+  width: 18px;
+  height: 18px;
 }
 
 .dpl-ladder-hub .df-pvf-summary-strip {
@@ -2538,12 +2584,13 @@
   width: 100%;
   min-width: 0;
   gap: 10px;
+  margin-top: 0;
   padding-top: 2px;
 }
 
 .dpl-ladder-hub .dpl-ladder-practice-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
 }
@@ -2552,6 +2599,9 @@
   flex: unset;
   width: 100%;
   min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .dpl-ladder-hub .dpl-ladder-footer {
