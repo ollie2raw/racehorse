@@ -2,6 +2,7 @@ import type { Application } from 'express';
 import {
   calculateDailyPuzzleAwardedPoints,
   calculateServerAuthoritativeElapsedSeconds,
+  DAILY_PUZZLE_SLOT_COUNT,
   findLadderSlotsForAttemptSet,
   findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleAttemptFinalizeReady,
@@ -205,11 +206,13 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       res.status(409).json({ error: 'Daily Puzzle attempt is already completed.' });
       return;
     }
-    const slotIndex = slotIndexRaw === 2 || slotIndexRaw === 3 ? slotIndexRaw : 1;
+    const slotIndex = slotIndexRaw >= 1 && slotIndexRaw <= DAILY_PUZZLE_SLOT_COUNT
+      ? slotIndexRaw as DailyPuzzleSlotIndex
+      : 1;
     const existing = attempt.result.slots.find((slot) => slot.slotIndex === slotIndex);
     if (existing) {
       const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
-      const ladderCompleted = attempt.result.slots.length >= 3;
+      const ladderCompleted = attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
       const nextSlot = ladderCompleted
         ? null
         : versionSlots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
@@ -218,7 +221,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         runDate: attempt.puzzleDate,
         attempt,
         slotResult: existing,
-        nextAvailableSlotIndex: ladderCompleted ? null : (attempt.currentSlotIndex as 2 | 3 | null),
+        nextAvailableSlotIndex: ladderCompleted ? null : attempt.currentSlotIndex,
         nextSlot,
         ladderCompleted,
         requiresCompleteCall: ladderCompleted,
@@ -282,14 +285,14 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         clientMovesUsed: Number.isFinite(clientMovesUsed) ? Math.max(0, Math.round(clientMovesUsed)) : null,
       },
     });
-    const nextCurrentSlotIndex = Math.min(3, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
+    const nextCurrentSlotIndex = Math.min(DAILY_PUZZLE_SLOT_COUNT, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
     const nextAttempt: DailyPuzzleAttempt = {
       ...attempt,
       currentSlotIndex: nextCurrentSlotIndex,
-      puzzlesCompleted: Math.min(3, attempt.puzzlesCompleted + 1),
+      puzzlesCompleted: Math.min(DAILY_PUZZLE_SLOT_COUNT, attempt.puzzlesCompleted + 1),
       totalScore: attempt.totalScore + slotResult.awardedPoints,
       masterChainScore:
-        slot.slotIndex === 3 ? slotResult.awardedPoints : attempt.masterChainScore,
+        slot.slotIndex === DAILY_PUZZLE_SLOT_COUNT ? slotResult.awardedPoints : attempt.masterChainScore,
       updatedAt: new Date().toISOString(),
       result: {
         ...attempt.result,
@@ -297,7 +300,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       },
     };
     const saved = await persistDailyPuzzleAttempt(nextAttempt);
-    const ladderCompleted = saved.result.slots.length >= 3;
+    const ladderCompleted = saved.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
     const nextSlot = ladderCompleted
       ? null
       : versionSlots.find((entry) => entry.slotIndex === saved.currentSlotIndex) ?? null;
@@ -341,7 +344,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       res.status(400).json({ error: 'Daily Puzzle run date does not match this attempt.' });
       return;
     }
-    if (attempt.result.slots.length < 3) {
+    if (attempt.result.slots.length < DAILY_PUZZLE_SLOT_COUNT) {
       res.status(409).json({ error: 'Daily Puzzle ladder is not complete yet.' });
       return;
     }

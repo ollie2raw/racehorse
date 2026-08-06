@@ -94,7 +94,7 @@ alter table public.daily_puzzles
 
 alter table public.daily_puzzles
   add constraint daily_puzzles_slot_index_check
-  check (slot_index between 1 and 3);
+  check (slot_index between 1 and 5);
 
 alter table public.daily_puzzles
   drop constraint if exists daily_puzzles_slot_max_points_check;
@@ -163,7 +163,7 @@ create table if not exists public.daily_puzzle_attempts (
   constraint daily_puzzle_attempts_status_check
     check (status in ('started', 'completed')),
   constraint daily_puzzle_attempts_current_slot_index_check
-    check (current_slot_index between 1 and 3),
+    check (current_slot_index between 1 and 5),
   constraint daily_puzzle_attempts_puzzles_completed_check
     check (puzzles_completed between 0 and 3),
   constraint daily_puzzle_attempts_total_score_check
@@ -198,7 +198,7 @@ create table if not exists public.daily_puzzle_slot_results (
   constraint daily_puzzle_slot_results_attempt_slot_key
     unique (attempt_id, slot_index),
   constraint daily_puzzle_slot_results_slot_index_check
-    check (slot_index between 1 and 3),
+    check (slot_index between 1 and 5),
   constraint daily_puzzle_slot_results_raw_score_check
     check (raw_score >= 0),
   constraint daily_puzzle_slot_results_awarded_points_check

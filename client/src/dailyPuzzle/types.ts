@@ -9,6 +9,9 @@ export type DailyPuzzleType =
 export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
 export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
 export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
+export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
+export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
+export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
 
 export interface CuratedDailyPuzzleRow {
   id: string;
@@ -41,7 +44,7 @@ export interface CuratedDailyPuzzle {
   targetScore: number;
   puzzleType: DailyPuzzleType;
   dealSize: number;
-  slotIndex?: 1 | 2 | 3;
+  slotIndex?: DailyPuzzleSlotIndex;
   slotTitle?: string;
   tier?: DailyPuzzleTier;
   slotMaxPoints?: number;
@@ -62,8 +65,8 @@ export interface PuzzleValidationResult {
 export interface DailyPuzzleSlot {
   id: string;
   puzzleDate: string;
-  slotIndex: 1 | 2 | 3;
-  slotTitle: 'Quick Line' | 'Tactical Setup' | 'Master Chain';
+  slotIndex: DailyPuzzleSlotIndex;
+  slotTitle: string;
   tier: DailyPuzzleTier;
   puzzleType: DailyPuzzleType;
   maxMoves: number;
@@ -83,7 +86,7 @@ export interface DailyPuzzleSlotResult {
   puzzleId: string;
   puzzleDate: string;
   userId: string;
-  slotIndex: 1 | 2 | 3;
+  slotIndex: DailyPuzzleSlotIndex;
   tier: DailyPuzzleTier;
   slotTitle: string;
   puzzleType: DailyPuzzleType;
@@ -107,7 +110,7 @@ export interface DailyPuzzleAttempt {
   username: string | null;
   status: Exclude<DailyPuzzleAttemptStatus, 'none'>;
   setVersion: number;
-  currentSlotIndex: 1 | 2 | 3;
+  currentSlotIndex: DailyPuzzleSlotIndex;
   puzzlesCompleted: number;
   totalScore: number;
   masterChainScore: number;
@@ -136,8 +139,8 @@ export interface DailyPuzzleTodayResponse {
   attemptSlots?: DailyPuzzleSlot[];
   attemptStatus: DailyPuzzleAttemptStatus;
   attempt: DailyPuzzleAttempt | null;
-  nextAvailableSlotIndex: 1 | 2 | 3 | null;
-  /** All three slots scored but /complete not persisted yet. */
+  nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
+  /** All five slots scored but /complete not persisted yet. */
   finalizeReady?: boolean;
   leaderboardPreview: DailyPuzzleLeaderboardRow[];
   legacySinglePuzzleDay: boolean;
@@ -148,7 +151,7 @@ export interface DailyPuzzleStartResponse {
   runDate: string;
   attempt: DailyPuzzleAttempt;
   activeSlot: DailyPuzzleSlot;
-  nextAvailableSlotIndex: 1 | 2 | 3 | null;
+  nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
   practiceMode: DailyPuzzlePracticeMode;
   replayed: boolean;
   finalizeReady?: boolean;
@@ -157,7 +160,7 @@ export interface DailyPuzzleStartResponse {
 export interface DailyPuzzleSubmitSlotRequest {
   attemptId: string;
   puzzleDate: string;
-  slotIndex: 1 | 2 | 3;
+  slotIndex: DailyPuzzleSlotIndex;
   puzzleId: string;
   rawScore: number;
   movesUsed: number;
@@ -171,7 +174,7 @@ export interface DailyPuzzleSubmitSlotResponse {
   runDate: string;
   attempt: DailyPuzzleAttempt;
   slotResult: DailyPuzzleSlotResult;
-  nextAvailableSlotIndex: 2 | 3 | null;
+  nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
   nextSlot: DailyPuzzleSlot | null;
   ladderCompleted: boolean;
   requiresCompleteCall: boolean;
@@ -196,7 +199,7 @@ export interface DailyPuzzleLeaderboardRow {
   masterChainScore: number;
   completedAt: string | null;
   breakdown: Array<{
-    slotIndex: 1 | 2 | 3;
+    slotIndex: DailyPuzzleSlotIndex;
     awardedPoints: number | null;
     perfect: boolean;
     solved: boolean;

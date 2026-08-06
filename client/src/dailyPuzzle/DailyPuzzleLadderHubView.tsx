@@ -13,7 +13,9 @@ import {
   LadderIconSameBoard,
 } from './dailyPuzzleLadderIcons';
 import { formatDateLabel, getLadderPuzzleCardState } from './ladderHelpers';
+import { getDailyPuzzleStepPresentation } from './presentation';
 import type { LadderSlotRowViewModel } from './ladderSlotRowViewModel';
+import type { DailyPuzzleSlotIndex } from './types';
 
 export type LadderHubLabels = {
   showNav: boolean;
@@ -44,7 +46,7 @@ export type LadderHubActions = {
   onOpenAuth?: () => void;
   onOpenAccount?: () => void;
   onStartScored: () => void;
-  onStartPractice: (slotIndex: 1 | 2 | 3) => void;
+  onStartPractice: (slotIndex: DailyPuzzleSlotIndex) => void;
   onOpenLeaderboard: () => void;
   onShareResult: (text: string) => void;
 };
@@ -380,7 +382,7 @@ export function DailyPuzzleLadderHubView({
                         className="dpl-share-result-btn"
                         onClick={() => onShareResult(hubLadderShareText)}
                       >
-                        {shareDone ? '✓ Shared!' : 'Share Result'}
+                        {shareDone ? 'Copied' : 'Share Result'}
                       </button>
                     ) : null}
                     <Button
@@ -397,14 +399,14 @@ export function DailyPuzzleLadderHubView({
                 {isLadderComplete ? (
                   <div className="dpl-ladder-practice">
                     <div className="dpl-ladder-practice-row">
-                      {([1, 2, 3] as const).map((slotIdx) => (
+                      {ladderSlotRows.map(({ slotIndex: slotIdx }) => (
                         <button
                           key={`practice-${slotIdx}`}
                           type="button"
                           className="dpl-ladder-practice-chip"
                           onClick={() => onStartPractice(slotIdx)}
                         >
-                          P{slotIdx}
+                          {getDailyPuzzleStepPresentation(slotIdx).title}
                         </button>
                       ))}
                     </div>

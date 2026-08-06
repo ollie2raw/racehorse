@@ -88,32 +88,38 @@ describe('Daily Puzzle ladder stabilization', () => {
       slot({ setVersion: 1, slotIndex: 1, id: 'v1-s1' }),
       slot({ setVersion: 1, slotIndex: 2, id: 'v1-s2', slotTitle: 'Tactical Setup', tier: 'tactical_setup', slotMaxPoints: 250 }),
       slot({ setVersion: 1, slotIndex: 3, id: 'v1-s3', slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ setVersion: 1, slotIndex: 4, id: 'v1-s4', slotTitle: 'Puzzle 4', tier: 'master_chain', slotMaxPoints: 300 }),
+      slot({ setVersion: 1, slotIndex: 5, id: 'v1-s5', slotTitle: 'Puzzle 5', tier: 'master_chain', slotMaxPoints: 300 }),
     ];
     const versionTwo = [
       slot({ setVersion: 2, slotIndex: 1, id: 'v2-s1' }),
       slot({ setVersion: 2, slotIndex: 2, id: 'v2-s2', slotTitle: 'Tactical Setup', tier: 'tactical_setup', slotMaxPoints: 250 }),
       slot({ setVersion: 2, slotIndex: 3, id: 'v2-s3', slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ setVersion: 2, slotIndex: 4, id: 'v2-s4', slotTitle: 'Puzzle 4', tier: 'master_chain', slotMaxPoints: 300 }),
+      slot({ setVersion: 2, slotIndex: 5, id: 'v2-s5', slotTitle: 'Puzzle 5', tier: 'master_chain', slotMaxPoints: 300 }),
     ];
     const readyLatest = findReadyDailyPuzzleLadderSlots([...versionOne, ...versionTwo]);
     expect(readyLatest?.[0].setVersion).toBe(2);
 
     const attemptSlots = versionOne;
     const bound = findLadderSlotsForAttemptSet(attemptSlots);
-    expect(bound?.map((entry) => entry.id)).toEqual(['v1-s1', 'v1-s2', 'v1-s3']);
+    expect(bound?.map((entry) => entry.id)).toEqual(['v1-s1', 'v1-s2', 'v1-s3', 'v1-s4', 'v1-s5']);
     expect(bound?.find((entry) => entry.slotIndex === 1 && entry.id === 'v1-s1')).toBeTruthy();
     expect(bound?.find((entry) => entry.id === 'v2-s1')).toBeFalsy();
   });
 
-  it('marks finalize-ready when three slot results exist but status is still started', () => {
+  it('marks finalize-ready when five slot results exist but status is still started', () => {
     const attempt = baseAttempt({
-      currentSlotIndex: 3,
-      puzzlesCompleted: 3,
-      totalScore: 180,
+      currentSlotIndex: 5,
+      puzzlesCompleted: 5,
+      totalScore: 300,
       result: {
         slots: [
           slotResult({ slotIndex: 1, awardedPoints: 60 }),
           slotResult({ slotIndex: 2, awardedPoints: 60 }),
           slotResult({ slotIndex: 3, awardedPoints: 60 }),
+          slotResult({ slotIndex: 4, awardedPoints: 60 }),
+          slotResult({ slotIndex: 5, awardedPoints: 60 }),
         ],
       },
     });
@@ -125,6 +131,8 @@ describe('Daily Puzzle ladder stabilization', () => {
       slot({ setVersion: 1, slotIndex: 1, id: 'v1-s1' }),
       slot({ setVersion: 1, slotIndex: 2, id: 'v1-s2', slotTitle: 'Tactical Setup', tier: 'tactical_setup', slotMaxPoints: 250 }),
       slot({ setVersion: 1, slotIndex: 3, id: 'v1-s3', slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ setVersion: 1, slotIndex: 4, id: 'v1-s4', slotTitle: 'Puzzle 4', tier: 'master_chain', slotMaxPoints: 300 }),
+      slot({ setVersion: 1, slotIndex: 5, id: 'v1-s5', slotTitle: 'Puzzle 5', tier: 'master_chain', slotMaxPoints: 300 }),
     ];
     const attempt = baseAttempt({
       setVersion: 1,
@@ -145,10 +153,12 @@ describe('Daily Puzzle ladder stabilization', () => {
           slotResult({ slotIndex: 1 }),
           slotResult({ slotIndex: 2 }),
           slotResult({ slotIndex: 3 }),
+          slotResult({ slotIndex: 4 }),
+          slotResult({ slotIndex: 5 }),
         ],
         final: {
-          puzzlesCompleted: 3,
-          totalScore: 180,
+          puzzlesCompleted: 5,
+          totalScore: 300,
           masterChainScore: 60,
           completedAt: '2026-05-17T12:05:00.000Z',
         },
@@ -178,9 +188,9 @@ describe('Daily Puzzle ladder stabilization', () => {
         username: 'Player',
         status: 'completed',
         set_version: 1,
-        current_slot_index: 3,
-        puzzles_completed: 3,
-        total_score: 180,
+        current_slot_index: 5,
+        puzzles_completed: 5,
+        total_score: 300,
         master_chain_score: 60,
         completed_at: '2026-05-17T12:05:00.000Z',
         started_at: '2026-05-17T10:00:00.000Z',
@@ -192,6 +202,8 @@ describe('Daily Puzzle ladder stabilization', () => {
         slotResult({ slotIndex: 1 }),
         slotResult({ slotIndex: 2 }),
         slotResult({ slotIndex: 3 }),
+        slotResult({ slotIndex: 4 }),
+        slotResult({ slotIndex: 5 }),
       ],
     );
     expect(normalized.practiceMode).toBe('review');

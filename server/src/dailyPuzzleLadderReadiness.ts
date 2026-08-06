@@ -1,4 +1,4 @@
-import { isDailyPuzzleLadderReady, normalizeDailyPuzzleSlot, sortDailyPuzzleSlots, type DailyPuzzleSlot } from './dailyPuzzle';
+import { DAILY_PUZZLE_SLOT_COUNT, DAILY_PUZZLE_SLOT_INDICES, isDailyPuzzleLadderReady, normalizeDailyPuzzleSlot, sortDailyPuzzleSlots, type DailyPuzzleSlot } from './dailyPuzzle';
 
 const PACIFIC_TZ = 'America/Los_Angeles';
 
@@ -32,10 +32,10 @@ export function assessDailyPuzzleLadderReadiness(
   const sorted = sortDailyPuzzleSlots(publishedSlots);
   const ready = isDailyPuzzleLadderReady(sorted);
   const present = new Set(sorted.map((slot) => slot.slotIndex));
-  const missingSlotIndexes = [1, 2, 3].filter((index) => !present.has(index as 1 | 2 | 3));
+  const missingSlotIndexes = DAILY_PUZZLE_SLOT_INDICES.filter((index) => !present.has(index));
   const shouldAlert = !ready && isPastLadderReadinessGracePt(runDate, now);
   const alertReason = shouldAlert
-    ? `Daily Puzzle ladder for ${runDate} is not publish-ready (${sorted.length}/3 slots, missing: ${missingSlotIndexes.join(', ') || 'metadata'})`
+    ? `Daily Puzzle ladder for ${runDate} is not publish-ready (${sorted.length}/${DAILY_PUZZLE_SLOT_COUNT} slots, missing: ${missingSlotIndexes.join(', ') || 'metadata'})`
     : null;
 
   return {

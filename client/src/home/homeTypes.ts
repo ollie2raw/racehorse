@@ -1,4 +1,5 @@
 import type { AppMode } from '../appRouteTypes';
+import type { DailyPuzzleSlotIndex } from '../dailyPuzzle/types';
 
 export type HomeSourceStatus = 'loading' | 'ready' | 'stale' | 'error' | 'unavailable';
 
@@ -63,7 +64,7 @@ export type DailyPuzzleModel = {
   state: DailyAttemptState;
   score: number | null;
   runDate: string | null;
-  nextAvailableSlotIndex: 1 | 2 | 3 | null;
+  nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
   completedAt?: string | null;
 };
 

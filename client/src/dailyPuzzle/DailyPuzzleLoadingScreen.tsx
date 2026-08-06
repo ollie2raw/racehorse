@@ -1,5 +1,6 @@
 import { BrandLogo } from '../components';
 import { getDailyPuzzleStepPresentation } from './presentation';
+import { DAILY_PUZZLE_SLOT_INDICES } from './types';
 import '../screens/RacehorseHomeArt.css';
 import './dailyPuzzle.css';
 
@@ -8,7 +9,7 @@ export type DailyPuzzleLoadingScreenProps = {
 };
 
 export function DailyPuzzleLoadingScreen({ onBack }: DailyPuzzleLoadingScreenProps) {
-  const loadingSteps = [1, 2, 3].map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
+  const loadingSteps = DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
   return (
     <div className="daily-puzzle-loading-root daily-puzzle-root">
       <div className="home-bg" aria-hidden="true">

@@ -20,6 +20,7 @@ import type {
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
+import type { DailyPuzzleSlotIndex } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -209,7 +210,7 @@ export default function DailyPuzzleLadderScreen({
 
   const hubSlots = today.attemptSlots ?? today.slots;
 
-  const handleStartPractice = useCallback((slotIndex: 1 | 2 | 3) => {
+  const handleStartPractice = useCallback((slotIndex: DailyPuzzleSlotIndex) => {
     const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);
     if (!slot) return;
     launchSlot(slot, 'practice');
@@ -490,7 +491,7 @@ export default function DailyPuzzleLadderScreen({
     const trustLine = isLadderComplete
       ? 'Practice any puzzle after your scored run.'
       : needsFinalize
-        ? 'All three puzzles are scored. Finalize to unlock review and the leaderboard.'
+        ? 'All five puzzles are scored. Finalize to unlock review and the leaderboard.'
         : 'Leaderboard updates after a scored run.';
 
     return (
@@ -554,7 +555,7 @@ export default function DailyPuzzleLadderScreen({
           hudCenter={
             <div className="wl-center-status" data-ui="turn-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
-              <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 3</span>
+                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 5</span>
             </div>
           }
           hudRight={
