@@ -99,7 +99,7 @@ describe('presentEmbeddedForcedDraws', () => {
     expect(resolved).toBe(true);
   });
 
-  it('preserves authoritative Fritz ownership while presenting a player draw-to-pass', async () => {
+  it('commits Fritz ownership before releasing a player draw-to-pass lock', async () => {
     const before = baseState();
     const drawn = [{ low: 1, high: 3 }];
     before.currentPlayer = 'you';
@@ -118,6 +118,7 @@ describe('presentEmbeddedForcedDraws', () => {
       },
     };
     const committedStates: BotMatchState[] = [];
+    const lifecycleEvents: string[] = [];
 
     await presentEmbeddedForcedDraws({
       player: 'you',
@@ -129,14 +130,16 @@ describe('presentEmbeddedForcedDraws', () => {
       },
       onDrawVisualStep: vi.fn(),
       triggerDrawStepAnimation: vi.fn(),
-      setDrawSequenceActiveBoth: vi.fn(),
+      setDrawSequenceActiveBoth: (active) => lifecycleEvents.push(active ? 'locked' : 'unlocked'),
+      onPresentationComplete: () => lifecycleEvents.push('commit-fritz'),
       drawStepMs: 0,
       isMuted: true,
     });
 
     expect(committedStates).toHaveLength(2);
-    expect(committedStates.every((state) => state.currentPlayer === 'bot')).toBe(true);
+    expect(committedStates.every((state) => state.currentPlayer === 'you')).toBe(true);
     expect(committedStates.every((state) => state.consecutivePasses === 1)).toBe(true);
+    expect(lifecycleEvents).toEqual(['locked', 'commit-fritz', 'unlocked']);
   });
 
   it('animates each embedded draw before the caller commits final state', async () => {

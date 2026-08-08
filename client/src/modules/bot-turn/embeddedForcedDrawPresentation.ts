@@ -49,6 +49,8 @@ export type PresentEmbeddedForcedDrawsDeps = {
   onDrawVisualStep?: (player: BotPlayerId, state: BotMatchState) => void;
   triggerDrawStepAnimation: (drawer: BotPlayerId, nextState: BotMatchState) => void;
   setDrawSequenceActiveBoth: (active: boolean) => void;
+  /** Commit authoritative turn ownership before the presentation lock releases. */
+  onPresentationComplete?: () => void;
   drawStepMs: number;
   isMuted: boolean;
 };
@@ -73,6 +75,7 @@ export async function presentEmbeddedForcedDraws(
     onDrawVisualStep,
     triggerDrawStepAnimation,
     setDrawSequenceActiveBoth,
+    onPresentationComplete,
     drawStepMs,
     isMuted,
   } = deps;
@@ -82,6 +85,7 @@ export async function presentEmbeddedForcedDraws(
   const postPlayHand = handWithoutTiles(afterPlay.players[player].hand, drawnTiles);
   const postPlayState: BotMatchState = {
     ...afterPlay,
+    currentPlayer: player,
     boneyard: beforePlay.boneyard,
     players: {
       ...afterPlay.players,
@@ -105,6 +109,7 @@ export async function presentEmbeddedForcedDraws(
       const stepHand = [...postPlayHand, ...drawnTiles.slice(0, index + 1)];
       const stepState: BotMatchState = {
         ...afterPlay,
+        currentPlayer: player,
         boneyard: beforePlay.boneyard.slice(index + 1),
         players: {
           ...afterPlay.players,
@@ -127,6 +132,7 @@ export async function presentEmbeddedForcedDraws(
       }
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMs));
     }
+    onPresentationComplete?.();
   } finally {
     setDrawSequenceActiveBoth(false);
   }
