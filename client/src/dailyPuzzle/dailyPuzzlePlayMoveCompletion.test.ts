@@ -4,6 +4,7 @@ import {
   evaluateTargetScoreMoveOutcome,
   isDominoDouble,
   shouldAutoFailOneTurnHighScoreWithNoLegalMoves,
+  shouldRecoverCompletedOneTurnHighScore,
 } from './dailyPuzzlePlayMoveCompletion';
 
 describe('evaluateOneTurnHighScoreMoveOutcome', () => {
@@ -131,5 +132,10 @@ describe('helpers', () => {
   it('flags auto-fail when no legal moves', () => {
     expect(shouldAutoFailOneTurnHighScoreWithNoLegalMoves(0)).toBe(true);
     expect(shouldAutoFailOneTurnHighScoreWithNoLegalMoves(1)).toBe(false);
+  });
+
+  it('recovers a persisted one-turn puzzle after control already ended', () => {
+    expect(shouldRecoverCompletedOneTurnHighScore('bot')).toBe(true);
+    expect(shouldRecoverCompletedOneTurnHighScore('you')).toBe(false);
   });
 });

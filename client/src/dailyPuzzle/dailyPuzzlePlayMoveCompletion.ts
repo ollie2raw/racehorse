@@ -81,3 +81,7 @@ export function evaluateTargetScoreMoveOutcome(params: {
 export function shouldAutoFailOneTurnHighScoreWithNoLegalMoves(legalMovesCount: number): boolean {
   return legalMovesCount === 0;
 }
+
+export function shouldRecoverCompletedOneTurnHighScore(currentPlayer: 'you' | 'bot'): boolean {
+  return currentPlayer !== 'you';
+}

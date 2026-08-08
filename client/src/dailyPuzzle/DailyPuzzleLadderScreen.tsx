@@ -44,6 +44,7 @@ import {
   evaluateTargetScoreMoveOutcome,
   isDominoDouble,
   shouldAutoFailOneTurnHighScoreWithNoLegalMoves,
+  shouldRecoverCompletedOneTurnHighScore,
 } from './dailyPuzzlePlayMoveCompletion';
 import { useDailyPuzzleLadderGameplay } from './useDailyPuzzleLadderGameplay';
 import {
@@ -303,6 +304,13 @@ export default function DailyPuzzleLadderScreen({
   useEffect(() => {
     if (!activeSlot || activeSlot.puzzleType !== 'one_turn_high_score' || status !== 'IN_PROGRESS') return;
     if (runtimeState == null) return;
+    if (shouldRecoverCompletedOneTurnHighScore(runtimeState.currentPlayer)) {
+      const recoveredScore = runningScoreRef.current;
+      setFinalScore(recoveredScore);
+      setStatus('SOLVED');
+      void submitLadderSlot('SOLVED', recoveredScore, activeSlot);
+      return;
+    }
     if (!shouldAutoFailOneTurnHighScoreWithNoLegalMoves(legalMoves.length)) return;
     setFinalScore(0);
     setStatus('FAILED');
