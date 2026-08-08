@@ -13,6 +13,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 5,
         isDouble: false,
         priorRunningScore: 10,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 2,
       }),
     ).toEqual({ type: 'continue', runningScore: 15 });
@@ -24,6 +25,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 3,
         isDouble: false,
         priorRunningScore: 0,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 0,
       }),
     ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 3 });
@@ -35,6 +37,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 0,
         isDouble: false,
         priorRunningScore: 4,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 1,
       }),
     ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 4 });
@@ -46,9 +49,22 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 0,
         isDouble: true,
         priorRunningScore: 4,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 1,
       }),
     ).toEqual({ type: 'continue', runningScore: 4 });
+  });
+
+  it('completes when the move hands control away from the player', () => {
+    expect(
+      evaluateOneTurnHighScoreMoveOutcome({
+        pointsAwarded: 7,
+        isDouble: false,
+        priorRunningScore: 4,
+        nextCurrentPlayer: 'bot',
+        upcomingPlayMovesCount: 3,
+      }),
+    ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 11 });
   });
 });
 

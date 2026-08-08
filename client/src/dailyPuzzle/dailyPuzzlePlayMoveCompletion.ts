@@ -12,11 +12,13 @@ export function evaluateOneTurnHighScoreMoveOutcome(params: {
   pointsAwarded: number;
   isDouble: boolean;
   priorRunningScore: number;
+  nextCurrentPlayer: 'you' | 'bot';
   upcomingPlayMovesCount: number;
 }): OneTurnHighScoreMoveOutcome {
   const newRunningScore = params.priorRunningScore + params.pointsAwarded;
   if (
     (params.pointsAwarded === 0 && !params.isDouble)
+    || params.nextCurrentPlayer !== 'you'
     || params.upcomingPlayMovesCount === 0
   ) {
     return { type: 'terminal', status: 'SOLVED', runningScore: newRunningScore };

@@ -270,6 +270,7 @@ export default function DailyPuzzleLadderScreen({
         pointsAwarded,
         isDouble: isDominoDouble(move.tile!),
         priorRunningScore: runningScoreRef.current,
+        nextCurrentPlayer: nextState.currentPlayer,
         upcomingPlayMovesCount: upcoming.length,
       });
       if (outcome.type === 'terminal') {
