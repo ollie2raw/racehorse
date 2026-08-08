@@ -99,6 +99,46 @@ describe('presentEmbeddedForcedDraws', () => {
     expect(resolved).toBe(true);
   });
 
+  it('preserves authoritative Fritz ownership while presenting a player draw-to-pass', async () => {
+    const before = baseState();
+    const drawn = [{ low: 1, high: 3 }];
+    before.currentPlayer = 'you';
+    before.boneyard = [...drawn, { low: 0, high: 0 }];
+    const after: BotMatchState = {
+      ...before,
+      currentPlayer: 'bot',
+      consecutivePasses: 1,
+      boneyard: [{ low: 0, high: 0 }],
+      players: {
+        ...before.players,
+        you: {
+          ...before.players.you,
+          hand: [...before.players.you.hand, ...drawn],
+        },
+      },
+    };
+    const committedStates: BotMatchState[] = [];
+
+    await presentEmbeddedForcedDraws({
+      player: 'you',
+      beforePlay: before,
+      afterPlay: after,
+      drawnTiles: drawn,
+      setMatch: (state) => {
+        if (typeof state !== 'function') committedStates.push(state);
+      },
+      onDrawVisualStep: vi.fn(),
+      triggerDrawStepAnimation: vi.fn(),
+      setDrawSequenceActiveBoth: vi.fn(),
+      drawStepMs: 0,
+      isMuted: true,
+    });
+
+    expect(committedStates).toHaveLength(2);
+    expect(committedStates.every((state) => state.currentPlayer === 'bot')).toBe(true);
+    expect(committedStates.every((state) => state.consecutivePasses === 1)).toBe(true);
+  });
+
   it('animates each embedded draw before the caller commits final state', async () => {
     const before = baseState();
     before.currentPlayer = 'bot';
