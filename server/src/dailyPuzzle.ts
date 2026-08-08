@@ -388,6 +388,22 @@ export function normalizeDailyPuzzleAttempt(
   const practiceMode: DailyPuzzlePracticeMode =
     row.review_unlocked ? 'review' : 'none';
   const completedAt = row.completed_at ?? null;
+  const orderedSlotResults = [...slotResults].sort((a, b) => a.slotIndex - b.slotIndex);
+  const persistedPuzzlesCompleted = Number.isFinite(row.puzzles_completed)
+    ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0)))
+    : 0;
+  const puzzlesCompleted = orderedSlotResults.length > 0
+    ? Math.min(DAILY_PUZZLE_SLOT_COUNT, orderedSlotResults.length)
+    : persistedPuzzlesCompleted;
+  const totalScore = orderedSlotResults.length > 0
+    ? orderedSlotResults.reduce((sum, slot) => sum + slot.awardedPoints, 0)
+    : Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0;
+  const masterChainScore = orderedSlotResults.find((slot) => slot.slotIndex === DAILY_PUZZLE_SLOT_COUNT)?.awardedPoints
+    ?? (Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0);
+  const submittedSlotIndexes = new Set(orderedSlotResults.map((slot) => slot.slotIndex));
+  const currentSlotIndex = orderedSlotResults.length > 0
+    ? DAILY_PUZZLE_SLOT_INDICES.find((index) => !submittedSlotIndexes.has(index)) ?? DAILY_PUZZLE_SLOT_COUNT
+    : clampSlotIndex(row.current_slot_index);
   return {
     id: row.id,
     puzzleDate: row.puzzle_date,
@@ -395,10 +411,10 @@ export function normalizeDailyPuzzleAttempt(
     username: row.username?.trim() || null,
     status: row.status === 'completed' ? 'completed' : 'started',
     setVersion: Number.isFinite(row.set_version) ? Math.round(row.set_version ?? 1) : 1,
-    currentSlotIndex: clampSlotIndex(row.current_slot_index),
-    puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
-    totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
-    masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
+    currentSlotIndex,
+    puzzlesCompleted,
+    totalScore,
+    masterChainScore,
     completedAt,
     startedAt: row.started_at ?? new Date(0).toISOString(),
     updatedAt: row.updated_at ?? row.started_at ?? new Date(0).toISOString(),
@@ -406,13 +422,13 @@ export function normalizeDailyPuzzleAttempt(
     practiceMode,
     result: {
       ...(result as Record<string, unknown>),
-      slots: slotResults,
+      slots: orderedSlotResults,
       ...(completedAt
         ? {
             final: {
-              puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
-              totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
-              masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
+              puzzlesCompleted,
+              totalScore,
+              masterChainScore,
               completedAt,
             },
           }
