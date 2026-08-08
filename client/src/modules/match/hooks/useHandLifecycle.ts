@@ -46,6 +46,7 @@ import type {
 import {
   buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
+  discardDailyFritzSnapshotBeforeReload,
 } from '../../daily/dailyFritzSessionStorage.ts';
 
 export type { HandLifecyclePorts, HandLifecycleDebugSnapshot, UseHandLifecycleArgs, UseHandLifecycleResult };
@@ -429,7 +430,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               ));
               reloadRequiredRef.current = true;
               setHandAdvanceError(
-                'This hand could not be verified. Restore the official hand to continue; your verified score is safe.',
+                'This hand could not be verified. Reload the hand to restore the official state; your verified score is safe.',
               );
             } else {
               setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
@@ -598,14 +599,24 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   const retryHandAdvance = useCallback(() => {
     if (reloadRequiredRef.current) {
-      window.location.reload();
+      if (dailyFritzPackage) {
+        discardDailyFritzSnapshotBeforeReload(
+          buildDailyFritzStorageKey(
+            dailyFritzPackage.attempt_id,
+            dailyFritzPackage.current_game_number ?? 1,
+          ),
+          () => window.location.reload(),
+        );
+      } else {
+        window.location.reload();
+      }
       return;
     }
     setHandAdvanceError(null);
     handTransitionInFlightRef.current = false;
     prefetchCoordinator.clear();
     advanceHandRef.current();
-  }, [prefetchCoordinator]);
+  }, [dailyFritzPackage, prefetchCoordinator]);
 
   const getDebugSnapshot = useCallback((): HandLifecycleDebugSnapshot => ({
     lastDailyFlowLabel: lastDailyFlowLabelRef.current,

@@ -179,6 +179,15 @@ export function discardDailyFritzSnapshot(storageKey: string): void {
   }
 }
 
+/** Remove any checkpoint re-persisted after an authority rejection, then reload. */
+export function discardDailyFritzSnapshotBeforeReload(
+  storageKey: string,
+  reload: () => void,
+): void {
+  discardDailyFritzSnapshot(storageKey);
+  reload();
+}
+
 export function pruneNonPlayableDailyFritzSnapshot(storageKey: string): void {
   if (typeof window === 'undefined') return;
   try { const raw=window.localStorage.getItem(storageKey); if(raw && !parseDailyFritzPersistedSnapshot(JSON.parse(raw))) window.localStorage.removeItem(storageKey); } catch { window.localStorage.removeItem(storageKey); }
