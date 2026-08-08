@@ -24,15 +24,35 @@ const tacticalProfile: LadderSlotGenerationProfile = {
 };
 
 describe('Daily Puzzle ladder generation budgets', () => {
-  it('publishes five equal 300-point high-score slots with 8–10 starting tiles', () => {
+  it('publishes a five-stage difficulty and 1,000-point scoring curve', () => {
     expect(DAILY_PUZZLE_LADDER_PROFILES).toHaveLength(5);
     expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotIndex)).toEqual([1, 2, 3, 4, 5]);
-    expect(DAILY_PUZZLE_LADDER_PROFILES.every((profile) =>
-      profile.slotMaxPoints === 300
-      && profile.targetHandSizeRange[0] === 8
-      && profile.targetHandSizeRange[1] === 10
-      && profile.preferredPuzzleTypes.length === 1
-      && profile.preferredPuzzleTypes[0] === 'one_turn_high_score')).toBe(true);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotTitle)).toEqual([
+      'Quick Hit',
+      'Build',
+      'Read',
+      'Pressure',
+      'Master Chain',
+    ]);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.targetHandSizeRange)).toEqual([
+      [3, 4],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+      [8, 10],
+    ]);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotMaxPoints)).toEqual([
+      100,
+      150,
+      200,
+      250,
+      300,
+    ]);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.reduce((sum, profile) => sum + profile.slotMaxPoints, 0)).toBe(1_000);
+    expect(DAILY_PUZZLE_LADDER_PROFILES[3].preferredPuzzleTypes).toEqual([
+      'setup_and_strike',
+      'one_turn_high_score',
+    ]);
   });
 
   it('turns repeated null Tactical Setup candidates into a structured failure', async () => {
@@ -221,18 +241,18 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
 
   it('maps ladder slot indexes to clean user-facing puzzle labels', () => {
     expect(getDailyPuzzleStepPresentation(1)).toEqual({
-      title: 'Puzzle 1',
+      title: 'Quick Hit',
       subtitle: 'Warm-up',
       shortLabel: 'P1',
     });
     expect(getDailyPuzzleStepPresentation(2)).toEqual({
-      title: 'Puzzle 2',
-      subtitle: 'Challenge',
+      title: 'Build',
+      subtitle: 'Momentum',
       shortLabel: 'P2',
     });
     expect(getDailyPuzzleStepPresentation(3)).toEqual({
-      title: 'Puzzle 3',
-      subtitle: 'Final',
+      title: 'Read',
+      subtitle: 'Tactical test',
       shortLabel: 'P3',
     });
   });
@@ -242,6 +262,14 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
     expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).toBe('Puzzle 2');
     expect(getDailyPuzzleDisplayTitle(3, 'Master Chain')).toBe('Puzzle 3');
     expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).not.toBe('Tactical Setup');
+  });
+
+  it('renders the published Daily Climb stage identities', () => {
+    expect(getDailyPuzzleDisplayTitle(1, 'Quick Hit')).toBe('Quick Hit');
+    expect(getDailyPuzzleDisplayTitle(2, 'Build')).toBe('Build');
+    expect(getDailyPuzzleDisplayTitle(3, 'Read')).toBe('Read');
+    expect(getDailyPuzzleDisplayTitle(4, 'Pressure')).toBe('Pressure');
+    expect(getDailyPuzzleDisplayTitle(5, 'Master Chain')).toBe('Master Chain');
   });
 
   it('allows fallback-published slots to keep clean product labels', () => {

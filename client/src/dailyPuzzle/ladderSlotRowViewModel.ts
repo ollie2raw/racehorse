@@ -53,7 +53,7 @@ export function buildLadderSlotRows(params: {
     const isAvailable = !isCompleteRun && nextSlotIndex === slotIndex;
     const isLocked = !isCompleteRun && nextSlotIndex != null && nextSlotIndex < slotIndex;
     const rowVariant = slotResult ? 'done' : isAvailable ? 'active' : 'muted';
-    const step = getDailyPuzzleStepPresentation(slotIndex);
+    const step = getDailyPuzzleStepPresentation(slotIndex, slot?.slotTitle ?? `Puzzle ${slotIndex}`);
 
     let statusSub: string;
     let unlockHint: string | null = null;
