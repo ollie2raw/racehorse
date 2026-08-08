@@ -82,7 +82,6 @@ export async function presentEmbeddedForcedDraws(
   const postPlayHand = handWithoutTiles(afterPlay.players[player].hand, drawnTiles);
   const postPlayState: BotMatchState = {
     ...afterPlay,
-    currentPlayer: player,
     boneyard: beforePlay.boneyard,
     players: {
       ...afterPlay.players,
@@ -106,7 +105,6 @@ export async function presentEmbeddedForcedDraws(
       const stepHand = [...postPlayHand, ...drawnTiles.slice(0, index + 1)];
       const stepState: BotMatchState = {
         ...afterPlay,
-        currentPlayer: player,
         boneyard: beforePlay.boneyard.slice(index + 1),
         players: {
           ...afterPlay.players,
