@@ -253,10 +253,10 @@ export function usePlayerPlacementHandler({
           onDrawVisualStep,
           triggerDrawStepAnimation,
           setDrawSequenceActiveBoth,
+          onPresentationComplete: commitResult,
           drawStepMs,
           isMuted,
         });
-        commitResult();
       })();
       return;
     }
