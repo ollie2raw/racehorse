@@ -1,6 +1,11 @@
 import { formatOrdinalPlace } from './format';
 import { DAILY_FRITZ_CLASSIC_PRACTICE_HINT, playerLostDailyFritzGame } from './practiceHint';
-import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
+import {
+  getDailyFritzPublishedSetScore,
+  getGameSkunkChipLabel,
+  getSetSkunkBadge,
+  getSkunkOverlayCopy,
+} from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import type { DailyFritzSetGameNumber } from './api';
 import {
@@ -113,6 +118,7 @@ export function buildDailyFritzSetOverlayViewModel(
 
   if (setOverlay.kind === 'finalizing') {
     const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
+    const publishedScore = getDailyFritzPublishedSetScore(sr);
     return {
       ...base,
       kind: 'finalizing' as const,
@@ -121,7 +127,7 @@ export function buildDailyFritzSetOverlayViewModel(
       primaryLabel: 'Posting…',
       primaryDisabled: true,
       gameScoreLabel: 'Set score',
-      gameScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+      gameScoreValue: publishedScore.label,
       setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
       marginValue: formatMargin(sr.totalPointDiff),
       marginTone:
@@ -132,6 +138,7 @@ export function buildDailyFritzSetOverlayViewModel(
 
   if (setOverlay.kind === 'final-error') {
     const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
+    const publishedScore = getDailyFritzPublishedSetScore(sr);
     return {
       ...base,
       kind: 'final-error' as const,
@@ -146,7 +153,7 @@ export function buildDailyFritzSetOverlayViewModel(
         void actions.loadToday();
       },
       gameScoreLabel: 'Set score',
-      gameScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+      gameScoreValue: publishedScore.label,
       setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
       marginValue: formatMargin(sr.totalPointDiff),
       marginTone: 'idle' as const,
@@ -199,6 +206,7 @@ export function buildDailyFritzSetOverlayViewModel(
 
   if (setOverlay.kind === 'final') {
     const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
+    const publishedScore = getDailyFritzPublishedSetScore(sr);
     const g = setOverlay.completedGame;
     const margin = formatMargin(sr.totalPointDiff);
     const marginTone: 'win' | 'loss' | 'idle' =
@@ -245,7 +253,7 @@ export function buildDailyFritzSetOverlayViewModel(
       primaryTone: skunkCopy?.primaryTone ?? (setWonPlayer ? ('success' as const) : ('default' as const)),
       gameScoreLabel: 'Final game',
       gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
-      setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+      setScoreValue: publishedScore.label,
       marginValue: margin,
       marginTone,
       resultValue: setWonPlayer ? 'Victory' : 'Defeat',

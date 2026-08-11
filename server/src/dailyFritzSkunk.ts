@@ -46,32 +46,33 @@ export function getDailyFritzSkunkGameLabel(
 }
 
 export function getDailyFritzSkunkWinRank(setResult: DailyFritzSetResult): number {
-  if (setResult.setWinner !== 'player') return 0;
-  if (setResult.instantSkunk && setResult.skunkBy === 'player' && setResult.skunkGameNumber === 1) {
-    return 50;
-  }
   if (
-    setResult.hasSkunk &&
-    setResult.skunkGameNumber === 2 &&
+    setResult.setWinner !== 'player' ||
+    !setResult.hasSkunk ||
+    setResult.skunkBy !== 'player' ||
+    !setResult.skunkGameNumber
+  ) return 0;
+
+  // Every player-earned skunk outranks a normal set win. Earlier skunks are
+  // stronger; equal-game skunks fall through to total point differential.
+  return 4 - setResult.skunkGameNumber;
+}
+
+export function getDailyFritzPublishedSetScore(
+  setResult: DailyFritzSetResult,
+): { finalScore: number; opponentScore: number } {
+  if (
+    setResult.instantSkunk &&
     setResult.setWinner === 'player' &&
-    setResult.playerGamesWon === 1 &&
-    setResult.fritzGamesWon === 1
+    setResult.skunkBy === 'player' &&
+    setResult.skunkGameNumber === 1
   ) {
-    return 35;
+    return { finalScore: 0, opponentScore: 1 };
   }
-  if (setResult.hasSkunk && setResult.skunkGameNumber === 2 && setResult.playerGamesWon === 2) {
-    return 40;
-  }
-  if (setResult.playerGamesWon === 2 && setResult.fritzGamesWon === 0 && !setResult.hasSkunk) {
-    return 30;
-  }
-  if (setResult.hasSkunk && setResult.skunkGameNumber === 3 && setResult.playerGamesWon === 2) {
-    return 20;
-  }
-  if (setResult.playerGamesWon === 2 && setResult.fritzGamesWon === 1) {
-    return 10;
-  }
-  return 0;
+  return {
+    finalScore: setResult.playerGamesWon,
+    opponentScore: setResult.fritzGamesWon,
+  };
 }
 
 export function getDailyFritzSkunkLossRank(setResult: DailyFritzSetResult): number {

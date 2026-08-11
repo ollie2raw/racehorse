@@ -389,17 +389,14 @@ export function buildDailyFritzCompletionHash(params: {
 export function sortDailyFritzLeaderboard<T extends DailyFritzLeaderboardEntry>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
     if (a.won !== b.won) return a.won ? -1 : 1;
-    if (a.finalScore !== b.finalScore) return b.finalScore - a.finalScore;
-    if (a.opponentScore !== b.opponentScore) return a.opponentScore - b.opponentScore;
     if (a.won) {
       const skunkA = a.skunkWinRank ?? 0;
       const skunkB = b.skunkWinRank ?? 0;
       if (skunkA !== skunkB) return skunkB - skunkA;
-    } else {
-      const skunkA = a.skunkLossRank ?? 0;
-      const skunkB = b.skunkLossRank ?? 0;
-      if (skunkA !== skunkB) return skunkB - skunkA;
+      if (skunkA > 0 && a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
     }
+    if (a.finalScore !== b.finalScore) return b.finalScore - a.finalScore;
+    if (a.opponentScore !== b.opponentScore) return a.opponentScore - b.opponentScore;
     if (a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
     return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
   });
