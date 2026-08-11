@@ -146,13 +146,13 @@ export async function createDailyPuzzleAttempt(params: {
   userId: string;
   username: string | null;
   setVersion: number;
-}): Promise<DailyPuzzleAttempt> {
+}): Promise<{ attempt: DailyPuzzleAttempt; created: boolean }> {
   const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
-    '/rest/v1/daily_puzzle_attempts',
+    '/rest/v1/daily_puzzle_attempts?on_conflict=puzzle_date,user_id',
     {
       method: 'POST',
       headers: {
-        Prefer: 'return=representation',
+        Prefer: 'return=representation,resolution=ignore-duplicates',
       },
       body: JSON.stringify([{
         puzzle_date: params.runDate,
@@ -170,8 +170,16 @@ export async function createDailyPuzzleAttempt(params: {
     },
   );
   const row = rows[0];
-  if (!row) throw new Error('Failed to create daily puzzle attempt.');
-  return normalizeDailyPuzzleAttempt(row, []);
+  if (row) {
+    return { attempt: normalizeDailyPuzzleAttempt(row, []), created: true };
+  }
+
+  // A concurrent start may have inserted the unique (puzzle_date, user_id)
+  // row while this request was in flight. Ignore the duplicate at the DB
+  // boundary, then replay the authoritative winner instead of leaking 23505.
+  const existing = await getDailyPuzzleAttempt(params.runDate, params.userId);
+  if (!existing) throw new Error('Failed to create or recover daily puzzle attempt.');
+  return { attempt: existing, created: false };
 }
 
 export async function persistDailyPuzzleAttempt(attempt: DailyPuzzleAttempt): Promise<DailyPuzzleAttempt> {

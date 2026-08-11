@@ -119,19 +119,21 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     }
     let attempt = await getDailyPuzzleAttempt(runDate, authenticatedUserId);
     const username = await getUsernameForUserId(authenticatedUserId);
-    const replayed = Boolean(attempt);
+    let replayed = Boolean(attempt);
     if (!attempt) {
       const readySlots = findReadyDailyPuzzleLadderSlots(slots);
       if (!readySlots) {
         res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.', runDate });
         return;
       }
-      attempt = await createDailyPuzzleAttempt({
+      const created = await createDailyPuzzleAttempt({
         runDate,
         userId: authenticatedUserId,
         username,
         setVersion: readySlots[0].setVersion,
       });
+      attempt = created.attempt;
+      replayed = !created.created;
     }
     const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
     const activeSlot = resolveActiveSlotForAttempt(attempt, versionSlots);

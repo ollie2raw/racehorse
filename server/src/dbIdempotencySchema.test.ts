@@ -11,6 +11,18 @@ function compactSql(sql: string): string {
 }
 
 describe('DB idempotency schema guardrails', () => {
+  it('ships the formerly manual social tables in the greenfield ledger', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-05-18_social_greenfield_baseline.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.player_presence');
+    expect(sql).toContain('create table if not exists public.activity_feed');
+    expect(sql).toContain('create table if not exists public.rivals');
+    expect(sql).toContain('references auth.users(id) on delete cascade');
+    expect(sql).toContain('alter table public.activity_feed enable row level security');
+    expect(sql).toContain('select 1 from public.friends');
+  });
+
   it('ships the production-derived ranking baseline before ranking upgrades', () => {
     const baseline = compactSql(readRepoFile(
       'supabase/migrations/2026-06-16_ranking_greenfield_baseline.sql',
