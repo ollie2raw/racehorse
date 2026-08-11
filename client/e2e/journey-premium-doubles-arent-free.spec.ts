@@ -4,7 +4,7 @@ const progress = { version: 2, activeChapterId: 'ch1-fritz-trail', chapters: { '
 function guard(page: Page) { const errors: string[] = []; page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`)); page.on('console', (message) => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); }); page.on('requestfailed', (request) => errors.push(`requestfailed: ${request.url()}`)); return errors; }
 async function shot(page: Page, info: TestInfo, name: string) { await page.screenshot({ path: info.outputPath(name), fullPage: true }); }
 async function open(page: Page) {
-  await page.goto('/#/journey');
+  await page.goto('/journey');
   await page.getByLabel('Pressure Hand, Current').click();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Doubles Aren’t Free' })).toBeVisible();

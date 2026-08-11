@@ -29,7 +29,7 @@ function record(id, label, passed, detail) {
 }
 
 async function openDailyFritzMatch(page, appUrl) {
-  await page.goto(`${appUrl}/#/daily-fritz`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${appUrl}/daily-fritz`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Daily Fritz' }).waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('.df-pvf-start-btn').waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('.df-pvf-start-btn').click();

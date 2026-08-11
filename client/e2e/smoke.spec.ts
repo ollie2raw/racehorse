@@ -20,7 +20,7 @@ test.describe('Smoke — Single Player hub', () => {
 
 test.describe('Smoke — Daily Puzzle', () => {
   test('daily puzzle screen loads board', async ({ page }) => {
-    await page.goto('/#/daily');
+    await page.goto('/daily');
     // Should show puzzle UI or a loading state — not a blank screen or error
     await expect(page.locator('.df-page, .df-shell, .screen, [data-ui], .daily-puzzle-screen, .loading-screen').first()).toBeVisible({ timeout: 15_000 });
   });
@@ -38,7 +38,7 @@ test.describe('Smoke — Play vs Fritz', () => {
 
 test.describe('Smoke — Tournament hub', () => {
   test('tournament screen loads', async ({ page }) => {
-    await page.goto('/#/tournament');
+    await page.goto('/tournament');
     await expect(page.locator('.th-page, .th-shell, .screen, [data-ui="tournament"], .tournament-hub').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Tournament', { exact: false }).first()).toBeVisible();
   });

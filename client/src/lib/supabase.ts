@@ -10,7 +10,7 @@ function makeClient(): SupabaseClient {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // Manual hash handling in auth/recoveryHash.ts — HashRouter owns "#/…" routes.
+      // Recovery tokens are consumed manually before BrowserRouter starts.
       detectSessionInUrl: false,
     },
   });

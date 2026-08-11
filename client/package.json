@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/prerender.mjs",
     "typecheck": "tsc -b --noEmit",
     "qa:capture-auth": "node scripts/captureAuthenticatedQaFixture.mjs",
     "qa:journey-content": "node scripts/validateJourneyContent.mjs",

@@ -11,9 +11,10 @@ Sentry.init({
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { HashRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
+import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
 import './index.css';
 import './premium-theme.css';
@@ -32,14 +33,16 @@ import './styles/board/index.css';
 {installGlobalErrorHandlers();}
 
 async function bootstrap() {
-  // Exchange recovery tokens before HashRouter/App replace the hash with "#/".
+  // Recovery tokens use a bare URL hash, so consume them before checking for an
+  // old HashRouter route. Legacy "#/…" bookmarks are then promoted to real paths.
   await consumeSupabaseRecoveryHash();
+  migrateLegacyHashRoute();
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <HashRouter>
+      <BrowserRouter>
         <App />
-      </HashRouter>
+      </BrowserRouter>
     </StrictMode>,
   );
 }

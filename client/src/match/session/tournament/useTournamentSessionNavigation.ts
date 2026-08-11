@@ -155,9 +155,6 @@ export function useTournamentSessionNavigation({
       setAppMode('tournament');
       setTournamentResult(null);
       setTournamentResultError(null);
-      if (typeof window !== 'undefined' && window.location.hash !== '#/tournament') {
-        window.location.hash = '#/tournament';
-      }
       console.log('[tournament:exit] cleared stale tournament state', {
         reason,
         tournamentId: tid,
@@ -214,7 +211,7 @@ export function useTournamentSessionNavigation({
       console.log('[app:navigation] tournament match close/home', {
         fromMode: appModeRef.current,
         toMode: 'tournament',
-        hash: typeof window !== 'undefined' ? window.location.hash : '',
+        path: typeof window !== 'undefined' ? window.location.pathname : '',
         hasRoom: Boolean(joinedRoom),
         hasTournamentContext: Boolean(currentTournamentContext),
         nextView,
