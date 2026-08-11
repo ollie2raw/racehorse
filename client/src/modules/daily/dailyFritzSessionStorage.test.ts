@@ -204,7 +204,7 @@ describe('Daily Fritz v3 session persistence', () => {
     discardDailyFritzSnapshot(key);
     // The mounted persistence effect can recreate the rejected checkpoint
     // between the 409 response and the player's recovery click.
-    expect(persistDailyFritzSnapshot(key, snapshot({ revision: 3 }))).toBe(true);
+    expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 3 }))).toBe(true);
     let checkpointAtReload: string | null = 'not-checked';
 
     discardDailyFritzSnapshotBeforeReload(key, () => {

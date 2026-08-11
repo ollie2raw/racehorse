@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import type { GameState } from '../game/types';
-import { applyMove, createInitialState, getLegalMoves, startNewHand } from '../game/engine';
+import {
+  applyMove,
+  createInitialState,
+  generateFullSet,
+  getLegalMoves,
+  startNewHand,
+} from '../game/engine';
 import { simulatePlacement } from '../game/scoring';
 import {
   createReservedRoom,
@@ -42,7 +48,21 @@ function buildMidGamePrivateMatchState(): {
   createReservedRoom(roomCode, { winningScore: 60 });
   const seatA = 'seat-a';
   const seatB = 'seat-b';
-  let state = startNewHand(createInitialState([seatA, seatB], { winningScore: 60, tilesPerPlayer: 7 }));
+  const seatAHand = [t(6, 5), t(3, 1), t(6, 6), t(5, 5), t(4, 4), t(3, 3), t(2, 2)];
+  const seatBHand = [t(5, 3), t(1, 0), t(6, 4), t(5, 4), t(4, 3), t(2, 1), t(0, 0)];
+  const dealtTileKeys = new Set(
+    [...seatAHand, ...seatBHand].map((tile) => `${tile.low}:${tile.high}`),
+  );
+  const fixedDeck = [
+    ...seatAHand,
+    ...seatBHand,
+    ...generateFullSet(6).filter((tile) => !dealtTileKeys.has(`${tile.low}:${tile.high}`)),
+  ];
+  let state = startNewHand(
+    createInitialState([seatA, seatB], { winningScore: 60, tilesPerPlayer: 7 }),
+    fixedDeck,
+    seatA,
+  );
 
   const scriptedMoves: Array<{ playerId: string; tile: ReturnType<typeof t>; position: 'left' | 'right' }> = [
     { playerId: seatA, tile: t(6, 5), position: 'left' },
