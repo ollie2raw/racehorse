@@ -82,4 +82,11 @@ describe('buildDailyFritzHubViewModel', () => {
     expect(vm.primaryCtaLabel).toBe("Resume Today's Set");
     expect(vm.isStarted).toBe(true);
   });
+
+  it('renders the authoritative completed hub after a lost /complete response', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('completed'), emptySetResult, 0, false, true);
+    expect(vm.primaryCtaLabel).toBe("View Today's Result");
+    expect(vm.setStatusLabel).toBe('Complete');
+    expect(vm.isComplete).toBe(true);
+  });
 });
