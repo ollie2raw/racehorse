@@ -18,6 +18,21 @@ VITE_ADMIN_EMAIL=you@example.com
 8. Start the client normally (`npm run dev` in `client/`).
 9. In `supabase/daily_puzzle.sql`, replace `admin@example.com` with the same email as `VITE_ADMIN_EMAIL` before running it.
 
+## Ranking greenfield baseline
+
+The Glicko tables were historically created out-of-band. New databases must run
+the checked-in ranking files in this order:
+
+1. `supabase/schema.sql`
+2. `supabase/migrations/2026-06-16_ranking_greenfield_baseline.sql`
+3. `supabase/migrations/2026-06-17_ranked_games_source_idempotency.sql`
+4. `supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql`
+
+The baseline adds the production `profiles` ranking columns and creates the
+production `ranked_games` / `rating_periods` tables, indexes, RLS policies, and
+grants. The later files remain responsible for source idempotency and the atomic
+rating-update RPC respectively.
+
 ## Daily Fritz transactional-authority upgrade (2026-08-01)
 
 Keep `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=false` while applying these files in this exact order:

@@ -11,11 +11,35 @@ function compactSql(sql: string): string {
 }
 
 describe('DB idempotency schema guardrails', () => {
+  it('ships the production-derived ranking baseline before ranking upgrades', () => {
+    const baseline = compactSql(readRepoFile(
+      'supabase/migrations/2026-06-16_ranking_greenfield_baseline.sql',
+    ));
+    const idempotency = compactSql(readRepoFile(
+      'supabase/migrations/2026-06-17_ranked_games_source_idempotency.sql',
+    ));
+    const atomicUpdate = compactSql(readRepoFile(
+      'supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql',
+    ));
+
+    expect(baseline).toContain('add column if not exists glicko_rating double precision not null default 1500');
+    expect(baseline).toContain('create table if not exists public.ranked_games');
+    expect(baseline).toContain('constraint ranked_games_game_type_check');
+    expect(baseline).toContain('create table if not exists public.rating_periods');
+    expect(baseline).toContain('alter table public.ranked_games enable row level security');
+    expect(baseline).toContain('alter table public.rating_periods enable row level security');
+    expect(baseline).not.toContain('source_match_id');
+    expect(baseline).not.toContain('create or replace function public.commit_glicko_game_update');
+    expect(idempotency).toContain('add column if not exists source_match_id text null');
+    expect(atomicUpdate).toContain('create or replace function public.commit_glicko_game_update');
+  });
+
   it('keeps Daily Puzzle attempt and slot-result uniqueness in the ladder migration', () => {
     const sql = compactSql(readRepoFile('supabase/daily_puzzle_ladder_v1.sql'));
 
     expect(sql).toContain('constraint daily_puzzle_attempts_puzzle_date_user_id_key unique (puzzle_date, user_id)');
     expect(sql).toContain('constraint daily_puzzle_slot_results_attempt_slot_key unique (attempt_id, slot_index)');
+    expect(sql).toContain("array_agg(kcu.column_name::text order by kcu.ordinal_position) = array['puzzle_date', 'puzzle_type']::text[]");
   });
 
   it('keeps Daily Fritz one-attempt-per-user-per-run uniqueness', () => {
@@ -105,6 +129,7 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('primary key (attempt_id, game_number)');
     expect(sql).toContain('create table if not exists public.daily_fritz_outbox');
     expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
+    expect(sql).not.toContain('constraint daily_fritz_outbox_operation_event_key constraint');
     expect(sql).toContain('where delivered_at is null');
     expect(sql).toContain('daily_fritz_attempt_operations_no_client_access');
   });
