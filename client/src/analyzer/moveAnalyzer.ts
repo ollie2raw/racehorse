@@ -13,6 +13,7 @@ import type {
 } from './analysisTypes';
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+import { derivePostMoveReviewBoard } from './reviewBoardState';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
 
@@ -31,7 +32,10 @@ export type AnalyzedMove = {
   validMoves: TileTuple[];
   boardEnds: [number, number];
   boardState: MoveEntry['boardState'];
+  /** Canonical pre-action snapshot retained for evaluation and coaching. */
   boardRenderState: MoveEntry['boardRenderState'];
+  /** Board after this logged action, used by the move-review viewport. */
+  boardRenderStateAfterMove: MoveEntry['boardRenderState'];
   handSnapshot: MoveEntry['handSnapshot'];
   engineBestMove: MoveEntry['engineBestMove'];
   bestBreakdown?: EngineBestMove['breakdown'];
@@ -567,6 +571,7 @@ function analyzeHandMoves(
       boardEnds: entry.boardEnds,
       boardState: entry.boardState,
       boardRenderState: normalizeBoardRenderState(entry.boardRenderState),
+      boardRenderStateAfterMove: derivePostMoveReviewBoard(entry),
       handSnapshot: entry.handSnapshot,
       engineBestMove: entry.engineBestMove,
       bestBreakdown: verdict.bestBreakdown ?? undefined,
