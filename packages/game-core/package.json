@@ -26,6 +26,10 @@
       "types": "./dist/scoring.d.ts",
       "default": "./dist/scoring.js"
     },
+    "./review": {
+      "types": "./dist/reviewContracts.d.ts",
+      "default": "./dist/reviewContracts.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "default": "./dist/types.js"

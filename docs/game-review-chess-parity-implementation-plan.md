@@ -1,7 +1,7 @@
 # Game Review: Engine-First Hero Feature Plan
 
 Date: 2026-08-10
-Status: proposal only; Part 3 is not implemented.
+Status: Batch 0 implemented for contract review; Batches 1–6 are not implemented.
 Dependency: review and approval of the evaluation-model verdict in `game-review-analyzer-audit.md`.
 
 ## Product contract
@@ -40,6 +40,58 @@ Acceptance gate:
 - No synthetic placeholder state is needed by the analyzer.
 - Replaying every fixture is deterministic and agrees with authoritative board/scoring outcomes.
 - Legacy V1 logs are explicitly labeled `heuristic/low confidence`; missing data is never silently invented.
+
+#### Batch 0 implementation evidence — 2026-08-10
+
+Status: implemented for contract review; Batch 1 has not started.
+
+Shared contracts:
+
+- `packages/game-core/src/reviewContracts.ts` defines the concrete `ReviewPositionSnapshotV2` and `ReviewEvaluationV1` contracts.
+- `@racehorse/game-core/review` is the dedicated public package subpath. This avoided mixing Batch 0 into the already-modified root `index.ts` and `types.ts` files.
+- V2 records schema, rules, command, review-engine-contract, and state-digest versions; stable session/game/hand/decision identifiers; game/hand/action/turn sequence; actor/opponent identifiers; canonical pre-action board and actor hand; exact opponent tile count; physical/drawable/dead boneyard counts; both scores and winning target; consecutive passes; hand-open state; known-missing-pip evidence; every legal action with exact tile and placement; the actual action; immediate points; post-action board/actor score; and pre/post authority digests.
+- `ReviewEvaluationV1` records exact/search/heuristic evidence, a required visible source label and confidence, played/best/all candidate values, principal variations, expected-value loss, search coverage, and diagnostics. The heuristic branch can only use `confidence: 'low'` and `displayLabel: 'Heuristic estimate'`.
+- Existing V1 analyses are governed by `LEGACY_REVIEW_EVALUATION_DISCLOSURE`, which fixes their presentation to `Legacy heuristic estimate`, `low` confidence, and reason `incomplete-v1-position-snapshot`. The accessible legacy reviewer now renders that disclosure, including for previously persisted records that predate the evidence field. Batch 0 does not migrate, retrofit, or silently promote old analysis data.
+
+No-placeholder boundary:
+
+```text
+exact authority GameState at capture/test time
+  -> project only fair public facts
+  -> ReviewPositionSnapshotV2 (review-engine input)
+
+fixture-only authority evidence + V2 snapshot
+  -> verify pre-state digest and every public projection
+  -> applyGameCommand through canonical game-core
+  -> verify post board, immediate points, actor score, and post digest
+```
+
+The public V2 snapshot deliberately does **not** contain the opponent's hidden hand, boneyard tile identities/order, or an embedded authority state. The deterministic fixture envelope retains the real authority pre-state solely to prove the replay invariant. `replayReviewFixture` rejects any missing/drifted authority evidence; it never constructs an opponent hand of zero tiles, a fake 14-tile boneyard, or zeroed scores.
+
+Checked-in fixture corpus (`reviewFixtureCorpus.ts`):
+
+| Required class | Fixture | Real-log checkpoint evidence |
+| --- | --- | --- |
+| Opening | `opening-double-from-live-deal` | Action 1 from a complete deterministic double-six deal, with 12 drawable tiles |
+| Scoring chain | `scoring-branch-chain` | Branch placement scores 2 points and retains the actor's turn |
+| Forced move | `forced-single-play-midgame` | Non-opening action with exactly one legal tile/position |
+| Block | `second-pass-blocks-hand` | Locked-yard second consecutive pass resolves the hand |
+| Nested branches | `nested-branch-decision` | Position contains three hubs, including branch-lane doubles |
+| Near-win defense | `near-win-multi-choice-defense` | Player at 48 faces opponent at 52/60 with four legal choices |
+| Hidden-information ambiguity | `hidden-allocation-ambiguous-midgame` | Three legal actions, opponent holds at least four unknown tiles, and at least three drawable tiles remain |
+| Exact endgame | `locked-yard-five-tile-endgame` | Five total hand tiles and zero drawable tiles |
+
+All checkpoints are reconstructed from checked-in seed, strategy, and action-index provenance, then compared with checked-in pre/post authority digests, the exact logged action, and immediate points. This prevents an engine or strategy change from silently regenerating both sides of the replay assertion. They start from a complete physical double-six deal and advance only through `applyGameCommand`; no board, hand, or tile pool is hand-authored for a test predicate. Pass/draw observations encountered in each log populate real known-missing-pip evidence for later checkpoints.
+
+Verification completed so far:
+
+- Focused review-contract suite: 1 file, 13 tests passed.
+- Focused legacy-disclosure client suites: 2 files, 21 tests passed, including the persisted-record render fallback.
+- Full game-core suite: 12 files, 203 tests passed.
+- Full client suite: 156 files, 1,022 tests passed.
+- game-core typecheck: passed.
+- game-core production build: passed.
+- client TypeScript build and production bundle: passed (existing circular-chunk, mixed-import, and large-chunk warnings remain).
 
 ### Batch 1 — Capture and persist complete review positions
 
