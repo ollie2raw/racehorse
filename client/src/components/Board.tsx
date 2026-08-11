@@ -32,7 +32,7 @@ const DOUBLE_CROSS_GAP = 0.2;
 
 // ─── Types ───────────────────────────────────────────────────
 
-interface LayoutTile {
+export interface BoardLayoutTile {
   tile: Tile;
   x: number;
   y: number;
@@ -54,8 +54,8 @@ interface LayoutZone {
   key: string;
 }
 
-interface BoardLayout {
-  tiles: LayoutTile[];
+export interface BoardLayout {
+  tiles: BoardLayoutTile[];
   zones: LayoutZone[];
   minX: number;
   maxX: number;
@@ -73,8 +73,11 @@ interface HubLookup {
 
 // ─── Layout Engine ───────────────────────────────────────────
 
-function computeLayout(board: BoardState | null, validPositions: PlacementPosition[]): BoardLayout {
-  const tiles: LayoutTile[] = [];
+export function computeBoardLayout(
+  board: BoardState | null,
+  validPositions: PlacementPosition[] = [],
+): BoardLayout {
+  const tiles: BoardLayoutTile[] = [];
   const zones: LayoutZone[] = [];
 
   if (!board) {
@@ -120,14 +123,14 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   }
 
   if (!isRenderableNonNullBoard(board)) {
-    return computeLayout(null, validPositions);
+    return computeBoardLayout(null, validPositions);
   }
 
   const { mainLine, hubDoubles } = board;
 
   for (const pt of mainLine) {
     if (!pt?.tile || typeof pt.orientation !== 'string') {
-      return computeLayout(null, validPositions);
+      return computeBoardLayout(null, validPositions);
     }
   }
 
@@ -169,7 +172,14 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
     laneHorizontal: boolean,
   ) => {
     if (laidOutHubIds.has(hubId)) {
-      return { tiles: [] as LayoutTile[], zones: [] as LayoutZone[], minY: hubY, maxY: hubY };
+      return {
+        tiles: [] as BoardLayoutTile[],
+        zones: [] as LayoutZone[],
+        minX: hubX,
+        maxX: hubX,
+        minY: hubY,
+        maxY: hubY,
+      };
     }
     laidOutHubIds.add(hubId);
     hubCenters.set(hubId, { x: hubX, y: hubY });
@@ -201,8 +211,8 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   const mainY = 0;
 
   // Track bounds
-  let minX = currentX - 2;
-  let maxX = -currentX + 2;
+  let minX = currentX - 3;
+  let maxX = -currentX + 3;
   let minY = -TILE_UNIT;
   let maxY = TILE_UNIT;
 
@@ -236,16 +246,14 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       const bz = branchResult.zones ?? [];
       tiles.push(...bt);
       zones.push(...bz);
+      minX = Math.min(minX, branchResult.minX);
+      maxX = Math.max(maxX, branchResult.maxX);
       minY = Math.min(minY, branchResult.minY ?? minY);
       maxY = Math.max(maxY, branchResult.maxY ?? maxY);
     }
 
     currentX += tileWidth + TILE_GAP;
   }
-
-  // Update X bounds
-  minX = -totalWidth / 2 - 3;
-  maxX = totalWidth / 2 + 3;
 
   // Main line placement zones
   if (validPositions.includes('left')) {
@@ -290,6 +298,26 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   };
 }
 
+export function calculateBoardFitScale(input: {
+  layout: Pick<BoardLayout, 'minX' | 'maxX' | 'minY' | 'maxY'>;
+  tileSize: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  targetFill: number;
+  minScale: number;
+  maxScale: number;
+  multiplier?: number;
+}): number {
+  const layoutWidth = (input.layout.maxX - input.layout.minX) * input.tileSize;
+  const layoutHeight = (input.layout.maxY - input.layout.minY) * input.tileSize;
+  if (layoutWidth <= 0 || layoutHeight <= 0) return 1;
+
+  const scaleX = (input.viewportWidth * input.targetFill) / layoutWidth;
+  const scaleY = (input.viewportHeight * input.targetFill) / layoutHeight;
+  const rawFit = Math.min(scaleX, scaleY) * (input.multiplier ?? 1);
+  return Math.min(input.maxScale, Math.max(input.minScale, rawFit));
+}
+
 function layoutBranches(
   hub: BoardState['hubDoubles'][number],
   hubId: number,
@@ -304,10 +332,24 @@ function layoutBranches(
     hubX: number,
     hubY: number,
     laneHorizontal: boolean,
-  ) => { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number },
+  ) => {
+    tiles: BoardLayoutTile[];
+    zones: LayoutZone[];
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+  },
   laneHorizontal: boolean,
-): { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number } {
-  const tiles: LayoutTile[] = [];
+): {
+  tiles: BoardLayoutTile[];
+  zones: LayoutZone[];
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  const tiles: BoardLayoutTile[] = [];
   const zones: LayoutZone[] = [];
   let minY = hubY - TILE_UNIT / 2;
   let maxY = hubY + TILE_UNIT / 2;
@@ -315,7 +357,7 @@ function layoutBranches(
   let maxX = hubX + TILE_UNIT / 2;
 
   if (!hub || typeof hub !== 'object') {
-    return { tiles, zones, minY, maxY };
+    return { tiles, zones, minX, maxX, minY, maxY };
   }
 
   // Branch arms are always perpendicular to the lane this hub is on.
@@ -394,6 +436,8 @@ function layoutBranches(
                 nt.length > 0
                   ? Math.max(maxX, ...nt.map((t) => t.x))
                   : maxX;
+              minX = Math.min(minX, nested.minX);
+              maxX = Math.max(maxX, nested.maxX);
               minY = Math.min(minY, nested.minY);
               maxY = Math.max(maxY, nested.maxY);
             }
@@ -449,7 +493,7 @@ function layoutBranches(
     }
   }
 
-  return { tiles, zones, minY, maxY };
+  return { tiles, zones, minX, maxX, minY, maxY };
 }
 
 // ─── Board Component ─────────────────────────────────────────
@@ -481,6 +525,8 @@ interface BoardProps {
   staticFitMainline?: boolean;
   /** When set with staticFitMainline, place the spine at this fraction from the top (0–1). */
   staticSpineAnchor?: number;
+  /** Fit the complete recursive board extent, including narrow review viewports. */
+  containFullBoard?: boolean;
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -524,11 +570,13 @@ function BoardComponent(
     staticView = false,
     staticFitMainline = false,
     staticSpineAnchor,
+    containFullBoard = false,
   }: BoardProps,
   ref: ForwardedRef<BoardHandle>,
 ) {
   const resolvedFitMode = staticView ? 'guided' : fitMode;
   const resolvedShowZoomTray = staticView ? false : showZoomTray;
+  const minCameraScale = containFullBoard ? 0.08 : 0.22;
   useRenderProfiler('Board');
   if (profileDailyFritz) {
     recordDailyFritzBoardMetric('boardRenderCount', 1);
@@ -625,7 +673,7 @@ function BoardComponent(
       validPositions,
       selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
     });
-    const nextLayout = computeLayout(isResettingBoard ? null : board, cameraFitPositions);
+    const nextLayout = computeBoardLayout(isResettingBoard ? null : board, cameraFitPositions);
     traceCameraDebug('[camera-debug] computeLayout output', {
       minX: Number(nextLayout.minX.toFixed(2)),
       maxX: Number(nextLayout.maxX.toFixed(2)),
@@ -642,7 +690,7 @@ function BoardComponent(
   }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
   const placementZones = useMemo(() => {
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const zones = computeLayout(isResettingBoard ? null : board, validPositions).zones;
+    const zones = computeBoardLayout(isResettingBoard ? null : board, validPositions).zones;
     if (profileDailyFritz) {
       const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
       recordDailyFritzBoardMetric('computeLayout', end - start);
@@ -664,7 +712,7 @@ function BoardComponent(
 
   const glowLayout = useMemo(() => {
     if (!showOpenEndGlow) return null;
-    return computeLayout(isResettingBoard ? null : board, openEndPositions);
+    return computeBoardLayout(isResettingBoard ? null : board, openEndPositions);
   }, [showOpenEndGlow, board, openEndPositions, isResettingBoard]);
 
   const resetSignature = useMemo(
@@ -722,14 +770,12 @@ function BoardComponent(
       return;
     }
 
-    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
-    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
-    if (layoutWidth <= 0 || layoutHeight <= 0) return;
-
     // Calculate scale to fit
     const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
     const targetFill =
-      resolvedFitMode === 'guided'
+      containFullBoard
+        ? 0.88
+        : resolvedFitMode === 'guided'
         ? layoutSpanUnits <= 3
           ? 1.08
           : layoutSpanUnits <= 5
@@ -748,10 +794,10 @@ function BoardComponent(
               : layoutSpanUnits >= 10
                 ? 0.93
                 : 0.9;
-    let scaleX = (containerWidth * targetFill) / layoutWidth;
-    let scaleY = (containerHeight * targetFill) / layoutHeight;
     let maxFitScale =
-      resolvedFitMode === 'guided'
+      containFullBoard
+        ? 1.8
+        : resolvedFitMode === 'guided'
         ? boardTileCount <= 1
           ? 4.4
           : boardTileCount <= 4
@@ -769,29 +815,50 @@ function BoardComponent(
 
     if (staticView) {
       const diagramFill = 1.04;
-      scaleX = (containerWidth * diagramFill) / layoutWidth;
-      scaleY = (containerHeight * diagramFill) / layoutHeight;
       maxFitScale =
         boardTileCount <= 3 ? 11.6 : boardTileCount <= 5 ? 10.4 : boardTileCount <= 8 ? 9.2 : 8;
+      const fitScale = calculateBoardFitScale({
+        layout,
+        tileSize: unitToPixels,
+        viewportWidth: containerWidth,
+        viewportHeight: containerHeight,
+        targetFill: diagramFill,
+        minScale: 0.22,
+        maxScale: maxFitScale,
+        multiplier: 2,
+      });
+      applyFitCamera(fitScale);
+      return;
     }
 
-    const rawFit = Math.max(0.22, Math.min(scaleX, scaleY));
-    const fitScale = Math.min(maxFitScale, staticView ? rawFit * 2 : rawFit);
-
-    let cameraY = 0;
-    if (staticView && staticFitMainline && staticSpineAnchor != null) {
-      const anchor = Math.min(0.85, Math.max(0.15, staticSpineAnchor));
-      cameraY = containerHeight * (anchor - 0.5);
-    }
-
-    traceCameraDebug('[camera-debug] setCamera', {
-      reason,
-      x: 0,
-      y: Number(cameraY.toFixed(1)),
-      scale: Number(fitScale.toFixed(3)),
+    const fitScale = calculateBoardFitScale({
+      layout,
+      tileSize: unitToPixels,
+      viewportWidth: containerWidth,
+      viewportHeight: containerHeight,
+      targetFill,
+      minScale: minCameraScale,
+      maxScale: maxFitScale,
     });
-    const nextCamera = { x: 0, y: cameraY, scale: fitScale };
-    setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
+
+    applyFitCamera(fitScale);
+
+    function applyFitCamera(nextScale: number) {
+      let cameraY = 0;
+      if (staticView && staticFitMainline && staticSpineAnchor != null) {
+        const anchor = Math.min(0.85, Math.max(0.15, staticSpineAnchor));
+        cameraY = containerHeight * (anchor - 0.5);
+      }
+
+      traceCameraDebug('[camera-debug] setCamera', {
+        reason,
+        x: 0,
+        y: Number(cameraY.toFixed(1)),
+        scale: Number(nextScale.toFixed(3)),
+      });
+      const nextCamera = { x: 0, y: cameraY, scale: nextScale };
+      setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
+    }
   }
 
   // Single authoritative camera auto-fit: respond to layout and container size.
@@ -833,7 +900,16 @@ function BoardComponent(
         fitRetryRafRef.current = null;
       }
     };
-  }, [layout, unitToPixels]);
+  }, [
+    containFullBoard,
+    layout,
+    minCameraScale,
+    resolvedFitMode,
+    staticFitMainline,
+    staticSpineAnchor,
+    staticView,
+    unitToPixels,
+  ]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -843,7 +919,7 @@ function BoardComponent(
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(1.8, Math.max(0.22, cam.scale * delta));
+        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale * delta));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'wheel',
           x: Number(cam.x.toFixed(2)),
@@ -853,7 +929,7 @@ function BoardComponent(
         return nextScale;
       })(),
     }));
-  }, [markManualCamera]);
+  }, [markManualCamera, minCameraScale]);
 
   // Pan handlers
   const handleMouseDown = useCallback(
@@ -913,7 +989,7 @@ function BoardComponent(
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(1.8, Math.max(0.22, cam.scale + delta));
+        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale + delta));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'manual-zoom',
           x: Number(cam.x.toFixed(2)),
@@ -923,7 +999,7 @@ function BoardComponent(
         return nextScale;
       })(),
     }));
-  }, [markManualCamera]);
+  }, [markManualCamera, minCameraScale]);
 
   useImperativeHandle(
     ref,
@@ -1106,7 +1182,7 @@ function BoardComponent(
             traceCameraDebug('[camera-debug] manual zoom click', {
               direction: 'out',
               beforeScale: Number(camera.scale.toFixed(3)),
-              afterScale: Number(Math.min(1.8, Math.max(0.22, camera.scale - 0.12)).toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale - 0.12)).toFixed(3)),
             });
             applyZoomStep(-0.12);
           }}
@@ -1131,7 +1207,7 @@ function BoardComponent(
             traceCameraDebug('[camera-debug] manual zoom click', {
               direction: 'in',
               beforeScale: Number(camera.scale.toFixed(3)),
-              afterScale: Number(Math.min(1.8, Math.max(0.22, camera.scale + 0.12)).toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale + 0.12)).toFixed(3)),
             });
             applyZoomStep(0.12);
           }}
@@ -1160,7 +1236,8 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     prev.showZoomTray === next.showZoomTray &&
     prev.staticView === next.staticView &&
     prev.staticFitMainline === next.staticFitMainline &&
-    prev.staticSpineAnchor === next.staticSpineAnchor
+    prev.staticSpineAnchor === next.staticSpineAnchor &&
+    prev.containFullBoard === next.containFullBoard
   );
 }
 

@@ -138,13 +138,12 @@ export default function GameReviewer({
             <div className="gr-board-frame">
               <div className="gr-board-layer">
                 <Board
-                  board={current?.boardRenderState ?? null}
+                  board={current?.boardRenderStateAfterMove ?? null}
                   legalMoves={[]}
                   selectedTile={null}
                   onPositionClick={() => {}}
-                  staticView
-                  staticFitMainline
-                  staticSpineAnchor={0.62}
+                  fitMode="guided"
+                  containFullBoard
                   tileSize={46}
                 />
               </div>
