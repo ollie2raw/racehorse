@@ -223,18 +223,38 @@ export function isRecoverableDailyFritzAuthorityCode(code: string | null | undef
 export class DailyFritzAuthorityRecoveryError extends Error {
   readonly status: number | null;
   readonly verifierCode: string;
+  readonly authorityRevision: number | null;
+  readonly authoritativeState: Record<string, unknown> | null;
 
-  constructor(message: string, status: number | null, verifierCode: string) {
+  constructor(
+    message: string,
+    status: number | null,
+    verifierCode: string,
+    authorityRevision: number | null = null,
+    authoritativeState: Record<string, unknown> | null = null,
+  ) {
     super(message);
     this.name = 'DailyFritzAuthorityRecoveryError';
     this.status = status;
     this.verifierCode = verifierCode;
+    this.authorityRevision = authorityRevision;
+    this.authoritativeState = authoritativeState;
   }
 }
 
 function throwDailyFritzAuthorityError<T>(result: ApiResult<T>): T {
   if (result.error && result.errorCode && isRecoverableDailyFritzAuthorityCode(result.errorCode)) {
-    throw new DailyFritzAuthorityRecoveryError(result.error, result.status ?? null, result.errorCode);
+    throw new DailyFritzAuthorityRecoveryError(
+      result.error,
+      result.status ?? null,
+      result.errorCode,
+      Number.isInteger(result.errorData?.authority_revision)
+        ? Number(result.errorData?.authority_revision)
+        : null,
+      result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
+        ? result.errorData.authoritative_state as Record<string, unknown>
+        : null,
+    );
   }
   return throwApiResult(result);
 }
@@ -516,16 +536,22 @@ export function formatDailyFritzNextHandUserMessage(raw: string): string {
 export class DailyFritzNextHandHttpError extends Error {
   readonly status: number | null;
   readonly verifierCode: string | null;
+  readonly authorityRevision: number | null;
+  readonly authoritativeState: Record<string, unknown> | null;
 
   constructor(
     message: string,
     status: number | null,
     verifierCode: string | null = null,
+    authorityRevision: number | null = null,
+    authoritativeState: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = 'DailyFritzNextHandHttpError';
     this.status = status;
     this.verifierCode = verifierCode;
+    this.authorityRevision = authorityRevision;
+    this.authoritativeState = authoritativeState;
   }
 }
 
@@ -625,6 +651,12 @@ export async function nextDailyFritzHand(input: {
         message,
         result.status,
         result.errorCode ?? null,
+        Number.isInteger(result.errorData?.authority_revision)
+          ? Number(result.errorData?.authority_revision)
+          : null,
+        result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
+          ? result.errorData.authoritative_state as Record<string, unknown>
+          : null,
       );
     }
     throw new DailyFritzEndOfRunError(message);
@@ -655,6 +687,12 @@ export async function nextDailyFritzHand(input: {
       parsedError || `${path} failed with ${result.status ?? 'unknown'}`,
       result.status ?? null,
       result.errorCode ?? null,
+      Number.isInteger(result.errorData?.authority_revision)
+        ? Number(result.errorData?.authority_revision)
+        : null,
+      result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
+        ? result.errorData.authoritative_state as Record<string, unknown>
+        : null,
     );
   }
 

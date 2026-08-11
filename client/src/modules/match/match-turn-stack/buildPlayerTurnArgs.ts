@@ -42,7 +42,7 @@ export function buildPlayerTurnArgs(
     setAuthoringV2Events,
   } = authoring;
   const { isAuthoringMode, isAuthoringV2Mode } = guidedBoot;
-  const { beginLocalRun, isLocalRunCurrent, finishLocalRun } = sources.localRun;
+  const { beginLocalRun, isLocalRunCurrent, hasActiveLocalRun, finishLocalRun } = sources.localRun;
 
   return {
     match,
@@ -115,6 +115,7 @@ export function buildPlayerTurnArgs(
     localRun: {
       beginLocalRun,
       isLocalRunCurrent,
+      hasActiveLocalRun,
       finishLocalRun,
     },
     drawStepMs: DRAW_STEP_MS,

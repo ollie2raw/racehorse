@@ -47,6 +47,8 @@ import {
   buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
 } from '../../daily/dailyFritzSessionStorage.ts';
+import { recordDailyFritzTelemetry } from '../../../dailyFritz/api.ts';
+import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../../dailyFritz/telemetry.ts';
 
 export type { HandLifecyclePorts, HandLifecycleDebugSnapshot, UseHandLifecycleArgs, UseHandLifecycleResult };
 export const autoAdvanceMs = DAILY_FRITZ_HAND_AUTO_ADVANCE_MS;
@@ -68,7 +70,8 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     dailyFritzPackage,
     dailyFritzTranscriptProtocolVersion,
     dailyFritzHandIndex,
-    setDailyFritzHandIndex,
+    dailyFritzAuthorityRevision,
+    applyDailyFritzAuthorityCursor,
     initialDailyFritzHandResult,
     setDailyFritzHandResult,
     frozenV2Lesson,
@@ -177,12 +180,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         replayed: Boolean(response.replayed),
         ignored: Boolean(response.ignored),
       });
-      setDailyFritzHandIndex(response.current_hand_index);
-      setDailyFritzHandResult(null);
-      transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
-      reloadRequiredRef.current = false;
-      setHandAdvanceError(null);
-      setShowManualHandAdvance(false);
       traceHandLifecycle('dealing-next-hand', { source }, 'D');
 
       const live = matchRef.current;
@@ -200,6 +197,20 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       );
       const applied = nextStateResult.applied;
       if (nextStateResult.applied) {
+        // Commit the server cursor only when the matching deal can also be
+        // committed. Persistence rejects the brief cross-store render, so the
+        // cursor can never durably relabel the previous terminal hand.
+        applyDailyFritzAuthorityCursor({
+          handIndex: response.current_hand_index,
+          revision: response.authority_revision
+            ?? dailyFritzPackage?.authority_revision
+            ?? 0,
+        });
+        setDailyFritzHandResult(null);
+        transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
+        reloadRequiredRef.current = false;
+        setHandAdvanceError(null);
+        setShowManualHandAdvance(false);
         // Keep the hand-over surface mounted until the new deal is accepted.
         // If application fails, the same reveal must remain available to show
         // the retry/error state instead of leaving the old board uncovered.
@@ -227,6 +238,37 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       } else {
         traceHandLifecycle('error', { source, reason: 'setMatch-noop' }, 'D');
         setHandAdvanceError('Could not start the next hand. Tap Continue to retry.');
+        if (dailyFritzPackage) {
+          const sessionId = getDailyFritzTelemetrySession(dailyFritzPackage.run_date);
+          void recordDailyFritzTelemetry({
+            eventId: dailyFritzTelemetryEventId(
+              dailyFritzPackage.attempt_id,
+              'recovery_started',
+              `next-hand-apply:${response.current_hand_index}`,
+            ),
+            eventType: 'recovery_started',
+            attemptId: dailyFritzPackage.attempt_id,
+            runDate: dailyFritzPackage.run_date,
+            challengeId: dailyFritzPackage.challenge_id ?? null,
+            sessionId,
+            failureCode: 'next_hand_apply_rejected',
+            payload: {
+              transitionPhase: 'apply-next-hand',
+              clientCursor: {
+                gameNumber: dailyFritzPackage.current_game_number ?? 1,
+                handIndex: dailyFritzHandIndex,
+                authorityRevision: dailyFritzAuthorityRevision,
+              },
+              serverCursor: {
+                gameNumber: response.current_game_number ?? response.game_number ?? 1,
+                handIndex: response.current_hand_index,
+                authorityRevision: response.authority_revision ?? null,
+              },
+              matchHandNumber: live.handNumber,
+              recoveryDecision: 'show_modal_retry',
+            },
+          });
+        }
         logDailyFritzHandBreadcrumb('manual-advance-shown', { reason: 'setMatch-noop', source });
         setShowManualHandAdvance(true);
       }
@@ -235,11 +277,13 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       dailyFritzPackage?.challenge_code,
       dailyFritzPackage?.current_game_number,
       dailyFritzPackage?.winning_score,
+      dailyFritzAuthorityRevision,
+      dailyFritzHandIndex,
       lastDailyFlowLabelRef,
       matchRef,
       prefetchCoordinator,
       reveal,
-      setDailyFritzHandIndex,
+      applyDailyFritzAuthorityCursor,
       setDailyFritzHandResult,
       setMatch,
       traceHandLifecycle,
@@ -387,6 +431,44 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           const verifierCode = err instanceof DailyFritzNextHandHttpError
             ? err.verifierCode
             : null;
+          const emitModalFailureTelemetry = (recoveryDecision: string) => {
+            const sessionId = getDailyFritzTelemetrySession(dailyFritzPackage.run_date);
+            void recordDailyFritzTelemetry({
+              eventId: dailyFritzTelemetryEventId(
+                dailyFritzPackage.attempt_id,
+                'recovery_started',
+                `next-hand:${dailyFritzHandIndex}:${failureAttempt}:${verifierCode ?? 'transport'}`,
+              ),
+              eventType: 'recovery_started',
+              attemptId: dailyFritzPackage.attempt_id,
+              runDate: dailyFritzPackage.run_date,
+              challengeId: dailyFritzPackage.challenge_id ?? null,
+              sessionId,
+              failureCode: verifierCode ?? (isAbort ? 'timeout' : 'next_hand_request_failed'),
+              payload: {
+                transitionPhase: 'next-hand-request',
+                endpoint: '/api/daily-fritz/next-hand',
+                clientCursor: {
+                  gameNumber: prefetchParams.gameNumber,
+                  handIndex: dailyFritzHandIndex,
+                  authorityRevision: dailyFritzAuthorityRevision,
+                },
+                serverCursor: err instanceof DailyFritzNextHandHttpError
+                  ? {
+                      authorityRevision: err.authorityRevision,
+                      authoritativeState: err.authoritativeState,
+                    }
+                  : null,
+                lifecyclePhase: matchRef.current.gameOver
+                  ? 'completed'
+                  : matchRef.current.handOver ? 'hand_transition' : 'active_hand',
+                matchHandNumber: matchRef.current.handNumber,
+                status: err instanceof DailyFritzNextHandHttpError ? err.status : null,
+                verifierCode,
+                recoveryDecision,
+              },
+            });
+          };
           // A hand-end callback can run before the final move-log write is
           // observable. Never make the player recover from that local timing
           // race: discard the frozen prefetch evidence and rebuild it once.
@@ -443,6 +525,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               error: errMsg,
             });
             setShowManualHandAdvance(true);
+            emitModalFailureTelemetry(reloadRequiredRef.current
+              ? 'discard_checkpoint_and_reload_authority'
+              : 'show_modal_retry');
             traceHandLifecycle('error', {
               source,
               error: errMsg,
@@ -474,6 +559,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             error: errMsg,
           });
           setShowManualHandAdvance(true);
+          emitModalFailureTelemetry('show_modal_retry_after_transport_retries');
           traceHandLifecycle('error', { source, error: errMsg, failureAttempt }, 'C');
           if (import.meta.env.DEV) {
             console.warn('[daily-fritz-hand] next hand error (raw)', {
@@ -530,6 +616,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     applyDailyFritzNextHandResponse,
     advanceRetry,
     dailyFritzHandIndex,
+    dailyFritzAuthorityRevision,
     dailyFritzPackage,
     dailyFritzTranscriptProtocolVersion,
     frozenLesson,

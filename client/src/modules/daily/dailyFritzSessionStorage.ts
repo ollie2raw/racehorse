@@ -7,13 +7,33 @@ import type { DailyFritzTranscript } from '@racehorse/game-core';
 import { canonicalizeDailyFritzMoveLog } from '../../dailyFritz/dailyFritzMoveEvidence.ts';
 
 // Bump when the local match state is no longer safe to replay against the
-// server verifier. Version 8 invalidates checkpoints whose Fritz fingerprints
-// included non-policy starter-history metadata.
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 8;
+// server verifier. Version 9 binds every checkpoint to the server authority
+// revision and rejects match/index pairs torn across a hand transition.
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 9;
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
 
+export type DailyFritzAuthorityCursor = {
+  gameNumber: number;
+  handIndex: number;
+  revision: number;
+};
+
+export type DailyFritzResumeRejection =
+  | 'attempt_mismatch'
+  | 'challenge_mismatch'
+  | 'run_mismatch'
+  | 'game_mismatch'
+  | 'hand_mismatch'
+  | 'revision_mismatch'
+  | 'match_hand_mismatch'
+  | 'policy_mismatch';
+
+export type DailyFritzResumeReconciliation =
+  | { accepted: true; snapshot: DailyFritzPersistedSnapshot }
+  | { accepted: false; reason: DailyFritzResumeRejection };
+
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 8;
+  schemaVersion: 9;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
@@ -21,6 +41,8 @@ export type DailyFritzPersistedSnapshot = {
   runFingerprint: string;
   gameNumber: number;
   currentHandIndex: number;
+  /** Server attempt revision from which this hand state was derived. */
+  authorityRevision: number;
   lifecyclePhase: DailyFritzPersistedPhase;
   match: BotMatchState;
   handResult: BotHandReveal | null;
@@ -30,7 +52,8 @@ export type DailyFritzPersistedSnapshot = {
   verificationPhase: 'collecting' | 'pending';
   startedAt: string;
   lastTransitionAt: string;
-  revision: number;
+  /** Monotonic local write sequence; never used as server authority. */
+  checkpointRevision: number;
   /** Protocol used to encode the persisted move log. Missing means legacy v1. */
   transcriptProtocolVersion?: 1 | 2;
   fritzPolicyVersion?: 1 | 2;
@@ -80,14 +103,15 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
   if (!object(value) || value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION || value.classification !== 'official') return null;
   if (!validChallenge(value.challenge) || !isDailyFritzChallengeCurrent(value.challenge, now)) return null;
   if (typeof value.attemptId !== 'string' || !value.attemptId || typeof value.runFingerprint !== 'string' || !value.runFingerprint) return null;
-  if (!nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex)) return null;
+  if (!nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex) || !nonNegativeInteger(value.authorityRevision)) return null;
   if (!['active_hand','hand_transition','completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;
-  if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog) || !validHandResult(value.handResult) || !validIso(value.startedAt) || !validIso(value.lastTransitionAt) || Date.parse(value.lastTransitionAt) < Date.parse(value.startedAt) || !nonNegativeInteger(value.revision)) return null;
+  if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog) || !validHandResult(value.handResult) || !validIso(value.startedAt) || !validIso(value.lastTransitionAt) || Date.parse(value.lastTransitionAt) < Date.parse(value.startedAt) || !nonNegativeInteger(value.checkpointRevision)) return null;
   const phase = value.lifecyclePhase as DailyFritzPersistedPhase;
   const match = value.match as BotMatchState;
   if (phase === 'active_hand' && (match.handOver || match.gameOver)) return null;
   if (phase === 'hand_transition' && (!match.handOver || match.gameOver || value.handResult === null)) return null;
   if (phase === 'completed' && !match.gameOver) return null;
+  if (match.handNumber !== Number(value.currentHandIndex) + 1) return null;
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
   if (value.fritzPolicyVersion != null && value.fritzPolicyVersion !== 1 && value.fritzPolicyVersion !== 2) return null;
@@ -101,6 +125,39 @@ export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date(
     verificationPhase,
     transcriptProtocolVersion,
   } as unknown as DailyFritzPersistedSnapshot;
+}
+
+export function reconcileDailyFritzResume(
+  snapshot: DailyFritzPersistedSnapshot,
+  authority: {
+    attemptId: string;
+    challengeId: string;
+    runFingerprint?: string | null;
+    cursor: DailyFritzAuthorityCursor;
+    fritzPolicyVersion?: number | null;
+    fritzPolicyContract?: string | null;
+  },
+): DailyFritzResumeReconciliation {
+  if (snapshot.attemptId !== authority.attemptId) return { accepted: false, reason: 'attempt_mismatch' };
+  if (snapshot.challenge.challengeId !== authority.challengeId) return { accepted: false, reason: 'challenge_mismatch' };
+  if (authority.runFingerprint && snapshot.runFingerprint !== authority.runFingerprint) {
+    return { accepted: false, reason: 'run_mismatch' };
+  }
+  if (snapshot.gameNumber !== authority.cursor.gameNumber) return { accepted: false, reason: 'game_mismatch' };
+  if (snapshot.currentHandIndex !== authority.cursor.handIndex) return { accepted: false, reason: 'hand_mismatch' };
+  if (snapshot.authorityRevision !== authority.cursor.revision) return { accepted: false, reason: 'revision_mismatch' };
+  if (snapshot.match.handNumber !== authority.cursor.handIndex + 1) {
+    return { accepted: false, reason: 'match_hand_mismatch' };
+  }
+  if (
+    authority.fritzPolicyVersion != null
+    && snapshot.fritzPolicyVersion !== authority.fritzPolicyVersion
+  ) return { accepted: false, reason: 'policy_mismatch' };
+  if (
+    authority.fritzPolicyContract
+    && snapshot.fritzPolicyContract !== authority.fritzPolicyContract
+  ) return { accepted: false, reason: 'policy_mismatch' };
+  return { accepted: true, snapshot };
 }
 
 export function buildDailyFritzStorageKey(attemptId: string, gameNumber: number): string {
@@ -121,6 +178,8 @@ export function loadPersistedDailyFritzMatch(
   runFingerprint?: string | null,
   expectedFritzPolicyVersion?: number | null,
   expectedFritzPolicyContract?: string | null,
+  serverAuthorityRevision?: number | null,
+  serverGameNumber?: number | null,
 ): DailyFritzPersistedSnapshot | null {
   if (!storageKey || !attemptId || !runDate || typeof window === 'undefined') return null;
   try {
@@ -129,24 +188,53 @@ export function loadPersistedDailyFritzMatch(
     // checkpoint for the in-progress match.
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
-    const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(raw), now);
+    const decoded = JSON.parse(raw) as unknown;
+    // Schema 8 predates server-revision binding. Preserve an otherwise coherent
+    // in-progress hand by binding it to the revision returned by /start; the
+    // new match-hand invariant still rejects the torn boundary snapshots that
+    // motivated schema 9.
+    let candidate = decoded;
+    if (object(decoded) && decoded.schemaVersion === 8 && Number.isInteger(serverAuthorityRevision)) {
+      const { revision: legacyCheckpointRevision, ...legacySnapshot } = decoded;
+      candidate = {
+        ...legacySnapshot,
+        schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+        authorityRevision: Number(serverAuthorityRevision),
+        checkpointRevision: nonNegativeInteger(legacyCheckpointRevision) ? legacyCheckpointRevision : 0,
+      };
+    }
+    const parsed = parseDailyFritzPersistedSnapshot(candidate, now);
     if (!parsed) {
       window.localStorage.removeItem(storageKey);
       return null;
     }
-    if (parsed.attemptId !== attemptId || parsed.challenge.challengeId !== createDailyFritzChallengeIdentity(runDate).challengeId || parsed.lifecyclePhase === 'completed') return null;
-    if (runFingerprint && parsed.runFingerprint !== runFingerprint) return null;
-    if (
-      expectedFritzPolicyVersion != null
-      && parsed.fritzPolicyVersion !== expectedFritzPolicyVersion
-    ) return null;
-    if (
-      expectedFritzPolicyContract
-      && parsed.fritzPolicyContract !== expectedFritzPolicyContract
-    ) return null;
-    // Local must match the server hand index.
-    if (parsed.currentHandIndex !== serverHandIndex) return null;
-    return parsed;
+    if (!Number.isInteger(serverAuthorityRevision) || Number(serverAuthorityRevision) < 0) return null;
+    if (!Number.isInteger(serverGameNumber) || Number(serverGameNumber) < 1) return null;
+    const reconciled = reconcileDailyFritzResume(parsed, {
+      attemptId,
+      challengeId: createDailyFritzChallengeIdentity(runDate).challengeId,
+      runFingerprint,
+      cursor: {
+        gameNumber: Number(serverGameNumber),
+        handIndex: serverHandIndex,
+        revision: Number(serverAuthorityRevision),
+      },
+      fritzPolicyVersion: expectedFritzPolicyVersion,
+      fritzPolicyContract: expectedFritzPolicyContract,
+    });
+    if (!reconciled.accepted) {
+      // A rejected checkpoint belongs to a different authoritative cursor. It
+      // must not remain behind: a freshly-created hand restarts its local
+      // checkpoint counter, and the monotonic-write guard would otherwise
+      // reject every save in the authoritative hand as older than this stale
+      // snapshot.
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+    if (object(decoded) && decoded.schemaVersion === 8) {
+      persistDailyFritzSnapshot(storageKey, reconciled.snapshot);
+    }
+    return reconciled.snapshot;
   } catch { return null; }
 }
 
@@ -156,12 +244,12 @@ export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFri
     const existingRaw = window.localStorage.getItem(storageKey);
     const existing = existingRaw ? JSON.parse(existingRaw) as unknown : null;
     if (object(existing) && existing.schemaVersion === DAILY_FRITZ_SESSION_SCHEMA_VERSION) {
-      const revision = Number(existing.revision);
+      const revision = Number(existing.checkpointRevision);
       const transitionAt = typeof existing.lastTransitionAt === 'string'
         ? Date.parse(existing.lastTransitionAt)
         : Number.NaN;
       if (
-        (Number.isInteger(revision) && revision > snapshot.revision)
+        (Number.isInteger(revision) && revision > snapshot.checkpointRevision)
         || (Number.isFinite(transitionAt) && transitionAt > Date.parse(snapshot.lastTransitionAt))
       ) return false;
     }

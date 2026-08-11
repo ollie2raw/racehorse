@@ -105,6 +105,7 @@ export type UsePlayerTurnOrchestrationArgs = {
   localRun: {
     beginLocalRun: (kind: 'player-draw' | 'bot-turn') => import('../match/types.ts').LocalRunToken;
     isLocalRunCurrent: (token: import('../match/types.ts').LocalRunToken) => boolean;
+    hasActiveLocalRun: () => boolean;
     finishLocalRun: (token: import('../match/types.ts').LocalRunToken) => void;
   };
   drawStepMs: number;

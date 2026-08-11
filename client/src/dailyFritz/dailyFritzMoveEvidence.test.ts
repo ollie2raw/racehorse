@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MoveEntry } from '../game/moveLogger.ts';
 import {
   canonicalizeDailyFritzMoveLog,
+  isDuplicateDailyFritzActionEvidence,
   isDuplicateDailyFritzPlacement,
 } from './dailyFritzMoveEvidence.ts';
 
@@ -56,6 +57,44 @@ describe('Daily Fritz move evidence', () => {
       { action: 'place', player: 'you', tile: [0, 5] },
       2,
     )).toBe(false);
+  });
+
+  it('rejects only an immediately duplicated draw from the same pre-action state', () => {
+    const firstDraw: MoveEntry = {
+      ...base,
+      moveNumber: 1,
+      handNumber: 3,
+      player: 'you',
+      action: 'draw',
+      handBefore: [[2, 6]],
+    };
+    expect(isDuplicateDailyFritzActionEvidence(
+      [firstDraw],
+      { ...base, player: 'you', action: 'draw', handBefore: [[2, 6]] },
+      3,
+    )).toBe(true);
+    expect(isDuplicateDailyFritzActionEvidence(
+      [firstDraw],
+      { ...base, player: 'you', action: 'draw', handBefore: [[2, 6], [5, 5]] },
+      3,
+    )).toBe(false);
+  });
+
+  it('preserves a legitimate multi-draw chain while canonicalizing duplicate capture', () => {
+    const log: MoveEntry[] = [
+      { ...base, moveNumber: 1, handNumber: 3, player: 'you', action: 'draw', handBefore: [[2, 6]] },
+      { ...base, moveNumber: 2, handNumber: 3, player: 'you', action: 'draw', handBefore: [[2, 6]] },
+      { ...base, moveNumber: 3, handNumber: 3, player: 'you', action: 'draw', handBefore: [[2, 6], [0, 1]] },
+    ];
+    expect(canonicalizeDailyFritzMoveLog(log).map((entry) => entry.moveNumber)).toEqual([1, 3]);
+  });
+
+  it('preserves repeated legacy draws when pre-action evidence is unavailable', () => {
+    const log: MoveEntry[] = [
+      { ...base, moveNumber: 1, handNumber: 3, player: 'opponent', action: 'draw' },
+      { ...base, moveNumber: 2, handNumber: 3, player: 'opponent', action: 'draw' },
+    ];
+    expect(canonicalizeDailyFritzMoveLog(log).map((entry) => entry.moveNumber)).toEqual([1, 2]);
   });
 
   it('canonicalizes separated stale placement captures without removing legal actions', () => {
