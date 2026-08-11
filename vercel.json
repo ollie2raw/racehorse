@@ -7,9 +7,6 @@
     { "source": "/journey", "destination": "/journey.html" },
     { "source": "/learn", "destination": "/learn.html" },
     { "source": "/tournament", "destination": "/tournament.html" },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
