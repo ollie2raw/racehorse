@@ -19,7 +19,10 @@ import {
   type DailyFritzSetGameNumber,
   type DailyFritzSetGameResult,
 } from '../../dailyFritz';
-import { appendDailyFritzGameToSet } from '../../dailyFritzSkunk';
+import {
+  appendDailyFritzGameToSet,
+  getDailyFritzPublishedSetScore,
+} from '../../dailyFritzSkunk';
 import { isAdminSecret } from '../../platform/auth/adminSecret';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { writeDailyFritzGameActivity } from '../../social/activityWriter';
@@ -1615,8 +1618,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       res.status(409).json({ error: 'Daily Fritz verification is incomplete.' });
       return;
     }
-    const finalScore = setResult.playerGamesWon;
-    const opponentScore = setResult.fritzGamesWon;
+    const { finalScore, opponentScore } = getDailyFritzPublishedSetScore(setResult);
     const won = setResult.setWinner === 'player';
     const movesUsed = ledger.hands.reduce((sum, hand) => sum + hand.actionCount, 0);
     const handsPlayed = ledger.hands.length;

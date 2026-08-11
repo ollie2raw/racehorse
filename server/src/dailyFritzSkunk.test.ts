@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
  */
 import {
   appendDailyFritzGameToSet,
+  getDailyFritzPublishedSetScore,
   getDailyFritzSkunkLossRank,
   getDailyFritzSkunkWinRank,
   isDailyFritzSkunk,
@@ -11,7 +12,7 @@ import {
   resolveGame2SkunkSetWinner,
   type DailyFritzSetWinner,
 } from './dailyFritzSkunk';
-import type { DailyFritzSetResult } from './dailyFritz';
+import { sortDailyFritzLeaderboard, type DailyFritzLeaderboardEntry, type DailyFritzSetResult } from './dailyFritz';
 
 function emptySet(): DailyFritzSetResult {
   return {
@@ -310,13 +311,13 @@ describe('skunk leaderboard ranks', () => {
     expect(getDailyFritzSkunkWinRank(g1Skunk)).toBeGreaterThan(getDailyFritzSkunkWinRank(normal));
   });
 
-  it('ranks normal 2-0 above a 2-1 decider skunk', () => {
+  it('ranks a decider skunk above a normal 2-0 win', () => {
     let normal = recordGame(emptySet(), 1, 60, 45);
     normal = recordGame(normal, 2, 60, 40);
     let deciderSkunk = recordGame(emptySet(), 1, 60, 45);
     deciderSkunk = recordGame(deciderSkunk, 2, 40, 60);
     deciderSkunk = recordGame(deciderSkunk, 3, 60, 22);
-    expect(getDailyFritzSkunkWinRank(normal)).toBeGreaterThan(getDailyFritzSkunkWinRank(deciderSkunk));
+    expect(getDailyFritzSkunkWinRank(deciderSkunk)).toBeGreaterThan(getDailyFritzSkunkWinRank(normal));
   });
 
   it('ranks a normal 0-2 loss above a game 1 skunk loss', () => {
@@ -324,5 +325,93 @@ describe('skunk leaderboard ranks', () => {
     let normal = recordGame(emptySet(), 1, 40, 60);
     normal = recordGame(normal, 2, 35, 60);
     expect(getDailyFritzSkunkLossRank(normal)).toBeGreaterThan(getDailyFritzSkunkLossRank(skunked));
+  });
+
+  it('orders player skunks by earliest game, then point differential', () => {
+    const completedAt = '2026-08-11T12:00:00.000Z';
+    const row = (
+      username: string,
+      setResult: DailyFritzSetResult,
+      pointDiff: number,
+    ): DailyFritzLeaderboardEntry => ({
+      userId: username,
+      username,
+      won: true,
+      finalScore: setResult.playerGamesWon,
+      opponentScore: setResult.fritzGamesWon,
+      pointDiff,
+      movesUsed: 10,
+      completedAt,
+      skunkWinRank: getDailyFritzSkunkWinRank(setResult),
+    });
+
+    const game1LowerMargin = recordGame(emptySet(), 1, 60, 25);
+    let game2HigherMargin = recordGame(emptySet(), 1, 40, 60);
+    game2HigherMargin = recordGame(game2HigherMargin, 2, 60, 0);
+    const game1HigherMargin = recordGame(emptySet(), 1, 60, 5);
+
+    const sorted = sortDailyFritzLeaderboard([
+      row('game-2', game2HigherMargin, 40),
+      row('game-1-low', game1LowerMargin, 35),
+      row('game-1-high', game1HigherMargin, 55),
+    ]);
+
+    expect(sorted.map((entry) => entry.username)).toEqual([
+      'game-1-high',
+      'game-1-low',
+      'game-2',
+    ]);
+  });
+
+  it('puts every player skunk above normal wins regardless of set score or margin', () => {
+    let deciderSkunk = recordGame(emptySet(), 1, 31, 60);
+    deciderSkunk = recordGame(deciderSkunk, 2, 60, 59);
+    deciderSkunk = recordGame(deciderSkunk, 3, 60, 29);
+
+    const sorted = sortDailyFritzLeaderboard([
+      {
+        userId: 'normal', username: 'normal', won: true, finalScore: 2, opponentScore: 0,
+        pointDiff: 100, movesUsed: 5, completedAt: '2026-08-11T11:00:00.000Z', skunkWinRank: 0,
+      },
+      {
+        userId: 'skunk', username: 'skunk', won: true, finalScore: 2, opponentScore: 1,
+        pointDiff: 2, movesUsed: 20, completedAt: '2026-08-11T12:00:00.000Z',
+        skunkWinRank: getDailyFritzSkunkWinRank(deciderSkunk),
+      },
+    ]);
+
+    expect(sorted[0]?.username).toBe('skunk');
+  });
+
+  it('does not give leaderboard priority to skunk losses', () => {
+    const sorted = sortDailyFritzLeaderboard([
+      {
+        userId: 'skunk-loss', username: 'skunk-loss', won: false, finalScore: 0, opponentScore: 2,
+        pointDiff: -50, movesUsed: 10, completedAt: '2026-08-11T11:00:00.000Z', skunkLossRank: 99,
+      },
+      {
+        userId: 'normal-loss', username: 'normal-loss', won: false, finalScore: 1, opponentScore: 2,
+        pointDiff: -5, movesUsed: 20, completedAt: '2026-08-11T12:00:00.000Z', skunkLossRank: 0,
+      },
+    ]);
+
+    expect(sorted[0]?.username).toBe('normal-loss');
+  });
+});
+
+describe('published skunk set score', () => {
+  it('publishes a player game-1 skunk as 0-1 without changing the mechanical 2-0 clinch', () => {
+    const set = recordGame(emptySet(), 1, 60, 20);
+
+    expect(set.playerGamesWon).toBe(2);
+    expect(set.fritzGamesWon).toBe(0);
+    expect(getDailyFritzPublishedSetScore(set)).toEqual({ finalScore: 0, opponentScore: 1 });
+  });
+
+  it('keeps a game-2 split skunk published as 1-1', () => {
+    let set = recordGame(emptySet(), 1, 40, 60);
+    set = recordGame(set, 2, 60, 20);
+
+    expect(getDailyFritzPublishedSetScore(set)).toEqual({ finalScore: 1, opponentScore: 1 });
   });
 });

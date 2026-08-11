@@ -13,6 +13,7 @@ import {
   type DailyFritzTier,
 } from '../../dailyFritz';
 import {
+  getDailyFritzPublishedSetScore,
   getDailyFritzSkunkLossRank,
   getDailyFritzSkunkWinRank,
   normalizeDailyFritzSetSkunkFields,
@@ -646,12 +647,15 @@ export async function buildDailyFritzLeaderboard(
         ) {
           return null;
         }
+        const publishedScore = setResult
+          ? getDailyFritzPublishedSetScore(setResult)
+          : { finalScore: attempt.finalScore, opponentScore: attempt.opponentScore };
         return {
           userId: attempt.userId,
           username: names.get(attempt.userId) ?? `user_${attempt.userId.slice(0, 8)}`,
           won: attempt.won,
-          finalScore: attempt.finalScore,
-          opponentScore: attempt.opponentScore,
+          finalScore: publishedScore.finalScore,
+          opponentScore: publishedScore.opponentScore,
           pointDiff,
           movesUsed: attempt.movesUsed,
           completedAt: attempt.completedAt,

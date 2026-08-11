@@ -130,7 +130,7 @@ export default function DailyFritzLeaderboard({
           <div>
             <span className="daily-fritz-results-kicker">Today’s Daily Fritz Board</span>
             <p className="daily-fritz-standings-note">
-              Ranked by set result, set score, skunk quality, total point margin, then completion time.
+              Player skunks rank first by earliest game, then point margin. Other sets rank by result and score.
             </p>
           </div>
           <span className="daily-fritz-global-results-count">
