@@ -1,4 +1,5 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from '../game/moveLogger';
+import type { LegacyReviewEvaluationDisclosure } from '@racehorse/game-core/reviewContracts';
 import { normalizeBoardRenderState, sameTileTuple } from '../game/moveLogger';
 import { chooseBotMove, evaluateMove, toBotVisibleState, type BotDifficulty } from '../modules/fritz/botHeuristics.ts';
 import { createBotMatch, getLegalMoves, type BotMatchState } from '../modules/match/runtime/botEngine.ts';
@@ -54,6 +55,15 @@ export type GameAnalysis = {
   oracleLabel: string;
   worstHandNumber: number | null;
   consequenceByMoveNumber: Record<number, ConsequenceChain>;
+  /** Disclosure for the legacy V1 heuristic evaluator. Optional for persisted pre-Batch-0 records. */
+  evidence?: LegacyReviewEvaluationDisclosure;
+};
+
+export const LEGACY_ANALYSIS_DISCLOSURE: LegacyReviewEvaluationDisclosure = {
+  source: 'heuristic',
+  confidence: 'low',
+  displayLabel: 'Legacy heuristic estimate',
+  reason: 'incomplete-v1-position-snapshot',
 };
 
 type StoredAnalysisItem = {
@@ -662,6 +672,7 @@ function buildGameSummary(
     oracleLabel: oracleLabelFor(options.oracleMode, options.tierPlayed),
     worstHandNumber: worstHand?.handNumber ?? null,
     consequenceByMoveNumber,
+    evidence: LEGACY_ANALYSIS_DISCLOSURE,
   };
 }
 
