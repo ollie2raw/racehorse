@@ -11,12 +11,11 @@ export type SupabaseAuthHashPayload = {
 /**
  * Parse Supabase auth callback params from the URL hash.
  *
- * HashRouter owns hashes that start with "#/…". Supabase recovery links land as
- * "#/access_token=…&type=recovery" is wrong — they use a bare query string hash:
+ * Legacy client routes start with "#/…". Supabase recovery links instead use a
+ * bare query string hash:
  *   #access_token=…&refresh_token=…&type=recovery
  *
- * We must read and clear that hash before React/HashRouter runs navigate(), which
- * would replace it with "#/".
+ * We must read and clear that hash before the router starts.
  */
 export function parseSupabaseAuthHash(rawHash: string): SupabaseAuthHashPayload | null {
   const hash = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash;
@@ -32,14 +31,14 @@ export function parseSupabaseAuthHash(rawHash: string): SupabaseAuthHashPayload 
   return { access_token, refresh_token, type };
 }
 
-function clearHashToHomeRoute(): void {
-  const next = `${window.location.pathname}${window.location.search}#/`;
+function clearRecoveryHash(): void {
+  const next = `${window.location.pathname}${window.location.search}`;
   window.history.replaceState(window.history.state, '', next);
 }
 
 /**
  * If the current URL carries a Supabase password-recovery hash, exchange it for a
- * session and normalize the hash to "#/". Returns true when a recovery session was
+ * session and remove the sensitive hash. Returns true when a recovery session was
  * established (PASSWORD_RECOVERY will fire via onAuthStateChange).
  */
 export async function consumeSupabaseRecoveryHash(): Promise<boolean> {
@@ -51,7 +50,7 @@ export async function consumeSupabaseRecoveryHash(): Promise<boolean> {
   const { access_token, refresh_token } = parsed;
 
   // Strip auth tokens from the hash before App's navigate() effect can run.
-  clearHashToHomeRoute();
+  clearRecoveryHash();
 
   const { error } = await supabase.auth.setSession({ access_token, refresh_token });
   if (error) {

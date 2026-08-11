@@ -220,7 +220,7 @@ async function main() {
   const page = await context.newPage();
 
   try {
-    await page.goto(`${appUrl}/#/daily-fritz`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${appUrl}/daily-fritz`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Daily Fritz' }).waitFor({ state: 'visible', timeout: 20000 });
     await openSignInIfNeeded(page);
 

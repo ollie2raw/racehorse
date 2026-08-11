@@ -36,7 +36,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 }
 
 async function openLesson(page: Page) {
-  await page.goto('/#/journey');
+  await page.goto('/journey');
   const nodeLabel = page.getByLabel('The Fritz Trail map').getByText('Double Trouble', { exact: true });
   await expect(nodeLabel).toBeVisible({ timeout: 15_000 });
   await nodeLabel.click();

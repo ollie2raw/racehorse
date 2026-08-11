@@ -138,7 +138,7 @@ export function useTournamentSessionLifecycle({
     if (tournamentSubView === 'bracket' && !activeTournamentId) {
       console.log('[app:navigation] invalid state fallback', {
         appMode,
-        hash: typeof window !== 'undefined' ? window.location.hash : '',
+        path: typeof window !== 'undefined' ? window.location.pathname : '',
       });
       setTournamentSubView('hub');
     }

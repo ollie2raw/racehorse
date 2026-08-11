@@ -149,8 +149,8 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const navigate = useNavigate();
   const [appMode, setAppMode] = useState<AppMode>(() => {
-    const hash = window.location.hash.replace(/^#/, '') || '/';
-    const mode = PATH_TO_MODE[hash];
+    const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+    const mode = PATH_TO_MODE[pathname];
     return mode && !SOCKET_MODES.has(mode) ? mode : 'home';
   });
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
@@ -180,7 +180,7 @@ export default function App() {
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
 
-  // Sync appMode → URL hash (side effect only; appMode is still source of truth)
+  // Sync appMode to a real browser path (appMode remains the source of truth).
   useEffect(() => {
     const path = SOCKET_MODES.has(appMode) ? '/' : (MODE_TO_PATH[appMode] ?? '/');
     navigate(path, { replace: true });

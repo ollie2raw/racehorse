@@ -204,7 +204,7 @@ CSS for a screen lives next to its component file.
 
 ## Navigation / Routing
 
-The app uses `HashRouter` from react-router-dom. Navigation is driven by `setAppMode()` in `App.tsx`, not by `<Link>` or `navigate()` in most components. Pass `setAppMode` as a prop if a screen needs to navigate.
+The app uses `BrowserRouter` from react-router-dom. Navigation is driven by `setAppMode()` in `App.tsx`, not by `<Link>` or `navigate()` in most components. Pass `setAppMode` as a prop if a screen needs to navigate. Vercel serves prerendered public routes first and falls back to `index.html` for client routes.
 
 ---
 

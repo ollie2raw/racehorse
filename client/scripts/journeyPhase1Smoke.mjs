@@ -55,27 +55,17 @@ async function getConsoleErrors(page) {
   return page.evaluate(() => window.__journeySmokeErrors ?? []);
 }
 
-async function hashPath(page) {
-  const url = page.url();
-  const idx = url.indexOf('#');
-  if (idx === -1) return '/';
-  const raw = url.slice(idx + 1);
-  if (!raw || raw === '/') return '/';
-  return raw.startsWith('/') ? raw : `/${raw}`;
+async function browserPath(page) {
+  return new URL(page.url()).pathname;
 }
 
-/** Hard-reset SPA route: clear JS state, load hash, reload, wait for hash to match. */
-async function gotoAppHashRoute(page, base, path) {
-  const hash = path === '/' ? '#/' : `#${path}`;
+/** Hard-reset SPA route: clear JS state, load path, reload, wait for it to match. */
+async function gotoAppRoute(page, base, path) {
   await page.goto('about:blank');
-  await page.goto(`${base}/${hash}`, { waitUntil: 'load' });
+  await page.goto(`${base}${path}`, { waitUntil: 'load' });
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(
-    (expectedPath) => {
-      const raw = window.location.hash.replace(/^#/, '') || '/';
-      const current = raw.startsWith('/') ? raw : `/${raw}`;
-      return current === expectedPath;
-    },
+    (expectedPath) => window.location.pathname === expectedPath,
     path,
     { timeout: 8000 },
   );
@@ -106,7 +96,7 @@ async function main() {
   });
 
   // 1–2: Home + Single Player Hub
-  await page.goto(`${BASE}/#/solo`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/solo`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   const soloTitle = page.getByRole('heading', { name: 'Single Player' });
   record('2-single-player-hub-loads', await soloTitle.isVisible());
@@ -116,12 +106,12 @@ async function main() {
   record('3-journey-card-visible', await journeyCard.isVisible());
   await page.getByRole('button', { name: /Start Journey|Continue Journey/i }).click();
   await page.waitForTimeout(600);
-  record('4-journey-route', page.url().includes('#/journey'), page.url());
+  record('4-journey-route', new URL(page.url()).pathname === '/journey', page.url());
 
   // 5: Direct load / refresh
-  await page.goto(`${BASE}/#/journey`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/journey`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
-  record('5-direct-journey-load', page.url().includes('#/journey'));
+  record('5-direct-journey-load', new URL(page.url()).pathname === '/journey');
 
   record(
     '3d-chapter-selector-visible',
@@ -141,7 +131,7 @@ async function main() {
     }),
   );
   await page.setViewportSize({ width: 390, height: 720 });
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.waitForTimeout(500);
   const ch4CardNarrow = page.locator('[data-chapter-id="ch4-pressure-circuit"]');
   await ch4CardNarrow.scrollIntoViewIfNeeded();
@@ -153,7 +143,7 @@ async function main() {
   await ch6CardNarrow.scrollIntoViewIfNeeded();
   record('3h-ch6-accessible-via-scroll', await ch6CardNarrow.isVisible());
   await page.setViewportSize({ width: 1280, height: 720 });
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.waitForTimeout(500);
 
   await clearJourneyProgress(page);
@@ -539,7 +529,7 @@ async function main() {
     await page.getByRole('button', { name: /Leave game/i }).click();
     await page.waitForTimeout(800);
   }
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.locator('[data-chapter-id="ch1-fritz-trail"]').click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -576,7 +566,7 @@ async function main() {
       }),
     );
   }, STORAGE_KEY);
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   record(
     '3f-ch3-available-after-ch2',
     await page
@@ -661,7 +651,7 @@ async function main() {
     await page.getByRole('button', { name: /Leave game/i }).click();
     await page.waitForTimeout(800);
   }
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.locator('[data-chapter-id="ch1-fritz-trail"]').click();
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -712,7 +702,7 @@ async function main() {
       }),
     );
   }, STORAGE_KEY);
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   record(
     '3g-ch4-available-after-ch3',
     await page
@@ -791,7 +781,7 @@ async function main() {
     await page.getByRole('button', { name: /Leave game/i }).click();
     await page.waitForTimeout(800);
   }
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.locator('[data-chapter-id="ch1-fritz-trail"]').click();
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -856,7 +846,7 @@ async function main() {
       }),
     );
   }, STORAGE_KEY);
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   record(
     '3h-ch5-available-after-ch4',
     await page
@@ -935,7 +925,7 @@ async function main() {
     await page.getByRole('button', { name: /Leave game/i }).click();
     await page.waitForTimeout(800);
   }
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.locator('[data-chapter-id="ch1-fritz-trail"]').click();
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -1014,7 +1004,7 @@ async function main() {
       }),
     );
   }, STORAGE_KEY);
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   record(
     '3i-ch6-available-after-ch5',
     await page
@@ -1084,7 +1074,7 @@ async function main() {
     await page.getByRole('button', { name: /Leave game/i }).click();
     await page.waitForTimeout(800);
   }
-  await gotoAppHashRoute(page, BASE, '/journey');
+  await gotoAppRoute(page, BASE, '/journey');
   await page.locator('[data-chapter-id="ch1-fritz-trail"]').click();
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -1122,7 +1112,7 @@ async function main() {
   );
 
   await clearJourneyProgress(page);
-  await page.goto(`${BASE}/#/journey`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/journey`, { waitUntil: 'load' });
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await page.getByRole('button', { name: /Trailhead Briefing/i }).click();
@@ -1137,7 +1127,7 @@ async function main() {
   await leaveButton.click();
   await page.getByRole('button', { name: 'Leave Game', exact: true }).click();
   await page.waitForTimeout(800);
-  record('2a-exit-returns-to-journey', page.url().includes('#/journey'));
+  record('2a-exit-returns-to-journey', new URL(page.url()).pathname === '/journey');
   const progressAfterExit = await readProgress(page);
   record(
     '2a-exit-does-not-complete-node',
@@ -1147,7 +1137,7 @@ async function main() {
 
   // Normal Play vs Fritz setup still reachable
   await clearJourneyProgress(page);
-  await gotoAppHashRoute(page, BASE, '/solo');
+  await gotoAppRoute(page, BASE, '/solo');
   await page.getByRole('heading', { name: 'Single Player' }).waitFor({ state: 'visible', timeout: 10000 });
   await page
     .locator('section')
@@ -1157,17 +1147,17 @@ async function main() {
   await page.waitForTimeout(1000);
   record('2a-normal-bot-setup-loads', await page.getByText(/Rookie|Standard|Elite|Master/i).first().isVisible().catch(() => false), page.url());
 
-  // Route spot-checks — reset out of botSetup (SOCKET mode maps appMode URL to #/)
-  await gotoAppHashRoute(page, BASE, '/');
+  // Route spot-checks — reset out of botSetup (socket modes map appMode URL to /).
+  await gotoAppRoute(page, BASE, '/');
   const routes = [
-    { hash: '#/', path: '/', label: 'home' },
-    { hash: '#/solo', path: '/solo', label: 'solo' },
-    { hash: '#/daily-fritz', path: '/daily-fritz', label: 'daily-fritz' },
-    { hash: '#/learn', path: '/learn', label: 'learn' },
+    { path: '/', label: 'home' },
+    { path: '/solo', label: 'solo' },
+    { path: '/daily-fritz', label: 'daily-fritz' },
+    { path: '/learn', label: 'learn' },
   ];
   for (const route of routes) {
-    await gotoAppHashRoute(page, BASE, route.path);
-    const currentPath = await hashPath(page);
+    await gotoAppRoute(page, BASE, route.path);
+    const currentPath = await browserPath(page);
     const routeOk =
       route.label === 'solo'
         ? await page
@@ -1184,9 +1174,9 @@ async function main() {
     record(`18-route-${route.label}`, routeOk, `${currentPath} (${page.url()})`);
   }
 
-  // bot is a SOCKET mode — URL syncs to #/; only verify navigation does not crash
+  // bot is a socket mode — URL syncs to /; only verify navigation does not crash.
   await page.goto('about:blank');
-  await page.goto(`${BASE}/#/bot`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/bot`, { waitUntil: 'load' });
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(700);
   record('18-route-bot-no-crash', true, `url=${page.url()}`);

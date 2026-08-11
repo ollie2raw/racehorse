@@ -15,7 +15,7 @@ function hasValidAuthState(filePath:string){
   }catch{return false;}
 }
 function runtimeGuard(page: Page) { const errors:string[]=[]; page.on('pageerror',(error)=>errors.push(error.message)); page.on('console',(message)=>{if(message.type()==='error')errors.push(message.text());}); return()=>expect(errors,errors.join('\n')).toEqual([]); }
-async function openDailyFritz(page:Page){await page.goto('/#/daily-fritz');await expect(page.getByRole('heading',{name:'Daily Fritz'})).toBeVisible({timeout:20_000});}
+async function openDailyFritz(page:Page){await page.goto('/daily-fritz');await expect(page.getByRole('heading',{name:'Daily Fritz'})).toBeVisible({timeout:20_000});}
 
 test.describe('Daily Fritz v2 official lifecycle',()=>{
   test.skip(!hasValidAuthState(authState),'A current authenticated Daily Fritz QA fixture is required');
