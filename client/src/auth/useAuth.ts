@@ -55,65 +55,32 @@ function normalizeDesiredUsername(value: string | null | undefined): string | nu
   return normalized;
 }
 
-function isUniqueUsernameError(error: unknown): boolean {
-  const message = error instanceof Error
-    ? error.message.toLowerCase()
-    : typeof error === 'object' && error && 'message' in error
-      ? String((error as { message?: unknown }).message ?? '').toLowerCase()
-      : String(error).toLowerCase();
-  return message.includes('duplicate key') || message.includes('unique');
-}
-
-function getPreferredUsername(user: User): string | null {
-  const meta = user.user_metadata as Record<string, unknown> | null | undefined;
-  const direct = typeof meta?.username === 'string' ? meta.username : null;
-  const preferred = typeof meta?.preferred_username === 'string' ? meta.preferred_username : null;
-  return normalizeDesiredUsername(preferred ?? direct ?? null);
-}
-
 async function ensureProfile(user: User): Promise<void> {
   if (!supabase) return;
   const client = supabase;
   const userId = user.id;
-  const tempUsername = `${TEMP_USERNAME_PREFIX}${userId.replace(/-/g, '').slice(0, 8)}`;
-  const preferredUsername = getPreferredUsername(user);
-  const primaryUsername = preferredUsername ?? tempUsername;
   try {
     const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
       setTimeout(() => resolve({ timedOut: true }), PROFILE_REQUEST_TIMEOUT_MS);
     });
-    const upsertProfile = async (username: string) =>
+    const profilePromise =
       client
         .from('profiles')
-        .upsert(
-          {
-            id: userId,
-            username,
-            glicko_rating: DEFAULT_GLICKO_RATING,
-            glicko_rd: DEFAULT_GLICKO_RD,
-            glicko_vol: DEFAULT_GLICKO_VOL,
-            provisional: true,
-            peak_rating: DEFAULT_GLICKO_RATING,
-            ranked_games_played: 0,
-          },
-          { onConflict: 'id', ignoreDuplicates: true },
-        );
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle()
+        .then(({ data, error }) => ({ timedOut: false as const, data, error }));
 
-    const upsertPromise = (async () => {
-      let result = await upsertProfile(primaryUsername);
-      if (result.error && preferredUsername && preferredUsername !== tempUsername && isUniqueUsernameError(result.error)) {
-        result = await upsertProfile(tempUsername);
-      }
-      return { timedOut: false as const, error: result.error };
-    })();
-
-    const result = await Promise.race([upsertPromise, timeoutPromise]);
+    const result = await Promise.race([profilePromise, timeoutPromise]);
     if ('timedOut' in result && result.timedOut) {
       console.warn('[auth] ensureProfile timed out; continuing without blocking auth');
       return;
     }
-    if (result.error) {
-      console.warn('[auth] ensureProfile failed; continuing without blocking auth', result.error);
+    if (result.error || !result.data) {
+      console.warn(
+        '[auth] profile bootstrap trigger has not produced a profile; continuing without blocking auth',
+        result.error,
+      );
     }
   } catch (err) {
     console.warn('[auth] ensureProfile errored; continuing without blocking auth', err);
@@ -261,27 +228,12 @@ export function useAuth() {
             peak_rating: DEFAULT_GLICKO_RATING,
             ranked_games_played: 0,
           };
-          try {
-            const { data: normalizedData } = await client
-              .from('profiles')
-              .update(normalizedPatch)
-              .eq('id', sessionUser.id)
-              .eq('ranked_games_played', 0)
-              .select(
-                'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
-              )
-              .maybeSingle();
-            profileData = (normalizedData as Record<string, unknown> | null) ?? {
-              ...profileData,
-              ...normalizedPatch,
-            };
-          } catch (err) {
-            console.warn('[auth] profile normalization failed; using local fallback values', err);
-            profileData = {
-              ...profileData,
-              ...normalizedPatch,
-            };
-          }
+          // Display the current default locally. The server normalizes the
+          // persisted legacy value before its first authoritative rating write.
+          profileData = {
+            ...profileData,
+            ...normalizedPatch,
+          };
         }
         let ghostRating: number | null = null;
         try {
@@ -677,7 +629,8 @@ export function useAuth() {
       try {
         const request = supabase
           .from('profiles')
-          .upsert({ id: user.id, username: normalized }, { onConflict: 'id' })
+          .update({ username: normalized })
+          .eq('id', user.id)
           .select('id, username, created_at')
           .single();
 
