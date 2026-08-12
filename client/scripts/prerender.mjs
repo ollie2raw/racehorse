@@ -66,6 +66,103 @@ const routes = [
     body: 'Create or join a tournament and compete through the full table.',
     image: defaultImage,
   },
+  {
+    path: '/multiplayer',
+    title: 'Multiplayer | Racehorse Dominoes',
+    description: 'Play competitive Racehorse Dominoes online against other players.',
+    heading: 'Racehorse Multiplayer',
+    body: 'Find an opponent and play competitive Racehorse Dominoes online.',
+    image: homeImage,
+  },
+  {
+    path: '/multiplayer/private',
+    output: 'multiplayer-private.html',
+    title: 'Private Match | Racehorse Dominoes',
+    description: 'Create or join a private Racehorse Dominoes room and play with friends.',
+    heading: 'Private Racehorse Match',
+    body: 'Create a private room or join a friend with a room code.',
+    image: homeImage,
+  },
+  {
+    path: '/solo/fritz',
+    output: 'solo-fritz.html',
+    title: 'Play vs Fritz | Racehorse Dominoes',
+    description: 'Choose a Fritz difficulty and play a strategic solo Racehorse Dominoes match.',
+    heading: 'Play vs Fritz',
+    body: 'Choose your Fritz difficulty and deal size, then start a solo match.',
+    image: '/dailyfritznew.png',
+  },
+  {
+    path: '/solo/ghost',
+    output: 'solo-ghost.html',
+    title: 'Ghost Mode | Racehorse Dominoes',
+    description: 'Challenge a Racehorse Dominoes ghost modeled on another player’s decisions.',
+    heading: 'Ghost Mode',
+    body: 'Choose a player ghost and test your strategy against their style.',
+    image: homeImage,
+  },
+  {
+    path: '/social',
+    title: 'Social | Racehorse Dominoes',
+    description: 'Follow Racehorse Dominoes players, see recent activity, and explore the global rankings.',
+    heading: 'Racehorse Social',
+    body: 'Follow players, see recent activity, and explore the competitive community.',
+    image: homeImage,
+  },
+  {
+    path: '/players',
+    output: 'players.html',
+    title: 'Player Profile | Racehorse Dominoes',
+    description: 'View a Racehorse Dominoes player profile, rating, record, and recent competitive activity.',
+    heading: 'Racehorse Player Profile',
+    body: 'View player ratings, records, and recent competitive activity.',
+    image: homeImage,
+  },
+  {
+    path: '/daily-fritz/leaderboard',
+    output: 'daily-fritz-leaderboard.html',
+    title: 'Daily Fritz Leaderboard | Racehorse Dominoes',
+    description: 'Compare today’s Daily Fritz results with Racehorse Dominoes players around the world.',
+    heading: 'Daily Fritz Leaderboard',
+    body: 'See how today’s shared Daily Fritz set played out across the field.',
+    image: '/dailyfritznew.png',
+  },
+  {
+    path: '/daily/leaderboard',
+    output: 'daily-leaderboard.html',
+    title: 'Daily Puzzle Leaderboard | Racehorse Dominoes',
+    description: 'Compare scores from today’s Racehorse Dominoes Daily Puzzle ladder.',
+    heading: 'Daily Puzzle Leaderboard',
+    body: 'See today’s top Daily Puzzle ladder scores.',
+    image: defaultImage,
+  },
+  {
+    path: '/learn/how-to-play',
+    output: 'learn-how-to-play.html',
+    title: 'How to Play Racehorse Dominoes',
+    description: 'Learn the rules, scoring, and core strategy of Racehorse Dominoes.',
+    heading: 'How to Play Racehorse Dominoes',
+    body: 'Learn Racehorse scoring, turns, draws, and the decisions that shape each hand.',
+    image: homeImage,
+  },
+  {
+    path: '/tournament/detail',
+    output: 'tournament-detail.html',
+    title: 'Tournament | Racehorse Dominoes',
+    description: 'View a Racehorse Dominoes tournament table, players, and match schedule.',
+    heading: 'Racehorse Tournament',
+    body: 'View the tournament table, players, and match schedule.',
+    image: homeImage,
+  },
+  {
+    path: '/tournament/result',
+    output: 'tournament-result.html',
+    title: 'Tournament Result | Racehorse Dominoes',
+    description: 'View the result of a Racehorse Dominoes tournament match.',
+    heading: 'Tournament Match Result',
+    body: 'Review the completed tournament match result.',
+    image: homeImage,
+  },
 ];
 
 function escapeHtml(value) {
@@ -108,7 +205,7 @@ const template = await readFile(indexPath, 'utf8');
 for (const route of routes) {
   const outputPath = route.path === '/'
     ? indexPath
-    : path.join(distDir, `${route.path.slice(1)}.html`);
+    : path.join(distDir, route.output ?? `${route.path.slice(1)}.html`);
   await writeFile(outputPath, renderRoute(template, route));
 }
 

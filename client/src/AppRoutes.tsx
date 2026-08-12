@@ -24,6 +24,7 @@ const RatingHistoryPage = React.lazy(() => import('./ranking/RatingHistoryPage')
 const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
 const FriendsScreenLobbyBridge = React.lazy(() => import('./multiplayer/FriendsScreenLobbyBridge'));
 const ActivityFeedLobbyBridge = React.lazy(() => import('./multiplayer/ActivityFeedLobbyBridge'));
+const LeaderboardScreen = React.lazy(() => import('./social/LeaderboardScreen'));
 const DailyFritzLeaderboardRoute = React.lazy(() => import('./dailyFritz/DailyFritzLeaderboardRoute'));
 const PublicProfileScreenLobbyBridge = React.lazy(() => import('./multiplayer/PublicProfileScreenLobbyBridge'));
 const RacehorseHomeScreen = React.lazy(() => import('./screens/HomeScreen'));
@@ -466,8 +467,31 @@ export default function AppRoutes({
         <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
           <ErrorBoundary context="daily-puzzle">
           <DailyPuzzleScreen
+            key="daily-hub"
             user={authUser}
             profile={authProfile}
+            onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
+          />
+          </ErrorBoundary>
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'dailyPuzzleLeaderboard') {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle Leaderboard…" />}>
+          <ErrorBoundary context="daily-puzzle-leaderboard">
+          <DailyPuzzleScreen
+            key="daily-leaderboard"
+            user={authUser}
+            profile={authProfile}
+            initialView="leaderboard"
+            onLeaderboardClose={() => setAppMode('daily')}
             onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
@@ -497,6 +521,23 @@ export default function AppRoutes({
             onNavigate={setAppMode}
           />
 
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'dailyFritzLeaderboard') {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Daily Fritz Leaderboard…" />}>
+          <DailyFritzLeaderboardRoute
+            user={authUser}
+            profile={authProfile}
+            onClose={() => setAppMode('dailyFritz')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
+          />
         </Suspense>
       </div>
     );
@@ -598,13 +639,14 @@ export default function AppRoutes({
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
-          <DailyFritzLeaderboardRoute
+          <LeaderboardScreen
             user={authUser}
-            profile={authProfile}
-            onClose={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
+            onViewProfile={(username) => {
+              setProfileTarget(username);
+              setProfileOriginMode('leaderboard');
+              setAppMode('profile');
+            }}
+            onClose={() => setAppMode('feed')}
           />
         </Suspense>
       </div>

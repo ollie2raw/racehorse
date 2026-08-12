@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('browser routing', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('hasSeenWelcome', '1'));
+  });
+
   test('root and in-app navigation use real paths', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: "Today's Race" })).toBeVisible();
@@ -28,5 +32,51 @@ test.describe('browser routing', () => {
     await page.goto('/#/learn');
     await expect(page).toHaveURL(/\/learn$/);
     await expect(page.getByRole('heading', { name: 'Learn' })).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('approved routes survive direct loads and refreshes', async ({ page }) => {
+    const paths = [
+      '/multiplayer',
+      '/multiplayer/private',
+      '/solo/fritz',
+      '/solo/ghost',
+      '/social',
+      '/players/route-smoke',
+      '/daily-fritz/leaderboard',
+      '/daily/leaderboard',
+      '/learn/how-to-play',
+      '/tournament/route-smoke',
+      '/tournament/route-smoke/result',
+    ];
+
+    for (const path of paths) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));
+      await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
+    }
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/tournament\/route-smoke\/result$/);
+    await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
+  });
+
+  test('browser back restores the previous routed screen', async ({ page }) => {
+    await page.goto('/solo');
+    await page.locator('.sp-solo-mode-card').filter({ hasText: 'Play vs Fritz' }).click();
+    await expect(page).toHaveURL(/\/solo\/fritz$/);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/solo$/);
+    await expect(page.getByRole('heading', { name: /single player/i })).toBeVisible();
+  });
+
+  test('Social opens the global rating leaderboard', async ({ page }) => {
+    await page.goto('/social');
+    await page.getByRole('button', { name: 'View Leaderboard' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Global', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'By Mode', exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/social$/);
   });
 });
