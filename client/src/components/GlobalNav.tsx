@@ -158,7 +158,12 @@ export function GlobalNav({
       />
       <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
         {/* Left: Brand & Identity */}
-        <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>
+        <button
+          type="button"
+          aria-label="Racehorse home"
+          className="flex min-w-[280px] cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
+          onClick={() => onNavigate?.('home')}
+        >
           <BrandLogo
             iconSize={compactChrome ? 40 : 44}
             showWordmark={false}
@@ -182,7 +187,7 @@ export function GlobalNav({
           >
             RACEHORSE
           </div>
-        </div>
+        </button>
 
         {/* Center Content Logic (The Switch) */}
         <div className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>

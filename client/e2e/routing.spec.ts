@@ -79,4 +79,46 @@ test.describe('browser routing', () => {
     await expect(page.getByRole('button', { name: 'By Mode', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/\/social$/);
   });
+
+  for (const path of [
+    '/social',
+    '/daily-fritz',
+    '/daily-fritz/leaderboard',
+    '/daily',
+    '/daily/leaderboard',
+    '/solo',
+    '/solo/fritz',
+    '/solo/ghost',
+    '/multiplayer',
+    '/multiplayer/private',
+    '/journey',
+    '/learn',
+    '/learn/how-to-play',
+    '/tournament',
+  ]) {
+    test(`the shared logo returns ${path} to the current homepage without a reload`, async ({ page }) => {
+      await page.goto(path, { waitUntil: 'networkidle' });
+      const logo = page.getByRole('button', { name: 'Racehorse home' });
+      await expect(logo).toBeVisible({ timeout: 15_000 });
+
+      const marker = `logo-navigation:${path}`;
+      await page.evaluate((value) => {
+        (window as Window & { __logoNavigationMarker?: string }).__logoNavigationMarker = value;
+      }, marker);
+      const documentRequests: string[] = [];
+      page.on('request', (request) => {
+        if (request.resourceType() === 'document') documentRequests.push(request.url());
+      });
+
+      await logo.click();
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole('heading', { name: "Today's Race" })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Multiplayer Online', { exact: true })).not.toBeVisible();
+      expect(await page.evaluate(
+        (value) => (window as Window & { __logoNavigationMarker?: string }).__logoNavigationMarker === value,
+        marker,
+      )).toBe(true);
+      expect(documentRequests).toEqual([]);
+    });
+  }
 });

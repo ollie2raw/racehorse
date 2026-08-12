@@ -1,6 +1,5 @@
 import React, { Suspense } from 'react';
 import { ScreenLoader } from './ui/ScreenLoader';
-import { claudeRgb } from './ui/claudeModeUtils';
 import type { AppRoutesProps } from './appRouteTypes';
 import { JOURNEY_MODE_VISIBLE, LEARN_MODE_VISIBLE } from './appRouteTypes';
 import {
@@ -41,7 +40,6 @@ const GuidedMatchAnnotatorScreen = React.lazy(() =>
 );
 const LearnHowToPlayRacehorse = React.lazy(() => import('./learn/LearnHowToPlayRacehorse'));
 const LearnPlayer = React.lazy(() => import('./learn/LearnPlayer'));
-const WeeklyStatsScreen = React.lazy(() => import('./stats/WeeklyStatsScreen'));
 const spectatorModeEnabled = isSpectatorModeEnabled();
 const LiveNowScreen = spectatorModeEnabled ? React.lazy(() => import('./live/LiveNowScreen')) : null;
 
@@ -53,7 +51,6 @@ export default function AppRoutes({
   botMatch,
   ghost,
   social,
-  homeOverlays,
   multiplayer,
   tournament: tournamentProps,
 }: AppRoutesProps) {
@@ -75,14 +72,10 @@ export default function AppRoutes({
     isAdmin,
     authUser,
     authProfile,
-    supabaseEnabled,
-    supabaseConfigError,
     refreshAuthProfile,
     applyProfilePatch,
     setAuthModalOpen,
     setUsernameModalOpen,
-    myHandle,
-    homeRatingLabel,
   } = auth;
   const {
     showLearnAdminView,
@@ -128,14 +121,6 @@ export default function AppRoutes({
     toast,
   } = social;
   const {
-    activeHomeMode,
-    setActiveHomeMode,
-    welcomeOpen,
-    setWelcomeOpen,
-    weeklyStatsOpen,
-    setWeeklyStatsOpen,
-  } = homeOverlays;
-  const {
     error,
     actionError,
     state,
@@ -165,7 +150,7 @@ export default function AppRoutes({
     attachAssignedTournamentMatch,
   } = tournamentProps;
 
-  if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && (appMode === 'home' || (appMode === 'live' && !spectatorModeEnabled))) {
+  if (appMode === 'home' || (appMode === 'live' && !spectatorModeEnabled)) {
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Home…" />}>
         <RacehorseHomeScreen
@@ -884,188 +869,6 @@ export default function AppRoutes({
       </div>,
     );
   }
-
-  const dismissWelcome = () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('hasSeenWelcome', 'true');
-    }
-    setWelcomeOpen(false);
-  };
-  const welcomeModal =
-    appMode === 'home' && welcomeOpen ? (
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Welcome to Racehorse Dominoes"
-        onClick={dismissWelcome}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1600,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(4px)',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 12,
-        }}
-      >
-        <div
-          className="card welcome-modal-card"
-          onClick={(e) => e.stopPropagation()}
-          style={{ textAlign: 'left' }}
-        >
-          <h3 className="welcome-modal-title" style={{ margin: 0, lineHeight: 1.2 }}>
-            How to Play
-          </h3>
-          <p className="welcome-modal-subtitle">
-            Quick guide to each game mode.
-          </p>
-          <div className="welcome-mode-list">
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#38bdf8' }} aria-hidden="true" />
-                Multiplayer Online
-              </div>
-              <div className="welcome-mode-desc">Play live 1v1 against a friend with a room code</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#e05c6a' }} aria-hidden="true" />
-                Tournament Mode
-              </div>
-              <div className="welcome-mode-desc">Round robin (4+ players), matches to 30, play everyone once</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#f59e0b' }} aria-hidden="true" />
-                Daily Puzzle
-              </div>
-              <div className="welcome-mode-desc">One puzzle per day, compete on the leaderboard</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#60a5fa' }} aria-hidden="true" />
-                vs Bot
-              </div>
-              <div className="welcome-mode-desc">Practice against an AI opponent</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
-                The Lab
-              </div>
-              <div className="welcome-mode-desc">Drill no-brainer combos in Learn</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#34d399' }} aria-hidden="true" />
-                Stats &amp; Leaderboard
-              </div>
-              <div className="welcome-mode-desc">Track your wins, streaks, and weekly rank</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, display: 'flex' }}>
-            <button
-              className="mode-inline-btn welcome-cta"
-              onClick={dismissWelcome}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
-
-  if (appMode === 'home') {
-    return withAuthModals(
-      <div ref={appRootRef} className={appRootClassName}>
-        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen claude-home-shell claude-home-screen-shell">
-          <div className="layout-screen-bg" aria-hidden="true" />
-          <div className="layout-screen-beam" aria-hidden="true" />
-          <div className="layout-screen-vignette" aria-hidden="true" />
-          <div className="layout-screen-inner home-lobby-shell">
-            <div className="claude-accordion-home">
-              <div className="claude-accordion-home__topbar">
-                <div className="claude-accordion-home__brand">RACEHORSE</div>
-                <div className="claude-accordion-home__utilities">
-                  {authUser ? (
-                    <button className="claude-accordion-home__utility" onClick={() => setUsernameModalOpen(true)}>
-                      {myHandle} · {homeRatingLabel}
-                    </button>
-                  ) : (
-                    <button className="claude-accordion-home__utility" onClick={() => setAuthModalOpen(true)}>
-                      Sign In · Profile
-                    </button>
-                  )}
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('friends')}>
-                    Friends
-                  </button>
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('stats')}>
-                    Stats
-                  </button>
-                </div>
-              </div>
-              <div className="claude-accordion-home__body">
-                {[
-                  { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
-                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz and Ghost Mode', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
-                  { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Set', desc: 'One fixed best of 3 Fritz set per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
-                  { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
-                  { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },
-                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'How to Play, Guided Match, and The Lab.', accent: '#34d399', action: () => setAppMode('learn') },
-                ].map((mode, index, all) => {
-                  const isActive = activeHomeMode === mode.id;
-                  const hasActive = activeHomeMode !== null;
-                  return (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={`claude-accordion-home__panel${isActive ? ' is-active' : ''}${hasActive ? ' has-active' : ''}`}
-                      style={{ ['--panel-accent' as string]: mode.accent, ['--panel-accent-rgb' as string]: claudeRgb(mode.accent), borderRight: index < all.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
-                      onMouseEnter={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
-                      onFocus={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
-                      onClick={mode.action}
-                    >
-                      <div className="claude-accordion-home__panel-atmo" />
-                      <div className="claude-accordion-home__big-number">{index + 1}</div>
-                      {mode.live ? <div className="claude-accordion-home__live">LIVE</div> : null}
-                      <div className="claude-accordion-home__panel-content">
-                        <div className="claude-accordion-home__mode-number">MODE {String(index + 1).padStart(2, '0')}</div>
-                        <div className="claude-accordion-home__mode-title">{mode.label}</div>
-                        <div className="claude-accordion-home__mode-desc">{mode.desc}</div>
-                        <div className="claude-accordion-home__enter">Enter</div>
-                      </div>
-                      <div className="claude-accordion-home__collapsed">
-                        <div className="claude-accordion-home__collapsed-label">{mode.short}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {!supabaseEnabled && (
-              <p className="lobby-server mode-subtitle" style={{ marginTop: 12 }}>
-                {supabaseConfigError ?? 'Supabase not configured.'}
-              </p>
-            )}
-          </div>
-        </div>
-        {welcomeModal}
-        {weeklyStatsOpen ? (
-          <Suspense fallback={null}>
-            <WeeklyStatsScreen
-              open={weeklyStatsOpen}
-              onClose={() => setWeeklyStatsOpen(false)}
-              user={authUser}
-            />
-          </Suspense>
-        ) : null}
-        {friendInvitePopup}
-</div>,
-    );
-  }
-
 
   return fallbackConnectionHost;
 }
