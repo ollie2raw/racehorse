@@ -785,7 +785,6 @@ function commitResolvedGameState(room: Room, assertLabel: string, nextState: Gam
   const extras = autoPassExtras?.filter(Boolean) ?? [];
   const merged = [...extras, ...finalized.autoPassedPlayerIds];
   room.pendingAutoPassNotice = merged.length > 0 ? merged : undefined;
-  notifyLiveRoomStateCommitted(room);
 }
 
 /**
@@ -899,6 +898,7 @@ async function actUnlocked(
       handCount: room.state.players[playerSeatId]?.hand.length ?? 0,
       boneyardCount: room.state.boneyard.length,
     });
+    notifyLiveRoomStateCommitted(room);
     return {
       room,
       forcedDrawAnimation: {
@@ -1004,6 +1004,7 @@ async function actUnlocked(
         });
       }
       appendResolutionEvents(room, previousState, playerSeatId);
+      notifyLiveRoomStateCommitted(room);
       return {
         room,
         forcedDrawAnimation: {
@@ -1017,6 +1018,7 @@ async function actUnlocked(
     }
 
     appendResolutionEvents(room, previousState, playerSeatId);
+    notifyLiveRoomStateCommitted(room);
     return { room };
   }
 
@@ -1058,6 +1060,7 @@ async function actUnlocked(
       },
     });
     appendResolutionEvents(room, previousState, playerSeatId);
+    notifyLiveRoomStateCommitted(room);
     return { room };
   }
 

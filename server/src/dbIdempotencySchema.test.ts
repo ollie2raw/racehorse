@@ -11,6 +11,19 @@ function compactSql(sql: string): string {
 }
 
 describe('DB idempotency schema guardrails', () => {
+  it('ships the production-derived pending Fritz match table in the greenfield ledger', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-05-12_bot_match_pending_greenfield_baseline.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.bot_match_pending');
+    expect(sql).toContain('id uuid not null default gen_random_uuid()');
+    expect(sql).toContain('foreign key (user_id) references public.profiles(id)');
+    expect(sql).toContain('bot_match_pending_room_code_resolved_idx');
+    expect(sql).toContain('bot_match_pending_user_id_resolved_idx');
+    expect(sql).toContain('grant all privileges on table public.bot_match_pending to anon, authenticated, service_role');
+    expect(sql).not.toContain('enable row level security');
+  });
+
   it('ships the formerly manual social tables in the greenfield ledger', () => {
     const sql = compactSql(readRepoFile(
       'supabase/migrations/2026-05-18_social_greenfield_baseline.sql',
@@ -30,6 +43,9 @@ describe('DB idempotency schema guardrails', () => {
     const idempotency = compactSql(readRepoFile(
       'supabase/migrations/2026-06-17_ranked_games_source_idempotency.sql',
     ));
+    const conflictTarget = compactSql(readRepoFile(
+      'supabase/migrations/2026-06-18_ranked_games_source_conflict_target.sql',
+    ));
     const atomicUpdate = compactSql(readRepoFile(
       'supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql',
     ));
@@ -43,6 +59,9 @@ describe('DB idempotency schema guardrails', () => {
     expect(baseline).not.toContain('source_match_id');
     expect(baseline).not.toContain('create or replace function public.commit_glicko_game_update');
     expect(idempotency).toContain('add column if not exists source_match_id text null');
+    expect(conflictTarget).toContain('drop index if exists public.ranked_games_player_source_match_uidx');
+    expect(conflictTarget).toContain('create unique index ranked_games_player_source_match_uidx on public.ranked_games (player_id, source_match_id)');
+    expect(conflictTarget).not.toContain('where source_match_id is not null');
     expect(atomicUpdate).toContain('create or replace function public.commit_glicko_game_update');
   });
 

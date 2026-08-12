@@ -3,6 +3,7 @@
  * Run: node client/scripts/stressTest.mjs
  */
 import net from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { io } from 'socket.io-client';
 
 const SERVER_URL = process.env.STRESS_SERVER_URL || 'http://127.0.0.1:3001';
@@ -53,6 +54,9 @@ function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIME
 }
 
 async function emitAck(socket, event, ...args) {
+  if (event === 'game:action' && args[1] && typeof args[1] === 'object' && !args[1].requestId) {
+    args[1] = { ...args[1], requestId: randomUUID() };
+  }
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
     socket.emit(event, ...args, (resp) => {
@@ -240,6 +244,19 @@ async function waitForAllClientsSequence(clients, minimumSequence) {
   await Promise.all(clients.map((client) => waitForSequenceAtLeast(client, minimumSequence)));
 }
 
+async function convergeLatestState(clients) {
+  for (;;) {
+    const sequences = clients.map((client) => latestState(client)?.state?.sequence ?? -1);
+    const newestSequence = Math.max(...sequences);
+    await waitForAllClientsSequence(clients, newestSequence);
+    const convergedSequences = clients.map((client) => latestState(client)?.state?.sequence ?? -1);
+    const convergedNewest = Math.max(...convergedSequences);
+    if (convergedSequences.every((sequence) => sequence === convergedNewest)) {
+      return latestState(clients[0])?.state ?? null;
+    }
+  }
+}
+
 async function waitForGameState(clients) {
   const hasState = () => clients.every((client) => latestState(client)?.state);
   if (hasState()) return;
@@ -248,6 +265,39 @@ async function waitForGameState(clients) {
       onceWithTimeout(client.socket, 'state:update', () => Boolean(latestState(client)?.state), TIMEOUT_MS),
     ),
   );
+}
+
+function latestPregameDraw(client) {
+  return latestState(client)?.preGameDraw ?? null;
+}
+
+async function completePregameDraw(clients) {
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    if (clients.every((client) => latestState(client)?.state && !latestPregameDraw(client))) return;
+
+    const draws = clients.map(latestPregameDraw);
+    if (draws.every(Boolean)) {
+      const reserved = new Set();
+      for (let index = 0; index < clients.length; index += 1) {
+        const draw = draws[index];
+        const seatId = seatIdFor(clients[index]);
+        if (draw.picks?.[seatId] != null) continue;
+
+        const slot = draw.tiles?.find(
+          (candidate) => !candidate.revealed && !candidate.outOfPlay && !reserved.has(candidate.id),
+        );
+        if (!slot) continue;
+        reserved.add(slot.id);
+        clients[index].socket.emit('game:pregame_draw_pick', { slotId: slot.id });
+      }
+    }
+
+    await delay(50);
+  }
+
+  throw new Error('pregame draw did not resolve before timeout');
 }
 
 function chooseRandomAction(client) {
@@ -276,9 +326,10 @@ async function advanceHandIfNeeded(clients, roomCode) {
 
 async function playUntilGameOver(clients, roomCode) {
   await waitForGameState(clients);
+  await completePregameDraw(clients);
 
   for (let turn = 0; turn < MAX_TURNS_PER_GAME; turn += 1) {
-    let state = latestState(clients[0])?.state;
+    let state = await convergeLatestState(clients);
     if (!state) throw new Error('missing game state during play');
     if (state.gameOver) return state;
 

@@ -2,7 +2,10 @@
 
 1. Create a Supabase project.
 2. Open **SQL Editor** and run `supabase/schema.sql`.
-3. Run `supabase/friends.sql`, then `supabase/migrations/2026-05-18_social_greenfield_baseline.sql` to install social persistence.
+3. Run `supabase/migrations/2026-05-12_bot_match_pending_greenfield_baseline.sql`,
+   then `supabase/friends.sql`, then
+   `supabase/migrations/2026-05-18_social_greenfield_baseline.sql` to install
+   Fritz pending-match and social persistence.
 4. Run `supabase/daily_puzzle.sql` to add Daily Puzzle tables/policies.
 5. Run `supabase/daily_fritz.sql` and then `supabase/migrations/2026-07-31_daily_fritz_events.sql` to add Daily Fritz attempts and durable operational events.
    The migration must be run after the Daily Fritz base schema because the event journal references `daily_fritz_attempts`.
@@ -27,6 +30,14 @@ previously documented as manual SQL Editor steps under `server/sql/social`.
 It must run after `supabase/friends.sql` because the feed and rival read
 policies reference accepted friendships.
 
+## Pending Fritz match greenfield baseline
+
+`supabase/migrations/2026-05-12_bot_match_pending_greenfield_baseline.sql`
+installs the production-derived `bot_match_pending` table that was previously
+created out-of-band. It must run after `supabase/schema.sql`, because its
+`user_id` foreign key references `public.profiles(id)`, and before application
+traffic can start or resolve Play vs Fritz sessions.
+
 ## Ranking greenfield baseline
 
 The Glicko tables were historically created out-of-band. New databases must run
@@ -35,11 +46,13 @@ the checked-in ranking files in this order:
 1. `supabase/schema.sql`
 2. `supabase/migrations/2026-06-16_ranking_greenfield_baseline.sql`
 3. `supabase/migrations/2026-06-17_ranked_games_source_idempotency.sql`
-4. `supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql`
+4. `supabase/migrations/2026-06-18_ranked_games_source_conflict_target.sql`
+5. `supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql`
 
 The baseline adds the production `profiles` ranking columns and creates the
 production `ranked_games` / `rating_periods` tables, indexes, RLS policies, and
-grants. The later files remain responsible for source idempotency and the atomic
+grants. The later files remain responsible for source idempotency, making its
+unique index inferable by PostgREST's explicit conflict target, and the atomic
 rating-update RPC respectively.
 
 ## Daily Fritz transactional-authority upgrade (2026-08-01)

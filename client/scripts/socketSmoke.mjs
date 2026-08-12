@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import { io } from 'socket.io-client';
 
@@ -121,6 +122,12 @@ function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIME
 }
 
 async function emitAck(socket, event, ...args) {
+  if (event === 'room:create' && args[0] && typeof args[0] === 'object') {
+    args[0] = { skipPregameDraw: true, ...args[0] };
+  }
+  if (event === 'game:action' && args[1] && typeof args[1] === 'object' && !args[1].requestId) {
+    args[1] = { ...args[1], requestId: randomUUID() };
+  }
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
     socket.emit(event, ...args, (resp) => {
@@ -1132,10 +1139,29 @@ async function scenarioManualDrawActionGuards() {
 
       let drawer = null;
       const clients = [alpha, bravo];
-      for (let step = 0; step < 80; step += 1) {
-        // Stop early if the hand ended before we found a draw window.
+      let rematchAttempts = 0;
+      for (let step = 0; step < 320; step += 1) {
         const referenceState = latestState(alpha)?.state;
-        if (referenceState?.handOver || referenceState?.gameOver) break;
+        if (referenceState?.gameOver) {
+          if (rematchAttempts >= 4) break;
+          const firstRematch = await emitAck(alpha.socket, 'game:rematch', roomCode);
+          assert(firstRematch?.ok, `alpha rematch failed while seeking draw: ${firstRematch?.error ?? 'unknown'}`);
+          const secondRematch = await emitAck(bravo.socket, 'game:rematch', roomCode);
+          assert(secondRematch?.ok, `bravo rematch failed while seeking draw: ${secondRematch?.error ?? 'unknown'}`);
+          await waitForAllConnectedClientsSequence(clients, referenceState.sequence + 1);
+          await waitForTurnReady(clients);
+          rematchAttempts += 1;
+          continue;
+        }
+        if (referenceState?.handOver) {
+          const firstReady = await emitAck(alpha.socket, 'hand:ready', roomCode, referenceState.handNumber);
+          assert(firstReady?.ok, `alpha hand:ready failed while seeking draw: ${firstReady?.error ?? 'unknown'}`);
+          const secondReady = await emitAck(bravo.socket, 'hand:ready', roomCode, referenceState.handNumber);
+          assert(secondReady?.ok, `bravo hand:ready failed while seeking draw: ${secondReady?.error ?? 'unknown'}`);
+          await waitForAllConnectedClientsSequence(clients, referenceState.sequence + 1);
+          await waitForTurnReady(clients);
+          continue;
+        }
 
         const currentId = getCurrentPlayerId(alpha);
         const current = getClientBySeatId(clients, currentId);
@@ -2030,7 +2056,13 @@ async function scenarioConcurrentActionSerialization() {
 
       await delay(SETTLE_MS);
       const afterSequence = latestState(active)?.state?.sequence ?? 0;
-      assert(afterSequence === beforeSequence + 1, 'concurrent actions advanced sequence more than once');
+      const committedSequence = [respA, respB].find((resp) => resp?.ok === true)?.sequence;
+      assert(
+        typeof committedSequence === 'number' &&
+          committedSequence > beforeSequence &&
+          afterSequence === committedSequence,
+        'concurrent actions advanced beyond the single committed acknowledgement',
+      );
 
       return {
         roomCode,
