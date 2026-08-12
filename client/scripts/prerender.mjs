@@ -7,6 +7,7 @@ const distDir = path.join(clientDir, 'dist');
 const indexPath = path.join(distDir, 'index.html');
 const siteOrigin = 'https://playracehorse.com';
 
+const homeImage = '/homeOG.png';
 const defaultImage = '/dailypuzzleHOMEBG.png';
 const routes = [
   {
@@ -15,7 +16,7 @@ const routes = [
     description: 'Play Racehorse Dominoes with daily strategy challenges, competitive modes, guided learning, and Fritz.',
     heading: 'Daily dominoes, built for strategy.',
     body: 'Play today’s Daily Fritz set, solve the Daily Puzzle, learn the game, or compete online.',
-    image: defaultImage,
+    image: homeImage,
   },
   {
     path: '/daily-fritz',
