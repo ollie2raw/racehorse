@@ -14,6 +14,7 @@ export type UseAppSessionUiParams = {
 export type UseAppSessionUiResult = {
   // Ghost mode
   ghostProfile: GhostProfileSummary | null;
+  setGhostProfile: React.Dispatch<React.SetStateAction<GhostProfileSummary | null>>;
   ghostOpponentName: string;
   ghostOpponentUserId: string | null;
   setGhostOpponentName: React.Dispatch<React.SetStateAction<string>>;
@@ -98,6 +99,7 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
 
   return {
     ghostProfile,
+    setGhostProfile,
     ghostOpponentName,
     ghostOpponentUserId,
     setGhostOpponentName,

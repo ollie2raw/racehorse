@@ -10,6 +10,11 @@ export type UseAppRouteStateParams = {
   tournamentSubView: 'hub' | 'bracket' | 'result';
   setActiveTournamentId: (id: string | null) => void;
   setTournamentSubView: (view: 'hub' | 'bracket' | 'result') => void;
+  /** External refs/state hoisted to App.tsx to satisfy runtimeBootstrapRef dependencies. */
+  appModeRef?: MutableRefObject<AppMode>;
+  mpSubView?: 'quick' | 'private';
+  setMpSubView?: Dispatch<SetStateAction<'quick' | 'private'>>;
+  mpSubViewRef?: MutableRefObject<'quick' | 'private'>;
 };
 
 export type UseAppRouteStateResult = {
@@ -50,7 +55,8 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(
     Boolean(initialRouteRef.current.learnHowToPlay),
   );
-  const [mpSubView, setMpSubView] = useState<'quick' | 'private'>(
+  // Internal state — used only when caller doesn't provide external state.
+  const [_mpSubView, _setMpSubView] = useState<'quick' | 'private'>(
     initialRouteRef.current.multiplayerView ?? 'quick',
   );
   const [profileTarget, setProfileTarget] = useState<string | null>(
@@ -58,16 +64,21 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   );
   const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);
 
-  const appModeRef = useRef(appMode);
-  const mpSubViewRef = useRef(mpSubView);
+  // Prefer external refs/state if provided (hoisted to App.tsx for runtimeBootstrapRef).
+  const _internalAppModeRef = useRef(appMode);
+  const _internalMpSubViewRef = useRef(_mpSubView);
+  const appModeRef = params.appModeRef ?? _internalAppModeRef;
+  const mpSubView = params.mpSubView ?? _mpSubView;
+  const setMpSubView = params.setMpSubView ?? _setMpSubView;
+  const mpSubViewRef = params.mpSubViewRef ?? _internalMpSubViewRef;
 
   useEffect(() => {
     appModeRef.current = appMode;
-  }, [appMode]);
+  }, [appMode, appModeRef]);
 
   useEffect(() => {
     mpSubViewRef.current = mpSubView;
-  }, [mpSubView]);
+  }, [mpSubView, mpSubViewRef]);
 
   // Mode guard: LEARN_MODE_VISIBLE
   useEffect(() => {

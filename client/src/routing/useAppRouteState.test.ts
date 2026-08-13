@@ -48,8 +48,8 @@ type Params = Parameters<typeof useAppRouteState>[0];
 
 function makeSetters() {
   return {
-    setActiveTournamentId: vi.fn<[string | null], void>(),
-    setTournamentSubView: vi.fn<['hub' | 'bracket' | 'result'], void>(),
+    setActiveTournamentId: vi.fn<(id: string | null) => void>(),
+    setTournamentSubView: vi.fn<(view: 'hub' | 'bracket' | 'result') => void>(),
   };
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import type React from 'react';
 import type { AppMode } from '../appRouteTypes';
 import type { BotDealSize } from './botEngine';
 import type { FritzTier } from './fritzConfig';
@@ -7,6 +8,8 @@ import { mutePreference } from '../utils/mutePreference';
 
 export type UseBotGamePreferencesParams = {
   appMode: AppMode;
+  /** External ref hoisted to App.tsx for runtimeBootstrapRef. If provided, synced instead of creating internal ref. */
+  isMutedRef?: React.MutableRefObject<boolean>;
 };
 
 export type UseBotGamePreferencesResult = {
@@ -46,7 +49,8 @@ export function useBotGamePreferences(
   const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
   const [isGuidedV2Mode, setIsGuidedV2Mode] = useState(false);
 
-  const isMutedRef = useRef(isMuted);
+  const _internalIsMutedRef = useRef(isMuted);
+  const isMutedRef = params.isMutedRef ?? _internalIsMutedRef;
 
   useEffect(() => {
     window.localStorage.setItem('racehorse_bot_deal_size', String(botDealSize));
@@ -62,7 +66,7 @@ export function useBotGamePreferences(
 
   useEffect(() => {
     isMutedRef.current = isMuted;
-  }, [isMuted]);
+  }, [isMuted, isMutedRef]);
 
   // Reset deal size to default when entering bot setup
   useEffect(() => {

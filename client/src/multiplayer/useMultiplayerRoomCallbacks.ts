@@ -38,6 +38,17 @@ import { logger } from '../utils/logger';
 import type { MatchFoundPayload } from '../matchmaking/types';
 import type { SessionEvent, SessionSnapshot } from './session/sessionTypes';
 import type { MultiplayerShellDelegates } from './multiplayerGameShellTypes';
+import type { TournamentMatchContext } from '../match/session/tournament/tournamentMatchSessionTypes';
+
+type HandEndedPayload = {
+  handNumber: number;
+  opponentRemainingTiles: import('../types').Tile[];
+  yourRemainingTiles: import('../types').Tile[];
+  pointsAwarded: { you: number; opponent: number };
+  whoWentOut?: string | null;
+  winnerId?: string | null;
+  handWinnerId?: string | null;
+};
 
 // ─── Params ──────────────────────────────────────────────────
 
@@ -71,7 +82,7 @@ export type UseMultiplayerRoomCallbacksParams = {
   setRoomCode: (code: string) => void;
   setYou: (you: string) => void;
   setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
-  setTournamentMatch: (match: unknown) => void;
+  setTournamentMatch: Dispatch<SetStateAction<TournamentMatchContext | null>>;
   setError: (error: string) => void;
   setOverlayPayload: (payload: MatchFoundPayload | null) => void;
   setAppMode: (mode: AppMode) => void;
@@ -81,7 +92,7 @@ export type UseMultiplayerRoomCallbacksParams = {
   shellSetLegalMoves: (value: SetStateAction<Move[]>) => void;
   shellSetCanDraw: (value: SetStateAction<boolean>) => void;
   shellSetSelectedTile: (value: SetStateAction<Tile | null>) => void;
-  shellSetHandReveal: (value: SetStateAction<unknown>) => void;
+  shellSetHandReveal: (value: SetStateAction<HandEndedPayload | null>) => void;
   shellSetRematchRequested: (value: SetStateAction<boolean>) => void;
   shellSetRematchReadyIds: (value: SetStateAction<string[]>) => void;
   shellSetActionError: (value: SetStateAction<string>) => void;
@@ -97,7 +108,7 @@ export type UseMultiplayerRoomCallbacksParams = {
   applyTournamentMetadataFromJoin: (
     resp: RoomAckResponse,
     nextState: GameState | null,
-  ) => 'terminal_handled' | void;
+  ) => 'terminal_handled' | 'continue' | void;
   tournament: {
     clearPendingMatch: () => void;
     clearRecoveryMatch: () => void;

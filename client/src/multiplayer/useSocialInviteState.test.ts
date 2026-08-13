@@ -25,7 +25,7 @@ const { registerRawSocketEventHandler } = await import('./socketEventBus');
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeShowToast() {
-  return vi.fn<[string, number?], void>();
+  return vi.fn<(msg: string, duration?: number) => void>();
 }
 
 function makeInvite(overrides: Partial<FriendInvitePayload> = {}): FriendInvitePayload {

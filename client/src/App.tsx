@@ -1,12 +1,10 @@
 import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
 import { useAuthSession } from './auth/useAuthSession';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';
 import { useBotGamePreferences } from './bot/useBotGamePreferences';
-import { logger } from './utils/logger';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
@@ -42,6 +40,8 @@ import { useRegisterTournamentSocketHandlers } from './tournament/useRegisterTou
 import { useSocialInviteState } from './multiplayer/useSocialInviteState';
 import type { MatchFoundPayload } from './matchmaking/types';
 import type { RoomAckResponse } from './multiplayer/roomTransport';
+import { emitWithAck } from './multiplayer/roomTransport';
+import type { RoomEventMeta } from './multiplayer/protocol/roomProtocol';
 import {
   LAST_ROOM_STORAGE_KEY,
   readRoomInviteCodeFromLocation,
@@ -51,7 +51,6 @@ import { shouldPersistJoinedRoom } from './match/recovery/joinedRoomPersistPolic
 import {
   normalizeRoomPlayers,
   type RoomPlayer,
-  type RoomRecoveryState,
 } from './multiplayer/protocol';
 
 // ─── Utilities ───────────────────────────────────────────────
@@ -80,6 +79,40 @@ export default function App() {
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
   const [appMode, setAppMode] = useState<AppMode>(() => resolveAppRoute(window.location.pathname).mode);
+  const [mpSubView, setMpSubView] = useState<'quick' | 'private'>(
+    () => resolveAppRoute(window.location.pathname).multiplayerView ?? 'quick',
+  );
+  const appModeRef = useRef<AppMode>(appMode);
+  const mpSubViewRef = useRef<'quick' | 'private'>(mpSubView);
+  const isMutedRef = useRef(false);
+
+  // useAuthSession must be called before useSocketConnectionState (which uses authUser)
+  const {
+    authUser,
+    authProfile,
+    authLoading,
+    justVerified,
+    supabaseEnabled,
+    supabaseConfigError,
+    signIn,
+    signUp,
+    resetPassword,
+    updatePassword,
+    passwordRecoveryPending,
+    clearPasswordRecoveryPending,
+    signOut,
+    updateUsername,
+    refreshAuthProfile,
+    applyProfilePatch,
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    authUserRef,
+    authProfileRef,
+    authAccessTokenRef,
+    multiplayerIdentityUserIdRef,
+    isAdmin,
+  } = useAuthSession();
+
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [roomCode, setRoomCode] = useState('');
   const [, setTournamentActiveRoom] = useState<string | null>(null);
@@ -130,34 +163,10 @@ export default function App() {
     detail: string;
     tournamentId?: string | null;
   } | null>(null);
-  const {
-    authUser,
-    authProfile,
-    authLoading,
-    justVerified,
-    supabaseEnabled,
-    supabaseConfigError,
-    signIn,
-    signUp,
-    resetPassword,
-    updatePassword,
-    passwordRecoveryPending,
-    clearPasswordRecoveryPending,
-    signOut,
-    updateUsername,
-    refreshAuthProfile,
-    applyProfilePatch,
-    multiplayerIdentityUserId,
-    multiplayerAuthToken,
-    authUserRef,
-    authProfileRef,
-    authAccessTokenRef,
-    multiplayerIdentityUserIdRef,
-    isAdmin,
-  } = useAuthSession();
 
   const {
     ghostProfile,
+    setGhostProfile,
     ghostOpponentName,
     ghostOpponentUserId,
     setGhostOpponentName,
@@ -175,7 +184,7 @@ export default function App() {
     setWeeklyStatsOpen,
     welcomeOpen,
     setWelcomeOpen,
-  } = useAppSessionUi({ authUser, authProfile, authLoading, justVerified, showToast });
+  } = useAppSessionUi({ authUser: authUser ? { id: authUser.id, email: authUser.email ?? '' } : null, authProfile, authLoading, justVerified, showToast });
 
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
   // Hoisted from the screens so that registration changes / bracket updates /
@@ -227,7 +236,6 @@ export default function App() {
   }, [joinedRoom]);
 
   const applyRoomEventMetaRef = useRef<(meta?: RoomEventMeta | null) => void>(() => {});
-  const resetClientGameSessionRef = useRef<() => void>(() => {});
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
   const applyJoinedRoomResponseRef = useRef<(resp: RoomAckResponse) => void>(() => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
@@ -427,12 +435,6 @@ export default function App() {
   } = tournamentSession;
 
   const {
-    appModeRef,
-    routeReady,
-    setRouteReady,
-    mpSubView,
-    setMpSubView,
-    mpSubViewRef,
     learnHowToPlayOpen,
     setLearnHowToPlayOpen,
     selectedLearnLessonId,
@@ -448,6 +450,10 @@ export default function App() {
     tournamentSubView,
     setActiveTournamentId,
     setTournamentSubView,
+    appModeRef,
+    mpSubView,
+    setMpSubView,
+    mpSubViewRef,
   });
 
   useRegisterTournamentSocketHandlers({
@@ -471,7 +477,6 @@ export default function App() {
   const {
     isMuted,
     setIsMuted,
-    isMutedRef,
     botDealSize,
     setBotDealSize,
     botFritzTier,
@@ -484,7 +489,7 @@ export default function App() {
     setIsAuthoringV2Mode,
     isGuidedV2Mode,
     setIsGuidedV2Mode,
-  } = useBotGamePreferences({ appMode });
+  } = useBotGamePreferences({ appMode, isMutedRef });
 
   const canOpenHowToPlayPreview = true;
 
@@ -526,10 +531,7 @@ export default function App() {
     clearRecoverableRoomState,
     applyRoomEventMeta,
     emitCreateRoom,
-    trySchedulePlayerReady,
-    schedulePlayerReady,
     applyJoinedRoomResponse,
-    handleJoinAck,
     handleMatchmakingAutoJoin,
   } = useMultiplayerRoomCallbacks({
     pendingCreateResolversRef,

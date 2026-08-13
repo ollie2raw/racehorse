@@ -31,7 +31,7 @@ const { attachSocketEventBus } = await import('./socketEventBus');
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeShowToast() {
-  return vi.fn<[string, number?], void>();
+  return vi.fn<(msg: string, duration?: number) => void>();
 }
 
 type Params = Parameters<typeof useSocketConnectionState>[0];

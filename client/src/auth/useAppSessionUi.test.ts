@@ -11,7 +11,7 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { UserProfile } from './useAuth';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ const { fetchGhostProfileSummary } = await import('../ghost/api');
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeShowToast() {
-  return vi.fn<[string, number?], void>();
+  return vi.fn<(msg: string, duration?: number) => void>();
 }
 
 function makeUser(overrides: Partial<{ id: string; email: string }> = {}) {
