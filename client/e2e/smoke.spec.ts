@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem('hasSeenWelcome', '1'));
+});
+
 test.describe('Smoke — Home', () => {
   test('home screen loads with key nav elements', async ({ page }) => {
     await page.goto('/');

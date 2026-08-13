@@ -632,7 +632,10 @@ export async function persistLiveRoomSessionNow(
       if (result.ok) {
         if (markRoomDurabilityPersistSuccess(room, commitFence)) return true;
         // The room changed while this write was in flight. Persist the newer
-        // fence before reporting success to gameplay callers.
+        // fence before reporting success to gameplay callers. Refresh the
+        // target explicitly so an event appended after a scheduling hook can
+        // never leave this loop retrying an obsolete fence forever.
+        markRoomDurabilityPending(room);
         continue;
       }
       markRoomDurabilityPersistFailure(

@@ -115,7 +115,6 @@ create table if not exists public.daily_fritz_outbox (
   delivered_at timestamptz null,
   delivery_attempts int not null default 0 check (delivery_attempts >= 0),
   last_error text null,
-  constraint daily_fritz_outbox_operation_event_key
   constraint daily_fritz_outbox_attempt_operation_event_key
     unique (attempt_id, operation_id, event_type)
 );

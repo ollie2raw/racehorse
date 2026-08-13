@@ -117,7 +117,7 @@ begin
     and tc.table_name = 'daily_puzzles'
     and tc.constraint_type = 'UNIQUE'
   group by tc.constraint_name
-  having array_agg(kcu.column_name order by kcu.ordinal_position) = array['puzzle_date', 'puzzle_type']
+  having array_agg(kcu.column_name::text order by kcu.ordinal_position) = array['puzzle_date', 'puzzle_type']::text[]
   limit 1;
 
   if constraint_name is not null then

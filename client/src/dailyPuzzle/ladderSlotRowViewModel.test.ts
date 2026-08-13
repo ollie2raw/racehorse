@@ -160,6 +160,22 @@ describe('buildLadderSlotRows', () => {
     expect(rows[0].step.title).toBe('Puzzle 1');
     expect(rows[4].step.title).toBe('Puzzle 5');
   });
+
+  it('uses stage identities only for newly published Daily Climb slots', () => {
+    const stageTitles = ['Quick Hit', 'Build', 'Read', 'Pressure', 'Master Chain'] as const;
+    const rows = buildLadderSlotRows({
+      hubSlots: stageTitles.map((slotTitle, index) => makeSlot({
+        id: `climb-${index + 1}`,
+        slotIndex: (index + 1) as 1 | 2 | 3 | 4 | 5,
+        slotTitle,
+      })),
+      completedSlots: [],
+      attemptStatus: 'started',
+      nextSlotIndex: 1,
+    });
+
+    expect(rows.map((row) => row.step.title)).toEqual(stageTitles);
+  });
 });
 
 describe('computeLadderTotalPoints', () => {

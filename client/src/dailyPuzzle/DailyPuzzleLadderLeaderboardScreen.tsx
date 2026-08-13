@@ -460,7 +460,8 @@ export default function DailyPuzzleLadderLeaderboardScreen({
           solidDarkChrome
           onNavigate={(mode) => {
             if (mode === 'home') {
-              onBack();
+              if (onNavigate) onNavigate('home');
+              else onBack();
               return;
             }
             onNavigate?.(mode);

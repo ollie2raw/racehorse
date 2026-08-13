@@ -119,7 +119,10 @@ export function markRoomDurabilityPersistSuccess(
   room: Room,
   persistedFence: RoomDurabilityFence,
 ): boolean {
-  if (!sameRoomDurabilityFence(room.durability.targetFence, persistedFence)) {
+  if (
+    !sameRoomDurabilityFence(room.durability.targetFence, persistedFence) ||
+    !sameRoomDurabilityVersion(captureRoomDurabilityVersion(room), persistedFence)
+  ) {
     return false;
   }
   const version = captureRoomDurabilityVersion(room);

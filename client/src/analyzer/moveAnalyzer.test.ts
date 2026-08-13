@@ -65,6 +65,12 @@ describe('moveAnalyzer', () => {
     expect(analysis.accuracy).toBe(0);
     expect(analysis.grade).toBe('D');
     expect(analysis.hands).toEqual([]);
+    expect(analysis.evidence).toEqual({
+      source: 'heuristic',
+      confidence: 'low',
+      displayLabel: 'Legacy heuristic estimate',
+      reason: 'incomplete-v1-position-snapshot',
+    });
   });
 
   it('2. correctly classifies single legal option as Good', () => {

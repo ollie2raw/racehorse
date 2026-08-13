@@ -22,13 +22,14 @@ type UseDailyFritzSessionPersistenceArgs = {
   runFingerprint: string | null | undefined;
   gameNumber: number;
   dailyFritzHandIndex: number;
+  authorityRevision: number;
   match: BotMatchState;
   moveLog: readonly MoveEntry[];
   movesUsed: number;
   preGameDrawActive: boolean;
   drawSequenceActive: boolean;
   handResult: BotHandReveal | null;
-  initialRevision?: number;
+  initialCheckpointRevision?: number;
   initialStartedAt?: string;
   transcriptProtocolVersion?: 1 | 2;
   fritzPolicyVersion?: number;
@@ -42,13 +43,14 @@ export function useDailyFritzSessionPersistence({
   runFingerprint,
   gameNumber,
   dailyFritzHandIndex,
+  authorityRevision,
   match,
   moveLog,
   movesUsed,
   preGameDrawActive,
   drawSequenceActive,
   handResult,
-  initialRevision = 0,
+  initialCheckpointRevision = 0,
   initialStartedAt,
   transcriptProtocolVersion = 2,
   fritzPolicyVersion,
@@ -56,8 +58,9 @@ export function useDailyFritzSessionPersistence({
   const storageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
   const startedAtRef = useRef(initialStartedAt ?? new Date().toISOString());
-  const revisionRef = useRef(initialRevision);
+  const checkpointRevisionRef = useRef(initialCheckpointRevision);
   const firstMoveReportedRef = useRef(false);
+  const divergenceReportedRef = useRef('');
 
   useEffect(() => {
     if (!enabled || !attemptId || !runDate || firstMoveReportedRef.current) return;
@@ -83,6 +86,40 @@ export function useDailyFritzSessionPersistence({
     // can see each tile arrive. Those states are not authoritative resume
     // points until the matching transcript actions and final state commit.
     if (preGameDrawActive || drawSequenceActive) return;
+    // The authority cursor and match live in different stores. A hand-boundary
+    // render can briefly observe one side before the other; never let that torn
+    // view replace the last coherent checkpoint.
+    if (match.handNumber !== dailyFritzHandIndex + 1) {
+      const divergenceKey = `${gameNumber}:${dailyFritzHandIndex}:${authorityRevision}:${match.handNumber}`;
+      if (divergenceReportedRef.current !== divergenceKey) {
+        divergenceReportedRef.current = divergenceKey;
+        console.error('[daily-fritz-authority] checkpoint cursor divergence', {
+          gameNumber,
+          handIndex: dailyFritzHandIndex,
+          authorityRevision,
+          matchHandNumber: match.handNumber,
+          lifecyclePhase: match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand',
+        });
+        const sessionId = getDailyFritzTelemetrySession(runDate);
+        void recordDailyFritzTelemetry({
+          eventId: dailyFritzTelemetryEventId(attemptId, 'recovery_started', `cursor-divergence:${divergenceKey}`),
+          eventType: 'recovery_started',
+          attemptId,
+          runDate,
+          challengeId: createDailyFritzChallengeIdentity(runDate).challengeId,
+          sessionId,
+          failureCode: 'client_authority_cursor_diverged',
+          payload: {
+            transitionPhase: 'checkpoint',
+            clientCursor: { gameNumber, handIndex: dailyFritzHandIndex, authorityRevision },
+            matchHandNumber: match.handNumber,
+            recoveryDecision: 'skip_torn_checkpoint',
+          },
+        });
+      }
+      return;
+    }
+    divergenceReportedRef.current = '';
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
     const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
@@ -93,6 +130,7 @@ export function useDailyFritzSessionPersistence({
       runFingerprint,
       gameNumber,
       currentHandIndex: dailyFritzHandIndex,
+      authorityRevision,
       lifecyclePhase,
       match,
       handResult,
@@ -116,7 +154,7 @@ export function useDailyFritzSessionPersistence({
       verificationPhase: match.handOver || match.gameOver ? 'pending' : 'collecting',
       startedAt: startedAtRef.current,
       lastTransitionAt: now,
-      revision: ++revisionRef.current,
+      checkpointRevision: ++checkpointRevisionRef.current,
       transcriptProtocolVersion,
       fritzPolicyVersion: isSupportedFritzPolicyVersion(fritzPolicyVersion)
         ? fritzPolicyVersion
@@ -151,6 +189,7 @@ export function useDailyFritzSessionPersistence({
     };
   }, [
     attemptId,
+    authorityRevision,
     runDate,
     runFingerprint,
     gameNumber,

@@ -41,14 +41,53 @@ export type LadderSlotGenerationProfile = {
   preferredPuzzleTypes: ('one_turn_high_score' | 'setup_and_strike')[];
 };
 
-export const DAILY_PUZZLE_LADDER_PROFILES: LadderSlotGenerationProfile[] = [1, 2, 3, 4, 5].map((slotIndex) => ({
-  slotIndex: slotIndex as 1 | 2 | 3 | 4 | 5,
-  tier: 'master_chain',
-  slotTitle: `Puzzle ${slotIndex}`,
-  slotMaxPoints: 300,
-  targetHandSizeRange: [8, 10],
-  preferredPuzzleTypes: ['one_turn_high_score'],
-}));
+export const DAILY_PUZZLE_LADDER_PROFILES: LadderSlotGenerationProfile[] = [
+  {
+    slotIndex: 1,
+    tier: 'quick_line',
+    slotTitle: 'Quick Hit',
+    slotMaxPoints: 100,
+    targetHandSizeRange: [3, 4],
+    targetBestScoreRange: [5, 25],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+  {
+    slotIndex: 2,
+    tier: 'quick_line',
+    slotTitle: 'Build',
+    slotMaxPoints: 150,
+    targetHandSizeRange: [4, 5],
+    targetBestScoreRange: [10, 35],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+  {
+    slotIndex: 3,
+    tier: 'tactical_setup',
+    slotTitle: 'Read',
+    slotMaxPoints: 200,
+    targetHandSizeRange: [5, 6],
+    targetBestScoreRange: [15, 50],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+  {
+    slotIndex: 4,
+    tier: 'tactical_setup',
+    slotTitle: 'Pressure',
+    slotMaxPoints: 250,
+    targetHandSizeRange: [6, 7],
+    targetBestScoreRange: [20, 65],
+    preferredPuzzleTypes: ['setup_and_strike', 'one_turn_high_score'],
+  },
+  {
+    slotIndex: 5,
+    tier: 'master_chain',
+    slotTitle: 'Master Chain',
+    slotMaxPoints: 300,
+    targetHandSizeRange: [8, 10],
+    targetBestScoreRange: [30, 120],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+];
 
 type CuratedDailyPuzzle = ReturnType<typeof createHighScorePuzzle>;
 
@@ -228,6 +267,7 @@ function isCuratedPuzzle(value: unknown): value is CuratedDailyPuzzle {
 
 function generationPlansForProfile(profile: LadderSlotGenerationProfile): GenerationPlan[] {
   const [minHandSize, maxHandSize] = profile.targetHandSizeRange;
+  const targetMinBestScore = profile.targetBestScoreRange?.[0];
   if (profile.preferredPuzzleTypes.includes('setup_and_strike')) {
     return [
       {
@@ -235,15 +275,15 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
         fallbackTier: 'primary',
         minHandSize,
         maxHandSize,
-        minBestScore: 25,
-        enforceTargetBestScoreRange: true,
+        minBestScore: targetMinBestScore ?? 25,
+        enforceTargetBestScoreRange: Boolean(profile.targetBestScoreRange),
       },
       {
         puzzleType: 'setup_and_strike',
         fallbackTier: 'relax_score',
         minHandSize,
         maxHandSize,
-        minBestScore: 15,
+        minBestScore: Math.max(10, Math.round((targetMinBestScore ?? 20) * 0.7)),
         enforceTargetBestScoreRange: false,
       },
       {
@@ -251,15 +291,15 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
         fallbackTier: 'wider_hand',
         minHandSize: Math.max(5, minHandSize),
         maxHandSize: Math.min(8, maxHandSize + 2),
-        minBestScore: 15,
+        minBestScore: Math.max(10, Math.round((targetMinBestScore ?? 20) * 0.5)),
         enforceTargetBestScoreRange: false,
       },
       {
         puzzleType: 'one_turn_high_score',
         fallbackTier: 'fallback_type',
-        minHandSize: Math.max(5, minHandSize),
-        maxHandSize: Math.min(10, maxHandSize + 1),
-        minBestScore: 20,
+        minHandSize,
+        maxHandSize,
+        minBestScore: Math.max(10, Math.round((targetMinBestScore ?? 20) * 0.75)),
         enforceTargetBestScoreRange: false,
       },
     ];
@@ -270,25 +310,23 @@ function generationPlansForProfile(profile: LadderSlotGenerationProfile): Genera
       fallbackTier: 'primary',
       minHandSize,
       maxHandSize,
-      minBestScore: 35,
-      enforceTargetBestScoreRange: false,
+      minBestScore: targetMinBestScore ?? 35,
+      enforceTargetBestScoreRange: Boolean(profile.targetBestScoreRange),
     },
     {
       puzzleType: 'one_turn_high_score',
       fallbackTier: 'relax_score',
       minHandSize,
       maxHandSize,
-      minBestScore: 25,
+      minBestScore: Math.max(5, Math.round((targetMinBestScore ?? 35) * 0.7)),
       enforceTargetBestScoreRange: false,
     },
     {
       puzzleType: 'one_turn_high_score',
       fallbackTier: 'wider_hand',
-      // The five-puzzle contract intentionally never falls below the
-      // published 8–10 starting-tile range, even when relaxing score checks.
       minHandSize,
       maxHandSize,
-      minBestScore: 15,
+      minBestScore: Math.max(5, Math.round((targetMinBestScore ?? 35) * 0.45)),
       enforceTargetBestScoreRange: false,
     },
   ];

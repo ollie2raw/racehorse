@@ -83,7 +83,8 @@ export type UseHandLifecycleArgs = {
   dailyFritzPackage: DailyFritzStartResponse | null;
   dailyFritzTranscriptProtocolVersion: 1 | 2;
   dailyFritzHandIndex: number;
-  setDailyFritzHandIndex: (index: number) => void;
+  dailyFritzAuthorityRevision: number;
+  applyDailyFritzAuthorityCursor: (cursor: { handIndex: number; revision: number }) => void;
   initialDailyFritzHandResult: BotHandReveal | null;
   setDailyFritzHandResult: (result: BotHandReveal | null) => void;
   frozenV2Lesson: import('../../../learn/lessonV2.ts').LessonV2 | null;

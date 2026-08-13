@@ -13,7 +13,6 @@ import {
   LadderIconSameBoard,
 } from './dailyPuzzleLadderIcons';
 import { formatDateLabel, getLadderPuzzleCardState } from './ladderHelpers';
-import { getDailyPuzzleStepPresentation } from './presentation';
 import type { LadderSlotRowViewModel } from './ladderSlotRowViewModel';
 import type { DailyPuzzleSlotIndex } from './types';
 
@@ -399,14 +398,14 @@ export function DailyPuzzleLadderHubView({
                 {isLadderComplete ? (
                   <div className="dpl-ladder-practice">
                     <div className="dpl-ladder-practice-row">
-                      {ladderSlotRows.map(({ slotIndex: slotIdx }) => (
+                      {ladderSlotRows.map(({ slotIndex: slotIdx, step }) => (
                         <button
                           key={`practice-${slotIdx}`}
                           type="button"
                           className="dpl-ladder-practice-chip"
                           onClick={() => onStartPractice(slotIdx)}
                         >
-                          {getDailyPuzzleStepPresentation(slotIdx).title}
+                          {step.title}
                         </button>
                       ))}
                     </div>

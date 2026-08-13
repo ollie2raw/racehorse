@@ -34,6 +34,42 @@ export function isDuplicateDailyFritzPlacement(
   );
 }
 
+function samePreActionEvidence(
+  left: Pick<MoveEntry, 'action' | 'player' | 'handBefore' | 'boardEnds' | 'boardState'>,
+  right: Pick<MoveEntry, 'action' | 'player' | 'handBefore' | 'boardEnds' | 'boardState'>,
+): boolean {
+  // Empty/default snapshots are legacy "evidence unavailable" values, not
+  // proof that two actions came from one physical pre-action state. A real
+  // draw/pass always starts with tiles in the acting hand.
+  return left.handBefore.length > 0
+    && right.handBefore.length > 0
+    && left.action === right.action
+    && left.player === right.player
+    && JSON.stringify(left.handBefore) === JSON.stringify(right.handBefore)
+    && JSON.stringify(left.boardEnds) === JSON.stringify(right.boardEnds)
+    && JSON.stringify(left.boardState) === JSON.stringify(right.boardState);
+}
+
+/**
+ * Exact-once guard for recorder evidence. Placements are keyed by their
+ * physical tile. Draw/pass actions may legitimately repeat, so only reject an
+ * immediately repeated action captured from the exact same pre-action state.
+ */
+export function isDuplicateDailyFritzActionEvidence(
+  moveLog: readonly MoveEntry[],
+  entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>,
+  handNumber: number,
+): boolean {
+  if (isDuplicateDailyFritzPlacement(moveLog, entry, handNumber)) return true;
+  if (entry.action === 'place') return false;
+  const previous = moveLog[moveLog.length - 1];
+  return Boolean(
+    previous
+    && previous.handNumber === handNumber
+    && samePreActionEvidence(previous, entry),
+  );
+}
+
 /** Defense in depth for resumed/legacy logs captured before source de-duplication. */
 export function canonicalizeDailyFritzMoveLog(
   moveLog: readonly MoveEntry[],
@@ -51,6 +87,13 @@ export function canonicalizeDailyFritzMoveLog(
       ? placementKey(entry, handNumber)
       : null;
     if (key && seenPlacements.has(key)) continue;
+    const previous = canonical[canonical.length - 1];
+    if (
+      !key
+      && typeof handNumber === 'number'
+      && previous?.handNumber === handNumber
+      && samePreActionEvidence(previous, entry)
+    ) continue;
     if (key) seenPlacements.add(key);
     canonical.push(entry);
   }

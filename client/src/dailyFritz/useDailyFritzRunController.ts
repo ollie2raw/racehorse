@@ -201,6 +201,27 @@ export function useDailyFritzRunController({
           error: message,
           currentHandIndex,
         });
+        const sessionId = getDailyFritzTelemetrySession(run.run_date);
+        void recordDailyFritzTelemetry({
+          eventId: dailyFritzTelemetryEventId(run.attempt_id, 'recovery_started', 'complete-modal-error'),
+          eventType: 'recovery_started',
+          attemptId: run.attempt_id,
+          runDate: run.run_date,
+          challengeId: run.challenge_id ?? null,
+          sessionId,
+          failureCode: err instanceof Error ? err.name : 'complete_failed',
+          payload: {
+            transitionPhase: 'complete',
+            endpoint: '/api/daily-fritz/complete',
+            clientCursor: {
+              gameNumber: run.current_game_number ?? 1,
+              handIndex: currentHandIndex,
+              authorityRevision: run.authority_revision ?? null,
+            },
+            serverResponse: message,
+            recoveryDecision: 'show_final_error_modal',
+          },
+        });
       }
       throw err;
     }
@@ -228,13 +249,14 @@ export function useDailyFritzRunController({
           currentHandIndex: normalized.current_hand_index,
           moveLog: normalized.set_result,
         }, 1);
+      openEmbeddedRun(normalized);
       try {
         await submitSetCompletion({
           run: normalized,
           setResult: normalized.set_result,
           completedGame,
           currentHandIndex: normalized.current_hand_index,
-          boardContext: false,
+          boardContext: true,
         });
       } catch {
         // no-op
@@ -303,6 +325,16 @@ export function useDailyFritzRunController({
     }
   }, [handleStartResponse, setOverlay, setHubError, today]);
 
+  useEffect(() => {
+    if (
+      today?.attempt_status !== 'started'
+      || !today.needs_completion
+      || !normalizeSetResult(today.set_result ?? today.result)?.setWinner
+      || activeRun
+    ) return;
+    void continueSet();
+  }, [activeRun, continueSet, today]);
+
   const submitCompletedGame = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     const run = activeRunRef.current;
     if (!run) return;
@@ -358,6 +390,10 @@ export function useDailyFritzRunController({
       });
 
       const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
+      const recordedRun = {
+        ...run,
+        authority_revision: recorded.authority_revision ?? run.authority_revision,
+      };
       const completedGame =
         setResult.games.find((entry) => entry.gameNumber === gameNumber) ?? fallbackCompletedGame;
 
@@ -365,13 +401,14 @@ export function useDailyFritzRunController({
         setActiveRun((current) =>
           current
             ? {
-                ...current,
-                set_result: setResult,
+              ...current,
+              set_result: setResult,
+              authority_revision: recordedRun.authority_revision,
               }
             : current,
         );
         await submitSetCompletion({
-          run,
+          run: recordedRun,
           setResult,
           completedGame,
           currentHandIndex: game.currentHandIndex,
@@ -412,6 +449,21 @@ export function useDailyFritzRunController({
           challengeId: run.challenge_id ?? null,
           sessionId,
           failureCode: err.verifierCode,
+          payload: {
+            transitionPhase: 'record-game',
+            endpoint: '/api/daily-fritz/record-game',
+            clientCursor: {
+              gameNumber,
+              handIndex: game.currentHandIndex,
+              authorityRevision: run.authority_revision ?? null,
+            },
+            serverCursor: {
+              authorityRevision: err.authorityRevision,
+              authoritativeState: err.authoritativeState,
+            },
+            status: err.status,
+            recoveryDecision: 'discard_checkpoint_and_reload_authority',
+          },
         });
         discardDailyFritzSnapshot(buildDailyFritzStorageKey(run.attempt_id, gameNumber));
         setSetOverlay(null);
@@ -449,6 +501,31 @@ export function useDailyFritzRunController({
         message: `Game ${gameNumber} is finished, but the result has not been saved yet.`,
         error: message,
         game,
+      });
+      const sessionId = getDailyFritzTelemetrySession(run.run_date);
+      void recordDailyFritzTelemetry({
+        eventId: dailyFritzTelemetryEventId(
+          run.attempt_id,
+          'recovery_started',
+          `record-game-modal-error:${gameNumber}:${game.currentHandIndex}`,
+        ),
+        eventType: 'recovery_started',
+        attemptId: run.attempt_id,
+        runDate: run.run_date,
+        challengeId: run.challenge_id ?? null,
+        sessionId,
+        failureCode: err instanceof Error ? err.name : 'record_game_failed',
+        payload: {
+          transitionPhase: 'record-game',
+          endpoint: '/api/daily-fritz/record-game',
+          clientCursor: {
+            gameNumber,
+            handIndex: game.currentHandIndex,
+            authorityRevision: run.authority_revision ?? null,
+          },
+          serverResponse: message,
+          recoveryDecision: 'show_record_error_modal',
+        },
       });
       throw err instanceof Error ? err : new Error(message);
     } finally {

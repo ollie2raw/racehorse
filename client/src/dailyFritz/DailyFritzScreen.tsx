@@ -79,11 +79,11 @@ export default function DailyFritzScreen({
   const loadToday = refreshToday;
 
   const openLeaderboard = useCallback(() => {
-    onNavigate?.('leaderboard');
+    onNavigate?.('dailyFritzLeaderboard');
   }, [onNavigate]);
 
   const openLeaderboardForRunDate = useCallback(() => {
-    onNavigate?.('leaderboard');
+    onNavigate?.('dailyFritzLeaderboard');
   }, [onNavigate]);
 
   const handleSetAction = useCallback(() => {

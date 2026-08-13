@@ -103,13 +103,25 @@ export function useDailyFritzRuntime({
     setShareCopied(false);
   }, [dailyFritzShareText]);
 
-  const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(() => {
+  const [dailyFritzAuthorityCursor, setDailyFritzAuthorityCursor] = useState(() => {
     const persisted = resumablePersistedDailyFritzMatch?.currentHandIndex;
-    if (typeof persisted === 'number' && Number.isFinite(persisted)) {
-      return persisted;
-    }
-    return dailyFritzPackage?.current_hand_index ?? 0;
+    const handIndex = typeof persisted === 'number' && Number.isFinite(persisted)
+      ? persisted
+      : dailyFritzPackage?.current_hand_index ?? 0;
+    return {
+      handIndex,
+      revision: resumablePersistedDailyFritzMatch?.authorityRevision
+        ?? dailyFritzPackage?.authority_revision
+        ?? 0,
+    };
   });
+  const dailyFritzHandIndex = dailyFritzAuthorityCursor.handIndex;
+  const applyDailyFritzAuthorityCursor = useCallback((input: {
+    handIndex: number;
+    revision: number;
+  }) => {
+    setDailyFritzAuthorityCursor(input);
+  }, []);
   const [persistedHandResult, setPersistedHandResult] = useState(
     resumablePersistedDailyFritzMatch?.handResult ?? null,
   );
@@ -125,13 +137,14 @@ export function useDailyFritzRuntime({
     runFingerprint: dailyFritzPackage?.run_fingerprint,
     gameNumber: dailyFritzPackage?.current_game_number ?? 1,
     dailyFritzHandIndex,
+    authorityRevision: dailyFritzAuthorityCursor.revision,
     match,
     moveLog,
     movesUsed,
     preGameDrawActive,
     drawSequenceActive,
     handResult: persistedHandResult,
-    initialRevision: resumablePersistedDailyFritzMatch?.revision,
+    initialCheckpointRevision: resumablePersistedDailyFritzMatch?.checkpointRevision,
     initialStartedAt: resumablePersistedDailyFritzMatch?.startedAt,
     transcriptProtocolVersion: resumablePersistedDailyFritzMatch?.transcriptProtocolVersion ?? 2,
     fritzPolicyVersion: dailyFritzPackage?.fritz_policy_version,
@@ -215,7 +228,8 @@ export function useDailyFritzRuntime({
     shareCopied,
     handleShareResult,
     dailyFritzHandIndex,
-    setDailyFritzHandIndex,
+    dailyFritzAuthorityRevision: dailyFritzAuthorityCursor.revision,
+    applyDailyFritzAuthorityCursor,
     persistedHandResult,
     setPersistedHandResult,
     dailyFritzLeaderboard,

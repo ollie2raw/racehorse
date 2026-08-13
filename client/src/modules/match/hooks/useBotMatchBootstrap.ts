@@ -73,6 +73,8 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     dailyFritzPackage?.run_fingerprint,
     dailyFritzPackage?.fritz_policy_version,
     dailyFritzPackage?.fritz_policy_contract,
+    dailyFritzPackage?.authority_revision,
+    dailyFritzPackage?.current_game_number ?? 1,
   );
   const resumablePersistedDailyFritzMatch =
     initialPersistedDailyFritzMatch?.match &&

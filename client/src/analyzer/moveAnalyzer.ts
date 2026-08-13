@@ -1,4 +1,5 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from '../game/moveLogger';
+import type { LegacyReviewEvaluationDisclosure } from '@racehorse/game-core/reviewContracts';
 import { normalizeBoardRenderState, sameTileTuple } from '../game/moveLogger';
 import { chooseBotMove, evaluateMove, toBotVisibleState, type BotDifficulty } from '../modules/fritz/botHeuristics.ts';
 import { createBotMatch, getLegalMoves, type BotMatchState } from '../modules/match/runtime/botEngine.ts';
@@ -13,6 +14,7 @@ import type {
 } from './analysisTypes';
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+import { derivePostMoveReviewBoard } from './reviewBoardState';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
 
@@ -31,7 +33,10 @@ export type AnalyzedMove = {
   validMoves: TileTuple[];
   boardEnds: [number, number];
   boardState: MoveEntry['boardState'];
+  /** Canonical pre-action snapshot retained for evaluation and coaching. */
   boardRenderState: MoveEntry['boardRenderState'];
+  /** Board after this logged action, used by the move-review viewport. */
+  boardRenderStateAfterMove: MoveEntry['boardRenderState'];
   handSnapshot: MoveEntry['handSnapshot'];
   engineBestMove: MoveEntry['engineBestMove'];
   bestBreakdown?: EngineBestMove['breakdown'];
@@ -50,6 +55,15 @@ export type GameAnalysis = {
   oracleLabel: string;
   worstHandNumber: number | null;
   consequenceByMoveNumber: Record<number, ConsequenceChain>;
+  /** Disclosure for the legacy V1 heuristic evaluator. Optional for persisted pre-Batch-0 records. */
+  evidence?: LegacyReviewEvaluationDisclosure;
+};
+
+export const LEGACY_ANALYSIS_DISCLOSURE: LegacyReviewEvaluationDisclosure = {
+  source: 'heuristic',
+  confidence: 'low',
+  displayLabel: 'Legacy heuristic estimate',
+  reason: 'incomplete-v1-position-snapshot',
 };
 
 type StoredAnalysisItem = {
@@ -567,6 +581,7 @@ function analyzeHandMoves(
       boardEnds: entry.boardEnds,
       boardState: entry.boardState,
       boardRenderState: normalizeBoardRenderState(entry.boardRenderState),
+      boardRenderStateAfterMove: derivePostMoveReviewBoard(entry),
       handSnapshot: entry.handSnapshot,
       engineBestMove: entry.engineBestMove,
       bestBreakdown: verdict.bestBreakdown ?? undefined,
@@ -657,6 +672,7 @@ function buildGameSummary(
     oracleLabel: oracleLabelFor(options.oracleMode, options.tierPlayed),
     worstHandNumber: worstHand?.handNumber ?? null,
     consequenceByMoveNumber,
+    evidence: LEGACY_ANALYSIS_DISCLOSURE,
   };
 }
 

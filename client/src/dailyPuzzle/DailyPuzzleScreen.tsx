@@ -64,6 +64,8 @@ const LazyDailyPuzzleLadderScreen = lazy(() => import('./DailyPuzzleLadderScreen
 export default function DailyPuzzleScreen({
   user,
   profile,
+  initialView = 'hub',
+  onLeaderboardClose,
   onBack,
   onNavigate,
   onOpenAuth,
@@ -132,6 +134,7 @@ export default function DailyPuzzleScreen({
     userId: user?.id ?? null,
     puzzleDate: puzzle?.puzzleDate,
     showLobby,
+    initialLeaderboardOpen: initialView === 'leaderboard',
   });
   const { resetSubmissionGuard, finalizeResult } = useDailyPuzzleLegacyGameplay({
     puzzle,
@@ -627,6 +630,8 @@ export default function DailyPuzzleScreen({
           user={user}
           profile={profile}
           initialToday={ladderToday}
+          initialLeaderboardOpen={initialView === 'leaderboard'}
+          onLeaderboardClose={onLeaderboardClose}
           onBack={onBack}
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
@@ -758,7 +763,10 @@ export default function DailyPuzzleScreen({
         backLabel="Back to Daily Puzzle"
         summaryCards={leaderboardSummaryCards}
         resultsLabel={`Global Results · ${leaderboard.length} ${leaderboard.length === 1 ? 'player' : 'players'}`}
-        onClose={() => setDailyLeaderboardOpen(false)}
+        onClose={() => {
+          if (onLeaderboardClose) onLeaderboardClose();
+          else setDailyLeaderboardOpen(false);
+        }}
       >
         <div className="daily-leaderboard-panel daily-leaderboard-page-panel">
           {leaderboardLoading && (
@@ -884,7 +892,10 @@ export default function DailyPuzzleScreen({
                     <ClaudeSecondaryAction
                       title="Leaderboard"
                       meta="See today’s top scores"
-                      onClick={() => setDailyLeaderboardOpen(true)}
+                      onClick={() => {
+                        if (onNavigate) onNavigate('dailyPuzzleLeaderboard');
+                        else setDailyLeaderboardOpen(true);
+                      }}
                     />
                   )}
                 </div>

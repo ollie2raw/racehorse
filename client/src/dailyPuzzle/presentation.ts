@@ -4,29 +4,46 @@ export interface DailyPuzzleStepPresentation {
   shortLabel: string;
 }
 
-export function getDailyPuzzleStepPresentation(slotIndex: number): DailyPuzzleStepPresentation {
+const LEGACY_SUBTITLES = ['Warm-up', 'Challenge', 'Final', 'Final stretch', 'Finale'] as const;
+
+function getDailyClimbStep(slotIndex: number): DailyPuzzleStepPresentation {
   if (slotIndex === 1) {
     return {
-      title: 'Puzzle 1',
+      title: 'Quick Hit',
       subtitle: 'Warm-up',
       shortLabel: 'P1',
     };
   }
   if (slotIndex === 2) {
     return {
-      title: 'Puzzle 2',
-      subtitle: 'Challenge',
+      title: 'Build',
+      subtitle: 'Momentum',
       shortLabel: 'P2',
     };
   }
-  if (slotIndex === 3) return { title: 'Puzzle 3', subtitle: 'Final', shortLabel: 'P3' };
-  if (slotIndex === 4) return { title: 'Puzzle 4', subtitle: 'Final stretch', shortLabel: 'P4' };
-  return { title: 'Puzzle 5', subtitle: 'Finale', shortLabel: 'P5' };
+  if (slotIndex === 3) return { title: 'Read', subtitle: 'Tactical test', shortLabel: 'P3' };
+  if (slotIndex === 4) return { title: 'Pressure', subtitle: 'Final stretch', shortLabel: 'P4' };
+  return { title: 'Master Chain', subtitle: 'Finale', shortLabel: 'P5' };
+}
+
+export function getDailyPuzzleStepPresentation(
+  slotIndex: number,
+  publishedSlotTitle?: string | null,
+): DailyPuzzleStepPresentation {
+  const climbStep = getDailyClimbStep(slotIndex);
+  const storedTitle = publishedSlotTitle?.trim();
+  if (!storedTitle || storedTitle === climbStep.title) return climbStep;
+  const normalizedIndex = Math.max(1, Math.min(5, Math.round(slotIndex)));
+  return {
+    title: `Puzzle ${normalizedIndex}`,
+    subtitle: LEGACY_SUBTITLES[normalizedIndex - 1],
+    shortLabel: `P${normalizedIndex}`,
+  };
 }
 
 export function getDailyPuzzleDisplayTitle(slotIndex: number, fallback?: string | null): string {
   if (slotIndex >= 1 && slotIndex <= 5) {
-    return getDailyPuzzleStepPresentation(slotIndex).title;
+    return getDailyPuzzleStepPresentation(slotIndex, fallback).title;
   }
   const safeFallback = fallback?.trim();
   return safeFallback && safeFallback.length > 0 ? safeFallback : 'Daily Puzzle';

@@ -43,6 +43,23 @@ describe('apiGet', () => {
     expect(result.data).toBeNull();
     expect(result.error).toBe('Network error');
   });
+
+  it('preserves structured authority conflict context on non-ok responses', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      error: 'Resume authoritative state.',
+      code: 'stale_revision',
+      authority_revision: 9,
+      authoritative_state: { current_hand_index: 3 },
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+
+    const result = await apiGet('/api/daily-fritz/today', { auth: false });
+
+    expect(result.errorCode).toBe('stale_revision');
+    expect(result.errorData).toMatchObject({
+      authority_revision: 9,
+      authoritative_state: { current_hand_index: 3 },
+    });
+  });
 });
 
 describe('apiPost request correlation', () => {

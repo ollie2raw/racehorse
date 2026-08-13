@@ -345,7 +345,25 @@ export async function resumeMultiplayerAfterReload(page: Page, expectedRoomCode:
     .poll(async () => (await readLastRoomCode(page)) === expectedRoomCode, { timeout: 10_000 })
     .toBeTruthy();
 
-  await page.getByText('Multiplayer', { exact: false }).first().click();
+  const routedDirectlyToMultiplayer = new URL(page.url()).pathname.startsWith('/multiplayer');
+  const restoredMatchIsVisible = await expect
+    .poll(() => page.locator(GAME_SCREEN_LOCATOR).isVisible().catch(() => false), { timeout: 30_000 })
+    .toBeTruthy()
+    .then(() => true)
+    .catch(() => false);
+  if (!routedDirectlyToMultiplayer && !restoredMatchIsVisible) {
+    await page
+      .getByText('Multiplayer', { exact: false })
+      .first()
+      .click({ timeout: 10_000 })
+      .catch(async (error: unknown) => {
+        const matchAppearedDuringClick = await page
+          .locator(GAME_SCREEN_LOCATOR)
+          .isVisible()
+          .catch(() => false);
+        if (!matchAppearedDuringClick) throw error;
+      });
+  }
   await expect
     .poll(
       async () => {

@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../components';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import type { LegacyReviewEvaluationDisclosure } from '@racehorse/game-core/reviewContracts';
 import type { AnalyzedMove, GameAnalysis, MoveRating } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import { buildReviewSidebarCopy } from './reviewSidebarCopy';
 import './GameReviewer.css';
+
+const LEGACY_ANALYSIS_DISCLOSURE: LegacyReviewEvaluationDisclosure = {
+  source: 'heuristic',
+  confidence: 'low',
+  displayLabel: 'Legacy heuristic estimate',
+  reason: 'incomplete-v1-position-snapshot',
+};
 
 interface GameReviewerProps {
   open: boolean;
@@ -104,6 +112,7 @@ export default function GameReviewer({
   }, [current, currentConsequence, opponentLabel]);
 
   const praiseCopy = current ? positiveNote(current) : null;
+  const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
 
   const showGhostTile = Boolean(
     current &&
@@ -128,7 +137,12 @@ export default function GameReviewer({
         <div className="gr-shell" onClick={(event) => event.stopPropagation()}>
           <div className="gr-main">
             <div className="gr-header">
-              <h3 className="gr-title">{title}</h3>
+              <div className="gr-heading">
+                <h3 className="gr-title">{title}</h3>
+                <span className="gr-evidence-label">
+                  {evidence.displayLabel} · {evidence.confidence} confidence
+                </span>
+              </div>
               <button type="button" className="mode-inline-btn" onClick={onClose}>
                 Close
               </button>
@@ -138,13 +152,12 @@ export default function GameReviewer({
             <div className="gr-board-frame">
               <div className="gr-board-layer">
                 <Board
-                  board={current?.boardRenderState ?? null}
+                  board={current?.boardRenderStateAfterMove ?? null}
                   legalMoves={[]}
                   selectedTile={null}
                   onPositionClick={() => {}}
-                  staticView
-                  staticFitMainline
-                  staticSpineAnchor={0.62}
+                  fitMode="guided"
+                  containFullBoard
                   tileSize={46}
                 />
               </div>

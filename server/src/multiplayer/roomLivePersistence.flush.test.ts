@@ -221,4 +221,48 @@ describe('roomLivePersistence flush', () => {
     expect(persistenceStore.liveSessions.get('LATEST1')?.game_state_sequence).toBe(15);
     expect(getLiveRoomDurabilityState(room).status).toBe('healthy');
   });
+
+  it('refreshes a stale target fence instead of retrying forever after an untracked event mutation', async () => {
+    let releaseFirstPersist!: () => void;
+    const firstPersistGate = new Promise<void>((resolve) => {
+      releaseFirstPersist = resolve;
+    });
+    let signalFirstPersistStarted!: () => void;
+    const firstPersistStarted = new Promise<void>((resolve) => {
+      signalFirstPersistStarted = resolve;
+    });
+    let isFirstPersist = true;
+
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+        persistenceStore.persistCalls += 1;
+        if (isFirstPersist) {
+          isFirstPersist = false;
+          signalFirstPersistStarted();
+          await firstPersistGate;
+        }
+        const rows = JSON.parse(String(init.body)) as Array<Record<string, unknown>>;
+        for (const row of rows) {
+          persistenceStore.liveSessions.set(String(row.room_code), row);
+        }
+        return undefined;
+      }
+      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+    });
+
+    const room = mkRoom({ code: 'EVENT1' });
+    schedulePersistLiveRoomSession(room, roster);
+    const persist = flushScheduledLiveRoomPersistence('EVENT1');
+    await firstPersistStarted;
+
+    // Reproduces DRAW/PASS previously appending events after the persistence
+    // hook had captured its target durability fence.
+    room.eventSequence = 1;
+    releaseFirstPersist();
+
+    await expect(persist).resolves.toEqual({ flushedRoomCodes: ['EVENT1'] });
+    expect(persistenceStore.persistCalls).toBe(2);
+    expect(persistenceStore.liveSessions.get('EVENT1')?.last_event_sequence).toBe(1);
+    expect(getLiveRoomDurabilityState(room).status).toBe('healthy');
+  });
 });

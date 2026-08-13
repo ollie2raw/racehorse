@@ -22,7 +22,7 @@ import {
   buildDrawMoveLogEntry,
   buildPassMoveLogEntry,
 } from './playerMoveLogEntries.ts';
-import { collectPlayerMoveSnapshot } from './playerMoveSnapshot.ts';
+import { collectPlayerMoveSnapshot, type PlayerMoveSnapshot } from './playerMoveSnapshot.ts';
 import type { UsePlayerTurnOrchestrationArgs } from './types.ts';
 
 type UsePlayerNoMoveEffectArgs = Pick<
@@ -92,10 +92,16 @@ export function usePlayerNoMoveEffect({
   } = authoring;
 
   const { isGhostMode } = ghost;
-  const { beginLocalRun, isLocalRunCurrent, finishLocalRun } = localRun;
+  const { beginLocalRun, isLocalRunCurrent, hasActiveLocalRun, finishLocalRun } = localRun;
 
   useEffect(() => {
-    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) {
+    if (
+      match.currentPlayer !== 'you'
+      || match.handOver
+      || match.gameOver
+      || drawSequenceActiveRef.current
+      || hasActiveLocalRun()
+    ) {
       return;
     }
     if (isGuidedTranscriptMode) {
@@ -119,7 +125,7 @@ export function usePlayerNoMoveEffect({
 
     void (async () => {
       // Another draw may have started between the sync guard and this tick.
-      if (drawSequenceActiveRef.current) return;
+      if (drawSequenceActiveRef.current || hasActiveLocalRun()) return;
       const runToken = beginLocalRun('player-draw');
       setDrawSequenceActiveBoth(true);
       try {
@@ -146,8 +152,12 @@ export function usePlayerNoMoveEffect({
         }
 
         let drawCount = 0;
+        const drawSnapshots: PlayerMoveSnapshot[] = [];
         const result = await runDrawSequence(match, 'you', runToken, (step) => {
-          if (step.actionKind === 'draw') drawCount += 1;
+          if (step.actionKind === 'draw') {
+            drawCount += 1;
+            drawSnapshots.push(collectPlayerMoveSnapshot(step.beforeState, []));
+          }
           captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
         });
         if (!isLocalRunCurrent(runToken)) return;
@@ -172,7 +182,10 @@ export function usePlayerNoMoveEffect({
           }
           const drawLogCount = resolveTranscriptDrawLogCount(isDailyFritzMode, drawCount);
           for (let index = 0; index < drawLogCount; index += 1) {
-            appendMove(buildDrawMoveLogEntry(match, snapshot, fritzDifficulty), match.handNumber);
+            appendMove(
+              buildDrawMoveLogEntry(match, drawSnapshots[index] ?? snapshot, fritzDifficulty),
+              match.handNumber,
+            );
           }
         }
 
@@ -253,6 +266,7 @@ export function usePlayerNoMoveEffect({
     isGuidedV2Mode,
     isGuidedV2OffLine,
     isLocalRunCurrent,
+    hasActiveLocalRun,
     isTransitioningRef,
     match,
     moveCounterRef,

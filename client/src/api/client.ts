@@ -20,6 +20,8 @@ export type ApiResult<T> = {
   error: string | null;
   /** Stable application error code returned by the server, when available. */
   errorCode?: string;
+  /** Structured non-OK response body for authority reconciliation/telemetry. */
+  errorData?: Record<string, unknown>;
   status?: number;
 };
 
@@ -115,10 +117,12 @@ async function apiFetch<T>(
   if (!response.ok) {
     let errorMessage = `Request failed (${response.status})`;
     let errorCode: string | undefined;
+    let errorData: Record<string, unknown> | undefined;
     try {
       const body = await response.json() as unknown;
       if (body && typeof body === 'object') {
         const record = body as Record<string, unknown>;
+        errorData = record;
         if (typeof record.error === 'string') errorMessage = record.error;
         if (typeof record.code === 'string') errorCode = record.code;
       }
@@ -134,6 +138,7 @@ async function apiFetch<T>(
       data: null,
       error: errorMessage,
       ...(errorCode ? { errorCode } : {}),
+      ...(errorData ? { errorData } : {}),
       status: response.status,
     };
   }
