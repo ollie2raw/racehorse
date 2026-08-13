@@ -256,9 +256,14 @@ export async function createDailyPuzzleSlotResult(input: {
   return normalizeDailyPuzzleSlotResult(row);
 }
 
-export async function listDailyPuzzleAttemptsForDate(runDate: string): Promise<DailyPuzzleAttempt[]> {
+/** Maximum attempts fetched for leaderboard display. Prevents unbounded full-table scans
+ *  at scale; raise only after adding server-side pagination to the leaderboard API. */
+export const LEADERBOARD_ATTEMPT_LIMIT = 200;
+
+async function fetchAttemptsForDate(runDate: string, limit: number | null): Promise<DailyPuzzleAttempt[]> {
+  const limitClause = limit !== null ? `&limit=${limit}` : '';
   const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
-    `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&puzzle_date=eq.${encodeURIComponent(runDate)}&order=completed_at.asc.nullslast,id.asc`,
+    `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&puzzle_date=eq.${encodeURIComponent(runDate)}&order=completed_at.asc.nullslast,id.asc${limitClause}`,
     { method: 'GET' },
   );
   if (rows.length === 0) return [];
@@ -276,6 +281,16 @@ export async function listDailyPuzzleAttemptsForDate(runDate: string): Promise<D
     else resultsByAttempt.set(result.attemptId, [result]);
   }
   return rows.map((row) => normalizeDailyPuzzleAttempt(row, resultsByAttempt.get(row.id) ?? []));
+}
+
+/** Capped at LEADERBOARD_ATTEMPT_LIMIT rows — safe for leaderboard display and completion rank lookups. */
+export async function listDailyPuzzleAttemptsForDate(runDate: string): Promise<DailyPuzzleAttempt[]> {
+  return fetchAttemptsForDate(runDate, LEADERBOARD_ATTEMPT_LIMIT);
+}
+
+/** Unbounded — only for admin export/analysis. Do not call from user-facing request handlers. */
+export async function listAllDailyPuzzleAttemptsForDate(runDate: string): Promise<DailyPuzzleAttempt[]> {
+  return fetchAttemptsForDate(runDate, null);
 }
 
 export async function buildDailyPuzzleLeaderboardForDate(runDate: string): Promise<DailyPuzzleLeaderboardEntry[]> {

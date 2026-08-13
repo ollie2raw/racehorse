@@ -367,8 +367,13 @@ const dailySubmitLimit = createRateLimitMiddleware(
 );
 const adminLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:admin');
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
+// Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
+// so a single poller can't exhaust the global restApiLimit for all other /api/* callers.
+const leaderboardLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 60_000, max: 30 }, 'rest:leaderboard');
 
 app.use('/api/cron', cronLimit);
+app.use('/api/daily-puzzle/leaderboard', leaderboardLimit);
+app.use('/api/daily-fritz/leaderboard', leaderboardLimit);
 app.use('/api/daily-puzzle/submit-slot', dailySubmitLimit);
 app.use('/api/daily-puzzle/complete', dailySubmitLimit);
 app.use('/api/daily-fritz/next-hand', dailySubmitLimit);
@@ -724,6 +729,7 @@ io.on('connection', (socket: Socket) => {
     if (isUuidLike(userId) && roomCode && wasActiveRoomPlayer) {
       const verifiedUserId = userId as string;
       void (async () => {
+        let fritzTier: string | null = null;
         try {
           const pendingRows = await supabaseFetch<any[]>(
             `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${verifiedUserId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
@@ -731,6 +737,7 @@ io.on('connection', (socket: Socket) => {
           const pending = pendingRows?.[0];
           if (!pending?.id) return;
 
+          fritzTier = pending.fritz_tier ?? null;
           await supabaseFetch(`/rest/v1/bot_match_pending?id=eq.${pending.id}`, {
             method: 'PATCH',
             body: JSON.stringify({ resolved: true }),
@@ -745,6 +752,11 @@ io.on('connection', (socket: Socket) => {
           });
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
+          Sentry.withScope((scope) => {
+            scope.setTag('subsystem', 'fritz_disconnect');
+            scope.setContext('fritz_disconnect', { userId: verifiedUserId, roomCode, fritzTier });
+            Sentry.captureException(error);
+          });
         }
       })();
     }
