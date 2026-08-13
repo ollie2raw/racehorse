@@ -5,6 +5,7 @@ export interface Config {
   nodeEnv: string;
   port: number;
   supabaseUrl: string;
+  supabasePoolerUrl: string | null;
   supabaseServiceKey: string;
   sentryDsn: string | null;
   renderGitCommit: string | null;
@@ -87,6 +88,7 @@ export function validateAndLoadConfig(): Config {
     nodeEnv,
     port: getEnvInt('PORT', 3001),
     supabaseUrl: supabaseUrl ?? '',
+    supabasePoolerUrl: getEnv('SUPABASE_POOLER_URL'),
     supabaseServiceKey: supabaseServiceKey ?? '',
     sentryDsn: getEnv('SENTRY_DSN'),
     renderGitCommit: getEnv('RENDER_GIT_COMMIT'),

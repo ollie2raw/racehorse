@@ -21,6 +21,15 @@ function matchmakingDebugEnabled(): boolean {
 let serviceSingleton: QueueService | null = null;
 let onlineBroadcastTimer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Tracks userIds currently in-flight through the async fetchPlayerRating call.
+ * Without this, two queue:join events for the same userId could both pass the
+ * byUserId check in QueueService before either completes the await, relying on
+ * Node's single-thread microtask ordering as the only protection. This Set
+ * makes the uniqueness guard explicit and synchronous.
+ */
+const pendingJoins = new Set<string>();
+
 function makeRoomCode(): string {
   return `MM${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
@@ -110,7 +119,18 @@ export function registerMatchmakingHandlers(
         });
         return;
       }
-      const rating = identity.authenticated ? await fetchPlayerRating(identity.userId) : DEFAULT_RATING;
+      // Guard duplicate joins that arrive while fetchPlayerRating is awaited.
+      if (pendingJoins.has(identity.userId)) {
+        ack?.({ ok: false, error: 'already_queued', online: getOnlineCount(io), queued: service.size() });
+        return;
+      }
+      pendingJoins.add(identity.userId);
+      let rating: number;
+      try {
+        rating = identity.authenticated ? await fetchPlayerRating(identity.userId) : DEFAULT_RATING;
+      } finally {
+        pendingJoins.delete(identity.userId);
+      }
       const result = service.join({
         socketId: socket.id,
         userId: identity.userId,
