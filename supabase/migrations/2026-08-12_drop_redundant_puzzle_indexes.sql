@@ -1,0 +1,55 @@
+-- Drops the three indexes added in 2026-08-12_daily_puzzle_attempts_indexes.sql.
+-- All three are made redundant by pre-existing definitions in daily_puzzle_ladder_v1.sql:
+--
+--   idx_daily_puzzle_attempts_date_user
+--     Covered by the UNIQUE constraint daily_puzzle_attempts_puzzle_date_user_id_key
+--     on (puzzle_date, user_id).  Postgres enforces unique constraints with a B-tree
+--     index, so the constraint IS the index.
+--
+--   idx_daily_puzzle_attempts_date_leaderboard
+--     Covered by daily_puzzle_attempts_leaderboard_idx on
+--     (puzzle_date, puzzles_completed desc, total_score desc, master_chain_score desc,
+--      completed_at asc, id asc).  The leading puzzle_date column satisfies the WHERE
+--     filter; Postgres index-scans on puzzle_date and sorts the (small) result set in
+--     memory for ORDER BY completed_at, id.  No seq scan; the extra sort step is
+--     negligible at the row counts expected.
+--
+--   idx_daily_puzzle_slot_results_attempt_id
+--     Covered by daily_puzzle_slot_results_attempt_idx on (attempt_id, slot_index asc)
+--     and by the unique constraint daily_puzzle_slot_results_attempt_slot_key on
+--     (attempt_id, slot_index).  Both use attempt_id as the leading column, which
+--     satisfies single-value equality and IN(...) lookups on attempt_id alone.
+--
+-- Run EXPLAIN queries below (in the Supabase SQL editor on staging) to confirm the
+-- existing indexes are used before and after applying this migration:
+--
+--   -- Query 1: per-user attempt lookup
+--   EXPLAIN (ANALYZE, BUFFERS)
+--   SELECT id, puzzle_date, user_id, status
+--   FROM daily_puzzle_attempts
+--   WHERE puzzle_date = '2026-08-12' AND user_id = '<any-real-uuid>'
+--   LIMIT 1;
+--   -- Expected plan: Index Scan using daily_puzzle_attempts_puzzle_date_user_id_key
+--
+--   -- Query 2: leaderboard bulk load
+--   EXPLAIN (ANALYZE, BUFFERS)
+--   SELECT id, puzzle_date, user_id, completed_at
+--   FROM daily_puzzle_attempts
+--   WHERE puzzle_date = '2026-08-12'
+--   ORDER BY completed_at ASC NULLS LAST, id ASC;
+--   -- Expected plan: Index Scan using daily_puzzle_attempts_leaderboard_idx
+--   --               (or Bitmap Index Scan + Sort if the planner prefers it)
+--   --               Either way: no Seq Scan on daily_puzzle_attempts.
+--
+--   -- Query 3: slot results by attempt
+--   EXPLAIN (ANALYZE, BUFFERS)
+--   SELECT id, attempt_id, slot_index
+--   FROM daily_puzzle_slot_results
+--   WHERE attempt_id = '<any-real-uuid>'
+--   ORDER BY slot_index ASC;
+--   -- Expected plan: Index Scan using daily_puzzle_slot_results_attempt_idx
+--   --               (leading column = attempt_id, so sort on slot_index is free)
+
+drop index if exists public.idx_daily_puzzle_attempts_date_user;
+drop index if exists public.idx_daily_puzzle_attempts_date_leaderboard;
+drop index if exists public.idx_daily_puzzle_slot_results_attempt_id;
