@@ -2,9 +2,8 @@ import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
-import { isTemporaryUsername } from './auth/useAuth';
 import { useAuthSession } from './auth/useAuthSession';
-import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
+import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';
 import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
@@ -141,10 +140,6 @@ export default function App() {
   const [isAuthoringMode, setIsAuthoringMode] = useState(false);
   const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
   const [isGuidedV2Mode, setIsGuidedV2Mode] = useState(false);
-  const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
-  const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
-  const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
-
   const [profileTarget, setProfileTarget] = useState<string | null>(
     initialRouteRef.current.profileUsername ?? null,
   );
@@ -245,6 +240,28 @@ export default function App() {
     multiplayerIdentityUserIdRef,
     isAdmin,
   } = useAuthSession();
+
+  const {
+    ghostProfile,
+    ghostOpponentName,
+    ghostOpponentUserId,
+    setGhostOpponentName,
+    setGhostOpponentUserId,
+    needsUsernameOnboarding,
+    onboardingDismissed,
+    setOnboardingDismissed,
+    authModalOpen,
+    setAuthModalOpen,
+    usernameModalOpen,
+    setUsernameModalOpen,
+    signingOut,
+    setSigningOut,
+    weeklyStatsOpen,
+    setWeeklyStatsOpen,
+    welcomeOpen,
+    setWelcomeOpen,
+  } = useAppSessionUi({ authUser, authProfile, authLoading, justVerified, showToast });
+
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
   // Hoisted from the screens so that registration changes / bracket updates /
   // pending match-ready events are observed in App.tsx and can trigger top-level
@@ -253,9 +270,6 @@ export default function App() {
     userId: authUser?.id ?? null,
   });
 
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [friendInvite, setFriendInvite] = useState<{
     inviteId: string;
     fromUsername: string;
@@ -267,26 +281,6 @@ export default function App() {
   const [outboundChallenge, setOutboundChallenge] = useState<OutboundChallenge | null>(null);
   const clearOutboundChallenge = useCallback(() => setOutboundChallenge(null), []);
 
-  useEffect(() => {
-    if (!authUser) {
-      setGhostProfile(null);
-      return;
-    }
-    let active = true;
-    void fetchGhostProfileSummary(authUser.id)
-      .then((summary) => {
-        if (active) setGhostProfile(summary);
-      })
-      .catch(() => {
-        if (active) setGhostProfile(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [authUser]);
-
-  const [usernameModalOpen, setUsernameModalOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const appModeRef = useRef(appMode);
   const mpSubViewRef = useRef(mpSubView);
   const roomPlayersRef = useRef<RoomPlayer[]>([]);
@@ -612,18 +606,6 @@ export default function App() {
   });
 
   const canOpenHowToPlayPreview = true;
-  const needsUsernameOnboarding = Boolean(
-    authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
-  );
-  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const raw = window.localStorage.getItem('username_onboarding_dismissed');
-    if (!raw) return false;
-    // Only snooze for 24 hours - after that the prompt returns
-    const dismissedAt = parseInt(raw, 10);
-    const SNOOZE_MS = 24 * 60 * 60 * 1000;
-    return Date.now() - dismissedAt < SNOOZE_MS;
-  });
 
   useEffect(() => {
     return () => {
@@ -631,12 +613,6 @@ export default function App() {
         clearTimeout(toastTimeoutRef.current);
       }
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const hasSeen = window.localStorage.getItem('hasSeenWelcome');
-    if (!hasSeen) setWelcomeOpen(true);
   }, []);
 
   useEffect(() => {
@@ -656,12 +632,6 @@ export default function App() {
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
-
-  useEffect(() => {
-    if (justVerified) {
-      showToast('✓ Email verified! Welcome to Racehorse Dominoes.', 5000);
-    }
-  }, [justVerified, showToast]);
 
   // Joined-room persist policy: see shouldPersistJoinedRoom in match/recovery/joinedRoomPersistPolicy.ts
   useEffect(() => {
