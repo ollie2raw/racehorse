@@ -26,7 +26,7 @@
     "test:smoke:sockets": "node scripts/socketSmoke.mjs",
     "test:smoke:sockets:stress": "SMOKE_REPEAT=10 node scripts/socketSmoke.mjs",
     "ci:bot": "npm run test:bot && npm run build",
-    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --max-warnings 600",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --max-warnings 401",
     "lint:css": "stylelint \"src/**/*.css\"",
     "check:deps": "depcruise src --config .dependency-cruiser.json --output-type text",
     "check:multiplayer-arch": "depcruise src/multiplayer --config .dependency-cruiser.multiplayer-arch.json --output-type err",

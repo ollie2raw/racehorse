@@ -205,6 +205,7 @@ export function useHandRevealScheduler({
       data: { delayMs: DAILY_FRITZ_HAND_AUTO_ADVANCE_MS, handNumber: match.handNumber },
     });
 
+    const capturedMatchRef = matchRef;
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     handAutoAdvanceTimerRef.current = window.setTimeout(() => {
       handAutoAdvanceTimerRef.current = null;
@@ -227,7 +228,7 @@ export function useHandRevealScheduler({
           location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
           message: 'timer-cleared-effect-cleanup',
           hypothesisId: 'A',
-          data: { handNumber: matchRef.current.handNumber },
+          data: { handNumber: capturedMatchRef.current.handNumber },
         });
       }
     };

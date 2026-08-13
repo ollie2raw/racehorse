@@ -3,9 +3,15 @@
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "project": "./tsconfig.app.json",
-    "ecmaFeatures": { "jsx": true }
+    "ecmaFeatures": {
+      "jsx": true
+    }
   },
-  "plugins": ["@typescript-eslint", "react", "react-hooks"],
+  "plugins": [
+    "@typescript-eslint",
+    "react",
+    "react-hooks"
+  ],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -13,7 +19,10 @@
     "plugin:react-hooks/recommended"
   ],
   "settings": {
-    "react": { "version": "detect", "jsxRuntime": "automatic" }
+    "react": {
+      "version": "detect",
+      "jsxRuntime": "automatic"
+    }
   },
   "ignorePatterns": [
     "**/*.behaviorTests.ts",
@@ -23,11 +32,34 @@
     "@typescript-eslint/no-explicit-any": "error",
     "react/react-in-jsx-scope": "off",
     "react/no-unescaped-entities": "warn",
-    "max-lines": ["warn", { "max": 500, "skipBlankLines": true, "skipComments": true }],
+    "max-lines": [
+      "warn",
+      {
+        "max": 500,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
-    "@typescript-eslint/no-unused-vars": "warn",
+    "no-console": [
+      "warn",
+      {
+        "allow": [
+          "warn",
+          "error"
+        ]
+      }
+    ],
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "varsIgnorePattern": "^_",
+        "argsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_"
+      }
+    ],
     "react-hooks/refs": "warn",
     "react-hooks/set-state-in-effect": "warn",
     "react-hooks/immutability": "warn",
@@ -36,11 +68,19 @@
   },
   "overrides": [
     {
-      "files": ["src/devtools/**"],
-      "rules": { "no-console": "off" }
+      "files": [
+        "src/devtools/**"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.behaviorTests.ts"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.behaviorTests.ts"
+      ],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off"
       }

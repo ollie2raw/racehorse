@@ -476,7 +476,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   <span className="rh-hub-tag dflb-eyebrow dflb-eyebrow--ladder">Daily Puzzle Ladder</span>
                   <h1 className="dflb-command__title">Leaderboard</h1>
                   <p className="dflb-command__sub">
-                    Global ranking · Climb five puzzles for today's ladder total.
+                    Global ranking · Climb five puzzles for today&apos;s ladder total.
                   </p>
                 </div>
                 <div className="dflb-command__aside">

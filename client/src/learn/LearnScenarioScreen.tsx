@@ -310,7 +310,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
                 paddingTop: '6px',
                 borderTop: '1px solid rgba(255,255,255,0.08)'
               }}>
-                <span style={{ fontWeight: 700, color: '#f59e0b' }}>Coach's Choice:</span>
+                <span style={{ fontWeight: 700, color: '#f59e0b' }}>Coach&apos;s Choice:</span>
                 <DominoTile tile={feedback.bestMove.move.tile} size={20} />
                 <span>scores {feedback.bestMove.breakdown.immediate} pts</span>
               </div>

@@ -330,13 +330,18 @@ export function useMatchPresentation({
   }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score, isMuted, gameOverSoundKeyRef]);
 
   useEffect(() => {
+    const toastRef = toastTimerRef;
+    const hideRef = scoreToastHideTimerRef;
+    const clearRef = scoreToastClearTimerRef;
+    const cueRef = scoreCueTimerRef;
+    const tileRef = lastPlayedTileTimerRef;
     return () => {
       invalidateLocalRuns();
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
-      if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
-      if (scoreCueTimerRef.current) clearTimeout(scoreCueTimerRef.current);
-      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+      if (toastRef.current) clearTimeout(toastRef.current);
+      if (hideRef.current) clearTimeout(hideRef.current);
+      if (clearRef.current) clearTimeout(clearRef.current);
+      if (cueRef.current) clearTimeout(cueRef.current);
+      if (tileRef.current) clearTimeout(tileRef.current);
     };
   }, [invalidateLocalRuns, toastTimerRef, scoreToastHideTimerRef, scoreToastClearTimerRef, lastPlayedTileTimerRef]);
 

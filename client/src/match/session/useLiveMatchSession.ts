@@ -299,10 +299,13 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   });
 
   useEffect(() => {
+    const drawRef = drawSequenceTimeoutRef;
+    const tileRef = lastPlayedTileTimerRef;
+    const revealRef = handRevealTimerRef;
     return () => {
-      if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
-      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
-      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      if (drawRef.current) clearTimeout(drawRef.current);
+      if (tileRef.current) clearTimeout(tileRef.current);
+      if (revealRef.current) clearTimeout(revealRef.current);
     };
   }, []);
 

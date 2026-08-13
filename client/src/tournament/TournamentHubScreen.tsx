@@ -335,7 +335,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   <CheckBadgeArt />
                   <div className="th-confirmation-copy">
                     <span className="th-confirmation-eyebrow">Seat Confirmed</span>
-                    <strong>You're registered</strong>
+                    <strong>You&apos;re registered</strong>
                     <span>Your entry is locked in for the next bracket.</span>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../appRouteTypes';
 import type { TournamentMatchContext } from '../match/session/tournament/tournamentMatchSessionTypes';
 import type { useTournament } from '../tournament/useTournament';
+import type { SessionSnapshot } from './session/sessionTypes';
 import {
   canAttemptMatchAbandon,
   emitMatchAbandonTransport,
@@ -14,7 +15,7 @@ import { selectJoinedRoomCode } from './session/sessionStateMachine';
 
 export type UseMatchExitHandlersParams = {
   socketRef: React.RefObject<Socket | null>;
-  sessionRef: React.RefObject<any>;
+  sessionRef: React.RefObject<SessionSnapshot>;
   normalizeRoomCode: (value: unknown) => string;
   currentTournamentContext: TournamentMatchContext | null;
   tournament: ReturnType<typeof useTournament>;

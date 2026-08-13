@@ -675,7 +675,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
             <p className="rh-modal__eyebrow">Lesson Complete</p>
             <h2 className="rh-modal__title">WELL DONE!</h2>
             <p className="rh-modal__copy">
-              You've got {lesson.title} locked in. Keep going — the next lesson is waiting.
+              You&apos;ve got {lesson.title} locked in. Keep going — the next lesson is waiting.
             </p>
             <div className="rh-modal__buttons" style={{ gridTemplateColumns: '1fr' }}>
               <button type="button" className="rh-btn-cancel" onClick={onExit}>Finish</button>

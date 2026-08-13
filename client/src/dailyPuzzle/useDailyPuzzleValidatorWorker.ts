@@ -113,13 +113,15 @@ export function useDailyPuzzleValidatorWorker(): {
   );
 
   useEffect(() => {
+    const pendingRef = validatorPendingRef;
+    const workerRef = validatorWorkerRef;
     return () => {
-      for (const [, pending] of validatorPendingRef.current) {
+      for (const [, pending] of pendingRef.current) {
         pending.reject(new Error('Validator worker terminated.'));
       }
-      validatorPendingRef.current.clear();
-      validatorWorkerRef.current?.terminate();
-      validatorWorkerRef.current = null;
+      pendingRef.current.clear();
+      workerRef.current?.terminate();
+      workerRef.current = null;
     };
   }, []);
 
