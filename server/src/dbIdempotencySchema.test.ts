@@ -133,6 +133,18 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('grant execute on function public.commit_daily_fritz_attempt_command');
     expect(sql.match(/on conflict \(attempt_id, operation_id, event_type\) do nothing/g)?.length)
       .toBeGreaterThanOrEqual(2);
+    expect(sql).toContain("coalesce((p_new_result->>'instantskunk')::boolean, false)");
+    expect(sql).toContain("coalesce((p_new_result->>'skunkgamenumber')::int, 0) = 1");
+  });
+
+  it('allows Game 1 instant-skunk finalize under transactional authority', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_daily_fritz_finalize_instant_skunk.sql',
+    ));
+    expect(sql).toContain('create or replace function public.commit_daily_fritz_attempt_command');
+    expect(sql).toContain("coalesce((p_new_result->>'instantskunk')::boolean, false)");
+    expect(sql).toContain("jsonb_array_length(p_new_result->'games') = 1");
+    expect(sql).not.toContain("jsonb_array_length(p_new_result->'games') not in (2, 3)");
   });
 
   it('repairs Daily Fritz outbox idempotency to be player-attempt scoped', () => {
