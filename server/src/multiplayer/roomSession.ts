@@ -1,5 +1,3 @@
-import { childLogger } from '../logger';
-const log = childLogger('room-session');
 import { randomUUID } from 'crypto';
 import type { Server, Socket } from 'socket.io';
 import { assertValidGameState } from '../game/invariants';
@@ -285,7 +283,7 @@ export function scheduleRoomCleanup(roomCode: string): void {
     try {
       await requireDeps().persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
     } catch (error) {
-      log.error({ err: error }, '[room-match-logs] failed to archive room before cleanup');
+      console.error('[room-match-logs] failed to archive room before cleanup:', error);
     }
     const botTimer = botTurnTimersByRoom.get(roomCode);
     if (botTimer) clearTimeout(botTimer);
@@ -581,7 +579,7 @@ export function scheduleBotTurn(roomCode: string): void {
       }
       setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
     } catch (error) {
-      log.warn({ err: error }, '[bot] turn failed');
+      console.warn('[bot] turn failed', error);
     }
   }, delayMs);
   botTurnTimersByRoom.set(roomCode, timer);
@@ -589,30 +587,30 @@ export function scheduleBotTurn(roomCode: string): void {
 
 function warnIfMaskedSnapshotMalformed(state: GameState, ctx: string): void {
   if (!state.players || typeof state.players !== 'object') {
-    log.warn(`[maskStateForRecipient:${ctx}] players dictionary missing`);
+    console.warn(`[maskStateForRecipient:${ctx}] players dictionary missing`);
   }
   if (!Array.isArray(state.playerIds)) {
-    log.warn(`[maskStateForRecipient:${ctx}] playerIds missing or not array`);
+    console.warn(`[maskStateForRecipient:${ctx}] playerIds missing or not array`);
   }
   const board = state.board as GameState['board'];
   if (board === undefined) {
-    log.warn(`[maskStateForRecipient:${ctx}] board omitted (must be explicit null)`);
+    console.warn(`[maskStateForRecipient:${ctx}] board omitted (must be explicit null)`);
     return;
   }
   if (board === null) return;
   if (!Array.isArray(board.mainLine) || !Array.isArray(board.hubDoubles)) {
-    log.warn(`[maskStateForRecipient:${ctx}] board malformed: mainLine/hubDoubles must be arrays`);
+    console.warn(`[maskStateForRecipient:${ctx}] board malformed: mainLine/hubDoubles must be arrays`);
     return;
   }
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
     const hub = board.hubDoubles[hubIdx];
     if (!hub || typeof hub !== 'object' || !Array.isArray(hub.branches)) {
-      log.warn(`[maskStateForRecipient:${ctx}] hub ${hubIdx} missing branches BranchArm[]`);
+      console.warn(`[maskStateForRecipient:${ctx}] hub ${hubIdx} missing branches BranchArm[]`);
       continue;
     }
     hub.branches.forEach((arm: BranchArm | undefined | null, armIdx: number) => {
       if (!arm || typeof arm !== 'object' || !Array.isArray(arm.tiles)) {
-        log.warn(
+        console.warn(
           `[maskStateForRecipient:${ctx}] hub ${hubIdx} arm ${armIdx} missing BranchArm.tiles array`,
         );
       }
@@ -790,7 +788,11 @@ export function broadcastStateUpdate(roomCode: string): void {
         matchStarted: true,
         preGameDraw: (() => {
           if (room.preGameDraw && recipientPlayerId) {
-            log.info({ connectionId, recipientPlayerId, picks: room.preGameDraw?.picks, yourPick: room.preGameDraw?.picks[recipientPlayerId ?? ''] ?? null }, '[PREGAME-DEBUG] broadcasting to socket');
+            console.log('[PREGAME-DEBUG] broadcasting to socket', connectionId, 
+              'recipientPlayerId:', recipientPlayerId,
+              'picks:', JSON.stringify(room.preGameDraw?.picks),
+              'currentRound.you will be:', room.preGameDraw?.picks[recipientPlayerId ?? ''] ?? null
+            );
             return maskPregameDrawForRecipient(room.preGameDraw, recipientPlayerId, room.players);
           }
           return undefined;
@@ -895,7 +897,7 @@ export function broadcastStateUpdate(roomCode: string): void {
               broadcastStateUpdate(roomCode);
             }
           } catch (e) {
-            log.warn({ err: e }, '[bot] auto-ready error');
+            console.warn('[bot] auto-ready error', e);
           }
         }, 800);
       }
