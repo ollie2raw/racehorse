@@ -12,13 +12,11 @@ import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTi
 import { mutePreference } from './utils/mutePreference';
 import { logger } from './utils/logger';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { resolveGameServerUrl } from './lib/gameServerUrl';
 
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 import { useJoinAckCoordinator } from './multiplayer/useJoinAckCoordinator';
 import type { RoomEventMeta } from './multiplayer/protocol';
 import {
-  attachSocketEventBus,
   dispatchSocketEvent,
   registerNormalizedSocketRouter,
   registerRawSocketEventHandler,
@@ -30,7 +28,7 @@ import {
   isCurrentRoomOperation,
 } from './multiplayer/roomOperationEpoch';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recoveryMachine';
-import { useMultiplayerConnectionActionsBridge } from './multiplayer/useMultiplayerConnectionContext';
+import { useSocketConnectionState } from './multiplayer/useSocketConnectionState';
 import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
 import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
 import { AuthModalsLayer } from './AppOverlays';
@@ -45,7 +43,6 @@ import {
 } from './multiplayer/multiplayerGameSnapshot';
 import { useMultiplayerShellDelegates } from './multiplayer/useMultiplayerShellDelegates';
 import { useMultiplayerResync } from './multiplayer/useMultiplayerResync';
-import { shouldAutoConnectForMode } from './multiplayer/connectPolicy';
 import { shouldShowPrivateMatchLobby } from './multiplayer/privateLobbyVisibility';
 import {
   canAttemptMatchmakingRoomJoin,
@@ -118,15 +115,8 @@ export default function App() {
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const connectRef = useRef<() => void>(() => {});
-  const connectionActions = useMultiplayerConnectionActionsBridge(connectRef);
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
-  const [serverUrl] = useState(() => resolveGameServerUrl());
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>(initialRouteRef.current.mode);
   const [routeReady, setRouteReady] = useState(
@@ -199,6 +189,31 @@ export default function App() {
     setToast(msg);
     toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
   }, []);
+
+  const {
+    serverUrl,
+    socket,
+    setSocket,
+    isConnected,
+    setIsConnected,
+    isConnecting,
+    setIsConnecting,
+    isRecoveringConnection,
+    setIsRecoveringConnection,
+    roomRecoveryState,
+    setRoomRecoveryState,
+    roomRecoveryMessage,
+    setRoomRecoveryMessage,
+    serverWaking,
+    setServerWaking,
+    socketRef,
+    connectRef,
+    connectionActions,
+    reconnectAttemptTimerRef,
+    reconnectAttemptCountRef,
+    clearReconnectAttemptTimer,
+  } = useSocketConnectionState({ appMode, hasAuthUser: Boolean(authUser), showToast });
+
   const [abandonedMatchNotice, setAbandonedMatchNotice] = useState<{
     context: 'tournament' | 'multiplayer';
     title: string;
@@ -241,7 +256,6 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
-  const [serverWaking, setServerWaking] = useState(false);
   const [friendInvite, setFriendInvite] = useState<{
     inviteId: string;
     fromUsername: string;
@@ -305,12 +319,7 @@ export default function App() {
   const createInFlightRef = useRef(false);
   const inviteJoinInFlightRef = useRef(false);
   const rejoinInFlightRef = useRef(false);
-  const reconnectAttemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptCountRef = useRef(0);
   const maxSequenceRef = useRef<number>(-1);
-  const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
-  const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>('idle');
-  const [roomRecoveryMessage, setRoomRecoveryMessage] = useState('');
   const roomMatchIdRef = useRef<string | null>(null);
   const maxEventSequenceRef = useRef<number>(-1);
 
@@ -319,39 +328,6 @@ export default function App() {
     maxEventSequenceRef.current = -1;
     roomMatchIdRef.current = null;
   }, [joinedRoom]);
-
-  const prevConnectedRef = useRef(false);
-  const prevRecoveryStateRef = useRef<RoomRecoveryState>('idle');
-
-  useEffect(() => {
-    if (appMode === 'multiplayer') {
-      const prev = prevConnectedRef.current;
-      if (prev !== isConnected) {
-        prevConnectedRef.current = isConnected;
-        if (isConnected) {
-          showToast('Connected to server.', 1200);
-        } else if (!isRecoveringConnection && roomRecoveryState === 'idle') {
-          showToast('Disconnected from server.', 1500);
-        }
-      }
-    } else {
-      prevConnectedRef.current = isConnected;
-    }
-  }, [isConnected, appMode, isRecoveringConnection, roomRecoveryState, showToast]);
-
-  useEffect(() => {
-    const prev = prevRecoveryStateRef.current;
-    if (prev !== roomRecoveryState) {
-      prevRecoveryStateRef.current = roomRecoveryState;
-      if (prev === 'idle' && (roomRecoveryState === 'reconnecting' || roomRecoveryState === 'resyncing')) {
-        showToast('Connection lost. Reconnecting...', 2000);
-      } else if ((prev === 'reconnecting' || prev === 'resyncing') && roomRecoveryState === 'idle') {
-        showToast('Connection restored. Match recovered.', 2000);
-      } else if (roomRecoveryState === 'failed') {
-        showToast('Reconnection failed.', 3000);
-      }
-    }
-  }, [roomRecoveryState, showToast]);
 
   const isMutedRef = useRef(isMuted);
   const applyRoomEventMetaRef = useRef<(meta?: RoomEventMeta | null) => void>(() => {});
@@ -654,15 +630,7 @@ export default function App() {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
       }
-      if (reconnectAttemptTimerRef.current) clearTimeout(reconnectAttemptTimerRef.current);
     };
-  }, []);
-
-  const clearReconnectAttemptTimer = useCallback(() => {
-    if (reconnectAttemptTimerRef.current) {
-      clearTimeout(reconnectAttemptTimerRef.current);
-      reconnectAttemptTimerRef.current = null;
-    }
   }, []);
 
   useEffect(() => {
@@ -694,10 +662,6 @@ export default function App() {
       showToast('✓ Email verified! Welcome to Racehorse Dominoes.', 5000);
     }
   }, [justVerified, showToast]);
-
-  useEffect(() => {
-    socketRef.current = socket;
-  }, [socket]);
 
   // Joined-room persist policy: see shouldPersistJoinedRoom in match/recovery/joinedRoomPersistPolicy.ts
   useEffect(() => {
@@ -971,11 +935,6 @@ export default function App() {
     return registerNormalizedSocketRouter({ roomJoinOk: handleJoinAck });
   }, [handleJoinAck]);
 
-  useEffect(() => {
-    if (!socket) return;
-    return attachSocketEventBus(socket);
-  }, [socket]);
-
   applyRoomEventMetaRef.current = applyRoomEventMeta;
   schedulePlayerReadyRef.current = schedulePlayerReady;
   applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
@@ -1089,20 +1048,6 @@ export default function App() {
       clearOutboundChallenge();
     }
   }, [players.length, outboundChallenge, clearOutboundChallenge]);
-
-  // Feed lazy-connect policy: see shouldAutoConnectForMode in multiplayer/connectPolicy.ts
-  useEffect(() => {
-    if (
-      !shouldAutoConnectForMode({
-        appMode,
-        hasAuthUser: Boolean(authUser),
-        isSocketConnected: Boolean(socket?.connected),
-      })
-    ) {
-      return;
-    }
-    connectRef.current();
-  }, [appMode, authUser, socket?.connected]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
