@@ -594,7 +594,7 @@ export async function createDailyFritzAttempt(runDate: string, userId: string): 
 export async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc`,
-    { method: 'GET' },
+    { method: 'GET', circuitBreakable: true },
   );
   return rows.map(toDailyFritzAttemptRecord);
 }
@@ -615,7 +615,7 @@ export async function fetchProfileNames(userIds: string[]): Promise<Map<string, 
   const idClause = uniqueIds.map((id) => `"${id}"`).join(',');
   const rows = await supabaseFetch<Array<{ id: string; username: string | null }>>(
     `/rest/v1/profiles?select=id,username&id=in.(${encodeURIComponent(idClause)})`,
-    { method: 'GET' },
+    { method: 'GET', circuitBreakable: true },
   );
   for (const row of rows) {
     const username = typeof row.username === 'string' && row.username.trim()

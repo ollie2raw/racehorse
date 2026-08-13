@@ -272,7 +272,7 @@ async function fetchAttemptsForDate(runDate: string, limit: number | null): Prom
   const limitClause = limit !== null ? `&limit=${limit}` : '';
   const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
     `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&puzzle_date=eq.${encodeURIComponent(runDate)}&order=completed_at.asc.nullslast,id.asc${limitClause}`,
-    { method: 'GET' },
+    { method: 'GET', circuitBreakable: true },
   );
   if (rows.length === 0) return [];
   const attemptIds = rows.map((row) => row.id);
