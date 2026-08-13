@@ -57,6 +57,7 @@ import {
 } from './multiplayer/postGameExit';
 import { useRenderProfiler } from './debug/renderProfiler';
 import { useTournament } from './tournament/useTournament';
+import { useTournamentDisplayLabels } from './tournament/useTournamentDisplayLabels';
 import { friendsSocketScopeRef } from './friends/friendsSocketScope';
 import { useRegisterFriendsSocketHandlers } from './friends/useRegisterFriendsSocketHandlers';
 import { matchmakingSocketScopeRef } from './matchmaking/matchmakingSocketScope';
@@ -1146,11 +1147,12 @@ export default function App() {
     tournament,
   ]);
 
-  const opponentForTournamentLabel = players.find((pl) => pl.id !== you) ?? null;
-  const [tournamentOpponentLabel, setTournamentOpponentLabel] = useState<string | null>(null);
-  const tournamentMyLabel = authProfile?.username
-    ? authProfile.username.replace(/^@/, '')
-    : 'You';
+  const { tournamentOpponentLabel, tournamentMyLabel } = useTournamentDisplayLabels({
+    tournamentMatch,
+    players,
+    you,
+    authProfile,
+  });
   const myHandle = authProfile?.username
     ? `@${authProfile.username}`
     : authUser?.email
@@ -1162,36 +1164,6 @@ export default function App() {
   >('multiplayer');
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
-
-  useEffect(() => {
-    if (!tournamentMatch) {
-      setTournamentOpponentLabel(null);
-      return;
-    }
-
-    let cancelled = false;
-    void import('./tournament/displayNames').then(({ resolveTournamentOpponentLabel }) => {
-      if (cancelled) return;
-      setTournamentOpponentLabel(
-        resolveTournamentOpponentLabel({
-          opponentUserId: tournamentMatch.opponentUserId,
-          opponentUsername: tournamentMatch.opponentUsername,
-          round: tournamentMatch.round,
-          roomOpponentUsername: opponentForTournamentLabel?.username ?? null,
-        }),
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    opponentForTournamentLabel?.username,
-    tournamentMatch?.opponentUserId,
-    tournamentMatch?.opponentUsername,
-    tournamentMatch?.round,
-    tournamentMatch,
-  ]);
 
   // Private lobby visibility: see shouldShowPrivateMatchLobby in multiplayer/privateLobbyVisibility.ts
   useEffect(() => {
