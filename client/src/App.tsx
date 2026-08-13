@@ -63,7 +63,7 @@ import { matchmakingSocketScopeRef } from './matchmaking/matchmakingSocketScope'
 import { useRegisterMatchmakingSocketHandlers } from './matchmaking/useRegisterMatchmakingSocketHandlers';
 import { useRegisterTournamentSocketHandlers } from './tournament/useRegisterTournamentSocketHandlers';
 
-import type { OutboundChallenge } from './multiplayer/friendChallenge';
+import { useSocialInviteState } from './multiplayer/useSocialInviteState';
 import type { MatchFoundPayload } from './matchmaking/types';
 import {
   emitWithAck,
@@ -270,16 +270,13 @@ export default function App() {
     userId: authUser?.id ?? null,
   });
 
-  const [friendInvite, setFriendInvite] = useState<{
-    inviteId: string;
-    fromUsername: string;
-    fromUserId: string | null;
-    roomCode: string;
-    inviteUrl: string;
-    matchSummary: string;
-  } | null>(null);
-  const [outboundChallenge, setOutboundChallenge] = useState<OutboundChallenge | null>(null);
-  const clearOutboundChallenge = useCallback(() => setOutboundChallenge(null), []);
+  const {
+    friendInvite,
+    setFriendInvite,
+    outboundChallenge,
+    setOutboundChallenge,
+    clearOutboundChallenge,
+  } = useSocialInviteState({ playerCount: players.length, showToast });
 
   const appModeRef = useRef(appMode);
   const mpSubViewRef = useRef(mpSubView);
@@ -952,72 +949,6 @@ export default function App() {
       setAppMode,
     ],
   );
-
-  useEffect(() => {
-    if (!friendInvite) return;
-    const timer = setTimeout(() => {
-      setFriendInvite(null);
-    }, 60_000);
-    return () => clearTimeout(timer);
-  }, [friendInvite]);
-
-  useEffect(() => {
-    const unregisterDeclined = registerRawSocketEventHandler(
-      'friend:invite:declined',
-      (payload) => {
-        const data = payload as { inviteId?: string; fromUsername?: string };
-        setOutboundChallenge((current) => {
-          if (!current) return null;
-          if (data.inviteId && current.inviteId !== data.inviteId) return current;
-          const name = data.fromUsername ?? current.friendUsername;
-          showToast(`${name} declined the challenge.`, 2400);
-          return null;
-        });
-      },
-    );
-
-    const unregisterInvited = registerRawSocketEventHandler('friend:invited', (payload) => {
-      const data = payload as {
-        inviteId?: string;
-        fromUsername: string;
-        fromUserId?: string | null;
-        roomCode: string;
-        inviteUrl: string;
-        matchSummary?: string;
-      };
-      setFriendInvite({
-        inviteId: String(data.inviteId ?? `${Date.now()}-${data.roomCode}`),
-        fromUsername: data.fromUsername,
-        fromUserId: data.fromUserId ?? null,
-        roomCode: data.roomCode,
-        inviteUrl: data.inviteUrl,
-        matchSummary: data.matchSummary ?? '7-Tile · First to 60 · Untimed',
-      });
-    });
-
-    return () => {
-      unregisterDeclined();
-      unregisterInvited();
-    };
-  }, [showToast]);
-
-  useEffect(() => {
-    if (!outboundChallenge) return;
-    const delay = Math.max(0, outboundChallenge.expiresAt - Date.now());
-    const timer = window.setTimeout(() => {
-      setOutboundChallenge((current) => {
-        if (!current || current.inviteId !== outboundChallenge.inviteId) return current;
-        return null;
-      });
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [outboundChallenge]);
-
-  useEffect(() => {
-    if (players.length >= 2 && outboundChallenge) {
-      clearOutboundChallenge();
-    }
-  }, [players.length, outboundChallenge, clearOutboundChallenge]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
