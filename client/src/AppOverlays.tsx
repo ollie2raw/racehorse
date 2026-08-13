@@ -81,6 +81,46 @@ export function AuthModalsLayer({
   );
 }
 
+export function MultiplayerShellErrorFallback() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-obsidian)',
+        color: 'rgba(255, 255, 255, 0.95)',
+        fontFamily: 'var(--font-display, sans-serif)',
+        gap: '16px',
+      }}
+    >
+      <div style={{ fontSize: '32px' }}>⚠</div>
+      <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Match unavailable</h2>
+      <p style={{ color: 'rgba(255, 255, 255, 0.35)', fontSize: '14px', margin: 0 }}>
+        Something went wrong during your match.
+      </p>
+      <button
+        onClick={() => { window.location.href = '/'; }}
+        style={{
+          background: 'var(--tier-elite)',
+          color: 'var(--bg-obsidian)',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '10px 24px',
+          fontSize: '14px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          marginTop: '8px',
+        }}
+      >
+        Return to home
+      </button>
+    </div>
+  );
+}
+
 export function FriendInvitePopupOverlay({
   invite,
   joining,

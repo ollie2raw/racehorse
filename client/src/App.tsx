@@ -13,7 +13,7 @@ import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recov
 import { useSocketConnectionState } from './multiplayer/useSocketConnectionState';
 import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
 import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
-import { AuthModalsLayer } from './AppOverlays';
+import { AuthModalsLayer, MultiplayerShellErrorFallback } from './AppOverlays';
 import { MultiplayerGameShell } from './multiplayer/MultiplayerGameShell';
 import { AppRoutesGamePropsHost } from './multiplayer/AppRoutesGamePropsHost';
 import type { MultiplayerShellDelegates } from './multiplayer/multiplayerGameShellTypes';
@@ -938,45 +938,7 @@ export default function App() {
       {joinedRoom ? (
         <ErrorBoundary
           context="multiplayer-shell"
-          fallback={
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100vh',
-                background: '#040b17',
-                color: '#f0e6cc',
-                fontFamily: 'var(--font-display, sans-serif)',
-                gap: '16px',
-              }}
-            >
-              <div style={{ fontSize: '32px' }}>⚠</div>
-              <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Match unavailable</h2>
-              <p style={{ color: '#6b7a94', fontSize: '14px', margin: 0 }}>
-                Something went wrong during your match.
-              </p>
-              <button
-                onClick={() => {
-                  window.location.href = '/';
-                }}
-                style={{
-                  background: '#C9A84C',
-                  color: '#040b17',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '10px 24px',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  marginTop: '8px',
-                }}
-              >
-                Return to home
-              </button>
-            </div>
-          }
+          fallback={<MultiplayerShellErrorFallback />}
         >
           <MultiplayerGameShell
             socket={socket}
