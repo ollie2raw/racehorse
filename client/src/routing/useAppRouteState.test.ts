@@ -1,17 +1,15 @@
 /**
  * Regression tests for useAppRouteState.
  *
- * Written BEFORE extraction from App.tsx. Covers:
- *   - Initial state hydration from window.location.pathname
- *   - Mode guard effects (LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE, learnHowToPlayOpen clear)
- *   - appModeRef / mpSubViewRef sync
- *   - Tournament bootstrap (initialDynamicRouteAppliedRef one-shot)
- *   - popstate handler (browser back/forward)
- *   - URL sync effect (pushState)
+ * appMode / setAppMode are now owned by App.tsx and passed in as props.
+ * The hook controls: appModeRef sync, mode guard side-effects, routeReady,
+ * mpSubView, learnHowToPlayOpen, selectedLearnLessonId, profileTarget,
+ * profileOriginMode, tournament bootstrap, popstate, and URL sync.
  */
 
 import { renderHook, act } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { AppMode } from '../appRouteTypes';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -20,8 +18,6 @@ vi.mock('../appRouteTypes', async (importOriginal) => {
   return { ...actual };
 });
 
-// We mock resolveAppRoute and buildAppPath so tests control pathname resolution
-// without depending on the full routing table.
 vi.mock('./appRoutePath', () => ({
   resolveAppRoute: vi.fn((pathname: string) => {
     if (pathname === '/multiplayer/private') return { mode: 'multiplayer', multiplayerView: 'private' };
@@ -59,6 +55,8 @@ function makeSetters() {
 
 function defaultParams(overrides: Partial<Params> = {}): Params {
   return {
+    appMode: 'home' as AppMode,
+    setAppMode: vi.fn(),
     activeTournamentId: null,
     tournamentSubView: 'hub',
     setActiveTournamentId: vi.fn(),
@@ -79,35 +77,33 @@ function firePopstate() {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-// ── 1. Initial state hydration ────────────────────────────────────────────────
+// ── 1. Initial state from passed-in appMode ───────────────────────────────────
 
-describe('useAppRouteState — initial state from pathname', () => {
+describe('useAppRouteState — initial state', () => {
   beforeEach(() => {
     vi.mocked(resolveAppRoute).mockClear();
     setPathname('/');
   });
 
-  it('defaults to home mode when pathname is "/"', () => {
-    setPathname('/');
+  it('reflects appMode from props', () => {
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+      initialProps: defaultParams({ appMode: 'multiplayer' }),
     });
-    expect(result.current.appMode).toBe('home');
+    expect(result.current.appMode).toBe('multiplayer');
   });
 
-  it('initializes appMode from resolved route', () => {
+  it('initializes mpSubView from resolved pathname', () => {
     setPathname('/multiplayer/private');
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
       initialProps: defaultParams(),
     });
-    expect(result.current.appMode).toBe('multiplayer');
     expect(result.current.mpSubView).toBe('private');
   });
 
   it('initializes learnHowToPlayOpen from route', () => {
     setPathname('/learn/how-to-play');
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+      initialProps: defaultParams({ appMode: 'learn' }),
     });
     expect(result.current.learnHowToPlayOpen).toBe(true);
   });
@@ -115,7 +111,7 @@ describe('useAppRouteState — initial state from pathname', () => {
   it('initializes profileTarget from route', () => {
     setPathname('/players/alice');
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+      initialProps: defaultParams({ appMode: 'profile' }),
     });
     expect(result.current.profileTarget).toBe('alice');
   });
@@ -129,20 +125,16 @@ describe('useAppRouteState — initial state from pathname', () => {
   });
 
   it('routeReady becomes true after tournament bootstrap fires', () => {
-    // routeReady starts false when tournamentId is in the initial route, but the
-    // bootstrap effect immediately sets it to true. What's observable after mount
-    // is that routeReady is true and setActiveTournamentId was called.
     setPathname('/tournament/tour-abc');
     const { setActiveTournamentId, setTournamentSubView } = makeSetters();
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams({ setActiveTournamentId, setTournamentSubView }),
+      initialProps: defaultParams({ appMode: 'tournament', setActiveTournamentId, setTournamentSubView }),
     });
     expect(result.current.routeReady).toBe(true);
     expect(setActiveTournamentId).toHaveBeenCalledWith('tour-abc');
   });
 
-  it('selectedLearnLessonId starts null regardless of route', () => {
-    setPathname('/learn/how-to-play');
+  it('selectedLearnLessonId starts null', () => {
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
       initialProps: defaultParams(),
     });
@@ -150,7 +142,6 @@ describe('useAppRouteState — initial state from pathname', () => {
   });
 
   it('profileOriginMode starts null', () => {
-    setPathname('/players/alice');
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
       initialProps: defaultParams(),
     });
@@ -163,26 +154,24 @@ describe('useAppRouteState — initial state from pathname', () => {
 describe('useAppRouteState — learnHowToPlayOpen clears when leaving learn', () => {
   beforeEach(() => setPathname('/'));
 
-  it('clears learnHowToPlayOpen when appMode leaves learn', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+  it('clears learnHowToPlayOpen when appMode prop changes away from learn', () => {
+    const { result, rerender } = renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ appMode: 'learn' }),
     });
 
     act(() => { result.current.setLearnHowToPlayOpen(true); });
-    act(() => { result.current.setAppMode('learn'); });
     expect(result.current.learnHowToPlayOpen).toBe(true);
 
-    act(() => { result.current.setAppMode('home'); });
+    rerender(defaultParams({ appMode: 'home' }));
     expect(result.current.learnHowToPlayOpen).toBe(false);
   });
 
   it('keeps learnHowToPlayOpen true when staying on learn', () => {
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+      initialProps: defaultParams({ appMode: 'learn' }),
     });
 
     act(() => { result.current.setLearnHowToPlayOpen(true); });
-    act(() => { result.current.setAppMode('learn'); });
     expect(result.current.learnHowToPlayOpen).toBe(true);
   });
 });
@@ -192,14 +181,14 @@ describe('useAppRouteState — learnHowToPlayOpen clears when leaving learn', ()
 describe('useAppRouteState — ref sync', () => {
   beforeEach(() => setPathname('/'));
 
-  it('appModeRef tracks appMode', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+  it('appModeRef tracks appMode prop', () => {
+    const { result, rerender } = renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ appMode: 'home' }),
     });
 
     expect(result.current.appModeRef.current).toBe('home');
 
-    act(() => { result.current.setAppMode('stats'); });
+    rerender(defaultParams({ appMode: 'stats' }));
     expect(result.current.appModeRef.current).toBe('stats');
   });
 
@@ -219,7 +208,7 @@ describe('useAppRouteState — ref sync', () => {
 // ── 4. Tournament bootstrap (one-shot) ────────────────────────────────────────
 
 describe('useAppRouteState — tournament bootstrap', () => {
-  it('calls setActiveTournamentId and setRouteReady when initial route has tournamentId', () => {
+  it('calls setActiveTournamentId and setTournamentSubView when initial route has tournamentId', () => {
     setPathname('/tournament/tour-xyz');
     const { setActiveTournamentId, setTournamentSubView } = makeSetters();
 
@@ -251,7 +240,6 @@ describe('useAppRouteState — tournament bootstrap', () => {
       initialProps: defaultParams({ setActiveTournamentId, setTournamentSubView }),
     });
 
-    // Rerender with new setters — the ref guard should prevent a second call
     const secondSetters = makeSetters();
     rerender(defaultParams({
       setActiveTournamentId: secondSetters.setActiveTournamentId,
@@ -270,26 +258,29 @@ describe('useAppRouteState — popstate handler', () => {
     vi.mocked(resolveAppRoute).mockClear();
   });
 
-  it('updates appMode when popstate fires', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+  it('calls setAppMode when popstate fires', () => {
+    const setAppMode = vi.fn();
+    renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ setAppMode }),
     });
 
     setPathname('/stats');
     act(() => { firePopstate(); });
 
-    expect(result.current.appMode).toBe('home'); // resolveAppRoute('/stats') → home in our mock (not mapped), but let's fix mock
+    // resolveAppRoute('/stats') → home in our mock (not mapped)
+    expect(setAppMode).toHaveBeenCalled();
   });
 
-  it('updates mpSubView when popstate navigates to multiplayer/private', () => {
+  it('calls setAppMode with multiplayer and updates mpSubView on popstate to multiplayer/private', () => {
+    const setAppMode = vi.fn();
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+      initialProps: defaultParams({ setAppMode }),
     });
 
     setPathname('/multiplayer/private');
     act(() => { firePopstate(); });
 
-    expect(result.current.appMode).toBe('multiplayer');
+    expect(setAppMode).toHaveBeenCalledWith('multiplayer');
     expect(result.current.mpSubView).toBe('private');
   });
 
@@ -298,7 +289,6 @@ describe('useAppRouteState — popstate handler', () => {
       initialProps: defaultParams(),
     });
 
-    // Set an origin mode to verify it gets cleared
     act(() => { result.current.setProfileOriginMode('home'); });
 
     setPathname('/players/alice');
@@ -339,17 +329,18 @@ describe('useAppRouteState — popstate handler', () => {
 
   it('cleans up popstate listener on unmount', () => {
     setPathname('/');
-    const { unmount, result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+    const setAppMode = vi.fn();
+    const { unmount } = renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ setAppMode }),
     });
 
     unmount();
+    setAppMode.mockClear();
 
     setPathname('/multiplayer/private');
     act(() => { firePopstate(); });
 
-    // appMode should not have changed after unmount
-    expect(result.current.appMode).toBe('home');
+    expect(setAppMode).not.toHaveBeenCalled();
   });
 });
 
@@ -368,49 +359,40 @@ describe('useAppRouteState — URL sync', () => {
     pushStateSpy.mockRestore();
   });
 
-  it('calls pushState when appMode changes and routeReady is true', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+  it('calls pushState when appMode prop changes and routeReady is true', () => {
+    const { rerender } = renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ appMode: 'home' }),
     });
 
-    act(() => { result.current.setAppMode('stats'); });
+    rerender(defaultParams({ appMode: 'stats' }));
 
     expect(pushStateSpy).toHaveBeenCalled();
   });
 
   it('setRouteReady(false) suppresses pushState until re-enabled', () => {
-    setPathname('/');
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
+    const { result, rerender } = renderHook((p: Params) => useAppRouteState(p), {
+      initialProps: defaultParams({ appMode: 'home' }),
     });
 
     act(() => { result.current.setRouteReady(false); });
     pushStateSpy.mockClear();
 
-    act(() => { result.current.setAppMode('stats'); });
+    rerender(defaultParams({ appMode: 'stats' }));
     expect(pushStateSpy).not.toHaveBeenCalled();
 
     act(() => { result.current.setRouteReady(true); });
-    // Now URL sync fires
     expect(pushStateSpy).toHaveBeenCalled();
   });
 
   it('skips pushState when browserNavigationRef is set (avoids double-push on popstate)', () => {
     setPathname('/');
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
+    renderHook((p: Params) => useAppRouteState(p), {
       initialProps: defaultParams(),
     });
 
-    // Simulate browser navigation: popstate fires, then URL sync effect runs
     setPathname('/stats');
     act(() => { firePopstate(); });
 
-    // After popstate, browserNavigationRef is true. The URL sync should not push.
-    // The path in location is already '/stats', buildAppPath returns '/' for home or
-    // the correct path. pushState should be suppressed.
-    // We just verify that after popstate the state updates and pushState was called
-    // at most once (for the state change, not the popstate itself).
-    // This is a structural guard test — mainly checking no infinite loop.
     expect(pushStateSpy.mock.calls.length).toBeLessThanOrEqual(2);
   });
 });

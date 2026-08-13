@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { type Dispatch, type SetStateAction, type MutableRefObject, useState, useEffect, useRef } from 'react';
 import type { AppMode } from '../appRouteTypes';
 import { LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE } from '../appRouteTypes';
 import { resolveAppRoute, buildAppPath } from './appRoutePath';
 
 export type UseAppRouteStateParams = {
+  appMode: AppMode;
+  setAppMode: Dispatch<SetStateAction<AppMode>>;
   activeTournamentId: string | null;
   tournamentSubView: 'hub' | 'bracket' | 'result';
   setActiveTournamentId: (id: string | null) => void;
@@ -12,32 +14,37 @@ export type UseAppRouteStateParams = {
 
 export type UseAppRouteStateResult = {
   appMode: AppMode;
-  setAppMode: React.Dispatch<React.SetStateAction<AppMode>>;
-  appModeRef: React.MutableRefObject<AppMode>;
+  setAppMode: Dispatch<SetStateAction<AppMode>>;
+  appModeRef: MutableRefObject<AppMode>;
   routeReady: boolean;
-  setRouteReady: React.Dispatch<React.SetStateAction<boolean>>;
+  setRouteReady: Dispatch<SetStateAction<boolean>>;
   mpSubView: 'quick' | 'private';
-  setMpSubView: React.Dispatch<React.SetStateAction<'quick' | 'private'>>;
-  mpSubViewRef: React.MutableRefObject<'quick' | 'private'>;
+  setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
+  mpSubViewRef: MutableRefObject<'quick' | 'private'>;
   learnHowToPlayOpen: boolean;
-  setLearnHowToPlayOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setLearnHowToPlayOpen: Dispatch<SetStateAction<boolean>>;
   selectedLearnLessonId: string | null;
-  setSelectedLearnLessonId: React.Dispatch<React.SetStateAction<string | null>>;
+  setSelectedLearnLessonId: Dispatch<SetStateAction<string | null>>;
   profileTarget: string | null;
-  setProfileTarget: React.Dispatch<React.SetStateAction<string | null>>;
+  setProfileTarget: Dispatch<SetStateAction<string | null>>;
   profileOriginMode: AppMode | null;
-  setProfileOriginMode: React.Dispatch<React.SetStateAction<AppMode | null>>;
+  setProfileOriginMode: Dispatch<SetStateAction<AppMode | null>>;
 };
 
 export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteStateResult {
-  const { activeTournamentId, tournamentSubView, setActiveTournamentId, setTournamentSubView } =
-    params;
+  const {
+    appMode,
+    setAppMode,
+    activeTournamentId,
+    tournamentSubView,
+    setActiveTournamentId,
+    setTournamentSubView,
+  } = params;
 
   const initialRouteRef = useRef(resolveAppRoute(window.location.pathname));
   const initialDynamicRouteAppliedRef = useRef(false);
   const browserNavigationRef = useRef(false);
 
-  const [appMode, setAppMode] = useState<AppMode>(initialRouteRef.current.mode);
   const [routeReady, setRouteReady] = useState(!initialRouteRef.current.tournamentId);
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(

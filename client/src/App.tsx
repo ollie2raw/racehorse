@@ -62,6 +62,7 @@ import { createMultiplayerRuntime } from './multiplayer/runtime/createMultiplaye
 import { MultiplayerRuntimeProvider } from './multiplayer/runtime/runtimeProvider';
 import type { MultiplayerRuntime, MultiplayerRuntimeBootstrap } from './multiplayer/runtime/runtimeTypes';
 import { useAppRouteState } from './routing/useAppRouteState';
+import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
 
 function normalizeRoomCode(value: unknown): string {
@@ -78,6 +79,7 @@ export default function App() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
+  const [appMode, setAppMode] = useState<AppMode>(() => resolveAppRoute(window.location.pathname).mode);
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [roomCode, setRoomCode] = useState('');
   const [, setTournamentActiveRoom] = useState<string | null>(null);
@@ -425,8 +427,6 @@ export default function App() {
   } = tournamentSession;
 
   const {
-    appMode,
-    setAppMode,
     appModeRef,
     routeReady,
     setRouteReady,
@@ -442,6 +442,8 @@ export default function App() {
     profileOriginMode,
     setProfileOriginMode,
   } = useAppRouteState({
+    appMode,
+    setAppMode,
     activeTournamentId,
     tournamentSubView,
     setActiveTournamentId,
