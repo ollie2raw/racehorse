@@ -5,10 +5,7 @@ import './match/match-live.css';
 import { useAuthSession } from './auth/useAuthSession';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';
-import type { BotDealSize } from './bot/botEngine';
-import type { FritzTier } from './bot/fritzConfig';
-import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTierPreference';
-import { mutePreference } from './utils/mutePreference';
+import { useBotGamePreferences } from './bot/useBotGamePreferences';
 import { logger } from './utils/logger';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -42,7 +39,7 @@ import {
 } from './multiplayer/multiplayerGameSnapshot';
 import { useMultiplayerShellDelegates } from './multiplayer/useMultiplayerShellDelegates';
 import { useMultiplayerResync } from './multiplayer/useMultiplayerResync';
-import { shouldShowPrivateMatchLobby } from './multiplayer/privateLobbyVisibility';
+import { usePrivateLobbyWinStreak } from './multiplayer/usePrivateLobbyWinStreak';
 import {
   canAttemptMatchmakingRoomJoin,
   emitMatchmakingRoomJoin,
@@ -98,6 +95,7 @@ import {
   selectMatchStarted,
 } from './multiplayer/session/sessionStateMachine';
 import { useAppRouteState } from './routing/useAppRouteState';
+import { useFullscreen } from './utils/useFullscreen';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -113,23 +111,10 @@ export default function App() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
-  const [isMuted, setIsMuted] = useState<boolean>(() => mutePreference.get());
-  const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
-    if (typeof window === 'undefined') return 7;
-    const stored = window.localStorage.getItem('racehorse_bot_deal_size');
-    return stored === '14' ? 14 : 7;
-  });
-  const [botFritzTier, setBotFritzTier] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
-  const [isGuidedMode, setIsGuidedMode] = useState(false);
-  const [isAuthoringMode, setIsAuthoringMode] = useState(false);
-  const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
-  const [isGuidedV2Mode, setIsGuidedV2Mode] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
-  const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
 
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
@@ -272,7 +257,6 @@ export default function App() {
     roomMatchIdRef.current = null;
   }, [joinedRoom]);
 
-  const isMutedRef = useRef(isMuted);
   const applyRoomEventMetaRef = useRef<(meta?: RoomEventMeta | null) => void>(() => {});
   const resetClientGameSessionRef = useRef<() => void>(() => {});
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
@@ -515,6 +499,24 @@ export default function App() {
     getScope: () => friendsSocketScopeRef.current,
   });
 
+  const {
+    isMuted,
+    setIsMuted,
+    isMutedRef,
+    botDealSize,
+    setBotDealSize,
+    botFritzTier,
+    setBotFritzTier,
+    isGuidedMode,
+    setIsGuidedMode,
+    isAuthoringMode,
+    setIsAuthoringMode,
+    isAuthoringV2Mode,
+    setIsAuthoringV2Mode,
+    isGuidedV2Mode,
+    setIsGuidedV2Mode,
+  } = useBotGamePreferences({ appMode });
+
   const canOpenHowToPlayPreview = true;
 
   useEffect(() => {
@@ -524,24 +526,6 @@ export default function App() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('racehorse_bot_deal_size', String(botDealSize));
-  }, [botDealSize]);
-
-  useEffect(() => {
-    writeStoredPvfFritzTier(botFritzTier);
-  }, [botFritzTier]);
-
-  useEffect(() => {
-    mutePreference.set(isMuted);
-  }, [isMuted]);
-
-
-  useEffect(() => {
-    isMutedRef.current = isMuted;
-  }, [isMuted]);
 
   // Joined-room persist policy: see shouldPersistJoinedRoom in match/recovery/joinedRoomPersistPolicy.ts
   useEffect(() => {
@@ -863,31 +847,7 @@ export default function App() {
     ],
   );
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    handleFullscreenChange();
-
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
-
-  const toggleFullscreen = useCallback(async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else if (appRootRef.current) {
-        await appRootRef.current.requestFullscreen();
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to toggle fullscreen.';
-      setError(`Fullscreen error: ${message}`);
-    }
-  }, []);
+  const { isFullscreen, toggleFullscreen } = useFullscreen(appRootRef, setError);
 
   const {
     multiplayerConnectionHostParams,
@@ -959,12 +919,6 @@ export default function App() {
   });
 
   const { connect, disconnect, retryRoomRecovery } = connectionActions;
-
-  useEffect(() => {
-    if (appMode !== 'botSetup') return;
-    setBotDealSize(7);
-  }, [appMode]);
-
 
 
 
@@ -1077,38 +1031,14 @@ export default function App() {
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
 
-  // Private lobby visibility: see shouldShowPrivateMatchLobby in multiplayer/privateLobbyVisibility.ts
-  useEffect(() => {
-    if (appMode !== 'multiplayer' || !authUser?.id) {
-      setPrivateLobbyHostWinStreak(null);
-      return;
-    }
-    if (
-      !shouldShowPrivateMatchLobby({
-        isConnected,
-        isRecoveringConnection,
-        joinedRoom,
-        hasLiveGameState,
-      })
-    ) {
-      setPrivateLobbyHostWinStreak(null);
-      return;
-    }
-    let cancelled = false;
-    void import('./stats/statsApi')
-      .then(({ fetchUserStatsByUserId }) => fetchUserStatsByUserId(authUser.id))
-      .then((res) => {
-        if (cancelled) return;
-        if (res.error || !res.data) {
-          setPrivateLobbyHostWinStreak(null);
-          return;
-        }
-        setPrivateLobbyHostWinStreak(res.data.currentWinStreak);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [appMode, authUser?.id, isConnected, isRecoveringConnection, joinedRoom, hasLiveGameState]);
+  const privateLobbyHostWinStreak = usePrivateLobbyWinStreak({
+    appMode,
+    authUserId: authUser?.id ?? null,
+    isConnected,
+    isRecoveringConnection,
+    joinedRoom,
+    hasLiveGameState,
+  });
 
   // ─── Render ───────────────────────────────────────────────
   const authModalsLayer = (
