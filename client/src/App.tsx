@@ -88,7 +88,6 @@ import {
 // ─── Utilities ───────────────────────────────────────────────
 
 import type { AppMode } from './appRouteTypes';
-import { LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE } from './appRouteTypes';
 import { selectLegacyAppSessionRuntime } from './multiplayer/runtime/runtimeSelectors';
 import { createMultiplayerRuntime } from './multiplayer/runtime/createMultiplayerRuntime';
 import { MultiplayerRuntimeProvider } from './multiplayer/runtime/runtimeProvider';
@@ -98,7 +97,7 @@ import {
   selectJoinedRoomCode,
   selectMatchStarted,
 } from './multiplayer/session/sessionStateMachine';
-import { buildAppPath, resolveAppRoute } from './routing/appRoutePath';
+import { useAppRouteState } from './routing/useAppRouteState';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -108,9 +107,6 @@ function normalizeRoomCode(value: unknown): string {
 
 export default function App() {
   useRenderProfiler('App');
-  const initialRouteRef = useRef(resolveAppRoute(window.location.pathname));
-  const initialDynamicRouteAppliedRef = useRef(false);
-  const browserNavigationRef = useRef(false);
   const appRootRef = useRef<HTMLDivElement>(null);
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
@@ -118,17 +114,6 @@ export default function App() {
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [appMode, setAppMode] = useState<AppMode>(initialRouteRef.current.mode);
-  const [routeReady, setRouteReady] = useState(
-    !initialRouteRef.current.tournamentId,
-  );
-  const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
-  const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(
-    Boolean(initialRouteRef.current.learnHowToPlay),
-  );
-  const [mpSubView, setMpSubView] = useState<'quick' | 'private'>(
-    initialRouteRef.current.multiplayerView ?? 'quick',
-  );
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => mutePreference.get());
   const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
@@ -141,35 +126,10 @@ export default function App() {
   const [isAuthoringMode, setIsAuthoringMode] = useState(false);
   const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
   const [isGuidedV2Mode, setIsGuidedV2Mode] = useState(false);
-  const [profileTarget, setProfileTarget] = useState<string | null>(
-    initialRouteRef.current.profileUsername ?? null,
-  );
-  const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);
-
   const [roomCode, setRoomCode] = useState('');
   const [, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
-      setSelectedLearnLessonId(null);
-      setLearnHowToPlayOpen(false);
-      setAppMode('singlePlayerHub');
-    }
-  }, [appMode]);
-
-  useEffect(() => {
-    if (!JOURNEY_MODE_VISIBLE && appMode === 'journey') {
-      setAppMode('singlePlayerHub');
-    }
-  }, [appMode]);
-
-  useEffect(() => {
-    if (appMode !== 'learn') {
-      setLearnHowToPlayOpen(false);
-    }
-  }, [appMode]);
 
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
@@ -279,8 +239,6 @@ export default function App() {
     clearOutboundChallenge,
   } = useSocialInviteState({ playerCount: players.length, showToast });
 
-  const appModeRef = useRef(appMode);
-  const mpSubViewRef = useRef(mpSubView);
   const roomPlayersRef = useRef<RoomPlayer[]>([]);
   const joinedRoomResponseRef = useRef<RoomAckResponse | null>(null);
   const roomIdentityRef = useRef<{
@@ -288,13 +246,6 @@ export default function App() {
     userId: string | null;
     authToken: string | null;
   } | null>(null);
-
-  useEffect(() => {
-    appModeRef.current = appMode;
-  }, [appMode]);
-  useEffect(() => {
-    mpSubViewRef.current = mpSubView;
-  }, [mpSubView]);
 
   const reconnectRoomCodeRef = useRef<string | null>(null);
   const reconnectShouldJoinRef = useRef(false);
@@ -522,68 +473,29 @@ export default function App() {
     sessionSocketDelegatesRef,
   } = tournamentSession;
 
-  useEffect(() => {
-    if (initialDynamicRouteAppliedRef.current) return;
-    initialDynamicRouteAppliedRef.current = true;
-    const initialRoute = initialRouteRef.current;
-    if (!initialRoute.tournamentId) return;
-
-    setActiveTournamentId(initialRoute.tournamentId);
-    setTournamentSubView(initialRoute.tournamentView ?? 'bracket');
-    setRouteReady(true);
-  }, [setActiveTournamentId, setTournamentSubView]);
-
-  useEffect(() => {
-    const applyBrowserRoute = () => {
-      browserNavigationRef.current = true;
-      const route = resolveAppRoute(window.location.pathname);
-      setAppMode(route.mode);
-      setLearnHowToPlayOpen(Boolean(route.learnHowToPlay));
-      setSelectedLearnLessonId(null);
-
-      if (route.multiplayerView) setMpSubView(route.multiplayerView);
-      if (route.profileUsername) {
-        setProfileTarget(route.profileUsername);
-        setProfileOriginMode(null);
-      }
-
-      if (route.mode === 'tournament') {
-        setActiveTournamentId(route.tournamentId ?? null);
-        setTournamentSubView(route.tournamentView ?? 'hub');
-      }
-    };
-
-    window.addEventListener('popstate', applyBrowserRoute);
-    return () => window.removeEventListener('popstate', applyBrowserRoute);
-  }, [setActiveTournamentId, setTournamentSubView]);
-
-  useEffect(() => {
-    if (!routeReady) return;
-    const nextPath = buildAppPath({
-      mode: appMode,
-      multiplayerView: mpSubView,
-      profileUsername: profileTarget,
-      learnHowToPlay: learnHowToPlayOpen,
-      tournamentId: activeTournamentId,
-      tournamentView: tournamentSubView,
-    });
-    const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
-    if (browserNavigationRef.current) {
-      if (currentPath === nextPath) browserNavigationRef.current = false;
-      return;
-    }
-    if (currentPath !== nextPath) {
-      window.history.pushState(window.history.state, '', nextPath);
-    }
-  }, [
-    activeTournamentId,
+  const {
     appMode,
-    learnHowToPlayOpen,
-    mpSubView,
-    profileTarget,
+    setAppMode,
+    appModeRef,
     routeReady,
+    setRouteReady,
+    mpSubView,
+    setMpSubView,
+    mpSubViewRef,
+    learnHowToPlayOpen,
+    setLearnHowToPlayOpen,
+    selectedLearnLessonId,
+    setSelectedLearnLessonId,
+    profileTarget,
+    setProfileTarget,
+    profileOriginMode,
+    setProfileOriginMode,
+  } = useAppRouteState({
+    activeTournamentId,
     tournamentSubView,
-  ]);
+    setActiveTournamentId,
+    setTournamentSubView,
+  });
 
   useRegisterTournamentSocketHandlers({
     enabled: Boolean(socket),
