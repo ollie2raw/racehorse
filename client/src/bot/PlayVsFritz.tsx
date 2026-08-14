@@ -27,7 +27,7 @@ const IconRobotNav = ({ color = "currentColor" }: { color?: string }) => (
 
 const IconRookie = ({ size = 26 }: { size?: number }) => (
   <img 
-    src="/rookieICON.png?v=2" 
+    src="/rookieICON.webp" 
     alt="Rookie Icon" 
     style={{ width: size, height: size, objectFit: 'contain' }} 
   />
@@ -49,7 +49,7 @@ const IconCrown = ({ color = "currentColor", size = 30 }: { color?: string; size
 
 const IconGoat = ({ size = 26 }: { size?: number }) => (
   <img 
-    src="/GOATicon.png" 
+    src="/GOATicon.webp" 
     alt="Master Icon" 
     style={{ width: size, height: size, objectFit: 'contain' }} 
   />

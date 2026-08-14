@@ -6,6 +6,7 @@ import {
   type GhostMoveLogEntry,
 } from '../../ghost/service';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
+import { setPublicShortCache } from './cacheControl';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -67,6 +68,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
 
     try {
       const summary = await getGhostProfileSummary(userId);
+      setPublicShortCache(res, 60, 300);
       res.json({ ok: true, summary });
     } catch (error) {
       res.status(500).json({
@@ -84,6 +86,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
 
     try {
       const result = await getGhostProfileSummaryByUsername(username);
+      setPublicShortCache(res, 60, 300);
       res.json({ ok: true, ...result });
     } catch (error) {
       res.status(500).json({

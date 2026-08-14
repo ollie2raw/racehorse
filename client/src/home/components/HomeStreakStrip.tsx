@@ -73,7 +73,7 @@ export function HomeStreakStrip({ summary, loading = false }: HomeStreakStripPro
     <section className="streak-strip" aria-label="Daily streak status">
       <div className="streak-identity">
         <div className="streak-flame-wrap" style={{ borderColor: currentStreak > 0 ? '#24541f' : 'rgba(255,255,255,0.1)' }}>
-          <img src="/daystreak.png" alt="" className="streak-flame-icon" />
+          <img src="/daystreak.webp" alt="" className="streak-flame-icon" />
         </div>
         <div>
           <div className="streak-label">{streakTitle}</div>

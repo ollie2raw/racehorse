@@ -14,7 +14,7 @@ export function InGameBoardFrame({ children, toolbar, className }: InGameBoardFr
       <div className="nbl-board-frame rh-board-frame">
         <div className="nbl-board-canvas rh-board-canvas" data-ui="board">
           <div className="nbl-board-watermark rh-board-watermark" aria-hidden="true">
-            <img src="/brand_logo.png" alt="" />
+            <img src="/brand_logo.webp" alt="" />
           </div>
           {children}
           {toolbar ? <div className="nbl-board-toolbar">{toolbar}</div> : null}

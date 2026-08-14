@@ -1,4 +1,4 @@
-import scoringChainArt from '../../assets/learn/scoring-open-count-chain.png';
+import scoringChainArt from '../../assets/learn/scoring-open-count-chain.webp';
 
 /** Image 2 chain: [6|2]–[2|4]–[4|6]–[6|0]–[0|4] → open ends 6 + 4 */
 const SCORING_LEFT_END = 6;

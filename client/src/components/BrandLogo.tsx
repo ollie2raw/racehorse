@@ -43,7 +43,7 @@ export function BrandLogo({
         }}
       >
         <img 
-          src="/brand_logo.png" 
+          src="/brand_logo.webp" 
           alt="Racehorse Logo"
           style={{ width: iconSize, height: iconSize, objectFit: 'contain' }}
         />

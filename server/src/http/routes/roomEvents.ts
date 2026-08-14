@@ -45,6 +45,8 @@ export function registerRoomEventsRoutes(app: Application, deps: RoomEventsRoute
         return;
       }
 
+      // Match logs are immutable once archived — cache privately for 5 min.
+      res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=3600');
       res.json({
         ok: true,
         log: {

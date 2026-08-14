@@ -1,5 +1,8 @@
+import { childLogger } from '../../logger';
 import type express from 'express';
 import type { Server } from 'socket.io';
+
+const log = childLogger('health');
 import { isGracefulShutdownInProgress } from '../gracefulShutdown';
 import { supabaseFetch } from '../../supabaseUtils';
 import {
@@ -58,7 +61,7 @@ async function getSupabaseReadiness(): Promise<{ ok: boolean; latencyMs: number;
     });
     return { ok: true, latencyMs: Date.now() - startedAt };
   } catch (error) {
-    console.error('[ready] Supabase readiness check failed', getProcessErrorLogPayload(error));
+    log.error(getProcessErrorLogPayload(error), 'supabase readiness check failed');
     return {
       ok: false,
       latencyMs: Date.now() - startedAt,
@@ -178,12 +181,12 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         ok: readiness.ready || !readiness.shouldAlert,
       };
       if (readiness.shouldAlert) {
-        console.error('[daily-puzzle-ladder] readiness-alert', {
+        log.error({
           runDate: todayPt,
           publishedSlotCount: readiness.publishedSlotCount,
           missingSlotIndexes: readiness.missingSlotIndexes,
           alertReason: readiness.alertReason,
-        });
+        }, 'daily-puzzle-ladder readiness alert');
       }
     } catch (error) {
       dailyPuzzleLadder = {

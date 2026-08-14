@@ -41,6 +41,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
   } = deps;
 
   app.get('/api/mp-stats', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const { roomCount, gamesInProgress } = getRoomRuntimeStats();
     res.json({
       ok: true,
