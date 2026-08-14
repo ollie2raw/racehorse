@@ -28,7 +28,6 @@ import {
 } from '../../dailyFritzSkunk';
 import { isAdminSecret } from '../../platform/auth/adminSecret';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
-import { recordOperationalFailure } from '../../operationalTelemetry';
 import { writeDailyFritzGameActivity } from '../../social/activityWriter';
 import { supabaseFetch } from '../../supabaseUtils';
 import { getFritzIdentityForTier } from '../../shared/fritzMatchLifecycle';
@@ -556,6 +555,16 @@ export function registerDailyFritzRoutes(app: Application): void {
         ? req.body.fritz_policy_contract.trim()
         : '';
     const requestedStateDigestVersion = Number(req.body?.state_digest_version);
+    const requestedDebugDate = typeof req.body?.debug_date === 'string' ? req.body.debug_date.trim() : '';
+    const isDevLike = process.env.NODE_ENV !== 'production';
+    if (requestedDebugDate && !isDevLike) {
+      res.status(400).json({ error: 'debug_date is only available outside production.' });
+      return;
+    }
+    if (requestedDebugDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDebugDate)) {
+      res.status(400).json({ error: 'debug_date must be in YYYY-MM-DD format.' });
+      return;
+    }
     const requestedClientRelease =
       typeof req.body?.client_release === 'string' ? req.body.client_release.trim().slice(0, 120) : '';
     const supportedTranscriptProtocols = Array.isArray(req.body?.supported_transcript_protocol_versions)
@@ -1481,11 +1490,7 @@ export function registerDailyFritzRoutes(app: Application): void {
         skunk: recordedGame.skunk,
         skunkBy: recordedGame.skunkBy,
       }).catch((error) => {
-        recordOperationalFailure('daily_fritz.activity_write', error, {
-          attemptId,
-          gameNumber: recordedGame.gameNumber,
-          userId: authenticatedUserId,
-        });
+        log.warn({ err: error, attemptId, gameNumber: recordedGame.gameNumber, userId: authenticatedUserId }, '[daily-fritz] activity_write_failed');
       });
     }
     incrementDailyFritzMetric('game_recorded');
