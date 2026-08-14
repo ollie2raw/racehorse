@@ -559,7 +559,7 @@ export function useAuth() {
     const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
     if (isDev) {
        
-      console.log('[Auth] signOut start');
+      console.warn('[Auth] signOut start');
     }
 
     let errorMessage: string | null = null;
@@ -605,7 +605,7 @@ export function useAuth() {
       setUser(null);
       if (isDev) {
          
-        console.log('[Auth] signOut end', { usedTimeoutFallback, error: errorMessage });
+        console.warn('[Auth] signOut end', { usedTimeoutFallback, error: errorMessage });
       }
     }
 
