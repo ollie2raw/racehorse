@@ -1,6 +1,9 @@
 import type { Server } from 'socket.io';
 import { act, getRoom } from '../rooms';
 import { canDraw, getLegalMoves } from '../game/engine';
+import { childLogger } from '../logger';
+
+const log = childLogger('disconnect-grace');
 
 export const DISCONNECT_GRACE_MS = 30_000;
 
@@ -146,11 +149,7 @@ async function handleDisconnectGraceExpired(
     } else if (canDrawNow) {
       await act(code, disconnectedPlayerSeatId, { type: 'DRAW' }, io, broadcast);
     } else {
-      console.warn('[disconnect-grace] no legal auto-action for disconnected turn', {
-        roomCode: code,
-        disconnectedPlayerSeatId,
-        legalMoveTypes: legalMoves.map((m) => m.type),
-      });
+      log.warn({ roomCode: code, disconnectedPlayerSeatId, legalMoveTypes: legalMoves.map((m) => m.type) }, 'no legal auto-action for disconnected turn');
     }
 
     if (!room.disconnectExpiries) {
@@ -189,10 +188,6 @@ async function handleDisconnectGraceExpired(
     io.to(code).emit('player:reconnect_timeout', { playerId: disconnectedPlayerSeatId });
     broadcast(code);
   } catch (error) {
-    console.error('[disconnect-grace] grace expiry failed', {
-      roomCode: code,
-      disconnectedPlayerSeatId,
-      error: error instanceof Error ? error.message : error,
-    });
+    log.error({ err: error, roomCode: code, disconnectedPlayerSeatId }, 'grace expiry failed');
   }
 }
