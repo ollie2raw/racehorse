@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
 import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
@@ -5,6 +6,8 @@ import { getLegalMoves } from '../game/engine';
 import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
 import { parseBranchPosition } from '../game/types';
 import type { BoardState, GameState, PlacementPosition, Tile, TileOrientation } from '../game/types';
+
+const log = childLogger('ghost');
 
 type GhostGameRow = {
   id: string;
@@ -249,7 +252,7 @@ async function insertGhostGameRow(params: {
         message.includes("match_id") ||
         message.includes('schema cache');
       if (!missingMatchIdColumn) throw error;
-      console.warn('[ghost] ghost_games missing match_id column; falling back to plain insert');
+      log.warn('[ghost] ghost_games missing match_id column; falling back to plain insert');
     }
   }
 
@@ -866,10 +869,10 @@ export async function completeGhostGame(params: {
   compositeLog: GhostCompositeLog;
   styleProfile: GhostStyleProfile | null;
 }> {
-  console.log('[Ghost Service] called', {
+  log.info({
     userId: params.userId,
     opponentUserId: params.opponentUserId,
-  });
+  }, 'called');
 
   const isFritz = Boolean(params.opponentUserId && isFritzId(params.opponentUserId));
   const trainingMoveLog = normalizeMoveLog(
@@ -932,10 +935,10 @@ export async function completeGhostGame(params: {
       trainingMoveLog,
       matchId: params.matchId,
     }).catch((error) => {
-      console.warn('[Ghost Service] deferred Fritz training persistence failed', {
+      log.warn({
         userId: params.userId,
         error: error instanceof Error ? error.message : String(error),
-      });
+      }, 'deferred Fritz training persistence failed');
     });
 
     return {

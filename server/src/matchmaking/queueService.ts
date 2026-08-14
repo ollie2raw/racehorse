@@ -1,6 +1,9 @@
+import { childLogger } from '../logger';
 import type { MatchedPair, QueuedPlayer, QueueStatusEvent } from './types';
 import { findPairs, ratingWindowMsAt } from './pairing';
 import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
+
+const log = childLogger('matchmaking:queue');
 
 export type QueueServiceOptions = {
   onMatched: (a: QueuedPlayer, b: QueuedPlayer) => void;
@@ -104,7 +107,7 @@ export class QueueService {
     }
     const players = Array.from(this.players.values());
     if (process.env.MATCHMAKING_DEBUG === '1' && players.length > 0) {
-      console.log('[matchmaking][debug] tick', {
+      log.info({
         queueSize: players.length,
         players: players.map((p) => ({
           socketId: p.socketId,
@@ -112,7 +115,7 @@ export class QueueService {
           rating: p.rating,
           waitedMs: now - p.joinedAtMs,
         })),
-      });
+      }, '[debug] tick');
     }
     const pairs: MatchedPair[] = findPairs(players, now);
     for (const pair of pairs) {

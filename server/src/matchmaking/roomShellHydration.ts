@@ -1,6 +1,9 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { createReservedRoom, peekRoom, type Room } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+
+const log = childLogger('matchmaking:hydration');
 
 export type MatchmakingRoomShellHydrationResult =
   | { kind: 'skipped' }
@@ -71,10 +74,10 @@ export async function tryHydrateMatchmakingRoomShell(
     if (!id) return { kind: 'not_found' };
     const room = createReservedRoom(code, { winningScore: 60 });
     room.matchmakingMatchId = id;
-    console.log('[room:hydrate] matchmaking shell restored', { roomCode: code, matchmakingMatchId: id });
+    log.info({ roomCode: code, matchmakingMatchId: id }, 'matchmaking shell restored');
     return { kind: 'shell_only', room, matchmakingMatchId: id };
   } catch (err) {
-    console.warn('[room:hydrate] failed', err instanceof Error ? err.message : err);
+    log.warn({ err: err instanceof Error ? err.message : err }, 'failed');
     return {
       kind: 'persistence_unavailable',
       error: err instanceof Error ? err.message : String(err),

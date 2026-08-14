@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { createReservedRoom, getRoom } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
@@ -5,6 +6,8 @@ import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
 import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
+
+const log = childLogger('matchmaking');
 
 const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
@@ -44,7 +47,7 @@ async function fetchPlayerRating(userId: string): Promise<number> {
     return Number.isFinite(n) ? n : DEFAULT_RATING;
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('[matchmaking] fetchPlayerRating failed', err instanceof Error ? err.message : err);
+      log.warn({ err: err instanceof Error ? err.message : err }, 'fetchPlayerRating failed');
     }
     return DEFAULT_RATING;
   }
@@ -140,11 +143,11 @@ export function registerMatchmakingHandlers(
       });
       if (!result.ok) {
         if (matchmakingDebugEnabled()) {
-          console.log('[matchmaking][debug] queue:join rejected', {
+          log.info({
             reason: result.reason,
             userId: identity.userId,
             socketId: socket.id,
-          });
+          }, '[debug] queue:join rejected');
         }
         ack?.({
           ok: false,
@@ -155,7 +158,7 @@ export function registerMatchmakingHandlers(
         return;
       }
       if (matchmakingDebugEnabled()) {
-        console.log('[matchmaking][debug] queue:join accepted', {
+        log.info({
           socketId: socket.id,
           userId: identity.userId,
           username: identity.username,
@@ -163,7 +166,7 @@ export function registerMatchmakingHandlers(
           authenticated: identity.authenticated,
           queueSize: service.size(),
           online: getOnlineCount(io),
-        });
+        }, '[debug] queue:join accepted');
       }
       ack?.({
         ok: true,
@@ -182,7 +185,7 @@ export function registerMatchmakingHandlers(
       // 2s interval tick.
       io.emit('queue:online', { online: getOnlineCount(io), queued: service.size() });
     } catch (err) {
-      console.warn('[matchmaking] queue:join failed', err instanceof Error ? err.message : err);
+      log.warn({ err: err instanceof Error ? err.message : err }, 'queue:join failed');
       ack?.({
         ok: false,
         error: 'internal',
@@ -222,7 +225,7 @@ function getOrCreateService(io: Server): QueueService {
     onMatched: (a, b) => { void handleMatched(io, a, b); },
     onTimeout: (socketId) => {
       if (matchmakingDebugEnabled()) {
-        console.log('[matchmaking][debug] queue:timeout', { socketId });
+        log.info({ socketId }, '[debug] queue:timeout');
       }
       io.to(socketId).emit('queue:timeout', { fallbackOffered: true });
     },
@@ -249,19 +252,19 @@ function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
     isSim: false,
   });
   if (!result.ok && matchmakingDebugEnabled()) {
-    console.log('[matchmaking][debug] requeue after aborted synthetic pair failed', {
+    log.info({
       userId: p.userId,
       reason: result.reason,
-    });
+    }, '[debug] requeue after aborted synthetic pair failed');
   }
 }
 
 async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Promise<void> {
   if (isForbiddenMatchmakingPlayer(a) || isForbiddenMatchmakingPlayer(b)) {
-    console.warn('[matchmaking] aborted quick match: synthetic seat in pair (humans-only queue)', {
+    log.warn({
       a: { userId: a.userId, username: a.username, isSim: a.isSim },
       b: { userId: b.userId, username: b.username, isSim: b.isSim },
-    });
+    }, 'aborted quick match: synthetic seat in pair (humans-only queue)');
     tryRequeueHumanAfterAbortedMatch(a);
     tryRequeueHumanAfterAbortedMatch(b);
     serviceSingleton?.tick();
@@ -293,16 +296,16 @@ async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Prom
     if (!a.isSim) io.to(a.socketId).emit('queue:matched', aPayload);
     if (!b.isSim) io.to(b.socketId).emit('queue:matched', bPayload);
     if (matchmakingDebugEnabled()) {
-      console.log('[matchmaking][debug] queue:matched emitted', {
+      log.info({
         roomCode: code,
         a: { socketId: a.socketId, userId: a.userId, isSim: a.isSim },
         b: { socketId: b.socketId, userId: b.userId, isSim: b.isSim },
-      });
+      }, '[debug] queue:matched emitted');
     }
     // The sim move loop is started by the auto-start hook in room:join once
     // the game state actually exists. Nothing to do here for sim cases —
     // handleMatched only prepares the room + DB record.
   } catch (err) {
-    console.warn('[matchmaking] handleMatched failed', err instanceof Error ? err.message : err);
+    log.warn({ err: err instanceof Error ? err.message : err }, 'handleMatched failed');
   }
 }

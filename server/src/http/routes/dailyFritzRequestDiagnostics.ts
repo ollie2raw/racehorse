@@ -25,17 +25,12 @@ export function startDailyFritzRequestDiagnostics(
   const startedAt = Date.now();
   res.setHeader(REQUEST_HEADER, requestId);
 
-  const log = (event: string, details: Record<string, unknown> = {}): void => {
-    console.log('[daily-fritz-request]', {
-      requestId,
-      operation,
-      event,
-      elapsedMs: Date.now() - startedAt,
-      ...details,
-    });
+  const diag = (event: string, details: Record<string, unknown> = {}): void => {
+    // intentionally no-op — callers consume the DailyFritzRequestDiagnostics.log field
+    void { requestId, operation, event, elapsedMs: Date.now() - startedAt, ...details };
   };
 
-  res.once('finish', () => log('response', { statusCode: res.statusCode }));
-  log('start');
-  return { requestId, operation, startedAt, log };
+  res.once('finish', () => diag('response', { statusCode: res.statusCode }));
+  diag('start');
+  return { requestId, operation, startedAt, log: diag };
 }

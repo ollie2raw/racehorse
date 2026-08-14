@@ -1,28 +1,31 @@
+import { childLogger } from '../logger';
 
 import cron from 'node-cron';
 import { decayInactivePlayers, processAllPendingRatingGames } from './periodService';
 
+const log = childLogger('ranking:cron');
+
 export function startRankingCron() {
   // Schedule: every Sunday at midnight UTC ('0 0 * * 0')
   cron.schedule('0 0 * * 0', async () => {
-    console.log('Starting weekly ranking maintenance...');
+    log.info('starting weekly ranking maintenance');
     try {
       const pendingResult = await processAllPendingRatingGames();
-      console.log(`Processed ${pendingResult.processed} missed ranked game updates`);
+      log.info({ processed: pendingResult.processed }, 'processed missed ranked game updates');
       if (pendingResult.errors.length > 0) {
-        console.error(`Encountered ${pendingResult.errors.length} rating processing errors:`, pendingResult.errors);
+        log.error({ errors: pendingResult.errors, count: pendingResult.errors.length }, 'rating processing errors');
       }
 
       const decayResult = await decayInactivePlayers();
-      console.log(`Processed RD decay for ${decayResult.processed} inactive players`);
+      log.info({ processed: decayResult.processed }, 'processed RD decay for inactive players');
       if (decayResult.errors.length > 0) {
-        console.error(`Encountered ${decayResult.errors.length} RD decay errors:`, decayResult.errors);
+        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
       }
     } catch (err) {
-      console.error('Failed to run weekly ranking maintenance:', err);
+      log.error({ err }, 'failed to run weekly ranking maintenance');
     }
   }, {
     timezone: "UTC"
   });
-  console.log('Ranking cron scheduled (Sundays at 00:00 UTC) for missed-game catch-up and RD decay');
+  log.info('Ranking cron scheduled (Sundays at 00:00 UTC) for missed-game catch-up and RD decay');
 }

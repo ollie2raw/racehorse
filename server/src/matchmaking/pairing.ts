@@ -1,4 +1,7 @@
+import { childLogger } from '../logger';
 import type { MatchedPair, QueuedPlayer } from './types';
+
+const log = childLogger('matchmaking:pairing');
 
 function pairingDebugEnabled(): boolean {
   return process.env.MATCHMAKING_DEBUG === '1';
@@ -50,13 +53,13 @@ export function findPairs(players: QueuedPlayer[], nowMs: number): MatchedPair[]
       else if (!(delta < bestDelta)) reject = `delta ${delta} not better than best ${bestDelta}`;
 
       if (debug) {
-        console.log('[matchmaking][debug] candidate', {
+        log.info({
           seeker: { socketId: a.socketId, userId: a.userId, rating: a.rating, waitedMs: nowMs - a.joinedAtMs, window: aWindow },
           candidate: { socketId: b.socketId, userId: b.userId, rating: b.rating, waitedMs: nowMs - b.joinedAtMs, window: bWindow },
           allowedMinWindow: allowed,
           ratingDelta: delta,
           decision: reject ? `reject: ${reject}` : 'eligible',
-        });
+        }, '[debug] candidate');
       }
 
       if (delta <= allowed && delta < bestDelta) {
@@ -67,24 +70,24 @@ export function findPairs(players: QueuedPlayer[], nowMs: number): MatchedPair[]
 
     if (best) {
       if (debug) {
-        console.log('[matchmaking][debug] matched pair', {
+        log.info({
           a: { socketId: a.socketId, userId: a.userId, rating: a.rating },
           b: { socketId: best.socketId, userId: best.userId, rating: best.rating },
           ratingDelta: bestDelta,
-        });
+        }, '[debug] matched pair');
       }
       used.add(a.socketId);
       used.add(best.socketId);
       pairs.push({ a, b: best, matchedAtMs: nowMs, ratingDelta: bestDelta });
     } else if (debug && sorted.length > 1) {
-      console.log('[matchmaking][debug] no partner for seeker', {
+      log.info({
         socketId: a.socketId,
         userId: a.userId,
         rating: a.rating,
         waitedMs: nowMs - a.joinedAtMs,
         window: aWindow,
         queueSize: sorted.length,
-      });
+      }, '[debug] no partner for seeker');
     }
   }
 

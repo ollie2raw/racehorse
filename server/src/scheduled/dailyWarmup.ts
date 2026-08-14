@@ -1,9 +1,12 @@
+import { childLogger } from '../logger';
 import { dailyFritzRunCache, ensureDailyFritzRunForDate } from '../http/stores/dailyFritzStore';
 import { buildDailyFritzPublishedChallenge } from '../dailyFritzPublishedChallenge';
 import { publishDailyFritzChallenge } from '../http/stores/dailyFritzPublishedChallengeStore';
 import { ensureDailyPuzzleLadderForDate } from '../seedDailyPuzzleLadder';
 import { getNextPacificWarmupAt, getPacificDateKeyDaysFromNow } from '../shared/pacificDate';
 import { isDailyFritzTransactionalAuthorityEnabled } from '../dailyFritzAuthorityFeature';
+
+const log = childLogger('daily-warmup');
 
 export function isTruthyEnvFlag(value: string | undefined): boolean {
   if (!value) return false;
@@ -23,10 +26,10 @@ export function isStartupDailyPuzzleWarmupEnabled(): boolean {
 
 async function warmDailyFritzRuns(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
   const startedAt = Date.now();
-  console.log('[daily-fritz-warmup] start', {
+  log.info({
     reason,
     runDates,
-  });
+  }, 'start');
   try {
     const results = await Promise.all(
       runDates.map(async (runDate) => {
@@ -53,17 +56,17 @@ async function warmDailyFritzRuns(reason: 'startup' | 'scheduled', runDates: str
         };
       }),
     );
-    console.log('[daily-fritz-warmup] success', {
+    log.info({
       reason,
       totalMs: Date.now() - startedAt,
       results,
-    });
+    }, 'success');
   } catch (error) {
-    console.warn('[daily-fritz-warmup] error', {
+    log.warn({
       reason,
       totalMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
-    });
+    }, 'error');
   }
 }
 
@@ -82,7 +85,7 @@ function yieldEventLoop(): Promise<void> {
 
 async function warmDailyPuzzleLadders(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
   const startedAt = Date.now();
-  console.log('[daily-puzzle-ladder-warmup] start', { reason, runDates });
+  log.info({ reason, runDates }, 'start');
   try {
     const results: Array<{ runDate: string; ms: number; outcome: 'skipped' | 'seeded' | 'failed' }> = [];
     for (const runDate of runDates) {
@@ -91,17 +94,17 @@ async function warmDailyPuzzleLadders(reason: 'startup' | 'scheduled', runDates:
       const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false, purpose: reason });
       results.push({ runDate, ms: Date.now() - slotStartedAt, outcome });
     }
-    console.log('[daily-puzzle-ladder-warmup] success', {
+    log.info({
       reason,
       totalMs: Date.now() - startedAt,
       results,
-    });
+    }, 'success');
   } catch (error) {
-    console.warn('[daily-puzzle-ladder-warmup] error', {
+    log.warn({
       reason,
       totalMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
-    });
+    }, 'error');
   }
 }
 
@@ -122,24 +125,24 @@ export function scheduleStartupDailyWarmups(): void {
   setTimeout(() => {
     if (isStartupDailyFritzWarmupEnabled()) {
       void warmDailyFritzRuns('startup', startupWarmupDates).catch((err) => {
-        console.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
+        log.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
       });
     } else {
-      console.log('[daily-fritz-warmup] skipped on startup', {
+      log.info({
         hint: 'Set ENABLE_STARTUP_FRITZ_WARMUP=true to enable',
-      });
+      }, 'skipped on startup');
     }
     if (isStartupDailyPuzzleWarmupEnabled()) {
       void warmDailyPuzzleLadders('startup', startupWarmupDates).catch((err) => {
-        console.warn(
+        log.warn(
           '[daily-puzzle-ladder-warmup] startup failed',
           err instanceof Error ? err.message : err,
         );
       });
     } else {
-      console.log('[daily-puzzle-ladder-warmup] skipped on startup', {
+      log.info({
         hint: 'Set ENABLE_STARTUP_PUZZLE_WARMUP=true to enable',
-      });
+      }, 'skipped on startup');
     }
   }, STARTUP_DAILY_WARMUP_DELAY_MS);
 }

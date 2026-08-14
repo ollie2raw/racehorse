@@ -168,7 +168,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 function logMpDebug(scope: string, payload: Record<string, unknown>): void {
   if (!MP_DEBUG) return;
-  console.log(`[${scope}]`, payload);
+  log.info(payload, scope);
 }
 
 function normalizeTileKey(tile: Tile): string {
@@ -562,7 +562,7 @@ export async function startGame(
   // corrupt the new game's state via dangling Promise closures.
   if (nextHandStartsByRoom.has(code)) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
+      log.info(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
     }
     nextHandStartsByRoom.delete(code);
   }

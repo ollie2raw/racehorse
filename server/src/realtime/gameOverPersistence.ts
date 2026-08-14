@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { completeGhostGame } from '../ghost/service';
 import { recordLeagueLiveResult } from '../league/results';
@@ -21,6 +22,8 @@ import {
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 
+const log = childLogger('realtime:game-over');
+
 /**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
  */
@@ -41,20 +44,20 @@ export function createGameOverPersistScheduler(io: Server) {
         }
         if (room.scheduledTournamentMatchId) {
           if (!winnerUserId) {
-            console.warn('[tournament:game-over] missing winner user id', {
+            log.warn({
               roomCode: room.code,
               matchId: room.scheduledTournamentMatchId,
-            });
+            }, 'missing winner user id');
           }
           return;
         }
         const tournamentMatchByRoom = await findTournamentMatchByRoom(room.code).catch(() => null);
         if (tournamentMatchByRoom) {
           if (!winnerUserId) {
-            console.warn('[tournament:game-over] missing winner user id', {
+            log.warn({
               roomCode: room.code,
               matchId: tournamentMatchByRoom.id,
-            });
+            }, 'missing winner user id');
           }
           return;
         }
@@ -125,11 +128,11 @@ export function createGameOverPersistScheduler(io: Server) {
         const rankedInsertResults = new Map<string, Awaited<ReturnType<typeof insertRankedGameIdempotent>>>();
         const rankedPlayedAt = new Date().toISOString();
         const rankedSourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
-        console.log('[Ranking] game-over persist ranked insert', {
+        log.info({
           roomCode: room.code,
           sourceMatchId,
           rankedSourceColumnsEnabled,
-        });
+        }, 'game-over persist ranked insert');
 
         for (const p of rankingParticipants) {
           if (p.me.userId) {
@@ -194,11 +197,11 @@ export function createGameOverPersistScheduler(io: Server) {
                 playerAGame: playerAInsert.game,
                 playerBGame: playerBInsert.game,
               });
-              console.log('[Ranking] Real-time update complete', {
+              log.info({
                 playerA: a.userId,
                 playerB: b.userId,
                 sourceMatchId,
-              });
+              }, 'Real-time update complete');
 
               if (room.matchmakingMatchId) {
                 const matchWinnerUserId =
@@ -213,16 +216,16 @@ export function createGameOverPersistScheduler(io: Server) {
                 });
               }
             } catch (err) {
-              console.error('[Ranking] Real-time update failed:', err);
+              log.error({ err }, 'real-time ranking update failed');
             }
           } else {
-            console.warn('[Ranking] Skipping real-time update — duplicate or missing ranked insert', {
+            log.warn({
               hasPlayerAProfile: !!playerAProfile,
               hasPlayerBProfile: !!playerBProfile,
               playerAIsNew: playerAInsert?.isNew ?? false,
               playerBIsNew: playerBInsert?.isNew ?? false,
               sourceMatchId,
-            });
+            }, 'Skipping real-time update — duplicate or missing ranked insert');
           }
         }
 
@@ -254,26 +257,26 @@ export function createGameOverPersistScheduler(io: Server) {
                 roomCode: room.code,
                 metadata: { via: 'live-room-auto-finalize' },
               });
-              console.log('[League] Live fixture finalized', {
+              log.info({
                 fixtureId: linkedFixture.id,
                 roomCode: room.code,
-              });
+              }, 'Live fixture finalized');
             } catch (err) {
-              console.error('[League] Live fixture finalization failed:', err);
+              log.error({ err }, 'live fixture finalization failed');
             }
           } else {
-            console.warn('[League] Skipping live fixture finalization — player mapping missing', {
+            log.warn({
               fixtureId: linkedFixture.id,
               roomCode: room.code,
               hasHomeMember: !!homeMember,
               hasAwayMember: !!awayMember,
               hasHomePlayer: !!homePlayer,
               hasAwayPlayer: !!awayPlayer,
-            });
+            }, 'Skipping live fixture finalization — player mapping missing');
           }
         }
       } catch (err) {
-        console.warn('Ranking/Match logging failed', err);
+        log.warn({ err }, 'ranking/match logging failed');
       }
     };
   };

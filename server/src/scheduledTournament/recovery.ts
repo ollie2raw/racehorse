@@ -4,6 +4,8 @@ import { isTournamentPastActiveWindow } from './activeWindow';
 import { dispatchTournamentMatch } from './matchDispatch';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 
+const log = childLogger('tournament:recovery');
+
 export async function recoverTournamentMatches(
   io: Server,
   persistence: EnginePersistence = defaultEnginePersistence,
@@ -16,11 +18,11 @@ export async function recoverTournamentMatches(
 
   for (const tournament of tournaments) {
     if (isTournamentPastActiveWindow(tournament)) {
-      console.log('[tournament:recovery] skipped-stale', {
+      log.info({
         tournamentId: tournament.id,
         reason: 'tournament_past_active_window',
         scheduledStart: tournament.scheduled_start,
-      });
+      }, 'skipped-stale');
       continue;
     }
     const matches = await persistence.fetchMatches(tournament.id);
@@ -32,22 +34,22 @@ export async function recoverTournamentMatches(
         match.completed_at ||
         match.winner_id
       ) {
-        console.log('[tournament:recovery] skipped-completed', {
+        log.info({
           tournamentId: tournament.id,
           matchId: match.id,
           roomCode: match.room_code,
-        });
+        }, 'skipped-completed');
         continue;
       }
       if (match.status === 'ready') {
         if (Date.now() < startMs && !match.ready_at) continue;
         await dispatchTournamentMatch(io, match.id, { reason: 'recovery', emitIfAlreadyReady: true }, persistence);
         readyRecovered += 1;
-        console.log('[tournament:recovery] ready match recovered', {
+        log.info({
           tournamentId: tournament.id,
           matchId: match.id,
           roomCode: match.room_code,
-        });
+        }, 'ready match recovered');
         continue;
       }
 
@@ -57,11 +59,11 @@ export async function recoverTournamentMatches(
         } catch {
           await dispatchTournamentMatch(io, match.id, { reason: 'recovery', emitIfAlreadyReady: true }, persistence);
           inProgressRecovered += 1;
-          console.log('[tournament:recovery] in-progress room recreated', {
+          log.info({
             tournamentId: tournament.id,
             matchId: match.id,
             roomCode: match.room_code,
-          });
+          }, 'in-progress room recreated');
         }
       }
     }

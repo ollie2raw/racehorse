@@ -1,7 +1,10 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import type { AckFn, RoomJoinConfig } from '../multiplayer/roomSession';
 import { supabaseFetch } from '../supabaseUtils';
 import { upsertPresence } from './presence';
+
+const log = childLogger('presence');
 
 export type PresenceHandlerDeps = {
   io: Server;
@@ -72,7 +75,7 @@ export function registerPresenceHandlers(
       try {
         const { username, userId } = await deps.resolveSocketIdentity(payload ?? {});
         if (!userId) return cb?.({ ok: false });
-        console.log('[presence] identify received', userId);
+        log.info({ userId }, 'presence identify received');
         removeSocketPresence();
         socket.data.userId = userId;
         socket.data.username = username;
@@ -95,14 +98,11 @@ export function registerPresenceHandlers(
           .filter((id): id is string => Boolean(id))
       : [];
     const onlineUserIds = userIds.filter((id) => (deps.socketsByUserId.get(id)?.size ?? 0) > 0);
-    console.log(
-      '[presence] online check',
-      JSON.stringify({
-        requested: userIds.length,
-        online: onlineUserIds.length,
-        registeredUsers: deps.socketsByUserId.size,
-      }),
-    );
+    log.info({
+      requested: userIds.length,
+      online: onlineUserIds.length,
+      registeredUsers: deps.socketsByUserId.size,
+    }, 'presence online check');
     cb?.({ ok: true, onlineUserIds });
   });
 
