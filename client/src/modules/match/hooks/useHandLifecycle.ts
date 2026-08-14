@@ -473,10 +473,26 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           // A hand-end callback can run before the final move-log write is
           // observable. Never make the player recover from that local timing
           // race: discard the frozen prefetch evidence and rebuild it once.
-          if (verifierCode === 'incomplete_transcript' && failureAttempt <= 2) {
+          // Incomplete blocked transcripts are also sealed on rebuild; never
+          // trap the player on a reload for this verifier code.
+          if (verifierCode === 'incomplete_transcript') {
             prefetchCoordinator.clear();
             completedHandEvidenceRef.current = null;
-            advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+            if (failureAttempt <= 4) {
+              advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+              return;
+            }
+            setHandAdvanceError(null);
+            setShowManualHandAdvance(true);
+            logDailyFritzHandBreadcrumb('manual-advance-shown', {
+              reason: 'next-hand-request-rejected',
+              source,
+              failureAttempt,
+              status: err instanceof DailyFritzNextHandHttpError ? err.status : null,
+              verifierCode,
+              error: errMsg,
+            });
+            emitModalFailureTelemetry('show_modal_retry');
             return;
           }
           // A concurrent resume or a checkpoint assembled during a move-log

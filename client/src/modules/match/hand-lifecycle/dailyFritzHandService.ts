@@ -67,6 +67,10 @@ export function buildDailyFritzPrefetchParams(
       moveLog,
       protocolVersion: transcriptProtocolVersion,
       fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+      sealBlockedHand: match.handOver
+        && match.players.you.hand.length > 0
+        && match.players.bot.hand.length > 0
+        && match.boneyard.length <= match.deadTiles.length,
     });
   } catch (error) {
     transcriptError = error instanceof Error

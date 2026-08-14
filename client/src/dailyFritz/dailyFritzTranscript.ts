@@ -6,9 +6,63 @@ import {
   isSupportedFritzPolicyVersion,
   GAME_RULES_VERSION,
   type DailyFritzTranscript,
+  type DailyFritzTranscriptAction,
 } from '@racehorse/game-core';
 import type { MoveEntry } from '../game/moveLogger.ts';
 import { canonicalizeDailyFritzMoveLog } from './dailyFritzMoveEvidence.ts';
+
+type TranscriptActor = DailyFritzTranscriptAction['actor'];
+
+function otherActor(actor: TranscriptActor): TranscriptActor {
+  return actor === 'player' ? 'fritz' : 'player';
+}
+
+/**
+ * Official passes still required for a blocked hand. Play resets the streak;
+ * a scoring play or double keeps the turn (extra turn).
+ */
+export function missingBlockedHandPassActors(
+  entries: readonly Pick<MoveEntry, 'player' | 'action' | 'tile' | 'pointsScored'>[],
+): TranscriptActor[] {
+  let consecutivePasses = 0;
+  let nextActor: TranscriptActor = 'player';
+
+  for (const entry of entries) {
+    const actor: TranscriptActor = entry.player === 'you' ? 'player' : 'fritz';
+    if (entry.action === 'place') {
+      consecutivePasses = 0;
+      const extraTurn = (entry.pointsScored ?? 0) > 0
+        || Boolean(entry.tile && entry.tile[0] === entry.tile[1]);
+      nextActor = extraTurn ? actor : otherActor(actor);
+    } else if (entry.action === 'pass') {
+      consecutivePasses += 1;
+      nextActor = otherActor(actor);
+    } else {
+      nextActor = actor;
+    }
+  }
+
+  const missing: TranscriptActor[] = [];
+  while (consecutivePasses < 2) {
+    missing.push(nextActor);
+    consecutivePasses += 1;
+    nextActor = otherActor(nextActor);
+  }
+  return missing;
+}
+
+export function sealBlockedDailyFritzTranscript(
+  transcript: DailyFritzTranscript,
+  entries: readonly Pick<MoveEntry, 'player' | 'action' | 'tile' | 'pointsScored'>[],
+): DailyFritzTranscript {
+  const missing = missingBlockedHandPassActors(entries);
+  if (missing.length === 0) return transcript;
+  const actions = [...transcript.actions];
+  for (const actor of missing) {
+    actions.push({ sequence: actions.length, actor, kind: 'pass' });
+  }
+  return { ...transcript, actions };
+}
 
 export function buildDailyFritzTranscript(input: {
   challengeId: string;
@@ -20,6 +74,8 @@ export function buildDailyFritzTranscript(input: {
   protocolVersion?: 1 | 2;
   fritzPolicyVersion?: number;
   clientRelease?: string;
+  /** When the local hand ended blocked, append any official passes the move log omitted. */
+  sealBlockedHand?: boolean;
 }): DailyFritzTranscript {
   const entries = canonicalizeDailyFritzMoveLog(input.moveLog)
     .filter((entry) => entry.handNumber === input.handNumber);
@@ -50,7 +106,7 @@ export function buildDailyFritzTranscript(input: {
     ? input.fritzPolicyVersion
     : FRITZ_POLICY_VERSION;
 
-  return {
+  const transcript: DailyFritzTranscript = {
     protocolVersion: input.protocolVersion ?? DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
     rulesVersion: GAME_RULES_VERSION,
     fritzPolicyVersion,
@@ -63,4 +119,8 @@ export function buildDailyFritzTranscript(input: {
     handIndex: input.handIndex,
     actions,
   };
+
+  return input.sealBlockedHand
+    ? sealBlockedDailyFritzTranscript(transcript, entries)
+    : transcript;
 }
