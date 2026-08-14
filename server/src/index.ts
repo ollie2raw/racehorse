@@ -226,6 +226,7 @@ import {
   getUserIdFromAuthHeaderSync,
 } from './platform/auth/supabaseAuth';
 import { getPacificDateKey } from './shared/pacificDate';
+import { childLogger } from './logger';
 import {
   abandonVerifiedSinglePlayerMatch,
   buildGhostCompletionHash,
@@ -298,6 +299,8 @@ import {
 } from './http/stores/homeCompletionDates';
 
 /** Production custom domain — always allowed even when CLIENT_URL still points at Vercel. */
+const log = childLogger('server');
+
 const canonicalProductionClientOrigins = [
   'https://playracehorse.com',
   'https://www.playracehorse.com',
@@ -650,9 +653,9 @@ initRoomSession(io, {
 });
 
 io.on('connection', (socket: Socket) => {
-  console.log(`[socket.io] client connected id=${socket.id} transport=${socket.conn.transport.name}`);
+  log.info({ socketId: socket.id, transport: socket.conn.transport.name }, 'client connected');
   socket.conn.on('upgrade', (transport) => {
-    console.log(`[socket.io] transport upgraded id=${socket.id} -> ${transport.name}`);
+    log.debug({ socketId: socket.id, transport: transport.name }, 'transport upgraded');
   });
   installSocketRateLimit(socket);
   registerSpectatorHandlersIfEnabled(io, socket);
@@ -712,7 +715,7 @@ io.on('connection', (socket: Socket) => {
   });
 
 
-  console.log('Client connected:', socket.id);
+  log.debug({ socketId: socket.id }, 'socket handlers registered');
 
   // TOURNAMENT_HELPERS
   const ENABLE_LEGACY_TOURNAMENTS = config.enableLegacyTournaments;
@@ -764,7 +767,7 @@ io.on('connection', (socket: Socket) => {
         }
       })();
     }
-    console.log('Client disconnected:', socket.id);
+    log.info({ socketId: socket.id }, 'client disconnected');
   });
 });
 registerGracefulShutdownHandlers({ server, io });
@@ -813,53 +816,41 @@ registerHealthRoutes({
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  log.info({ port: PORT }, 'server listening');
   bootstrapScheduledTournamentInfrastructure(io, app);
   void probeRoomMatchLogsTable()
     .then((ok) => {
-      console.log('[room-match-logs] startup probe', {
-        tableAvailable: ok,
-        persistenceEnabled: isRoomMatchLogsPersistenceAvailable(),
-      });
+      log.info({ tableAvailable: ok, persistenceEnabled: isRoomMatchLogsPersistenceAvailable() }, 'room-match-logs startup probe');
     })
     .catch((err) => {
-      console.warn('[room-match-logs] startup probe error', err instanceof Error ? err.message : err);
+      log.warn({ err }, 'room-match-logs startup probe error');
     });
   void probeRoomCommandReceiptsTable()
     .then((ok) => {
-      console.log('[room-command-receipts] startup probe', {
-        tableAvailable: ok,
-        persistenceEnabled: isRoomCommandReceiptsPersistenceAvailable(),
-      });
+      log.info({ tableAvailable: ok, persistenceEnabled: isRoomCommandReceiptsPersistenceAvailable() }, 'room-command-receipts startup probe');
     })
     .catch((err) => {
-      console.warn(
-        '[room-command-receipts] startup probe error',
-        err instanceof Error ? err.message : err,
-      );
+      log.warn({ err }, 'room-command-receipts startup probe error');
     });
   void probeDailyFritzEventsPersistence()
     .then((ok) => {
-      console.log('[daily-fritz-events] startup probe', { tableAvailable: ok });
+      log.info({ tableAvailable: ok }, 'daily-fritz-events startup probe');
     })
     .catch((err) => {
-      console.warn('[daily-fritz-events] startup probe error', err instanceof Error ? err.message : err);
+      log.warn({ err }, 'daily-fritz-events startup probe error');
     });
   void probeDailyFritzAuthoritySchema()
     .then((ok) => {
-      console.log('[daily-fritz-authority] startup probe', {
-        enabled: isDailyFritzTransactionalAuthorityEnabled(),
-        schemaAvailable: ok,
-      });
+      log.info({ enabled: isDailyFritzTransactionalAuthorityEnabled(), schemaAvailable: ok }, 'daily-fritz-authority startup probe');
     })
     .catch((err) => {
-      console.warn('[daily-fritz-authority] startup probe error', err instanceof Error ? err.message : err);
+      log.warn({ err }, 'daily-fritz-authority startup probe error');
     });
   const serverUrl = config.serverUrl;
   if (serverUrl) {
     const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;
     setInterval(() => {
-      void fetch(pingUrl).catch((err) => console.log('Ping failed:', err));
+      void fetch(pingUrl).catch((err) => log.warn({ err }, 'ping failed'));
     }, 10 * 60 * 1000);
   }
   startRankingCron();
