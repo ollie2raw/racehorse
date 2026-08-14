@@ -330,7 +330,8 @@ export function registerDailyFritzRoutes(app: Application): void {
   app.get('/api/daily-fritz/today', async (req, res) => {
   const requestStartedAt = Date.now();
   const requestId = randomUUID().slice(0, 8);
-  const isDevLike = process.env.NODE_ENV !== 'production';
+  const allowsTestFixtureDate = process.env.NODE_ENV !== 'production'
+    && process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED === 'true';
   let initUserId: string | null = null;
   let initRunDate: string | null = null;
   const mark = (label: string, startedAt: number, extra?: Record<string, unknown>) => {
@@ -362,8 +363,8 @@ export function registerDailyFritzRoutes(app: Application): void {
 
     const dateCalcStartedAt = Date.now();
     const requestedDebugDate = typeof req.query.debugDate === 'string' ? req.query.debugDate.trim() : '';
-    if (requestedDebugDate && !isDevLike) {
-      res.status(400).json({ error: 'debugDate is only available outside production.' });
+    if (requestedDebugDate && !allowsTestFixtureDate) {
+      res.status(400).json({ error: 'debugDate requires an enabled non-production fixture environment.' });
       return;
     }
     if (requestedDebugDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDebugDate)) {
@@ -556,9 +557,10 @@ export function registerDailyFritzRoutes(app: Application): void {
         : '';
     const requestedStateDigestVersion = Number(req.body?.state_digest_version);
     const requestedDebugDate = typeof req.body?.debug_date === 'string' ? req.body.debug_date.trim() : '';
-    const isDevLike = process.env.NODE_ENV !== 'production';
-    if (requestedDebugDate && !isDevLike) {
-      res.status(400).json({ error: 'debug_date is only available outside production.' });
+    const allowsTestFixtureDate = process.env.NODE_ENV !== 'production'
+      && process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED === 'true';
+    if (requestedDebugDate && !allowsTestFixtureDate) {
+      res.status(400).json({ error: 'debug_date requires an enabled non-production fixture environment.' });
       return;
     }
     if (requestedDebugDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDebugDate)) {
