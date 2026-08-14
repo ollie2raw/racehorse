@@ -30,6 +30,7 @@ import './styles/match-hud-polish.css';
 import './styles/match-board-architecture.css';
 import './styles/match-gameplay.css';
 import './styles/match-in-game.css';
+import './styles/home-hub.css';
 import './styles/match-standard-live-board.css';
 import './match/gameLayoutLayers.css';
 import './styles/racehorse-background.css';
