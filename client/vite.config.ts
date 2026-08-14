@@ -4,19 +4,26 @@ import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-// Injects <link rel="preload" fetchpriority="high"> for the home hero image so
-// Lighthouse can discover the LCP resource from the initial HTML document.
+// Injects <link rel="preload" fetchpriority="high"> for hero images used as
+// CSS backgrounds on the home screen so Lighthouse discovers LCP resources
+// from the initial HTML document (they aren't discoverable via CSS).
+const HERO_IMAGE_PATTERNS = ['newHOMEdailyfritz', 'homefinalpuzzle'];
+
 function preloadHeroImagePlugin(): Plugin {
   return {
     name: 'preload-hero-image',
     transformIndexHtml(html, ctx) {
       if (!ctx.bundle) return html;
-      const heroAsset = Object.keys(ctx.bundle).find(
-        (k) => k.includes('newHOMEdailyfritz') && k.endsWith('.webp'),
-      );
-      if (!heroAsset) return html;
-      const preload = `<link rel="preload" as="image" type="image/webp" href="/${heroAsset}" fetchpriority="high">`;
-      return html.replace('</head>', `  ${preload}\n  </head>`);
+      const preloads = HERO_IMAGE_PATTERNS.flatMap((pattern) => {
+        const asset = Object.keys(ctx.bundle!).find(
+          (k) => k.includes(pattern) && k.endsWith('.webp'),
+        );
+        return asset
+          ? [`<link rel="preload" as="image" type="image/webp" href="/${asset}" fetchpriority="high">`]
+          : [];
+      });
+      if (!preloads.length) return html;
+      return html.replace('</head>', `  ${preloads.join('\n  ')}\n  </head>`);
     },
   };
 }
