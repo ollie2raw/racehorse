@@ -34,8 +34,8 @@
   /* ── Text ────────────────────────────────────────── */
   --text-primary:   #f8fafc;
   --text-secondary: rgba(255, 255, 255, 0.6);
-  --text-dim:       rgba(255, 255, 255, 0.35);
-  --text-muted:     #6b7280;
+  --text-dim:       rgba(255, 255, 255, 0.46); /* lifted from 0.35 — achieves 4.51:1 AA on bg-primary */
+  --text-muted:     #8b93a5; /* lifted from #6b7280 — achieves 5.33:1 AA on bg-primary */
   /* High-contrast copy on solid elite / gold CTAs */
   --text-on-elite:  #1a1200;
 
