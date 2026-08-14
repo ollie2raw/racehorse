@@ -167,9 +167,23 @@ export function BotMatchScreenView({
     />
   ) : null;
 
+  const ariaLiveText = hud.handActive
+    ? hud.botTurn
+      ? `${hud.opponentLabel}'s turn. Your score: ${match.players.you.score}. ${hud.opponentLabel} score: ${match.players.bot.score}.`
+      : `Your turn. Your score: ${match.players.you.score}. ${hud.opponentLabel} score: ${match.players.bot.score}.`
+    : '';
+
   return (
     <>
       <RotateOverlay />
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+      >
+        {ariaLiveText}
+      </div>
       <BotMatchScreenShell
         rootRef={layout.rootRef}
         mode={layout.mode}

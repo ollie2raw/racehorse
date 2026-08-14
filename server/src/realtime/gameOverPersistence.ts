@@ -6,8 +6,9 @@ import { appendMatch } from '../stats/matchLog';
 import { recordPublicOnlineMatch } from '../stats/recordPublicMatch';
 import { writeMatchActivity } from '../social/activityWriter';
 import { supabaseFetch } from '../supabaseUtils';
+import type { ProfileRow } from '../supabaseTypes';
 import { FRITZ_SYSTEM_ID } from '../ranking/glicko2';
-import { processRealtimeMultiplayerGame } from '../ranking/periodService';
+import { processRealtimeMultiplayerGame, type Profile } from '../ranking/periodService';
 import { isRankedGameSourceColumnsEnabled } from '../ranking/rankedGamePayload';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { recordMatchEnd } from '../matchmaking/persistence';
@@ -124,7 +125,7 @@ export function createGameOverPersistScheduler(io: Server) {
           { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
           { me: b, opp: a, myScore: scoreB, oppScore: scoreA },
         ];
-        const rankingProfiles = new Map<string, any>();
+        const rankingProfiles = new Map<string, Profile>();
         const rankedInsertResults = new Map<string, Awaited<ReturnType<typeof insertRankedGameIdempotent>>>();
         const rankedPlayedAt = new Date().toISOString();
         const rankedSourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
@@ -140,7 +141,7 @@ export function createGameOverPersistScheduler(io: Server) {
             if (opponentId) {
               let profile = rankingProfiles.get(p.me.userId);
               if (!profile) {
-                const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+                const profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
                 profile = profileData?.[0];
                 if (profile) {
                   rankingProfiles.set(p.me.userId, profile);
@@ -153,8 +154,8 @@ export function createGameOverPersistScheduler(io: Server) {
                   playerScore: p.myScore,
                   opponentScore: p.oppScore,
                   gameType: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
-                  ratingBefore: profile.glicko_rating,
-                  rdBefore: profile.glicko_rd,
+                  ratingBefore: profile.glicko_rating ?? 0,
+                  rdBefore: profile.glicko_rd ?? 0,
                   playedAt: rankedPlayedAt,
                   source: { sourceType: 'live_room', sourceMatchId },
                 });

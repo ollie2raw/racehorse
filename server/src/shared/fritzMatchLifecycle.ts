@@ -19,6 +19,7 @@ import {
   type RankedGameSource,
 } from '../ranking/rankedGamePayload';
 import { supabaseFetch } from '../supabaseUtils';
+import type { ProfileRow } from '../supabaseTypes';
 import { writeForfeitActivity } from '../social/activityWriter';
 import { queryVerifiedSinglePlayerMatchByLocalKey } from './verifiedSinglePlayerMatch';
 
@@ -189,7 +190,7 @@ export async function recordPendingFritzDisconnectLoss(
   fritzTier: unknown = 'elite',
   source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null },
 ) {
-  const profileRows = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
+  const profileRows = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
   const profile = profileRows?.[0];
   if (!profile) {
     throw new Error(`Ranking profile not found for user ${userId}`);
@@ -206,8 +207,8 @@ export async function recordPendingFritzDisconnectLoss(
       playerScore: 0,
       opponentScore: 60,
       gameType,
-      ratingBefore: profile.glicko_rating,
-      rdBefore: profile.glicko_rd,
+      ratingBefore: profile.glicko_rating ?? 0,
+      rdBefore: profile.glicko_rd ?? 0,
       playedAt: new Date().toISOString(),
       source: rankedSource,
     })),

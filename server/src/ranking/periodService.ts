@@ -2,7 +2,7 @@
 import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId } from './glicko2';
 import { supabaseFetch } from '../supabaseUtils';
 
-interface Profile {
+export interface Profile {
   id: string;
   username: string;
   glicko_rating: number;

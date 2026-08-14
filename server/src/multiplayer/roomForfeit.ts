@@ -10,9 +10,10 @@ import {
   getRoomRoster,
   requireRoomSessionHandlerDeps,
 } from './roomSession';
-import { processRealtimeMultiplayerGame, type RealtimeRatingResult } from '../ranking/periodService';
+import { processRealtimeMultiplayerGame, type RealtimeRatingResult, type Profile } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
+import type { ProfileRow } from '../supabaseTypes';
 import { childLogger } from '../logger';
 
 const log = childLogger('room-forfeit');
@@ -113,7 +114,7 @@ export async function applyActiveMatchForfeit(
   ) {
     try {
       const [profilesA, profilesB] = await Promise.all([
-        supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${a.userId}`),
+        supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${a.userId}`),
         supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${b.userId}`),
       ]);
       const profileA = profilesA?.[0];
@@ -129,8 +130,8 @@ export async function applyActiveMatchForfeit(
             playerScore: scoreA,
             opponentScore: scoreB,
             gameType: 'multiplayer',
-            ratingBefore: profileA.glicko_rating,
-            rdBefore: profileA.glicko_rd,
+            ratingBefore: profileA.glicko_rating ?? 0,
+            rdBefore: profileA.glicko_rd ?? 0,
             playedAt: nowIso,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
@@ -140,8 +141,8 @@ export async function applyActiveMatchForfeit(
             playerScore: scoreB,
             opponentScore: scoreA,
             gameType: 'multiplayer',
-            ratingBefore: profileB.glicko_rating,
-            rdBefore: profileB.glicko_rd,
+            ratingBefore: profileB.glicko_rating ?? 0,
+            rdBefore: profileB.glicko_rd ?? 0,
             playedAt: nowIso,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
@@ -150,8 +151,8 @@ export async function applyActiveMatchForfeit(
         if (insertA.isNew && insertB.isNew && insertA.game && insertB.game) {
           const ratingScale = forfeitReason === 'disconnect_timeout' ? 0.5 : 1.0;
           ratingResult = await processRealtimeMultiplayerGame({
-            playerAProfile: profileA,
-            playerBProfile: profileB,
+            playerAProfile: profileA as Profile,
+            playerBProfile: profileB as Profile,
             playerAGame: insertA.game,
             playerBGame: insertB.game,
             ratingScale,

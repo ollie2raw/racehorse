@@ -1,5 +1,6 @@
 import type { Application, Request } from 'express';
 import { setPublicShortCache } from './cacheControl';
+import type { ProfileRow } from '../../supabaseTypes';
 
 export type RankingRouteDeps = {
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -42,14 +43,14 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     }
 
     try {
-      const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}`);
+      const profileData = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}`);
       const profile = profileData?.[0];
       if (!profile) {
         res.status(404).json({ error: 'Profile not found' });
         return;
       }
 
-      const allProfiles = await supabaseFetch<any[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc`);
+      const allProfiles = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc`);
       const rankIndex = allProfiles.findIndex((p) => p.id === userId);
 
       const enc = encodeURIComponent(userId);
@@ -104,7 +105,7 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
-      const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
+      const profileData = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
       const profile = profileData?.[0];
       if (!profile) {
         res.status(404).json({ error: 'Profile not found' });
