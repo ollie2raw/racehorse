@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { calculateWelcomeBack, HOME_WELCOME_BACK_PRIORITY } from './homeWelcomeBack';
 import { createHomeSourceState, type HomeCommandCenterModel, type HomeSourceStatus } from './homeTypes';

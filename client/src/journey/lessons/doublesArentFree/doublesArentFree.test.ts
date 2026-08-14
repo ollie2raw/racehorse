@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { analyzeJourneyAuthoredMove } from '../../journeyAuthoredLessonBundle.ts';
 import { DOUBLES_ARENT_FREE_LESSON_DEFINITION } from './doublesArentFreeLesson.ts';

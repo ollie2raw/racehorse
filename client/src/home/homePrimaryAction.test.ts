@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { selectHomePrimaryAction, type HomePrimaryActionContext } from './homePrimaryAction';
 import { createHomeSourceState, type HomeCommandCenterModel, type HomeSourceStatus } from './homeTypes';

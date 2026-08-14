@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { collectPhysicalTilesFromBoard } from './journeyBoardAnalysis.ts';
 import type { BoardState } from '../types.ts';

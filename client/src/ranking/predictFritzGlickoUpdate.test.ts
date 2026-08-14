@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { predictFritzGlickoUpdate } from './predictFritzGlickoUpdate';
 import { FRITZ_STANDARD_ID, FRITZ_ROOKIE_ID } from './glicko2';

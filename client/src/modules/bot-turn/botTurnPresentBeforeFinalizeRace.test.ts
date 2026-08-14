@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Daily Fritz end-of-hand verifier races — present-before-finalize (fixed).
  *

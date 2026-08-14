@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { buildDailyFritzTranscript } from './dailyFritzTranscript';
 import type { MoveEntry } from '../game/moveLogger';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { applyStateUpdateProjection } from './applyProjectionResult';
 import type { MultiplayerRoomSyncScope } from '../multiplayerRoomSyncScope';

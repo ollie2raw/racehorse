@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createFixedBotHand } from '../match/runtime/botEngine.ts';

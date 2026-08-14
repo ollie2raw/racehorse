@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { shouldPersistJoinedRoom } from './joinedRoomPersistPolicy';
 import * as terminalMatches from '../../tournament/terminalMatches';

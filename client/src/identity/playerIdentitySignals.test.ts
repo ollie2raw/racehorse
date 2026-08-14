@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createEmptyPlayerIdentityModel } from './playerIdentityNormalization';
 import { derivePlayerIdentitySignals, MIN_FRITZ_COMPARISON_GAMES } from './playerIdentitySignals';

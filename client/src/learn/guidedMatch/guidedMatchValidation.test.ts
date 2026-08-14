@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { validateGuidedMatchLesson } from './guidedMatchValidation';
 import type { GuidedMatchLesson } from './guidedMatchTypes';

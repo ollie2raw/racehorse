@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createEmptyPlayerIdentityModel } from './playerIdentityNormalization';
 import { derivePlayerIdentity, derivePlayerIdentityMilestones } from './playerIdentityDerivation';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { getAccountedTilesForPip, getCoreJourneyTileSet, getTilesContainingPip, getUnseenTileCountForPip, validateKnownTiles } from '../../journeyCounting.ts';
 import { COUNTING_WHATS_LEFT_LESSON_DEFINITION } from './countingWhatsLeftLesson.ts';

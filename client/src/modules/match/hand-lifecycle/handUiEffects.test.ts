@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { createBotMatch, type BotActionResult } from '../runtime/botEngine.ts';
 import { applyBotActionUiEffects } from './handUiEffects.ts';

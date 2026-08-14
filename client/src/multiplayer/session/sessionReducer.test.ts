@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { reduceSession } from './sessionReducer';
 import type { SessionSnapshot } from './sessionTypes';

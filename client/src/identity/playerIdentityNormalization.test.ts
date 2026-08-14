@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { applyPublicProfile, createEmptyPlayerIdentityModel, deriveWinRate, normalizeRecentForm } from './playerIdentityNormalization';
 import { applyPersonalInsights } from './playerIdentityNormalization';

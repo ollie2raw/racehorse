@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createBotMatch } from '../../botEngine.ts';
 import { buildPreGameDrawHudContent, selectTurnLabel } from './botMatchHudLabels.ts';

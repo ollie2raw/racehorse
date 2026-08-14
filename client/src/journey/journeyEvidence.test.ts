@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { getAllJourneyContentDescriptors } from './journeyContentResolver';
 import { JOURNEY_CHAPTER_DEFINITIONS } from './journeyChapters';

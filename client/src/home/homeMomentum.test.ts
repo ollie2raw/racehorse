@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { calculateHomeMomentum, HOME_MOMENTUM_WEIGHTS } from './homeMomentum';
 import { createHomeSourceState, type HomeCommandCenterModel, type HomeSourceStatus } from './homeTypes';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
 import { createPuzzleMatchState } from './validator';
 import type { CuratedDailyPuzzle } from './types';

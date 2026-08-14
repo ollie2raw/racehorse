@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { getPlacementClickBlockReason } from './playerPlacementGuards.ts';

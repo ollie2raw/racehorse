@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { GUIDED_LESSON_COACHING_BY_VISIBLE_STEP, applyGuidedLessonCoachingText } from './guidedLessonNotes';
 

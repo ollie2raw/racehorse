@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createBotMatch } from '../runtime/botEngine.ts';
 import { buildHandRevealFromResult } from './handRevealPayload.ts';

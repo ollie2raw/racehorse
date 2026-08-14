@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import {
   BOT_CHAIN_CONTINUE_DELAY_MS,

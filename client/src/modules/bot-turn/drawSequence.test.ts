@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBotMatch, type BotMatchState } from '../match/runtime/botEngine.ts';
 import { createRunDrawSequence } from './drawSequence.ts';

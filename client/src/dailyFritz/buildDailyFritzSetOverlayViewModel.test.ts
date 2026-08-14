@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { buildDailyFritzSetOverlayViewModel } from './buildDailyFritzSetOverlayViewModel';
 import type { DailyFritzSetResult, DailyFritzSetGameResult } from './api';

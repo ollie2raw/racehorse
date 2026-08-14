@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { FRITZ_ROOKIE_ID, FRITZ_STANDARD_ID } from '../bot/fritzConfig';
 import {

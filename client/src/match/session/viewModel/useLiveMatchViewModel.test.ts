@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import type { GameState, Move, Tile } from '../../../types';
 import { deriveLiveMatchViewModel } from './useLiveMatchViewModel';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { compareMovesFeedback } from './feedback';
 import type { BotChoice } from '../bot/botHeuristics';

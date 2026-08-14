@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import type { Tile } from '../../../types.ts';
 import { computeNormalHandRows } from './botMatchHandLayout.ts';

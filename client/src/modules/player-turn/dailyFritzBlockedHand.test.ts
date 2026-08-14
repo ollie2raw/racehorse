@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { passTurn, type BotMatchState } from '../match/runtime/botEngine.ts';
 import {

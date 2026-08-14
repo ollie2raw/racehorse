@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { buildBotTurnScheduleKey } from './useBotTurnEffect.ts';
 import { shouldScheduleBotTurn, shouldContinueBotTurnAtTimer } from './botTurnGuards.ts';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { buildHomeActivityTimeline, HOME_ACTIVITY_EVENT_PRIORITIES } from './homeActivityTimeline';
 import { createHomeSourceState, type HomeCommandCenterModel, type HomeSourceStatus } from './homeTypes';

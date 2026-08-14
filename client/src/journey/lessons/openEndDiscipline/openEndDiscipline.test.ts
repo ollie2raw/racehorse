@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { OPEN_END_DISCIPLINE_LESSON_DEFINITION } from './openEndDisciplineLesson.ts';
 import { evaluateOpenEndDisciplineDecision } from './openEndDisciplineEvaluator.ts';
