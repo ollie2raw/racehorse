@@ -1,4 +1,5 @@
 import type { Application, Request } from 'express';
+import type { LeagueMemberRow, FixtureRow, LeagueRow } from '../../supabaseTypes';
 import { assignPlayerToLeague } from '../../league/service';
 import { generateLeagueFixtures } from '../../league/schedule';
 import {
@@ -62,7 +63,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
-      const membershipRows = await supabaseFetch<any[]>(
+      const membershipRows = await supabaseFetch<LeagueMemberRow[]>(
         `/rest/v1/league_members?select=id&league_id=eq.${leagueId}&player_user_id=eq.${encodeURIComponent(authenticatedUserId)}&limit=1`,
       );
       if (!membershipRows?.[0]?.id) {
@@ -120,7 +121,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         return;
       }
 
-      const fixtureRows = await supabaseFetch<any[]>(
+      const fixtureRows = await supabaseFetch<FixtureRow[]>(
         `/rest/v1/fixtures?select=id,league_id,season,home_member_id,away_member_id,status&id=eq.${fixtureId}&limit=1`,
       );
       const fixture = fixtureRows?.[0];
@@ -132,7 +133,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         res.status(409).json({ error: `Fixture ${fixtureId} is already ${fixture.status}.` });
         return;
       }
-      const leagueRows = await supabaseFetch<any[]>(
+      const leagueRows = await supabaseFetch<LeagueRow[]>(
         `/rest/v1/leagues?select=id,status&id=eq.${fixture.league_id}&limit=1`,
       );
       const league = leagueRows?.[0];
@@ -141,7 +142,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         return;
       }
 
-      const membershipRows = await supabaseFetch<any[]>(
+      const membershipRows = await supabaseFetch<LeagueMemberRow[]>(
         `/rest/v1/league_members?select=id,player_user_id,member_type&id=in.("${fixture.home_member_id}","${fixture.away_member_id}")`,
       );
       const homeMember = membershipRows.find((member) => member?.id === fixture.home_member_id) ?? null;
@@ -349,7 +350,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         return;
       }
 
-      const fixtureRows = await supabaseFetch<any[]>(
+      const fixtureRows = await supabaseFetch<FixtureRow[]>(
         `/rest/v1/fixtures?select=id,league_id,status,home_member_id,away_member_id,live_room_code&id=eq.${fixtureId}&limit=1`,
       );
       const fixture = fixtureRows?.[0];
@@ -361,7 +362,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         res.status(409).json({ error: `Fixture ${fixtureId} is already ${fixture.status}.` });
         return;
       }
-      const leagueRows = await supabaseFetch<any[]>(
+      const leagueRows = await supabaseFetch<LeagueRow[]>(
         `/rest/v1/leagues?select=id,status&id=eq.${fixture.league_id}&limit=1`,
       );
       const league = leagueRows?.[0];
@@ -370,7 +371,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         return;
       }
 
-      const membershipRows = await supabaseFetch<any[]>(
+      const membershipRows = await supabaseFetch<LeagueMemberRow[]>(
         `/rest/v1/league_members?select=id,player_user_id,member_type&id=in.("${fixture.home_member_id}","${fixture.away_member_id}")`,
       );
       const homeMember = membershipRows.find((member) => member?.id === fixture.home_member_id) ?? null;

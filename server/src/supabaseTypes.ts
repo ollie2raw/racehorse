@@ -23,3 +23,42 @@ export type RankedGameRow = {
   delta: number | null;
   game_type: string | null;
 };
+
+export type BotMatchPendingRow = {
+  id: string;
+  user_id: string;
+  room_code: string | null;
+  fritz_tier: string | null;
+  started_at: string;
+  resolved: boolean;
+  local_match_id: string | null;
+};
+
+export type LeagueMemberRow = {
+  id: string;
+  league_id: string;
+  player_user_id: string;
+  seed: number | null;
+  joined_at: string;
+  member_type: string | null;
+};
+
+export type FixtureRow = {
+  id: string;
+  league_id: string;
+  matchday: number;
+  home_member_id: string;
+  away_member_id: string;
+  status: string;
+  home_score: number | null;
+  away_score: number | null;
+  live_room_code: string | null;
+  played_at: string | null;
+};
+
+export type LeagueRow = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+};

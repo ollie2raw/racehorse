@@ -1,4 +1,5 @@
 import type { Application, Request } from 'express';
+import type { BotMatchPendingRow } from '../../supabaseTypes';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 
 export type BotMatchesRouteDeps = {
@@ -46,7 +47,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
 
     try {
       const threshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const staleRows = await supabaseFetch<any[]>(
+      const staleRows = await supabaseFetch<BotMatchPendingRow[]>(
         `/rest/v1/bot_match_pending?select=id,user_id,room_code,fritz_tier,started_at,resolved&resolved=eq.false&started_at=lt.${encodeURIComponent(threshold)}&order=started_at.asc`,
       );
 
@@ -105,7 +106,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
         fritzTier,
       });
 
-      const existing = await supabaseFetch<any[]>(
+      const existing = await supabaseFetch<BotMatchPendingRow[]>(
         `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&limit=1`,
       );
 
@@ -186,7 +187,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
       }
       await abandonVerifiedSinglePlayerMatch(userId, localMatchId);
       const roomCode = `local:${localMatchId}`;
-      const pendingRows = await supabaseFetch<any[]>(
+      const pendingRows = await supabaseFetch<BotMatchPendingRow[]>(
         `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
       );
       const pending = pendingRows?.[0];

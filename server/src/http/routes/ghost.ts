@@ -1,4 +1,5 @@
 import type { Application, Request } from 'express';
+import type { BotMatchPendingRow } from '../../supabaseTypes';
 import {
   completeGhostGame,
   getGhostProfileSummary,

@@ -292,6 +292,7 @@ import {
 } from './http/stores/dailyFritzAuthorityReadiness';
 import { isDailyFritzTransactionalAuthorityEnabled } from './dailyFritzAuthorityFeature';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
+import type { BotMatchPendingRow } from './supabaseTypes';
 import {
   listCompletedDailyFritzDatesForUser,
   listCompletedDailyPuzzleLadderDatesForUser,
@@ -752,7 +753,7 @@ io.on('connection', (socket: Socket) => {
       void (async () => {
         let fritzTier: string | null = null;
         try {
-          const pendingRows = await supabaseFetch<any[]>(
+          const pendingRows = await supabaseFetch<BotMatchPendingRow[]>(
             `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${verifiedUserId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
           );
           const pending = pendingRows?.[0];
