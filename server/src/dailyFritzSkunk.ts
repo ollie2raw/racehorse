@@ -61,14 +61,6 @@ export function getDailyFritzSkunkWinRank(setResult: DailyFritzSetResult): numbe
 export function getDailyFritzPublishedSetScore(
   setResult: DailyFritzSetResult,
 ): { finalScore: number; opponentScore: number } {
-  if (
-    setResult.instantSkunk &&
-    setResult.setWinner === 'player' &&
-    setResult.skunkBy === 'player' &&
-    setResult.skunkGameNumber === 1
-  ) {
-    return { finalScore: 0, opponentScore: 1 };
-  }
   return {
     finalScore: setResult.playerGamesWon,
     opponentScore: setResult.fritzGamesWon,

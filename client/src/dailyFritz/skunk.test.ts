@@ -221,7 +221,7 @@ describe('skunk detection and messaging', () => {
       const copy = getSkunkOverlayCopy(setResult, game);
       expect(copy).not.toBeNull();
       expect(copy!.headline).toBe('SKUNK');
-      expect(copy!.subheadline).toContain('0–1');
+      expect(copy!.subheadline).toContain('2–0');
       expect(copy!.primaryTone).toBe('success');
     });
 
@@ -257,7 +257,7 @@ describe('skunk detection and messaging', () => {
   });
 
   describe('getDailyFritzPublishedSetScore', () => {
-    it('publishes a game-1 player skunk as 0–1', () => {
+    it('publishes a game-1 player skunk as 2–0', () => {
       expect(getDailyFritzPublishedSetScore({
         version: 2,
         format: 'best_of_3',
@@ -270,7 +270,7 @@ describe('skunk detection and messaging', () => {
         instantSkunk: true,
         skunkGameNumber: 1,
         skunkBy: 'player',
-      })).toEqual({ finalScore: 0, opponentScore: 1, label: '0–1' });
+      })).toEqual({ finalScore: 2, opponentScore: 0, label: '2–0' });
     });
 
     it('keeps a game-2 split skunk as 1–1', () => {

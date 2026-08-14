@@ -105,7 +105,7 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
     expect(vm.primaryLabel).toBe('View Leaderboard');expect(vm.secondaryLabel).toBeNull();expect(vm.tertiaryLabel).toBe('Return Home');
   });
 
-  it('shows the published 0–1 set score for a game-1 player skunk', () => {
+  it('shows the published 2–0 set score for a game-1 player skunk', () => {
     const skunkGame = { ...completedGame, fritzScore: 20, pointDiff: 40, skunk: true, skunkBy: 'player' as const };
     const vm = buildDailyFritzSetOverlayViewModel(
       {
@@ -129,7 +129,7 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
       {},
     );
 
-    expect(vm.setScoreValue).toBe('0–1');
-    expect(vm.subheadline).toContain('0–1');
+    expect(vm.setScoreValue).toBe('2–0');
+    expect(vm.subheadline).toContain('2–0');
   });
 });

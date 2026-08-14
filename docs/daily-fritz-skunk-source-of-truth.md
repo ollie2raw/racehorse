@@ -14,7 +14,7 @@ Only a skunk in **game 1** or **game 2** can end the full set early by counting 
 
 | Scenario | Set result | Notes |
 |----------|------------|--------|
-| Player skunks Fritz in **game 1** | Player wins set immediately; published score **0–1** | `instantSkunk: true`; internal clinch remains 2–0 |
+| Player skunks Fritz in **game 1** | Player wins set immediately; published score **2–0** | `instantSkunk: true`; skunk counts as two game wins |
 | Fritz skunks player in **game 1** | Fritz wins set **0–2** immediately | `instantSkunk: true` |
 | Player skunks Fritz in **game 2** after winning game 1 | Player wins set **2–0** (two games played) | Two real wins; G2 skunk is metadata |
 | Player skunks Fritz in **game 2** after losing game 1 (1–1) | Player wins set immediately | G2 skunk ends set at **1–1 games played** |
@@ -47,7 +47,7 @@ Each non-skunk win counts as **one** game toward the best-of-3. First side to **
 
 ## QA checklist
 
-- [ ] G1 player skunk → internal clinch 2–0, published score 0–1, no game 2
+- [ ] G1 player skunk → set 2–0, no game 2
 - [ ] G1 Fritz skunk → set 0–2, no game 2
 - [ ] G1 player win, G2 Fritz skunk (player &lt; 30) → Fritz wins set immediately
 - [ ] G1 Fritz win, G2 player skunk (Fritz &lt; 30) → player wins set immediately at 1–1

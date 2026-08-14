@@ -17,16 +17,10 @@ export type DailyFritzSkunkSide = 'player' | 'fritz';
 export function getDailyFritzPublishedSetScore(
   setResult: DailyFritzSetResult,
 ): { finalScore: number; opponentScore: number; label: string } {
-  const score =
-    setResult.instantSkunk &&
-    setResult.setWinner === 'player' &&
-    setResult.skunkBy === 'player' &&
-    setResult.skunkGameNumber === 1
-      ? { finalScore: 0, opponentScore: 1 }
-      : {
-          finalScore: setResult.playerGamesWon,
-          opponentScore: setResult.fritzGamesWon,
-        };
+  const score = {
+    finalScore: setResult.playerGamesWon,
+    opponentScore: setResult.fritzGamesWon,
+  };
   return { ...score, label: `${score.finalScore}–${score.opponentScore}` };
 }
 
@@ -115,7 +109,7 @@ export function getSkunkOverlayCopy(
     return {
       eyebrow: 'Daily Fritz',
       headline: 'SKUNK',
-      subheadline: 'You beat Fritz before he reached 30. Set won 0–1.',
+      subheadline: 'You beat Fritz before he reached 30. Set won 2–0.',
       primaryTone: 'success',
     };
   }

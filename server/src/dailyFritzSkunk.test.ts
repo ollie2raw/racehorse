@@ -400,12 +400,12 @@ describe('skunk leaderboard ranks', () => {
 });
 
 describe('published skunk set score', () => {
-  it('publishes a player game-1 skunk as 0-1 without changing the mechanical 2-0 clinch', () => {
+  it('publishes a player game-1 skunk as 2-0 to match the mechanical clinch', () => {
     const set = recordGame(emptySet(), 1, 60, 20);
 
     expect(set.playerGamesWon).toBe(2);
     expect(set.fritzGamesWon).toBe(0);
-    expect(getDailyFritzPublishedSetScore(set)).toEqual({ finalScore: 0, opponentScore: 1 });
+    expect(getDailyFritzPublishedSetScore(set)).toEqual({ finalScore: 2, opponentScore: 0 });
   });
 
   it('keeps a game-2 split skunk published as 1-1', () => {
