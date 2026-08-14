@@ -13,7 +13,7 @@ import {
 import { DominoTile } from './DominoTile';
 import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
 import { tileEquals } from '../game/tileUtils';
-import { isDouble } from '../bot/botEngine';
+import { isDouble } from '../game/openEndsGeometry';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { isRenderableNonNullBoard } from '../multiplayer/boardSnapshotGuards';
 import {

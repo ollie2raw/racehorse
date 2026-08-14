@@ -30,7 +30,7 @@ export interface OpenEndsContribution {
   reason: string;
 }
 
-function isDouble(tile: Tile): boolean {
+export function isDouble(tile: Tile): boolean {
   return tile.low === tile.high;
 }
 

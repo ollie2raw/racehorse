@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import GameReviewer from '../analyzer/GameReviewer';
+const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import {
@@ -1031,14 +1031,16 @@ function MultiplayerGameShellComponent({
   void selectedTile;
   void youRef;
 
-  return (
-    <GameReviewer
-      open={analyzerOpen}
-      onClose={() => setAnalyzerOpen(false)}
-      analysis={currentAnalysis}
-      title="Game Review"
-    />
-  );
+  return analyzerOpen ? (
+    <React.Suspense fallback={null}>
+      <GameReviewer
+        open={analyzerOpen}
+        onClose={() => setAnalyzerOpen(false)}
+        analysis={currentAnalysis}
+        title="Game Review"
+      />
+    </React.Suspense>
+  ) : null;
 }
 
 export const MultiplayerGameShell = React.memo(MultiplayerGameShellComponent);
