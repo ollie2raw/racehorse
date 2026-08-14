@@ -1,5 +1,6 @@
 import type { Application, Request } from 'express';
 import type { LeagueMemberRow, FixtureRow, LeagueRow } from '../../supabaseTypes';
+import { setPrivateShortCache } from './cacheControl';
 import { assignPlayerToLeague } from '../../league/service';
 import { generateLeagueFixtures } from '../../league/schedule';
 import {
@@ -301,6 +302,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
         const opponentUserId = opponentMember?.player_user_id ?? null;
         state.todaysOpponent.online = Boolean(opponentUserId && socketsByUserId.get(opponentUserId)?.size);
       }
+      setPrivateShortCache(res, 30);
       res.json({ ok: true, state });
     } catch (error) {
       res.status(500).json({
@@ -328,6 +330,7 @@ export function registerLeagueRoutes(app: Application, deps: LeagueRouteDeps): v
       }
 
       const history = await getLeagueHistoryForPlayer(userId);
+      setPrivateShortCache(res, 60);
       res.json({ ok: true, history });
     } catch (error) {
       res.status(500).json({

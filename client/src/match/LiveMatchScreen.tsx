@@ -439,6 +439,20 @@ export function LiveMatchScreen({
     prevOpponentScore.current = opponentScore;
   }, [myScore, opponentScore, isHandActive, opponentName]);
 
+  const prevHandCount = useRef<number | null>(null);
+  const [handAnnouncement, setHandAnnouncement] = useState('');
+  useEffect(() => {
+    const count = myHand.length;
+    if (prevHandCount.current !== null && prevHandCount.current !== count) {
+      const drawn = count > prevHandCount.current;
+      setHandAnnouncement(drawn
+        ? `Drew a tile. You now have ${count} tile${count !== 1 ? 's' : ''} in hand.`
+        : `You now have ${count} tile${count !== 1 ? 's' : ''} in hand.`
+      );
+    }
+    prevHandCount.current = count;
+  }, [myHand.length]);
+
   if (!visible || !state) {
     return (
       <>
@@ -483,6 +497,15 @@ export function LiveMatchScreen({
             style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
           >
             {scoreAnnouncement}
+          </div>
+          {/* Screen reader live region — announces hand tile count changes (draw events) */}
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+          >
+            {handAnnouncement}
           </div>
           <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
             <style>{`

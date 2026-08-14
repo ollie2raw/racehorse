@@ -21,6 +21,7 @@
   --accent-green:  #34d399;
   --accent-amber:  #f59e0b;
   --accent-red:    #F24747;   /* lifted from #ef4444 — achieves 4.51:1 AA on bg-primary */
+  --accent-steel:  #b8c7da;   /* muted blue-grey — social/neutral accents */
 
   /* ── Glass surface (the standard Racehorse panel) ─ */
   --glass-bg:      rgba(10, 16, 28, 0.6);

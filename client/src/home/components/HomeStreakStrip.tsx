@@ -72,7 +72,7 @@ export function HomeStreakStrip({ summary, loading = false }: HomeStreakStripPro
   return (
     <section className="streak-strip" aria-label="Daily streak status">
       <div className="streak-identity">
-        <div className="streak-flame-wrap" style={{ borderColor: currentStreak > 0 ? '#24541f' : 'rgba(255,255,255,0.1)' }}>
+        <div className="streak-flame-wrap" style={{ borderColor: currentStreak > 0 ? 'rgba(36, 84, 31, 0.9)' : 'var(--border-subtle)' }}>
           <img src="/daystreak.webp" alt="" className="streak-flame-icon" />
         </div>
         <div>
@@ -94,13 +94,13 @@ export function HomeStreakStrip({ summary, loading = false }: HomeStreakStripPro
             <div key={day.dateKey} className="streak-day">
               <span
                 className="day-label"
-                style={day.isToday && !day.complete ? { color: '#A77CFF' } : undefined}
+                style={day.isToday && !day.complete ? { color: 'var(--tier-master)' } : undefined}
               >
                 {day.label}
               </span>
               <div className={`day-dot ${dotClass}`}>
                 {day.complete && (
-                  <Check className="day-check-icon" stroke="#67D957" strokeWidth={3} />
+                  <Check className="day-check-icon" stroke="var(--tier-rookie)" strokeWidth={3} />
                 )}
                 {day.isToday && !day.complete && (
                   <div className="day-dot-today-inner" />

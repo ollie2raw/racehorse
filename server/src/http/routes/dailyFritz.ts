@@ -30,6 +30,7 @@ import { isAdminSecret } from '../../platform/auth/adminSecret';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { writeDailyFritzGameActivity } from '../../social/activityWriter';
 import { supabaseFetch } from '../../supabaseUtils';
+import { setPrivateShortCache, setPublicShortCache } from './cacheControl';
 import { getFritzIdentityForTier } from '../../shared/fritzMatchLifecycle';
 import { getPacificDateKey } from '../../shared/pacificDate';
 import { buildDailyFritzChallengeId, DAILY_FRITZ_RULES_VERSION, DAILY_FRITZ_SEED_VERSION, DAILY_FRITZ_TIME_ZONE } from '../../dailyFritzIdentity';
@@ -322,6 +323,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       const userId = await getAuthenticatedUserId(req);
       if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
       const attempts = await listDailyFritzAttemptsForUser(userId, Number(req.query.limit ?? 10));
+      setPrivateShortCache(res, 60);
       res.json({ ok: true, results: attempts.map((attempt) => ({ challenge_date: attempt.runDate, player_score: attempt.finalScore ?? 0, fritz_score: attempt.opponentScore ?? 0, won: attempt.won === true, completed_at: attempt.completedAt, verification_status: getDailyFritzVerificationStatus(attempt.result) })) });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Daily Fritz history is unavailable.' });
@@ -2002,6 +2004,7 @@ export function registerDailyFritzRoutes(app: Application): void {
       return;
     }
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
+    setPublicShortCache(res, 60, 300);
     res.json({
       ok: true,
       run_date: runDate,

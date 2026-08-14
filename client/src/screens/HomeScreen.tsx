@@ -34,17 +34,26 @@ type AppMode =
   | 'feed'
   | 'live';
 
+// These reference CSS custom property values from tokens.css — keep in sync if tokens change.
+const TOKEN = {
+  accentBlue:   'var(--accent-blue)',
+  tierMaster:   'var(--tier-master)',
+  accentAmber:  'var(--accent-amber)',
+  accentSteel:  'var(--accent-steel)',
+  accentTeal:   'var(--accent-teal)',
+} as const;
+
 const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
-  { label: 'Multiplayer', color: '#3FA7FF', icon: 'users', mode: 'multiplayer' },
-  { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
-  { label: 'Tournament', color: '#F5A524', icon: 'trophy', mode: 'tournament' },
-  { label: 'Social', color: '#B8C7DA', icon: 'medal', mode: 'feed' },
-  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
+  { label: 'Multiplayer', color: TOKEN.accentBlue, icon: 'users', mode: 'multiplayer' },
+  { label: 'Single Player', color: TOKEN.tierMaster, icon: 'robot', mode: 'singlePlayerHub' },
+  { label: 'Tournament', color: TOKEN.accentAmber, icon: 'trophy', mode: 'tournament' },
+  { label: 'Social', color: TOKEN.accentSteel, icon: 'medal', mode: 'feed' },
+  { label: 'Learn', color: TOKEN.accentTeal, icon: 'cap', mode: 'learn' },
 ];
 
 export function getHomeTabs(spectatorEnabled = isSpectatorModeEnabled()) {
   return spectatorEnabled
-    ? [{ label: 'Live Now', color: '#58A6FF', icon: 'users' as const, mode: 'live' as const }, ...coreTabs]
+    ? [{ label: 'Live Now', color: TOKEN.accentBlue, icon: 'users' as const, mode: 'live' as const }, ...coreTabs]
     : coreTabs;
 }
 
@@ -121,8 +130,8 @@ function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon
 
 function StatusRow({
   status,
-  color = '#22C55E',
-  accentColor = '#3BE26F',
+  color = 'var(--accent-green)',
+  accentColor = 'var(--tier-rookie)',
 }: {
   status: 'started' | 'none' | 'unknown';
   color?: string;
@@ -144,7 +153,7 @@ function StatusRow({
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20">
           <div className="h-2 w-2 rounded-full bg-white/25" />
         </span>
-        <span className="text-[#777287]">Status unavailable</span>
+        <span style={{ color: 'var(--text-muted)' }}>Status unavailable</span>
       </div>
     );
   }
@@ -258,8 +267,8 @@ export default function RacehorseHomeScreen({
                   {!fritzCompleted && <div className="mt-2">
                     <StatusRow
                       status={displayFritzStatus === 'completed' ? 'none' : displayFritzStatus}
-                      color="#E7B64A"
-                      accentColor="#FFD76A"
+                      color="var(--tier-elite)"
+                      accentColor="var(--tier-elite)"
                     />
                   </div>}
                   <Button
@@ -269,7 +278,7 @@ export default function RacehorseHomeScreen({
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
                     <span>{fritzCompleted ? 'View Results' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
-                    <span style={{ fontSize: 22, lineHeight: 1, color: '#FFD76A', opacity: 0.9 }}>›</span>
+                    <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--tier-elite)', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>
               </div>
@@ -292,8 +301,8 @@ export default function RacehorseHomeScreen({
                   {!puzzleCompleted && <div className="mt-2">
                     <StatusRow
                       status={puzzleStatus === 'completed' ? 'none' : puzzleStatus}
-                      color="#58A6FF"
-                      accentColor="#68B3FF"
+                      color="var(--accent-blue)"
+                      accentColor="var(--accent-blue)"
                     />
                   </div>}
                   <Button
@@ -303,7 +312,7 @@ export default function RacehorseHomeScreen({
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
                     <span>{puzzleCompleted ? 'View Results' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>
-                    <span style={{ fontSize: 22, lineHeight: 1, color: '#68B3FF', opacity: 0.9 }}>›</span>
+                    <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--accent-blue)', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>
               </div>

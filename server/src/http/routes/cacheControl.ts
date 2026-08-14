@@ -4,6 +4,10 @@ export function setPublicShortCache(res: Response, maxAgeSeconds = 60, swrSecond
   res.set('Cache-Control', `public, max-age=${maxAgeSeconds}, stale-while-revalidate=${swrSeconds}`);
 }
 
+export function setPrivateShortCache(res: Response, maxAgeSeconds = 30): void {
+  res.set('Cache-Control', `private, max-age=${maxAgeSeconds}, stale-while-revalidate=60`);
+}
+
 export function setPublicDailyCache(res: Response): void {
   // Good for data that changes once per day — 5-min fresh, serve stale for up to 1 hr while revalidating.
   res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
