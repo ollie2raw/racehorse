@@ -1,3 +1,9 @@
+import {
+  comparePregameDrawTiles as comparePreGameDrawTiles,
+  generateDoubleSixSet,
+  shuffleTiles,
+  tilePipSum,
+} from '@racehorse/game-core';
 import type { Tile } from '../../types.ts';
 
 export type PreGameDrawPlayer = 'you' | 'bot';
@@ -70,35 +76,7 @@ function tileKey(tile: Tile): string {
   return toPreGameDrawTileId(tile)!;
 }
 
-export function generateDoubleSixSet(): Tile[] {
-  const tiles: Tile[] = [];
-  for (let high = 0; high <= 6; high++) {
-    for (let low = 0; low <= high; low++) {
-      tiles.push({ low, high });
-    }
-  }
-  return tiles;
-}
-
-export function shuffleTiles(deck: readonly Tile[], rng: Rng = Math.random): Tile[] {
-  const out = deck.map((tile) => ({ low: tile.low, high: tile.high }));
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-export function tilePipSum(tile: Tile): number {
-  return tile.low + tile.high;
-}
-
-/** Compare draw tiles by total pip value, then by the higher individual pip. */
-export function comparePreGameDrawTiles(a: Tile, b: Tile): number {
-  const sumDifference = tilePipSum(a) - tilePipSum(b);
-  if (sumDifference !== 0) return sumDifference;
-  return Math.max(a.low, a.high) - Math.max(b.low, b.high);
-}
+export { comparePreGameDrawTiles, generateDoubleSixSet, shuffleTiles, tilePipSum };
 
 export function initPreGameDraw(
   deck: readonly Tile[] = generateDoubleSixSet(),

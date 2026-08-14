@@ -1,3 +1,4 @@
+export * from './botHeuristics';
 export * from './commands';
 export * from './dailyFritzTranscript';
 export * from './dailyFritzAuthority';
@@ -5,6 +6,7 @@ export * from './engine';
 export * from './fritzPolicy';
 export * from './invariants';
 export * from './openEndsGeometry';
+export * from './pregameDraw';
 export * from './random';
 export * from './scoring';
 export * from './types';
