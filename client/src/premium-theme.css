@@ -13,8 +13,8 @@ body, #root {
 .screen.lobby-screen.mode-home-screen {
   font-family: var(--font-body) !important;
   color: var(--text-primary) !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -1010,7 +1010,7 @@ button:hover:not(:disabled) {
   position: relative;
   z-index: 1;
   width: 100%;
-  min-height: calc(100vh - 16px);
+  min-height: calc(100dvh - 16px);
   max-width: none;
   border-radius: 0;
   border: none;
@@ -3600,7 +3600,7 @@ button:hover:not(:disabled) {
 .game-over-card {
   position: relative;
   width: min(720px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   border: 1px solid var(--border-light);
   background: var(--glass-bg);
   backdrop-filter: blur(calc(var(--glass-blur) - 4px));
@@ -3970,7 +3970,7 @@ button:hover:not(:disabled) {
     padding: 16px;
     width: min(100%, calc(100vw - 20px));
     min-height: auto;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
     overflow: auto;
   }
 

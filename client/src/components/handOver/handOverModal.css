@@ -20,7 +20,7 @@
   --pvf-radius-sm: 12px;
 
   width: min(720px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   margin: 0;
   padding: 0;
   gap: 0;
@@ -516,7 +516,7 @@
 
 @media (max-width: 640px), (max-height: 720px) {
   .hand-over-modal.game-over-card {
-    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
     border-radius: 16px;
   }
 
