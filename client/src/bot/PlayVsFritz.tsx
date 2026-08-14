@@ -321,7 +321,7 @@ export default function PlayVsFritz({
                       }
                     }}
                   >
-                    <div className="pvf-slider-dot" style={{ background: difficulty === id ? dynamicColor : undefined, boxShadow: difficulty === id ? `0 0 0 2px #040b17, 0 0 0 4px ${dynamicColor}` : undefined }} />
+                    <div className="pvf-slider-dot" style={{ background: difficulty === id ? dynamicColor : undefined, boxShadow: difficulty === id ? `0 0 0 2px var(--bg-obsidian), 0 0 0 4px ${dynamicColor}` : undefined }} />
                     <div className="pvf-slider-label" style={{ color: difficulty === id ? dynamicColor : undefined }}>{roleLabel}</div>
                   </div>
                 ))}
@@ -350,7 +350,7 @@ export default function PlayVsFritz({
                     <IconComp size={24} />
                   </div>
                   <div className="pvf-deal-content">
-                    <div className="pvf-deal-label" style={{ color: dealSize === id ? dynamicColor : '#fff' }}>{label}</div>
+                    <div className="pvf-deal-label" style={{ color: dealSize === id ? dynamicColor : 'var(--text-primary)' }}>{label}</div>
                     <div className="pvf-deal-sub">{sublabel}</div>
                   </div>
                 </div>

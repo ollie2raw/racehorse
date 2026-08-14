@@ -206,7 +206,7 @@ export default function WeeklyStatsScreen({
                       }}
                     >
                       <span style={{ fontSize: '0.98rem', color: 'rgba(191,213,223,0.88)', fontWeight: 700 }}>{row.label}</span>
-                      <strong style={{ fontSize: '1.56rem', color: '#f8fafc' }}>{row.value}</strong>
+                      <strong style={{ fontSize: '1.56rem', color: 'var(--text-primary)' }}>{row.value}</strong>
                     </div>
                   ))}
                 </div>

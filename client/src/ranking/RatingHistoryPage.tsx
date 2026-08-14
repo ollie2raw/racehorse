@@ -245,7 +245,7 @@ export default function RatingHistoryPage({
                   <Line
                     type="monotone"
                     dataKey="multiplayerRating"
-                    stroke="#34d399"
+                    stroke="var(--accent-green)"
                     strokeWidth={2.5}
                     dot={false}
                     connectNulls={false}
@@ -254,14 +254,14 @@ export default function RatingHistoryPage({
                   <Line
                     type="monotone"
                     dataKey="fritzRating"
-                    stroke="#60a5fa"
+                    stroke="var(--tier-standard)"
                     strokeWidth={2.5}
                     dot={false}
                     connectNulls={false}
                     name="Fritz"
                   />
-                  <Scatter dataKey="multiplayerPoint" fill="#34d399" name="Multiplayer games" />
-                  <Scatter dataKey="fritzPoint" fill="#60a5fa" name="Fritz games" />
+                  <Scatter dataKey="multiplayerPoint" fill="var(--accent-green)" name="Multiplayer games" />
+                  <Scatter dataKey="fritzPoint" fill="var(--tier-standard)" name="Fritz games" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

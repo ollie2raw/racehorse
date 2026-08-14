@@ -253,7 +253,7 @@ function DebugPanel({ eval: evalResult, packet, phase, turnIndex }: DebugPanelPr
                     {' '}[{cm.category}]
                     {' '}<b>Δ:</b> {cm.scoreDeltaFromBest.toFixed(1)}
                     {cm.isEquivalentToBest && (
-                      <span style={{ color: '#4a9' }}> ≡EQUIV</span>
+                      <span style={{ color: 'var(--accent-teal)' }}> ≡EQUIV</span>
                     )}
                     {' '}<b>reason:</b> {cm.primaryReason}
                     {cm.secondaryReason && (
@@ -278,7 +278,7 @@ function DebugPanel({ eval: evalResult, packet, phase, turnIndex }: DebugPanelPr
             const renderSignals = (label: string, mv: typeof evalResult.bestMove) => {
               const s = mv.debugSignals;
               return (
-                <div style={{ borderTop: '1px solid #444', paddingTop: 4, marginTop: 4 }}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 4, marginTop: 4 }}>
                   <b>{label} signals:</b>
                   <div>
                     <b>chain:</b>

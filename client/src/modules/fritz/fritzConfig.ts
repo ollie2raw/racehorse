@@ -23,7 +23,7 @@ export const FRITZ_TIERS = {
     description: 'Forgiving learning opponent — same shuffle and draw as every tier.',
     subdescription: undefined as string | undefined,
     difficulty: 'casual' as const,
-    color: '#4CAF82',
+    color: 'var(--tier-rookie)',
   },
   standard: {
     id: FRITZ_STANDARD_ID,
@@ -32,7 +32,7 @@ export const FRITZ_TIERS = {
     description: 'Balanced casual opponent — move quality only, not tile luck.',
     subdescription: undefined as string | undefined,
     difficulty: 'standard' as const,
-    color: '#4A9EE8',
+    color: 'var(--tier-standard)',
   },
   elite: {
     id: FRITZ_ELITE_ID,
@@ -41,7 +41,7 @@ export const FRITZ_TIERS = {
     description: 'Strong competitive opponent — Daily Fritz strength.',
     subdescription: 'The original Fritz.' as string | undefined,
     difficulty: 'hard' as const,
-    color: '#E8A93A',
+    color: 'var(--tier-elite)',
   },
   master: {
     id: FRITZ_MASTER_ID,
@@ -50,7 +50,7 @@ export const FRITZ_TIERS = {
     description: 'Brutal expert challenge — sharpest endgame, honest rules.',
     subdescription: undefined as string | undefined,
     difficulty: 'master' as const,
-    color: '#C97FE8',
+    color: 'var(--tier-master)',
   },
 } as const;
 

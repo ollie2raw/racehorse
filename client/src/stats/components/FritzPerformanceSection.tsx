@@ -3,7 +3,7 @@ import type { FritzTierKey } from '../statsTypes';
 
 type Props = { fritz: PlayerIdentityModel['fritz'] };
 const labels: Record<FritzTierKey, string> = { rookie: 'Rookie', standard: 'Standard', elite: 'Elite', master: 'Master' };
-const colors: Record<FritzTierKey, string> = { rookie: '#00e676', standard: '#3d8eff', elite: '#ff4040', master: '#f0c040' };
+const colors: Record<FritzTierKey, string> = { rookie: 'var(--tier-rookie)', standard: 'var(--tier-standard)', elite: 'var(--tier-elite)', master: 'var(--tier-master)' };
 const value = (number: number | null) => number == null ? '—' : number.toLocaleString();
 
 export function FritzPerformanceSection({ fritz }: Props) {

@@ -170,7 +170,7 @@ export function DailyPuzzleLegacyInPlayView({
           <div className="rh-modal-overlay" role="dialog" aria-modal="true" style={{ ['--rh-accent-rgb' as string]: '240, 192, 64' }}>
             <div className="rh-result">
               <header className="rh-result__head">
-                <div className="claude-mode-hero__eyebrow" style={{ color: '#f0c040' }}>PUZZLE COMPLETE</div>
+                <div className="claude-mode-hero__eyebrow" style={{ color: 'var(--tier-elite)' }}>PUZZLE COMPLETE</div>
                 <div className="rh-result__score">
                   <span>{completedScore}</span>
                   <span className="rh-result__score-suffix">PTS</span>
@@ -191,7 +191,7 @@ export function DailyPuzzleLegacyInPlayView({
                 </div>
                 <div>
                   <span className="rh-result__summary-label">Current Streak</span>
-                  <span className="rh-result__summary-value" style={{ color: '#f0c040' }}>{streakDays} DAYS</span>
+                  <span className="rh-result__summary-value" style={{ color: 'var(--tier-elite)' }}>{streakDays} DAYS</span>
                 </div>
               </div>
 

@@ -342,7 +342,7 @@ export function PrivateMatchLobbyControlPanel({
                 </div>
               )}
               {friendsError && (
-                <div style={{ fontSize: '12px', color: '#EF4444', padding: '6px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--accent-red)', padding: '6px' }}>
                   {friendsError}
                 </div>
               )}

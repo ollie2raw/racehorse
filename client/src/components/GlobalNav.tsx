@@ -198,7 +198,7 @@ export function GlobalNav({
                 fontSize: '13px', 
                 fontWeight: 800, 
                 letterSpacing: '0.2em', 
-                color: '#8A879B' 
+                color: 'var(--text-muted)'
               }}
             >
               {todayLabel}
@@ -207,10 +207,10 @@ export function GlobalNav({
             <div className={`flex items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
               {TABS.map((tab) => {
                 const isActive = tab.activeModes.includes(currentMode as AppMode);
-                const accentColor = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
+                const accentColor = (isActive && activeColor) || TAB_COLORS[tab.label] || 'var(--tier-elite)';
                 const textColor = isActive
-                  ? (tab.label === 'Social' && activeColor ? '#ffffff' : accentColor)
-                  : '#8A879B';
+                  ? (tab.label === 'Social' && activeColor ? 'var(--text-primary)' : accentColor)
+                  : 'var(--text-muted)';
 
                 return (
                   <button
@@ -242,7 +242,7 @@ export function GlobalNav({
         <div className="flex items-center min-w-[280px] justify-end">
           {/* Rating */}
           <div className="flex items-center gap-3 px-5 py-2.5">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? '#F2C35E'} xmlns="http://www.w3.org/2000/svg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
               <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
             </svg>
             <div className="leading-tight">
@@ -252,7 +252,7 @@ export function GlobalNav({
                 {rating}
               </div>
               <div 
-                style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
+                style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}
               >
                 Rating
               </div>
@@ -268,8 +268,8 @@ export function GlobalNav({
             className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <div className="leading-tight text-left">
               <div 
@@ -278,7 +278,7 @@ export function GlobalNav({
                 {friendCountDisplay !== null ? friendCountDisplay : authUser ? '…' : '—'}
               </div>
               <div 
-                style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
+                style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}
               >
                 Friends
               </div>
@@ -296,7 +296,7 @@ export function GlobalNav({
               aria-label="View Stats"
             >
               <span 
-                style={{ fontSize: '15px', fontWeight: 700, color: '#E1BE82', letterSpacing: '-0.02em' }}
+                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tier-elite)', letterSpacing: '-0.02em' }}
               >
                 {initials}
               </span>
@@ -314,7 +314,7 @@ export function GlobalNav({
                 {displayName}
               </div>
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 7.5L10 12.5L15 7.5" stroke="var(--text-secondary)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           </div>

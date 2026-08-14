@@ -158,7 +158,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
               height: '100%',
               display: 'grid',
               placeItems: 'center',
-              color: '#6b7a94',
+              color: 'var(--text-muted)',
             }}
           >
             Board unavailable — please refresh

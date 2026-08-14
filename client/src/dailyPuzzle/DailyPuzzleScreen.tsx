@@ -415,7 +415,7 @@ export default function DailyPuzzleScreen({
     const completionRatio = bestPossibleScore > 0 ? completedScoreForSummary / bestPossibleScore : 1;
     const completionMessage =
       completedScoreForSummary >= bestPossibleScore
-        ? { text: '🏆 Perfect!', color: '#d8b56f' }
+        ? { text: '🏆 Perfect!', color: 'var(--tier-elite)' }
         : completionRatio >= 0.8
           ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
           : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
@@ -537,7 +537,7 @@ export default function DailyPuzzleScreen({
       particleCount: 150,
       spread: 80,
       origin: { y: 0.55 },
-      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
+      colors: ['#2ecc8e', '#95f0ca', 'var(--tier-elite)', '#ffffff'],
     });
   }, [status, puzzle?.puzzleType, finalScore, runtimeState, bestPossibleScore]);
 
@@ -789,7 +789,7 @@ export default function DailyPuzzleScreen({
     return (
       <>
         <div className="screen mode-subpage-screen mode-accent-daily daily-entry-screen">
-          <div className="daily-dash" style={{ ['--dash-accent' as string]: '#f0c040' }}>
+          <div className="daily-dash" style={{ ['--dash-accent' as string]: 'var(--tier-elite)' }}>
 
             {/* ── Top bar ── */}
             <header className="daily-dash-topbar">
@@ -826,7 +826,7 @@ export default function DailyPuzzleScreen({
                 {/* Left: details */}
                 <div className="daily-dash-details">
                   <div className="claude-mode-info-card">
-                    <ClaudeSectionLabel color="#f0c040">
+                    <ClaudeSectionLabel color="var(--tier-elite)">
                       {isArchiveMode ? 'Archive Details' : "Today’s Board"}
                     </ClaudeSectionLabel>
                     <ClaudeStatLine label="Date" value={formattedDisplayDate} />
@@ -835,7 +835,7 @@ export default function DailyPuzzleScreen({
                     <ClaudeStatLine
                       label="Streak"
                       value={isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
-                      accent={isArchiveMode ? undefined : '#f0c040'}
+                      accent={isArchiveMode ? undefined : 'var(--tier-elite)'}
                     />
                   </div>
 
@@ -861,7 +861,7 @@ export default function DailyPuzzleScreen({
                 {/* Right: actions */}
                 <div className="daily-dash-actions">
                   <ClaudePrimaryAction
-                    accent="#f0c040"
+                    accent="var(--tier-elite)"
                     disabled={loading || (!archiveDateDirty && !selectedPuzzleReady)}
                     title={archiveTargetIsToday ? 'Start Daily Puzzle' : 'Play Archived Puzzle'}
                     meta={

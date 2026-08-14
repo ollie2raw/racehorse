@@ -30,7 +30,7 @@ export function OnlineCountBadge({ online, queued }: Props) {
           width: 8,
           height: 8,
           borderRadius: '50%',
-          background: '#4ADE80',
+          background: 'var(--tier-rookie)',
           boxShadow: '0 0 10px rgba(74, 222, 128, 0.65)',
         }}
       />

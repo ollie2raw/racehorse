@@ -12,8 +12,8 @@ export function DefaultErrorFallback({ error, onReset }: Props) {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: '#040b17',
-        color: '#f0e6cc',
+        background: 'var(--bg-obsidian)',
+        color: 'var(--text-primary)',
         fontFamily: 'var(--font-display, sans-serif)',
         gap: '16px',
         padding: '32px',
@@ -22,15 +22,15 @@ export function DefaultErrorFallback({ error, onReset }: Props) {
     >
       <div style={{ fontSize: '32px' }}>⚠</div>
       <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Something went wrong</h2>
-      <p style={{ color: '#6b7a94', fontSize: '14px', maxWidth: '360px', margin: 0 }}>
+      <p style={{ color: 'var(--text-muted)', fontSize: '14px', maxWidth: '360px', margin: 0 }}>
         An unexpected error occurred. Your progress has been saved.
       </p>
       {import.meta.env.DEV && (
         <pre
           style={{
             fontSize: '11px',
-            color: '#ef4444',
-            background: '#0d0505',
+            color: 'var(--accent-red)',
+            background: 'var(--bg-card)',
             padding: '12px',
             borderRadius: '6px',
             maxWidth: '480px',
@@ -44,8 +44,8 @@ export function DefaultErrorFallback({ error, onReset }: Props) {
       <button
         onClick={onReset}
         style={{
-          background: '#C9A84C',
-          color: '#040b17',
+          background: 'var(--tier-elite)',
+          color: 'var(--text-on-elite)',
           border: 'none',
           borderRadius: '6px',
           padding: '10px 24px',
@@ -63,7 +63,7 @@ export function DefaultErrorFallback({ error, onReset }: Props) {
         style={{
           background: 'none',
           border: 'none',
-          color: '#6b7a94',
+          color: 'var(--text-muted)',
           fontSize: '13px',
           cursor: 'pointer',
           textDecoration: 'underline',
