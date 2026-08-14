@@ -13,6 +13,9 @@ import {
 import { processRealtimeMultiplayerGame } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
+import { childLogger } from '../logger';
+
+const log = childLogger('room-forfeit');
 
 export type ForfeitLeavingPlayer = {
   id: string;
@@ -79,12 +82,10 @@ export async function applyActiveMatchForfeit(
       statusReason,
       forfeitUserId: authenticatedUserId,
     });
-    console.log('[tournament:forfeit] applied', {
-      matchId: match.id,
-      tournamentId: match.tournament_id,
-      loserId: authenticatedUserId,
-      winnerId: winnerUserId,
-    });
+    log.info(
+      { matchId: match.id, tournamentId: match.tournament_id, loserId: authenticatedUserId, winnerId: winnerUserId },
+      'tournament forfeit applied',
+    );
   }
 
   // Calculate forfeit scores and run Glicko-2 updates for ranked multiplayer games
@@ -156,19 +157,22 @@ export async function applyActiveMatchForfeit(
             ratingScale,
           });
 
-          console.log('[Ranking] Forfeit rating update complete', {
-            roomCode: room.code,
-            loserId: abandoningPlayer.userId,
-            winnerId: winnerUserId,
-            forfeitReason,
-            ratingScale,
-            deltaA: ratingResult.playerA.delta,
-            deltaB: ratingResult.playerB.delta,
-          });
+          log.info(
+            {
+              roomCode: room.code,
+              loserId: abandoningPlayer.userId,
+              winnerId: winnerUserId,
+              forfeitReason,
+              ratingScale,
+              deltaA: ratingResult.playerA.delta,
+              deltaB: ratingResult.playerB.delta,
+            },
+            'forfeit rating update complete',
+          );
         }
       }
     } catch (err) {
-      console.error('[Ranking] Forfeit rating update failed:', err);
+      log.error({ err }, 'forfeit rating update failed');
     }
   }
 

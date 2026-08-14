@@ -15,7 +15,10 @@ import type { Room, LeadTracker } from '../rooms';
 import { deleteRoom, peekRoom } from '../rooms';
 import type { RoomMatchEvent } from '../roomEvents';
 import { supabaseFetch } from '../supabaseUtils';
+import { childLogger } from '../logger';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
+
+const log = childLogger('room-live-persistence');
 import {
   captureRoomDurabilityFence,
   getRoomDurabilityState,
@@ -611,7 +614,7 @@ async function persistLiveSessionRowNow(
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
       liveSessionsTableAvailable = false;
-      console.warn('[room-live-sessions] table missing; skipping live persist');
+      log.warn('room_live_sessions table missing; skipping live persist');
       return {
         ok: false,
         status: 'failed',
@@ -619,10 +622,7 @@ async function persistLiveSessionRowNow(
       };
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.warn('[room-live-sessions] persist failed', {
-      roomCode: row.room_code,
-      error: errorMessage,
-    });
+    log.warn({ roomCode: row.room_code, error: errorMessage }, 'room_live_sessions persist failed');
     return {
       ok: false,
       status: 'degraded',
@@ -822,11 +822,14 @@ export async function flushAllPendingLiveSessions(options?: {
     } catch (error) {
       if (error instanceof Error && error.message === 'live_persist_flush_timeout') {
         timedOut = true;
-        console.warn('[room-live-sessions] shutdown flush timed out', {
-          timeoutMs,
-          pendingRoomCodes: getPendingLiveRoomPersistenceRoomCodes(),
-          inFlightRoomCodes: getInFlightLiveRoomPersistenceRoomCodes(),
-        });
+        log.warn(
+          {
+            timeoutMs,
+            pendingRoomCodes: getPendingLiveRoomPersistenceRoomCodes(),
+            inFlightRoomCodes: getInFlightLiveRoomPersistenceRoomCodes(),
+          },
+          'room_live_sessions shutdown flush timed out',
+        );
       } else {
         throw error;
       }
@@ -880,10 +883,7 @@ export async function loadLiveRoomSession(roomCode: string): Promise<LoadLiveRoo
       };
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.warn('[room-live-sessions] load failed', {
-      roomCode: code,
-      error: errorMessage,
-    });
+    log.warn({ roomCode: code, error: errorMessage }, 'room_live_sessions load failed');
     return {
       kind: 'persistence_unavailable',
       error: errorMessage,
@@ -906,10 +906,10 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
       liveSessionsTableAvailable = false;
       return;
     }
-    console.warn('[room-live-sessions] delete failed', {
-      roomCode: code,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    log.warn(
+      { roomCode: code, error: error instanceof Error ? error.message : String(error) },
+      'room_live_sessions delete failed',
+    );
   }
 }
 
