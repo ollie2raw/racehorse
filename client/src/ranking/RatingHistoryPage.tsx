@@ -179,7 +179,7 @@ export default function RatingHistoryPage({
           </div>
 
           {displayLoading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading rating history...</p>}
-          {displayError && <p style={{ margin: 0, color: '#fca5a5' }}>{displayError}</p>}
+          {displayError && <p style={{ margin: 0, color: 'var(--accent-red)' }}>{displayError}</p>}
           {!displayLoading && !displayError && chartData.length === 0 && (
             <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>No rated games yet.</p>
           )}

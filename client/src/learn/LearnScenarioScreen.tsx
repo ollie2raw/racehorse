@@ -286,9 +286,9 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
             border: `1px solid ${feedback.type === 'success' ? 'rgba(34, 197, 94, 0.4)' : 
                                feedback.type === 'error' ? 'rgba(239, 68, 68, 0.4)' : 
                                'rgba(59, 130, 246, 0.4)'}`,
-            color: feedback.type === 'success' ? '#4ade80' : 
-                   feedback.type === 'error' ? '#f87171' : 
-                   '#60a5fa',
+            color: feedback.type === 'success' ? 'var(--tier-rookie)' :
+                   feedback.type === 'error' ? 'var(--accent-red)' :
+                   'var(--tier-standard)',
             display: 'flex',
             flexDirection: 'column',
             gap: '6px'
@@ -310,7 +310,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
                 paddingTop: '6px',
                 borderTop: '1px solid rgba(255,255,255,0.08)'
               }}>
-                <span style={{ fontWeight: 700, color: '#f59e0b' }}>Coach&apos;s Choice:</span>
+                <span style={{ fontWeight: 700, color: 'var(--accent-amber)' }}>Coach&apos;s Choice:</span>
                 <DominoTile tile={feedback.bestMove.move.tile} size={20} />
                 <span>scores {feedback.bestMove.breakdown.immediate} pts</span>
               </div>
@@ -349,7 +349,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          color: '#f59e0b',
+          color: 'var(--accent-amber)',
           marginBottom: '8px',
           animation: 'pulse 2s infinite'
         }}>
@@ -394,8 +394,8 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
                     top: -8,
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    background: '#f59e0b',
-                    color: 'black',
+                    background: 'var(--accent-amber)',
+                    color: 'var(--text-on-elite)',
                     fontSize: '0.6rem',
                     fontWeight: 900,
                     padding: '2px 6px',

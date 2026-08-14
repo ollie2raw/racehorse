@@ -502,8 +502,8 @@ export function LiveMatchScreen({
                   padding: '8px 16px',
                   borderRadius: '6px',
                   border: '1px solid rgba(245, 158, 11, 0.6)',
-                  background: '#0a101d',
-                  color: '#f8fafc',
+                  background: 'var(--bg-obsidian)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.84rem',
                   fontWeight: 600,
                   boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 0 12px rgba(245, 158, 11, 0.15)',
@@ -520,8 +520,8 @@ export function LiveMatchScreen({
                     width: 8, 
                     height: 8, 
                     borderRadius: '50%', 
-                    background: '#f59e0b', 
-                    boxShadow: '0 0 8px #f59e0b',
+                    background: 'var(--accent-amber)',
+                    boxShadow: '0 0 8px var(--accent-amber)',
                     animation: 'rh-pulse-dot 1.5s infinite ease-in-out'
                   }} 
                 />
@@ -539,8 +539,8 @@ export function LiveMatchScreen({
                   padding: '8px 16px',
                   borderRadius: '6px',
                   border: roomRecoveryState === 'failed' ? '1px solid rgba(239, 68, 68, 0.6)' : '1px solid rgba(0, 216, 255, 0.6)',
-                  background: '#0a101d',
-                  color: '#f8fafc',
+                  background: 'var(--bg-obsidian)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.84rem',
                   fontWeight: 700,
                   boxShadow: roomRecoveryState === 'failed'
@@ -559,8 +559,8 @@ export function LiveMatchScreen({
                     width: 8, 
                     height: 8, 
                     borderRadius: '50%', 
-                    background: roomRecoveryState === 'failed' ? '#ef4444' : '#00d8ff', 
-                    boxShadow: roomRecoveryState === 'failed' ? '0 0 8px #ef4444' : '0 0 8px #00d8ff',
+                    background: roomRecoveryState === 'failed' ? 'var(--accent-red)' : 'var(--accent-teal)',
+                    boxShadow: roomRecoveryState === 'failed' ? '0 0 8px var(--accent-red)' : '0 0 8px var(--accent-teal)',
                     animation: roomRecoveryState === 'failed' ? 'none' : 'rh-pulse-dot 1.5s infinite ease-in-out'
                   }} 
                 />
@@ -581,7 +581,7 @@ export function LiveMatchScreen({
                     style={{
                       border: '1px solid rgba(239, 68, 68, 0.4)',
                       background: 'rgba(239, 68, 68, 0.1)',
-                      color: '#ef4444',
+                      color: 'var(--accent-red)',
                       borderRadius: '4px',
                       padding: '4px 12px',
                       fontSize: '0.78rem',
@@ -912,7 +912,7 @@ export function LiveMatchScreen({
                           height: '100%',
                           display: 'grid',
                           placeItems: 'center',
-                          color: '#6b7a94',
+                          color: 'var(--text-muted)',
                         }}
                       >
                         Board unavailable — please refresh
