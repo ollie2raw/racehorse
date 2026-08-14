@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import {
   AnimatedScore,
   Board,
@@ -425,6 +425,20 @@ export function LiveMatchScreen({
   const onPregameTileTap = preGameDraw?.onPregameTileTap;
   const showGameOverOverlay = Boolean(state?.gameOver);
 
+  const prevMyScore = useRef<number | null>(null);
+  const prevOpponentScore = useRef<number | null>(null);
+  const [scoreAnnouncement, setScoreAnnouncement] = useState('');
+  useEffect(() => {
+    if (!isHandActive) return;
+    const myChanged = prevMyScore.current !== null && prevMyScore.current !== myScore;
+    const opponentChanged = prevOpponentScore.current !== null && prevOpponentScore.current !== opponentScore;
+    if (myChanged || opponentChanged) {
+      setScoreAnnouncement(`Score update: you ${myScore}, ${opponentName} ${opponentScore}.`);
+    }
+    prevMyScore.current = myScore;
+    prevOpponentScore.current = opponentScore;
+  }, [myScore, opponentScore, isHandActive, opponentName]);
+
   if (!visible || !state) {
     return (
       <>
@@ -449,7 +463,7 @@ export function LiveMatchScreen({
     <>
       <>
           <RotateOverlay />
-          {/* Screen reader live region — announces turn and score changes without visual change */}
+          {/* Screen reader live region — announces turn transitions */}
           <div
             role="status"
             aria-live="polite"
@@ -457,9 +471,18 @@ export function LiveMatchScreen({
             style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
           >
             {isHandActive && (isMyTurn
-              ? `Your turn. Your score: ${myScore}. Opponent score: ${opponentScore}.`
-              : `${opponentName}'s turn. Your score: ${myScore}. Opponent score: ${opponentScore}.`
+              ? `Your turn. Your score: ${myScore}. ${opponentName} score: ${opponentScore}.`
+              : `${opponentName}'s turn. Your score: ${myScore}. ${opponentName} score: ${opponentScore}.`
             )}
+          </div>
+          {/* Screen reader live region — announces score changes */}
+          <div
+            role="status"
+            aria-live="assertive"
+            aria-atomic="true"
+            style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+          >
+            {scoreAnnouncement}
           </div>
           <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
             <style>{`

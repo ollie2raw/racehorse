@@ -11,16 +11,16 @@
 
   /* ── Tier accent system ──────────────────────────── */
   --tier-rookie:   #4ADE80;   /* green  — streaks, positive progression */
-  --tier-standard: #3B82F6;   /* blue   — focus, gameplay, strategy     */
+  --tier-standard: #3C83F7;   /* blue   — focus, gameplay, strategy     */
   --tier-elite:    #E7B64A;   /* gold   — prestige, achievement, mastery */
-  --tier-master:   #A855F7;   /* purple — elite competition, premium    */
+  --tier-master:   #AF5CFE;   /* purple — elite competition, premium    */
 
   /* ── Extended accent palette ────────────────────── */
   --accent-blue:   #0ea5e9;
   --accent-teal:   #2dd4bf;
   --accent-green:  #34d399;
   --accent-amber:  #f59e0b;
-  --accent-red:    #ef4444;
+  --accent-red:    #F24747;   /* lifted from #ef4444 — achieves 4.51:1 AA on bg-primary */
 
   /* ── Glass surface (the standard Racehorse panel) ─ */
   --glass-bg:      rgba(10, 16, 28, 0.6);
