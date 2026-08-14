@@ -27,7 +27,7 @@ import {
   validateGuidedMatchCandidate,
   type GuidedMatchCandidateValidationIssue,
 } from './guidedMatch/guidedMatchCandidateValidation';
-import labScientistArt from '../assets/singlePlayerHub/fritzScientistLab.png';
+import labScientistArt from '../assets/singlePlayerHub/fritzScientistLab.webp';
 const themeVars = {
   '--rh-bg': '#050911',
   '--rh-panel': '#09101A',
