@@ -93,9 +93,8 @@ export function handleRoomPlayerDisconnect(
     }
   }
 
-  const leaveTrackedRoom = (socket as any).__leaveTrackedRoom as
-    | ((roomCode: string | undefined, options?: { preserveSeat?: boolean }) => void | Promise<void>)
-    | undefined;
+  type LeaveTrackedRoom = (roomCode: string | undefined, options?: { preserveSeat?: boolean }) => void | Promise<void>;
+  const leaveTrackedRoom = (socket as Socket & { __leaveTrackedRoom?: LeaveTrackedRoom }).__leaveTrackedRoom;
   void leaveTrackedRoom?.(roomCode, { preserveSeat: wasActiveRoomPlayer });
 
   return { wasActiveRoomPlayer, roomCode };

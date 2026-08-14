@@ -574,7 +574,7 @@ function installSocketRateLimit(socket: Socket): void {
   });
 }
 
-let finalizeTournamentMatchHook: ((room: any) => void) | null = null;
+let finalizeTournamentMatchHook: ((room: Room) => void) | null = null;
 
 
 function normalizeUsername(value: unknown): string {
@@ -702,7 +702,7 @@ io.on('connection', (socket: Socket) => {
   registerRoomChatEmoteHandlers(socket);
 
   // WEEKLY_STATS
-  socket.on("stats:weekly", async (cb?: any) => {
+  socket.on("stats:weekly", async (cb?: AckFn) => {
     try {
       const awards = await computeWeeklyAwards(Date.now());
       cb?.({ ok: true, awards });

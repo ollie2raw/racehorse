@@ -241,6 +241,11 @@ export async function processRatingPeriod(
   };
 }
 
+export interface RealtimeRatingResult {
+  playerA: { profile: Profile; newRating: number; newRD: number; delta: number };
+  playerB: { profile: Profile; newRating: number; newRD: number; delta: number };
+}
+
 export async function processRealtimeMultiplayerGame(params: {
   playerAProfile: Profile;
   playerBProfile: Profile;
@@ -292,8 +297,8 @@ export async function processAllPendingRatingGames() {
     try {
       const result = await processRatingPeriod(userId);
       processed += result.gamesInPeriod;
-    } catch (err: any) {
-      errors.push(`Error processing user ${userId}: ${err.message}`);
+    } catch (err: unknown) {
+      errors.push(`Error processing user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -316,8 +321,8 @@ export async function decayInactivePlayers() {
       if (result.gamesInPeriod === 0) {
         processed++;
       }
-    } catch (err: any) {
-      errors.push(`Error decaying user ${user.id}: ${err.message}`);
+    } catch (err: unknown) {
+      errors.push(`Error decaying user ${user.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

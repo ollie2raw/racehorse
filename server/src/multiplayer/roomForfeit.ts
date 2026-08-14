@@ -10,7 +10,7 @@ import {
   getRoomRoster,
   requireRoomSessionHandlerDeps,
 } from './roomSession';
-import { processRealtimeMultiplayerGame } from '../ranking/periodService';
+import { processRealtimeMultiplayerGame, type RealtimeRatingResult } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 import { childLogger } from '../logger';
@@ -89,7 +89,7 @@ export async function applyActiveMatchForfeit(
   }
 
   // Calculate forfeit scores and run Glicko-2 updates for ranked multiplayer games
-  let ratingResult: any = null;
+  let ratingResult: RealtimeRatingResult | null = null;
   const isPrivate = !room.scheduledTournamentMatchId && !room.scheduledTournamentId;
   const aId = room.players[0];
   const bId = room.players[1];

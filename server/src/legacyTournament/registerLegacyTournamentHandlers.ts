@@ -9,13 +9,20 @@ import {
   type Tournament,
   type TournamentPlayer,
 } from '../tournament/tournament';
-import { createRoom, joinRoom } from '../rooms';
+import { createRoom, joinRoom, type Room } from '../rooms';
 import {
   allocatePlayerSeatId,
   joinSocketToRoom,
   setRoomRoster,
   type AckFn,
 } from '../multiplayer/roomSession';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __tournamentsById: Map<string, Tournament> | undefined;
+  // eslint-disable-next-line no-var
+  var __tournamentsByCode: Map<string, string> | undefined;
+}
 
 export type LegacyTournamentHandlerDeps = {
   io: Server;
@@ -27,14 +34,8 @@ export function getLegacyTournamentStorage(): {
   tournamentsById: Map<string, Tournament>;
   tournamentsByCode: Map<string, string>;
 } {
-  const tournamentsById = ((globalThis as any).__tournamentsById ??= new Map<string, Tournament>()) as Map<
-    string,
-    Tournament
-  >;
-  const tournamentsByCode = ((globalThis as any).__tournamentsByCode ??= new Map<string, string>()) as Map<
-    string,
-    string
-  >;
+  const tournamentsById = (globalThis.__tournamentsById ??= new Map<string, Tournament>());
+  const tournamentsByCode = (globalThis.__tournamentsByCode ??= new Map<string, string>());
   return { tournamentsById, tournamentsByCode };
 }
 
@@ -83,10 +84,7 @@ export function createStartNextMatch(io: Server, emitTournament: (t: Tournament)
       tournamentId: t.id,
       tournamentMatchId: m.id,
       tournamentMode: 'round_robin',
-    } as any);
-
-    // Defensive: ensure config is accessible later even if createRoom doesn't persist arbitrary config
-    (room as any).config = { ...(room as any).config, winningScore: 30, tournamentId: t.id, tournamentMatchId: m.id };
+    });
 
     m.roomCode = room.code;
     t.activeRoomCode = room.code;
@@ -126,12 +124,12 @@ export function createMaybeFinalizeTournamentMatch(
   emitTournament: (t: Tournament) => void,
   startNextMatch: (t: Tournament) => void,
 ) {
-  return (room: any) => {
+  return (room: Room) => {
     if (!room?.state?.gameOver) return;
 
-    const cfg = (room as any).config ?? {};
-    const tid = cfg.tournamentId as string | undefined;
-    const mid = cfg.tournamentMatchId as string | undefined;
+    const cfg = room.config;
+    const tid = cfg.tournamentId;
+    const mid = cfg.tournamentMatchId;
     if (!tid || !mid) return;
 
     const t = tournamentsById.get(tid);
@@ -173,7 +171,7 @@ export function createMaybeFinalizeTournamentMatch(
 export function registerLegacyTournamentHandlers(
   socket: Socket,
   deps: LegacyTournamentHandlerDeps,
-): (room: any) => void {
+): (room: Room) => void {
   const { io, normalizeUsername, normalizeUserId } = deps;
   const { tournamentsById } = getLegacyTournamentStorage();
 
@@ -196,7 +194,7 @@ export function registerLegacyTournamentHandlers(
     const config = (
       arg1 && typeof arg1 === 'object' && !Array.isArray(arg1) ? arg1 : {}
     ) as { username?: unknown; userId?: unknown };
-    const cb = (typeof arg1 === 'function' ? arg1 : arg2) as any;
+    const cb = (typeof arg1 === 'function' ? arg1 : arg2) as AckFn | undefined;
     try {
       const username = normalizeUsername(config.username ?? socket.data?.username);
       const userId = normalizeUserId(config.userId ?? socket.data?.userId);
@@ -225,8 +223,8 @@ export function registerLegacyTournamentHandlers(
         activeRoomCode: null,
       };
 
-      (globalThis as any).__tournamentsById.set(id, t);
-      (globalThis as any).__tournamentsByCode.set(lobbyCode, id);
+      globalThis.__tournamentsById!.set(id, t);
+      globalThis.__tournamentsByCode!.set(lobbyCode, id);
 
       socket.data.tournamentId = id;
       socket.join(`tourn:${id}`);
@@ -246,13 +244,13 @@ export function registerLegacyTournamentHandlers(
     const config = (
       arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? arg2 : {}
     ) as { username?: unknown; userId?: unknown };
-    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as any;
+    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
     try {
       const code = String(lobbyCode ?? '').trim().toUpperCase();
-      const tid = (globalThis as any).__tournamentsByCode.get(code) as string | undefined;
+      const tid = getLegacyTournamentStorage().tournamentsByCode.get(code);
       if (!tid) return cb?.({ ok: false, error: 'not_found' });
 
-      const t = (globalThis as any).__tournamentsById.get(tid) as Tournament | undefined;
+      const t = getLegacyTournamentStorage().tournamentsById.get(tid);
       if (!t) return cb?.({ ok: false, error: 'not_found' });
       if (t.status !== 'lobby') return cb?.({ ok: false, error: 'already_started' });
 
@@ -293,7 +291,7 @@ export function registerLegacyTournamentHandlers(
     cb?.({ ok: false, error: 'bots_disabled' });
   });
 
-  socket.on('tournament:start', (cb?: any) => {
+  socket.on('tournament:start', (cb?: AckFn) => {
     try {
       const t = getTournamentForSocket();
       if (!t) return cb?.({ ok: false, error: 'no_tournament' });

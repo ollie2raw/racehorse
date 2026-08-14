@@ -31,7 +31,7 @@ export function registerRematchPregameHandlers(
     try {
       const room = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(room, 'rematch');
-      const cfg = (room as any).config ?? {};
+      const cfg = room.config;
 
       if (cfg.tournamentId) {
         return cb?.({ ok: false, error: 'Rematch is unavailable in tournament rooms.' });

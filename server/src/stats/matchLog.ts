@@ -217,18 +217,20 @@ export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> 
     if (meta) streakBest[k] = { ...meta, value: best };
   }
 
-  const toBoard = (obj: Record<Key, { username: string; userId: string | null; count?: number; value?: number }>, field: 'count' | 'value') =>
-    sortDesc(Object.values(obj).map((x) => ({ username: x.username, userId: x.userId, value: (x as any)[field] as number })), (x) => x.value);
+  type BoardEntry = { username: string; userId: string | null; count?: number; value?: number };
+  const toBoard = (obj: Record<Key, BoardEntry>, field: 'count' | 'value') =>
+    sortDesc(Object.values(obj).map((x) => ({ username: x.username, userId: x.userId, value: (x[field] ?? 0) })), (x) => x.value);
 
-  const mostWinsBoard = toBoard(wins as any, 'count');
-  const mostGamesBoard = toBoard(games as any, 'count');
-  const biggestWinBoard = toBoard(biggestWin as any, 'value');
-  const closestWinBoardRaw = toBoard(closestWin as any, 'value');
+  const mostWinsBoard = toBoard(wins, 'count');
+  const mostGamesBoard = toBoard(games, 'count');
+  const biggestWinBoard = toBoard(biggestWin, 'value');
+  const closestWinBoardRaw = toBoard(closestWin, 'value');
   const closestWinBoard = [...closestWinBoardRaw].filter((x) => Number.isFinite(x.value)).sort((a,b)=>a.value-b.value);
-  const comebackBoard = toBoard(biggestComeback as any, 'value');
+  const comebackBoard = toBoard(biggestComeback, 'value');
   const streakBoard = sortDesc(Object.values(streakBest), (x) => x.value).map((x) => ({ username: x.username, userId: x.userId, value: x.value }));
 
-  const mk = (key: WeeklyAwards['awards'][number]['key'], title: string, leaderboard: any[]) => ({
+  type LeaderboardEntry = { username: string; userId: string | null; value: number };
+  const mk = (key: WeeklyAwards['awards'][number]['key'], title: string, leaderboard: LeaderboardEntry[]) => ({
     key,
     title,
     leader: leaderboard[0] ?? null,

@@ -36,6 +36,14 @@ const log = childLogger('rooms');
 
 export type RoomCode = string;
 
+/** Server-side extensions to the game-core Config that are only meaningful in room context. */
+export interface RoomConfig extends Partial<Config> {
+  fritzTier?: string;
+  tournamentId?: string;
+  tournamentMatchId?: string;
+  tournamentMode?: string;
+}
+
 export type LeadTracker = {
   aId: string;
   bId: string;
@@ -48,7 +56,7 @@ export type Room = {
   /** Stable `playerSeatId` values in engine seat order (never socket ids). */
   players: string[];
   state: GameState | null; // null until game started
-  config: Partial<Config>;
+  config: RoomConfig;
   asyncStateVersion: number;
   /** `playerSeatId` values ready for the next hand. */
   nextHandReady: Set<string>;
@@ -224,7 +232,7 @@ function makeCode(len = 5): string {
   return s;
 }
 
-export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {}): Room {
+export function createRoom(hostPlayerSeatId: string, config: RoomConfig = {}): Room {
   let code = makeCode();
   while (rooms.has(code)) code = makeCode();
   const eventState = createRoomEventState();

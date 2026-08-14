@@ -23,7 +23,7 @@ import { writeForfeitActivity } from '../social/activityWriter';
 import { queryVerifiedSinglePlayerMatchByLocalKey } from './verifiedSinglePlayerMatch';
 
 export function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
-  const cfg = (room as any).config ?? {};
+  const cfg = room.config;
   if (typeof cfg.fritzTier === 'string' && cfg.fritzTier.trim()) {
     return cfg.fritzTier.trim().toLowerCase();
   }

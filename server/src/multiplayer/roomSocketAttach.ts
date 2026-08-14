@@ -177,7 +177,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     evaluateRoomLifecycle(code);
   };
 
-  (socket as any).__leaveTrackedRoom = leaveTrackedRoom;
+  (socket as Socket & { __leaveTrackedRoom: typeof leaveTrackedRoom }).__leaveTrackedRoom = leaveTrackedRoom;
 
   const leaveExistingSocketRooms = () => {
     const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);

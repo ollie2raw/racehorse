@@ -16,6 +16,7 @@ import {
   type ActionPayload,
   type DrawAnimationStep,
   type Room,
+  type RoomConfig,
 } from '../rooms';
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
@@ -73,7 +74,7 @@ export type GameOverPersistInput = {
   room: Room;
   /** Frozen at persist schedule time — do not read `room.matchId` again in the IIFE. */
   sourceMatchId: string;
-  cfg: Record<string, unknown>;
+  cfg: RoomConfig;
   aId: string;
   bId: string;
   a: RoomPlayer;
@@ -688,7 +689,7 @@ export function broadcastStateUpdate(roomCode: string): void {
     room.activeTileSetSize,
   );
 
-  const cfg = (room as { config?: Record<string, unknown> }).config ?? {};
+  const cfg = room.config;
   const isTournamentRoom = Boolean(cfg.tournamentId);
   const pidsForLead = room.state.playerIds;
   if (Array.isArray(pidsForLead) && pidsForLead.length === 2) {

@@ -1,7 +1,8 @@
-import type { Server } from 'socket.io';
+import type { Server, Socket } from 'socket.io';
 import { act, getRoom } from '../rooms';
 import { canDraw, getLegalMoves } from '../game/engine';
 import { childLogger } from '../logger';
+import type { RoomPlayer } from './roomSession';
 
 const log = childLogger('disconnect-grace');
 
@@ -165,7 +166,7 @@ async function handleDisconnectGraceExpired(
       const rosterCached = getRoomRoster(code);
       const roster =
         rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(code, room.players);
-      const abandoningPlayer = roster.find((p: any) => p.id === disconnectedPlayerSeatId) ?? {
+      const abandoningPlayer: RoomPlayer = roster.find((p) => p.id === disconnectedPlayerSeatId) ?? {
         id: disconnectedPlayerSeatId,
         socketId: '',
         username: 'Opponent',
@@ -178,7 +179,7 @@ async function handleDisconnectGraceExpired(
           userId: abandoningPlayer.userId,
           username: abandoningPlayer.username,
         },
-      } as any;
+      } as unknown as Socket;
 
       await applyActiveMatchForfeit(io, mockSocket, code, abandoningPlayer, 'disconnect_timeout');
       broadcast(code);
