@@ -1,6 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import { act, getRoom, readyForNextHand } from '../rooms';
 import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
+import { childLogger } from '../logger';
+
+const log = childLogger('game-action');
 import {
   flushScheduledLiveRoomPersistence,
   getLiveRoomDurabilityState,
@@ -29,7 +32,7 @@ export function registerGameplayActionHandlers(
 
   socket.on('game:action', async (code, action, cb) => {
     const roomCode = String(code).trim().toUpperCase();
-    console.log(`[game:action] socket=${socket.id}, code=${roomCode}, action=${action?.type}`);
+    log.debug({ socketId: socket.id, roomCode, actionType: action?.type }, 'game:action received');
     try {
       if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
         if (typeof cb === 'function') cb({ ok: false, error: 'Invalid action payload.' });
@@ -146,7 +149,7 @@ export function registerGameplayActionHandlers(
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[game:action] ERROR: ${message}`);
+      log.warn({ err, roomCode, actionType: action?.type }, 'game:action error');
       if (typeof cb === 'function') cb({ ok: false, error: message });
     }
   });

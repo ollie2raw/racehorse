@@ -591,9 +591,13 @@ export async function createDailyFritzAttempt(runDate: string, userId: string): 
   return saved;
 }
 
+// Defensive cap: prevents unbounded scans if a day accumulates many completions.
+// Leaderboard only displays top N anyway; 2000 entries covers any realistic beta volume.
+const LEADERBOARD_ATTEMPT_CAP = 2_000;
+
 export async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc`,
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc&limit=${LEADERBOARD_ATTEMPT_CAP}`,
     { method: 'GET', circuitBreakable: true },
   );
   return rows.map(toDailyFritzAttemptRecord);

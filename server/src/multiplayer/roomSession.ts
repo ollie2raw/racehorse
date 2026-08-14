@@ -611,7 +611,8 @@ function warnIfMaskedSnapshotMalformed(state: GameState, ctx: string): void {
       continue;
     }
     hub.branches.forEach((arm: BranchArm | undefined | null, armIdx: number) => {
-      if (!arm || typeof arm !== 'object' || !Array.isArray(arm.tiles)) {
+      // null arm = empty slot; valid per BranchArm | null type. Only warn if arm exists but lacks tiles.
+      if (arm !== null && arm !== undefined && !Array.isArray(arm.tiles)) {
         log.warn(
           `[maskStateForRecipient:${ctx}] hub ${hubIdx} arm ${armIdx} missing BranchArm.tiles array`,
         );

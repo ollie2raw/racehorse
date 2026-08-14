@@ -86,4 +86,18 @@ describe('leaderboard circuit breaker integration (item 3.2)', () => {
     await expect(buildDailyFritzLeaderboard('2026-08-12')).rejects.toThrow('circuit breaker is open');
     expect(mockFetch.mock.calls.length).toBe(callsBefore);
   });
+
+  it('Daily Fritz leaderboard query is capped to prevent unbounded scans', async () => {
+    mockFetch.mockResolvedValue(make503());
+
+    await expect(buildDailyFritzLeaderboard('2026-08-12')).rejects.toThrow();
+
+    // supabaseFetch passes a URL object; convert to string to inspect query params
+    const [requestArg] = mockFetch.mock.calls[0] as [URL | string | Request, ...unknown[]];
+    const urlStr = String(requestArg instanceof URL ? requestArg.href : requestArg);
+    expect(urlStr).toMatch(/limit=\d+/);
+    const limitMatch = urlStr.match(/limit=(\d+)/);
+    expect(Number(limitMatch?.[1])).toBeGreaterThan(0);
+    expect(Number(limitMatch?.[1])).toBeLessThanOrEqual(10_000);
+  });
 });
