@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
 import { createRoom, getRoomMatchEventMeta } from '../rooms';
@@ -13,6 +14,8 @@ import {
   type RoomPlayer,
   type RoomSessionHandlerDeps,
 } from './roomSession';
+
+const log = childLogger('multiplayer:lifecycle');
 
 export type LeaveTrackedRoomFn = (
   roomCode: string | undefined,
@@ -42,7 +45,7 @@ export function registerRoomLifecycleHandlers(
       authToken: _ignoredAuthToken,
       ...roomConfig
     } = config as Record<string, unknown>;
-    console.log(`[room:create] socket=${socket.id}`);
+    log.info(`[room:create] socket=${socket.id}`);
     try {
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
@@ -66,7 +69,7 @@ export function registerRoomLifecycleHandlers(
           via: 'room:create',
         },
       });
-      console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
+      log.info(`[room:create] created room=${room.code}, players=${room.players.length}`);
       cb?.({
         ok: true,
         roomCode: room.code,
@@ -77,7 +80,7 @@ export function registerRoomLifecycleHandlers(
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[room:create] ERROR: ${message}`);
+      log.info(`[room:create] ERROR: ${message}`);
       cb?.({ ok: false, error: message });
     }
   });

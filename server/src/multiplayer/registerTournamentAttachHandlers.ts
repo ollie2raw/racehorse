@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import {
   getRoom,
@@ -22,6 +23,8 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
+
+const log = childLogger('multiplayer:tournament-attach');
 
 export type RegisterTournamentAttachHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -49,21 +52,21 @@ export function registerTournamentAttachHandlers(
         ? (payload as { matchId: string }).matchId
         : null;
 
-    console.log('[tournament:attach-server] received', {
+    log.info({
       socketId: socket.id,
       userId: handlerDeps.normalizeUserId(socket.data?.userId),
       matchId: matchIdFromPayload,
-    });
-    console.log('[tournament:attach] request', {
+    }, 'received');
+    log.info({
       socketId: socket.id,
       userId: handlerDeps.normalizeUserId(socket.data?.userId),
       matchId: matchIdFromPayload,
-    });
+    }, 'request');
 
     try {
       const authenticatedUserId = handlerDeps.normalizeUserId(socket.data?.userId);
       if (!authenticatedUserId) {
-        console.log('[tournament:attach-server] rejected/no-user', { socketId: socket.id });
+        log.info({ socketId: socket.id }, 'rejected/no-user');
         ackOnce({ ok: false, error: 'not_authenticated' });
         return;
       }
@@ -74,7 +77,7 @@ export function registerTournamentAttachHandlers(
       }
       let match = await fetchMatchById(matchId);
       if (!match) {
-        console.log('[tournament:attach-server] rejected/no-match', { matchId, userId: authenticatedUserId });
+        log.info({ matchId, userId: authenticatedUserId }, 'rejected/no-match');
         ackOnce({ ok: false, error: 'match_not_found' });
         return;
       }
@@ -85,16 +88,16 @@ export function registerTournamentAttachHandlers(
       if (match.room_code) {
         const existingRoom = peekRoom(match.room_code);
         if (existingRoom?.state?.gameOver) {
-          console.log('[room:join] rejected completed room', { roomCode: match.room_code });
+          log.info({ roomCode: match.room_code }, 'rejected completed room');
           ackOnce({ ok: false, error: 'match_completed' });
           return;
         }
       }
       if (match.player1_id !== authenticatedUserId && match.player2_id !== authenticatedUserId) {
-        console.log('[tournament:attach-server] rejected/not-participant', {
+        log.info({
           matchId,
           userId: authenticatedUserId,
-        });
+        }, 'rejected/not-participant');
         ackOnce({ ok: false, error: 'tournament_not_assigned' });
         return;
       }
@@ -111,25 +114,25 @@ export function registerTournamentAttachHandlers(
         return;
       }
       if (peekRoom(match.room_code)) {
-        console.log('[tournament:attach-server] room-found', {
+        log.info({
           matchId: match.id,
           roomCode: match.room_code,
-        });
+        }, 'room-found');
       } else {
-        console.log('[tournament:attach-server] room-missing', {
+        log.info({
           matchId: match.id,
           roomCode: match.room_code,
-        });
+        }, 'room-missing');
         await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true });
         match = await fetchMatchById(matchId);
         if (!match?.room_code || !peekRoom(match.room_code)) {
           ackOnce({ ok: false, error: 'room_unavailable' });
           return;
         }
-        console.log('[tournament:attach-server] rehydrated', {
+        log.info({
           matchId: match.id,
           roomCode: match.room_code,
-        });
+        }, 'rehydrated');
       }
 
       const seat =
@@ -138,12 +141,12 @@ export function registerTournamentAttachHandlers(
           : match.player2_id === authenticatedUserId
             ? 'player2'
             : null;
-      console.log('[tournament:attach-server] joining-room', {
+      log.info({
         matchId: match.id,
         roomCode: match.room_code,
         userId: authenticatedUserId,
         seat,
-      });
+      }, 'joining-room');
 
       const attached = await attachSocketToTrackedRoom({
         roomCode: match.room_code,
@@ -210,26 +213,26 @@ export function registerTournamentAttachHandlers(
         youSeat && stateWithCounts?.players?.[youSeat]?.hand
           ? stateWithCounts.players[youSeat].hand.length
           : 0;
-      console.log('[tournament:attach-server] ack/success', {
+      log.info({
         matchId: match.id,
         roomCode: room.code,
         userId: authenticatedUserId,
         seat,
         handCount,
         matchStatus,
-      });
-      console.log('[tournament:attach-server] accepted', {
+      }, 'ack/success');
+      log.info({
         matchId: match.id,
         roomCode: room.code,
         userId: authenticatedUserId,
         seat,
-      });
-      console.log('[tournament:attach] accepted', {
+      }, 'accepted');
+      log.info({
         matchId: match.id,
         roomCode: room.code,
         userId: authenticatedUserId,
         seat,
-      });
+      }, 'accepted');
       ackOnce({
         ok: true,
         tournamentId: match.tournament_id,
@@ -247,20 +250,20 @@ export function registerTournamentAttachHandlers(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'attach_failed';
-      console.log('[tournament:attach-server] ack/error', {
+      log.info({
         matchId: matchIdFromPayload,
         error: message,
-      });
+      }, 'ack/error');
       ackOnce({
         ok: false,
         error: message,
       });
     } finally {
       if (!acked) {
-        console.log('[tournament:attach-server] ack/error', {
+        log.info({
           matchId: matchIdFromPayload,
           error: 'attach_ack_missing',
-        });
+        }, 'ack/error');
         ackOnce({ ok: false, error: 'attach_ack_missing' });
       }
     }

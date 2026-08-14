@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { getRoom } from '../rooms';
 import { applyActiveMatchForfeit } from './roomForfeit';
@@ -9,6 +10,8 @@ import {
 } from './roomSession';
 import type { LeaveTrackedRoomFn } from './registerRoomLifecycleHandlers';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+
+const log = childLogger('multiplayer:abandon');
 
 export type RegisterRoomAbandonHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -29,25 +32,25 @@ export function registerRoomAbandonHandlers(
         ? String((payload as { roomCode: string }).roomCode).trim().toUpperCase()
         : '';
     const authenticatedUserId = handlerDeps.normalizeUserId(socket.data?.userId);
-    console.log('[room:abandon] request', {
+    log.info({
       roomCode,
       userId: authenticatedUserId,
-    });
+    }, 'request');
     if (!authenticatedUserId) {
-      console.log('[room:abandon] rejected', {
+      log.info({
         roomCode,
         userId: null,
         reason: 'not_authenticated',
-      });
+      }, 'rejected');
       cb?.({ ok: false, error: 'not_authenticated' });
       return;
     }
     if (!roomCode) {
-      console.log('[room:abandon] rejected', {
+      log.info({
         roomCode,
         userId: authenticatedUserId,
         reason: 'missing_code',
-      });
+      }, 'rejected');
       cb?.({ ok: false, error: 'missing_code' });
       return;
     }
@@ -56,11 +59,11 @@ export function registerRoomAbandonHandlers(
       const room = getRoom(roomCode);
       if (room.abandonedAt || room.state?.gameOver) {
         const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
-        console.log('[room:abandon] rejected', {
+        log.info({
           roomCode,
           userId: authenticatedUserId,
           reason: error,
-        });
+        }, 'rejected');
         cb?.({ ok: false, error });
         return;
       }
@@ -73,11 +76,11 @@ export function registerRoomAbandonHandlers(
         ?? roster.find((player) => player.socketId === socket.id)
         ?? null;
       if (!abandoningPlayer || !room.players.includes(abandoningPlayer.id)) {
-        console.log('[room:abandon] rejected', {
+        log.info({
           roomCode,
           userId: authenticatedUserId,
           reason: 'not_player',
-        });
+        }, 'rejected');
         cb?.({ ok: false, error: 'not_player' });
         return;
       }
@@ -85,21 +88,21 @@ export function registerRoomAbandonHandlers(
       const result = await applyActiveMatchForfeit(io, socket, roomCode, abandoningPlayer, 'manual');
       if (!result) {
         const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
-        console.log('[room:abandon] rejected', {
+        log.info({
           roomCode,
           userId: authenticatedUserId,
           reason: error,
-        });
+        }, 'rejected');
         cb?.({ ok: false, error });
         return;
       }
 
       await leaveTrackedRoom(roomCode);
-      console.log('[room:abandon] completed', {
+      log.info({
         roomCode,
         abandonedUserId: authenticatedUserId,
         winnerId: result.winnerUserId,
-      });
+      }, 'completed');
       emitMpAuthorityFunnel('private_match_abandoned', {
         roomCode,
         extra: {
@@ -116,11 +119,11 @@ export function registerRoomAbandonHandlers(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'abandon_failed';
-      console.log('[room:abandon] rejected', {
+      log.info({
         roomCode,
         userId: authenticatedUserId,
         reason: message,
-      });
+      }, 'rejected');
       cb?.({ ok: false, error: message });
     }
   });

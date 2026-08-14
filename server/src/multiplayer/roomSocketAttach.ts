@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
 import {
@@ -42,6 +43,8 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { LeaveTrackedRoomFn } from './registerRoomLifecycleHandlers';
+
+const log = childLogger('multiplayer:socket-attach');
 
 export type AttachSocketToTrackedRoomFn = (params: {
   roomCode: string;
@@ -135,11 +138,11 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       try {
         await applyActiveMatchForfeit(io, socket, code, abandoningPlayer, 'manual');
       } catch (err) {
-        console.error('[room:leave] forfeit failed', {
+        log.error({
           roomCode: code,
           playerSeatId,
           error: err instanceof Error ? err.message : err,
-        });
+        }, 'forfeit failed');
       }
       room = getRoom(code);
     }
@@ -203,10 +206,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           userId: entry.userId,
         })),
       );
-      console.log(`[${via}] live-session roster restored`, {
-        roomCode,
-        seats: hydrated.restoredRoster.length,
-      });
+      log.info({ roomCode, seats: hydrated.restoredRoster.length, via }, 'live-session roster restored');
     }
     if (hydrated.kind === 'persistence_unavailable') {
       throw new Error('room_persistence_unavailable');
@@ -237,7 +237,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     let existingRoom = peekRoom(roomCode);
     if (!existingRoom) {
       const message = 'Room not found.';
-      console.log(
+      log.info(
         `[${via}] ERROR: ${message} live=${hydrated.kind} shell=${shellHydrationResult.kind}`,
       );
       throw new Error(message);
@@ -246,7 +246,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       throw new Error('match_abandoned');
     }
     if (existingRoom.state?.gameOver) {
-      console.log('[room:join] rejected completed room', { roomCode });
+      log.info({ roomCode }, 'rejected completed room');
       throw new Error('match_completed');
     }
     let room: Room | null = null;
@@ -266,13 +266,13 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           ? io.sockets.sockets.get(existingPlayer.socketId)
           : undefined;
         if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
-          console.log(`[${via}] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
+          log.info(`[${via}] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
           oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
           oldSocket.disconnect(true);
           await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        console.log(`[${via}] RECONNECT: migrating seat ${existingPlayer.id} socket -> ${socket.id} for userId=${userId}`);
+        log.info(`[${via}] RECONNECT: migrating seat ${existingPlayer.id} socket -> ${socket.id} for userId=${userId}`);
         migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
         roster = roster.map((player) =>
           player.id === existingPlayer.id
@@ -380,7 +380,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     }
     setRoomRoster(room.code, roster);
     io.to(room.code).emit('room:update', { players: roster });
-    console.log(`[${via}] joined room=${room.code}, players=${room.players.length}`);
+    log.info(`[${via}] joined room=${room.code}, players=${room.players.length}`);
 
     if (room.matchmakingMatchId && !room.state) {
       markMatchStartReady(room.code, joinedPlayerSeatId);
@@ -392,16 +392,10 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
           if (startResult.started) {
             room = getRoom(room.code);
-            console.log(`[${via}] matchmaking auto-started`, {
-              roomCode: room.code,
-              socketId: socket.id,
-            });
+            log.info({ roomCode: room.code, socketId: socket.id, via }, 'matchmaking auto-started');
           }
         } catch (startErr) {
-          console.warn(
-            `[${via}] matchmaking auto-start failed`,
-            startErr instanceof Error ? startErr.message : startErr,
-          );
+          log.warn({ err: startErr, via }, 'matchmaking auto-start failed');
         }
       }
     }

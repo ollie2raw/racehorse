@@ -103,13 +103,13 @@ export function registerGameplayActionHandlers(
             process.env.MP_DEBUG === '1' ||
             process.env.DEBUG_MP === '1'
           ) {
-            console.log('[mp-action-ack]', {
+            log.info({
               roomCode: room.code,
               playerId: socket.id,
               action: action?.type,
               sequence: room.state?.sequence ?? null,
               flushedRoomCodes: flushResult.flushedRoomCodes,
-            });
+            }, '');
           }
           const forcedMeta = result.forcedDrawAnimation
             ? {

@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { getRoomMatchEventMeta } from '../rooms';
 import {
@@ -7,6 +8,8 @@ import {
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
 import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
+
+const log = childLogger('multiplayer:join');
 
 export type RegisterRoomJoinHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -43,10 +46,10 @@ export function registerRoomJoinHandlers(
     const roomCode = String(rawCode ?? '')
       .trim()
       .toUpperCase();
-    console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
+    log.info(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
-      console.log(`[room:join] identity user=${username} (${userId})`);
+      log.info(`[room:join] identity user=${username} (${userId})`);
       const attached = await attachSocketToTrackedRoom({
         roomCode,
         username,
@@ -71,7 +74,7 @@ export function registerRoomJoinHandlers(
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[room:join] ERROR: ${message}`);
+      log.info(`[room:join] ERROR: ${message}`);
       if (message === 'Room not found.') {
         const rateLimitKey = socketRateLimitKey(socket);
         const failedLookupsKey = `failed_lookups:${rateLimitKey}`;

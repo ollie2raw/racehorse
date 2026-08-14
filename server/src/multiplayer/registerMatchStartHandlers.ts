@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { getRoom } from '../rooms';
 import { defaultEnginePersistence } from '../scheduledTournament/persistenceInterface';
@@ -12,6 +13,8 @@ import {
   type AckFn,
   type RoomSessionHandlerDeps,
 } from './roomSession';
+
+const log = childLogger('multiplayer:match-start');
 
 export type RegisterMatchStartHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -31,30 +34,30 @@ export function registerMatchStartHandlers(
       assertRoomDurabilityOperationAllowed(room, 'match_start');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       if (!room.players.includes(playerSeatId)) {
-        console.log('[player:ready] rejected — seat not in room.players', {
+        log.info({
           roomCode,
           playerSeatId,
           socketId: socket.id,
           roomPlayers: [...room.players],
           matchStartReady: [...room.matchStartReady],
-        });
+        }, 'rejected — seat not in room.players');
         cb?.({ ok: false, error: 'Only room players can ready up.' });
         return;
       }
-      console.log('[player:ready] marking seat ready', {
+      log.info({
         roomCode,
         playerSeatId,
         socketId: socket.id,
         roomPlayers: [...room.players],
         matchStartReadyBefore: [...room.matchStartReady],
-      });
+      }, 'marking seat ready');
       markMatchStartReady(roomCode, playerSeatId);
       const roomAfterReady = getRoom(roomCode);
-      console.log('[player:ready] matchStartReady after mark', {
+      log.info({
         roomCode,
         playerSeatId,
         matchStartReady: [...roomAfterReady.matchStartReady],
-      });
+      }, 'matchStartReady after mark');
       const isPrivate = !roomAfterReady.matchmakingMatchId && !roomAfterReady.scheduledTournamentMatchId;
       if (!isPrivate) {
         const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
@@ -92,14 +95,14 @@ export function registerMatchStartHandlers(
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
-      console.log('[player:ready] ERROR', { roomCode, socketId: socket.id, error: message });
+      log.info({ roomCode, socketId: socket.id, error: message }, 'ERROR');
       cb?.({ ok: false, error: message });
     }
   });
 
   socket.on('game:start', async (code, cb) => {
     const roomCode = String(code).trim().toUpperCase();
-    console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
+    log.info(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
       const existingRoom = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(existingRoom, 'match_start');
@@ -127,7 +130,7 @@ export function registerMatchStartHandlers(
       const auditPlayers = [...roomForAudit.players];
       const auditReady = [...roomForAudit.matchStartReady];
       const auditMissing = auditPlayers.filter((id) => !roomForAudit.matchStartReady.has(id));
-      console.log('[game:start] matchStartReady audit', {
+      log.info({
         roomCode,
         hostSeatId: playerSeatId,
         socketId: socket.id,
@@ -136,7 +139,7 @@ export function registerMatchStartHandlers(
         missing: auditMissing,
         waitingFor: startResult.waitingFor ?? [],
         started: startResult.started,
-      });
+      }, 'matchStartReady audit');
       if (!startResult.started) {
         const waitingFor = startResult.waitingFor ?? auditMissing;
         io.to(roomCode).emit('room:request_ready', {
@@ -149,7 +152,7 @@ export function registerMatchStartHandlers(
         return;
       }
       const room = getRoom(roomCode);
-      console.log(
+      log.info(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
       handlerDeps.notifyRoomPlayersInGame(roomCode);
@@ -157,7 +160,7 @@ export function registerMatchStartHandlers(
       if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[game:start] ERROR: ${message}`);
+      log.info(`[game:start] ERROR: ${message}`);
       if (typeof cb === 'function') cb({ ok: false, error: message });
     }
   });
