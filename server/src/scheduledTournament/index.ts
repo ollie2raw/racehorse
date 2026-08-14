@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import type { Express } from 'express';
 import { registerTournamentSocketHandlers } from './socketHandlers';
@@ -13,6 +14,8 @@ export {
 } from './engine';
 export type { MatchRow, ScheduledTournamentRow, RegistrationRow, BracketView } from './types';
 
+const log = childLogger('tournament');
+
 let infrastructureInitialized = false;
 
 /**
@@ -27,10 +30,7 @@ export function bootstrapScheduledTournamentInfrastructure(io: Server, app: Expr
   startTournamentScheduler(io);
   setTimeout(() => {
     void recoverTournamentMatches(io).catch((error) => {
-      console.warn(
-        '[tournament:recovery] startup recovery failed',
-        error instanceof Error ? error.message : error,
-      );
+      log.warn({ err: error }, 'startup recovery failed');
     });
   }, 2_000);
 }

@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { isTournamentPastActiveWindow } from './activeWindow';
 import { fetchTournamentsByStatus } from './persistence';
@@ -11,6 +12,8 @@ import {
 import { supabaseFetch } from '../supabaseUtils';
 
 const TICK_INTERVAL_MS = 30_000;
+const log = childLogger('tournament:scheduler');
+
 const SEED_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -46,12 +49,7 @@ export function startTournamentScheduler(io: Server): void {
       const inProgress = await fetchTournamentsByStatus(['in_progress']);
       for (const t of inProgress) {
         if (isTournamentPastActiveWindow(t, now)) {
-          console.log('[tournament:stale] cancelling expired in-progress tournament', {
-            tournamentId: t.id,
-            scheduledStart: t.scheduled_start,
-            ageMs: now - Date.parse(t.scheduled_start),
-            reason: 'past_active_window',
-          });
+          log.info({ tournamentId: t.id, scheduledStart: t.scheduled_start, ageMs: now - Date.parse(t.scheduled_start) }, 'cancelling expired tournament');
           await cancelTournament(io, t.id);
           continue;
         }
@@ -62,10 +60,7 @@ export function startTournamentScheduler(io: Server): void {
       }
       await reconcileExpiredReadyMatches(io, new Date(now));
     } catch (err) {
-      console.warn(
-        '[tournament:scheduler] tick failed',
-        err instanceof Error ? err.message : err,
-      );
+      log.warn({ err }, 'scheduler tick failed');
     }
   };
   // Fire one immediate tick so an existing-due tournament catches up at boot.
@@ -97,10 +92,7 @@ async function callEnsureSeedWindow(): Promise<void> {
       body: '{}',
     });
   } catch (err) {
-    console.warn(
-      '[tournament:scheduler] auto-reseed RPC failed',
-      err instanceof Error ? err.message : err,
-    );
+    log.warn({ err }, 'auto-reseed RPC failed');
   }
 }
 

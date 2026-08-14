@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Express, Request, Response } from 'express';
 import { isSupabaseTimeoutError, supabaseFetch } from '../supabaseUtils';
 import { placementLabelForRank } from './engine';
@@ -22,6 +23,8 @@ import {
   requireAuthUserId,
   sendAuthError,
 } from './tournamentAuth';
+
+const log = childLogger('tournament:routes');
 
 async function requireAuth(
   req: Request,
@@ -56,10 +59,7 @@ export function registerTournamentRoutes(app: Express): void {
       res.json({ ok: true, tournaments: enriched });
     } catch (err) {
       if (isSupabaseTimeoutError(err)) {
-        console.warn('[tournament:upcoming] upstream timeout', {
-          ms: Date.now() - startedAt,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        log.warn({ ms: Date.now() - startedAt, err }, 'upstream timeout');
         res.status(503).json({ ok: false, error: 'upstream_timeout', tournaments: [] });
         return;
       }
@@ -174,14 +174,7 @@ export function registerTournamentRoutes(app: Express): void {
         : null;
 
       if (activeAssignedPayload) {
-        console.log('[tournament:recovery] activeAssignedMatch', {
-          userId,
-          matchId: activeAssignedPayload.matchId,
-          status: activeAssignedPayload.matchStatus,
-          roomCodeExists: Boolean(activeAssignedPayload.roomCode),
-          round: activeAssignedPayload.round,
-          deadline: activeAssignedPayload.readyDeadlineAt,
-        });
+        log.info({ userId, matchId: activeAssignedPayload.matchId, status: activeAssignedPayload.matchStatus, round: activeAssignedPayload.round }, 'recovery activeAssignedMatch');
       }
 
       if (meState.currentTournamentPhase === 'completed' && meState.activeTournamentId) {
@@ -193,10 +186,7 @@ export function registerTournamentRoutes(app: Express): void {
               (match.status === 'completed' || match.completed_at || match.winner_id),
           )
           .sort((a, b) => Date.parse(b.completed_at ?? '') - Date.parse(a.completed_at ?? ''))[0];
-        console.log('[tournament:me] completed result state', {
-          tournamentId: meState.activeTournamentId,
-          matchId: completedMatch?.id ?? null,
-        });
+        log.info({ tournamentId: meState.activeTournamentId, matchId: completedMatch?.id ?? null }, 'completed result state');
       }
 
       res.json({

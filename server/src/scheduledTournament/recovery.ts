@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { isTournamentPastActiveWindow } from './activeWindow';
 import { dispatchTournamentMatch } from './matchDispatch';

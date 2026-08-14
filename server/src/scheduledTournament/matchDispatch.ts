@@ -1,9 +1,12 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { MatchRow } from './types';
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
+
+const log = childLogger('tournament:dispatch');
 
 export const TOURNAMENT_MATCH_READY_WINDOW_MS = 2 * 60_000;
 
@@ -71,11 +74,7 @@ export async function promoteScheduledMatchToInProgress(
     started_at: match.started_at ?? startedAt,
     status_reason: null,
   });
-  console.log('[tournament:match] promoted in_progress only after human attach', {
-    matchId,
-    roomCode: match.room_code,
-    humanUserId: humanUserId ?? null,
-  });
+  log.info({ matchId, roomCode: match.room_code, humanUserId: humanUserId ?? null }, 'promoted in_progress after human attach');
 }
 
 function botLabel(tier: MatchRow['bot_tier']): string {
@@ -161,11 +160,7 @@ export async function dispatchTournamentMatch(
     const humanUserIds = [match.player1_id, match.player2_id].filter(
       (id): id is string => Boolean(id && !isBotUserId(id)),
     );
-    console.log('[tournament:dispatch] match ready', {
-      matchId: match.id,
-      roomCode,
-      humanUserIds,
-    });
+    log.info({ matchId: match.id, roomCode, humanUserIds }, 'match ready');
   }
 
   const shouldEmit = !alreadyReady || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
@@ -209,10 +204,7 @@ export async function dispatchTournamentMatch(
       sock.emit('tournament:match_ready', payload);
     }
     if (recipientSockets.length === 0) {
-      console.log('[tournament:match_ready] skipped — no connected assigned sockets', {
-        matchId: match.id,
-        roomCode,
-      });
+      log.debug({ matchId: match.id, roomCode }, 'match_ready skipped — no connected sockets');
     }
   }
 

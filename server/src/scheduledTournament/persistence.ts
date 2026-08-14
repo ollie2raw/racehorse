@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import { supabaseFetch } from '../supabaseUtils';
 import { isTournamentPastActiveWindow } from './activeWindow';
 import { humanJoinedAt } from './matchDispatch';
@@ -9,6 +10,8 @@ import type {
   ScheduledTournamentStatus,
   MatchStatus,
 } from './types';
+
+const log = childLogger('tournament:persistence');
 
 /** Single source of truth for the table names — easy to rename later. */
 export const TABLES = {
@@ -301,7 +304,7 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
       (entry): entry is { match: MatchRow; tournament: ScheduledTournamentRow } => Boolean(entry.tournament),
     );
 
-  console.log('[tournament:recovery] candidates', {
+  log.info({
     userId,
     count: candidateRows.length,
     matches: candidateRows.map(({ match, tournament }) => ({
@@ -311,39 +314,39 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
       scheduledStart: tournament.scheduled_start,
       roomCode: match.room_code,
     })),
-  });
+  }, 'candidates');
 
   const filtered = candidateRows.filter(({ match, tournament }) => {
     if (isTournamentPastActiveWindow(tournament, nowMs)) {
-      console.log('[tournament:recovery] skipped-stale', {
+      log.info({
         tournamentId: tournament.id,
         matchId: match.id,
         reason: 'tournament_past_active_window',
-      });
+      }, 'skipped-stale');
       return false;
     }
     if (tournament.status !== 'in_progress') {
-      console.log('[tournament:recovery] skipped-stale', {
+      log.info({
         tournamentId: tournament.id,
         matchId: match.id,
         reason: `tournament_${tournament.status}`,
-      });
+      }, 'skipped-stale');
       return false;
     }
     if (match.status !== 'ready' && match.status !== 'in_progress') {
-      console.log('[tournament:recovery] skipped-stale', {
+      log.info({
         tournamentId: tournament.id,
         matchId: match.id,
         reason: `match_${match.status}`,
-      });
+      }, 'skipped-stale');
       return false;
     }
     if (match.completed_at || match.winner_id) {
-      console.log('[tournament:recovery] skipped-completed', {
+      log.info({
         tournamentId: tournament.id,
         matchId: match.id,
         roomCode: match.room_code,
-      });
+      }, 'skipped-completed');
       return false;
     }
     if (
@@ -352,11 +355,11 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
       Date.parse(match.ready_deadline_at) < nowMs &&
       !humanJoinedAt(match, userId)
     ) {
-      console.log('[tournament:recovery] skipped-stale', {
+      log.info({
         tournamentId: tournament.id,
         matchId: match.id,
         reason: 'ready_deadline_expired',
-      });
+      }, 'skipped-stale');
       return false;
     }
     return true;
@@ -378,11 +381,11 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
   if (!selected) {
     return null;
   }
-  console.log('[tournament:recovery] selected', {
+  log.info({
     tournamentId: selected.tournament.id,
     matchId: selected.match.id,
     reason: 'latest_in_progress_attachable_match',
-  });
+  }, 'selected');
   const opponentId =
     selected.match.player1_id === userId ? selected.match.player2_id : selected.match.player1_id;
   let opponentUsername: string | null = null;

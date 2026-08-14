@@ -1,3 +1,4 @@
+import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
@@ -11,6 +12,8 @@ import {
   isBotUserId,
 } from './matchDispatch';
 import type { MatchRow, SeededPlayer } from './types';
+
+const log = childLogger('tournament:engine');
 
 const MIN_HUMANS_TO_START = 1;
 const BOT_ID_PREFIX = 'bot:fritz:';
@@ -179,11 +182,11 @@ async function resolveBotOnlyMatch(
   if (!match.player1_id || !match.player2_id) return false;
   if (!isBotOnlyMatch(match)) {
     if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
-      console.log('[tournament:bot-match] skipped auto-resolve because human participant exists', {
+      log.info({
         matchId: match.id,
         player1Id: match.player1_id,
         player2Id: match.player2_id,
-      });
+      }, 'skipped auto-resolve because human participant exists');
     }
     return false;
   }
@@ -197,10 +200,10 @@ async function resolveBotOnlyMatch(
     match.player2_id,
     persistence,
   );
-  console.log('[tournament:bot-match] auto-resolved bot-vs-bot', {
+  log.info({
     matchId: match.id,
     winnerId,
-  });
+  }, 'auto-resolved bot-vs-bot');
   await applyMatchResult(io, {
     matchId: match.id,
     winnerId,
@@ -384,10 +387,10 @@ export async function resolveWaitingBotOnlyQuarterfinals(
     }
   }
   if (resolved > 0) {
-    console.log('[tournament:bot-match] resolved waiting quarterfinal bot pairs', {
+    log.info({
       tournamentId,
       resolved,
-    });
+    }, 'resolved waiting quarterfinal bot pairs');
   }
   return resolved;
 }
@@ -420,10 +423,10 @@ export async function dispatchScheduledStartMatches(
     if (match.status !== 'waiting') continue;
     await dispatchTournamentMatch(io, match.id, { reason: 'bracket_generated', now }, persistence);
     if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
-      console.log('[tournament:dispatch] human-vs-bot playable match ready', {
+      log.info({
         tournamentId,
         matchId: match.id,
-      });
+      }, 'human-vs-bot playable match ready');
     }
     dispatched += 1;
     const updated = await persistence.fetchMatchById(match.id);
@@ -433,7 +436,7 @@ export async function dispatchScheduledStartMatches(
   }
   const botResolved = await resolveWaitingBotOnlyQuarterfinals(io, tournamentId, persistence, now);
   if (dispatched > 0 || botResolved > 0) {
-    console.log('[tournament:dispatch] scheduled_start batch', { tournamentId, dispatched, botResolved });
+    log.info({ tournamentId, dispatched, botResolved }, 'scheduled_start batch');
   }
   return dispatched;
 }
@@ -507,7 +510,7 @@ export async function applyMatchResult(
     (m) => m.round === next.nextRound && m.match_number === next.nextMatchNumber,
   );
   if (!target) {
-    console.warn('[tournament] no target match for advancement', { matchId: match.id });
+    log.warn({ matchId: match.id }, 'no target match for advancement');
     return;
   }
   const patch =
@@ -527,12 +530,12 @@ export async function applyMatchResult(
     status: newStatus,
     bot_tier: matchBotTier(next.nextRound, targetPlayer1Id, targetPlayer2Id),
   });
-  console.log('[tournament:advance] winner advanced', {
+  log.info({
     fromMatchId: match.id,
     nextMatchId: target.id,
     slot: next.slot,
     winnerId: params.winnerId,
-  });
+  }, 'winner advanced');
 
   // Re-fetch and broadcast.
   const updated = await persistence.fetchMatchById(target.id);
@@ -558,10 +561,10 @@ export async function completeTournament(
     await persistence.updateRegistrationStatus(tournamentId, winnerUserId, 'winner');
   }
   await writeTournamentCompletionActivity(tournamentId, placements);
-  console.log('[tournament:complete] champion', {
+  log.info({
     tournamentId,
     winnerId: winnerUserId,
-  });
+  }, 'champion');
   io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
 }
 
@@ -661,10 +664,10 @@ export async function reconcileExpiredReadyMatches(
             ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
             status_reason: 'room_rehydrated_deadline_extended',
           });
-          console.log('[tournament:recovery] ready room missing; rehydrated before no-show', {
+          log.info({
             matchId: match.id,
             roomCode: match.room_code,
-          });
+          }, 'ready room missing; rehydrated before no-show');
           continue;
         }
       }
@@ -690,11 +693,11 @@ export async function reconcileExpiredReadyMatches(
         );
       }
 
-      console.log('[tournament:no-show] marking loss', {
+      log.info({
         matchId: match.id,
         userId: noShowUserId,
         reason: playerNoShowReason(match, noShowUserId),
-      });
+      }, 'marking loss');
 
       await applyMatchResult(
         io,
@@ -774,27 +777,27 @@ export async function applyTournamentGameOverFromRoom(
     const byRoom = await lookupMatchByRoom(room.code);
     if (byRoom) {
       matchId = byRoom.id;
-      console.log('[tournament:game-over] resolved match by room code', {
+      log.info({
         roomCode: room.code,
         matchId,
         tournamentId: byRoom.tournament_id,
-      });
+      }, 'resolved match by room code');
     }
   }
   if (!matchId) {
-    console.warn('[tournament:game-over] no tournament match for room', {
+    log.warn({
       roomCode: room.code,
       scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
-    });
+    }, 'no tournament match for room');
     return false;
   }
-  console.log('[tournament:game-over] applying result', {
+  log.info({
     roomCode: room.code,
     matchId,
     tournamentId: room.scheduledTournamentId ?? null,
     winnerId: params.winnerUserId,
     scores: { player1: params.player1Score, player2: params.player2Score },
-  });
+  }, 'applying result');
   await applyMatchResult(
     io,
     {
