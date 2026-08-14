@@ -18,7 +18,10 @@ import { scrubPartialPublishedLadderForDate } from '../../dailyPuzzleLadderPubli
 import { ensureDailyPuzzleLadderForDate } from '../../seedDailyPuzzleLadder';
 import { constantTimeEqualSecret } from '../../platform/auth/adminSecret';
 import { supabaseFetch } from '../../supabaseUtils';
+import { childLogger } from '../../logger';
 import { getPacificDateKey, getPacificDateKeyDaysFromNow } from '../../shared/pacificDate';
+
+const log = childLogger('daily-puzzle-store');
 import { listCompletedDailyPuzzleLadderDatesForUser } from './homeCompletionDates';
 
 export function isRequestPuzzleGenerationEnabled(): boolean {
@@ -82,17 +85,14 @@ export async function listDailyPuzzleSlotsForDateWithAutoSeed(runDate: string): 
     if (outcome === 'seeded') {
       slots = await listDailyPuzzleSlotsForDate(runDate);
     } else {
-      console.warn('[daily-puzzle-ladder] request-time generation unavailable', {
-        runDate,
-        outcome,
-      });
+      log.warn({ runDate, outcome }, 'daily-puzzle-ladder request-time generation unavailable');
     }
     return slots;
   } catch (error) {
-    console.warn('[daily-puzzle-ladder] listDailyPuzzleSlotsForDateWithAutoSeed failed', {
-      runDate,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    log.warn(
+      { runDate, error: error instanceof Error ? error.message : String(error) },
+      'daily-puzzle-ladder listDailyPuzzleSlotsForDateWithAutoSeed failed',
+    );
     return [];
   }
 }

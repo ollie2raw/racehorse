@@ -1,6 +1,9 @@
 
 import * as Sentry from '@sentry/node';
 import { config } from './config';
+import { childLogger } from './logger';
+
+const log = childLogger('supabase');
 
 /** Prevent hung PostgREST/auth calls from blocking HTTP handlers indefinitely. */
 export const DEFAULT_SUPABASE_FETCH_TIMEOUT_MS = 15_000;
@@ -69,10 +72,10 @@ function recordFailure(now = Date.now()): void {
       });
       Sentry.captureException(new Error('Supabase circuit breaker opened'));
     });
-    console.error('[supabase] circuit breaker opened — failing fast for 30s', {
-      failures: failureTimestamps.length,
-      windowMs: CIRCUIT_WINDOW_MS,
-    });
+    log.error(
+      { failures: failureTimestamps.length, windowMs: CIRCUIT_WINDOW_MS },
+      'supabase circuit breaker opened — failing fast for 30s',
+    );
   }
 }
 
@@ -104,7 +107,7 @@ async function runWithSpan<T>(
     const durationMs = Date.now() - startMs;
     // Always emit a timing log so slow calls are visible even without Sentry tracing enabled.
     if (durationMs > 1000 || failed) {
-      console.warn('[supabase] slow/failed query', { path, method, durationMs, failed });
+      log.warn({ path, method, durationMs, failed }, 'supabase slow/failed query');
     }
   }
 }

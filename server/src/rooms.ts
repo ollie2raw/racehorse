@@ -30,6 +30,9 @@ import {
 } from './multiplayer/roomDurability';
 import { flushScheduledLiveRoomPersistence, isLiveRoomDurablyRecoverable } from './multiplayer/roomLivePersistence';
 import { assertRoomDurabilityOperationAllowed } from './multiplayer/roomDurabilityPolicy';
+import { childLogger } from './logger';
+
+const log = childLogger('rooms');
 
 export type RoomCode = string;
 
@@ -734,7 +737,7 @@ export async function readyForNextHand(
     nextHandStartsByRoom.set(code, advance);
     void advance
       .catch((err: unknown) => {
-        console.error('[hand:ready] scheduled next hand failed', err);
+        log.error({ err, roomCode: code }, 'scheduled next hand failed');
       })
       .finally(() => {
         if (nextHandStartsByRoom.get(code) === advance) {

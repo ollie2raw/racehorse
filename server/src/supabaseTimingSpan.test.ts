@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const { warnSpy } = vi.hoisted(() => ({ warnSpy: vi.fn() }));
+
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
@@ -21,6 +23,10 @@ vi.mock('@sentry/node', () => ({
   startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
   withScope: vi.fn((fn: (scope: unknown) => void) => fn({ setTag: vi.fn(), setContext: vi.fn() })),
   captureException: vi.fn(),
+}));
+
+vi.mock('./logger', () => ({
+  childLogger: () => ({ warn: warnSpy, error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
 }));
 
 import * as Sentry from '@sentry/node';
@@ -55,18 +61,14 @@ describe('supabaseFetch Sentry span (item 3.1)', () => {
     expect(mockStartSpan).toHaveBeenCalledOnce();
   });
 
-  it('emits timing console.warn for slow calls (mocked via spy)', async () => {
-    // Simulate a slow call by making startSpan invoke fn but we intercept console.warn
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    // Make fetch fail so the finally block logs it
+  it('emits timing log.warn for slow/failed calls', async () => {
+    warnSpy.mockClear();
     mockFetch.mockResolvedValue({ ok: false, status: 503, text: async () => 'slow error' } as unknown as Response);
     await expect(supabaseFetch('/rest/v1/slow')).rejects.toThrow();
-    // The finally block emits a warning when the call fails
     expect(warnSpy).toHaveBeenCalledWith(
-      '[supabase] slow/failed query',
       expect.objectContaining({ path: '/rest/v1/slow', failed: true }),
+      'supabase slow/failed query',
     );
-    warnSpy.mockRestore();
   });
 
   it('sets span name based on HTTP method', async () => {
