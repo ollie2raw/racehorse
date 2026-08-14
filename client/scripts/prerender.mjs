@@ -183,7 +183,7 @@ function replaceMeta(html, selector, value) {
 function renderRoute(template, route) {
   const url = `${siteOrigin}${route.path}`;
   const image = `${siteOrigin}${route.image}`;
-  const content = `<main class="prerendered-page"><p>Racehorse Dominoes</p><h1>${escapeHtml(route.heading)}</h1><p>${escapeHtml(route.body)}</p><p><a href="/">Explore Racehorse Dominoes</a></p></main>`;
+  const content = `<main class="prerendered-page" aria-hidden="true"><p>Racehorse Dominoes</p><h1>${escapeHtml(route.heading)}</h1><p>${escapeHtml(route.body)}</p><p><a href="/">Explore Racehorse Dominoes</a></p></main>`;
 
   let html = template
     .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(route.title)}</title>`)

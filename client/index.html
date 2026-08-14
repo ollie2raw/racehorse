@@ -23,45 +23,25 @@
       body {
         margin: 0;
         background: #020617;
-        color: #f7f1e3;
-        font-family: "Outfit", system-ui, sans-serif;
       }
+      /* Keep SEO copy in the document; hide it so refresh does not flash a landing page. */
       .prerendered-page {
-        box-sizing: border-box;
-        min-height: 100vh;
-        display: grid;
-        align-content: center;
-        gap: 16px;
-        max-width: 880px;
-        margin: 0 auto;
-        padding: 48px 24px;
-      }
-      .prerendered-page h1,
-      .prerendered-page p {
-        margin: 0;
-      }
-      .prerendered-page h1 {
-        font-size: clamp(40px, 7vw, 72px);
-        line-height: 0.98;
-      }
-      .prerendered-page p,
-      .prerendered-page a {
-        color: #b9c7db;
-        font-size: 18px;
-      }
-      .prerendered-page nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
-      }
-      .prerendered-page a {
-        color: #58a6ff;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+        pointer-events: none;
       }
     </style>
   </head>
   <body>
     <div id="root">
-      <main class="prerendered-page">
+      <main class="prerendered-page" aria-hidden="true">
         <p>Racehorse Dominoes</p>
         <h1>Daily dominoes, built for strategy.</h1>
         <p>Play today’s Daily Fritz set, solve the Daily Puzzle, learn the game, or compete online.</p>
