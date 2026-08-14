@@ -1,0 +1,159 @@
+/* ─── Navbar button refinements ─── */
+
+.home-top-actions .home-top-btn-user {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  font-weight: 650 !important;
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.home-top-actions .home-top-btn-action {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.home-top-actions .home-top-btn-action:hover {
+  color: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.home-top-actions .home-top-btn-signout {
+  color: rgba(255, 255, 255, 0.3) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  font-size: 13px !important;
+}
+
+.home-top-btn-signout-topleft:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.home-lobby-screen .layout-screen-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.home-utility-profile-sep {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 2px;
+}
+
+/* ─── Suspense fallback: full-screen loader (lazy route chunks) ─── */
+
+.rh-screen-loader {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: var(--space-md);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+.rh-screen-loader__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 48% 36% at 50% 0%,
+      color-mix(in srgb, var(--tier-standard) 14%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 40% 28% at 72% 30%,
+      color-mix(in srgb, var(--tier-standard) 6%, transparent) 0%,
+      transparent 52%
+    ),
+    var(--bg-obsidian);
+}
+
+.rh-screen-loader__panel {
+  position: relative;
+  z-index: 1;
+  width: min(440px, calc(100% - 32px));
+  padding: 28px 32px 26px;
+  border-radius: var(--radius-card);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-subtle);
+  box-shadow:
+    0 var(--hud-lift) 48px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 5%, transparent);
+  text-align: center;
+  animation: rh-screen-loader-in 700ms var(--ease-premium) forwards;
+}
+
+@keyframes rh-screen-loader-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rh-screen-loader__brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  opacity: 0.95;
+}
+
+.rh-screen-loader__label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.rh-screen-loader__rail {
+  margin-top: 22px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  overflow: hidden;
+}
+
+.rh-screen-loader__rail-fill {
+  height: 100%;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--tier-standard) 75%, transparent),
+    transparent
+  );
+  animation: rh-screen-loader-scan 1.35s linear infinite;
+}
+
+@keyframes rh-screen-loader-scan {
+  0% {
+    transform: translateX(-140%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}

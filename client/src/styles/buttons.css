@@ -1,0 +1,69 @@
+/* ─── Buttons ───────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  touch-action: manipulation;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.btn.primary {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn.secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn.secondary:hover:not(:disabled) {
+  background: var(--bg-primary);
+}
+
+.btn.action {
+  background: var(--accent-secondary);
+  color: white;
+  padding: 10px 20px;
+}
+
+.btn.action:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn.text {
+  background: none;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+}
+
+.btn.text:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.97);
+}
