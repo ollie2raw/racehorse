@@ -449,6 +449,18 @@ export function LiveMatchScreen({
     <>
       <>
           <RotateOverlay />
+          {/* Screen reader live region — announces turn and score changes without visual change */}
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+          >
+            {isHandActive && (isMyTurn
+              ? `Your turn. Your score: ${myScore}. Opponent score: ${opponentScore}.`
+              : `${opponentName}'s turn. Your score: ${myScore}. Opponent score: ${opponentScore}.`
+            )}
+          </div>
           <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
             <style>{`
               @keyframes rh-pulse-dot {

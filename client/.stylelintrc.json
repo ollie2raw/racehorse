@@ -35,6 +35,8 @@
         "**/racehorse-matte.css",
         "**/game-interactions.css",
         "**/match-board-architecture.css",
+        "**/match-gameplay.css",
+        "**/match-in-game.css",
         "**/match-hud-polish.css",
         "**/match-standard-live-board.css",
         "**/shared-ui.css",

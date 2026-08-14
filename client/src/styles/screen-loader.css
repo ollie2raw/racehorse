@@ -157,3 +157,17 @@
     transform: translateX(380%);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-screen-loader,
+  [class*="screen-loader"] {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .rh-screen-loader::after,
+  [class*="screen-loader"]::after {
+    animation: none;
+    display: none;
+  }
+}

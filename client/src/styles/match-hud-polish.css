@@ -515,3 +515,17 @@
   border-color: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.85);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  @supports (view-transition-name: none) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation-duration: 0.01ms;
+    }
+  }
+
+  .df-result-overlay {
+    animation: none;
+  }
+}

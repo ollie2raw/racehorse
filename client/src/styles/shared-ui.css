@@ -837,6 +837,14 @@
   box-shadow: 0 0 18px rgba(231, 182, 74, 0.32) !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  [class*="rh-active-outline"]::after,
+  [class*="active-outline"]::after {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
 .learn-lesson-screen .board-canvas .domino-tile.highlight .domino-body,
 .learn-lesson-screen .guided-scoring .domino-tile,
 .learn-lesson-screen .guided-scoring {
