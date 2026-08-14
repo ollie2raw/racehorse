@@ -3,8 +3,11 @@
 
 :root {
   /* ── Backgrounds ─────────────────────────────────── */
-  --bg-obsidian: #04070c;
-  --bg-card:     #0d121f;
+  --bg-obsidian:   #04070c;
+  --bg-card:       #0d121f;
+  /* Legacy aliases (App.css era) — kept for backward compat */
+  --bg-primary:    #1a1f2e;
+  --bg-secondary:  #252b3d;
 
   /* ── Tier accent system ──────────────────────────── */
   --tier-rookie:   #4ADE80;   /* green  — streaks, positive progression */
@@ -32,6 +35,7 @@
   --text-primary:   #f8fafc;
   --text-secondary: rgba(255, 255, 255, 0.6);
   --text-dim:       rgba(255, 255, 255, 0.35);
+  --text-muted:     #6b7280;
   /* High-contrast copy on solid elite / gold CTAs */
   --text-on-elite:  #1a1200;
 
@@ -43,9 +47,24 @@
   /* ── Spatial ─────────────────────────────────────── */
   --radius-sm:   8px;
   --radius-md:   14px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
   --radius-card: 24px;
   --radius-pill: 999px;
   --hud-lift:    20px;
+
+  /* ── Spacing scale ───────────────────────────────── */
+  --space-xs: 8px;
+  --space-sm: 16px;
+  --space-md: 24px;
+  --space-lg: 40px;
+  --space-xl: 64px;
+
+  /* ── Layout constants ────────────────────────────── */
+  --tray-height:        64px;
+  --score-header-height: 72px;
+  --mobile-w:           600px;
+  --very-small-w:       380px;
 
   /* Match board arena (inGameBoardShell — Pass A playfield) */
   --rh-arena-mount-bg: rgba(4, 9, 18, 0.96);
@@ -63,8 +82,39 @@
   --surface-2: rgba(255, 255, 255, 0.08);
 
   /* ── Motion ──────────────────────────────────────── */
-  --ease-premium: cubic-bezier(0.2, 0, 0, 1);
-  --duration-fast: 120ms;
+  --ease-premium:      cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast:     120ms;
+  --transition-fast:   150ms ease;
+  --transition-normal: 250ms ease;
+
+  /* ── Accent aliases (semantic layer over tier system) */
+  --accent-primary:   var(--tier-standard);
+  --accent-secondary: #10b981;
+  --accent-warning:   #f59e0b;
+  --accent-danger:    #ef4444;
+
+  /* ── Tile styling ────────────────────────────────── */
+  --tile-bg:           #fffef5;
+  --tile-bg-gradient:  linear-gradient(145deg, #fffef5 0%, #f5f0e0 100%);
+  --tile-border:       #8b7355;
+  --tile-pip:          #1a1a1a;
+  --tile-selected:     rgba(80, 160, 255, 0.9);
+  --tile-highlight:    rgba(80, 160, 255, 0.95);
+  --tile-play-glow:    rgba(80, 160, 255, 0.3);
+  --tile-shadow:       0 3px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --tile-shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
+
+  /* ── Menu / nav backgrounds ──────────────────────── */
+  --menu-bg-base:
+    linear-gradient(180deg, #03101d 0%, #031324 38%, #02111f 100%);
+  --menu-bg-spot-a:
+    radial-gradient(ellipse 46% 32% at 50% 0%, rgba(56, 189, 248, 0.34) 0%, rgba(56, 189, 248, 0.10) 28%, rgba(56, 189, 248, 0.06) 46%, rgba(56, 189, 248, 0.00) 74%);
+  --menu-bg-spot-b:
+    linear-gradient(90deg, rgba(3, 15, 29, 0.00) 0%, rgba(34, 211, 238, 0.09) 50%, rgba(3, 15, 29, 0.00) 100%);
+  --menu-bg-beam:
+    linear-gradient(90deg, rgba(2, 12, 24, 0.00) 0%, rgba(56, 189, 248, 0.18) 50%, rgba(2, 12, 24, 0.00) 100%);
+  --menu-bg-vignette:
+    radial-gradient(circle at 50% 18%, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.10) 58%, rgba(0, 0, 0, 0.46) 100%);
 
   /* ── Typography ──────────────────────────────────── */
   --font-display: 'Barlow Condensed', sans-serif;
