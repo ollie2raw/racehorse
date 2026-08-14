@@ -8,7 +8,13 @@ import type {
   GuidedMatchPlayerTilePlayEvent,
   GuidedMatchTilePlayEvent,
 } from './guidedMatchTypes';
-import bundledCanonicalLesson from './lessons/FINAL-guided-match-standard-v1-canonical-75-48.json';
+// Import as a URL so Vite serves it as a separate hashed asset rather than
+// inlining 1.2 MB of JSON into the JS bundle. The fetch happens once at module
+// init (this file is always dynamically imported via lessonV2 → LearnHome lazy).
+import canonicalLessonUrl from './lessons/FINAL-guided-match-standard-v1-canonical-75-48.json?url';
+const bundledCanonicalLesson: GuidedMatchLesson = await fetch(canonicalLessonUrl).then(
+  (r) => r.json() as Promise<GuidedMatchLesson>,
+);
 import {
   getGuidedMatchFinalDebrief,
   STANDARD_GUIDED_MATCH_FINAL_DEBRIEF,

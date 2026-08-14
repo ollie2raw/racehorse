@@ -87,6 +87,80 @@ test.describe('Match lifecycle — Daily Puzzle', () => {
   });
 });
 
+test.describe('Match lifecycle — Pregame draw', () => {
+  test('picking a draw tile reveals it and advances the draw phase', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Single Player', { exact: false }).first().click();
+    await page.getByText('Play vs Fritz', { exact: false }).first().click();
+    await page.getByText('Start Match', { exact: false }).first().click();
+    await expect(page.locator('.game-screen')).toBeVisible({ timeout: 15_000 });
+
+    const pickable = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
+    if (!(await pickable.isVisible())) return; // already past draw phase
+
+    await pickable.click();
+
+    // After picking, the tile should be revealed (face-up) or the hand is dealt
+    const tileRevealed = await page.locator('.pre-game-draw-board__tile-slot.is-revealed').isVisible().catch(() => false);
+    const handDealt = await page.locator('.hand-area:not(.pre-game-draw-hand-dock)').isVisible().catch(() => false);
+    expect(tileRevealed || handDealt).toBe(true);
+  });
+
+  test('pregame draw completes and hand is dealt within timeout', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Single Player', { exact: false }).first().click();
+    await page.getByText('Play vs Fritz', { exact: false }).first().click();
+    await page.getByText('Start Match', { exact: false }).first().click();
+    await expect(page.locator('.game-screen')).toBeVisible({ timeout: 15_000 });
+
+    const drawTile = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
+    if (await drawTile.isVisible()) {
+      await drawTile.click();
+    }
+
+    // Hand must deal within 12 seconds of picking
+    await expect(page.locator('.hand-area:not(.pre-game-draw-hand-dock)')).toBeVisible({ timeout: 12_000 });
+    // Must have at least 1 domino in hand
+    await expect(page.locator('.hand-area .domino-body, .hand-area [class*="domino"]').first()).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+test.describe('Match lifecycle — Fritz setup', () => {
+  test('difficulty selector shows all four tiers', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Single Player', { exact: false }).first().click();
+    await page.getByText('Play vs Fritz', { exact: false }).first().click();
+
+    await expect(page.getByText('Rookie', { exact: false })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Standard', { exact: false })).toBeVisible();
+    await expect(page.getByText('Elite', { exact: false })).toBeVisible();
+    await expect(page.getByText('Master', { exact: false })).toBeVisible();
+  });
+
+  test('selecting Master difficulty enables Start Match', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Single Player', { exact: false }).first().click();
+    await page.getByText('Play vs Fritz', { exact: false }).first().click();
+
+    await page.getByText('Master', { exact: false }).first().click();
+    const startBtn = page.getByText('Start Match', { exact: false }).first();
+    await expect(startBtn).toBeVisible({ timeout: 5_000 });
+    await expect(startBtn).toBeEnabled();
+  });
+
+  test('14-tile format can be selected', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Single Player', { exact: false }).first().click();
+    await page.getByText('Play vs Fritz', { exact: false }).first().click();
+
+    const tile14 = page.getByText('14 Tiles', { exact: false }).first();
+    if (await tile14.isVisible()) {
+      await tile14.click();
+      await expect(page.getByText('Start Match', { exact: false }).first()).toBeEnabled();
+    }
+  });
+});
+
 test.describe('Match lifecycle — Navigation', () => {
   test('back navigation from bot match returns to hub', async ({ page }) => {
     await page.goto('/');

@@ -687,7 +687,7 @@ function BoardComponent(
       logLayoutDebug(validPositions.length, selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null, nextLayout);
     }
     return nextLayout;
-  }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
+  }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions, isResettingBoard]);
   const placementZones = useMemo(() => {
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const zones = computeBoardLayout(isResettingBoard ? null : board, validPositions).zones;
@@ -746,7 +746,11 @@ function BoardComponent(
     manualCameraUntilRef.current = now + 1500;
   }, []);
 
-  function fitCameraToContainer(reason: string, width?: number, height?: number, force = false) {
+  // Stable ref so the RAF retry callback always calls the latest version,
+  // avoiding a stale closure when layout/deps change between scheduling and firing.
+  const fitCameraToContainerRef = useRef<(reason: string, width?: number, height?: number, force?: boolean) => void>(() => {});
+
+  const fitCameraToContainer = useCallback((reason: string, width?: number, height?: number, force = false) => {
     const container = containerRef.current;
     if (!container) return;
     if (manualCameraRef.current && !force) {
@@ -764,7 +768,7 @@ function BoardComponent(
       if (typeof window !== 'undefined' && fitRetryRafRef.current === null) {
         fitRetryRafRef.current = window.requestAnimationFrame(() => {
           fitRetryRafRef.current = null;
-          fitCameraToContainer('retry');
+          fitCameraToContainerRef.current('retry');
         });
       }
       return;
@@ -859,7 +863,11 @@ function BoardComponent(
       const nextCamera = { x: 0, y: cameraY, scale: nextScale };
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }
+  }, [layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
+
+  useEffect(() => {
+    fitCameraToContainerRef.current = fitCameraToContainer;
+  }, [fitCameraToContainer]);
 
   // Single authoritative camera auto-fit: respond to layout and container size.
   useEffect(() => {
@@ -901,6 +909,7 @@ function BoardComponent(
       }
     };
   }, [
+    fitCameraToContainer,
     containFullBoard,
     layout,
     minCameraScale,
@@ -982,7 +991,7 @@ function BoardComponent(
   const handleDoubleClick = useCallback(() => {
     manualCameraRef.current = false;
     fitCameraToContainer('double-click-reset', undefined, undefined, true);
-  }, [layout, unitToPixels]);
+  }, [fitCameraToContainer]);
 
   const applyZoomStep = useCallback((delta: number) => {
     markManualCamera();
