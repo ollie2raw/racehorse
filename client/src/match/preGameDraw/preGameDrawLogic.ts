@@ -173,16 +173,13 @@ function resolveTie(state: PreGameDrawState, tiles: PreGameDrawTileSlot[]): PreG
   };
 }
 
-/** Both picks revealed with equal pips — tiles still on the scatter before redraw. */
+/** Both picks revealed with a genuine pip-identity tie — tiles still on the scatter before redraw. */
 export function isTieHoldState(state: PreGameDrawState): boolean {
   const { you, bot } = state.currentRound;
-  return (
-    state.phase === 'pick-opponent' &&
-    you != null &&
-    bot != null &&
-    you.pipSum === bot.pipSum &&
-    state.winner == null
-  );
+  if (state.phase !== 'pick-opponent' || you == null || bot == null || state.winner != null) {
+    return false;
+  }
+  return comparePreGameDrawTiles(you.tile, bot.tile) === 0;
 }
 
 export function commitTieRedraw(state: PreGameDrawState): PreGameDrawState {
