@@ -1890,3 +1890,17 @@
   }
 }
 
+
+/* Single-player hub card typography overrides (migrated from App.css) */
+.single-player-hub-cards .mode-option-title {
+  font-size: clamp(2.12rem, 3.35vw, 3.1rem) !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  text-transform: none;
+}
+
+.single-player-hub-cards .mode-option-meta {
+  font-size: 1.56rem !important;
+  line-height: 1.32;
+}

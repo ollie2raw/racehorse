@@ -1,6 +1,13 @@
 import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import './App.css';
 import './match/match-live.css';
+import './styles/room-lobby.css';
+import './styles/rotate-overlay.css';
+import './styles/match-hud-corner-pills.css';
+import './styles/large-mode.css';
+import './styles/table-theme-toggle.css';
+import './styles/weekly-awards.css';
+import './styles/responsive.css';
 import { useAuthSession } from './auth/useAuthSession';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';

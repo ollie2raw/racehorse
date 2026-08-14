@@ -1,0 +1,40 @@
+/* ─── Weekly awards leaderboard rows ─────────────────────────── */
+
+.weekly-award-row {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.weekly-award-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent), black 25%)
+  );
+}
+
+.weekly-award-value-pill {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent), white 15%),
+    color-mix(in srgb, var(--accent), black 20%)
+  );
+  color: #08121c;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.weekly-award-row.most-wins     { --accent: #f5c76a; }
+.weekly-award-row.most-games    { --accent: #4da3ff; }
+.weekly-award-row.biggest-win   { --accent: #ff6b6b; }
+.weekly-award-row.closest-win   { --accent: #3ddc97; }
+.weekly-award-row.biggest-comeback { --accent: #ff9f43; }
+.weekly-award-row.longest-streak   { --accent: #6c8cff; }

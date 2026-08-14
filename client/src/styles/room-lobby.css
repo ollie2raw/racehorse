@@ -1,0 +1,39 @@
+/* ─── Room lobby player list ─────────────────────────────────── */
+
+.players-list {
+  margin-bottom: 24px;
+}
+
+.players-list h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.player-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+.player-item.you {
+  border: 1px solid var(--accent-primary);
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-sm);
+}
+
+.waiting {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 12px;
+}

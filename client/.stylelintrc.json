@@ -39,6 +39,9 @@
         "**/match-in-game.css",
         "**/match-hud-polish.css",
         "**/match-standard-live-board.css",
+        "**/match-hud-corner-pills.css",
+        "**/large-mode.css",
+        "**/responsive.css",
         "**/shared-ui.css",
         "**/tournamentMatchHud.css"
       ],

@@ -1,0 +1,259 @@
+/* ─── Global responsive overrides ────────────────────────────── */
+
+/* Small screens (≤640px) */
+@media (max-width: 640px) {
+  .header h1 {
+    font-size: 1rem;
+  }
+
+  .game-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .scoreboard {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .scores-row {
+    gap: 8px;
+  }
+
+  .player-score {
+    padding: 4px 8px;
+    min-width: 60px;
+  }
+
+  .score-number {
+    font-size: 1rem;
+  }
+
+  .hand-container {
+    gap: 8px;
+  }
+
+  .opponent-tile-card {
+    top: 12px;
+    left: 12px;
+    padding: 7px 10px;
+  }
+
+  .opponent-tile-number {
+    font-size: 1.32rem;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .board-tile-wrapper,
+  .hand-container .domino-tile,
+  .player-score.active {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Mobile (≤768px) */
+@media (max-width: 768px) {
+  .layout-screen {
+    padding-inline: 0;
+    overflow-x: hidden;
+  }
+
+  .layout-screen-inner {
+    padding: 24px 16px;
+    margin-top: 0;
+    max-width: 100%;
+    width: 100%;
+    gap: 16px;
+  }
+
+  .layout-screen-title,
+  .mode-home-screen .layout-screen-title {
+    font-size: 28px !important;
+    line-height: 1.15;
+  }
+
+  .layout-screen-subtitle {
+    font-size: 1.08rem;
+    line-height: 1.45;
+  }
+
+  .layout-screen-content {
+    gap: 12px;
+  }
+
+  .screen-shell,
+  .mode-home-screen .layout-screen-header,
+  .mode-home-screen .layout-screen-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-inline: 0;
+  }
+
+  .mode-home-screen .mode-actions,
+  .tournament-screen .tournament-grid,
+  .tournament-screen .tournament-grid-entry,
+  .tournament-screen .tournament-grid-waiting,
+  .tournament-screen .tournament-grid-running,
+  .tournament-screen .tournament-running-top,
+  .tournament-screen .tournament-running-bottom {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px;
+  }
+
+  .mode-option,
+  .tournament-card,
+  .mode-inline-btn,
+  .btn {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .mode-option,
+  .mode-inline-btn,
+  .btn,
+  .home-top-btn {
+    min-height: 44px;
+  }
+
+  .app.large-mode .home-top-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    max-width: 100%;
+  }
+
+  .app.large-mode .home-top-actions .mode-inline-btn.home-top-btn {
+    width: auto;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .home-top-bar {
+    padding-inline: 8px;
+  }
+
+  .wl-top-rail,
+  .wl-stage-shell,
+  .wl-hand-area,
+  .board-area,
+  .board-container,
+  .board-canvas {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .wl-stage-shell,
+  .game-layout,
+  .bot-match-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .wl-board-area,
+  .board-area,
+  .board-container,
+  .board-wrap,
+  .game-board,
+  .wl-stage {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .wl-hand-area,
+  .hand-area,
+  .hand-tray,
+  .bot-hand {
+    flex-shrink: 0;
+    height: auto;
+    width: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+    background: linear-gradient(180deg, rgba(12, 18, 26, 0.95), rgba(8, 12, 18, 0.98));
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .screen.game-screen.walnut-live .wl-hand-area,
+  .screen.game-screen.walnut-live .hand-area.wl-hand-area {
+    height: var(--tray-height, 138px) !important;
+    min-height: var(--tray-height, 138px) !important;
+    max-height: var(--tray-height, 138px) !important;
+    flex: 0 0 var(--tray-height, 138px) !important;
+  }
+
+  .screen.game-screen.walnut-live .wl-hand-area .hand-container,
+  .screen.game-screen.walnut-live .wl-hand-area .hand-container.is-stacked {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .screen.game-screen.walnut-live .wl-hand-area .hand-row {
+    display: flex !important;
+  }
+
+  .hand-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 12px 16px !important;
+    overflow: visible !important;
+  }
+
+  .hand-row {
+    display: contents !important;
+  }
+
+  .domino-tile {
+    width: clamp(64px, 21vw, 92px) !important;
+    height: auto !important;
+  }
+
+  .pip-half {
+    padding: 2px !important;
+  }
+
+  .board-zoom-tray,
+  .wl-controls-tray {
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    bottom: 8px !important;
+    right: 8px !important;
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+
+  .icon-btn {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+  }
+
+  .screen,
+  .layout-screen,
+  .layout-screen-inner {
+    font-size: 13px;
+  }
+}

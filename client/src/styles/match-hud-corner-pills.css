@@ -1,0 +1,113 @@
+/* ─── Board corner HUD pills (open-ends, boneyard) ──────────── */
+
+.board-corner-pill {
+  position: absolute;
+  top: 12px;
+  z-index: 8;
+  border-radius: 999px;
+  border: 1.5px solid rgba(236, 252, 245, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  color: rgba(232, 245, 240, 0.98);
+  padding: 7px 14px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-corner-pill--tl {
+  left: 12px;
+}
+
+.board-corner-pill--tr {
+  right: 12px;
+}
+
+.open-ends-pill__label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.66em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.open-ends-count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
+}
+
+.boneyard-pill,
+.board-zoom-tray,
+.wl-controls-tray {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.boneyard-icon {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
+  opacity: 0.62;
+  flex: 0 0 auto;
+}
+
+.boneyard-count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
+}
+
+.boneyard-meta {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-size: 0.66em;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  opacity: 0.72;
+}
+
+/* Large-mode overrides for corner pills */
+.large-mode .open-ends-pill.board-corner-pill,
+.large-mode .boneyard-pill,
+.large-mode [data-ui="boneyard"] {
+  font-size: 1.26rem !important;
+  font-weight: 800 !important;
+  padding: 10px 18px !important;
+  border-width: 1.8px !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(248, 253, 250, 0.98) !important;
+  letter-spacing: 0.02em !important;
+}
+
+.large-mode .boneyard-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.large-mode .boneyard-count {
+  font-weight: 850;
+  font-size: 1.48rem !important;
+}
+
+.large-mode .boneyard-meta {
+  font-size: 0.64em;
+}
