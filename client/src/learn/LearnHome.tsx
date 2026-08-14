@@ -435,6 +435,7 @@ export default function LearnHome({
                         className="learn-lab-scientist"
                         draggable={false}
                         decoding="async"
+                        loading="lazy"
                         aria-hidden
                       />
                     ) : null}

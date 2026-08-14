@@ -46,7 +46,7 @@ export default function HubPageHero({
 
       {heroImageSrc ? (
         <div className="rh-hub-hero-art" aria-hidden="true">
-          <img src={heroImageSrc} alt={heroImageAlt} className="rh-hub-hero-art-img" />
+          <img src={heroImageSrc} alt={heroImageAlt} className="rh-hub-hero-art-img" fetchPriority="high" decoding="async" />
         </div>
       ) : null}
 

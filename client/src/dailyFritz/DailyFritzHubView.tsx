@@ -98,6 +98,7 @@ export function DailyFritzHubView({
                   className="df-pvf-card-bg-img"
                   alt="Fritz waiting at the domino table"
                   decoding="async"
+                  loading="lazy"
                 />
               ) : null}
               <div className="df-pvf-card-overlay" aria-hidden />

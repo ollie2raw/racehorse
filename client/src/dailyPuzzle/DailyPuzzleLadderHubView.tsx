@@ -145,6 +145,7 @@ export function DailyPuzzleLadderHubView({
                     className="df-pvf-card-bg-img dpl-ladder-hero-img"
                     alt="Daily Ladder puzzle boards"
                     decoding="async"
+                    loading="lazy"
                   />
                 ) : null}
                 <div className="df-pvf-card-overlay" aria-hidden />

@@ -46,6 +46,8 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
     <div
       className="hand-area wl-hand-area"
       data-ui="tray"
+      role="region"
+      aria-label="Your tiles"
     >
       <div className="tray-rail">
         <div className="tray-center" ref={handAreaRef}>

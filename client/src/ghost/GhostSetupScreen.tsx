@@ -289,6 +289,7 @@ export default function GhostSetupScreen({
                 className="pvf-card-bg-img ghost-pvf-card-bg-img"
                 alt=""
                 decoding="async"
+                loading="lazy"
               />
             ) : null}
             <div className="pvf-card-overlay ghost-pvf-card-overlay" />

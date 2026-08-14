@@ -209,6 +209,7 @@ export default function SinglePlayerHubScreen({
                       className="sp-solo-mode-card__art"
                       draggable={false}
                       decoding="async"
+                      loading="lazy"
                       aria-hidden
                     />
                   ) : null}
