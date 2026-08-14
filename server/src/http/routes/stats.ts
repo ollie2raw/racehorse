@@ -1,5 +1,6 @@
 import type { Application, Request } from 'express';
 import type { Server } from 'socket.io';
+import { setPublicShortCache } from './cacheControl';
 import type { HomeDailyCompletionMap, HomeDailySummaryPayload } from '../../homeDailySummary';
 import type { recordUserMatch as RecordUserMatchFn } from '../../stats/recordUserMatch';
 
@@ -57,6 +58,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
       const authenticatedUserId = await getAuthenticatedUserId(req);
 
       if (!authenticatedUserId) {
+        setPublicShortCache(res, 30, 120);
         res.json({
           ok: true,
           ...buildHomeDailySummary(today, {}, new Date()),

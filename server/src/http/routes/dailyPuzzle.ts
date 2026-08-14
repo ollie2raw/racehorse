@@ -17,6 +17,7 @@ import { validateDailyPuzzleSubmission } from '../../dailyPuzzleSubmissionValida
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { writePuzzleActivity } from '../../social/activityWriter';
 import { getPacificDateKey } from '../../shared/pacificDate';
+import { setPublicDailyCache } from './cacheControl';
 import {
   buildDailyPuzzleLeaderboardForDate,
   createDailyPuzzleAttempt,
@@ -401,6 +402,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       : getPacificDateKey();
   try {
     const rows = await buildDailyPuzzleLeaderboardForDate(runDate);
+    setPublicDailyCache(res);
     res.json({
       ok: true,
       runDate,

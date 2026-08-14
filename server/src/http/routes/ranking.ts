@@ -1,4 +1,5 @@
 import type { Application, Request } from 'express';
+import { setPublicShortCache } from './cacheControl';
 
 export type RankingRouteDeps = {
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -81,6 +82,7 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     const limit = Number(req.query.limit) || 50;
     try {
       const leaderboard = await getLeaderboard(limit);
+      setPublicShortCache(res, 60, 300);
       res.json({ ok: true, leaderboard });
     } catch (error) {
       res.status(500).json({
