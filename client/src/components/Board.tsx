@@ -1024,6 +1024,8 @@ function BoardComponent(
   return (
     <div
       ref={containerRef}
+      role="region"
+      aria-label="Domino board"
       className={`board-container${staticView ? ' board-container--static' : ''}`}
       onWheel={staticView ? undefined : handleWheel}
       onMouseDown={staticView ? undefined : handleMouseDown}
@@ -1097,10 +1099,14 @@ function BoardComponent(
           else if (zone.dirY < 0) arrow = '↑';
           else if (zone.dirY > 0) arrow = '↓';
 
+          const arrowLabel = zone.dirX < 0 ? 'left' : zone.dirX > 0 ? 'right' : zone.dirY < 0 ? 'up' : 'down';
+
           return (
-            <div
+            <button
               key={zone.key}
+              type="button"
               className={`placement-zone active${showTargetDebug ? ' debug' : ''}${highlightedPosition === zone.position ? ' highlighted' : ''}`}
+              aria-label={`Place tile ${arrowLabel} on ${zone.lane} lane`}
               style={{
                 position: 'absolute',
                 left: `calc(50% + ${x}px)`,
@@ -1109,6 +1115,10 @@ function BoardComponent(
                 height,
                 transform: 'translate(-50%, -50%)',
                 touchAction: 'none',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
@@ -1130,13 +1140,13 @@ function BoardComponent(
               data-dir={`${zone.dirX},${zone.dirY}`}
               data-position={zone.position}
             >
-              <span className="placement-arrow">{arrow}</span>
+              <span className="placement-arrow" aria-hidden="true">{arrow}</span>
               {showTargetDebug && (
                 <span className="placement-debug-label">
                   {zone.lane} ({zone.dirX},{zone.dirY})
                 </span>
               )}
-            </div>
+            </button>
           );
           })}
 

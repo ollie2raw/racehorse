@@ -34,6 +34,8 @@ export function BotMatchScreenShell({
   return (
     <div
       ref={rootRef}
+      role="main"
+      aria-label="Racehorse Dominoes match"
       className={`screen game-screen walnut-live theme-green bot-match-screen rh-match-live bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen learn-pvf-root pvf-root tier-rookie claude-mode-screen-shell' : ''}`}
     >
       {isLessonLayoutMode && <BotMatchLessonBackground />}
