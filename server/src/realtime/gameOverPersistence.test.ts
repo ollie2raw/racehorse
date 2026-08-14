@@ -19,6 +19,7 @@ const {
   recordMatchEndMock,
   recordLeagueLiveResultMock,
   isRankedGameSourceColumnsEnabledMock,
+  logWarnMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -34,6 +35,7 @@ const {
   recordMatchEndMock: vi.fn(),
   recordLeagueLiveResultMock: vi.fn(),
   isRankedGameSourceColumnsEnabledMock: vi.fn(),
+  logWarnMock: vi.fn(),
 }));
 
 vi.mock('../scheduledTournament', () => ({
@@ -85,6 +87,10 @@ vi.mock('../league/results', () => ({
 
 vi.mock('../ranking/rankedGamePayload', () => ({
   isRankedGameSourceColumnsEnabled: () => isRankedGameSourceColumnsEnabledMock(),
+}));
+
+vi.mock('../logger', () => ({
+  childLogger: () => ({ warn: logWarnMock, error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
 }));
 
 import { createGameOverPersistScheduler } from './gameOverPersistence';
@@ -174,56 +180,48 @@ describe('createGameOverPersistScheduler', () => {
 
   it('returns early for scheduledTournamentMatchId without downstream persist', async () => {
     applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await runPersist(buildInput({
       room: { scheduledTournamentMatchId: 'sched-match-1' },
     }));
 
     expect(appendMatchMock).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(logWarnMock).not.toHaveBeenCalled();
   });
 
   it('warns on scheduledTournamentMatchId when winnerUserId is missing', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await runPersist(buildInput({
       room: { scheduledTournamentMatchId: 'sched-match-1' },
       winnerSeatId: 'seat-unknown',
     }));
 
-    expect(warnSpy).toHaveBeenCalledWith('[tournament:game-over] missing winner user id', {
-      roomCode: 'ROOM1',
-      matchId: 'sched-match-1',
-    });
+    expect(logWarnMock).toHaveBeenCalledWith(
+      { roomCode: 'ROOM1', matchId: 'sched-match-1' },
+      'missing winner user id',
+    );
     expect(appendMatchMock).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
   });
 
   it('returns early when findTournamentMatchByRoom finds a match', async () => {
     findTournamentMatchByRoomMock.mockResolvedValue({ id: 'tour-match-9' });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await runPersist(buildInput());
 
     expect(findTournamentMatchByRoomMock).toHaveBeenCalledWith('ROOM1');
     expect(appendMatchMock).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(logWarnMock).not.toHaveBeenCalled();
   });
 
   it('warns on findTournamentMatchByRoom path when winnerUserId is missing', async () => {
     findTournamentMatchByRoomMock.mockResolvedValue({ id: 'tour-match-9' });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await runPersist(buildInput({ winnerSeatId: 'seat-unknown' }));
 
-    expect(warnSpy).toHaveBeenCalledWith('[tournament:game-over] missing winner user id', {
-      roomCode: 'ROOM1',
-      matchId: 'tour-match-9',
-    });
+    expect(logWarnMock).toHaveBeenCalledWith(
+      { roomCode: 'ROOM1', matchId: 'tour-match-9' },
+      'missing winner user id',
+    );
     expect(appendMatchMock).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
   });
 
   it('awaits resolvePendingFritzMatch before appendMatch when Fritz context exists', async () => {
@@ -285,12 +283,10 @@ describe('createGameOverPersistScheduler', () => {
       .mockResolvedValueOnce({ isNew: true, game: gameA })
       .mockResolvedValueOnce({ isNew: false, game: null });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await runPersist(buildInput());
 
     expect(processRealtimeMultiplayerGameMock).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[Ranking] Skipping real-time update — duplicate or missing ranked insert',
+    expect(logWarnMock).toHaveBeenCalledWith(
       expect.objectContaining({
         hasPlayerAProfile: true,
         hasPlayerBProfile: true,
@@ -298,8 +294,8 @@ describe('createGameOverPersistScheduler', () => {
         playerBIsNew: false,
         sourceMatchId: 'match-1',
       }),
+      'Skipping real-time update — duplicate or missing ranked insert',
     );
-    warnSpy.mockRestore();
   });
 
   it('calls recordLeagueLiveResult when fixture is active and player mapping is complete', async () => {
@@ -353,12 +349,10 @@ describe('createGameOverPersistScheduler', () => {
       return [];
     });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await runPersist(buildInput());
 
     expect(recordLeagueLiveResultMock).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[League] Skipping live fixture finalization — player mapping missing',
+    expect(logWarnMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fixtureId: 'fixture-1',
         hasHomeMember: true,
@@ -366,18 +360,16 @@ describe('createGameOverPersistScheduler', () => {
         hasHomePlayer: true,
         hasAwayPlayer: false,
       }),
+      'Skipping live fixture finalization — player mapping missing',
     );
-    warnSpy.mockRestore();
   });
 
-  it('swallows awaited errors with outer console.warn and does not propagate', async () => {
+  it('swallows awaited errors with outer log.warn and does not propagate', async () => {
     const boom = new Error('append failed');
     appendMatchMock.mockRejectedValue(boom);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(runPersist(buildInput())).resolves.toBeUndefined();
 
-    expect(warnSpy).toHaveBeenCalledWith('Ranking/Match logging failed', boom);
-    warnSpy.mockRestore();
+    expect(logWarnMock).toHaveBeenCalledWith({ err: boom }, 'ranking/match logging failed');
   });
 });

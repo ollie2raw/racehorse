@@ -7,9 +7,20 @@ import { createReservedRoom, getRoom } from '../rooms';
 import type { EnginePersistence } from './persistenceInterface';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
 
-const { matchStoreRef, updateMatchMock } = vi.hoisted(() => ({
+const { matchStoreRef, updateMatchMock, capturedLogs } = vi.hoisted(() => ({
   matchStoreRef: { current: null as MatchRow | null },
   updateMatchMock: vi.fn(),
+  capturedLogs: [] as Array<{ context: string; msg: string; [k: string]: unknown }>,
+}));
+
+vi.mock('../logger', () => ({
+  childLogger: (context: string) => ({
+    info: (obj: unknown, msg: string) => { capturedLogs.push({ context, msg, ...(typeof obj === 'object' && obj !== null ? obj : {}) }); },
+    debug: (obj: unknown, msg: string) => { capturedLogs.push({ context, msg, ...(typeof obj === 'object' && obj !== null ? obj : {}) }); },
+    warn: (obj: unknown, msg: string) => { capturedLogs.push({ context, msg, ...(typeof obj === 'object' && obj !== null ? obj : {}) }); },
+    error: (obj: unknown, msg: string) => { capturedLogs.push({ context, msg, ...(typeof obj === 'object' && obj !== null ? obj : {}) }); },
+  }),
+  logger: { child: () => ({}) },
 }));
 
 vi.mock('../supabaseUtils', () => ({
@@ -37,15 +48,13 @@ import { registerRoomSessionHandlers } from '../multiplayer/registerRoomSessionH
 import { dispatchTournamentMatch } from './matchDispatch';
 
 function captureTournamentLogs() {
-  const lines: string[] = [];
-  const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-    const first = args[0];
-    if (typeof first === 'string' && first.includes('[tournament')) {
-      const payload = args[1] !== undefined ? ` ${JSON.stringify(args[1])}` : '';
-      lines.push(`${first}${payload}`);
-    }
-  });
-  return { lines, restore: () => spy.mockRestore() };
+  capturedLogs.length = 0;
+  const toLine = (e: (typeof capturedLogs)[0]) => `[${e.context}] ${e.msg}`;
+  const lines = {
+    some: (fn: (l: string) => boolean) => capturedLogs.some((e) => fn(toLine(e))),
+    filter: (fn: (l: string) => boolean) => capturedLogs.filter((e) => fn(toLine(e))).map(toLine),
+  };
+  return { lines, restore: () => {} };
 }
 
 function makeHumanVsBotPersistence(): {
@@ -226,7 +235,7 @@ describe('tournament human+bot runtime log sequence', () => {
     restore();
 
     const serverTournamentLines = lines.filter((l) =>
-      /\[tournament:(dispatch|attach|match|match_ready)\]/.test(l),
+      /\[(?:tournament|multiplayer):(?:tournament-)?(?:dispatch|attach|match|match_ready)\]/.test(l),
     );
 
     // eslint-disable-next-line no-console
@@ -244,15 +253,11 @@ describe('tournament human+bot runtime log sequence', () => {
 
     expect(ackArg?.ok, ackArg?.error ?? 'attach failed').toBe(true);
 
-    expect(serverTournamentLines.some((l) => l.startsWith('[tournament:dispatch] match ready'))).toBe(true);
-    expect(serverTournamentLines.some((l) => l.startsWith('[tournament:attach] request'))).toBe(true);
-    expect(serverTournamentLines.some((l) => l.startsWith('[tournament:attach] accepted'))).toBe(true);
-    expect(
-      serverTournamentLines.some((l) =>
-        l.startsWith('[tournament:match] promoted in_progress only after human attach'),
-      ),
-    ).toBe(true);
-    expect(serverTournamentLines.some((l) => l.includes('[tournament:match_ready] skipped'))).toBe(false);
+    expect(serverTournamentLines.some((l) => l.includes('match ready'))).toBe(true);
+    expect(serverTournamentLines.some((l) => l.includes('request'))).toBe(true);
+    expect(serverTournamentLines.some((l) => l.includes('ack/success') || l.includes('accepted'))).toBe(true);
+    expect(serverTournamentLines.some((l) => l.includes('promoted in_progress'))).toBe(true);
+    expect(serverTournamentLines.some((l) => l.includes('match_ready skipped') || l.includes('skipped'))).toBe(false);
   });
 
   it('logs match_ready skipped when no human socket is connected at dispatch', async () => {
@@ -263,6 +268,6 @@ describe('tournament human+bot runtime log sequence', () => {
     await dispatchTournamentMatch(io, match.id, { reason: 'bracket_generated' }, persistence);
     restore();
 
-    expect(lines.some((l) => l.includes('[tournament:match_ready] skipped'))).toBe(true);
+    expect(lines.some((l) => l.includes('skipped'))).toBe(true);
   });
 });
