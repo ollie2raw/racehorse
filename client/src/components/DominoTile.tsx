@@ -102,6 +102,7 @@ export interface DominoTileProps {
   /** Ivory back — no pips (pre-game draw, boneyard face-down). */
   faceDown?: boolean;
   onClick?: () => void;
+  /** Disables click/tap but keeps tile keyboard-focusable for screen readers. */
   disabled?: boolean;
   className?: string;
   flipped?: boolean;
@@ -160,10 +161,10 @@ function DominoTileComponent({
     return (
       <button
         className={tileClass}
-        onClick={onClick}
-        disabled={disabled}
-        aria-label="Domino tile back"
+        onClick={disabled ? undefined : onClick}
+        aria-label="Face-down domino tile"
         aria-pressed={selected}
+        aria-disabled={disabled || undefined}
         style={{
           display: 'block',
           padding: 0,
@@ -192,13 +193,19 @@ function DominoTileComponent({
 
   // Tile is always rendered horizontally (row direction)
   // Rotation is applied via CSS transform
+  const ariaLabel = [
+    `Domino ${tile.low}-${tile.high}`,
+    unplayable ? ', not playable' : '',
+    disabled ? ', opponent\'s turn' : '',
+  ].join('');
+
   return (
     <button
       className={tileClass}
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={`Domino ${tile.low}-${tile.high}`}
+      onClick={disabled ? undefined : onClick}
+      aria-label={ariaLabel}
       aria-pressed={selected}
+      aria-disabled={disabled || undefined}
       style={{
         display: 'block',
         padding: 0,

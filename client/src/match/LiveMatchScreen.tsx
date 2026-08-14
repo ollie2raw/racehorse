@@ -92,7 +92,7 @@ const HandView = React.memo(function HandView({
     const firstRow = hand.slice(0, splitAt);
     const secondRow = hand.slice(splitAt);
     return (
-      <div className="hand-container is-stacked">
+      <div role="group" aria-label="Your hand" className="hand-container is-stacked">
         <div className="hand-row">{firstRow.map((tile, idx) => renderTile(tile, idx))}</div>
         <div className="hand-row">{secondRow.map((tile, idx) => renderTile(tile, splitAt + idx))}</div>
       </div>
@@ -100,7 +100,7 @@ const HandView = React.memo(function HandView({
   }
 
   return (
-    <div className="hand-container has-single-row">
+    <div role="group" aria-label="Your hand" className="hand-container has-single-row">
       <div className="hand-row">{hand.map((tile, idx) => renderTile(tile, idx))}</div>
     </div>
   );

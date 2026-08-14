@@ -52,6 +52,8 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
       <div className="tray-rail">
         <div className="tray-center" ref={handAreaRef}>
           <div
+            role="group"
+            aria-label="Your hand"
             className={`hand-container ${
               handCompactStacked ? 'is-stacked' : ''
             } ${normalHandRows.length > 1 ? 'has-multiple-rows' : 'has-single-row'}`}
