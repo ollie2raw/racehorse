@@ -13,7 +13,7 @@
   },
   "socketRegistry": {
     "grandfatheredDirectSocketOn": 0,
-    "approvedRegistrarFiles": 11
+    "approvedRegistrarFiles": 13
   },
   "session": {
     "pureCoreFiles": [
