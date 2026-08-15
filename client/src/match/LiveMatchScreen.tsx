@@ -599,10 +599,10 @@ export function LiveMatchScreen({
                 />
                 <span>
                   {roomRecoveryState === 'reconnecting'
-                    ? 'Reconnecting…'
+                    ? 'Connection lost — reconnecting…'
                     : roomRecoveryState === 'resyncing'
                       ? 'Syncing room…'
-                      : 'Reconnect failed'}
+                      : 'Connection lost. Refresh the page if the game doesn\'t resume.'}
                 </span>
                 {roomRecoveryMessage && roomRecoveryState !== 'reconnecting' && (
                   <span style={{ fontWeight: 500, opacity: 0.9 }}>{roomRecoveryMessage}</span>
