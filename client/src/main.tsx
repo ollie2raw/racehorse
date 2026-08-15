@@ -16,6 +16,7 @@ import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
+import './styles/rh-mobile-chrome.css';
 import './styles/buttons.css';
 import './styles/toast.css';
 import './styles/lobby.css';

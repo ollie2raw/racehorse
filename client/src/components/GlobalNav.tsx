@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrandLogo } from './BrandLogo';
+import { AppBottomTabBar } from './nav/AppBottomTabBar';
 import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
@@ -133,6 +134,7 @@ export function GlobalNav({
   const isHome = currentMode === 'home' || !currentMode;
 
   return (
+    <>
     <nav 
       className={`relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
       style={{
@@ -161,7 +163,7 @@ export function GlobalNav({
         <button
           type="button"
           aria-label="Racehorse home"
-          className="flex min-w-[280px] cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
+          className="rh-nav-brand flex min-w-[280px] cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
           onClick={() => onNavigate?.('home')}
         >
           <BrandLogo
@@ -190,7 +192,7 @@ export function GlobalNav({
         </button>
 
         {/* Center Content Logic (The Switch) */}
-        <div className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
+        <div className={`rh-nav-center-desktop absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
           {isHome ? (
             <div 
               className="uppercase"
@@ -239,7 +241,7 @@ export function GlobalNav({
         </div>
 
         {/* Right Side: Player Statistics */}
-        <div className="flex items-center min-w-[280px] justify-end">
+        <div className="rh-nav-stats flex items-center min-w-[280px] justify-end">
           {/* Rating */}
           <div className="flex items-center gap-3 px-5 py-2.5">
             <svg width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
@@ -321,5 +323,11 @@ export function GlobalNav({
         </div>
       </div>
     </nav>
+    <AppBottomTabBar
+      currentMode={currentMode}
+      activeColor={activeColor}
+      onNavigate={onNavigate}
+    />
+    </>
   );
 }

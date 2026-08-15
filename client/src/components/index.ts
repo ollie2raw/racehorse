@@ -20,6 +20,7 @@ export type { BoardOpenEndsPillProps } from './BoardOpenEndsPill';
 export { RotateOverlay } from './RotateOverlay';
 export { BrandLogo } from './BrandLogo';
 export { GlobalNav } from './GlobalNav';
+export { AppBottomTabBar } from './nav/AppBottomTabBar';
 export {
   ZoomOutIcon,
   ZoomInIcon,

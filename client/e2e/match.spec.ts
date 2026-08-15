@@ -131,10 +131,8 @@ test.describe('Match lifecycle — Fritz setup', () => {
     await page.getByText('Single Player', { exact: false }).first().click();
     await page.getByText('Play vs Fritz', { exact: false }).first().click();
 
-    await expect(page.getByText('Rookie', { exact: false })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Standard', { exact: false })).toBeVisible();
-    await expect(page.getByText('Elite', { exact: false })).toBeVisible();
-    await expect(page.getByText('Master', { exact: false })).toBeVisible();
+    const tiers = page.locator('.pvf-tier-name');
+    await expect(tiers).toHaveText(['Rookie', 'Standard', 'Elite', 'Master'], { timeout: 10_000 });
   });
 
   test('selecting Master difficulty enables Start Match', async ({ page }) => {
@@ -142,7 +140,7 @@ test.describe('Match lifecycle — Fritz setup', () => {
     await page.getByText('Single Player', { exact: false }).first().click();
     await page.getByText('Play vs Fritz', { exact: false }).first().click();
 
-    await page.getByText('Master', { exact: false }).first().click();
+    await page.locator('.pvf-tier-name', { hasText: 'Master' }).click();
     const startBtn = page.getByText('Start Match', { exact: false }).first();
     await expect(startBtn).toBeVisible({ timeout: 5_000 });
     await expect(startBtn).toBeEnabled();

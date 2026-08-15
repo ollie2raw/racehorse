@@ -492,6 +492,7 @@ export default function AppRoutes({
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Daily Fritz…" />}>
+          <ErrorBoundary context="daily-fritz">
           <DailyFritzScreen
             user={authUser}
             profile={authProfile}
@@ -505,7 +506,7 @@ export default function AppRoutes({
             onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
           />
-
+          </ErrorBoundary>
         </Suspense>
       </div>
     );

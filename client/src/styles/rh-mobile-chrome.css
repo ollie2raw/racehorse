@@ -1,0 +1,25 @@
+@media (max-width: 767px) {
+  .rh-nav-center-desktop {
+    display: none !important;
+  }
+
+  .rh-nav-brand,
+  .rh-nav-stats {
+    min-width: 0 !important;
+  }
+
+  .home-shell,
+  .home-page-root .home-shell,
+  .sp-page,
+  .pvf-root,
+  .rh-hub-shell {
+    padding-bottom: var(--rh-bottom-tab-offset);
+    box-sizing: border-box;
+  }
+}
+
+@media (min-width: 768px) {
+  .rh-bottom-tab-bar {
+    display: none !important;
+  }
+}
