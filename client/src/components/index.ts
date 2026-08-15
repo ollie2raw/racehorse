@@ -24,6 +24,7 @@ export { AppBottomTabBar } from './nav/AppBottomTabBar';
 export {
   ZoomOutIcon,
   ZoomInIcon,
+  FitBoardIcon,
   FullscreenIcon,
   VolumeIcon,
   HomeIcon,

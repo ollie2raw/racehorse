@@ -898,6 +898,19 @@ export function LiveMatchScreen({
                     <button
                       type="button"
                       className="wl-control-btn"
+                      title="Fit board"
+                      aria-label="Fit board"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        boardRef.current?.resetCamera();
+                      }}
+                    >
+                      <FitBoardIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="wl-control-btn"
                       title="Zoom in"
                       aria-label="Zoom in"
                       onClick={(e) => {

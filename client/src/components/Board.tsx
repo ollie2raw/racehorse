@@ -11,6 +11,7 @@ import {
   type ForwardedRef,
 } from 'react';
 import { DominoTile } from './DominoTile';
+import { ZoomInIcon, ZoomOutIcon, FitBoardIcon } from './MatchBoardControlIcons';
 import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
 import { tileEquals } from '../game/tileUtils';
 import { isDouble } from '../game/openEndsGeometry';
@@ -501,6 +502,7 @@ function layoutBranches(
 export interface BoardHandle {
   zoomIn: () => void;
   zoomOut: () => void;
+  resetCamera: () => void;
 }
 
 interface BoardProps {
@@ -790,13 +792,13 @@ function BoardComponent(
                 ? 0.93
                 : 0.9
         : layoutSpanUnits <= 3
-          ? 0.56
+          ? 0.52
           : layoutSpanUnits <= 5
-            ? 0.7
+            ? 0.65
             : layoutSpanUnits <= 8
-              ? 0.84
+              ? 0.78
               : layoutSpanUnits >= 10
-                ? 0.93
+                ? 0.85
                 : 0.9;
     let maxFitScale =
       containFullBoard
@@ -869,6 +871,16 @@ function BoardComponent(
     fitCameraToContainerRef.current = fitCameraToContainer;
   }, [fitCameraToContainer]);
 
+  // Re-fit automatically when a new tile is placed, unless user has manually adjusted the camera.
+  const prevBoardTileCountRef = useRef(boardTileCount);
+  useEffect(() => {
+    if (staticView) return;
+    if (boardTileCount > prevBoardTileCountRef.current && !manualCameraRef.current) {
+      fitCameraToContainerRef.current('tile-placed-auto-fit');
+    }
+    prevBoardTileCountRef.current = boardTileCount;
+  }, [boardTileCount, staticView]);
+
   // Single authoritative camera auto-fit: respond to layout and container size.
   useEffect(() => {
     const container = containerRef.current;
@@ -928,7 +940,7 @@ function BoardComponent(
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale * delta));
+        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * delta));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'wheel',
           x: Number(cam.x.toFixed(2)),
@@ -993,12 +1005,12 @@ function BoardComponent(
     fitCameraToContainer('double-click-reset', undefined, undefined, true);
   }, [fitCameraToContainer]);
 
-  const applyZoomStep = useCallback((delta: number) => {
+  const applyZoomStep = useCallback((factor: number) => {
     markManualCamera();
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale + delta));
+        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * factor));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'manual-zoom',
           x: Number(cam.x.toFixed(2)),
@@ -1010,13 +1022,19 @@ function BoardComponent(
     }));
   }, [markManualCamera, minCameraScale]);
 
+  const resetCameraToFit = useCallback(() => {
+    manualCameraRef.current = false;
+    fitCameraToContainerRef.current('manual-reset', undefined, undefined, true);
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
-      zoomIn: () => applyZoomStep(0.12),
-      zoomOut: () => applyZoomStep(-0.12),
+      zoomIn: () => applyZoomStep(1.22),
+      zoomOut: () => applyZoomStep(1 / 1.22),
+      resetCamera: resetCameraToFit,
     }),
-    [applyZoomStep],
+    [applyZoomStep, resetCameraToFit],
   );
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
@@ -1187,51 +1205,46 @@ function BoardComponent(
           type="button"
           className="board-zoom-btn"
           title="Zoom out"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDoubleClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
+          aria-label="Zoom out"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            traceCameraDebug('[camera-debug] manual zoom click', {
-              direction: 'out',
-              beforeScale: Number(camera.scale.toFixed(3)),
-              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale - 0.12)).toFixed(3)),
-            });
-            applyZoomStep(-0.12);
+            applyZoomStep(1 / 1.22);
           }}
         >
-          −
+          <ZoomOutIcon />
+        </button>
+        <button
+          type="button"
+          className="board-zoom-btn"
+          title="Fit board"
+          aria-label="Fit board"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            resetCameraToFit();
+          }}
+        >
+          <FitBoardIcon />
         </button>
         <button
           type="button"
           className="board-zoom-btn"
           title="Zoom in"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDoubleClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
+          aria-label="Zoom in"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            traceCameraDebug('[camera-debug] manual zoom click', {
-              direction: 'in',
-              beforeScale: Number(camera.scale.toFixed(3)),
-              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale + 0.12)).toFixed(3)),
-            });
-            applyZoomStep(0.12);
+            applyZoomStep(1.22);
           }}
         >
-          +
+          <ZoomInIcon />
         </button>
       </div>
       ) : null}
