@@ -75,20 +75,32 @@ async function refreshSession(): Promise<string | null> {
  * Core fetch wrapper. Returns ApiResult<T> — never throws.
  * On 401: attempts one session refresh and retries once.
  */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function apiFetch<T>(
   url: string,
   init: RequestInit,
   attempt = 1,
 ): Promise<ApiResult<T>> {
   let response: Response;
+  // Merge caller's signal with a 15-second timeout so no request hangs forever
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  const callerSignal = init.signal as AbortSignal | undefined;
+  if (callerSignal) {
+    callerSignal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+  }
   try {
-    response = await fetch(url, { credentials: 'include', ...init });
+    response = await fetch(url, { credentials: 'include', ...init, signal: timeoutController.signal });
   } catch (err) {
+    clearTimeout(timeoutId);
+    const isTimeout = err instanceof DOMException && err.name === 'AbortError';
     return {
       data: null,
-      error: err instanceof Error ? err.message : 'Network error',
+      error: isTimeout ? 'Request timed out. Please try again.' : (err instanceof Error ? err.message : 'Network error'),
     };
   }
+  clearTimeout(timeoutId);
 
   // 401 — try refresh once
   if (response.status === 401 && attempt === 1) {
