@@ -396,6 +396,15 @@ const leaderboardLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 
 app.use('/api/cron', cronLimit);
 app.use('/api/daily-puzzle/leaderboard', leaderboardLimit);
 app.use('/api/daily-fritz/leaderboard', leaderboardLimit);
+app.use('/api/ranking/leaderboard', leaderboardLimit);
+// record-match triggers rating computation — tighter budget than the generic REST limit
+const recordMatchLimit = createRateLimitMiddleware(
+  restRateLimiter,
+  { windowMs: 5 * 60_000, max: 20 },
+  'rest:record-match',
+  getUserIdFromAuthHeaderSync,
+);
+app.use('/api/stats/record-match', recordMatchLimit);
 app.use('/api/daily-puzzle/submit-slot', dailySubmitLimit);
 app.use('/api/daily-puzzle/complete', dailySubmitLimit);
 app.use('/api/daily-fritz/next-hand', dailySubmitLimit);
