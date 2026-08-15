@@ -70,6 +70,8 @@ import type { MultiplayerRuntime, MultiplayerRuntimeBootstrap } from './multipla
 import { useAppRouteState } from './routing/useAppRouteState';
 import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { OfflineBanner } from './components/OfflineBanner';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -598,6 +600,7 @@ export default function App() {
   }, [dispatchRecovery]);
 
   const { isFullscreen, toggleFullscreen } = useFullscreen(appRootRef, setError);
+  const isOnline = useNetworkStatus();
 
   const {
     multiplayerConnectionHostParams,
@@ -942,6 +945,7 @@ export default function App() {
   return (
     <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
     <>
+      <OfflineBanner online={isOnline} />
       {joinedRoom ? (
         <ErrorBoundary
           context="multiplayer-shell"
