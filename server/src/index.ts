@@ -365,12 +365,20 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 
 // Security headers — applied to every response from this API server.
-// CSP is intentionally API-permissive (no script-src needed; the client is served by Vite/CDN).
+// This server only serves JSON — so CSP locks down everything except connect-src
+// for Supabase and Sentry. The client HTML CSP lives in client/public/_headers.
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'none'",
+      `connect-src 'self' ${config.supabaseUrl ?? ''} https://*.sentry.io https://*.ingest.sentry.io`,
+    ].join('; '),
+  );
   // Only set HSTS in production to avoid breaking local dev with HTTPS redirects.
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
