@@ -6,6 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { isAdminUser } from '../auth/isAdminUser';
+import { isMultiplayerPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
@@ -732,7 +734,14 @@ function MultiplayerGameShellComponent({
     you,
   ]);
 
+  const canOpenPostGameReview = isMultiplayerPostGameReviewEligible({
+    gameOver: true,
+    isTournament: isTournamentMatch,
+    isAdmin: isAdminUser(authUser?.email),
+  });
+
   const openMultiplayerAnalyzer = useCallback(() => {
+    if (!canOpenPostGameReview) return;
     void import('../analyzer/moveAnalyzer').then(({ analyzeMoveLogDeferred, saveGameAnalysis }) => {
       void analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
         (analysis) => {
@@ -742,7 +751,7 @@ function MultiplayerGameShellComponent({
         },
       );
     });
-  }, [multiplayerMoveLog]);
+  }, [canOpenPostGameReview, multiplayerMoveLog]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
   const handCompactStacked = myHand.length > 8;
@@ -1031,7 +1040,7 @@ function MultiplayerGameShellComponent({
   void selectedTile;
   void youRef;
 
-  return analyzerOpen ? (
+  return analyzerOpen && canOpenPostGameReview ? (
     <React.Suspense fallback={null}>
       <GameReviewer
         open={analyzerOpen}

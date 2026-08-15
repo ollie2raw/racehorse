@@ -1,5 +1,4 @@
 import { lazy, Suspense, type CSSProperties } from 'react';
-import { POST_GAME_REVIEW_VISIBLE } from '../../../appRouteTypes.ts';
 
 const GameReviewer = lazy(() => import('../../../analyzer/GameReviewer.tsx'));
 import LeaveGameModal from '../../../components/LeaveGameModal.tsx';
@@ -93,7 +92,7 @@ export function BotMatchInGameOverlays({
         </GameOverlayPortal>
       ) : null}
 
-      {POST_GAME_REVIEW_VISIBLE && analyzerOpen ? (
+      {analyzerOpen ? (
         <Suspense fallback={null}>
           <GameReviewer
             open={analyzerOpen}

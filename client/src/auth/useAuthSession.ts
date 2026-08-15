@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
+import { isAdminUser } from './isAdminUser';
 import { getOrCreateGuestDisplayName, getOrCreateGuestIdentityId } from '../match/recovery/matchRecovery';
 
 /**
@@ -43,10 +44,7 @@ export function useAuthSession() {
   const authAccessTokenRef = useRef<string | null>(authAccessToken);
   const multiplayerIdentityUserIdRef = useRef(multiplayerIdentityUserId);
 
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
-  const isAdmin = Boolean(
-    authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
-  );
+  const isAdmin = isAdminUser(authUser?.email);
 
   useEffect(() => {
     authUserRef.current = authUser;

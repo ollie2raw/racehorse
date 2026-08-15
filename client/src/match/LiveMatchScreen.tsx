@@ -39,7 +39,9 @@ import { useRenderProfiler } from '../debug/renderProfiler';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
 import type { GameState, Move, Tile } from '../types';
 import type { RoomPlayer } from '../multiplayer/protocol';
-import type { LiveMatchScreenProps } from './liveMatchScreenTypes';
+import { useAuth } from '../auth/useAuth';
+import { isAdminUser } from '../auth/isAdminUser';
+import { isMultiplayerPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
 
 export type { LiveMatchScreenProps } from './liveMatchScreenTypes';
 
@@ -414,6 +416,12 @@ export function LiveMatchScreen({
     handReveal,
     handRevealAutoProgress,
   } = postGame;
+  const { user: authUser } = useAuth();
+  const canAnalyzeGame = isMultiplayerPostGameReviewEligible({
+    gameOver: true,
+    isTournament: Boolean(tournamentMatch),
+    isAdmin: isAdminUser(authUser?.email),
+  });
   const {
     showLeaveConfirm,
     onRequestLeaveConfirm,
@@ -666,8 +674,8 @@ export function LiveMatchScreen({
                 waitingText={canUseRematch ? rematchWaitingText : undefined}
                 players={players}
                 ratingSummary={multiplayerRatingSummary}
-                extraActionLabel="Analyze Game"
-                onExtraAction={onOpenMultiplayerAnalyzer}
+                extraActionLabel={canAnalyzeGame ? 'Analyze Game' : undefined}
+                onExtraAction={canAnalyzeGame ? onOpenMultiplayerAnalyzer : undefined}
               />
             ) : null}
             {handReveal && !state.gameOver && (

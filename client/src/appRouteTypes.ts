@@ -18,8 +18,11 @@ export const LEARN_MODE_VISIBLE = true;
 /** Flagship campaign — hidden until ready to ship. */
 export const JOURNEY_MODE_VISIBLE = true;
 
-/** Pivotal-turn post-game review + full game analyzer — hidden until ready to ship. */
-export const POST_GAME_REVIEW_VISIBLE = true;
+/**
+ * Public post-game review + full game analyzer.
+ * Keep false for beta; admins still get it via `isPostGameReviewEnabled(isAdmin)`.
+ */
+export const POST_GAME_REVIEW_VISIBLE = false;
 
 export type AppMode =
   | 'home'

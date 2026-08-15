@@ -57,7 +57,7 @@ export function buildMatchCapabilitiesFromBotProps(
     dealSize: input.dealSize,
     winningScore: input.winningScore,
     preGameDraw: input.preGameDrawActive,
-    postGameReview: true,
+    postGameReview: false,
     verifiedRanking: input.isStandaloneFritzMatch,
   });
 }
