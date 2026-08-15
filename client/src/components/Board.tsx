@@ -796,9 +796,9 @@ function BoardComponent(
           : layoutSpanUnits <= 5
             ? 0.65
             : layoutSpanUnits <= 8
-              ? 0.78
+              ? 0.82
               : layoutSpanUnits >= 10
-                ? 0.85
+                ? 0.92
                 : 0.9;
     let maxFitScale =
       containFullBoard
@@ -817,7 +817,7 @@ function BoardComponent(
             ? 2.1
             : boardTileCount <= 8
               ? 1.8
-              : 1.45;
+              : 1.65;
 
     if (staticView) {
       const diagramFill = 1.04;
