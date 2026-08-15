@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../../logger';
 import type express from 'express';
 import type { Server } from 'socket.io';
@@ -128,6 +129,22 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
 
   app.get('/ping', (_, res) => {
     res.json({ status: 'ok', release: getReleaseVersion() });
+  });
+
+  app.get('/healthz', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const db = await getSupabaseReadiness();
+    if (!db.ok) {
+      Sentry.captureException(new Error(`/healthz DB probe failed: ${db.error ?? 'unknown'}`));
+      res.status(503).json({ status: 'degraded', db: 'error', error: db.error ?? 'db probe failed' });
+      return;
+    }
+    res.status(200).json({
+      status: 'ok',
+      db: 'ok',
+      release: getReleaseVersion(),
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
   });
 
   app.get('/ready', async (_req, res) => {
