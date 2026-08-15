@@ -104,3 +104,12 @@ Every coding task should end with:
 - What changed
 - Build/test result
 - Remaining risks or visual gaps
+
+## 10. Module ownership map (engineering)
+
+- `client/src/multiplayer/` — connection/transport/runtime hooks for live matches.
+- `server/src/middleware/` — Express middleware (rate limiting, auth, error handling).
+- `server/src/rooms/`, `server/src/multiplayer/` — server-side room/session and gameplay-action handling.
+- `server/src/game/` — core game rules/state (via `@racehorse/game-core` workspace package).
+- `client/src/match/`, `client/src/bot/` — live match screen and bot opponent view logic.
+- `docs/agent-skills/` — design/UI source-of-truth docs (see Section 2); not engineering-owned.

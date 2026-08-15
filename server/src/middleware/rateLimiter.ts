@@ -21,6 +21,4 @@ function makeJsonLimiter(max: number, windowMs = 60_000) {
   });
 }
 
-export const dailyFritzInitLimiter = makeJsonLimiter(20);
-export const dailyFritzHandLimiter = makeJsonLimiter(60);
 export const apiGeneralLimiter = makeJsonLimiter(120);
