@@ -477,6 +477,12 @@ io.use((socket, next) => {
 });
 
 const socketsByUserId = new Map<string, Set<string>>();
+
+app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, ts: Date.now() });
+});
+
 registerStatsRoutes(app, {
   io,
   getRoomRuntimeStats,
