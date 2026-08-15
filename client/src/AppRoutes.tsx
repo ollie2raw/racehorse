@@ -152,26 +152,30 @@ export default function AppRoutes({
 
   if (appMode === 'home' || (appMode === 'live' && !spectatorModeEnabled)) {
     return withAuthModals(
-      <Suspense fallback={<ScreenLoader label="Loading Home…" />}>
-        <RacehorseHomeScreen
-          setAppMode={setAppMode}
-          onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
-          tournament={tournamentProps.tournament}
-        />
-      </Suspense>,
+      <ErrorBoundary context="home">
+        <Suspense fallback={<ScreenLoader label="Loading Home…" />}>
+          <RacehorseHomeScreen
+            setAppMode={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
+            tournament={tournamentProps.tournament}
+          />
+        </Suspense>
+      </ErrorBoundary>,
     );
   }
 
   if (appMode === 'noBrainer') {
     return withAuthModals(
       <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
-          <NoBrainerLabScreen
-            userId={authUser?.id ?? null}
-            onBack={() => setAppMode('learn')}
-          />
-        </Suspense>
+        <ErrorBoundary context="no-brainer">
+          <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
+            <NoBrainerLabScreen
+              userId={authUser?.id ?? null}
+              onBack={() => setAppMode('learn')}
+            />
+          </Suspense>
+        </ErrorBoundary>
       </div>,
     );
   }
@@ -194,6 +198,7 @@ export default function AppRoutes({
     if (learnHowToPlayOpen && canOpenHowToPlayPreview) {
       return withAuthModals(
         <div className={appRootClassName}>
+          <ErrorBoundary context="learn-how-to-play">
           <Suspense fallback={<ScreenLoader label="Loading Learn…" />}>
             <LearnHowToPlayRacehorse
               onBack={() => setLearnHowToPlayOpen(false)}
@@ -211,11 +216,13 @@ export default function AppRoutes({
               }}
             />
           </Suspense>
+          </ErrorBoundary>
         </div>
       );
     }
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="learn">
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
           <LearnHome
             onBack={() => setAppMode('home')}
@@ -271,6 +278,7 @@ export default function AppRoutes({
             }}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -278,11 +286,13 @@ export default function AppRoutes({
   if (appMode === 'guidedMatchAnnotator') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="guided-match-annotator">
         <Suspense fallback={<ScreenLoader label="Loading Guided Match Annotator…" />}>
           <GuidedMatchAnnotatorScreen
             onBack={() => setAppMode('learn')}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -290,12 +300,14 @@ export default function AppRoutes({
   if (appMode === 'guidedMatchRecorder') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="guided-match-recorder">
         <Suspense fallback={<ScreenLoader label="Loading Guided Match Recorder…" />}>
           <GuidedMatchRecorderScreen
             onBack={() => setAppMode('learn')}
             onNavigate={setAppMode}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -303,6 +315,7 @@ export default function AppRoutes({
   if (appMode === 'botSetup') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="bot-setup">
         <Suspense fallback={<ScreenLoader label="Loading Fritz Setup…" />}>
           <PlayVsFritz
             onStart={({ difficulty, dealSize }) => {
@@ -316,6 +329,7 @@ export default function AppRoutes({
             onOpenAccount={() => setUsernameModalOpen(true)}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -400,6 +414,7 @@ export default function AppRoutes({
   if (appMode === 'ghostSetup') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="ghost-setup">
         <Suspense fallback={<ScreenLoader label="Loading Ghost Setup…" />}>
           <GhostSetupScreen
             userId={authUser?.id ?? null}
@@ -416,6 +431,7 @@ export default function AppRoutes({
             }}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -534,9 +550,11 @@ export default function AppRoutes({
   if (appMode === 'live' && spectatorModeEnabled && LiveNowScreen) {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="live-now">
         <Suspense fallback={<ScreenLoader label="Loading Live Now…" />}>
           <LiveNowScreen socket={socket} connect={social.connect} onBack={() => setAppMode('home')} />
         </Suspense>
+        </ErrorBoundary>
       </div>,
     );
   }
@@ -544,6 +562,7 @@ export default function AppRoutes({
   if (appMode === 'ratingHistory') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="rating-history">
         <Suspense fallback={<ScreenLoader label="Loading Rating History…" />}>
           <RatingHistoryPage
             userId={authUser?.id ?? null}
@@ -551,6 +570,7 @@ export default function AppRoutes({
             onBack={() => setAppMode('home')}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -558,6 +578,7 @@ export default function AppRoutes({
   if (appMode === 'friends') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="friends">
         <Suspense fallback={<ScreenLoader label="Loading Friends…" />}>
           <FriendsScreenLobbyBridge
             open={true}
@@ -574,6 +595,7 @@ export default function AppRoutes({
             }}
           />
         </Suspense>
+        </ErrorBoundary>
         {friendInvitePopup}
       </div>
     );
@@ -582,6 +604,7 @@ export default function AppRoutes({
   if (appMode === 'stats') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="stats">
         <Suspense fallback={<ScreenLoader label="Loading Stats…" />}>
           <StatsScreen
             open={true}
@@ -590,6 +613,7 @@ export default function AppRoutes({
             onClose={() => setAppMode('home')}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -598,6 +622,7 @@ export default function AppRoutes({
     return withAuthModals(
       <div className={appRootClassName}>
         {toast && <div className="toast">{toast}</div>}
+        <ErrorBoundary context="feed">
         <Suspense fallback={<ScreenLoader label="Loading Feed…" />}>
           <ActivityFeedLobbyBridge
             user={authUser}
@@ -618,6 +643,7 @@ export default function AppRoutes({
             onOpenAccount={handleOpenAccountModal}
           />
         </Suspense>
+        </ErrorBoundary>
         {friendInvitePopup}
       </div>
     );
@@ -626,6 +652,7 @@ export default function AppRoutes({
   if (appMode === 'leaderboard') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="leaderboard">
         <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
           <LeaderboardScreen
             user={authUser}
@@ -637,6 +664,7 @@ export default function AppRoutes({
             onClose={() => setAppMode('feed')}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -644,6 +672,7 @@ export default function AppRoutes({
   if (appMode === 'profile') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="profile">
         <Suspense fallback={<ScreenLoader label="Loading Profile…" />}>
           <PublicProfileScreenLobbyBridge
             username={profileTarget ?? ''}
@@ -658,6 +687,7 @@ export default function AppRoutes({
             onChallenge={() => setAppMode('multiplayer')}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -665,6 +695,7 @@ export default function AppRoutes({
   if (appMode === 'singlePlayerHub') {
     return withAuthModals(
       <div className={appRootClassName}>
+        <ErrorBoundary context="single-player-hub">
         <Suspense fallback={<ScreenLoader label="Loading Single Player…" />}>
           <SinglePlayerHubScreen
             userId={authUser?.id ?? null}
@@ -674,6 +705,7 @@ export default function AppRoutes({
             onOpenAccount={handleOpenAccountModal}
           />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
