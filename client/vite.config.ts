@@ -66,6 +66,9 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    // Disable the modulepreload polyfill inline script — all supported browsers have native
+    // <link rel="modulepreload"> support, and removing the polyfill lets us drop unsafe-inline from CSP.
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         manualChunks(id) {
