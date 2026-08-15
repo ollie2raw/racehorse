@@ -195,8 +195,16 @@ export default function RatingHistoryPage({
 
           {displayLoading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading rating history...</p>}
           {displayError && <p style={{ margin: 0, color: 'var(--accent-red)' }}>{displayError}</p>}
-          {!displayLoading && !displayError && chartData.length === 0 && (
-            <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>No rated games yet.</p>
+          {!displayLoading && !displayError && chartData.length === 0 && userId && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '32px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '2.4rem', lineHeight: 1 }} aria-hidden="true">🏆</div>
+              <p style={{ margin: 0, color: 'rgba(241,248,245,0.92)', fontWeight: 700, fontSize: '1.05rem' }}>
+                No rated games yet
+              </p>
+              <p style={{ margin: 0, color: 'rgba(191,213,223,0.72)', fontSize: '0.92rem', maxWidth: 280 }}>
+                Play your first ranked game to see your Glicko-2 rating history here.
+              </p>
+            </div>
           )}
 
           {!displayLoading && !displayError && chartData.length > 0 && (
