@@ -85,10 +85,8 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
       const leaderboard = await getLeaderboard(limit);
       setPublicShortCache(res, 60, 300);
       res.json({ ok: true, leaderboard });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load leaderboard.',
-      });
+    } catch {
+      res.json({ ok: false, leaderboard: [], leaderboard_load_failed: true });
     }
   });
 

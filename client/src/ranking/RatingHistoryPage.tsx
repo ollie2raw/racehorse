@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import LayoutScreen from '../ui/LayoutScreen';
-import { fetchRatingHistory, type RatingHistoryResponse } from './api';
+import { fetchRatingHistory, fetchRankingLeaderboard, type LeaderboardEntry, type RatingHistoryResponse } from './api';
 
 interface RatingHistoryPageProps {
   userId: string | null;
@@ -75,6 +75,8 @@ export default function RatingHistoryPage({
   const [history, setHistory] = useState<RatingHistoryResponse | null>(null);
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardUnavailable, setLeaderboardUnavailable] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -107,6 +109,19 @@ export default function RatingHistoryPage({
       active = false;
     };
   }, [userId]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchRankingLeaderboard(20).then((result) => {
+      if (!active) return;
+      if (result.data?.leaderboard_load_failed) {
+        setLeaderboardUnavailable(true);
+      } else {
+        setLeaderboard(result.data?.leaderboard ?? []);
+      }
+    });
+    return () => { active = false; };
+  }, []);
 
   const displayHistory = userId ? history : null;
   const displayLoading = userId ? loading : false;
@@ -326,6 +341,48 @@ export default function RatingHistoryPage({
               <span style={{ fontSize: '0.9rem', color: 'rgba(223,236,244,0.78)' }}>{card.note}</span>
             </div>
           ))}
+        </div>
+
+        <div
+          style={{
+            borderRadius: 18,
+            border: '1px solid rgba(236,252,245,0.12)',
+            background: 'linear-gradient(180deg, rgba(11,18,29,0.96), rgba(8,13,22,0.98))',
+            boxShadow: '0 18px 42px rgba(0,0,0,0.28)',
+            padding: '18px 18px 14px',
+          }}
+        >
+          <h3 style={{ margin: '0 0 12px', color: 'rgba(241,248,245,0.96)' }}>Global Leaderboard</h3>
+          {leaderboardUnavailable ? (
+            <p style={{ color: 'rgba(191,213,223,0.72)', margin: 0 }}>Leaderboard temporarily unavailable.</p>
+          ) : leaderboard.length === 0 ? (
+            <p style={{ color: 'rgba(191,213,223,0.72)', margin: 0 }}>No ranked players yet.</p>
+          ) : (
+            <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
+              {leaderboard.map((entry) => (
+                <li
+                  key={entry.userId}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: entry.userId === userId ? 'rgba(52,211,153,0.08)' : 'transparent',
+                    border: entry.userId === userId ? '1px solid rgba(52,211,153,0.18)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ color: 'rgba(191,213,223,0.72)', minWidth: 28, fontVariantNumeric: 'tabular-nums' }}>
+                    #{entry.rank}
+                  </span>
+                  <span style={{ flex: 1, color: 'rgba(241,248,245,0.92)', marginLeft: 8 }}>{entry.username}</span>
+                  <span style={{ color: 'rgba(52,211,153,0.9)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {Math.round(entry.rating)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
