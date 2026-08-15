@@ -9,6 +9,16 @@ Sentry.init({
   release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
 });
 
+if (import.meta.env.DEV && !import.meta.env.VITE_SENTRY_DSN) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[Racehorse] Sentry DSN not configured.\n' +
+    'Errors will NOT be reported in production until you set VITE_SENTRY_DSN.\n' +
+    'Add it to client/.env.local for local dev or to your hosting env vars for production.\n' +
+    'Example: VITE_SENTRY_DSN=https://your-key@oXXXXXX.ingest.sentry.io/YYYYYYY',
+  );
+}
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
