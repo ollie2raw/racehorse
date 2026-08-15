@@ -22,6 +22,7 @@
   }
 
   .rh-journey-root .rh-journey-detail__actions {
+    padding-bottom: var(--rh-bottom-tab-offset);
     scroll-margin-bottom: calc(var(--rh-bottom-tab-offset) + 16px);
   }
 }

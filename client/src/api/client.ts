@@ -104,6 +104,7 @@ async function apiFetch<T>(
 
   // 401 — try refresh once
   if (response.status === 401 && attempt === 1) {
+    const hadToken = !!(init.headers as Record<string, string>)?.['Authorization'];
     const newToken = await refreshSession();
     if (newToken) {
       const retryInit: RequestInit = {
@@ -115,8 +116,9 @@ async function apiFetch<T>(
       };
       return apiFetch<T>(url, retryInit, 2);
     }
-    // Refresh failed — fire a global event so the App shell can open the auth modal
-    if (typeof window !== 'undefined') {
+    // Only signal session expiry if the request actually carried a token — an unauthenticated
+    // request hitting a protected endpoint should not pop the sign-in modal.
+    if (hadToken && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('rh:session-expired'));
     }
     return {
