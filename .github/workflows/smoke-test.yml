@@ -1,0 +1,48 @@
+name: Smoke Test — Production
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify production endpoints after deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for Vercel + Render to finish deploying
+        run: sleep 90
+
+      - name: /healthz — server healthy and DB reachable
+        run: |
+          RESPONSE=$(curl -sf --max-time 15 https://racehorse.onrender.com/healthz)
+          echo "Response: $RESPONSE"
+          DB_STATUS=$(echo "$RESPONSE" | jq -r '.db // empty')
+          if [ "$DB_STATUS" != "ok" ]; then
+            echo "ERROR: /healthz db status is '$DB_STATUS', expected 'ok'"
+            exit 1
+          fi
+          echo "OK: /healthz db=ok"
+
+      - name: /api/daily-fritz/today — returns 401 for unauthenticated (not 500 or HTML)
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://racehorse.onrender.com/api/daily-fritz/today)
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "401" ]; then
+            echo "ERROR: expected 401, got $HTTP_CODE"
+            exit 1
+          fi
+          echo "OK: /api/daily-fritz/today returns 401"
+
+      - name: playracehorse.com — CSP header includes racehorse.onrender.com
+        run: |
+          CSP=$(curl -sI --max-time 15 https://playracehorse.com | grep -i 'content-security-policy' | tr -d '\r')
+          echo "CSP: $CSP"
+          if ! echo "$CSP" | grep -q 'racehorse.onrender.com'; then
+            echo "ERROR: CSP header missing racehorse.onrender.com"
+            exit 1
+          fi
+          echo "OK: CSP contains racehorse.onrender.com"
