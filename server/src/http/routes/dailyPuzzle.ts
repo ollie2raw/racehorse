@@ -1,4 +1,14 @@
+import * as Sentry from '@sentry/node';
 import type { Application } from 'express';
+
+function prodSafeError(error: unknown, fallback: string): string {
+  if (process.env.NODE_ENV === 'production') return fallback;
+  return error instanceof Error ? error.message : String(error);
+}
+
+function capture500(error: unknown, context?: Record<string, unknown>): void {
+  Sentry.captureException(error, context ? { extra: context } : undefined);
+}
 import {
   calculateDailyPuzzleAwardedPoints,
   calculateServerAuthoritativeElapsedSeconds,
@@ -96,8 +106,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       legacySinglePuzzleDay: !ready,
     });
   } catch (error) {
+    capture500(error, { route: 'puzzle-today' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load today’s Daily Puzzle ladder.',
+      error: prodSafeError(error, 'Failed to load today’s Daily Puzzle ladder.'),
     });
   }
 });
@@ -159,8 +170,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       finalizeReady,
     });
   } catch (error) {
+    capture500(error, { route: 'puzzle-start' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to start Daily Puzzle ladder.',
+      error: prodSafeError(error, 'Failed to start Daily Puzzle ladder.'),
     });
   }
 });
@@ -319,8 +331,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       replayed: false,
     });
   } catch (error) {
+    capture500(error, { route: 'puzzle-submit' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to submit Daily Puzzle slot.',
+      error: prodSafeError(error, 'Failed to submit Daily Puzzle slot.'),
     });
   }
 });
@@ -389,8 +402,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       replayed,
     });
   } catch (error) {
+    capture500(error, { route: 'puzzle-complete' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to complete Daily Puzzle ladder.',
+      error: prodSafeError(error, 'Failed to complete Daily Puzzle ladder.'),
     });
   }
 });
@@ -409,8 +423,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       rows,
     });
   } catch (error) {
+    capture500(error, { route: 'puzzle-leaderboard' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load Daily Puzzle leaderboard.',
+      error: prodSafeError(error, 'Failed to load Daily Puzzle leaderboard.'),
     });
   }
 });

@@ -1,5 +1,15 @@
+import * as Sentry from '@sentry/node';
 import { createHash, randomUUID } from 'crypto';
 import { childLogger } from '../../logger';
+
+function prodSafeError(error: unknown, fallback: string): string {
+  if (process.env.NODE_ENV === 'production') return fallback;
+  return error instanceof Error ? error.message : String(error);
+}
+
+function capture500(error: unknown, context?: Record<string, unknown>): void {
+  Sentry.captureException(error, context ? { extra: context } : undefined);
+}
 
 const log = childLogger('daily-fritz');
 import {
@@ -326,7 +336,8 @@ export function registerDailyFritzRoutes(app: Application): void {
       setPrivateShortCache(res, 60);
       res.json({ ok: true, results: attempts.map((attempt) => ({ challenge_date: attempt.runDate, player_score: attempt.finalScore ?? 0, fritz_score: attempt.opponentScore ?? 0, won: attempt.won === true, completed_at: attempt.completedAt, verification_status: getDailyFritzVerificationStatus(attempt.result) })) });
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Daily Fritz history is unavailable.' });
+      capture500(error, { route: 'history' });
+      res.status(500).json({ error: prodSafeError(error, 'Daily Fritz history is unavailable.') });
     }
   });
   app.get('/api/daily-fritz/today', async (req, res) => {
@@ -535,8 +546,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       date: initRunDate ?? getPacificDateKey(),
       error: error instanceof Error ? error.message : String(error),
     }, '[daily-fritz:init] error');
+    capture500(error, { route: ‘today’ });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load today’s Daily Fritz run.',
+      error: prodSafeError(error, ‘Failed to load today\’s Daily Fritz run.’),
     });
   }
 });
@@ -849,8 +861,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       date: getPacificDateKey(),
       error: error instanceof Error ? error.message : String(error),
     }, '[daily-fritz:init] error');
+    capture500(error, { route: 'start' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to start Daily Fritz.',
+      error: prodSafeError(error, 'Failed to start Daily Fritz.'),
     });
   }
 });
@@ -1204,8 +1217,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       attemptId,
       error: error instanceof Error ? error.message : String(error),
     }, '[daily-fritz-next-hand] error');
+    capture500(error, { route: 'next-hand' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to advance Daily Fritz hand.',
+      error: prodSafeError(error, 'Failed to advance Daily Fritz hand.'),
     });
   }
 });
@@ -1547,8 +1561,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       });
     }
     if (respondVerificationError(res, error)) return;
+    capture500(error, { route: 'record-game' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to record Daily Fritz game.',
+      error: prodSafeError(error, 'Failed to record Daily Fritz game.'),
     });
   }
 });
@@ -1783,8 +1798,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       idempotencyKey: `${attemptId || 'unknown'}:request_failed:complete:${diagnostics.requestId}`,
       payload: { operation: 'complete', message: error instanceof Error ? error.message : String(error) },
     });
+    capture500(error, { route: 'complete' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to complete Daily Fritz attempt.',
+      error: prodSafeError(error, 'Failed to complete Daily Fritz attempt.'),
     });
   }
 });
@@ -1888,8 +1904,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       idempotencyKey: `${attemptId || 'unknown'}:request_failed:abandon:${diagnostics.requestId}`,
       payload: { operation: 'abandon', message: error instanceof Error ? error.message : String(error) },
     });
+    capture500(error, { route: 'abandon' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to abandon Daily Fritz attempt.',
+      error: prodSafeError(error, 'Failed to abandon Daily Fritz attempt.'),
     });
    }
 });
@@ -1985,8 +2002,9 @@ export function registerDailyFritzRoutes(app: Application): void {
     const events = await listDailyFritzEvents(req.params.attemptId, Number(req.query.limit ?? 200));
     res.json({ ok: true, attempt_id: req.params.attemptId, events });
   } catch (error) {
+    capture500(error, { route: 'events' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Daily Fritz event history is unavailable.',
+      error: prodSafeError(error, 'Daily Fritz event history is unavailable.'),
     });
   }
 });
@@ -2014,8 +2032,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       })),
     });
   } catch (error) {
+    capture500(error, { route: 'leaderboard' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load Daily Fritz leaderboard.',
+      error: prodSafeError(error, 'Failed to load Daily Fritz leaderboard.'),
     });
   }
 });
@@ -2067,8 +2086,9 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
     res.json({ ok: true, run_date: saved.runDate, seed: getDailyFritzSeed(saved.runDate) });
   } catch (error) {
+    capture500(error, { route: 'generate' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to generate Daily Fritz run.',
+      error: prodSafeError(error, 'Failed to generate Daily Fritz run.'),
     });
   }
 });
@@ -2109,8 +2129,9 @@ export function registerDailyFritzRoutes(app: Application): void {
     dailyFritzRunCache.delete(runDate);
     res.json({ ok: true, challenge_id: invalidated.challengeId, status: invalidated.status });
   } catch (error) {
+    capture500(error, { route: 'invalidate' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to invalidate Daily Fritz run.',
+      error: prodSafeError(error, 'Failed to invalidate Daily Fritz run.'),
     });
   }
 });
@@ -2147,8 +2168,9 @@ export function registerDailyFritzRoutes(app: Application): void {
     }
     res.json({ ok: true });
   } catch (error) {
+    capture500(error, { route: 'reset-attempt' });
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz attempt.',
+      error: prodSafeError(error, 'Failed to reset Daily Fritz attempt.'),
     });
   }
 });
