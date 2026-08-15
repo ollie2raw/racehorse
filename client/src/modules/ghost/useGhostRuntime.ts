@@ -10,6 +10,12 @@ import { useGhostMatchCompletion, useGhostMatchSessionStart } from './index.ts';
 import type { BotMatchScreenProps } from '../match/types.ts';
 import type { UseBotMatchBootstrapResult } from '../match/hooks/useBotMatchBootstrap.ts';
 import { createLocalMatchId } from '../match/hooks/useBotMatchBootstrap.ts';
+import {
+  readFritzSession,
+  saveFritzSessionMatchId,
+  saveFritzSessionVerifiedMatchId,
+  clearFritzSession,
+} from './fritzSessionStorage.ts';
 import type { UseBotMatchRefsResult } from '../match/hooks/useBotMatchRefs.ts';
 import type { UseMatchPresentationResult } from '../match/hooks/useMatchPresentation.ts';
 import type { UseGuidedLessonBootResult } from '../guided/index.ts';
@@ -74,15 +80,21 @@ export function useGhostRuntime({
       ? Number(currentGlickoRating)
       : null,
   );
-  const [activeLocalMatchId, setActiveLocalMatchId] = useState<string>(
-    () =>
-      (mode === 'daily-fritz' && dailyFritzPackage
-        ? `daily-fritz:${dailyFritzPackage.run_date}:${dailyFritzPackage.attempt_id}`
-        : createLocalMatchId()),
-  );
-  const [verifiedMatchId, setVerifiedMatchId] = useState<string | null>(
-    dailyFritzPackage?.verified_match_id ?? null,
-  );
+  const [activeLocalMatchId, setActiveLocalMatchId] = useState<string>(() => {
+    if (mode === 'daily-fritz' && dailyFritzPackage) {
+      return `daily-fritz:${dailyFritzPackage.run_date}:${dailyFritzPackage.attempt_id}`;
+    }
+    // Restore from sessionStorage on refresh so the server sees the same localMatchId
+    const saved = readFritzSession();
+    if (saved?.localMatchId) return saved.localMatchId;
+    const next = createLocalMatchId();
+    saveFritzSessionMatchId(next);
+    return next;
+  });
+  const [verifiedMatchId, setVerifiedMatchId] = useState<string | null>(() => {
+    if (dailyFritzPackage?.verified_match_id) return dailyFritzPackage.verified_match_id;
+    return readFritzSession()?.verifiedMatchId ?? null;
+  });
 
   const ghostSubLabel = isGhostMode
     ? (opponentName && opponentName.toLowerCase() !== 'your ghost' ? opponentName : (username || 'Your Ghost'))
@@ -111,6 +123,18 @@ export function useGhostRuntime({
     if (matchStartGlickoRating != null) return;
     setMatchStartGlickoRating(Number(currentGlickoRating));
   }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
+
+  // Persist verifiedMatchId to sessionStorage so a refresh can reconnect
+  useEffect(() => {
+    if (mode === 'daily-fritz') return;
+    if (verifiedMatchId) saveFritzSessionVerifiedMatchId(verifiedMatchId);
+  }, [mode, verifiedMatchId]);
+
+  // Clear session on match end so next match gets a fresh ID
+  useEffect(() => {
+    if (mode === 'daily-fritz') return;
+    if (match.gameOver) clearFritzSession();
+  }, [mode, match.gameOver]);
 
   useGhostMatchSessionStart({
     userId,
