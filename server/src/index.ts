@@ -413,6 +413,15 @@ const recordMatchLimit = createRateLimitMiddleware(
   getUserIdFromAuthHeaderSync,
 );
 app.use('/api/stats/record-match', recordMatchLimit);
+// Tighter per-user budget on Daily Fritz init paths — 20 req/60s prevents polling abuse
+const dailyFritzInitLimit = createRateLimitMiddleware(
+  restRateLimiter,
+  { windowMs: 60_000, max: 20 },
+  'rest:daily-fritz-init',
+  getUserIdFromAuthHeaderSync,
+);
+app.use('/api/daily-fritz/today', dailyFritzInitLimit);
+app.use('/api/daily-fritz/start', dailyFritzInitLimit);
 app.use('/api/daily-puzzle/submit-slot', dailySubmitLimit);
 app.use('/api/daily-puzzle/complete', dailySubmitLimit);
 app.use('/api/daily-fritz/next-hand', dailySubmitLimit);
