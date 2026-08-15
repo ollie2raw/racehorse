@@ -4,6 +4,8 @@ import {
   initRoomSession,
   resetRoomSessionStoresForTests,
   setRoomRoster,
+  getSeatIdForSocket,
+  resolveActorSeatId,
 } from './roomSession';
 import { createRoomSocketAttach } from './roomSocketAttach';
 import * as livePersistence from './roomLivePersistence';
@@ -238,5 +240,65 @@ describe('createRoomSocketAttach', () => {
         hydrateMatchmakingRoom: true,
       }),
     ).rejects.toThrow('reconnect_unavailable');
+  });
+
+  it('gives the new socket sole authority over a claimed seat and rejects the superseded old socket', async () => {
+    const roomCode = 'DUPTAB';
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+
+    const oldSocket = makeSocket('sock-old');
+    oldSocket.connected = true;
+    oldSocket.data.roomId = roomCode;
+    oldSocket.data.playerId = 'p1';
+    oldSocket.disconnect = vi.fn();
+
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-old', username: 'P1', userId: 'u1' },
+    ]);
+
+    const io = {
+      sockets: { sockets: new Map([['sock-old', oldSocket]]) },
+      to: vi.fn(() => ({ emit: vi.fn() })),
+    } as any;
+
+    const newSocket = makeSocket('sock-new');
+    const { attachSocketToTrackedRoom } = createRoomSocketAttach({
+      io,
+      socket: newSocket,
+      handlerDeps: {
+        ...handlerDeps,
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+      },
+    });
+
+    const result = await attachSocketToTrackedRoom({
+      roomCode,
+      username: 'P1',
+      userId: 'u1',
+      via: 'room:join',
+      hydrateMatchmakingRoom: true,
+    });
+
+    expect(result.joinedPlayerSeatId).toBe('p1');
+
+    // New socket is authoritative for the seat.
+    expect(getSeatIdForSocket(roomCode, 'sock-new')).toBe('p1');
+    expect(resolveActorSeatId(roomCode, newSocket)).toBe('p1');
+
+    // Old socket was told it was superseded and forcibly disconnected.
+    expect(oldSocket.emit).toHaveBeenCalledWith(
+      'room:session:superseded',
+      expect.objectContaining({ newSocketId: 'sock-new' }),
+    );
+    expect(oldSocket.disconnect).toHaveBeenCalledWith(true);
+
+    // Old socket can no longer resolve or act as the seat's authority, even
+    // via its stale cached socket.data.playerId (the duplicate-tab race this
+    // guards against: an in-flight action from the old tab after supersession).
+    expect(getSeatIdForSocket(roomCode, 'sock-old')).not.toBe('p1');
+    expect(() => resolveActorSeatId(roomCode, oldSocket)).toThrow(
+      'Player seat not found for socket.',
+    );
   });
 });

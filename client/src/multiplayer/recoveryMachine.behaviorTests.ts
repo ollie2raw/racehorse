@@ -409,6 +409,40 @@ function testSessionSupersededDisablesRecovery(): void {
   );
 }
 
+function testSupersededSocketCannotResumeRecoveryAuthority(): void {
+  // Duplicate-tab scenario: this machine belongs to the OLD tab/socket whose
+  // seat has just been claimed by a new socket (B). The server disconnects
+  // this tab and it receives SESSION_SUPERSEDED before/along with its own
+  // transport loss. Any subsequent recovery signal the old tab's socket
+  // produces (SOCKET_LOST, RESYNC_NEEDED, a stale ROOM_JOIN_OK from a
+  // straggling in-flight request) must not resurrect this machine into an
+  // active reconnect episode — it is no longer authoritative for the room.
+  const superseded = reduceRecovery(baseSnapshot({ policy: 'auto', targetRoom: 'ABCD' }), {
+    type: 'SESSION_SUPERSEDED',
+    roomCode: 'ABCD',
+  }).snapshot;
+  assertEqual(superseded.policy, 'disabled', 'superseded machine is disabled');
+  assertEqual(superseded.targetRoom, null, 'superseded machine has no target room');
+
+  const afterSocketLost = reduceRecovery(superseded, {
+    type: 'SOCKET_LOST',
+    roomCode: 'ABCD',
+  });
+  assertEqual(afterSocketLost.snapshot.state, 'idle', 'stale SOCKET_LOST does not restart recovery');
+  assertEqual(afterSocketLost.effects.length, 0, 'stale SOCKET_LOST produces no effects');
+
+  const afterResyncNeeded = reduceRecovery(superseded, {
+    type: 'RESYNC_NEEDED',
+    roomCode: 'ABCD',
+  });
+  assertEqual(afterResyncNeeded.snapshot.state, 'idle', 'stale RESYNC_NEEDED does not restart recovery');
+  assertEqual(afterResyncNeeded.effects.length, 0, 'stale RESYNC_NEEDED produces no effects');
+
+  const afterUserRetry = reduceRecovery(superseded, { type: 'USER_RETRY' });
+  assertEqual(afterUserRetry.snapshot.state, 'idle', 'stale USER_RETRY cannot resume a superseded session');
+  assertEqual(afterUserRetry.effects.length, 0, 'stale USER_RETRY produces no effects');
+}
+
 function testShimDerivations(): void {
   const joining = baseSnapshot({ state: 'joining', targetRoom: 'ABCD', policy: 'auto' });
   assertEqual(deriveReconnectShouldJoin(joining), true, 'should join when joining');
@@ -477,6 +511,7 @@ function run(): void {
   testReconnectEpisodeFlushesQueuedResyncOnJoinOk();
   testManualJoinSetsManualRetry();
   testSessionSupersededDisablesRecovery();
+  testSupersededSocketCannotResumeRecoveryAuthority();
   testShimDerivations();
   testMachineSchedulerFiresScheduledRetry();
   testMachineLogsEveryTransition();

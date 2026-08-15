@@ -265,13 +265,17 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         const oldSocket = existingPlayer.socketId
           ? io.sockets.sockets.get(existingPlayer.socketId)
           : undefined;
-        if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
-          log.info(`[${via}] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
-          oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
-          oldSocket.disconnect(true);
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+        const oldSocketId = oldSocket && oldSocket.id !== socket.id ? oldSocket.id : null;
 
+        // Migrate seat authority to the new socket BEFORE disconnecting the old
+        // one. Seat ownership (roomSession's roster.socketId + socket.data.playerId)
+        // is what resolveActorSeatId trusts to authorize gameplay/recovery actions.
+        // If we disconnected the old socket first and migrated afterward, any
+        // action the old socket sends while its transport is still tearing down
+        // (disconnect(true) is not instantaneous) would still resolve to this
+        // seat and be accepted as authoritative — a duplicate-tab race. Doing the
+        // migration first closes that window: the moment we hand off, the old
+        // socket can no longer resolve to this seat by any path.
         log.info(`[${via}] RECONNECT: migrating seat ${existingPlayer.id} socket -> ${socket.id} for userId=${userId}`);
         migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
         roster = roster.map((player) =>
@@ -294,6 +298,23 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
             username,
           },
         });
+
+        if (oldSocket && oldSocketId && oldSocket.connected) {
+          log.info(`[${via}] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
+          // Invalidate the old socket's cached seat identity so even an
+          // in-flight message it sends before its transport actually closes
+          // cannot fall back to a stale socket.data.playerId and be treated
+          // as authoritative for this seat.
+          if (oldSocket.data?.playerId === existingPlayer.id) {
+            oldSocket.data.playerId = undefined;
+          }
+          if (oldSocket.data?.roomId === roomCode) {
+            oldSocket.data.roomId = undefined;
+          }
+          oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
+          oldSocket.disconnect(true);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
       }
     }
     let joinedPlayerSeatId: string | null = migratedByUserId
