@@ -546,9 +546,9 @@ export function registerDailyFritzRoutes(app: Application): void {
       date: initRunDate ?? getPacificDateKey(),
       error: error instanceof Error ? error.message : String(error),
     }, '[daily-fritz:init] error');
-    capture500(error, { route: ‘today’ });
+    capture500(error, { route: 'today' });
     res.status(500).json({
-      error: prodSafeError(error, ‘Failed to load today\’s Daily Fritz run.’),
+      error: prodSafeError(error, "Failed to load today's Daily Fritz run."),
     });
   }
 });
