@@ -516,6 +516,7 @@ export default function AppRoutes({
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Daily Fritz Leaderboard…" />}>
+          <ErrorBoundary context="daily-fritz-leaderboard">
           <DailyFritzLeaderboardRoute
             user={authUser}
             profile={authProfile}
@@ -524,6 +525,7 @@ export default function AppRoutes({
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
           />
+          </ErrorBoundary>
         </Suspense>
       </div>
     );
