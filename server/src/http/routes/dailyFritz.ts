@@ -1110,6 +1110,27 @@ export function registerDailyFritzRoutes(app: Application): void {
       publishedChallenge: publishedAuthority,
     });
     if (verified.terminalState.gameOver) {
+      // This hand crossed the winning score and ends the game, so it must be
+      // finalized through /record-game rather than advanced here. But the
+      // hand itself is already verified — persist its receipt and the
+      // resulting score now so a refresh (or a client that never calls
+      // record-game) cannot silently drop an already-verified score.
+      // currentHandIndex is deliberately left unchanged: record-game expects
+      // to receive this same terminal hand.
+      if (!findVerifiedHand(attempt.result, gameNumber, completedHandIndex)) {
+        attempt.result = pinAuthorityContractFromVerifiedTranscript({
+          result: attempt.result,
+          run,
+          transcript: verified.transcript,
+        });
+        attempt.result = writeVerifiedHand(attempt.result, verified.result);
+        attempt.result = writeActiveGameProgress(attempt.result, {
+          gameNumber,
+          you: verified.result.playerScoreAfter,
+          fritz: verified.result.fritzScoreAfter,
+        });
+        await upsertDailyFritzAttempt(attempt);
+      }
       res.status(409).json({ error: 'Daily Fritz game is complete; finalize the verified game.' });
       return;
     }
@@ -1370,28 +1391,71 @@ export function registerDailyFritzRoutes(app: Application): void {
     let handsPlayed = Math.round(legacyHandsPlayed);
     let terminalHandReceipt: VerifiedDailyFritzHandRecord | null = null;
     if (parsedTranscript) {
-      const verified = verifyAttemptHand({
-        transcript: parsedTranscript,
-        attempt,
-        run,
-        userId: authenticatedUserId,
-        gameNumber,
-        handIndex: attempt.currentHandIndex,
-        publishedChallenge: publishedAuthority,
-      });
-      playerScore = verified.result.playerScoreAfter;
-      fritzScore = verified.result.fritzScoreAfter;
-      if (!verified.terminalState.gameOver || playerScore === fritzScore) {
-        res.status(409).json({ error: 'Daily Fritz game is not complete.' });
-        return;
+      // /next-hand may already have verified and persisted this exact terminal
+      // hand (it does so before returning "game is complete; finalize" so the
+      // score is never lost). Reuse that receipt instead of re-verifying and
+      // re-appending a duplicate hand into the authority ledger.
+      const existingTerminalHand = findVerifiedHand(attempt.result, gameNumber, attempt.currentHandIndex);
+      let verifiedHandResult: VerifiedDailyFritzHandRecord;
+      if (existingTerminalHand) {
+        if (existingTerminalHand.transcriptDigest !== digestDailyFritzTranscript(parsedTranscript)) {
+          log.warn({
+            attemptId,
+            gameNumber,
+            userId: authenticatedUserId,
+          }, '[daily-fritz-record-game] conflicting verified terminal hand retry');
+          incrementDailyFritzMetric('command_conflict', 'verified_hand_conflict');
+          await recordDailyFritzEventBestEffort({
+            attemptId,
+            runDate: attempt.runDate,
+            userId: authenticatedUserId,
+            requestId: diagnostics.requestId,
+            eventType: 'command_conflict',
+            gameNumber,
+            handIndex: attempt.currentHandIndex,
+            verifierCode: 'verified_hand_conflict',
+            idempotencyKey: `${attemptId}:command_conflict:record-game:${gameNumber}:${attempt.currentHandIndex}:${diagnostics.requestId}`,
+            payload: { reason: 'verified_hand_evidence_differs' },
+          });
+          res.status(409).json({
+            error: 'Daily Fritz advanced on another session. Resume from the authoritative state.',
+            code: 'verified_hand_conflict',
+            recoverable: true,
+            recovery_action: 'reload_official_hand',
+            authority_revision: attempt.revision,
+          });
+          return;
+        }
+        if (existingTerminalHand.playerScoreAfter === existingTerminalHand.fritzScoreAfter) {
+          res.status(409).json({ error: 'Daily Fritz game is not complete.' });
+          return;
+        }
+        verifiedHandResult = existingTerminalHand;
+      } else {
+        const verified = verifyAttemptHand({
+          transcript: parsedTranscript,
+          attempt,
+          run,
+          userId: authenticatedUserId,
+          gameNumber,
+          handIndex: attempt.currentHandIndex,
+          publishedChallenge: publishedAuthority,
+        });
+        if (!verified.terminalState.gameOver || verified.result.playerScoreAfter === verified.result.fritzScoreAfter) {
+          res.status(409).json({ error: 'Daily Fritz game is not complete.' });
+          return;
+        }
+        verifiedHandResult = verified.result;
+        attempt.result = pinAuthorityContractFromVerifiedTranscript({
+          result: attempt.result,
+          run,
+          transcript: verified.transcript,
+        });
+        attempt.result = writeVerifiedHand(attempt.result, verified.result);
       }
-      terminalHandReceipt = verified.result;
-      attempt.result = pinAuthorityContractFromVerifiedTranscript({
-        result: attempt.result,
-        run,
-        transcript: verified.transcript,
-      });
-      attempt.result = writeVerifiedHand(attempt.result, verified.result);
+      playerScore = verifiedHandResult.playerScoreAfter;
+      fritzScore = verifiedHandResult.fritzScoreAfter;
+      terminalHandReceipt = verifiedHandResult;
       attempt.result = writeActiveGameProgress(attempt.result, { gameNumber, you: playerScore, fritz: fritzScore });
       const gameHands = readAuthorityLedger(attempt.result).hands.filter((hand) => hand.gameNumber === gameNumber);
       movesUsed = gameHands.reduce((sum, hand) => sum + hand.actionCount, 0);

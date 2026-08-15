@@ -31,6 +31,18 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
     expect(decision.kind).toBe('continue');
   });
 
+  it('continues (never resets) on a bare 400 with no verifier code after Hand Over', () => {
+    // e.g. a malformed follow-up request rejected before any verification
+    // ran. The already-recorded score for the prior verified hand must not
+    // be treated as invalid just because this later request failed.
+    const decision = resolveDailyFritzCompletedHandNextHandFailure({
+      verifierCode: null,
+      status: 400,
+      failureAttempt: 1,
+    });
+    expect(decision).toEqual({ kind: 'continue', message: expect.any(String), reason: 'http-400' });
+  });
+
   it('rebuilds Fritz mismatch once before Continue', () => {
     expect(resolveDailyFritzCompletedHandNextHandFailure({
       verifierCode: 'fritz_action_mismatch',
