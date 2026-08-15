@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react';
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { DefaultErrorFallback } from './DefaultErrorFallback';
@@ -25,6 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     const label = this.props.context ?? 'unknown';
     logger.error('ErrorBoundary.tsx', error, { label, componentStack: info.componentStack });
+    Sentry.captureException(error, { extra: { label, componentStack: info.componentStack } });
     this.props.onError?.(error, info);
   }
 
