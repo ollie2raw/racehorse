@@ -1,0 +1,24 @@
+{
+  "name": "Racehorse Dominoes",
+  "short_name": "Racehorse",
+  "description": "Daily dominoes, built for strategy.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#04070c",
+  "background_color": "#020617",
+  "icons": [
+    {
+      "src": "/GOATicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/GOATicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
