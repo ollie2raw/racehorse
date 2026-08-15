@@ -103,6 +103,10 @@ async function apiFetch<T>(
       };
       return apiFetch<T>(url, retryInit, 2);
     }
+    // Refresh failed — fire a global event so the App shell can open the auth modal
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rh:session-expired'));
+    }
     return {
       data: null,
       error: 'Session expired. Please sign in again.',

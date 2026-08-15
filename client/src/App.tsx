@@ -532,6 +532,13 @@ export default function App() {
     setAppMode('home');
   }, []);
 
+  // Open auth modal when API layer signals session expiry after failed token refresh
+  useEffect(() => {
+    const handler = () => setAuthModalOpen(true);
+    window.addEventListener('rh:session-expired', handler);
+    return () => window.removeEventListener('rh:session-expired', handler);
+  }, []);
+
   const {
     getInviteLink,
     resolvePendingCreate,
