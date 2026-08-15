@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import type { RunDrawSequence } from '../bot-turn/drawSequence.ts';
 import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
+import { collectBotTurnSnapshot } from '../bot-turn/botMoveSnapshot.ts';
+import { buildBotPassMoveLogEntry } from '../bot-turn/botMoveLogEntries.ts';
 import {
   isDailyFritzLockedBoneyardNoMove,
   resolveDailyFritzBlockedHandPass,
@@ -131,23 +133,33 @@ export function usePlayerNoMoveEffect({
       try {
         if (isDailyFritzMode && isDailyFritzLockedBoneyardNoMove(match)) {
           logDailyFritzLockedBoneyardDetected(match);
-          const fastResult = resolveDailyFritzBlockedHandPass(match);
+          const resolution = resolveDailyFritzBlockedHandPass(match);
           if (!isLocalRunCurrent(runToken)) return;
-          logDailyFritzBlockedHandResolved(fastResult);
-          if (fastResult.passed) {
-            if (isGhostMode) {
-              appendGhostMove(
-                buildGhostPassMoveLogEntry({
-                  moveCounter: moveCounterRef.current,
-                  handNumber: match.handNumber,
-                  snapshot,
-                  useTupleHandFormat: true,
-                }),
+          logDailyFritzBlockedHandResolved(resolution.result);
+          for (const pass of resolution.passes) {
+            if (pass.player === 'you') {
+              if (isGhostMode) {
+                appendGhostMove(
+                  buildGhostPassMoveLogEntry({
+                    moveCounter: moveCounterRef.current,
+                    handNumber: match.handNumber,
+                    snapshot,
+                    useTupleHandFormat: true,
+                  }),
+                );
+              }
+              appendMove(
+                buildPassMoveLogEntry(pass.before, snapshot, fritzDifficulty),
+                match.handNumber,
+              );
+            } else {
+              appendMove(
+                buildBotPassMoveLogEntry(collectBotTurnSnapshot(pass.before), null),
+                match.handNumber,
               );
             }
-            appendMove(buildPassMoveLogEntry(match, snapshot, fritzDifficulty), match.handNumber);
           }
-          applyAndNotify(fastResult);
+          applyAndNotify(resolution.result);
           return;
         }
 

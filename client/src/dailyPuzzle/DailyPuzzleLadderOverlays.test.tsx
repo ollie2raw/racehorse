@@ -138,6 +138,7 @@ describe('DailyPuzzleLadderOverlays', () => {
     );
     expect(screen.getByLabelText('Submitting puzzle')).toBeTruthy();
     expect(screen.getByText('Submitting puzzle…')).toBeTruthy();
+    expect(screen.getByText('Your progress is being secured')).toBeTruthy();
   });
 
   it('renders finalize pending copy when finalizePending is true', () => {
@@ -170,8 +171,11 @@ describe('DailyPuzzleLadderOverlays', () => {
     );
 
     expect(screen.getByLabelText('Puzzle complete')).toBeTruthy();
+    expect(screen.getByLabelText('Daily Climb progress')).toBeTruthy();
+    expect(screen.getByText('Next up: Puzzle 2')).toBeTruthy();
+    expect(screen.getByLabelText('8 points earned')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to Ladder' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Next · Puzzle 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Climb to Puzzle 2' }));
     expect(actions.exitPlayToHub).toHaveBeenCalledTimes(1);
     expect(actions.onSlotNext).toHaveBeenCalledWith(expect.objectContaining({ slotIndex: 2 }));
   });
@@ -197,8 +201,28 @@ describe('DailyPuzzleLadderOverlays', () => {
     );
 
     expect(screen.getByLabelText('Practice complete')).toBeTruthy();
+    expect(screen.getByLabelText('Puzzle 2 current')).toBeTruthy();
+    expect(screen.getByLabelText('18 practice points')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Replay' }));
     expect(actions.onPracticeReplay).toHaveBeenCalledWith(2);
+  });
+
+  it('renders the recoverable save error and returns to the ladder', () => {
+    const actions = makeActions();
+    render(
+      <DailyPuzzleLadderOverlays
+        flags={{ ...emptyFlags, hubError: 'Unable to save this result.' }}
+        currentSlotBreakdown={[]}
+        finalLadderShareText=""
+        shareDone={false}
+        actions={actions}
+      />,
+    );
+
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByText('Your board is still safe')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Ladder' }));
+    expect(actions.exitPlayToHub).toHaveBeenCalledTimes(1);
   });
 
   it('renders final overlay and wires home/review/leaderboard callbacks', () => {
@@ -217,7 +241,9 @@ describe('DailyPuzzleLadderOverlays', () => {
     );
 
     expect(screen.getByLabelText('Ladder complete')).toBeTruthy();
-    expect(screen.getByText('Rank #5')).toBeTruthy();
+    expect(screen.getByText('You placed #5 on today’s ladder.')).toBeTruthy();
+    expect(screen.getByLabelText('42 total points')).toBeTruthy();
+    expect(screen.getByLabelText('Puzzle score breakdown')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Home' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review Ladder' }));
     fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));

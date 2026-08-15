@@ -1,7 +1,7 @@
 import type { PresenceStatus } from '../social/socialApi';
 
 export const FRIEND_CHALLENGE_MATCH_SUMMARY = '7-Tile · First to 60 · Untimed';
-export const FRIEND_CHALLENGE_EXPIRY_MS = 60_000;
+export const FRIEND_CHALLENGE_EXPIRY_MS = 5 * 60_000;
 
 export type FriendChallengeState =
   | 'idle'
@@ -92,7 +92,7 @@ export function isChallengeButtonDisabled(
   presenceStatus: PresenceStatus,
   options?: { unreachable?: boolean; reachabilityKnown?: boolean },
 ): boolean {
-  if (presenceStatus === 'offline' || presenceStatus === 'in_game') return true;
+  if (presenceStatus === 'in_game') return true;
   if (options?.unreachable) return true;
   if (options?.reachabilityKnown === false) return true;
   return state === 'creating' || state === 'pending' || state === 'accepted';

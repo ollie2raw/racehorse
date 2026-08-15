@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isDailyFritzSkunk,
   getGameSkunkChipLabel,
+  getDailyFritzPublishedSetScore,
   getSetSkunkBadgeFromLeaderboardRow,
   getSetSkunkBadge,
   getSkunkOverlayCopy,
@@ -220,6 +221,7 @@ describe('skunk detection and messaging', () => {
       const copy = getSkunkOverlayCopy(setResult, game);
       expect(copy).not.toBeNull();
       expect(copy!.headline).toBe('SKUNK');
+      expect(copy!.subheadline).toContain('2–0');
       expect(copy!.primaryTone).toBe('success');
     });
 
@@ -251,6 +253,39 @@ describe('skunk detection and messaging', () => {
       expect(copy).not.toBeNull();
       expect(copy!.headline).toBe('Skunked by Fritz');
       expect(copy!.primaryTone).toBe('default');
+    });
+  });
+
+  describe('getDailyFritzPublishedSetScore', () => {
+    it('publishes a game-1 player skunk as 2–0', () => {
+      expect(getDailyFritzPublishedSetScore({
+        version: 2,
+        format: 'best_of_3',
+        playerGamesWon: 2,
+        fritzGamesWon: 0,
+        totalPointDiff: 45,
+        games: [],
+        setWinner: 'player',
+        hasSkunk: true,
+        instantSkunk: true,
+        skunkGameNumber: 1,
+        skunkBy: 'player',
+      })).toEqual({ finalScore: 2, opponentScore: 0, label: '2–0' });
+    });
+
+    it('keeps a game-2 split skunk as 1–1', () => {
+      expect(getDailyFritzPublishedSetScore({
+        version: 2,
+        format: 'best_of_3',
+        playerGamesWon: 1,
+        fritzGamesWon: 1,
+        totalPointDiff: 20,
+        games: [],
+        setWinner: 'player',
+        hasSkunk: true,
+        skunkGameNumber: 2,
+        skunkBy: 'player',
+      })).toEqual({ finalScore: 1, opponentScore: 1, label: '1–1' });
     });
   });
 });

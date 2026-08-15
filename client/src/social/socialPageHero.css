@@ -90,8 +90,13 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .social-hero__meta {
     grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .social-hero__title {
+    font-size: clamp(28px, 8vw, 34px);
   }
 }

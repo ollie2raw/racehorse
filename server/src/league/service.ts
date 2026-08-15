@@ -43,7 +43,7 @@ interface AssignmentResult {
   mode: 'existing_league' | 'new_league' | 'already_assigned';
 }
 
-const DIVISION_ENTRY: 3 = 3;
+const DIVISION_ENTRY = 3 as const;
 const LEAGUE_SIZE = 7;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;

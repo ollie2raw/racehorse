@@ -12,11 +12,13 @@ export function evaluateOneTurnHighScoreMoveOutcome(params: {
   pointsAwarded: number;
   isDouble: boolean;
   priorRunningScore: number;
+  nextCurrentPlayer: 'you' | 'bot';
   upcomingPlayMovesCount: number;
 }): OneTurnHighScoreMoveOutcome {
   const newRunningScore = params.priorRunningScore + params.pointsAwarded;
   if (
     (params.pointsAwarded === 0 && !params.isDouble)
+    || params.nextCurrentPlayer !== 'you'
     || params.upcomingPlayMovesCount === 0
   ) {
     return { type: 'terminal', status: 'SOLVED', runningScore: newRunningScore };
@@ -78,4 +80,8 @@ export function evaluateTargetScoreMoveOutcome(params: {
 
 export function shouldAutoFailOneTurnHighScoreWithNoLegalMoves(legalMovesCount: number): boolean {
   return legalMovesCount === 0;
+}
+
+export function shouldRecoverCompletedOneTurnHighScore(currentPlayer: 'you' | 'bot'): boolean {
+  return currentPlayer !== 'you';
 }

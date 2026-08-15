@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getRoom,
   getRoomCanDraw,
@@ -145,7 +145,7 @@ async function findPlayMoveForCurrentTurn(
       const ack = vi.fn();
       await activeHandlers.get('game:action')?.(
         roomCode,
-        { type: 'DRAW', requestId: `setup-draw-${step}` },
+        { type: 'DRAW', requestId: `setup-draw-${step}`, expectedSequence: room.state!.sequence },
         ack,
       );
       expect(ack).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
@@ -155,7 +155,7 @@ async function findPlayMoveForCurrentTurn(
       const ack = vi.fn();
       await activeHandlers.get('game:action')?.(
         roomCode,
-        { type: 'PASS', requestId: `setup-pass-${step}` },
+        { type: 'PASS', requestId: `setup-pass-${step}`, expectedSequence: room.state!.sequence },
         ack,
       );
       expect(ack).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
@@ -175,6 +175,16 @@ describe('private room happy path', () => {
     resetRoomGameplayLocksForTests();
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();
+  });
+
+  afterEach(() => {
+    resetGameActionIdempotencyForTests();
+    resetLiveRoomPersistenceForTests();
+    resetLiveRoomPersistHookForTests();
+    resetRoomGameplayLocksForTests();
+    resetRoomRuntimeForTests();
+    resetRoomSessionStoresForTests();
+    vi.useRealTimers();
   });
 
   it('create → join → start → legal move syncs; wrong-turn move rejected', async () => {
@@ -218,6 +228,7 @@ describe('private room happy path', () => {
       {
         type: 'MOVE',
         requestId: 'wrong-turn-move',
+        expectedSequence: room.state!.sequence,
         move: { tile: playMove!.tile, position: playMove!.position },
       },
       wrongTurnAck,
@@ -231,6 +242,7 @@ describe('private room happy path', () => {
       {
         type: 'MOVE',
         requestId: 'accepted-move',
+        expectedSequence: beforeSequence,
         move: { tile: playMove!.tile, position: playMove!.position },
       },
       moveAck,
@@ -276,11 +288,13 @@ describe('private room happy path', () => {
     const payload1 = {
       type: 'MOVE',
       requestId: 'concurrent-move-1',
+      expectedSequence: beforeSequence,
       move: { tile: playMove!.tile, position: playMove!.position },
     };
     const payload2 = {
       type: 'MOVE',
       requestId: 'concurrent-move-2',
+      expectedSequence: beforeSequence,
       move: { tile: playMove!.tile, position: playMove!.position },
     };
 

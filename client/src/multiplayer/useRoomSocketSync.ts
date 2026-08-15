@@ -629,6 +629,13 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       'player:disconnected',
       (payload: { playerId?: string; graceMs?: number }) => {
         if (!payload?.playerId || payload.playerId === scope.dom.youRef.current) return;
+        scope.ui.setOpponentDragging?.(false);
+        scope.ui.setDrawSequenceActiveBoth(false);
+        scope.ui.setDrawStepMyHand(null);
+        scope.ui.setDrawStepActorId(null);
+        scope.ui.setDrawStepOpponentHandCount(null);
+        scope.ui.setBoneyardDisplayCount(null);
+        scope.ui.setFlyingTiles([]);
         scope.ui.setOpponentDisconnected(true);
         const seconds = Math.max(1, Math.round((payload.graceMs ?? 30_000) / 1000));
         scope.ui.setOpponentDisconnectMessage(`Opponent disconnected. Waiting up to ${seconds}s…`);
@@ -643,6 +650,13 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     });
 
     const onPlayerReconnectTimeout = wrapSocketHandler('player:reconnect_timeout', () => {
+      scope.ui.setOpponentDragging?.(false);
+      scope.ui.setDrawSequenceActiveBoth(false);
+      scope.ui.setDrawStepMyHand(null);
+      scope.ui.setDrawStepActorId(null);
+      scope.ui.setDrawStepOpponentHandCount(null);
+      scope.ui.setBoneyardDisplayCount(null);
+      scope.ui.setFlyingTiles([]);
       scope.ui.setOpponentDisconnectMessage('Opponent did not return in time.');
       scope.ui.showToast('Opponent forfeited.', 3000);
     });
@@ -676,6 +690,12 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
         scope.dom.drawSequenceTimeoutRef.current = null;
       }
+      scope.ui.setDrawSequenceActiveBoth(false);
+      scope.ui.setDrawStepMyHand(null);
+      scope.ui.setDrawStepActorId(null);
+      scope.ui.setDrawStepOpponentHandCount(null);
+      scope.ui.setBoneyardDisplayCount(null);
+      scope.ui.setFlyingTiles([]);
     };
   }, [inputParams]);
 }

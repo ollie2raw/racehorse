@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import type { AppMode } from '../types';
-import { GlobalNav } from '../components';
+import { GlobalNav, SubsectionHeader } from '../components';
 import { useSyncNow } from '../ui/useSyncNow';
 import type { Registration, ScheduledTournament } from './types';
 import { deriveTournamentHubViewModel, type TournamentRecoveryMatch } from './hubState';
@@ -180,7 +180,7 @@ const TournamentCard = memo(function TournamentCard({
           <span className="th-card__soon">Opens soon</span>
         ) : (
           <button
-            className="th-cta"
+            className="th-cta rh-mode-card__cta"
             disabled={!userId}
             onClick={() => void onRegister(tournament.id)}
           >
@@ -313,16 +313,15 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
         activeColor="var(--accent-amber)"
       />
       <div className="th-shell">
-        <div className="th-toolbar">
-          <button type="button" className="th-back" onClick={props.onBackHome}>
-            <span aria-hidden>←</span> Back to Home
-          </button>
-        </div>
+        <SubsectionHeader
+          title="Tournament"
+          onBack={props.onBackHome}
+          backAriaLabel="Back to Home"
+        />
 
         <div className="th-layout">
           <div className="th-left">
             <div>
-              <p className="th-kicker">Tournament</p>
               <h1 className="th-title">Compete</h1>
               <p className="th-desc">8-player bracket. First to 30 wins. One champion every 30 minutes.</p>
             </div>
@@ -343,7 +342,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                 <Trophy />
               )}
             </div>
-            <div className="th-features">
+            <div className="th-features rh-mode-card-grid">
               <div className="th-feature">
                 <div className="th-feature__header">8 Players</div>
                 <div className="th-feature__desc">Single-elimination bracket.</div>
@@ -383,7 +382,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   </span>
                 </div>
                 <button
-                  className="th-cta"
+                  className="th-cta rh-mode-card__cta"
                   type="button"
                   onClick={() => props.onOpenBracket(lobbyBracketTournamentId)}
                 >
@@ -414,7 +413,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   </span>
                 </div>
                 <button
-                  className="th-cta"
+                  className="th-cta rh-mode-card__cta"
                   type="button"
                   disabled={props.attachJoinPhase === 'pending'}
                   onClick={() => void props.onAttachAssignedMatch(props.recoveryMatch!.matchId)}
@@ -446,7 +445,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                     <strong>{hubState.title}</strong>
                     <span>{hubState.detail}</span>
                   </div>
-                  <button className="th-cta th-cta--ghost" onClick={() => void props.onRetry()}>
+                  <button className="th-cta th-cta--ghost rh-mode-card__cta" onClick={() => void props.onRetry()}>
                     Retry
                   </button>
                 </div>

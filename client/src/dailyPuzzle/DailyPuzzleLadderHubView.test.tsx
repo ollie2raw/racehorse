@@ -139,7 +139,10 @@ describe('DailyPuzzleLadderHubView', () => {
     expect(screen.getByRole('heading', { name: 'Daily Ladder', level: 1 })).toBeTruthy();
     expect(screen.getAllByText('1500 pts').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('3 days')).toBeTruthy();
-    expect(screen.getByLabelText('Ladder progress')).toBeTruthy();
+    expect(screen.getByLabelText('Five-stage Daily Climb')).toBeTruthy();
+    expect(screen.getByText('1500 PTS AT THE SUMMIT')).toBeTruthy();
+    expect(screen.getByLabelText('Puzzle 1: Up next')).toBeTruthy();
+    expect(screen.getByLabelText('1 tile, 10 pts')).toBeTruthy();
     expect(screen.getByTestId('overlays-stub')).toBeTruthy();
   });
 

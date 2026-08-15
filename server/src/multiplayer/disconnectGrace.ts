@@ -1,6 +1,7 @@
 import type { Server } from 'socket.io';
 import { act, getRoom } from '../rooms';
 import { canDraw, getLegalMoves } from '../game/engine';
+import { recordOperationalFailure } from '../operationalTelemetry';
 
 export const DISCONNECT_GRACE_MS = 30_000;
 
@@ -110,7 +111,12 @@ export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatI
     if (room.disconnectExpiries) {
       room.disconnectExpiries[playerSeatId] = 0;
     }
-  } catch {}
+  } catch (error) {
+    recordOperationalFailure('multiplayer.disconnect_rejoin_room_lookup', error, {
+      roomCode,
+      playerSeatId,
+    });
+  }
   if (hadGrace) {
     io.to(roomCode).emit('player:reconnected', { playerId: playerSeatId });
   }

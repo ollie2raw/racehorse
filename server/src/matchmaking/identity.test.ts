@@ -41,7 +41,7 @@ describe('resolveQueueIdentity', () => {
     expect(identity).toEqual({ ok: false, error: 'not_authenticated' });
   });
 
-  it('allows non-UUID guest identities as unranked queue identities', () => {
+  it('allows namespaced guest identities as unranked queue identities', () => {
     const identity = resolveQueueIdentity(socketWithData({}), {
       userId: 'guest_local_123',
       username: 'Guest',
@@ -54,5 +54,11 @@ describe('resolveQueueIdentity', () => {
       authenticated: false,
     });
   });
-});
 
+  it('rejects arbitrary non-UUID identities without authentication', () => {
+    expect(resolveQueueIdentity(socketWithData({}), {
+      userId: 'admin',
+      username: 'Imposter',
+    })).toEqual({ ok: false, error: 'not_authenticated' });
+  });
+});

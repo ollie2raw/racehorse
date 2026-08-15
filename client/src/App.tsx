@@ -1,5 +1,5 @@
-import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore, useReducer } from 'react';
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
@@ -14,6 +14,11 @@ import { mutePreference } from './utils/mutePreference';
 import { logger } from './utils/logger';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
+import { FRITZ_CHALLENGE_FEATURE_ENABLED } from './config/fritzChallengeFeature';
+import { readFritzChallengeCodeFromHash } from './fritzChallenge/fritzChallengeLinks';
+import { startFritzChallenge, toDailyFritzChallengePackage, recordFritzChallengeGame } from './fritzChallenge/api';
+import type { DailyFritzStartResponse } from './dailyFritz/api';
+import { buildDailyFritzTranscript } from './dailyFritz/dailyFritzTranscript';
 
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 import { useJoinAckCoordinator } from './multiplayer/useJoinAckCoordinator';
@@ -93,6 +98,9 @@ import {
 
 import type { AppMode } from './appRouteTypes';
 import { LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE } from './appRouteTypes';
+import { isCircuitModeEnabled, resolveCircuitGatedMode } from './config/circuitModeFeature';
+import { isStakesPrototypeEnabled, resolveStakesGatedMode } from './config/stakesModeFeature';
+import { stakesReducer, INITIAL_STAKES_STATE } from './stakes/stakesRunState';
 import { selectLegacyAppSessionRuntime } from './multiplayer/runtime/runtimeSelectors';
 import { createMultiplayerRuntime } from './multiplayer/runtime/createMultiplayerRuntime';
 import { MultiplayerRuntimeProvider } from './multiplayer/runtime/runtimeProvider';
@@ -120,6 +128,8 @@ const MODE_TO_PATH: Partial<Record<AppMode, string>> = {
   ratingHistory: '/rating-history',
   singlePlayerHub: '/solo',
   journey: '/journey',
+  circuit: '/circuit',
+  stakes: '/stakes',
   tournament: '/tournament',
   noBrainer: '/practice',
   learn: '/learn',
@@ -148,8 +158,16 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [appMode, setAppMode] = useState<AppMode>(() => {
     const hash = window.location.hash.replace(/^#/, '') || '/';
+    if (
+      FRITZ_CHALLENGE_FEATURE_ENABLED
+      && readFritzChallengeCodeFromHash(window.location.hash)
+    ) {
+      return 'botSetup';
+    }
     const mode = PATH_TO_MODE[hash];
     return mode && !SOCKET_MODES.has(mode) ? mode : 'home';
   });
@@ -171,6 +189,7 @@ export default function App() {
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
+  const [challengePackage, setChallengePackage] = useState<DailyFritzStartResponse | null>(null);
 
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
   const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);
@@ -179,12 +198,102 @@ export default function App() {
   const [, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
+  const [stakesState, dispatchStakes] = useReducer(stakesReducer, INITIAL_STAKES_STATE);
 
-  // Sync appMode → URL hash (side effect only; appMode is still source of truth)
+  // Sync appMode → URL hash. Pushes a real history entry when the mode
+  // actually changes the path (so back/forward has something to move
+  // through); replaces in place when the URL already matches (e.g. two
+  // modes that share a path, like the SOCKET_MODES all mapping to '/').
+  //
+  // No coordination needed with the POP-effect below beyond each one
+  // comparing against current truth (location.pathname here, appMode
+  // there): once either effect brings appMode and the URL back in sync,
+  // the other's own equality check naturally no-ops on its next run.
+  // (An earlier version tried to coordinate the two via refs that
+  // remembered "the last path/key I handled" — that broke because
+  // `location.pathname`/`location.key` identify a history *entry*, not
+  // a navigation *event*: revisiting an entry via back/forward reports
+  // the exact same values as the first visit, so "have I seen this
+  // value before" is never a valid dedupe signal here.)
   useEffect(() => {
-    const path = SOCKET_MODES.has(appMode) ? '/' : (MODE_TO_PATH[appMode] ?? '/');
-    navigate(path, { replace: true });
-  }, [appMode, navigate]);
+    const challengeCode = appMode === 'botSetup' && FRITZ_CHALLENGE_FEATURE_ENABLED
+      ? readFritzChallengeCodeFromHash(window.location.hash)
+      : null;
+    const path = challengeCode
+      ? `/fritz/challenge/${challengeCode}`
+      : SOCKET_MODES.has(appMode) ? '/' : (MODE_TO_PATH[appMode] ?? '/');
+    if (path === location.pathname) return;
+    navigate(path);
+  }, [appMode, navigate, location.pathname]);
+
+  // Sync URL hash → appMode for browser back/forward. The `mode === appMode`
+  // check is what makes this safe to fire on mount (react-router reports
+  // 'POP' as the initial navigationType, not just for real back/forward) —
+  // on mount, appMode was already derived from the same URL, so this is
+  // naturally a no-op rather than needing a separate "was this mount"
+  // tracking ref.
+  useEffect(() => {
+    if (navigationType !== 'POP') return;
+    const mode = PATH_TO_MODE[location.pathname] ?? 'home';
+    if (mode === appMode) return;
+    setAppMode(mode);
+  }, [location.pathname, navigationType, appMode]);
+
+  const startChallenge = useCallback(async (code: string) => {
+    const response = await startFritzChallenge(code);
+    setChallengePackage(toDailyFritzChallengePackage(response));
+    setAppMode('bot');
+  }, [setAppMode]);
+
+  const completeChallengeGame = useCallback(async (result: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+    movesUsed: number;
+    handsPlayed: number;
+    currentHandIndex: number;
+    moveLog: import('./game/moveLogger').MoveEntry[];
+  }) => {
+    if (!challengePackage?.challenge_code || !challengePackage.current_game_number) return;
+    const recorded = await recordFritzChallengeGame({
+      code: challengePackage.challenge_code,
+      attemptId: challengePackage.attempt_id,
+      gameNumber: challengePackage.current_game_number,
+      finalScore: result.yourScore,
+      opponentScore: result.botScore,
+      transcript: buildDailyFritzTranscript({
+        challengeId: challengePackage.challenge_id ?? `fritz-challenge:${challengePackage.challenge_code}`,
+        attemptId: challengePackage.attempt_id,
+        gameNumber: challengePackage.current_game_number,
+        handIndex: result.currentHandIndex,
+        handNumber: result.handsPlayed,
+        moveLog: result.moveLog,
+        fritzPolicyVersion: challengePackage.fritz_policy_version,
+      }),
+    });
+    if (recorded.hand_advanced && recorded.hand && recorded.current_game_scores) {
+      setChallengePackage((current) => current ? {
+        ...current,
+        current_hand_index: recorded.current_hand_index ?? current.current_hand_index + 1,
+        current_game_scores: recorded.current_game_scores!,
+        first_hand: recorded.hand!,
+        draw_winner: recorded.draw_winner ?? current.draw_winner,
+        draw_player_tile: recorded.draw_player_tile ?? current.draw_player_tile,
+        draw_fritz_tile: recorded.draw_fritz_tile ?? current.draw_fritz_tile,
+      } : current);
+      return;
+    }
+    if (recorded.next_game_number) {
+      const next = await startFritzChallenge(challengePackage.challenge_code);
+      setChallengePackage(toDailyFritzChallengePackage(next));
+      return;
+    }
+    setChallengePackage((current) => current ? { ...current, set_result: recorded.set_result ?? null } : current);
+    setAppMode('botSetup');
+    if (typeof window !== 'undefined') {
+      window.history.pushState(window.history.state, '', `${window.location.pathname}${window.location.search}#/fritz/challenge/${challengePackage.challenge_code}`);
+    }
+  }, [challengePackage, setAppMode]);
 
   useEffect(() => {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
@@ -197,6 +306,20 @@ export default function App() {
   useEffect(() => {
     if (!JOURNEY_MODE_VISIBLE && appMode === 'journey') {
       setAppMode('singlePlayerHub');
+    }
+  }, [appMode]);
+
+  useEffect(() => {
+    const gated = resolveCircuitGatedMode(appMode, isCircuitModeEnabled());
+    if (gated !== appMode) {
+      setAppMode(gated);
+    }
+  }, [appMode]);
+
+  useEffect(() => {
+    const gated = resolveStakesGatedMode(appMode, isStakesPrototypeEnabled());
+    if (gated !== appMode) {
+      setAppMode(gated);
     }
   }, [appMode]);
 
@@ -1379,9 +1502,11 @@ export default function App() {
         setError('');
         shellSetActionError('');
         try {
-          void signOut().catch(() => {});
-        } catch {
-          // no-op
+          void signOut().catch((error) => {
+            logger.error('app.username_signout', error);
+          });
+        } catch (error) {
+          logger.error('app.username_signout_sync', error);
         } finally {
           setSigningOut(false);
           setUsernameModalOpen(false);
@@ -1478,6 +1603,9 @@ export default function App() {
         isAuthoringMode,
         isAuthoringV2Mode,
         isGuidedV2Mode,
+        challengePackage,
+        onStartFritzChallenge: startChallenge,
+        onFritzChallengeGameComplete: completeChallengeGame,
       },
       ghost: {
         ghostProfile,
@@ -1526,6 +1654,7 @@ export default function App() {
         attachAssignedTournamentMatch,
       },
       multiplayerRoute: { mpSubView, error, setError },
+      stakes: { runState: stakesState, dispatch: dispatchStakes },
     },
     multiplayerConnectionState,
     multiplayerConnectionConfig,

@@ -11,6 +11,7 @@ import {
   broadcastStateUpdate,
   getRoomRoster,
   initRoomSession,
+  resetRoomSessionStoresForTests,
   setRoomRoster,
 } from './roomSession';
 import { seatSyntheticBotInRoom } from './botSeating';
@@ -57,6 +58,7 @@ describe('seatSyntheticBotInRoom', () => {
   afterEach(() => {
     deleteRoom('BOTSEAT1');
     deleteRoom('BOTTURN1');
+    resetRoomSessionStoresForTests();
     vi.mocked(supabaseFetch).mockClear();
     vi.useRealTimers();
   });

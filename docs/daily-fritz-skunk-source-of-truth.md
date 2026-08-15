@@ -14,7 +14,7 @@ Only a skunk in **game 1** or **game 2** can end the full set early by counting 
 
 | Scenario | Set result | Notes |
 |----------|------------|--------|
-| Player skunks Fritz in **game 1** | Player wins set **2–0** immediately | `instantSkunk: true` |
+| Player skunks Fritz in **game 1** | Player wins set immediately; published score **2–0** | `instantSkunk: true`; skunk counts as two game wins |
 | Fritz skunks player in **game 1** | Fritz wins set **0–2** immediately | `instantSkunk: true` |
 | Player skunks Fritz in **game 2** after winning game 1 | Player wins set **2–0** (two games played) | Two real wins; G2 skunk is metadata |
 | Player skunks Fritz in **game 2** after losing game 1 (1–1) | Player wins set immediately | G2 skunk ends set at **1–1 games played** |
@@ -28,6 +28,10 @@ Skunk does **not** apply after the set is already decided (e.g. no further games
 A skunk in **game 3** is still detected and stored (`skunk: true`, “Decider Skunk” badges, leaderboard rank tiers) because the loser was under 30.
 
 It has **no mechanical set impact**: the set is already going to a decider at 1–1, and the winner is determined by that single game win (set finishes **2–1**). Game 3 skunk does **not** inflate game counts or trigger `instantSkunk`.
+
+## Leaderboard priority
+
+Only a player who **wins the set by skunking Fritz** receives skunk priority. Every such result ranks above a normal set win regardless of point differential. Player skunks rank by earliest game (game 1, then game 2, then game 3); player skunks in the same game are ordered by total point differential. Being skunked by Fritz never grants leaderboard priority.
 
 ## Normal (non-skunk) games
 

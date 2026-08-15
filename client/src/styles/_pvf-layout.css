@@ -5,21 +5,8 @@
 
 @import './_fritz-screen-shell.css';
 
-:root {
-  --pvf-bg:        #040b17;
-  --pvf-text:      #F2EEE8;
-  --pvf-muted:     #8891A0;
-  --pvf-para:      #AAA6B4;
-  --pvf-dim:       #727083;
-  --pvf-radius-lg: 20px;
-  --pvf-radius-md: 14px;
-  --pvf-radius-sm: 12px;
-  --color-obsidian: #04070c;
-  --color-rookie: var(--tier-rookie);
-  --color-standard: #3B82F6;
-  --color-elite: var(--tier-elite);
-  --color-master: #A855F7;
-}
+/* This file's --pvf- and --color- variables were consolidated into
+   styles/tokens.css. Do not add a new :root block here. */
 
 
 /* ── root ── */

@@ -71,6 +71,24 @@ export function isDailyFritzSetTerminal(
 }
 
 /**
+ * Challenge games reuse the hand lifecycle, but the engine can mark a hand
+ * over before the fixed-deal game target is reached. That state is a hand
+ * transition, not a completed challenge game.
+ */
+export function isChallengeHandOnlyGameOver(input: {
+  gameOver: boolean;
+  youScore: number;
+  botScore: number;
+  winningScore: number | null | undefined;
+}): boolean {
+  return Boolean(
+    input.gameOver
+    && typeof input.winningScore === 'number'
+    && Math.max(input.youScore, input.botScore) < input.winningScore,
+  );
+}
+
+/**
  * Hand-end reveal timer fired for an older hand — do not show or replace reveal.
  */
 export function shouldShowHandRevealForHand(
@@ -102,11 +120,12 @@ export function getDailyFritzWatchdogDelayMs(handRevealVisible: boolean): number
 export function shouldDailyFritzWatchdogAdvance(input: {
   handOver: boolean;
   gameOver: boolean;
+  challengeHandOnlyGameOver?: boolean;
   handRevealVisible: boolean;
   minAdvanceAt: number | null;
   nowMs: number;
 }): boolean {
-  if (!input.handOver || input.gameOver) return false;
+  if (!input.handOver || (input.gameOver && !input.challengeHandOnlyGameOver)) return false;
   if (!input.handRevealVisible) return false;
   if (isDailyFritzAdvanceLocked(input.minAdvanceAt, input.nowMs)) return false;
   return true;

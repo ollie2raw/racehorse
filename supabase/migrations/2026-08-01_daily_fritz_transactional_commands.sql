@@ -316,12 +316,24 @@ begin
       p_game_receipt->>'resultDigest', p_game_receipt
     );
   elsif p_command_type = 'finalize_verified_attempt' then
+    -- Normal BO3 finishes with 2–3 games. Game-1 instant skunk ends the set with
+    -- exactly one verified game (mechanical 2–0 / 0–2) and must also finalize.
     if p_new_status <> 'completed'
       or coalesce(p_new_result->>'verification_status', '') <> 'verified'
       or not (p_new_result ? 'setWinner')
       or jsonb_typeof(p_new_result->'games') <> 'array'
-      or jsonb_array_length(p_new_result->'games') not in (2, 3)
-      or (select count(*) from public.daily_fritz_verified_games where attempt_id = attempt.id) < 2 then
+      or not (
+        (
+          jsonb_array_length(p_new_result->'games') in (2, 3)
+          and (select count(*) from public.daily_fritz_verified_games where attempt_id = attempt.id) >= 2
+        )
+        or (
+          coalesce((p_new_result->>'instantSkunk')::boolean, false)
+          and coalesce((p_new_result->>'skunkGameNumber')::int, 0) = 1
+          and jsonb_array_length(p_new_result->'games') = 1
+          and (select count(*) from public.daily_fritz_verified_games where attempt_id = attempt.id) >= 1
+        )
+      ) then
       raise exception 'daily_fritz_invalid_finalize_transition';
     end if;
   elsif p_command_type = 'abandon_attempt' and p_new_status <> 'abandoned' then

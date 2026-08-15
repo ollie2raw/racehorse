@@ -1,7 +1,7 @@
 import type { BotDealSize } from '../../bot/botEngine.ts';
 import type { BotMatchState } from '../../bot/botEngine.ts';
 
-export type PreGameDrawMatchMode = 'bot' | 'ghost' | 'daily-fritz';
+export type PreGameDrawMatchMode = 'bot' | 'ghost' | 'daily-fritz' | 'stakes';
 
 export interface PreGameDrawEligibilityInput {
   mode: PreGameDrawMatchMode;

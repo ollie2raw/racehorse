@@ -472,6 +472,7 @@ export default function DailyPuzzleScreen({
         pointsAwarded,
         isDouble: isDominoDouble(move.tile!),
         priorRunningScore: runningScoreRef.current,
+        nextCurrentPlayer: nextState.currentPlayer,
         upcomingPlayMovesCount: upcomingPlayMoves.length,
       });
       if (outcome.type === 'terminal') {

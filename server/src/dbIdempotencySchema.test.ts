@@ -94,10 +94,42 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain("'operation_id_reused'");
   });
 
+  it('requires a recipient-bound, one-at-a-time Fritz Challenge invitation', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-03_fritz_challenge_recipient_invites.sql',
+    ));
+    expect(sql).toContain('add column if not exists invited_at timestamptz');
+    expect(sql).toContain('add column if not exists accepted_at timestamptz');
+    expect(sql).toContain('create or replace function public.create_fritz_challenge_invite');
+    expect(sql).toContain('fritz_challenge_recipient_not_friend');
+    expect(sql).toContain('fritz_challenge_active_invite_exists');
+    expect(sql).toContain('pg_advisory_xact_lock');
+    expect(sql).toContain('opponent_user_id is null');
+    expect(sql).toContain('accepted_at = coalesce(accepted_at, now())');
+    expect(sql).toContain('create trigger require_fritz_challenge_attempt_invite');
+    expect(sql).toContain('fritz_challenge_invite_not_accepted');
+  });
+
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
     const sql = compactSql(readRepoFile('supabase/migrations/2026-05-14_scheduled_tournaments.sql'));
 
     expect(sql).toContain('unique (tournament_id, round, match_number)');
+  });
+
+  it('ships multiplayer live-room CAS and durable command receipt primitives', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_multiplayer_live_room_authority.sql',
+    ));
+    expect(sql).toContain('add column if not exists authority_revision bigint not null default 0');
+    expect(sql).toContain('create table if not exists public.room_live_session_command_receipts');
+    expect(sql).toContain('primary key (room_code, actor_seat_id, request_id)');
+    expect(sql).toContain("'request_id_conflict'");
+    expect(sql).toContain("'stale_revision'");
+    expect(sql).toContain('for update');
+    expect(sql).toContain('create or replace function public.assert_room_live_session_revision');
+    expect(sql).toContain('create or replace function public.commit_room_live_session_snapshot');
+    expect(sql).toContain('room_live_session_revision_changed_during_commit');
+    expect(sql).toContain('grant execute on function public.assert_room_live_session_revision');
   });
 
   it('ships immutable, idempotent Daily Fritz challenge publication', () => {

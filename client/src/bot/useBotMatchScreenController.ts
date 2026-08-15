@@ -169,5 +169,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     rating,
     puzzle,
     navigation,
+    replay,
   });
 }

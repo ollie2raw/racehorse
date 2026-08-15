@@ -26,6 +26,8 @@ type AppMode =
   | 'ratingHistory'
   | 'singlePlayerHub'
   | 'journey'
+  | 'circuit'
+  | 'stakes'
   | 'tournament'
   | 'leaderboard'
   | 'profile'
@@ -263,7 +265,7 @@ export default function RacehorseHomeScreen({
                   <Button
                     variant="tier-elite"
                     onClick={() => navigate('dailyFritz')}
-                    className="mt-7"
+                    className="rh-mode-card__cta mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
                     <span>{fritzCompleted ? 'View Results' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
@@ -297,7 +299,7 @@ export default function RacehorseHomeScreen({
                   <Button
                     variant="tier-standard"
                     onClick={() => navigate('daily')}
-                    className="mt-7"
+                    className="rh-mode-card__cta mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
                     <span>{puzzleCompleted ? 'View Results' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>

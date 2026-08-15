@@ -99,9 +99,9 @@
   min-height: 58px;
   border-radius: 14px;
   padding: 8px 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
+  background: rgba(5, 9, 15, 0.88);
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 22%, rgba(255, 255, 255, 0.08));
+  backdrop-filter: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -138,8 +138,9 @@
 }
 
 .daily-puzzle-screen .wl-turn-label.your-turn {
-  background: #f0c040;
-  color: #000;
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 34%, transparent);
+  background: rgba(8, 12, 20, 0.92);
+  color: color-mix(in srgb, var(--tier-standard) 92%, white);
   font-weight: 850;
   padding: 4px 12px;
   border-radius: 6px;
@@ -152,7 +153,7 @@
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.6);
+  color: color-mix(in srgb, var(--tier-standard) 72%, rgba(255, 255, 255, 0.55));
   text-transform: uppercase;
 }
 
@@ -1702,15 +1703,66 @@
   color: var(--text-secondary);
 }
 
+.dpl-ladder-pending-copy.is-pending {
+  color: color-mix(in srgb, var(--tier-standard) 72%, var(--text-secondary));
+  animation: dpl-ladder-pending-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dpl-ladder-pending-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dpl-ladder-result {
+    animation: none;
+  }
+
+  .dpl-ladder-pending-copy.is-pending {
+    animation: none;
+    opacity: 0.8;
+  }
+
+  .dpl-ladder-hub .dpl-pvf-start-btn.rh-btn,
+  .dpl-ladder-hub .dpl-pvf-start-btn.rh-btn:hover:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+
+  .dpl-ladder-hub .df-pvf-progress-card {
+    transition: none;
+  }
+
+  .rh-result {
+    animation: none;
+  }
+
+  .loading-step-chip::after {
+    animation: none;
+  }
+}
+
 /* Daily Ladder completion — electric blue identity (not daily-puzzle gold/green) */
 .dpl-ladder-result {
   border-color: color-mix(in srgb, var(--tier-standard) 22%, rgba(255, 255, 255, 0.08));
+  background: rgba(8, 11, 18, 0.98);
+  animation: dpl-ladder-result-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dpl-ladder-result-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .dpl-ladder-result .rh-result__head {
-  background:
-    radial-gradient(ellipse 80% 70% at 0% 100%, color-mix(in srgb, var(--tier-standard) 20%, transparent), transparent 70%),
-    radial-gradient(ellipse 50% 50% at 100% 0%, color-mix(in srgb, var(--tier-standard) 8%, transparent), transparent 70%);
+  background: rgba(10, 14, 22, 0.96);
+  border-bottom-color: color-mix(in srgb, var(--tier-standard) 14%, rgba(255, 255, 255, 0.06));
 }
 
 .dpl-ladder-result .claude-mode-hero__eyebrow {
@@ -1719,7 +1771,7 @@
 
 .dpl-ladder-result .rh-result__score {
   color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
-  text-shadow: 0 0 48px color-mix(in srgb, var(--tier-standard) 32%, transparent);
+  text-shadow: 0 0 48px color-mix(in srgb, var(--tier-standard) 22%, transparent);
 }
 
 .dpl-ladder-result__actions {
@@ -1743,12 +1795,12 @@
 
 .dpl-ladder-share-result-btn,
 .dpl-share-result-btn {
-  border: 1px solid color-mix(in srgb, var(--tier-standard) 42%, transparent);
-  background: color-mix(in srgb, var(--tier-standard) 16%, transparent);
-  color: color-mix(in srgb, var(--tier-standard) 92%, white);
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 22%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
   font-weight: 700;
   cursor: pointer;
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: opacity 120ms ease, transform 120ms ease, border-color 120ms ease;
 }
 
 .dpl-ladder-share-result-btn {
@@ -1761,7 +1813,8 @@
 
 .dpl-ladder-share-result-btn:hover,
 .dpl-share-result-btn:hover {
-  opacity: 0.9;
+  opacity: 0.95;
+  border-color: color-mix(in srgb, var(--tier-standard) 36%, transparent);
 }
 
 .dpl-ladder-footer-actions {
@@ -1780,9 +1833,9 @@
 }
 
 .dflb-page--ladder .dpl-share-result-btn.dflb-share-result-btn {
-  border-color: color-mix(in srgb, var(--tier-standard) 38%, transparent);
-  background: color-mix(in srgb, var(--tier-standard) 14%, transparent);
-  color: color-mix(in srgb, var(--tier-standard) 90%, white);
+  border-color: color-mix(in srgb, var(--tier-standard) 22%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
 }
 
 .dpl-ladder-result-btn {
@@ -2404,23 +2457,42 @@
 
 .dpl-ladder-hub .dpl-pvf-start-btn.rh-btn {
   width: 100%;
+  border: none;
   background: var(--tier-standard);
   color: var(--text-on-elite);
   box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 0 32px color-mix(in srgb, var(--tier-standard) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dpl-ladder-hub .dpl-pvf-start-btn.rh-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 40px color-mix(in srgb, var(--tier-standard) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.dpl-ladder-hub .dpl-pvf-start-btn.rh-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.dpl-ladder-hub .df-pvf-progress-grid:has(.df-game-card--active) .df-pvf-progress-card:not(.df-game-card--active) {
+  opacity: 0.5;
+  filter: saturate(0.45);
 }
 
 .dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn {
-  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
 }
 
 .dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:hover {
-  color: var(--tier-elite);
+  color: var(--tier-standard);
 }
 
 .dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:focus-visible {
-  outline-color: color-mix(in srgb, var(--tier-elite) 55%, transparent);
+  outline-color: color-mix(in srgb, var(--tier-standard) 55%, transparent);
 }
 
 .dpl-ladder-footer {

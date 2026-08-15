@@ -18,6 +18,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     rating,
     puzzle,
     navigation,
+    replay,
   } = args;
 
   const {
@@ -83,6 +84,9 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     dailyFritzBoardHasPlay: presentation.dailyFritzBoardHasPlay,
     isLessonLayoutMode: turns.isLessonLayoutMode,
     isGhostMode,
+    stakesConfig: props.stakesConfig,
+    onStakesHandComplete: props.onStakesHandComplete,
+    replay: replay,
     isGuidedMode,
     isAuthoringMode,
     isAuthoringV2Mode,
@@ -135,6 +139,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
   const board = {
     boardRef: refs.boardRef,
     boneyardRef: refs.boneyardRef,
+    boneyardDisplayCount: turns.boneyardDisplayCount,
     ghostBoardPulse: ghost.ghostBoardPulse,
     openEnds: presentation.openEnds,
     openEndsSum: presentation.openEndsSum,

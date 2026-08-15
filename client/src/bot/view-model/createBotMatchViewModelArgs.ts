@@ -12,6 +12,7 @@ import type { UseDailyPuzzleLeaderboardSyncResult } from '../../modules/daily-pu
 import type { UseMatchNavigationResult } from '../../modules/match/hooks/useMatchNavigation.ts';
 import type { useAuthoringCapture } from '../../modules/guided/useAuthoringCapture.ts';
 import type { useMatchUiChrome } from '../useMatchUiChrome.ts';
+import type { MoveEntry } from '../../game/moveLogger';
 
 type UseAuthoringCaptureResult = ReturnType<typeof useAuthoringCapture>;
 type UseMatchUiChromeResult = ReturnType<typeof useMatchUiChrome>;
@@ -31,4 +32,5 @@ export type CreateBotMatchViewModelArgs = {
   rating: UseFritzRatingDisplayResult;
   puzzle: UseDailyPuzzleLeaderboardSyncResult;
   navigation: UseMatchNavigationResult;
+  replay?: { moveLog: readonly MoveEntry[] };
 };

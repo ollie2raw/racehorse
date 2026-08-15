@@ -13,6 +13,7 @@ import {
   type DailyFritzTier,
 } from '../../dailyFritz';
 import {
+  getDailyFritzPublishedSetScore,
   getDailyFritzSkunkLossRank,
   getDailyFritzSkunkWinRank,
   normalizeDailyFritzSetSkunkFields,
@@ -570,24 +571,35 @@ export async function upsertDailyFritzAttempt(record: DailyFritzAttemptRecord): 
 }
 
 export async function createDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord> {
-  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    '/rest/v1/daily_fritz_attempts',
-    {
-      method: 'POST',
-      headers: {
-        Prefer: 'return=representation',
+  try {
+    const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+      '/rest/v1/daily_fritz_attempts',
+      {
+        method: 'POST',
+        headers: {
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify([{
+          run_date: runDate,
+          user_id: userId,
+          status: 'started',
+          current_hand_index: 0,
+        }]),
       },
-      body: JSON.stringify([{
-        run_date: runDate,
-        user_id: userId,
-        status: 'started',
-        current_hand_index: 0,
-      }]),
-    },
-  );
-  const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
-  if (!saved) throw new Error('Failed to create daily Fritz attempt.');
-  return saved;
+    );
+    const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
+    if (!saved) throw new Error('Failed to create daily Fritz attempt.');
+    return saved;
+  } catch (error) {
+    // The unique (run_date, user_id) constraint is the authority. A parallel
+    // start or a retry after a lost response must resume that row, not surface
+    // Postgres's unique-violation as a player-facing 500.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/409|23505|idx_daily_fritz_attempts_run_user/i.test(message)) throw error;
+    const existing = await getDailyFritzAttempt(runDate, userId);
+    if (existing) return existing;
+    throw error;
+  }
 }
 
 export async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
@@ -646,12 +658,15 @@ export async function buildDailyFritzLeaderboard(
         ) {
           return null;
         }
+        const publishedScore = setResult
+          ? getDailyFritzPublishedSetScore(setResult)
+          : { finalScore: attempt.finalScore, opponentScore: attempt.opponentScore };
         return {
           userId: attempt.userId,
           username: names.get(attempt.userId) ?? `user_${attempt.userId.slice(0, 8)}`,
           won: attempt.won,
-          finalScore: attempt.finalScore,
-          opponentScore: attempt.opponentScore,
+          finalScore: publishedScore.finalScore,
+          opponentScore: publishedScore.opponentScore,
           pointDiff,
           movesUsed: attempt.movesUsed,
           completedAt: attempt.completedAt,

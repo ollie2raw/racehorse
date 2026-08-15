@@ -45,6 +45,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     resyncBufferedUpdateRef,
     resyncFlushRef,
     resetClientGameSession,
+    fetchGameState,
     onGameStart,
     appendMultiplayerMove,
   } = params;
@@ -208,6 +209,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     onGameStart,
     appendMultiplayerMove,
     flashLastPlayed: transientUi.flashLastPlayed,
+    requestAuthoritativeResync: fetchGameState,
   });
 
   const handRevealSequence = useHandRevealSequence({

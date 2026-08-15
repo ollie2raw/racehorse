@@ -97,6 +97,8 @@ export function toFritzChallengeApiView(
     deal_size: challenge.config.dealSize,
     winning_score: challenge.config.winningScore,
     has_opponent: Boolean(challenge.opponentUserId),
+    invite_sent: Boolean(challenge.invitedAt),
+    recipient_accepted: Boolean(challenge.acceptedAt),
     viewer_role: viewerRole,
     created_at: challenge.createdAt,
     expires_at: challenge.expiresAt,
@@ -119,6 +121,7 @@ function toFritzChallengeAttemptApiView(attempt: FritzChallengeAttemptRecord) {
     started_at: attempt.startedAt,
     updated_at: attempt.updatedAt,
     completed_at: attempt.completedAt,
+    set_result: attempt.result?.set_result ?? null,
   };
 }
 
@@ -157,7 +160,12 @@ function sendChallengeError(res: Response, error: unknown): void {
       : error.code === 'opponent_already_claimed'
         || error.code === 'creator_cannot_join'
         || error.code === 'expired'
+        || error.code === 'invite_required'
+        || error.code === 'invite_not_accepted'
+        || error.code === 'active_invite_exists'
         ? 409
+        : error.code === 'recipient_not_friend'
+          ? 403
         : error.code === 'invalid_config'
           ? 400
           : 503;
@@ -182,14 +190,18 @@ export function registerFritzChallengeRoutes(
       }
       const fritzTier = normalizeFritzChallengeTier(req.body?.fritz_tier);
       const dealSize = normalizeFritzChallengeDealSize(req.body?.deal_size);
-      if (!fritzTier || !dealSize) {
+      const recipientUserId = typeof req.body?.recipient_user_id === 'string'
+        ? req.body.recipient_user_id.trim()
+        : '';
+      if (!fritzTier || !dealSize || !recipientUserId) {
         throw new FritzChallengeError(
-          'Choose a valid Fritz tier and 7- or 14-tile format.',
+          'Choose a friend, valid Fritz tier, and 7- or 14-tile format.',
           'invalid_config',
         );
       }
       const challenge = await deps.createChallenge({
         creatorUserId: userId,
+        recipientUserId,
         fritzTier,
         dealSize,
         now: deps.now(),
@@ -218,9 +230,17 @@ export function registerFritzChallengeRoutes(
       if (!challenge) {
         throw new FritzChallengeError('Fritz Challenge not found.', 'not_found');
       }
+      const viewerIsParticipant = viewerUserId === challenge.creatorUserId
+        || viewerUserId === challenge.opponentUserId;
+      const attempt = viewerIsParticipant && viewerUserId
+        ? await deps.getAttempt({ challengeId: challenge.id, userId: viewerUserId })
+        : null;
+      const challengeView = toFritzChallengeApiView(challenge, viewerUserId, deps.now());
       res.json({
         ok: true,
-        challenge: toFritzChallengeApiView(challenge, viewerUserId, deps.now()),
+        challenge: attempt
+          ? { ...challengeView, attempt: toFritzChallengeAttemptApiView(attempt) }
+          : challengeView,
       });
     } catch (error) {
       sendChallengeError(res, error);
@@ -272,6 +292,24 @@ export function registerFritzChallengeRoutes(
       const challenge = await deps.getChallengeByCode(shareCode);
       if (!challenge) {
         throw new FritzChallengeError('Fritz Challenge not found.', 'not_found');
+      }
+      if (resolveVisibleStatus(challenge, deps.now()) === 'expired') {
+        throw new FritzChallengeError(
+          'This Fritz Challenge has expired and can no longer be played.',
+          'expired',
+        );
+      }
+      if (!challenge.opponentUserId || !challenge.invitedAt) {
+        throw new FritzChallengeError(
+          'Choose and send to a specific friend before starting this challenge.',
+          'invite_required',
+        );
+      }
+      if (!challenge.acceptedAt) {
+        throw new FritzChallengeError(
+          'Your friend must accept this challenge before either player can start.',
+          'invite_not_accepted',
+        );
       }
       const requestedProtocol = Number(req.body?.verification_protocol_version);
       const requestedRules = Number(req.body?.game_rules_version);

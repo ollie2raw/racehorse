@@ -2365,9 +2365,13 @@
   color: var(--text-primary);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .mp-hub-shell.mp-hub-shell--pvf {
-    padding: 16px 16px 24px;
+    padding: 16px 16px var(--rh-bottom-tab-offset);
+  }
+
+  .pml-choice {
+    min-height: var(--touch-min);
   }
 }
 

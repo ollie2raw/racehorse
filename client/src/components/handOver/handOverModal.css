@@ -528,3 +528,32 @@
     font-size: 40px;
   }
 }
+
+/* Daily Fritz portal tone */
+.hand-over-modal--daily-fritz .hand-over-modal__status-pill {
+  border-color: rgba(231, 182, 74, 0.28);
+  background: color-mix(in srgb, var(--tier-elite, #e7b64a) 10%, transparent);
+  color: rgba(242, 220, 154, 0.92);
+}
+
+.hand-over-modal--daily-fritz .hand-over-modal__progress-track {
+  height: 5px;
+  background: rgba(231, 182, 74, 0.12);
+}
+
+.hand-over-modal--daily-fritz .hand-over-modal__progress-fill {
+  background: var(--tier-elite, #e7b64a);
+}
+
+.hand-over-modal--daily-fritz .hand-over-modal__reward-card {
+  border-color: rgba(231, 182, 74, 0.42);
+  box-shadow:
+    inset 0 0 22px color-mix(in srgb, var(--tier-elite, #e7b64a) 10%, transparent),
+    0 0 18px color-mix(in srgb, var(--tier-elite, #e7b64a) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hand-over-modal.game-over-card {
+    animation: none;
+  }
+}

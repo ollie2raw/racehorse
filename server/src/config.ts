@@ -12,7 +12,6 @@ export interface Config {
   corsAllowedOrigins: string;
   clientUrl: string | null;
   serverUrl: string | null;
-  enableLegacyTournaments: boolean;
   matchmakingDebug: boolean;
   matchmakingDevMode: string | null;
   mpDrawAudit: boolean;
@@ -21,6 +20,7 @@ export interface Config {
   roomCleanupGraceMs: number;
   dailyPuzzleCronSecret: string | null;
   enableRequestPuzzleGeneration: boolean;
+  multiplayerDurableInvites: boolean;
   
   // Socket rate limiting overrides
   limitRoomCreateMax: number;
@@ -94,7 +94,6 @@ export function validateAndLoadConfig(): Config {
     corsAllowedOrigins: getEnv('CORS_ALLOWED_ORIGINS') ?? '',
     clientUrl: getEnv('CLIENT_URL'),
     serverUrl: getEnv('SERVER_URL'),
-    enableLegacyTournaments: getEnvBool('ENABLE_LEGACY_TOURNAMENTS', false),
     matchmakingDebug: getEnvBool('MATCHMAKING_DEBUG', false),
     matchmakingDevMode: getEnv('MATCHMAKING_DEV_MODE'),
     mpDrawAudit: getEnvBool('MP_DRAW_AUDIT', false),
@@ -103,6 +102,7 @@ export function validateAndLoadConfig(): Config {
     roomCleanupGraceMs: getEnvInt('ROOM_CLEANUP_GRACE_MS', 0),
     dailyPuzzleCronSecret: getEnv('DAILY_PUZZLE_CRON_SECRET'),
     enableRequestPuzzleGeneration: getEnvBool('ENABLE_REQUEST_PUZZLE_GENERATION', false),
+    multiplayerDurableInvites: getEnvBool('MULTIPLAYER_DURABLE_INVITES', false),
 
     // Socket rate limiting
     limitRoomCreateMax: getEnvInt('LIMIT_ROOM_CREATE_MAX', 10),

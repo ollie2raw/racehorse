@@ -23,6 +23,7 @@ import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
 import { useRoomSocketSync } from './useRoomSocketSync';
 import { useMultiplayerPresentation } from './useMultiplayerPresentation';
 import { useLiveMatchSession } from '../match/session/useLiveMatchSession';
+import { logger } from '../utils/logger';
 import {
   findPlacedTile,
   getBoardEnds,
@@ -668,7 +669,11 @@ function MultiplayerGameShellComponent({
               400,
             );
           })
-          .catch(() => {});
+          .catch((error) => {
+            logger.operational('completion_fx', 'confetti_unavailable', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
       }
     }
     const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
@@ -720,7 +725,13 @@ function MultiplayerGameShellComponent({
           },
         ),
       )
-      .catch(() => {});
+      .catch((error) => {
+        logger.error('multiplayer.post_match_recording', error, {
+          roomCode: joinedRoom,
+          winnerSocketId,
+          loserSocketId,
+        });
+      });
   }, [
     authUser,
     isMutedRef,
@@ -749,7 +760,14 @@ function MultiplayerGameShellComponent({
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
-  const myName = authProfile?.username ? `@${authProfile.username}` : 'you';
+  const myParticipant = players.find((player) => player.id === you) ?? null;
+  const myName = myParticipant?.username
+    ? myParticipant.username.startsWith('@')
+      ? myParticipant.username
+      : `@${myParticipant.username}`
+    : authProfile?.username
+      ? `@${authProfile.username}`
+      : 'you';
   const spectateRightPlayerId = isSpectatingMatch ? (state?.playerIds?.[1] ?? null) : null;
   const spectateRightPlayer = spectateRightPlayerId
     ? (players.find((pl) => pl.id === spectateRightPlayerId) ?? null)

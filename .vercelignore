@@ -1,0 +1,11 @@
+client/
+node_modules/
+packages/*/node_modules/
+server/node_modules/
+.git/
+.worktrees/
+.claude/
+audit-screenshots/
+docs/
+supabase/
+*.md

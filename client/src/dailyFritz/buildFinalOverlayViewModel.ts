@@ -1,6 +1,11 @@
 import type { DailyFritzSetGameResult, DailyFritzSetResult } from './api';
 import { formatOrdinalPlace } from './format';
-import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
+import {
+  getDailyFritzPublishedSetScore,
+  getGameSkunkChipLabel,
+  getSetSkunkBadge,
+  getSkunkOverlayCopy,
+} from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 
 function formatMargin(value: number): string {
@@ -54,6 +59,7 @@ export function buildDailyFritzFinalOverlayViewModel({
     sr.totalPointDiff > 0 ? 'win' : sr.totalPointDiff < 0 ? 'loss' : 'idle';
   const skunkCopy = g ? getSkunkOverlayCopy(sr, g) : null;
   const setWonPlayer = sr.setWinner === 'player';
+  const publishedScore = getDailyFritzPublishedSetScore(sr);
 
   const games = sr.games.map((game) => {
     const playerScore = Number.isFinite(game.playerScore) ? game.playerScore : 0;
@@ -87,7 +93,7 @@ export function buildDailyFritzFinalOverlayViewModel({
     gameScoreValue: g
       ? `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`
       : '—',
-    setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+    setScoreValue: publishedScore.label,
     marginValue: margin,
     marginTone,
     resultValue: setWonPlayer ? 'Victory' : 'Defeat',

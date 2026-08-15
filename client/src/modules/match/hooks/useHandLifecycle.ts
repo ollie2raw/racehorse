@@ -30,6 +30,7 @@ import {
   createDailyFritzNextHandRequest,
   createEndOfRunMatchState,
   logDailyFritzHandComplete,
+  normalizeChallengeHandEndForClient,
   tryApplyDailyFritzNextHand,
 } from '../hand-lifecycle/dailyFritzHandService.ts';
 import { planLocalHandAdvance } from '../hand-lifecycle/guidedHandCoordinator.ts';
@@ -157,6 +158,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     matchRef,
     mode,
     isDailyFritzMode,
+    challengeWinningScore: dailyFritzPackage?.challenge_code
+      ? dailyFritzPackage.winning_score
+      : null,
     isGuidedMode,
     isGuidedV2Mode,
     lastDailyFlowLabelRef,
@@ -472,10 +476,26 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           // A hand-end callback can run before the final move-log write is
           // observable. Never make the player recover from that local timing
           // race: discard the frozen prefetch evidence and rebuild it once.
-          if (verifierCode === 'incomplete_transcript' && failureAttempt <= 2) {
+          // Incomplete blocked transcripts are also sealed on rebuild; never
+          // trap the player on a reload for this verifier code.
+          if (verifierCode === 'incomplete_transcript') {
             prefetchCoordinator.clear();
             completedHandEvidenceRef.current = null;
-            advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+            if (failureAttempt <= 4) {
+              advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+              return;
+            }
+            setHandAdvanceError(null);
+            setShowManualHandAdvance(true);
+            logDailyFritzHandBreadcrumb('manual-advance-shown', {
+              reason: 'next-hand-request-rejected',
+              source,
+              failureAttempt,
+              status: err instanceof DailyFritzNextHandHttpError ? err.status : null,
+              verifierCode,
+              error: errMsg,
+            });
+            emitModalFailureTelemetry('show_modal_retry');
             return;
           }
           // A concurrent resume or a checkpoint assembled during a move-log
@@ -642,23 +662,37 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   const notifyBotActionResult = useCallback(
     (result: BotActionResult) => {
-      if (result.handEnded) {
+      const lifecycleResult = dailyFritzPackage?.challenge_code
+        ? normalizeChallengeHandEndForClient(result, dailyFritzPackage.winning_score)
+        : result;
+      if (lifecycleResult !== result) {
+        // applyAndNotify has already queued the engine result. Queue the
+        // challenge-normalized state immediately after it so React cannot
+        // leave a hand-only gameOver visible between lifecycle phases.
+        setMatch((prev) => prev.handNumber === lifecycleResult.state.handNumber
+          ? lifecycleResult.state
+          : prev);
+      }
+      if (lifecycleResult.handEnded) {
         lifecycle.onHandEndedFromBotAction(
           { mode, getHandNumber: () => result.state.handNumber },
           {
-            winner: result.handEnded.winner,
-            reason: result.handEnded.reason,
-            gameOver: result.state.gameOver,
-            handNumber: result.state.handNumber,
+            winner: lifecycleResult.handEnded.winner,
+            reason: lifecycleResult.handEnded.reason,
+            gameOver: lifecycleResult.state.gameOver,
+            handNumber: lifecycleResult.state.handNumber,
           },
         );
         if (isDailyFritzMode) {
           lastDailyFlowLabelRef.current = 'hand-complete';
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
-          logDailyFritzHandComplete(result);
+          logDailyFritzHandComplete(lifecycleResult);
+          // Do not verify during this callback. The final player/bot move has
+          // not necessarily reached the replay recorder yet; advanceHand
+          // freezes evidence after the reveal instead.
         }
         ports.flashLastPlayed(null);
-        const plan = reveal.planHandEndedReveal(result);
+        const plan = reveal.planHandEndedReveal(lifecycleResult);
         if (isDailyFritzMode) setDailyFritzHandResult(plan.revealPayload);
         reveal.showHandEndedReveal(plan, result.state.handNumber);
         playHandEndAudioEffects(result, isMuted);
@@ -666,10 +700,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       applyBotActionUiEffects(result, ports, opponentLabel, isMuted, isDailyFritzMode);
     },
     [
-      dailyFritzHandIndex,
       dailyFritzPackage,
-      dailyFritzTranscriptProtocolVersion,
-      getMoveLog,
       isDailyFritzMode,
       isMuted,
       lastDailyFlowLabelRef,
@@ -677,8 +708,8 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       mode,
       opponentLabel,
       ports,
-      prefetchCoordinator,
       reveal,
+      setMatch,
       setDailyFritzHandResult,
     ],
   );
@@ -715,6 +746,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     handTransitionInFlightRef,
     lastDailyFlowLabelRef,
     isDailyFritzMode,
+    challengeWinningScore: dailyFritzPackage?.challenge_code
+      ? dailyFritzPackage.winning_score
+      : null,
     isGuidedMode,
     isGuidedV2Mode,
     isGuidedV2OffLine,

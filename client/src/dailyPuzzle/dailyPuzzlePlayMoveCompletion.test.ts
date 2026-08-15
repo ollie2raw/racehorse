@@ -4,6 +4,7 @@ import {
   evaluateTargetScoreMoveOutcome,
   isDominoDouble,
   shouldAutoFailOneTurnHighScoreWithNoLegalMoves,
+  shouldRecoverCompletedOneTurnHighScore,
 } from './dailyPuzzlePlayMoveCompletion';
 
 describe('evaluateOneTurnHighScoreMoveOutcome', () => {
@@ -13,6 +14,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 5,
         isDouble: false,
         priorRunningScore: 10,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 2,
       }),
     ).toEqual({ type: 'continue', runningScore: 15 });
@@ -24,6 +26,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 3,
         isDouble: false,
         priorRunningScore: 0,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 0,
       }),
     ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 3 });
@@ -35,6 +38,7 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 0,
         isDouble: false,
         priorRunningScore: 4,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 1,
       }),
     ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 4 });
@@ -46,9 +50,22 @@ describe('evaluateOneTurnHighScoreMoveOutcome', () => {
         pointsAwarded: 0,
         isDouble: true,
         priorRunningScore: 4,
+        nextCurrentPlayer: 'you',
         upcomingPlayMovesCount: 1,
       }),
     ).toEqual({ type: 'continue', runningScore: 4 });
+  });
+
+  it('completes when the move hands control to the bot', () => {
+    expect(
+      evaluateOneTurnHighScoreMoveOutcome({
+        pointsAwarded: 7,
+        isDouble: false,
+        priorRunningScore: 4,
+        nextCurrentPlayer: 'bot',
+        upcomingPlayMovesCount: 3,
+      }),
+    ).toEqual({ type: 'terminal', status: 'SOLVED', runningScore: 11 });
   });
 });
 
@@ -115,5 +132,10 @@ describe('helpers', () => {
   it('flags auto-fail when no legal moves', () => {
     expect(shouldAutoFailOneTurnHighScoreWithNoLegalMoves(0)).toBe(true);
     expect(shouldAutoFailOneTurnHighScoreWithNoLegalMoves(1)).toBe(false);
+  });
+
+  it('recovers a persisted one-turn puzzle after control already ended', () => {
+    expect(shouldRecoverCompletedOneTurnHighScore('bot')).toBe(true);
+    expect(shouldRecoverCompletedOneTurnHighScore('you')).toBe(false);
   });
 });

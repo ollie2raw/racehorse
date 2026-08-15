@@ -112,10 +112,6 @@ export function useFriendChallenge({
         showToast('Sign in with friends to send challenges.', 2200);
         return;
       }
-      if (target.presenceStatus === 'offline') {
-        showToast(`${target.username} is offline.`, 2000);
-        return;
-      }
       if (target.presenceStatus === 'in_game') {
         showToast(`${target.username} is in a match.`, 2000);
         return;
@@ -213,7 +209,6 @@ export function useFriendChallenge({
   const getChallengeButtonLabel = useCallback(
     (userId: string, presenceStatus: FriendChallengeTarget['presenceStatus']) => {
       if (presenceStatus === 'in_game') return 'In Match';
-      if (presenceStatus === 'offline') return 'Offline';
       if (isUnreachable(userId, presenceStatus)) return 'Unavailable';
       return challengeButtonLabel(resolveState(userId));
     },

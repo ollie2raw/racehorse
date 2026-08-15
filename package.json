@@ -6,6 +6,10 @@
     "server",
     "packages/*"
   ],
+  "scripts": {
+    "check:migrations": "node scripts/validate-migration-ledger.mjs && node scripts/verify-schema-contract-static.mjs",
+    "db:apply-ledger": "node scripts/apply-migration-ledger.mjs"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2"
   }

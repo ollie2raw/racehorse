@@ -4,6 +4,7 @@ import {
   DAILY_FRITZ_HAND_REVEAL_DELAY_MS,
   getDailyFritzWatchdogDelayMs,
   getHandLifecyclePhase,
+  isChallengeHandOnlyGameOver,
   isDailyFritzAdvanceLocked,
   isDailyFritzSetTerminal,
   logHandLifecycle,
@@ -115,6 +116,24 @@ function testDailyFritzSetTerminal(): void {
   assertEqual(isDailyFritzSetTerminal({ setWinner: null }), false, 'live set');
 }
 
+function testChallengeHandOnlyGameOver(): void {
+  assertEqual(
+    isChallengeHandOnlyGameOver({ gameOver: true, youScore: 15, botScore: 8, winningScore: 60 }),
+    true,
+    'challenge hand end below game target remains a hand transition',
+  );
+  assertEqual(
+    isChallengeHandOnlyGameOver({ gameOver: true, youScore: 60, botScore: 8, winningScore: 60 }),
+    false,
+    'challenge game target remains terminal',
+  );
+  assertEqual(
+    isChallengeHandOnlyGameOver({ gameOver: true, youScore: 15, botScore: 8, winningScore: null }),
+    false,
+    'ordinary daily Fritz does not reinterpret game over',
+  );
+}
+
 function testShouldShowHandRevealForHand(): void {
   assertEqual(shouldShowHandRevealForHand(2, 2), true, 'same hand');
   assertEqual(shouldShowHandRevealForHand(3, 2), false, 'stale reveal timer');
@@ -170,6 +189,18 @@ function testDailyFritzWatchdogGuards(): void {
     true,
     'watchdog may advance after reveal gate',
   );
+  assertEqual(
+    shouldDailyFritzWatchdogAdvance({
+      handOver: true,
+      gameOver: true,
+      challengeHandOnlyGameOver: true,
+      handRevealVisible: true,
+      minAdvanceAt: 10_000,
+      nowMs: 10_000,
+    }),
+    true,
+    'challenge watchdog advances a hand marked game over below the game target',
+  );
 }
 
 async function testResolveDailyFritzNextHandCache(): Promise<void> {
@@ -203,7 +234,7 @@ async function testResolveDailyFritzNextHandCache(): Promise<void> {
     return { index: 99 };
   };
   const rejectedNet = Promise.reject(new Error('network'));
-  void rejectedNet.catch(() => {});
+  void rejectedNet.catch((_expectedNetworkError) => undefined);
   const failedPrefetch = await resolveDailyFritzNextHandCache(
     {
       promise: rejectedNet,
@@ -222,7 +253,7 @@ async function testResolveDailyFritzNextHandCache(): Promise<void> {
     return { index: 7 };
   };
   const rejectedBoom = Promise.reject(new Error('boom'));
-  void rejectedBoom.catch(() => {});
+  void rejectedBoom.catch((_expectedLifecycleError) => undefined);
   const afterThrow = await resolveDailyFritzNextHandCache(
     {
       promise: rejectedBoom,
@@ -241,6 +272,7 @@ async function run(): Promise<void> {
   testShouldAllowBotAction();
   testShouldApplyBotActionResult();
   testDailyFritzSetTerminal();
+  testChallengeHandOnlyGameOver();
   testShouldShowHandRevealForHand();
   testHandRevealScheduleMode();
   testDailyFritzWatchdogGuards();

@@ -49,8 +49,14 @@
   min-height: calc(11px * 1.35);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .mm-features {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .mm-feature {
+    min-height: var(--touch-min);
+    padding: 14px 16px;
   }
 }

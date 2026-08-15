@@ -104,4 +104,32 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
     const actions=makeActions();const vm=buildDailyFritzSetOverlayViewModel({kind:'final',completedGame,setResult:{...setResult,setWinner:'player',playerGamesWon:2},rank:4,canViewLeaderboard:true},actions,{});
     expect(vm.primaryLabel).toBe('View Leaderboard');expect(vm.secondaryLabel).toBeNull();expect(vm.tertiaryLabel).toBe('Return Home');
   });
+
+  it('shows the published 2–0 set score for a game-1 player skunk', () => {
+    const skunkGame = { ...completedGame, fritzScore: 20, pointDiff: 40, skunk: true, skunkBy: 'player' as const };
+    const vm = buildDailyFritzSetOverlayViewModel(
+      {
+        kind: 'final',
+        completedGame: skunkGame,
+        setResult: {
+          ...setResult,
+          games: [skunkGame],
+          playerGamesWon: 2,
+          fritzGamesWon: 0,
+          setWinner: 'player',
+          hasSkunk: true,
+          instantSkunk: true,
+          skunkGameNumber: 1,
+          skunkBy: 'player',
+        },
+        rank: 1,
+        canViewLeaderboard: true,
+      },
+      makeActions(),
+      {},
+    );
+
+    expect(vm.setScoreValue).toBe('2–0');
+    expect(vm.subheadline).toContain('2–0');
+  });
 });

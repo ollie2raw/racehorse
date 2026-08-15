@@ -12,12 +12,12 @@
 
 /* ── Top bar ── */
 .friends-page-topbar {
-  height: 46px;
+  min-height: 52px;
+  height: auto;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 clamp(20px, 3vw, 52px);
+  padding: 4px clamp(16px, 3vw, 52px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
   background: linear-gradient(180deg, rgba(0, 1, 4, 0.9), rgba(0, 1, 4, 0.72));
   backdrop-filter: blur(18px);
@@ -25,6 +25,11 @@
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.025);
   position: relative;
   z-index: 100;
+}
+
+.friends-page-topbar .rh-subsection-header {
+  width: 100%;
+  padding-block: 4px;
 }
 
 .friends-page-brand {
@@ -589,7 +594,7 @@
 }
 
 /* ── Responsive ── */
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .friends-page-list-pane {
     width: 100%;
   }

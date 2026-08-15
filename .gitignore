@@ -14,7 +14,9 @@
 .env*.local
 server/.env
 client/.auth/
+/.auth/
 client/coverage/
 client/playwright-report/
 client/test-results/
 reset-password.mjs
+.worktrees/

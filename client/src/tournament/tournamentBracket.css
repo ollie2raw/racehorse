@@ -27,10 +27,18 @@
 
 .tb-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 20px;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+.tb-page .rh-subsection-header {
+  margin-bottom: 4px;
+}
+
+.tb-toolbar:empty {
+  display: none;
 }
 
 .tb-back {
@@ -1519,13 +1527,22 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .tb-shell {
-    padding: 14px 16px 18px;
+    padding: 14px 16px var(--rh-bottom-tab-offset);
   }
 
   .tb-shell--waiting {
-    padding: 10px 14px 12px;
+    padding: 10px 14px var(--rh-bottom-tab-offset);
+  }
+
+  .tb-toolbar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tb-head {
+    text-align: left;
   }
 
   .tb-bracket,

@@ -1,7 +1,6 @@
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotDifficulty } from '../fritz/botHeuristics.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
-import { getFritzBestMove } from '../bot-turn/fritzEvaluation.ts';
 import type { PlayerMoveSnapshot } from './playerMoveSnapshot.ts';
 import type { Tile } from '../../types.ts';
 import { toTileTuple } from '../../game/moveLogger.ts';
@@ -20,9 +19,9 @@ type BaseMoveLogFields = Pick<
 >;
 
 function baseMoveLogFields(
-  match: BotMatchState,
+  _match: BotMatchState,
   snapshot: PlayerMoveSnapshot,
-  fritzDifficulty: BotDifficulty,
+  _fritzDifficulty: BotDifficulty,
   overrides: Partial<BaseMoveLogFields> = {},
 ): BaseMoveLogFields {
   return {
@@ -34,7 +33,7 @@ function baseMoveLogFields(
     boardState: snapshot.boardState,
     boardRenderState: snapshot.boardRenderState,
     handSnapshot: snapshot.handBefore,
-    engineBestMove: getFritzBestMove(match, fritzDifficulty),
+    engineBestMove: null,
     ...overrides,
   };
 }

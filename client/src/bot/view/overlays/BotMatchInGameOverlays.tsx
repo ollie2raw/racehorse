@@ -1,5 +1,6 @@
 import { lazy, Suspense, type CSSProperties } from 'react';
 import { POST_GAME_REVIEW_VISIBLE } from '../../../appRouteTypes.ts';
+import { logger } from '../../../utils/logger.ts';
 
 const GameReviewer = lazy(() => import('../../../analyzer/GameReviewer.tsx'));
 import LeaveGameModal from '../../../components/LeaveGameModal.tsx';
@@ -142,7 +143,9 @@ export function BotMatchInGameOverlays({
                   console.warn('[Fritz Pending] abandon failed', err);
                 })
                 .finally(() => {
-                  void Promise.resolve(onProfileRefresh?.()).catch(() => {});
+                  void Promise.resolve(onProfileRefresh?.()).catch((error) => {
+                    logger.error('bot.profile_refresh_after_abandon', error);
+                  });
                   exitMatch();
                 });
             } else {

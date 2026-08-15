@@ -38,6 +38,10 @@
   margin-bottom: 14px;
 }
 
+.th-page .rh-subsection-header {
+  margin-bottom: 8px;
+}
+
 .th-back {
   display: inline-flex;
   align-items: center;
@@ -218,6 +222,11 @@
 .th-features {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* When paired with Pass 1 helper, let shared grid own column math */
+.th-features.rh-mode-card-grid {
   gap: 10px;
 }
 
@@ -639,5 +648,63 @@
   .th-state-card {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 767px) {
+  .th-shell {
+    padding: 12px 16px var(--rh-bottom-tab-offset);
+    overflow-y: auto;
+  }
+
+  .th-features,
+  .th-features.rh-mode-card-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .th-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .th-card__time {
+    min-width: 0;
+  }
+
+  .th-card__actions {
+    width: 100%;
+  }
+
+  .th-cta,
+  .th-cta.rh-mode-card__cta {
+    width: 100%;
+    min-height: var(--touch-min);
+    justify-content: center;
+  }
+
+  .th-summary-strip {
+    gap: 8px;
+    padding: 10px 8px;
+  }
+
+  .th-summary-key {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .th-summary-value {
+    font-size: 12px;
+  }
+
+  .th-recovery-banner__actions .th-cta {
+    width: 100%;
+  }
+
+  .th-card:hover,
+  .th-card:focus-visible,
+  .th-card:active {
+    border-color: rgba(255, 255, 255, 0.16);
   }
 }

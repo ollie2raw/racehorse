@@ -4,6 +4,7 @@ import {
   buildDailyFritzCompletedHandEvidenceKey,
   createDailyFritzNextHandRequest,
   createEndOfRunMatchState,
+  normalizeChallengeHandEndForClient,
   tryApplyDailyFritzNextHand,
 } from './dailyFritzHandService.ts';
 import type { DailyFritzPrefetchParams } from './types.ts';
@@ -81,6 +82,61 @@ describe('tryApplyDailyFritzNextHand', () => {
   });
 });
 
+describe('normalizeChallengeHandEndForClient', () => {
+  it('keeps a below-target hand transition out of match game-over state', () => {
+    const base = createBotMatch(60, 7);
+    const result = normalizeChallengeHandEndForClient({
+      state: {
+        ...base,
+        handOver: true,
+        gameOver: true,
+        winnerId: 'you',
+        players: {
+          you: { ...base.players.you, score: 15 },
+          bot: { ...base.players.bot, score: 8 },
+        },
+      },
+      handEnded: {
+        winner: 'you',
+        reason: 'domino',
+        pointsAwarded: 5,
+        loserPips: 8,
+        calcText: '5',
+      },
+    }, 60);
+
+    expect(result.state.gameOver).toBe(false);
+    expect(result.state.winnerId).toBeNull();
+    expect(result.state.handOver).toBe(true);
+  });
+
+  it('preserves terminal game-over when the challenge target is reached', () => {
+    const base = createBotMatch(60, 7);
+    const result = normalizeChallengeHandEndForClient({
+      state: {
+        ...base,
+        handOver: true,
+        gameOver: true,
+        winnerId: 'you',
+        players: {
+          you: { ...base.players.you, score: 60 },
+          bot: { ...base.players.bot, score: 8 },
+        },
+      },
+      handEnded: {
+        winner: 'you',
+        reason: 'domino',
+        pointsAwarded: 5,
+        loserPips: 8,
+        calcText: '5',
+      },
+    }, 60);
+
+    expect(result.state.gameOver).toBe(true);
+    expect(result.state.winnerId).toBe('you');
+  });
+});
+
 describe('createEndOfRunMatchState', () => {
   it('marks game over with the higher-scoring player as winner', () => {
     const base = createBotMatch(60, 7);
@@ -96,6 +152,21 @@ describe('createEndOfRunMatchState', () => {
     expect(next.gameOver).toBe(true);
     expect(next.handOver).toBe(false);
     expect(next.winnerId).toBe('you');
+  });
+
+  it('does not invent a winner on tied scores', () => {
+    const base = createBotMatch(60, 7);
+    const match = {
+      ...base,
+      handOver: true,
+      players: {
+        you: { ...base.players.you, score: 55 },
+        bot: { ...base.players.bot, score: 55 },
+      },
+    };
+    const next = createEndOfRunMatchState(match);
+    expect(next.gameOver).toBe(true);
+    expect(next.winnerId).toBeNull();
   });
 });
 

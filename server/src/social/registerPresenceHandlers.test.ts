@@ -101,6 +101,28 @@ describe('registerPresenceHandlers', () => {
     expect(presence.upsertPresence).toHaveBeenCalledWith(USER_A, 'online');
   });
 
+  it('invokes the authenticated-identification hook used for pending invite delivery', async () => {
+    const socketsByUserId = new Map<string, Set<string>>();
+    const socket = createSocketStub({ id: 'sock-a' });
+    const handlers = captureHandlers(socket);
+    const onIdentified = vi.fn().mockResolvedValue(undefined);
+    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+
+    registerPresenceHandlers(socket, {
+      io,
+      socketsByUserId,
+      resolveSocketIdentity: vi.fn().mockResolvedValue({ username: 'Alice', userId: USER_A }),
+      normalizeUserId,
+      isUuidLike,
+      onIdentified,
+    });
+
+    await handlers['presence:identify']({ username: 'Alice' }, vi.fn());
+    await Promise.resolve();
+
+    expect(onIdentified).toHaveBeenCalledWith(USER_A);
+  });
+
   it('presence:identify returns ok:false when identity has no userId', async () => {
     const socketsByUserId = new Map<string, Set<string>>();
     const socket = createSocketStub();

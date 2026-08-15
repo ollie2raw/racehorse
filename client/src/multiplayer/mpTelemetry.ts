@@ -31,6 +31,10 @@ export type MpTelemetryCounters = {
   rejoinLatencyMs: number;
   joinAckTimeout: number;
   reconnectSuccess: number;
+  actionStaleState: number;
+  actionRequestIdConflict: number;
+  actionDuplicateReplay: number;
+  actionRejected: number;
 };
 
 const counters: MpTelemetryCounters = {
@@ -51,6 +55,10 @@ const counters: MpTelemetryCounters = {
   rejoinLatencyMs: 0,
   joinAckTimeout: 0,
   reconnectSuccess: 0,
+  actionStaleState: 0,
+  actionRequestIdConflict: 0,
+  actionDuplicateReplay: 0,
+  actionRejected: 0,
 };
 
 const episodeStartedAt = new Map<number, number>();
@@ -190,6 +198,44 @@ export function recordJoinLatency(latencyMs: number, kind: 'join' | 'rejoin'): v
 export function recordJoinAckTimeout(event: string, elapsedMs: number): void {
   counters.joinAckTimeout += 1;
   emit('join', 'ack_timeout', { event, elapsedMs });
+}
+
+/**
+ * Canonical client-side accounting for server action acknowledgements. The
+ * server remains authoritative; this lets operations distinguish expected
+ * optimistic-concurrency resyncs from actual player-visible failures.
+ */
+export function recordGameplayActionAck(
+  action: 'draw' | 'pass' | 'play',
+  ack: { ok?: boolean; error?: string; duplicate?: boolean; sequence?: number } | null | undefined,
+  context: { roomCode: string; expectedSequence: number },
+): void {
+  const base = {
+    action,
+    roomCode: context.roomCode,
+    expectedSequence: context.expectedSequence,
+    actualSequence: ack?.sequence,
+    error: ack?.error,
+  };
+  if (ack?.ok) {
+    if (ack.duplicate) {
+      counters.actionDuplicateReplay += 1;
+      emit('gameplay_action', 'duplicate_replay', base);
+    }
+    return;
+  }
+  if (ack?.error === 'stale_state') {
+    counters.actionStaleState += 1;
+    emit('gameplay_action', 'stale_state', base);
+    return;
+  }
+  if (ack?.error === 'request_id_conflict') {
+    counters.actionRequestIdConflict += 1;
+    emit('gameplay_action', 'request_id_conflict', base);
+    return;
+  }
+  counters.actionRejected += 1;
+  emit('gameplay_action', 'rejected', base);
 }
 
 declare global {

@@ -1,10 +1,14 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { FritzTier } from "../modules/fritz/fritzConfig.ts";
 import type { BotDealSize } from "../modules/match/runtime/botEngine.ts";
 import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
+import { FRITZ_CHALLENGE_FEATURE_ENABLED } from "../config/fritzChallengeFeature";
+import { FritzChallengeDialog } from "../fritzChallenge/FritzChallengeDialog";
+import FritzChallengeRoom from "../fritzChallenge/FritzChallengeRoom";
+import { readFritzChallengeCodeFromHash } from "../fritzChallenge/fritzChallengeLinks";
 import "./PlayVsFritz.css";
 
 /* ---- High-Fidelity Home Icons ---- */
@@ -160,6 +164,7 @@ interface PlayVsFritzProps {
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
   onOpenAccount?: () => void;
+  onStartChallenge?: (code: string) => Promise<void>;
 }
 
 export default function PlayVsFritz({ 
@@ -167,10 +172,19 @@ export default function PlayVsFritz({
   onStart, 
   onNavigate, 
   onOpenAuth, 
-  onOpenAccount 
+  onOpenAccount,
+  onStartChallenge,
 }: PlayVsFritzProps) {
   const [difficulty, setDifficulty] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
+  const [incomingChallengeCode, setIncomingChallengeCode] = useState<string | null>(() =>
+    FRITZ_CHALLENGE_FEATURE_ENABLED && typeof window !== 'undefined'
+      ? readFritzChallengeCodeFromHash(window.location.hash)
+      : null,
+  );
+  const [challengeDialogOpen, setChallengeDialogOpen] = useState(
+    false,
+  );
   const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
   const dynamicColor = TIER_COLORS[difficulty];
   const loadHeroAsset = useCallback(
@@ -179,10 +193,59 @@ export default function PlayVsFritz({
   );
   const heroSrc = useDeferredAsset("play-vs-fritz-hero", loadHeroAsset);
 
+  useEffect(() => {
+    if (!FRITZ_CHALLENGE_FEATURE_ENABLED || typeof window === 'undefined') return;
+    const syncChallengeRoute = () => {
+      setIncomingChallengeCode(readFritzChallengeCodeFromHash(window.location.hash));
+    };
+    window.addEventListener('hashchange', syncChallengeRoute);
+    window.addEventListener('popstate', syncChallengeRoute);
+    return () => {
+      window.removeEventListener('hashchange', syncChallengeRoute);
+      window.removeEventListener('popstate', syncChallengeRoute);
+    };
+  }, []);
+
   const selectDifficulty = (tier: FritzTier): void => {
     setDifficulty(tier);
     writeStoredPvfFritzTier(tier);
   };
+
+  const openChallengeRoom = useCallback((code: string) => {
+    setIncomingChallengeCode(code);
+    setChallengeDialogOpen(false);
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${window.location.search}#/fritz/challenge/${code}`,
+      );
+    }
+  }, []);
+
+  const closeChallengeRoom = useCallback(() => {
+    setIncomingChallengeCode(null);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${window.location.search}#/`,
+      );
+    }
+  }, []);
+
+  if (incomingChallengeCode) {
+    return (
+      <FritzChallengeRoom
+        code={incomingChallengeCode}
+        onBack={closeChallengeRoom}
+        onNavigate={onNavigate}
+        onOpenAuth={onOpenAuth}
+        onOpenAccount={onOpenAccount}
+        onStartChallenge={onStartChallenge}
+      />
+    );
+  }
 
   return (
     <div className={`pvf-root pvf-root--setup tier-${difficulty}`} style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
@@ -397,23 +460,43 @@ export default function PlayVsFritz({
               </div>
             </div>
 
-            <button
-              className="pvf-start-btn"
-              onClick={() => {
-                writeStoredPvfFritzTier(difficulty);
-                onStart({ difficulty, dealSize });
-              }}
-              style={{ 
-                background: `linear-gradient(180deg, ${dynamicColor} 0%, ${dynamicColor}CC 100%)`,
-                boxShadow: `0 0 32px ${dynamicColor}33, inset 0 1px 0 rgba(255,255,255,0.4)`
-              }}
-            >
-              <span>Start Match</span>
-              <span className="pvf-start-arrow">›</span>
-            </button>
+            <div className={`pvf-primary-actions${FRITZ_CHALLENGE_FEATURE_ENABLED ? ' has-challenge' : ''}`}>
+              <button
+                className="pvf-start-btn"
+                onClick={() => {
+                  writeStoredPvfFritzTier(difficulty);
+                  onStart({ difficulty, dealSize });
+                }}
+                style={{
+                  background: `linear-gradient(180deg, ${dynamicColor} 0%, ${dynamicColor}CC 100%)`,
+                  boxShadow: `0 0 32px ${dynamicColor}33, inset 0 1px 0 rgba(255,255,255,0.4)`
+                }}
+              >
+                <span>Start Match</span>
+                <span className="pvf-start-arrow">›</span>
+              </button>
+              {FRITZ_CHALLENGE_FEATURE_ENABLED ? (
+                <button
+                  className="pvf-challenge-launch"
+                  onClick={() => setChallengeDialogOpen(true)}
+                >
+                  Challenge a Friend
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
+      {challengeDialogOpen ? (
+        <FritzChallengeDialog
+          initialCode={null}
+          fritzTier={difficulty}
+          dealSize={dealSize}
+          onCreated={(challenge) => openChallengeRoom(challenge.share_code)}
+          onOpenAuth={onOpenAuth}
+          onClose={() => setChallengeDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

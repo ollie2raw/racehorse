@@ -6,6 +6,7 @@ import {
   type GhostMoveLogEntry,
 } from '../../ghost/service';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
+import { recordOperationalFailure } from '../../operationalTelemetry';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -277,7 +278,12 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
           winnerScore: playerWon ? roundedPlayerScore : roundedFritzScore,
           loserScore: playerWon ? roundedFritzScore : roundedPlayerScore,
           fritzTier: verifiedMatch.fritzTier ?? 'elite',
-        }).catch(() => {});
+        }).catch((error) => {
+          recordOperationalFailure('ghost.activity_write', error, {
+            matchId: verifiedMatch.matchId,
+            userId,
+          });
+        });
       }
       res.json({ ok: true, result });
     } catch (error) {

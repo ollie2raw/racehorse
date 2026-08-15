@@ -55,11 +55,12 @@ export type RoomAbandonPayload = {
 };
 
 export type GameActionPayload =
-  | { type: 'DRAW'; requestId: string }
-  | { type: 'PASS'; requestId: string }
+  | { type: 'DRAW'; requestId: string; expectedSequence: number }
+  | { type: 'PASS'; requestId: string; expectedSequence: number }
   | {
       type: 'MOVE';
       requestId: string;
+      expectedSequence: number;
       move: { tile: { high: number; low: number }; position: string };
     };
 

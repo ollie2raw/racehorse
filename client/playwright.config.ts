@@ -19,7 +19,30 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
+      name: 'teardown',
+      testMatch: /auth\.teardown\.ts/,
+    },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+      teardown: 'teardown',
+    },
+    {
+      name: 'circuit-smoke',
+      testMatch: /circuit-(smoke|capture)\.spec\.ts|solo-hub-no-circuit\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'stakes-smoke',
+      testMatch: /stakes-prototype-smoke\.spec\.ts|capture-stakes-screenshots\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined

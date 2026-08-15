@@ -18,6 +18,7 @@ import {
   beginRoomOperation,
   isCurrentRoomOperation,
 } from './roomOperationEpoch';
+import { logger } from '../utils/logger';
 
 type RoomJoinConfig = {
   username: string;
@@ -247,9 +248,6 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       if (target.userId === scope.auth.authUserId) {
         return { ok: false, error: 'self' };
       }
-      if (target.presenceStatus === 'offline') {
-        return { ok: false, error: 'offline' };
-      }
       if (target.presenceStatus === 'in_game') {
         return { ok: false, error: 'in_game' };
       }
@@ -290,11 +288,15 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       }
 
       const inviteId = makeFriendChallengeInviteId();
+      let durableInviteId = inviteId;
+      let durableExpiresAt: string | undefined;
       try {
         const deliverResp = await scope.transport.emitWithAck<{
           ok?: boolean;
           error?: string;
           delivered?: boolean;
+          inviteId?: string;
+          expiresAt?: string;
         }>(scope.transport.socketRef.current, 'friend:invite', {
           inviteId,
           toUserId: target.userId,
@@ -313,13 +315,18 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
           }
           return { ok: false, error: 'unreachable' };
         }
+        durableInviteId = deliverResp.inviteId ?? inviteId;
+        durableExpiresAt = deliverResp.expiresAt;
       } catch {
         return { ok: false, error: 'unreachable' };
       }
 
-      const expiresAt = Date.now() + FRIEND_CHALLENGE_EXPIRY_MS;
+      const serverExpiresAt = Date.parse(durableExpiresAt ?? '');
+      const expiresAt = Number.isFinite(serverExpiresAt)
+        ? serverExpiresAt
+        : Date.now() + FRIEND_CHALLENGE_EXPIRY_MS;
       scope.ui.setOutboundChallenge({
-        inviteId,
+        inviteId: durableInviteId,
         friendUserId: target.userId,
         friendUsername: target.username,
         roomCode,
@@ -333,7 +340,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
 
       return {
         ok: true,
-        inviteId,
+        inviteId: durableInviteId,
         roomCode,
         expiresAt,
       };
@@ -405,6 +412,14 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
       }
       if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) return;
       scope.room.applyJoinedRoomResponse(resp);
+      const acceptedInviteId = scope.ui.friendInvite.inviteId;
+      void scope.transport.emitWithAck(
+        scope.transport.socket,
+        'friend:invite:accept',
+        { inviteId: acceptedInviteId },
+      ).catch((error) => {
+        logger.error('multiplayer.invite_accept_persist', error, { inviteId: acceptedInviteId });
+      });
       scope.navigation.setAppMode('multiplayer');
       scope.ui.setMpSubView('private');
       scope.joinFlight.autoJoinAttemptedRef.current = false;

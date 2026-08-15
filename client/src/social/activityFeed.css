@@ -452,21 +452,26 @@
   color: #fff;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .rh-af-rich-row {
     grid-template-columns: 44px 24px minmax(0, 1fr);
     grid-template-rows: auto auto auto;
     row-gap: 6px;
     margin-inline: 10px;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .rh-af-rich-stats {
     grid-column: 2 / -1;
     justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .rh-af-rich-end {
     grid-column: 2 / -1;
     justify-content: space-between;
+    min-width: 0;
   }
 }

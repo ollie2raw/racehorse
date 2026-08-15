@@ -22,6 +22,7 @@ describe('Server Configuration Module', () => {
     expect(cfg.isProd).toBe(false);
     expect(cfg.port).toBe(8080);
     expect(cfg.supabaseUrl).toBe('http://localhost:54321');
+    expect(cfg.multiplayerDurableInvites).toBe(false);
   });
 
   it('fails fast in production mode if required variables are missing', () => {

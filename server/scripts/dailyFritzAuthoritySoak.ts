@@ -488,7 +488,28 @@ async function main(): Promise<void> {
       users,
     })}\n`);
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, users, concurrency, baseUrl, results }, null, 2)}\n`);
+  const elapsed = results
+    .map((result) => Number(result.elapsedMs))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  const percentile = (fraction: number) => {
+    if (elapsed.length === 0) return null;
+    return elapsed[Math.min(elapsed.length - 1, Math.ceil(elapsed.length * fraction) - 1)] ?? null;
+  };
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    users,
+    concurrency,
+    baseUrl,
+    summary: {
+      completedUsers: results.length,
+      errorRate: 0,
+      p50ElapsedMs: percentile(0.50),
+      p95ElapsedMs: percentile(0.95),
+      p99ElapsedMs: percentile(0.99),
+    },
+    results,
+  }, null, 2)}\n`);
 }
 
 void main()

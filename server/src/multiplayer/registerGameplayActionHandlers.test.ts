@@ -11,6 +11,7 @@ import {
 } from './roomSession';
 import * as roomSession from './roomSession';
 import * as livePersistence from './roomLivePersistence';
+import * as liveRoomCommandStore from './liveRoomCommandStore';
 import { registerGameplayActionHandlers } from './registerGameplayActionHandlers';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
 
@@ -242,7 +243,7 @@ describe('registerGameplayActionHandlers', () => {
       },
     });
 
-    const payload = { type: 'PASS', requestId: 'idem-pass-1' };
+    const payload = { type: 'PASS', requestId: 'idem-pass-1', expectedSequence: 5 };
     const ack1 = vi.fn();
     const ack2 = vi.fn();
     await handlers.get('game:action')?.(roomCode, payload, ack1);
@@ -255,6 +256,99 @@ describe('registerGameplayActionHandlers', () => {
       expect.objectContaining({ ok: true, sequence: 6, duplicate: true }),
     );
     expect(getRoom(roomCode).state!.sequence).toBe(6);
+  });
+
+  it('uses durable command replay after restart without mutating the room again', async () => {
+    const previousFlag = process.env.MULTIPLAYER_TRANSACTIONAL_COMMANDS;
+    process.env.MULTIPLAYER_TRANSACTIONAL_COMMANDS = 'true';
+    try {
+      const roomCode = 'DURRP1';
+      createReservedRoom(roomCode);
+      const seatId = 'seat-1';
+      joinRoom(roomCode, seatId);
+      joinRoom(roomCode, 'seat-2');
+      const room = getRoom(roomCode);
+      room.players = [seatId, 'seat-2'];
+      room.state = mkStartedRoom(roomCode);
+      room.authorityRevision = 8;
+      setRoomRoster(roomCode, [
+        { id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' },
+      ]);
+
+      const io = makeIo();
+      const { socket, handlers } = makeSocket('sock-1', seatId);
+      ensureSocketDataSeat(socket, seatId);
+      const actSpy = vi.spyOn(rooms, 'act');
+      vi.spyOn(liveRoomCommandStore, 'prepareLiveRoomGameplayCommand').mockResolvedValue({
+        kind: 'replay',
+        authorityRevision: 9,
+        ack: { ok: true, sequence: 6, duplicate: true },
+      });
+      const commitSpy = vi.spyOn(liveRoomCommandStore, 'commitLiveRoomGameplayCommand');
+
+      registerGameplayActionHandlers(io, socket, {
+        handlerDeps: {
+          resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+          normalizeUsername: (value) => String(value ?? 'Guest'),
+          normalizeUserId: (value) => (typeof value === 'string' ? value : null),
+          tryHydrateMatchmakingRoomShell: async () => 'skipped',
+          waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+          onAfterMatchStarted: async () => undefined,
+          notifyRoomPlayersInGame: () => undefined,
+          persistRoomMatchLog: async () => undefined,
+          maybeFinalizeTournamentMatch: vi.fn(),
+        },
+      });
+
+      const cb = vi.fn();
+      await handlers.get('game:action')?.(
+        roomCode,
+        { type: 'PASS', requestId: 'restart-replay', expectedSequence: 5 },
+        cb,
+      );
+
+      expect(cb).toHaveBeenCalledWith({ ok: true, sequence: 6, duplicate: true });
+      expect(actSpy).not.toHaveBeenCalled();
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(room.authorityRevision).toBe(9);
+    } finally {
+      if (previousFlag === undefined) delete process.env.MULTIPLAYER_TRANSACTIONAL_COMMANDS;
+      else process.env.MULTIPLAYER_TRANSACTIONAL_COMMANDS = previousFlag;
+    }
+  });
+
+  it('rejects an obsolete command without mutating room state', async () => {
+    const roomCode = 'STALE1';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+    const actSpy = vi.spyOn(rooms, 'act');
+    registerGameplayActionHandlers(io, socket, { handlerDeps: {
+      resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+      normalizeUsername: (v) => String(v ?? 'Guest'),
+      normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      persistRoomMatchLog: async () => undefined,
+      maybeFinalizeTournamentMatch: vi.fn(),
+    } });
+    const cb = vi.fn();
+    await handlers.get('game:action')?.(roomCode, {
+      type: 'PASS', requestId: 'stale-pass', expectedSequence: 4,
+    }, cb);
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'stale_state', sequence: 5 });
+    expect(actSpy).not.toHaveBeenCalled();
+    expect(room.state.sequence).toBe(5);
   });
 
   it('blocks gameplay actions after room persistence failure', async () => {
@@ -288,7 +382,9 @@ describe('registerGameplayActionHandlers', () => {
     });
 
     const cb = vi.fn();
-    await handlers.get('game:action')?.(roomCode, { type: 'PASS', requestId: 'failed-pass' }, cb);
+    await handlers.get('game:action')?.(roomCode, {
+      type: 'PASS', requestId: 'failed-pass', expectedSequence: 5,
+    }, cb);
     expect(cb).toHaveBeenCalledWith({ ok: false, error: 'room_persistence_failed' });
   });
 
@@ -370,7 +466,7 @@ describe('registerGameplayActionHandlers', () => {
       },
     });
 
-    const payload = { type: 'PASS', requestId: 'uncertain-pass' };
+    const payload = { type: 'PASS', requestId: 'uncertain-pass', expectedSequence: 5 };
     const ack1 = vi.fn();
     const ack2 = vi.fn();
     await handlers.get('game:action')?.(roomCode, payload, ack1);
@@ -452,6 +548,7 @@ describe('registerGameplayActionHandlers', () => {
     const payload = {
       type: 'MOVE',
       requestId: 'idem-move-1',
+      expectedSequence: 5,
       move: { tile: { low: 5, high: 6 }, position: 'right' },
     };
     const ack1 = vi.fn();

@@ -5,6 +5,7 @@ import type {
   DailyPuzzleSlot,
   DailyPuzzleSubmitSlotResponse,
 } from './types';
+import './dailyPuzzleClimbOverlays.css';
 
 export type LadderSlotOverlayData = {
   response: DailyPuzzleSubmitSlotResponse;
@@ -32,6 +33,7 @@ export type DailyPuzzleLadderOverlayFlags = {
   slotOverlay: LadderSlotOverlayData | null;
   practiceOverlay: LadderPracticeOverlayData | null;
   finalOverlay: LadderFinalOverlayData | null;
+  hubError?: string | null;
 };
 
 export type DailyPuzzleLadderOverlayActions = {
@@ -54,6 +56,41 @@ export type DailyPuzzleLadderOverlaysProps = {
   actions: DailyPuzzleLadderOverlayActions;
 };
 
+function LadderStageRail({
+  currentStage,
+  complete,
+  completedThrough = currentStage,
+}: {
+  currentStage: number;
+  complete?: boolean;
+  completedThrough?: number;
+}) {
+  return (
+    <div className="dpl-climb-result__rail" role="list" aria-label="Daily Climb progress">
+      {[1, 2, 3, 4, 5].map((stage) => {
+        const isReached = complete || stage <= completedThrough;
+        const isCurrent = !complete && stage === currentStage;
+        return (
+          <span
+            key={stage}
+            role="listitem"
+            aria-label={`Puzzle ${stage}${isReached ? ' complete' : isCurrent ? ' current' : ' upcoming'}`}
+            className={[
+              'dpl-climb-result__rail-step',
+              isReached ? 'is-reached' : '',
+              isCurrent ? 'is-current' : '',
+              stage === 5 ? 'is-summit' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <span aria-hidden>{isReached ? '✓' : stage}</span>
+            <small>P{stage}</small>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DailyPuzzleLadderOverlays({
   flags,
   currentSlotBreakdown,
@@ -61,7 +98,7 @@ export function DailyPuzzleLadderOverlays({
   shareDone,
   actions,
 }: DailyPuzzleLadderOverlaysProps) {
-  const { submitPending, finalizePending, slotOverlay, practiceOverlay, finalOverlay } = flags;
+  const { submitPending, finalizePending, slotOverlay, practiceOverlay, finalOverlay, hubError = null } = flags;
 
   return (
     <>
@@ -73,16 +110,34 @@ export function DailyPuzzleLadderOverlays({
           aria-busy="true"
           aria-label={finalizePending ? 'Finalizing ladder' : 'Submitting puzzle'}
         >
-          <div className="rh-result dpl-ladder-pending-modal">
-            <header className="rh-result__head">
-              <div className="claude-mode-hero__eyebrow" style={{ color: 'var(--tier-standard)' }}>
-                DAILY LADDER
-              </div>
-              <div className="rh-result__feedback">
-                {finalizePending ? 'Finalizing ladder…' : 'Submitting puzzle…'}
-              </div>
-            </header>
-            <p className="dpl-ladder-pending-copy is-pending">Saving your result…</p>
+          <div className="rh-result dpl-climb-status" aria-live="polite">
+            <div className="dpl-climb-status__mark" aria-hidden>
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="dpl-climb-status__eyebrow">DAILY CLIMB</div>
+            <h2>{finalizePending ? 'Finalizing ladder…' : 'Submitting puzzle…'}</h2>
+            <p>Saving your result…</p>
+            <div className="dpl-climb-status__trust">Your progress is being secured</div>
+          </div>
+        </div>
+      ) : null}
+
+      {hubError && !submitPending && !finalizePending && !slotOverlay && !practiceOverlay && !finalOverlay ? (
+        <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="alertdialog" aria-modal="true">
+          <div className="rh-result dpl-climb-status dpl-climb-status--error">
+            <div className="dpl-climb-status__alert-mark" aria-hidden>!</div>
+            <div className="dpl-climb-status__eyebrow">SAVE NEEDS ATTENTION</div>
+            <h2>Your board is still safe</h2>
+            <p>{hubError}</p>
+            <footer className="dpl-climb-status__actions">
+              <button type="button" className="dpl-ladder-result-btn dpl-ladder-result-btn--primary" onClick={actions.exitPlayToHub}>
+                Return to Ladder
+              </button>
+            </footer>
           </div>
         </div>
       ) : null}
@@ -94,32 +149,60 @@ export function DailyPuzzleLadderOverlays({
           aria-modal="true"
           aria-label="Puzzle complete"
         >
-          <div className="rh-result dpl-ladder-result">
-            <header className="rh-result__head">
-              <div className="claude-mode-hero__eyebrow">PUZZLE COMPLETE</div>
-              <div className="rh-result__score">
-                <span>{slotOverlay.response.slotResult.awardedPoints}</span>
-                <span className="rh-result__score-suffix">PTS</span>
+          <div className="rh-result dpl-ladder-result dpl-climb-result">
+            <header className="dpl-climb-result__header">
+              <div className="dpl-climb-result__header-row">
+                <div className="dpl-climb-result__eyebrow">
+                  {slotOverlay.response.slotResult.solved ? 'STAGE CLEARED' : 'STAGE RECORDED'}
+                </div>
+                <div className="dpl-climb-result__stage-count">
+                  {slotOverlay.response.slotResult.slotIndex} / 5
+                </div>
               </div>
-              <div className="rh-result__feedback">
-                {getDailyPuzzleDisplayTitle(
-                  slotOverlay.response.slotResult.slotIndex,
-                  slotOverlay.response.slotResult.slotTitle,
-                )}
+              <LadderStageRail currentStage={slotOverlay.response.slotResult.slotIndex} />
+              <div className="dpl-climb-result__hero">
+                <div className="dpl-climb-result__identity">
+                  <span className="dpl-climb-result__performance">
+                    {slotOverlay.response.slotResult.perfect
+                      ? 'Perfect line'
+                      : slotOverlay.response.slotResult.solved
+                        ? 'Climb continues'
+                        : 'Result locked in'}
+                  </span>
+                  <h2>
+                    {getDailyPuzzleDisplayTitle(
+                      slotOverlay.response.slotResult.slotIndex,
+                      slotOverlay.response.slotResult.slotTitle,
+                    )}
+                  </h2>
+                  <p>
+                    {slotOverlay.response.nextSlot
+                      ? `Next up: ${getDailyPuzzleDisplayTitle(
+                          slotOverlay.response.nextSlot.slotIndex,
+                          slotOverlay.response.nextSlot.slotTitle,
+                        )}`
+                      : 'The summit is within reach.'}
+                  </p>
+                </div>
+                <div className="dpl-climb-result__score" aria-label={`${slotOverlay.response.slotResult.awardedPoints} points earned`}>
+                  <strong>{slotOverlay.response.slotResult.awardedPoints}</strong>
+                  <span>PTS EARNED</span>
+                  <small>of {slotOverlay.response.slotResult.slotMaxPoints}</small>
+                </div>
               </div>
             </header>
-            <div className="rh-result__summary">
+            <div className="dpl-climb-result__summary">
               <div>
-                <span className="rh-result__summary-label">Raw Score</span>
-                <span className="rh-result__summary-value">{slotOverlay.rawScore}</span>
+                <span>Board score</span>
+                <strong>{slotOverlay.rawScore}</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Best Possible</span>
-                <span className="rh-result__summary-value">{slotOverlay.response.slotResult.bestPossibleScore}</span>
+                <span>Best possible</span>
+                <strong>{slotOverlay.response.slotResult.bestPossibleScore}</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Ladder Total</span>
-                <span className="rh-result__summary-value">{slotOverlay.response.attempt.totalScore}</span>
+                <span>Climb total</span>
+                <strong>{slotOverlay.response.attempt.totalScore}</strong>
               </div>
             </div>
             <footer className="rh-result__actions dpl-ladder-result__actions">
@@ -135,7 +218,10 @@ export function DailyPuzzleLadderOverlays({
                     if (nextSlot) actions.onSlotNext(nextSlot);
                   }}
                 >
-                  {`Next · Puzzle ${slotOverlay.response.nextSlot.slotIndex}`}
+                  {`Climb to ${getDailyPuzzleDisplayTitle(
+                    slotOverlay.response.nextSlot.slotIndex,
+                    slotOverlay.response.nextSlot.slotTitle,
+                  )}`}
                 </button>
               ) : null}
             </footer>
@@ -145,31 +231,41 @@ export function DailyPuzzleLadderOverlays({
 
       {practiceOverlay ? (
         <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="dialog" aria-modal="true" aria-label="Practice complete">
-          <div className="rh-result dpl-ladder-result">
-            <header className="rh-result__head">
-              <div className="claude-mode-hero__eyebrow">PRACTICE COMPLETE</div>
-              <div className="rh-result__score">
-                <span>{practiceOverlay.rawScore}</span>
-                <span className="rh-result__score-suffix">PTS</span>
+          <div className="rh-result dpl-ladder-result dpl-climb-result dpl-climb-result--practice">
+            <header className="dpl-climb-result__header">
+              <div className="dpl-climb-result__header-row">
+                <div className="dpl-climb-result__eyebrow">PRACTICE COMPLETE</div>
+                <div className="dpl-climb-result__stage-count">STAGE {practiceOverlay.slotIndex} / 5</div>
               </div>
-              <div className="rh-result__feedback">
-                {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
+              <LadderStageRail
+                currentStage={practiceOverlay.slotIndex}
+                completedThrough={0}
+              />
+              <div className="dpl-climb-result__hero">
+                <div className="dpl-climb-result__identity">
+                  <span className="dpl-climb-result__performance">Practice run</span>
+                  <h2>{getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}</h2>
+                  <p>Replay this board or move forward through the climb.</p>
+                </div>
+                <div className="dpl-climb-result__score" aria-label={`${practiceOverlay.rawScore} practice points`}>
+                  <strong>{practiceOverlay.rawScore}</strong>
+                  <span>BOARD PTS</span>
+                  <small>Unranked</small>
+                </div>
               </div>
             </header>
-            <div className="rh-result__summary">
+            <div className="dpl-climb-result__summary">
               <div>
-                <span className="rh-result__summary-label">Best Possible</span>
-                <span className="rh-result__summary-value">{practiceOverlay.bestPossible ?? '—'}</span>
+                <span>Best possible</span>
+                <strong>{practiceOverlay.bestPossible ?? '—'}</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Mode</span>
-                <span className="rh-result__summary-value">Practice</span>
+                <span>Mode</span>
+                <strong>Practice</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Puzzle</span>
-                <span className="rh-result__summary-value">
-                  {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
-                </span>
+                <span>Stage</span>
+                <strong>{practiceOverlay.slotIndex}/5</strong>
               </div>
             </div>
             <footer
@@ -217,32 +313,51 @@ export function DailyPuzzleLadderOverlays({
 
       {finalOverlay ? (
         <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="dialog" aria-modal="true" aria-label="Ladder complete">
-          <div className="rh-result dpl-ladder-result">
-            <header className="rh-result__head">
-              <div className="claude-mode-hero__eyebrow">LADDER COMPLETE</div>
-              <div className="rh-result__score">
-                <span>{finalOverlay.response.attempt.totalScore}</span>
-                <span className="rh-result__score-suffix">PTS</span>
+          <div className="rh-result dpl-ladder-result dpl-climb-result dpl-climb-result--summit">
+            <header className="dpl-climb-result__header">
+              <div className="dpl-climb-result__header-row">
+                <div className="dpl-climb-result__eyebrow">DAILY CLIMB COMPLETE</div>
+                <div className="dpl-climb-result__stage-count dpl-climb-result__stage-count--summit">SUMMIT</div>
               </div>
-              <div className="rh-result__feedback">
-                {finalOverlay.response.leaderboardRank ? `Rank #${finalOverlay.response.leaderboardRank}` : 'Ladder finalized'}
+              <LadderStageRail currentStage={5} complete />
+              <div className="dpl-climb-result__hero">
+                <div className="dpl-climb-result__identity">
+                  <span className="dpl-climb-result__performance">Summit reached</span>
+                  <h2>Master Chain Complete</h2>
+                  <p>
+                    {finalOverlay.response.leaderboardRank
+                      ? `You placed #${finalOverlay.response.leaderboardRank} on today’s ladder.`
+                      : 'Your score is locked on today’s ladder.'}
+                  </p>
+                </div>
+                <div className="dpl-climb-result__score" aria-label={`${finalOverlay.response.attempt.totalScore} total points`}>
+                  <strong>{finalOverlay.response.attempt.totalScore}</strong>
+                  <span>TOTAL PTS</span>
+                  <small>{finalOverlay.response.leaderboardRank ? `Rank #${finalOverlay.response.leaderboardRank}` : 'Final'}</small>
+                </div>
               </div>
             </header>
-            <div className="rh-result__summary">
+            <div className="dpl-climb-result__summary">
               <div>
-                <span className="rh-result__summary-label">Completed</span>
-                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/5</span>
+                <span>Stages cleared</span>
+                <strong>{finalOverlay.response.attempt.puzzlesCompleted}/5</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Puzzle 5</span>
-                <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
+                <span>Master Chain</span>
+                <strong>{finalOverlay.response.attempt.masterChainScore}</strong>
               </div>
               <div>
-                <span className="rh-result__summary-label">Breakdown</span>
-                <span className="rh-result__summary-value">
-                  {currentSlotBreakdown.map((chip) => `${chip.label} ${chip.value}`).join(' · ')}
-                </span>
+                <span>Daily rank</span>
+                <strong>{finalOverlay.response.leaderboardRank ? `#${finalOverlay.response.leaderboardRank}` : '—'}</strong>
               </div>
+            </div>
+            <div className="dpl-climb-result__breakdown" role="list" aria-label="Puzzle score breakdown">
+              {currentSlotBreakdown.map((chip) => (
+                <div key={chip.slotIndex} role="listitem" className={chip.slotIndex === 5 ? 'is-summit' : ''}>
+                  <span>{chip.label}</span>
+                  <strong>{chip.value}</strong>
+                </div>
+              ))}
             </div>
             <footer className="rh-result__actions dpl-ladder-result__actions dpl-ladder-result__actions--with-share">
               <button

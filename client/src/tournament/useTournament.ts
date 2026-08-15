@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from './tournamentApi';
 import { bindTournamentRecoverySignals } from './recoverySignals';
 import { isTerminalTournamentMatch } from './terminalMatches';
+import { logger } from '../utils/logger';
 import type { TournamentHubSocketDelegates } from './tournamentSocketTypes';
 import type {
   BracketView,
@@ -348,14 +349,20 @@ export function useTournament({ userId }: Args) {
       },
       onRegistrationUpdated: (payload) => {
         void refresh();
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        void fetchAndApplyBracket(payload.tournamentId).catch((error) => {
+          logger.error('tournament.bracket_refresh_registration', error, payload);
+        });
       },
       onBracketGenerated: (payload) => {
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        void fetchAndApplyBracket(payload.tournamentId).catch((error) => {
+          logger.error('tournament.bracket_refresh_generated', error, payload);
+        });
         void refresh();
       },
       onMatchUpdated: (payload) => {
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        void fetchAndApplyBracket(payload.tournamentId).catch((error) => {
+          logger.error('tournament.bracket_refresh_match', error, payload);
+        });
       },
       onMatchReady: (payload) => {
         console.log('[tournament] match_ready received', {
@@ -376,14 +383,18 @@ export function useTournament({ userId }: Args) {
         setRecoveryMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
         void refresh();
         if (activeBracketTournamentId === payload.tournamentId) {
-          void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+          void fetchAndApplyBracket(payload.tournamentId).catch((error) => {
+            logger.error('tournament.bracket_refresh_completion', error, payload);
+          });
         }
       },
       onTournamentCompleted: (payload) => {
         setPendingMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
         setRecoveryMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
         void refresh();
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        void fetchAndApplyBracket(payload.tournamentId).catch((error) => {
+          logger.error('tournament.bracket_refresh_tournament_complete', error, payload);
+        });
       },
       onRecover: () => {
         void recover();

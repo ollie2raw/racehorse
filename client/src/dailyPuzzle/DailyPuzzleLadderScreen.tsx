@@ -11,7 +11,7 @@ import {
 } from '../bot/botEngine';
 import type { AppMode, Move, Tile } from '../types';
 import { tileEquals } from '../game/tileUtils';
-import { startDailyPuzzleLadder } from './api';
+import { recordDailyPuzzleTelemetry, startDailyPuzzleLadder } from './api';
 import { createPuzzleMatchState } from './validator';
 import type {
   DailyPuzzleSlotIndex,
@@ -44,6 +44,7 @@ import {
   evaluateTargetScoreMoveOutcome,
   isDominoDouble,
   shouldAutoFailOneTurnHighScoreWithNoLegalMoves,
+  shouldRecoverCompletedOneTurnHighScore,
 } from './dailyPuzzlePlayMoveCompletion';
 import { useDailyPuzzleLadderGameplay } from './useDailyPuzzleLadderGameplay';
 import {
@@ -188,6 +189,12 @@ export default function DailyPuzzleLadderScreen({
     }
     setStartPending(true);
     setHubError(null);
+    void recordDailyPuzzleTelemetry({
+      eventType: 'start_requested',
+      runDate: today.runDate,
+      attemptId: attempt?.id ?? null,
+      eventId: `${attempt?.id ?? today.runDate}:start-requested:${Date.now()}`,
+    });
     try {
       const response = await startDailyPuzzleLadder(today.runDate);
       setAttempt(response.attempt);
@@ -214,8 +221,17 @@ export default function DailyPuzzleLadderScreen({
   const handleStartPractice = useCallback((slotIndex: DailyPuzzleSlotIndex) => {
     const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);
     if (!slot) return;
+    if (attempt?.id) {
+      void recordDailyPuzzleTelemetry({
+        eventType: 'review_opened',
+        runDate: today.runDate,
+        attemptId: attempt.id,
+        slotIndex,
+        eventId: `${attempt.id}:review-opened:${slotIndex}:${Date.now()}`,
+      });
+    }
     launchSlot(slot, 'practice');
-  }, [hubSlots, launchSlot]);
+  }, [attempt?.id, hubSlots, launchSlot, today.runDate]);
 
   const legalMoves = useMemo(() => {
     if (!runtimeState || status !== 'IN_PROGRESS') return [] as Move[];
@@ -250,6 +266,16 @@ export default function DailyPuzzleLadderScreen({
     const nextMoves = movesUsed + 1;
     const totalScore = nextState.players.you.score;
 
+    if (playMode === 'scored' && attempt && movesUsed === 0) {
+      void recordDailyPuzzleTelemetry({
+        eventType: 'first_move',
+        runDate: today.runDate,
+        attemptId: attempt.id,
+        slotIndex: activeSlot.slotIndex,
+        eventId: `${attempt.id}:first-move:${activeSlot.slotIndex}`,
+      });
+    }
+
     setRuntimeState(nextState);
     setSelectedTile(null);
     setMovesUsed(nextMoves);
@@ -270,6 +296,7 @@ export default function DailyPuzzleLadderScreen({
         pointsAwarded,
         isDouble: isDominoDouble(move.tile!),
         priorRunningScore: runningScoreRef.current,
+        nextCurrentPlayer: nextState.currentPlayer,
         upcomingPlayMovesCount: upcoming.length,
       });
       if (outcome.type === 'terminal') {
@@ -283,7 +310,9 @@ export default function DailyPuzzleLadderScreen({
       return;
     }
 
-    const upcoming = getLegalMoves(nextState, 'you').filter((candidate) => candidate.type === 'play');
+    const upcoming = nextState.currentPlayer === 'you'
+      ? getLegalMoves(nextState, 'you').filter((candidate) => candidate.type === 'play')
+      : [];
     const targetOutcome = evaluateTargetScoreMoveOutcome({
       totalScore,
       nextMoves,
@@ -297,11 +326,18 @@ export default function DailyPuzzleLadderScreen({
       setStatus(targetOutcome.status);
       void submitLadderSlot(targetOutcome.status, targetOutcome.totalScore, activeSlot);
     }
-  }, [activeSlot, flashLastPlayed, legalMoves, movesUsed, runtimeState, selectedTile, status, submitLadderSlot]);
+  }, [activeSlot, attempt, flashLastPlayed, legalMoves, movesUsed, playMode, runtimeState, selectedTile, status, submitLadderSlot, today.runDate]);
 
   useEffect(() => {
     if (!activeSlot || activeSlot.puzzleType !== 'one_turn_high_score' || status !== 'IN_PROGRESS') return;
     if (runtimeState == null) return;
+    if (shouldRecoverCompletedOneTurnHighScore(runtimeState.currentPlayer)) {
+      const recoveredScore = runningScoreRef.current;
+      setFinalScore(recoveredScore);
+      setStatus('SOLVED');
+      void submitLadderSlot('SOLVED', recoveredScore, activeSlot);
+      return;
+    }
     if (!shouldAutoFailOneTurnHighScoreWithNoLegalMoves(legalMoves.length)) return;
     setFinalScore(0);
     setStatus('FAILED');
@@ -350,12 +386,30 @@ export default function DailyPuzzleLadderScreen({
 
   const handleShareLadderResult = useCallback(
     (text: string) => {
+      const shareAttemptId = finalOverlay?.response.attempt.id ?? attempt?.id ?? null;
+      const shareRunDate = finalOverlay?.response.runDate ?? today.runDate;
+      if (shareAttemptId) {
+        void recordDailyPuzzleTelemetry({
+          eventType: 'share_requested',
+          runDate: shareRunDate,
+          attemptId: shareAttemptId,
+          eventId: `${shareAttemptId}:share-requested:${Date.now()}`,
+        });
+      }
       invokeLadderShareResult(text, () => {
         setShareDone(true);
+        if (shareAttemptId) {
+          void recordDailyPuzzleTelemetry({
+            eventType: 'share_completed',
+            runDate: shareRunDate,
+            attemptId: shareAttemptId,
+            eventId: `${shareAttemptId}:share-completed:${Date.now()}`,
+          });
+        }
         window.setTimeout(() => setShareDone(false), 2000);
       });
     },
-    [],
+    [attempt?.id, finalOverlay, today.runDate],
   );
 
   const ladderSlotRows = useMemo(
@@ -374,6 +428,18 @@ export default function DailyPuzzleLadderScreen({
   );
 
   const inActivePlay = Boolean(activeSlot && runtimeState);
+
+  const openLeaderboard = useCallback(() => {
+    if (attempt?.id) {
+      void recordDailyPuzzleTelemetry({
+        eventType: 'leaderboard_opened',
+        runDate: today.runDate,
+        attemptId: attempt.id,
+        eventId: `${attempt.id}:leaderboard-opened:${Date.now()}`,
+      });
+    }
+    setLeaderboardOpen(true);
+  }, [attempt?.id, today.runDate]);
 
   useEffect(() => {
     if (playMode !== 'scored' || status !== 'IN_PROGRESS' || !attempt || !activeSlot || !runtimeState) return;
@@ -412,6 +478,7 @@ export default function DailyPuzzleLadderScreen({
         slotOverlay,
         practiceOverlay,
         finalOverlay,
+        hubError,
       }}
       currentSlotBreakdown={currentSlotBreakdown}
       finalLadderShareText={finalLadderShareText}
@@ -447,7 +514,7 @@ export default function DailyPuzzleLadderScreen({
         onFinalLeaderboard: () => {
           setFinalOverlay(null);
           exitPlayToHub();
-          setLeaderboardOpen(true);
+          openLeaderboard();
         },
       }}
     />
@@ -525,7 +592,7 @@ export default function DailyPuzzleLadderScreen({
           onOpenAccount,
           onStartScored: handleStartScored,
           onStartPractice: handleStartPractice,
-          onOpenLeaderboard: () => setLeaderboardOpen(true),
+          onOpenLeaderboard: openLeaderboard,
           onShareResult: handleShareLadderResult,
         }}
       />

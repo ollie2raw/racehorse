@@ -16,6 +16,7 @@ import { deleteRoom, peekRoom } from '../rooms';
 import type { RoomMatchEvent } from '../roomEvents';
 import { supabaseFetch } from '../supabaseUtils';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
+import { recordMultiplayerOperationalEventBestEffort } from './multiplayerOperationalEventStore';
 import {
   captureRoomDurabilityFence,
   getRoomDurabilityState,
@@ -31,6 +32,7 @@ export const DEFAULT_SHUTDOWN_FLUSH_TIMEOUT_MS = 10_000;
 
 let persistenceShuttingDown = false;
 const inFlightPersistByRoomCode = new Map<string, Promise<boolean>>();
+const inFlightRosterByRoomCode = new Map<string, string>();
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -66,6 +68,7 @@ export type PersistedRoomShell = {
 
 export type RoomLiveSessionRow = {
   room_code: string;
+  authority_revision: number;
   match_id: string;
   status: RoomLiveSessionStatus;
   source_type: RoomLiveSessionSourceType;
@@ -336,6 +339,7 @@ export function buildLiveSessionRow(
 
   return {
     room_code: room.code,
+    authority_revision: room.authorityRevision,
     match_id: room.matchId,
     status,
     source_type: inferLiveSessionSourceType(room),
@@ -413,6 +417,10 @@ function parseLiveSessionRow(raw: Record<string, unknown>): RoomLiveSessionRow |
 
   return {
     room_code: raw.room_code.trim().toUpperCase(),
+    authority_revision:
+      typeof raw.authority_revision === 'number' && Number.isInteger(raw.authority_revision)
+        ? raw.authority_revision
+        : 0,
     match_id: raw.match_id,
     status,
     source_type: sourceType,
@@ -623,8 +631,26 @@ export async function persistLiveRoomSessionNow(
 ): Promise<boolean> {
   const roomCode = room.code.trim().toUpperCase();
   const inFlight = inFlightPersistByRoomCode.get(roomCode);
-  if (inFlight) return inFlight;
+  if (inFlight) {
+    // `room` is a live object mutated in place, so the retry loop below
+    // already re-reads fresh game state on each iteration of the *winning*
+    // call. `roster` is a plain array closed over by that same call, though —
+    // if a second player's roster update lands here while an earlier write
+    // (e.g. from room creation, with an empty/partial roster) is still in
+    // flight, piggybacking on that stale promise would silently drop it for
+    // good. Compare against what's actually being persisted and, if it
+    // differs, follow up with a write for the current roster once the
+    // in-flight one settles.
+    const rosterKey = JSON.stringify(roster);
+    const inFlightRosterKey = inFlightRosterByRoomCode.get(roomCode);
+    const outcome = await inFlight;
+    if (inFlightRosterKey !== undefined && inFlightRosterKey !== rosterKey) {
+      return persistLiveRoomSessionNow(room, roster);
+    }
+    return outcome;
+  }
 
+  inFlightRosterByRoomCode.set(roomCode, JSON.stringify(roster));
   const persistPromise = (async () => {
     while (true) {
       const commitFence = captureRoomDurabilityFence(room, room.durability.targetFence.commitId);
@@ -648,6 +674,7 @@ export async function persistLiveRoomSessionNow(
   })().finally(() => {
     if (inFlightPersistByRoomCode.get(roomCode) === persistPromise) {
       inFlightPersistByRoomCode.delete(roomCode);
+      inFlightRosterByRoomCode.delete(roomCode);
     }
   });
   inFlightPersistByRoomCode.set(roomCode, persistPromise);
@@ -903,6 +930,7 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
  */
 export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHydrationResult> {
   const code = roomCode.trim().toUpperCase();
+  const hydrationStartedAt = Date.now();
   const existing = peekRoom(code);
   if (existing) {
     return {
@@ -970,7 +998,25 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
         error: error instanceof Error ? error.message : String(error),
       };
     }
-  })().finally(() => {
+  })().then((result) => {
+    if (result.kind === 'hydrated') {
+      recordMultiplayerOperationalEventBestEffort({
+        eventType: 'room_hydration_succeeded',
+        roomCode: code,
+        durationMs: Date.now() - hydrationStartedAt,
+        idempotencyKey: `room-hydration:${code}:${loadedHydrationIdentity(result.room)}:succeeded`,
+      });
+    } else if (!['not_found', 'shell_only'].includes(result.kind)) {
+      recordMultiplayerOperationalEventBestEffort({
+        eventType: 'room_hydration_failed',
+        roomCode: code,
+        errorCode: 'error' in result ? result.error : result.kind,
+        durationMs: Date.now() - hydrationStartedAt,
+        idempotencyKey: `room-hydration:${code}:${hydrationStartedAt}:failed:${result.kind}`,
+      });
+    }
+    return result;
+  }).finally(() => {
     if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
       inFlightHydrationByRoomCode.delete(code);
     }
@@ -978,6 +1024,10 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
 
   inFlightHydrationByRoomCode.set(code, hydrationPromise);
   return hydrationPromise;
+}
+
+function loadedHydrationIdentity(room: Room): string {
+  return `${room.state?.sequence ?? 0}:${room.authorityRevision}`;
 }
 
 /** Test-only reset for debounce timers and table-availability cache. */
@@ -988,6 +1038,7 @@ export function resetLiveRoomPersistenceForTests(): void {
   flushTimersByRoomCode.clear();
   pendingPersistByRoomCode.clear();
   inFlightPersistByRoomCode.clear();
+  inFlightRosterByRoomCode.clear();
   inFlightHydrationByRoomCode.clear();
   flushAllPendingInFlight = null;
   persistenceShuttingDown = false;

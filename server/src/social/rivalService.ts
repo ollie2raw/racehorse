@@ -1,5 +1,6 @@
 import { supabaseFetch } from '../supabaseUtils';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
+import { recordOperationalFailure } from '../operationalTelemetry';
 
 export interface RivalEntry {
   userId: string;
@@ -78,7 +79,12 @@ export async function getAutoRivals(userId: string): Promise<RivalEntry[]> {
           h2h_record: { wins: r.winsAgainst, losses: r.lossesAgainst, games: r.gamesPlayed },
         }),
       }),
-    ).catch(() => {}),
+    ).catch((error) => {
+      recordOperationalFailure('social.rival_cache_write', error, {
+        userId,
+        rivalUserId: r.userId,
+      });
+    }),
   ));
 
   return rivals;

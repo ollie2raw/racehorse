@@ -327,7 +327,12 @@
     filter 120ms ease;
 }
 
-.mm-cta:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.mm-cta:hover:not(:disabled),
+.mm-cta:focus-visible:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.mm-cta:focus-visible:not(:disabled) {
+  outline: 2px solid color-mix(in srgb, var(--tier-elite) 70%, transparent);
+  outline-offset: 2px;
+}
 .mm-cta:active:not(:disabled) { transform: scale(0.98); }
 .mm-cta:disabled              { opacity: 0.55; cursor: not-allowed; }
 
@@ -456,10 +461,32 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .pvf-layout.mp-hub-pvf-layout {
-    padding-left: 20px !important;
-    padding-right: 20px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-bottom: var(--rh-bottom-tab-offset) !important;
+  }
+
+  .mm-format-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .mm-rating-track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mm-rating-seg {
+    min-height: var(--touch-min);
+    padding: 12px 10px;
+  }
+
+  .mm-cta,
+  .mm-cta-secondary {
+    min-height: var(--touch-min);
+    width: 100%;
   }
 }
 

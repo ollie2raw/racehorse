@@ -21,6 +21,7 @@ describe('Fritz Challenge store', () => {
   it('uses one atomic database claim so concurrent server processes cannot both win', async () => {
     const challenge = createGeneratedFritzChallenge({
       creatorUserId: CREATOR_ID,
+      recipientUserId: PLAYER_A_ID,
       fritzTier: 'elite',
       dealSize: 7,
       id: '44444444-4444-4444-8444-444444444444',

@@ -11,7 +11,7 @@ import { runLeagueSundayRollover } from '../../league/rollover';
 import { getLeagueStateForPlayer } from '../../league/state';
 import { getLeagueHistoryForPlayer } from '../../league/history';
 import { createReservedRoom, getRoom } from '../../rooms';
-import { makeCode } from '../../tournament/tournament';
+import { makeCode } from '../../shared/randomCode';
 
 export type LeagueRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;

@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import type { AckFn, RoomJoinConfig } from '../multiplayer/roomSession';
 import { supabaseFetch } from '../supabaseUtils';
 import { upsertPresence } from './presence';
+import { recordOperationalFailure } from '../operationalTelemetry';
 
 export type PresenceHandlerDeps = {
   io: Server;
@@ -9,6 +10,7 @@ export type PresenceHandlerDeps = {
   resolveSocketIdentity: (config: RoomJoinConfig) => Promise<{ username: string; userId: string | null }>;
   normalizeUserId: (value: unknown) => string | null;
   isUuidLike: (value: string | null | undefined) => boolean;
+  onIdentified?: (userId: string) => Promise<void>;
 };
 
 // Emit presence:update to all sockets of friends who are currently connected.
@@ -32,8 +34,8 @@ export function emitPresenceUpdateToFriends(
           deps.io.to(socketId).emit('presence:update', { userId, status });
         }
       }
-    } catch {
-      /* non-critical */
+    } catch (error) {
+      recordOperationalFailure('presence.friend_broadcast_lookup', error, { userId, status });
     }
   })();
 }
@@ -79,10 +81,18 @@ export function registerPresenceHandlers(
         const existing = deps.socketsByUserId.get(userId) ?? new Set<string>();
         existing.add(socket.id);
         deps.socketsByUserId.set(userId, existing);
-        void upsertPresence(userId, 'online').catch(() => {});
+        void upsertPresence(userId, 'online').catch((error) => {
+          recordOperationalFailure('presence.online_upsert', error, { userId });
+        });
+        if (deps.onIdentified) {
+          void deps.onIdentified(userId).catch((error) => {
+            recordOperationalFailure('multiplayer.pending_invite_delivery', error, { userId });
+          });
+        }
         emitPresenceUpdateToFriends(deps, userId, 'online');
         cb?.({ ok: true });
-      } catch {
+      } catch (error) {
+        recordOperationalFailure('presence.identify', error, { socketId: socket.id });
         cb?.({ ok: false });
       }
     },
@@ -110,7 +120,9 @@ export function registerPresenceHandlers(
     removeSocketPresence();
     const userId = deps.normalizeUserId(socket.data?.userId);
     if (deps.isUuidLike(userId)) {
-      void upsertPresence(userId as string, 'offline').catch(() => {});
+      void upsertPresence(userId as string, 'offline').catch((error) => {
+        recordOperationalFailure('presence.offline_upsert', error, { userId });
+      });
       emitPresenceUpdateToFriends(deps, userId as string, 'offline');
     }
   };

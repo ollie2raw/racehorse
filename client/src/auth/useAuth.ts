@@ -4,6 +4,7 @@ import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/s
 import { formatAuthErrorMessage } from './authErrors';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
+import { logger } from '../utils/logger';
 
 export interface UserProfile {
   id: string;
@@ -636,9 +637,11 @@ export function useAuth() {
 
         // IMPORTANT: do not await anything that can hang here. We want UI to recover.
         try {
-          void supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-        } catch {
-          // ignore
+          void supabase.auth.signOut({ scope: 'local' }).catch((error) => {
+            logger.error('auth.local_signout_fallback', error);
+          });
+        } catch (error) {
+          logger.error('auth.local_signout_fallback_sync', error);
         } finally {
           clearLocalSupabaseAuthTokens();
         }

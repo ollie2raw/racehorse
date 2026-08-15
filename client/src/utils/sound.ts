@@ -1,4 +1,5 @@
 import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
+import { logger } from './logger';
 
 /**
  * sound.ts — Racehorse Dominoes audio synthesis
@@ -32,7 +33,11 @@ function getCtx(): AudioContext | null {
     ctx = new AudioContext();
   }
   if (ctx.state === 'suspended') {
-    void ctx.resume().catch(() => {});
+    void ctx.resume().catch((error) => {
+      logger.operational('audio', 'context_resume_rejected', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
     if (ctx.state === 'suspended') {
       return null;
     }

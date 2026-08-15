@@ -171,4 +171,105 @@ describe('Daily Fritz transcript adapter', () => {
     expect(transcript.clientRelease).toBe('deploy-123');
     expect(transcript.actions[0]).toMatchObject({ preStateDigest: 'df-state-v1:12345678' });
   });
+
+  it('seals a blocked hand that omitted the official trailing passes', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      sealBlockedHand: true,
+      moveLog: [{
+        ...base,
+        moveNumber: 1,
+        handNumber: 1,
+        player: 'opponent',
+        action: 'place',
+        tile: [3, 5],
+        position: 'left',
+        pointsScored: 0,
+      }],
+    });
+    expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
+      'fritz:play',
+      'player:pass',
+      'fritz:pass',
+    ]);
+  });
+
+  it('seals only the missing second pass when the player already passed', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      sealBlockedHand: true,
+      moveLog: [
+        {
+          ...base,
+          moveNumber: 1,
+          handNumber: 1,
+          player: 'opponent',
+          action: 'place',
+          tile: [3, 5],
+          position: 'left',
+          pointsScored: 0,
+        },
+        { ...base, moveNumber: 2, handNumber: 1, player: 'you', action: 'pass' },
+      ],
+    });
+    expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
+      'fritz:play',
+      'player:pass',
+      'fritz:pass',
+    ]);
+  });
+
+  it('keeps extra-turn order after a scoring play', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      sealBlockedHand: true,
+      moveLog: [{
+        ...base,
+        moveNumber: 1,
+        handNumber: 1,
+        player: 'you',
+        action: 'place',
+        tile: [2, 3],
+        position: 'left',
+        pointsScored: 5,
+      }],
+    });
+    expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
+      'player:play',
+      'player:pass',
+      'fritz:pass',
+    ]);
+  });
+
+  it('does not append passes unless the hand is sealed as blocked', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      moveLog: [{
+        ...base,
+        moveNumber: 1,
+        handNumber: 1,
+        player: 'opponent',
+        action: 'place',
+        tile: [3, 5],
+        position: 'left',
+      }],
+    });
+    expect(transcript.actions).toHaveLength(1);
+  });
 });

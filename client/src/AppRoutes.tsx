@@ -11,11 +11,14 @@ import {
 import { markJourneyNodeCompleted } from './journey/journeyStorage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isSpectatorModeEnabled, resolveSpectatorGatedMode } from './config/spectatorModeFeature';
+import { isCircuitModeEnabled } from './config/circuitModeFeature';
 
 const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
 const RacehorseJourneyScreen = React.lazy(() => import('./journey/RacehorseJourneyScreen'));
+const CircuitScreen = React.lazy(() => import('./circuit/CircuitScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
+const StakesScreen = React.lazy(() => import('./stakes/StakesScreen'));
 const PlayVsFritz = React.lazy(() => import('./bot/PlayVsFritz'));
 const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
 const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
@@ -55,6 +58,7 @@ export default function AppRoutes({
   homeOverlays,
   multiplayer,
   tournament: tournamentProps,
+  stakes,
 }: AppRoutesProps) {
   const {
     withAuthModals,
@@ -104,6 +108,9 @@ export default function AppRoutes({
     isAuthoringMode,
     isAuthoringV2Mode,
     isGuidedV2Mode,
+    challengePackage,
+    onStartFritzChallenge,
+    onFritzChallengeGameComplete,
   } = botMatch;
   const {
     ghostProfile,
@@ -183,8 +190,23 @@ export default function AppRoutes({
         <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
           <NoBrainerLabScreen
             userId={authUser?.id ?? null}
-            onBack={() => setAppMode('singlePlayerHub')}
+            onBack={() => setAppMode('learn')}
           />
+        </Suspense>
+      </div>,
+    );
+  }
+
+  if (appMode === 'circuit' && isCircuitModeEnabled()) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading The Circuit…" />}>
+          <ErrorBoundary context="circuit">
+            <CircuitScreen
+              userId={authUser?.id ?? null}
+              onBack={() => setAppMode('singlePlayerHub')}
+            />
+          </ErrorBoundary>
         </Suspense>
       </div>,
     );
@@ -325,6 +347,7 @@ export default function AppRoutes({
               setAppMode('bot');
             }}
             onBack={() => setAppMode('singlePlayerHub')}
+            onStartChallenge={onStartFritzChallenge}
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
@@ -341,6 +364,8 @@ export default function AppRoutes({
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
           <ErrorBoundary context="bot-match">
           <BotMatchScreen
+            key={challengePackage ? `${challengePackage.attempt_id}:${challengePackage.current_game_number}:${challengePackage.current_hand_index}` : 'standard-bot-match'}
+            mode={challengePackage ? 'daily-fritz' : undefined}
             onBack={() => {
               if (journeyChallenge) {
                 clearJourneyActiveChallenge();
@@ -368,8 +393,11 @@ export default function AppRoutes({
               setAppMode(mode);
             }}
             dealSize={journeyChallenge?.dealSize ?? botDealSize}
-            fritzTier={journeyChallenge?.fritzTier ?? botFritzTier}
-            winningScore={journeyChallenge?.winningScore ?? 60}
+            fritzTier={journeyChallenge?.fritzTier ?? challengePackage?.fritz_tier ?? botFritzTier}
+            winningScore={journeyChallenge?.winningScore ?? challengePackage?.winning_score ?? 60}
+            dailyFritzPackage={challengePackage}
+            onDailyFritzGameComplete={challengePackage ? onFritzChallengeGameComplete : null}
+            matchInstanceKey={challengePackage?.attempt_id ?? null}
             journeyTrial={
               journeyChallenge
                 ? { nodeId: journeyChallenge.nodeId, nodeTitle: journeyChallenge.nodeTitle }
@@ -405,6 +433,66 @@ export default function AppRoutes({
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
           />
+          </ErrorBoundary>
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'stakes') {
+    const { runState, dispatch } = stakes;
+    if (runState.phase === 'table_active' && runState.selectedOffer) {
+      return withAuthModals(
+        <div className={appRootClassName}>
+          <Suspense fallback={<ScreenLoader label="Entering Table…" />}>
+            <ErrorBoundary context="stakes-match">
+              <BotMatchScreen
+                mode="stakes"
+                onBack={() => {
+                  dispatch({ type: 'RESET_RUN' });
+                  setAppMode('singlePlayerHub');
+                }}
+                onNavigate={setAppMode}
+                dealSize={7}
+                fritzTier={runState.selectedOffer.difficulty}
+                winningScore={999}
+                userId={authUser?.id ?? null}
+                username={authProfile?.username ?? null}
+                stakesConfig={runState.selectedOffer}
+                onStakesHandComplete={(won, stats) => {
+                  dispatch({
+                    type: 'SETTLE_HAND',
+                    result: {
+                      won,
+                      scoreMargin: stats.scoreMargin,
+                      youGoOut: stats.youGoOut,
+                      botPassCount: stats.botPassCount,
+                      youScoreFirst: stats.youScoreFirst,
+                      youScore: stats.youScore,
+                      botScore: stats.botScore,
+                    },
+                  });
+                }}
+              />
+            </ErrorBoundary>
+          </Suspense>
+        </div>
+      );
+    }
+
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Stakes…" />}>
+          <ErrorBoundary context="stakes">
+            <StakesScreen
+              userId={authUser?.id ?? null}
+              onBack={() => setAppMode('singlePlayerHub')}
+              onStartMatch={(_offer, _onHandComplete) => {
+                // CHOOSE_OFFER is handled internally in StakesScreen
+              }}
+              runState={runState}
+              dispatch={dispatch}
+            />
           </ErrorBoundary>
         </Suspense>
       </div>
@@ -910,9 +998,9 @@ export default function AppRoutes({
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
                 <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
-                No Brainer Lab
+                The Lab
               </div>
-              <div className="welcome-mode-desc">Practice clearing all 7 tiles in one turn</div>
+              <div className="welcome-mode-desc">Drill no-brainer combos in Learn</div>
             </div>
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
@@ -966,11 +1054,11 @@ export default function AppRoutes({
               <div className="claude-accordion-home__body">
                 {[
                   { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
-                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
+                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz and Ghost Mode', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
                   { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Set', desc: 'One fixed best of 3 Fritz set per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
                   { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
                   { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },
-                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'New to dominoes? Learn how to play and win.', accent: '#34d399', action: () => setAppMode('learn') },
+                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'How to Play, Guided Match, and The Lab.', accent: '#34d399', action: () => setAppMode('learn') },
                 ].map((mode, index, all) => {
                   const isActive = activeHomeMode === mode.id;
                   const hasActive = activeHomeMode !== null;

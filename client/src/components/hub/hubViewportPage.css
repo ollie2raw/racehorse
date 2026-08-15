@@ -48,6 +48,14 @@
   width: 100%;
 }
 
+/* Bottom tab bar clearance — phone only (see styles/breakpoints.ts) */
+@media (max-width: 767px) {
+  .rh-hub-shell {
+    padding-bottom: var(--rh-bottom-tab-offset);
+    box-sizing: border-box;
+  }
+}
+
 .rh-hub-body {
   display: flex;
   flex: 1 1 0;

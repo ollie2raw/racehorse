@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearGameActionIdempotencyForRoom,
+  digestGameActionRequest,
   GAME_ACTION_IDEMPOTENCY_TTL_MS,
   getGameActionIdempotencyCacheSize,
   resetGameActionIdempotencyForTests,
@@ -44,6 +45,19 @@ describe('gameActionIdempotency', () => {
     expect(ackB.sequence).toBe(4);
     expect(executeA).toHaveBeenCalledTimes(1);
     expect(executeB).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects reuse of a requestId for a different semantic action', async () => {
+    const execute = vi.fn(async () => ({ ok: true, sequence: 3 }));
+    const first = await withGameActionIdempotency(
+      'room1', 'seat-a', 'req-conflict', digestGameActionRequest({ type: 'PASS', sequence: 2 }), execute,
+    );
+    const conflict = await withGameActionIdempotency(
+      'room1', 'seat-a', 'req-conflict', digestGameActionRequest({ type: 'DRAW', sequence: 2 }), execute,
+    );
+    expect(first.ok).toBe(true);
+    expect(conflict).toEqual({ ok: false, error: 'request_id_conflict' });
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it('allows different requestIds to mutate normally', async () => {

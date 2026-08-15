@@ -9,14 +9,26 @@ import { BotPostGameCard } from '../../BotPostGameCard.tsx';
 import { BotPivotalReviewPortal } from '../../BotPivotalReviewPortal.tsx';
 import { BotReviewSummaryPortal } from '../../BotReviewSummaryPortal.tsx';
 import { BotGameOverModal } from '../../BotGameOverModal.tsx';
+import { isChallengeHandOnlyGameOver } from '../../../modules/match/hand-lifecycle/handLifecycleRules.ts';
 
 type BotMatchModalLayerProps = {
   modals: ModalOverlayViewModel;
   match: BotMatchState;
+  mode?: string;
+  onStakesProceed?: () => void;
 };
 
-export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
+export function BotMatchModalLayer({ modals, match, mode, onStakesProceed }: BotMatchModalLayerProps) {
   const { opponentLabel, winningScore, navigation } = modals;
+  const challengeHandOnlyGameOver = isChallengeHandOnlyGameOver({
+    gameOver: match.gameOver,
+    youScore: match.players.you.score,
+    botScore: match.players.bot.score,
+    winningScore: modals.isDailyFritzMode
+      ? winningScore
+      : null,
+  });
+  const modalGameOver = match.gameOver && !challengeHandOnlyGameOver;
   return (
     <>
       <ScoreTrackOverlay
@@ -30,7 +42,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
       />
       <BotHandOverModal
         handReveal={modals.handReveal}
-        gameOver={match.gameOver}
+        gameOver={modalGameOver}
         handRevealProgress={modals.handRevealProgress}
         handAdvanceError={modals.handAdvanceError}
         showManualHandAdvance={modals.showManualHandAdvance}
@@ -49,6 +61,8 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         }}
         onRetryHandAdvance={modals.retryHandAdvance}
         handNumber={match.handNumber}
+        mode={mode}
+        onStakesProceed={onStakesProceed}
       />
       <BotDailyFritzSetOverlay
         overlay={modals.dailyFritzSetOverlay}

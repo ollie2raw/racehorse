@@ -1,0 +1,42 @@
+{
+  "relations": {
+    "daily_puzzles": ["id", "puzzle_date"],
+    "daily_puzzle_attempts": ["id", "puzzle_date", "user_id", "status", "current_slot_index", "puzzles_completed", "total_score"],
+    "daily_puzzle_slot_results": ["id", "attempt_id", "slot_index", "awarded_points", "submitted_line"],
+    "daily_puzzle_events": ["id", "event_type", "idempotency_key", "created_at"],
+    "daily_fritz_attempts": ["id", "user_id", "revision", "status"],
+    "daily_fritz_published_challenges": ["challenge_id", "run_date", "content_digest"],
+    "daily_fritz_attempt_operations": ["attempt_id", "operation_id", "request_digest"],
+    "daily_fritz_verified_hands": ["attempt_id", "game_number", "hand_index"],
+    "daily_fritz_verified_games": ["attempt_id", "game_number"],
+    "daily_fritz_outbox": ["attempt_id", "event_type", "operation_id"],
+    "fritz_challenges": ["id", "share_code", "seed", "expires_at"],
+    "fritz_challenge_attempts": ["id", "challenge_id", "user_id", "revision"],
+    "fritz_challenge_attempt_operations": ["attempt_id", "operation_id", "request_digest"],
+    "fritz_challenge_verified_hands": ["attempt_id", "game_number", "hand_index"],
+    "fritz_challenge_verified_games": ["attempt_id", "game_number"],
+    "fritz_challenge_outbox": ["attempt_id", "event_type", "operation_id"],
+    "room_live_sessions": ["room_code", "match_id", "game_state", "game_state_sequence", "authority_revision"],
+    "room_live_session_command_receipts": ["room_code", "actor_seat_id", "request_id", "request_digest", "expected_revision", "committed_revision", "outcome"],
+    "multiplayer_invites": ["invite_id", "sender_user_id", "recipient_user_id", "room_code", "status", "expires_at"],
+    "multiplayer_operational_events": ["id", "event_type", "idempotency_key", "duration_ms", "created_at"],
+    "room_match_logs": ["match_id"],
+    "verified_single_player_matches": ["match_id"]
+  },
+  "views": [
+    "daily_puzzle_event_funnel",
+    "daily_puzzle_failure_metrics",
+    "multiplayer_operational_metrics"
+  ],
+  "functions": [
+    "start_daily_fritz_attempt_command",
+    "commit_daily_fritz_attempt_command",
+    "start_fritz_challenge_attempt_command",
+    "commit_fritz_challenge_attempt_command",
+    "assert_room_live_session_revision",
+    "commit_room_live_session_snapshot",
+    "commit_room_live_session_command",
+    "create_multiplayer_invite",
+    "resolve_multiplayer_invite"
+  ]
+}

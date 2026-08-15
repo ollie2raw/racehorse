@@ -29,6 +29,7 @@ export function applyLiveSessionRow(
     room.state = row.game_state ? cloneGameState(row.game_state) : null;
     room.config = shell.config;
     room.asyncStateVersion = shell.asyncStateVersion;
+    room.authorityRevision = row.authority_revision;
     room.nextHandReady = new Set(shell.nextHandReady);
     room.rematchReady = new Set(shell.rematchReady);
     room.matchStartReady = new Set(shell.matchStartReady);

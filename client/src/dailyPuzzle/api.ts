@@ -663,6 +663,47 @@ export async function startDailyPuzzleLadder(runDate?: string): Promise<DailyPuz
   });
 }
 
+export type DailyPuzzleClientEventType =
+  | 'start_requested'
+  | 'first_move'
+  | 'attempt_abandoned'
+  | 'recovery_started'
+  | 'recovery_succeeded'
+  | 'recovery_failed'
+  | 'share_requested'
+  | 'share_completed'
+  | 'retry_requested'
+  | 'review_opened'
+  | 'leaderboard_opened'
+  | 'request_failed';
+
+export async function recordDailyPuzzleTelemetry(input: {
+  eventType: DailyPuzzleClientEventType;
+  runDate: string;
+  eventId: string;
+  attemptId?: string | null;
+  slotIndex?: number | null;
+  failureCode?: string | null;
+  durationMs?: number | null;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await requestServerJson('/api/daily-puzzle/telemetry', {
+      method: 'POST',
+      body: {
+        ...input,
+        clientRelease: import.meta.env.VITE_APP_VERSION ?? 'unknown',
+      },
+    });
+  } catch (error) {
+    logger.operational('daily_puzzle', 'telemetry_failed', {
+      eventType: input.eventType,
+      runDate: input.runDate,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function submitDailyPuzzleSlot(
   input: DailyPuzzleSubmitSlotRequest,
 ): Promise<DailyPuzzleSubmitSlotResponse> {

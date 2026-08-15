@@ -14,6 +14,16 @@ export const DAILY_FRITZ_SKUNK_THRESHOLD = 30;
 
 export type DailyFritzSkunkSide = 'player' | 'fritz';
 
+export function getDailyFritzPublishedSetScore(
+  setResult: DailyFritzSetResult,
+): { finalScore: number; opponentScore: number; label: string } {
+  const score = {
+    finalScore: setResult.playerGamesWon,
+    opponentScore: setResult.fritzGamesWon,
+  };
+  return { ...score, label: `${score.finalScore}–${score.opponentScore}` };
+}
+
 export function isDailyFritzSkunk(losingScore: number): boolean {
   return Number.isFinite(losingScore) && losingScore < DAILY_FRITZ_SKUNK_THRESHOLD;
 }

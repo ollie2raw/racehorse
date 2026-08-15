@@ -21,6 +21,7 @@ const NOW = new Date('2026-07-26T12:00:00.000Z');
 function challengeFixture(): GeneratedFritzChallenge {
   return createGeneratedFritzChallenge({
     creatorUserId: CREATOR_ID,
+    recipientUserId: PLAYER_A_ID,
     fritzTier: 'elite',
     dealSize: 7,
     id: '44444444-4444-4444-8444-444444444444',
@@ -36,7 +37,7 @@ function makeHarness(overrides: Partial<FritzChallengeRoutesDeps> = {}) {
     get: (path: string, handler: RouteHandler) => routes.set(`GET ${path}`, handler),
     post: (path: string, handler: RouteHandler) => routes.set(`POST ${path}`, handler),
   };
-  const challenge = challengeFixture();
+  const challenge = { ...challengeFixture(), acceptedAt: NOW.toISOString() };
   const deps: FritzChallengeRoutesDeps = {
     getAuthenticatedUserId: async (req) => (
       typeof req.headers['x-test-user'] === 'string' ? req.headers['x-test-user'] : null
@@ -148,7 +149,7 @@ describe('Fritz Challenge routes', () => {
     const harness = makeHarness();
     const response = await harness.request('POST', '/api/fritz-challenges', {
       userId: CREATOR_ID,
-      body: { fritz_tier: 'elite', deal_size: 7 },
+      body: { fritz_tier: 'elite', deal_size: 7, recipient_user_id: PLAYER_A_ID },
     });
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
@@ -256,6 +257,108 @@ describe('Fritz Challenge routes', () => {
     expect(harness.deps.getOrCreateHand).toHaveBeenCalledTimes(1);
   });
 
+  it('returns the participant attempt summary with the challenge room', async () => {
+    const harness = makeHarness({
+      getAttempt: vi.fn(async ({ userId }) => ({
+        id: '55555555-5555-4555-8555-555555555555',
+        challengeId: harnessChallengeId(),
+        userId,
+        status: 'completed' as const,
+        currentGameNumber: 2 as const,
+        currentHandIndex: 4,
+        result: {
+          set_result: {
+            setWinner: 'player',
+            playerGamesWon: 2,
+            fritzGamesWon: 0,
+            games: [],
+          },
+        },
+        finalScore: 60,
+        opponentScore: 41,
+        pointDiff: 19,
+        won: true,
+        movesUsed: 18,
+        handsPlayed: 4,
+        startedAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        completedAt: NOW.toISOString(),
+        revision: 5,
+      })),
+    });
+    const response = await harness.request('GET', '/api/fritz-challenges/:shareCode', {
+      userId: CREATOR_ID,
+      params: { shareCode: 'ABCDEFGH' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      challenge: {
+        status: 'open',
+        attempt: {
+          status: 'completed',
+          final_score: 60,
+          set_result: { setWinner: 'player', playerGamesWon: 2 },
+        },
+      },
+    });
+  });
+
+  it('does not let the creator start before the recipient accepts', async () => {
+    const pendingChallenge = challengeFixture();
+    const harness = makeHarness({
+      getChallengeByCode: vi.fn(async () => pendingChallenge),
+    });
+    const response = await harness.request(
+      'POST',
+      '/api/fritz-challenges/:shareCode/start',
+      {
+        userId: CREATOR_ID,
+        params: { shareCode: 'ABCDEFGH' },
+        body: {
+          verification_protocol_version: 2,
+          game_rules_version: pendingChallenge.versions.rulesVersion,
+          fritz_policy_version: pendingChallenge.versions.fritzPolicyVersion,
+          verifier_version: pendingChallenge.versions.verifierVersion,
+        },
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: 'invite_not_accepted' });
+    expect(harness.deps.startCommand).not.toHaveBeenCalled();
+    expect(harness.deps.getOrCreateHand).not.toHaveBeenCalled();
+  });
+
+  it('does not start an expired challenge even when the invite was accepted', async () => {
+    const expiredChallenge = {
+      ...challengeFixture(),
+      acceptedAt: NOW.toISOString(),
+      expiresAt: '2026-07-25T12:00:00.000Z',
+    };
+    const harness = makeHarness({
+      getChallengeByCode: vi.fn(async () => expiredChallenge),
+    });
+    const response = await harness.request(
+      'POST',
+      '/api/fritz-challenges/:shareCode/start',
+      {
+        userId: CREATOR_ID,
+        params: { shareCode: 'ABCDEFGH' },
+        body: {
+          verification_protocol_version: 2,
+          game_rules_version: expiredChallenge.versions.rulesVersion,
+          fritz_policy_version: expiredChallenge.versions.fritzPolicyVersion,
+          verifier_version: expiredChallenge.versions.verifierVersion,
+        },
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: 'expired' });
+    expect(harness.deps.startCommand).not.toHaveBeenCalled();
+  });
+
   it('rejects an outdated client before creating an attempt or hand', async () => {
     const harness = makeHarness();
     const response = await harness.request(
@@ -330,3 +433,7 @@ describe('Fritz Challenge routes', () => {
     );
   });
 });
+
+function harnessChallengeId(): string {
+  return '44444444-4444-4444-8444-444444444444';
+}

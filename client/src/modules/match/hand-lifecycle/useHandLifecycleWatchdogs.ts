@@ -7,6 +7,7 @@ import {
   getDailyFritzWatchdogDelayMs,
   logDailyFritzHandBreadcrumb,
   shouldDailyFritzWatchdogAdvance,
+  isChallengeHandOnlyGameOver,
   shouldShowHandRevealForHand,
   warnHandLifecycleStuck,
 } from './handLifecycleRules.ts';
@@ -28,6 +29,7 @@ export type UseHandLifecycleWatchdogsArgs = {
   isGuidedMode: boolean;
   isGuidedV2Mode: boolean;
   isGuidedV2OffLine: boolean;
+  challengeWinningScore?: number | null;
   handAdvanceError: string | null;
   setShowManualHandAdvance: React.Dispatch<React.SetStateAction<boolean>>;
   setHandReveal: React.Dispatch<React.SetStateAction<BotHandReveal | null>>;
@@ -53,13 +55,20 @@ export function useHandLifecycleWatchdogs({
   isGuidedMode,
   isGuidedV2Mode,
   isGuidedV2OffLine,
+  challengeWinningScore,
   handAdvanceError,
   setShowManualHandAdvance,
   setHandReveal,
   advanceHand,
 }: UseHandLifecycleWatchdogsArgs) {
   useEffect(() => {
-    if (!handReveal || match.gameOver || isGuidedMode || isGuidedV2Mode) {
+    const challengeHandOnlyGameOver = isChallengeHandOnlyGameOver({
+      gameOver: match.gameOver,
+      youScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      winningScore: challengeWinningScore,
+    });
+    if (!handReveal || (match.gameOver && !challengeHandOnlyGameOver) || isGuidedMode || isGuidedV2Mode) {
       return;
     }
     const stallMs =
@@ -94,6 +103,7 @@ export function useHandLifecycleWatchdogs({
     return () => window.clearTimeout(warnId);
   }, [
     handAdvanceError,
+    challengeWinningScore,
     handReveal,
     handRevealShownAtRef,
     handTransitionInFlightRef,
@@ -128,12 +138,24 @@ export function useHandLifecycleWatchdogs({
 
   useEffect(() => {
     if (!isDailyFritzMode) return;
-    if (!match.handOver || match.gameOver) return;
+    const challengeHandOnlyGameOver = isChallengeHandOnlyGameOver({
+      gameOver: match.gameOver,
+      youScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      winningScore: challengeWinningScore,
+    });
+    if (!match.handOver || (match.gameOver && !challengeHandOnlyGameOver)) return;
 
     const watchdogMs = getDailyFritzWatchdogDelayMs(handReveal !== null);
     const id = window.setTimeout(() => {
       const live = matchRef.current;
-      if (!live.handOver || live.gameOver) return;
+      const liveChallengeHandOnlyGameOver = isChallengeHandOnlyGameOver({
+        gameOver: live.gameOver,
+        youScore: live.players.you.score,
+        botScore: live.players.bot.score,
+        winningScore: challengeWinningScore,
+      });
+      if (!live.handOver || (live.gameOver && !liveChallengeHandOnlyGameOver)) return;
 
       if (!handRevealRef.current && pendingHandRevealRef.current) {
         const pending = pendingHandRevealRef.current;
@@ -150,6 +172,7 @@ export function useHandLifecycleWatchdogs({
       if (!shouldDailyFritzWatchdogAdvance({
         handOver: live.handOver,
         gameOver: live.gameOver,
+        challengeHandOnlyGameOver: liveChallengeHandOnlyGameOver,
         handRevealVisible: handRevealRef.current !== null,
         minAdvanceAt: dailyFritzMinAdvanceAtRef.current,
         nowMs: Date.now(),
@@ -184,6 +207,7 @@ export function useHandLifecycleWatchdogs({
     return () => window.clearTimeout(id);
   }, [
     advanceHand,
+    challengeWinningScore,
     dailyFritzMinAdvanceAtRef,
     handReveal,
     handRevealRef,

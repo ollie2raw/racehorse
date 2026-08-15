@@ -3,6 +3,7 @@ import {
   calculateDailyPuzzleAwardedPoints,
   calculateServerAuthoritativeElapsedSeconds,
   DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
   findLadderSlotsForAttemptSet,
   findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleAttemptFinalizeReady,
@@ -14,7 +15,13 @@ import {
   type DailyPuzzleSlotIndex,
 } from '../../dailyPuzzle';
 import { validateDailyPuzzleSubmission } from '../../dailyPuzzleSubmissionValidation';
+import {
+  failureEventTypeForDailyPuzzleCode,
+  isDailyPuzzleClientEventType,
+  normalizeDailyPuzzleFailureCode,
+} from '../../dailyPuzzleTelemetry';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
+import { recordOperationalFailure } from '../../operationalTelemetry';
 import { writePuzzleActivity } from '../../social/activityWriter';
 import { getPacificDateKey } from '../../shared/pacificDate';
 import {
@@ -30,6 +37,46 @@ import {
   listDailyPuzzleSlotsForDateWithAutoSeed,
   persistDailyPuzzleAttempt,
 } from '../stores/dailyPuzzleStore';
+import {
+  recordDailyPuzzleEvent,
+  type DailyPuzzleEventInput,
+} from '../stores/dailyPuzzleEventStore';
+
+async function recordDailyPuzzleEventBestEffort(event: DailyPuzzleEventInput): Promise<void> {
+  try {
+    await recordDailyPuzzleEvent(event);
+  } catch (error) {
+    recordOperationalFailure('daily_puzzle.telemetry_write', error, {
+      attemptId: event.attemptId ?? null,
+      runDate: event.runDate,
+      eventType: event.eventType,
+    });
+  }
+}
+
+function recordDailyPuzzleFailureBestEffort(input: {
+  attempt: DailyPuzzleAttempt;
+  userId: string;
+  slotIndex?: number | null;
+  failureCode: string;
+}): void {
+  const eventType = failureEventTypeForDailyPuzzleCode(input.failureCode);
+  void recordDailyPuzzleEventBestEffort({
+    attemptId: input.attempt.id,
+    runDate: input.attempt.puzzleDate,
+    userId: input.userId,
+    eventType,
+    slotIndex: input.slotIndex ?? null,
+    failureCode: input.failureCode,
+    idempotencyKey: [
+      'daily-puzzle',
+      input.attempt.id,
+      eventType,
+      input.slotIndex ?? 'run',
+      input.failureCode,
+    ].join(':'),
+  });
+}
 
 export function registerDailyPuzzleRoutes(app: Application): void {
   app.get('/api/daily-puzzle/today', async (req, res) => {
@@ -66,6 +113,13 @@ export function registerDailyPuzzleRoutes(app: Application): void {
           error: attemptError instanceof Error ? attemptError.message : String(attemptError),
         });
       }
+      void recordDailyPuzzleEventBestEffort({
+        attemptId: attempt?.id ?? null,
+        runDate,
+        userId: authenticatedUserId,
+        eventType: 'mode_impression',
+        idempotencyKey: `daily-puzzle:${runDate}:${authenticatedUserId}:mode-impression`,
+      });
     }
     const finalizeReady = attempt ? isDailyPuzzleAttemptFinalizeReady(attempt) : false;
     const nextAvailableSlotIndex = attempt
@@ -133,6 +187,15 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         setVersion: readySlots[0].setVersion,
       });
     }
+    void recordDailyPuzzleEventBestEffort({
+      attemptId: attempt.id,
+      runDate,
+      userId: authenticatedUserId,
+      eventType: replayed ? 'attempt_resumed' : 'attempt_started',
+      idempotencyKey: replayed
+        ? `daily-puzzle:${attempt.id}:attempt-resumed:${attempt.updatedAt}`
+        : `daily-puzzle:${attempt.id}:attempt-started`,
+    });
     const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
     const activeSlot = resolveActiveSlotForAttempt(attempt, versionSlots);
     if (!activeSlot) {
@@ -203,6 +266,11 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       return;
     }
     if (attempt.status === 'completed') {
+      recordDailyPuzzleFailureBestEffort({
+        attempt,
+        userId: authenticatedUserId,
+        failureCode: 'attempt_completed',
+      });
       res.status(409).json({ error: 'Daily Puzzle attempt is already completed.' });
       return;
     }
@@ -213,15 +281,18 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     if (existing) {
       const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
       const ladderCompleted = attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
+      const nextExpectedSlotIndex = DAILY_PUZZLE_SLOT_INDICES.find(
+        (index) => !attempt.result.slots.some((slot) => slot.slotIndex === index),
+      ) ?? attempt.currentSlotIndex;
       const nextSlot = ladderCompleted
         ? null
-        : versionSlots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
+        : versionSlots.find((slot) => slot.slotIndex === nextExpectedSlotIndex) ?? null;
       res.json({
         ok: true,
         runDate: attempt.puzzleDate,
         attempt,
         slotResult: existing,
-        nextAvailableSlotIndex: ladderCompleted ? null : attempt.currentSlotIndex,
+        nextAvailableSlotIndex: ladderCompleted ? null : nextExpectedSlotIndex,
         nextSlot,
         ladderCompleted,
         requiresCompleteCall: ladderCompleted,
@@ -229,13 +300,28 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       });
       return;
     }
-    if (slotIndex !== attempt.currentSlotIndex) {
+    const expectedSlotIndex = DAILY_PUZZLE_SLOT_INDICES.find(
+      (index) => !attempt.result.slots.some((slot) => slot.slotIndex === index),
+    ) ?? attempt.currentSlotIndex;
+    if (slotIndex !== expectedSlotIndex) {
+      recordDailyPuzzleFailureBestEffort({
+        attempt,
+        userId: authenticatedUserId,
+        slotIndex,
+        failureCode: 'slot_order_invalid',
+      });
       res.status(409).json({ error: 'Daily Puzzle slot order is invalid.' });
       return;
     }
     const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
     const ladderSlots = findLadderSlotsForAttemptSet(versionSlots);
     if (!ladderSlots) {
+      recordDailyPuzzleFailureBestEffort({
+        attempt,
+        userId: authenticatedUserId,
+        slotIndex,
+        failureCode: 'version_mismatch',
+      });
       res.status(409).json({
         error: 'Daily Puzzle ladder content is unavailable for this attempt version.',
       });
@@ -243,6 +329,12 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     }
     const slot = ladderSlots.find((entry) => entry.slotIndex === slotIndex && entry.id === puzzleId);
     if (!slot) {
+      recordDailyPuzzleFailureBestEffort({
+        attempt,
+        userId: authenticatedUserId,
+        slotIndex,
+        failureCode: 'puzzle_mismatch',
+      });
       res.status(404).json({ error: 'Daily Puzzle slot not found for this date.' });
       return;
     }
@@ -259,6 +351,12 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         clientRawScore,
       });
     } catch (error) {
+      recordDailyPuzzleFailureBestEffort({
+        attempt,
+        userId: authenticatedUserId,
+        slotIndex,
+        failureCode: normalizeDailyPuzzleFailureCode(error),
+      });
       res.status(400).json({
         error: error instanceof Error ? error.message : 'Daily Puzzle submitted line is invalid.',
       });
@@ -300,6 +398,19 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       },
     };
     const saved = await persistDailyPuzzleAttempt(nextAttempt);
+    void recordDailyPuzzleEventBestEffort({
+      attemptId: saved.id,
+      runDate: saved.puzzleDate,
+      userId: authenticatedUserId,
+      eventType: 'slot_submitted',
+      slotIndex,
+      idempotencyKey: `daily-puzzle:${saved.id}:slot-submitted:${slotIndex}`,
+      payload: {
+        awardedPoints: slotResult.awardedPoints,
+        solved: slotResult.solved,
+        perfect: slotResult.perfect,
+      },
+    });
     const ladderCompleted = saved.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
     const nextSlot = ladderCompleted
       ? null
@@ -373,9 +484,23 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     const leaderboard = await buildDailyPuzzleLeaderboardForDate(saved.puzzleDate);
     const leaderboardRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
     if (!replayed) {
+      void recordDailyPuzzleEventBestEffort({
+        attemptId: saved.id,
+        runDate: saved.puzzleDate,
+        userId: authenticatedUserId,
+        eventType: 'attempt_completed',
+        idempotencyKey: `daily-puzzle:${saved.id}:attempt-completed`,
+        payload: { totalScore: saved.totalScore, leaderboardRank },
+      });
       void getDailyPuzzleLadderStreak(authenticatedUserId, saved.puzzleDate)
         .then((streak) => writePuzzleActivity({ userId: authenticatedUserId, score: saved.totalScore ?? null, streak }))
-        .catch(() => {});
+        .catch((error) => {
+          recordOperationalFailure('daily_puzzle.activity_write', error, {
+            attemptId: saved.id,
+            puzzleDate: saved.puzzleDate,
+            userId: authenticatedUserId,
+          });
+        });
     }
     res.json({
       ok: true,
@@ -410,6 +535,42 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     });
   }
 });
+
+  app.post('/api/daily-puzzle/telemetry', async (req, res) => {
+    try {
+      const authenticatedUserId = await getAuthenticatedUserId(req);
+      if (!authenticatedUserId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const eventType = req.body?.eventType;
+      const runDate = typeof req.body?.runDate === 'string' ? req.body.runDate.trim() : '';
+      const eventId = typeof req.body?.eventId === 'string' ? req.body.eventId.trim().slice(0, 160) : '';
+      if (!isDailyPuzzleClientEventType(eventType) || !runDate || !eventId) {
+        res.status(400).json({ error: 'eventType, runDate, and eventId are required.' });
+        return;
+      }
+      await recordDailyPuzzleEvent({
+        attemptId: typeof req.body?.attemptId === 'string' ? req.body.attemptId : null,
+        runDate,
+        userId: authenticatedUserId,
+        eventType,
+        slotIndex: Number.isInteger(req.body?.slotIndex) ? Number(req.body.slotIndex) : null,
+        requestId: typeof req.body?.requestId === 'string' ? req.body.requestId : null,
+        failureCode: typeof req.body?.failureCode === 'string' ? req.body.failureCode : null,
+        sessionId: typeof req.body?.sessionId === 'string' ? req.body.sessionId : null,
+        clientRelease: typeof req.body?.clientRelease === 'string' ? req.body.clientRelease : null,
+        durationMs: Number.isFinite(req.body?.durationMs) ? Math.max(0, Math.round(req.body.durationMs)) : null,
+        source: 'client',
+        idempotencyKey: `daily-puzzle-client:${authenticatedUserId}:${eventId}`,
+        payload: req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : {},
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      recordOperationalFailure('daily_puzzle.client_telemetry', error, {});
+      res.status(503).json({ error: 'Daily Puzzle telemetry is temporarily unavailable.' });
+    }
+  });
 
 /**
  * Optional: schedule a platform cron (Vercel, GitHub Actions, etc.) to hit this route

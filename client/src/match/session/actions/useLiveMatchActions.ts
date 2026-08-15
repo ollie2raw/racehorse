@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, t
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
+import { logger } from '../../../utils/logger';
 import { drawAudit } from '../../../multiplayer/drawAudit';
 import {
   mpPerfBeginAction,
@@ -19,6 +20,7 @@ import {
   emitGameRematch,
   emitGameStart,
 } from '../../../multiplayer/roomTransport';
+import { recordGameplayActionAck } from '../../../multiplayer/mpTelemetry';
 import { getBoardEnds } from '../../boardSessionUtils';
 import type { MoveEntry } from '../../../game/moveLogger';
 import type { FlyingTile } from '../liveMatchSessionTypes';
@@ -81,6 +83,8 @@ export type UseLiveMatchActionsParams = {
   onGameStart: () => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
   flashLastPlayed: (tile: Tile | null) => void;
+  /** Rejoins the room to obtain a full authoritative state after a CAS miss. */
+  requestAuthoritativeResync: (reason: string) => Promise<boolean>;
 };
 
 export type UseLiveMatchActionsResult = {
@@ -148,7 +152,19 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     onGameStart,
     appendMultiplayerMove,
     flashLastPlayed,
+    requestAuthoritativeResync,
   } = params;
+
+  const handleRejectedGameplayAction = useCallback(
+    (action: 'draw' | 'pass' | 'play', response: { error?: string } | null | undefined) => {
+      if (response?.error !== 'stale_state') return false;
+      // This is expected when a second tab/device commits first. Never leave a
+      // player with a red error for a state that can be recovered authoritatively.
+      void requestAuthoritativeResync(`action_${action}_stale_state`);
+      return true;
+    },
+    [requestAuthoritativeResync],
+  );
 
   const emitDraggingState = useCallback(
     (dragging: boolean) => {
@@ -205,8 +221,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     const now = Date.now();
     const prev = prevDrawSequenceActiveRef.current;
     if (prev !== drawSequenceActive) {
-      // TEMP-DIAGNOSTIC: correlate with useRoomSocketSync path-tagged logs for clear-path attribution.
-      console.log('[TEMP-DIAGNOSTIC] drawSequenceActive observed transition', {
+      logger.operational('multiplayer_action', 'draw_sequence_transition', {
         from: prev,
         to: drawSequenceActive,
         at: now,
@@ -224,8 +239,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         flyingTilesNonEmptySinceRef.current = now;
       }
     } else if (prevCount > 0) {
-      // TEMP-DIAGNOSTIC
-      console.log('[TEMP-DIAGNOSTIC] flyingTiles transitioned to empty', {
+      logger.operational('multiplayer_action', 'flying_tiles_cleared', {
         at: now,
         wasNonEmptyForMs:
           flyingTilesNonEmptySinceRef.current === null
@@ -490,8 +504,11 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     });
     drawAudit('emit', { event: 'game:action', actionType: 'DRAW', roomCode: joinedRoom, requestId });
     try {
-      const resp = await emitGameAction(socket, joinedRoom, { type: 'DRAW', requestId });
+      const resp = await emitGameAction(socket, joinedRoom, {
+        type: 'DRAW', requestId, expectedSequence: baselineSequence,
+      });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
+      recordGameplayActionAck('draw', resp, { roomCode: joinedRoom, expectedSequence: baselineSequence });
       drawAudit('ack', {
         requestId,
         ms: Date.now() - emitAt,
@@ -501,6 +518,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         error: resp?.error,
       });
       if (!resp?.ok) {
+        if (handleRejectedGameplayAction('draw', resp)) return;
         setActionError(resp?.error ?? 'Unable to draw.');
         return;
       }
@@ -562,6 +580,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     autoTurnActionKeyRef,
     setActionError,
     setPendingUiAction,
+    handleRejectedGameplayAction,
   ]);
 
   const pass = useCallback(async () => {
@@ -601,9 +620,13 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     logicalGameplayActionRef.current = logicalAction;
     const requestId = logicalAction.requestId;
     try {
-      const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
+      const resp = await emitGameAction(socket, joinedRoom, {
+        type: 'PASS', requestId, expectedSequence: baselineSequence,
+      });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
+      recordGameplayActionAck('pass', resp, { roomCode: joinedRoom, expectedSequence: baselineSequence });
       if (!resp?.ok) {
+        if (handleRejectedGameplayAction('pass', resp)) return;
         setActionError(resp?.error ?? 'Unable to pass.');
         return;
       }
@@ -658,6 +681,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     setPendingActionRefDiag,
     setActionError,
     setPendingUiAction,
+    handleRejectedGameplayAction,
   ]);
 
   const play = useCallback(
@@ -671,8 +695,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       if (isGameplayActionBlocked()) {
         const blockReason = diagnoseGameplayBlockReason();
         if (blockReason) {
-          // TEMP-DIAGNOSTIC
-          console.log('[TEMP-DIAGNOSTIC] play() blocked by isGameplayActionBlocked', {
+          logger.operational('multiplayer_action', 'play_blocked', {
             reason: blockReason,
             conditionAgeMs: blockConditionAgeMs(blockReason),
             at: Date.now(),
@@ -747,11 +770,14 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         const resp = await emitGameAction(socket, joinedRoom, {
           type: 'MOVE',
           requestId,
+          expectedSequence: baselineSequence,
           move: { tile: tileToPlay, position },
         });
 
         mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
+        recordGameplayActionAck('play', resp, { roomCode: joinedRoom, expectedSequence: baselineSequence });
         if (!resp?.ok) {
+          if (handleRejectedGameplayAction('play', resp)) return;
           setActionError(resp?.error ?? 'Unable to play tile.');
           return;
         }
@@ -836,6 +862,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       setPendingUiAction,
       setSelectedTile,
       setDrawStepMyHand,
+      handleRejectedGameplayAction,
     ],
   );
 

@@ -328,7 +328,9 @@
   transition: box-shadow 200ms ease, filter 200ms ease;
 }
 
-.daily-fritz-card-container:hover {
+.daily-fritz-card-container:hover,
+.daily-fritz-card-container:focus-visible,
+.daily-fritz-card-container:active {
   filter: brightness(1.04);
   box-shadow:
     inset 0 1px 0 rgba(231, 182, 74, 0.58),
@@ -348,7 +350,9 @@
   transition: box-shadow 200ms ease, filter 200ms ease;
 }
 
-.daily-puzzle-card-container:hover {
+.daily-puzzle-card-container:hover,
+.daily-puzzle-card-container:focus-visible,
+.daily-puzzle-card-container:active {
   filter: brightness(1.04);
   box-shadow:
     inset 0 1px 0 rgba(88, 166, 255, 0.58),
@@ -745,8 +749,8 @@
   }
 }
 
-/* ── Mobile Layout & Typography Overrides ── */
-@media (max-width: 800px) {
+/* ── Mobile Layout & Typography Overrides (bp-phone-max: 767px) ── */
+@media (max-width: 767px) {
   .home-page-root h1,
   .home-page-root h2 {
     font-size: clamp(32px, 8vw, 42px) !important;
@@ -786,7 +790,7 @@
   }
   
   .home-card-content h2 {
-    font-size: clamp(28px, 6vw, 36px) !important;
+    font-size: clamp(28px, 7vw, 40px) !important;
   }
   
   .home-card-content p {
@@ -803,25 +807,45 @@
     min-height: 180px !important;
   }
 
+  /* Horizontal scroll mode chips — thumb-friendly, one band */
+  .home-mode-tabs {
+    margin-inline: 16px !important;
+  }
+
   .home-mode-tabs > div {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .home-mode-tabs > div::-webkit-scrollbar {
+    display: none;
   }
 
   .home-mode-tabs button {
     display: flex;
-    height: 68px;
-    min-width: 0;
-    flex-direction: column;
-    gap: 5px;
-    padding: 6px 3px;
+    flex: 0 0 auto;
+    height: var(--touch-min);
+    min-height: var(--touch-min);
+    min-width: 108px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 14px;
+    scroll-snap-align: start;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .home-mode-tabs button > span:last-of-type {
     overflow: hidden;
     max-width: 100%;
     color: #b8c7da !important;
-    font-size: 10px !important;
+    font-size: 13px !important;
     line-height: 1.1;
     text-align: center;
     text-overflow: ellipsis;
@@ -832,11 +856,22 @@
     width: 20px;
     height: 20px;
   }
+
+  .daily-fritz-card-container:focus-visible,
+  .daily-puzzle-card-container:focus-visible,
+  .daily-card--completed:focus-visible {
+    outline: 2px solid rgba(88, 166, 255, 0.55);
+    outline-offset: 2px;
+  }
 }
 
 @media (max-width: 360px) {
+  .home-mode-tabs button {
+    min-width: 96px;
+  }
+
   .home-mode-tabs button > span:last-of-type {
-    font-size: 9px !important;
+    font-size: 12px !important;
   }
 }
 

@@ -6,13 +6,16 @@ import type { AppMode } from '../../../types.ts';
 import type { BotDealSize } from '../runtime/botEngine.ts';
 import type { FritzTier } from '../../fritz/fritzConfig.ts';
 import type { BotMatchState } from '../runtime/botEngine.ts';
+import type { TableOffer, HandResult } from '../../../stakes/stakesEconomy';
 
 export interface BotMatchScreenProps {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   dealSize: BotDealSize;
   fritzTier?: FritzTier;
-  mode?: 'bot' | 'ghost' | 'daily-fritz';
+  mode?: 'bot' | 'ghost' | 'daily-fritz' | 'stakes';
+  stakesConfig?: TableOffer;
+  onStakesHandComplete?: (won: boolean, stats: Omit<HandResult, 'won'>) => void;
   dailyPuzzleDate?: string | null;
   userId?: string | null;
   username?: string | null;
@@ -41,7 +44,7 @@ export interface BotMatchScreenProps {
     handsPlayed: number;
     currentHandIndex: number;
     moveLog: MoveEntry[];
-  }) => void) | null;
+  }) => void | Promise<void>) | null;
   isGuidedMode?: boolean;
   /** Admin-only: replace CoachPanel with an editable textarea on each player turn */
   isAuthoringMode?: boolean;

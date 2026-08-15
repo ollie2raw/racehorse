@@ -15,6 +15,7 @@ import { HashRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
 import './styles/tokens.css';
+import './styles/rh-mobile-chrome.css';
 import './index.css';
 import './premium-theme.css';
 import App from './App.tsx';

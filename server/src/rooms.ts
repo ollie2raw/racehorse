@@ -47,6 +47,8 @@ export type Room = {
   state: GameState | null; // null until game started
   config: Partial<Config>;
   asyncStateVersion: number;
+  /** Database CAS revision for durable gameplay commands. */
+  authorityRevision: number;
   /** `playerSeatId` values ready for the next hand. */
   nextHandReady: Set<string>;
   /** `playerSeatId` values ready for rematch. */
@@ -232,6 +234,7 @@ export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {
     state: null,
     config,
     asyncStateVersion: 0,
+    authorityRevision: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     matchStartReady: new Set<string>(),
@@ -283,6 +286,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     state: null,
     config,
     asyncStateVersion: 0,
+    authorityRevision: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     matchStartReady: new Set<string>(),
@@ -769,6 +773,8 @@ export async function readyForNextHand(
 export interface ActionPayload {
   type: 'DRAW' | 'MOVE' | 'PASS';
   requestId?: string;
+  /** State sequence observed by the client when this intent was created. */
+  expectedSequence?: number;
   move?: {
     tile: { high: number; low: number };
     position?: PlacementPosition;
@@ -818,7 +824,7 @@ async function actUnlocked(
   }
   if (!room.state) throw new Error('Game not started.');
 
-  let state = room.state;
+  const state = room.state;
 
   if (state.handOver && !state.gameOver && action.type !== 'DRAW' && action.type !== 'PASS') {
     throw new Error('Hand is over. Waiting for next hand to start.');

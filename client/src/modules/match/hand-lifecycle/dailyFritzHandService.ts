@@ -6,6 +6,7 @@ import {
   canApplyNextHand,
   DAILY_FRITZ_HAND_AUTO_ADVANCE_MS,
   DAILY_FRITZ_HAND_REVEAL_DELAY_MS,
+  isChallengeHandOnlyGameOver,
   resolveHandRevealScheduleMode,
 } from './handLifecycleRules.ts';
 import {
@@ -21,6 +22,7 @@ import type { DailyFritzPrefetchParams } from './types.ts';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import { buildDailyFritzTranscript } from '../../../dailyFritz/dailyFritzTranscript.ts';
 import { createDailyFritzChallengeIdentity } from '../../../dailyFritz/dailyFritzChallengeIdentity.ts';
+import { nextFritzChallengeHand } from '../../../fritzChallenge/api.ts';
 
 export function computeDailyFritzMinAdvanceAtOnHandComplete(): number {
   const scheduleMode = resolveHandRevealScheduleMode(true);
@@ -46,6 +48,34 @@ export function logDailyFritzHandComplete(result: BotActionResult): void {
   });
 }
 
+/**
+ * The shared challenge uses the same engine for each hand, but its engine
+ * gameOver flag can be raised when a hand ends. Keep that flag scoped to the
+ * hand until the fixed game target is actually reached so every client-side
+ * lifecycle surface follows the normal next-hand path.
+ */
+export function normalizeChallengeHandEndForClient(
+  result: BotActionResult,
+  winningScore: number | null | undefined,
+): BotActionResult {
+  if (!result.handEnded || !isChallengeHandOnlyGameOver({
+    gameOver: result.state.gameOver,
+    youScore: result.state.players.you.score,
+    botScore: result.state.players.bot.score,
+    winningScore,
+  })) {
+    return result;
+  }
+  return {
+    ...result,
+    state: {
+      ...result.state,
+      gameOver: false,
+      winnerId: null,
+    },
+  };
+}
+
 export function buildDailyFritzPrefetchParams(
   dailyFritzPackage: DailyFritzStartResponse,
   dailyFritzHandIndex: number,
@@ -67,6 +97,10 @@ export function buildDailyFritzPrefetchParams(
       moveLog,
       protocolVersion: transcriptProtocolVersion,
       fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+      sealBlockedHand: match.handOver
+        && match.players.you.hand.length > 0
+        && match.players.bot.hand.length > 0
+        && match.boneyard.length <= match.deadTiles.length,
     });
   } catch (error) {
     transcriptError = error instanceof Error
@@ -101,16 +135,27 @@ export function createDailyFritzNextHandRequest(
       'Daily Fritz verification evidence could not be built. Reload the latest deployment and resume this attempt.',
     ));
   }
-  return nextDailyFritzHand({
+  const request = {
     attemptId: dailyFritzPackage.attempt_id,
     verifiedMatchId: dailyFritzPackage.verified_match_id,
-    runDate: dailyFritzPackage.run_date,
     gameNumber,
     completedHandIndex: dailyFritzHandIndex,
     transcript,
     completedHandScores,
-    timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
-  });
+  };
+  if (dailyFritzPackage.challenge_code) {
+    if (!transcript) return Promise.reject(new Error('Challenge verification evidence could not be built.'));
+    return nextFritzChallengeHand({
+      code: dailyFritzPackage.challenge_code,
+      attemptId: request.attemptId,
+      verifiedMatchId: request.verifiedMatchId,
+      gameNumber: request.gameNumber,
+      completedHandIndex: request.completedHandIndex,
+      transcript,
+      completedHandScores: request.completedHandScores,
+    });
+  }
+  return nextDailyFritzHand({ ...request, runDate: dailyFritzPackage.run_date, timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS });
 }
 
 export type ApplyDailyFritzNextHandResult =

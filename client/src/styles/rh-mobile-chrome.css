@@ -1,0 +1,112 @@
+/*
+ * Shared mobile chrome + mode-card helpers.
+ * Breakpoints must match styles/breakpoints.ts and --bp-* in tokens.css:
+ *   phone: max-width 767px | tablet+: min-width 768px
+ */
+
+/* Content inset when fixed bottom tab bar is visible */
+@media (max-width: 767px) {
+  .rh-chrome--has-bottom-tabs {
+    padding-bottom: var(--rh-bottom-tab-offset);
+  }
+
+  .rh-hub-shell.rh-chrome--has-bottom-tabs,
+  .home-page-root.rh-chrome--has-bottom-tabs .home-shell,
+  .home-page-root.rh-chrome--has-bottom-tabs .home-main,
+  .home-page-root.rh-chrome--has-bottom-tabs .sp-solo-main {
+    padding-bottom: var(--rh-bottom-tab-offset);
+    box-sizing: border-box;
+  }
+
+  .home-shell,
+  .home-page-root .home-shell {
+    padding-bottom: var(--rh-bottom-tab-offset);
+    box-sizing: border-box;
+  }
+
+  /* Compact GlobalNav status cluster */
+  .rh-nav-stat-label,
+  .rh-nav-username,
+  .rh-nav-username-chevron,
+  .rh-nav-center-desktop {
+    display: none !important;
+  }
+
+  .rh-nav-brand {
+    min-width: 0 !important;
+  }
+
+  .rh-nav-brand-wordmark {
+    font-size: 16px !important;
+    margin-left: 10px !important;
+  }
+
+  .rh-nav-stats {
+    min-width: 0 !important;
+    gap: 0;
+  }
+
+  .rh-nav-stat {
+    gap: 6px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    min-height: var(--touch-min);
+  }
+
+  .rh-nav-stat-value {
+    font-size: 15px !important;
+  }
+
+  .rh-nav-avatar-wrap {
+    padding-left: 8px !important;
+    gap: 0 !important;
+  }
+
+  .rh-nav-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+
+  .rh-nav-inner {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .rh-nav-bar {
+    height: 56px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .rh-bottom-tab-bar {
+    display: none !important;
+  }
+}
+
+/* Reusable mode-card grid (Pass 1 + Pass 2 hubs) */
+.rh-mode-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .rh-mode-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .rh-mode-card-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .rh-mode-card__cta {
+    width: 100% !important;
+    min-height: var(--touch-min);
+  }
+}

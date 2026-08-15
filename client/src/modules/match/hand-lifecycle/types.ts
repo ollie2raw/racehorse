@@ -18,7 +18,14 @@ export type HandLifecyclePorts = {
   setLastBotChoice: (choice: BotChoice | null) => void;
   pushToast: (msg: string, ms?: number) => void;
   showScoreToast: (player: 'you' | 'bot', points: number) => void;
-  showBoardToast: (message: string, tone: 'you' | 'bot') => void;
+  showBoardToast: (
+    message: string,
+    tone: 'you' | 'bot',
+    options?: {
+      sticky?: boolean;
+      holdMs?: number;
+    },
+  ) => void;
   captureGuidedMatchCandidateNextHand: (
     previousState: BotMatchState,
     nextState: BotMatchState,

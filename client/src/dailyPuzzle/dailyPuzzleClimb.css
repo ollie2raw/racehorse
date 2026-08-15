@@ -1,0 +1,309 @@
+/* Daily Puzzle hero climb — scoped to the ladder hub. */
+
+.dpl-ladder-hub .dpl-climb-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dpl-ladder-hub .dpl-climb-heading__total {
+  color: color-mix(in srgb, var(--tier-standard) 78%, var(--text-secondary));
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .dpl-climb-track {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: end;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.dpl-ladder-hub .dpl-climb-stage {
+  --dpl-climb-accent: color-mix(in srgb, var(--tier-standard) 68%, #dcecff);
+  --dpl-climb-rise: 7px;
+
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: calc(124px + var(--dpl-climb-rise));
+  display: flex;
+  flex-direction: column;
+  padding: 11px 10px 10px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--dpl-climb-accent) 20%, rgba(255, 255, 255, 0.07));
+  border-radius: 12px;
+  background: rgba(7, 12, 21, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 10px 22px rgba(0, 0, 0, 0.17);
+  transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.dpl-ladder-hub .dpl-climb-stage:nth-child(2) { --dpl-climb-rise: 14px; }
+.dpl-ladder-hub .dpl-climb-stage:nth-child(3) { --dpl-climb-rise: 21px; }
+.dpl-ladder-hub .dpl-climb-stage:nth-child(4) { --dpl-climb-rise: 28px; }
+.dpl-ladder-hub .dpl-climb-stage:nth-child(5) { --dpl-climb-rise: 35px; }
+
+.dpl-ladder-hub .dpl-climb-stage:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 21px;
+  right: -12px;
+  width: 15px;
+  height: 1px;
+  background: color-mix(in srgb, var(--tier-standard) 30%, rgba(255, 255, 255, 0.1));
+  transform: rotate(-26deg);
+  transform-origin: center;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__topline {
+  min-height: 25px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__node {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--dpl-climb-accent) 56%, transparent);
+  border-radius: 50%;
+  background: rgba(8, 16, 28, 0.98);
+  color: color-mix(in srgb, var(--dpl-climb-accent) 88%, white);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 900;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--dpl-climb-accent) 13%, transparent);
+}
+
+.dpl-ladder-hub .dpl-climb-stage__code,
+.dpl-ladder-hub .dpl-climb-stage__finale,
+.dpl-ladder-hub .dpl-climb-stage__eyebrow,
+.dpl-ladder-hub .dpl-climb-stage__status,
+.dpl-ladder-hub .dpl-climb-stage__unlock {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__code {
+  color: color-mix(in srgb, var(--dpl-climb-accent) 72%, var(--text-dim));
+  font-size: 9px;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__finale {
+  margin-left: auto;
+  color: #e4b759;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__eyebrow {
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__title {
+  margin: 2px 0 7px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(14px, 1.08vw, 16px);
+  font-weight: 850;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__stakes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__stakes span {
+  min-width: 0;
+  padding: 3px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__stakes span:last-child {
+  border-color: color-mix(in srgb, var(--dpl-climb-accent) 18%, rgba(255, 255, 255, 0.07));
+  color: color-mix(in srgb, var(--dpl-climb-accent) 68%, var(--text-secondary));
+}
+
+.dpl-ladder-hub .dpl-climb-stage__status {
+  min-height: 15px;
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: color-mix(in srgb, var(--text-secondary) 72%, var(--text-dim));
+  font-size: 9px;
+  line-height: 1;
+}
+
+.dpl-ladder-hub .dpl-climb-stage__lock {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  color: var(--text-dim);
+}
+
+.dpl-ladder-hub .dpl-climb-stage__pulse {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--tier-standard);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tier-standard) 64%, transparent);
+}
+
+.dpl-ladder-hub .dpl-climb-stage__unlock {
+  margin-top: 3px;
+  color: color-mix(in srgb, var(--text-dim) 78%, transparent);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.dpl-ladder-hub .dpl-climb-stage--active {
+  border-color: color-mix(in srgb, var(--tier-standard) 72%, white 8%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tier-standard) 16%, transparent),
+    0 0 24px color-mix(in srgb, var(--tier-standard) 13%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dpl-ladder-hub .dpl-climb-stage--active .dpl-climb-stage__status {
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+}
+
+.dpl-ladder-hub .dpl-climb-stage--done {
+  border-color: color-mix(in srgb, var(--tier-standard) 38%, rgba(255, 255, 255, 0.08));
+  background: rgba(7, 15, 25, 0.94);
+}
+
+.dpl-ladder-hub .dpl-climb-stage--done .dpl-climb-stage__status {
+  color: color-mix(in srgb, var(--tier-standard) 72%, var(--text-secondary));
+}
+
+.dpl-ladder-hub .dpl-climb-stage--locked {
+  --dpl-climb-accent: #8b97a9;
+
+  opacity: 0.72;
+}
+
+.dpl-ladder-hub .dpl-climb-stage--idle {
+  opacity: 0.86;
+}
+
+.dpl-ladder-hub .dpl-climb-stage--finale {
+  --dpl-climb-accent: #e4b759;
+
+  border-color: rgba(228, 183, 89, 0.44);
+  background: rgba(17, 16, 14, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(228, 183, 89, 0.07),
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 230, 170, 0.08);
+}
+
+.dpl-ladder-hub .dpl-climb-stage--finale .dpl-climb-stage__title {
+  color: #f4e8c8;
+}
+
+.dpl-ladder-hub .dpl-climb-stage--finale.dpl-climb-stage--locked {
+  opacity: 0.78;
+}
+
+@media (max-width: 1280px) {
+  .dpl-ladder-hub .dpl-climb-track {
+    gap: 6px;
+  }
+
+  .dpl-ladder-hub .dpl-climb-stage {
+    min-height: calc(116px + var(--dpl-climb-rise));
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .dpl-ladder-hub .dpl-climb-stage__finale {
+    display: none;
+  }
+}
+
+@media (min-width: 1101px) and (max-width: 1280px) {
+  .dpl-ladder-hub.daily-puzzle-root .df-pvf-overview-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dpl-ladder-hub.daily-puzzle-root .df-pvf-summary-strip {
+    display: flex;
+  }
+
+  .dpl-ladder-hub.daily-puzzle-root .df-pvf-summary-divider {
+    display: block;
+  }
+
+  .dpl-ladder-hub.daily-puzzle-root .df-pvf-summary-item {
+    border: 0;
+    background: transparent;
+  }
+}
+
+@media (max-width: 1100px) {
+  .dpl-ladder-hub .dpl-climb-track {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 5px;
+  }
+}
+
+@media (max-width: 720px) {
+  .dpl-ladder-hub .dpl-climb-heading__total {
+    display: none;
+  }
+
+  .dpl-ladder-hub .dpl-climb-stage {
+    min-height: 126px;
+  }
+
+  .dpl-ladder-hub .dpl-climb-stage:not(:last-child)::after {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dpl-ladder-hub .dpl-climb-stage {
+    transition: none;
+  }
+}

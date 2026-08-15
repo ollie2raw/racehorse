@@ -28,6 +28,8 @@ export type HandOverModalProps = {
   progressTransitionMs?: number;
   footer?: ReactNode;
   learningRecap?: ReactNode;
+  /** Extra card class — e.g. daily-fritz portal tone */
+  cardClassName?: string;
 };
 
 function handOverRewardCardStyle(accentColor: string): CSSProperties {
@@ -126,6 +128,7 @@ export function HandOverModal({
   progressTransitionMs,
   footer,
   learningRecap,
+  cardClassName,
 }: HandOverModalProps) {
   const panelStyle = { '--pvf-dynamic-color': HAND_OVER_ACCENT } as CSSProperties;
   const showAutoAdvance = typeof progress === 'number';
@@ -163,7 +166,7 @@ export function HandOverModal({
       aria-labelledby="hand-over-modal-title"
     >
       <div
-        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide} tier-elite`}
+        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide} tier-elite${cardClassName ? ` ${cardClassName}` : ''}`}
         style={panelStyle}
         onClick={(event) => event.stopPropagation()}
       >

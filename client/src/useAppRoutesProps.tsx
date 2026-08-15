@@ -53,7 +53,7 @@ export type UseAppRoutesPropsSource = {
 
 export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesProps {
   const { host, routeBundles } = source;
-  const { navigation, auth, learn, botMatch, ghost, social, homeOverlays, tournament, multiplayerRoute } =
+  const { navigation, auth, learn, botMatch, ghost, social, homeOverlays, tournament, multiplayerRoute, stakes } =
     routeBundles;
 
   const appRootClassName = 'app large-mode';
@@ -69,10 +69,10 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
     }
   }, []);
 
-  const handleOpenAuthModal = useCallback(() => auth.setAuthModalOpen(true), [auth.setAuthModalOpen]);
+  const handleOpenAuthModal = useCallback(() => auth.setAuthModalOpen(true), [auth]);
   const handleOpenAccountModal = useCallback(
     () => auth.setUsernameModalOpen(true),
-    [auth.setUsernameModalOpen],
+    [auth],
   );
 
   const multiplayerConnectionBundle = useMemo(
@@ -265,6 +265,8 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       source.handReveal,
       source.handRevealAutoProgress,
       source.flyingTiles,
+      source.preGameDraw,
+      source.onPregameTileTap,
       source.canUseRematch,
       source.rematchRequested,
       source.rematchWaitingText,
@@ -373,5 +375,6 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       multiplayerModeViewProps,
     },
     tournament,
+    stakes,
   };
 }

@@ -1,0 +1,483 @@
+/* Daily Puzzle climb result moments. Scoped so shared result overlays stay unchanged. */
+
+.dpl-climb-result.rh-result {
+  width: min(680px, calc(100vw - 32px));
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 24%, rgba(255, 255, 255, 0.08));
+  border-radius: 20px;
+  background: #080d16;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(255, 255, 255, 0.025),
+    0 0 38px color-mix(in srgb, var(--tier-standard) 9%, transparent);
+}
+
+.dpl-climb-result .dpl-climb-result__header {
+  padding: 24px 26px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0a111d;
+}
+
+.dpl-climb-result__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dpl-climb-result__eyebrow,
+.dpl-climb-result__stage-count,
+.dpl-climb-result__performance,
+.dpl-climb-result__score span,
+.dpl-climb-result__score small,
+.dpl-climb-result__summary span,
+.dpl-climb-result__breakdown span {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dpl-climb-result__eyebrow {
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+  font-size: 11px;
+}
+
+.dpl-climb-result__stage-count {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.dpl-climb-result__rail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin: 18px 0 22px;
+}
+
+.dpl-climb-result__rail::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 8%;
+  left: 8%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.dpl-climb-result__rail-step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.dpl-climb-result__rail-step > span {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  background: #0a111d;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.dpl-climb-result__rail-step small {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.dpl-climb-result__rail-step.is-reached > span {
+  border-color: color-mix(in srgb, var(--tier-standard) 68%, white 8%);
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tier-standard) 18%, transparent);
+}
+
+.dpl-climb-result__rail-step.is-reached small {
+  color: color-mix(in srgb, var(--tier-standard) 68%, var(--text-secondary));
+}
+
+.dpl-climb-result__rail-step.is-current > span {
+  border-color: color-mix(in srgb, var(--tier-standard) 68%, white 8%);
+  background: color-mix(in srgb, var(--tier-standard) 16%, #0a111d);
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tier-standard) 18%, transparent);
+}
+
+.dpl-climb-result__rail-step.is-summit > span {
+  border-color: rgba(228, 183, 89, 0.5);
+}
+
+.dpl-climb-result__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 28px;
+}
+
+.dpl-climb-result__performance {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.dpl-climb-result__identity h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.dpl-climb-result__identity p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.dpl-climb-result__score {
+  min-width: 116px;
+  display: grid;
+  justify-items: end;
+}
+
+.dpl-climb-result__score strong {
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+  font-family: var(--font-display);
+  font-size: clamp(52px, 8vw, 74px);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 0.82;
+  text-shadow: 0 0 34px color-mix(in srgb, var(--tier-standard) 18%, transparent);
+}
+
+.dpl-climb-result__score span {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.dpl-climb-result__score small {
+  margin-top: 4px;
+  color: var(--text-dim);
+  font-size: 8px;
+}
+
+.dpl-climb-result__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #080d16;
+}
+
+.dpl-climb-result__summary > div {
+  min-width: 0;
+  padding: 16px 20px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dpl-climb-result__summary > div:last-child {
+  border-right: 0;
+}
+
+.dpl-climb-result__summary span {
+  display: block;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.dpl-climb-result__summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.dpl-climb-result--summit.rh-result {
+  border-color: rgba(228, 183, 89, 0.35);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(228, 183, 89, 0.06),
+    0 0 42px rgba(228, 183, 89, 0.08);
+}
+
+.dpl-climb-result--summit .dpl-climb-result__header {
+  background: #11100e;
+}
+
+.dpl-climb-result--summit .dpl-climb-result__eyebrow,
+.dpl-climb-result__stage-count--summit,
+.dpl-climb-result--summit .dpl-climb-result__score strong {
+  color: #e4b759;
+}
+
+.dpl-climb-result--summit .dpl-climb-result__rail-step > span {
+  background: #11100e;
+}
+
+.dpl-climb-result--summit .dpl-climb-result__rail-step.is-summit > span {
+  color: #e4b759;
+  box-shadow: 0 0 16px rgba(228, 183, 89, 0.16);
+}
+
+.dpl-climb-result__breakdown {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+
+.dpl-climb-result__breakdown > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dpl-climb-result__breakdown span {
+  color: var(--text-dim);
+  font-size: 8px;
+}
+
+.dpl-climb-result__breakdown strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.dpl-climb-result__breakdown > div.is-summit {
+  border-color: rgba(228, 183, 89, 0.3);
+}
+
+.dpl-climb-result__breakdown > div.is-summit span,
+.dpl-climb-result__breakdown > div.is-summit strong {
+  color: #e4b759;
+}
+
+.dpl-climb-result--summit .dpl-ladder-result__actions--with-share {
+  padding-top: 14px;
+}
+
+.dpl-climb-result--practice .dpl-climb-result__header {
+  background: #09111d;
+}
+
+.dpl-climb-result--practice .dpl-climb-result__identity p {
+  max-width: 28rem;
+}
+
+.dpl-climb-status.rh-result {
+  width: min(430px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 30px;
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 24%, rgba(255, 255, 255, 0.08));
+  border-radius: 18px;
+  background: #09101a;
+  text-align: center;
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.55),
+    0 0 30px color-mix(in srgb, var(--tier-standard) 8%, transparent);
+}
+
+.dpl-climb-status__mark {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 10px);
+  justify-content: center;
+  gap: 7px;
+  margin: 0 auto 22px;
+}
+
+.dpl-climb-status__mark::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: calc(50% - 30px);
+  left: calc(50% - 30px);
+  height: 1px;
+  background: color-mix(in srgb, var(--tier-standard) 28%, rgba(255, 255, 255, 0.08));
+}
+
+.dpl-climb-status__mark span {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 48%, transparent);
+  border-radius: 50%;
+  background: #09101a;
+  animation: dpl-climb-status-pulse 1.4s ease-in-out infinite;
+}
+
+.dpl-climb-status__mark span:nth-child(2) { animation-delay: 100ms; }
+.dpl-climb-status__mark span:nth-child(3) { animation-delay: 200ms; }
+.dpl-climb-status__mark span:nth-child(4) { animation-delay: 300ms; }
+.dpl-climb-status__mark span:nth-child(5) {
+  border-color: rgba(228, 183, 89, 0.5);
+  animation-delay: 400ms;
+}
+
+@keyframes dpl-climb-status-pulse {
+  0%, 100% {
+    background: #09101a;
+    box-shadow: none;
+  }
+
+  50% {
+    background: var(--tier-standard);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tier-standard) 38%, transparent);
+  }
+}
+
+.dpl-climb-status__eyebrow,
+.dpl-climb-status__trust {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dpl-climb-status__eyebrow {
+  color: color-mix(in srgb, var(--tier-standard) 88%, white);
+  font-size: 10px;
+}
+
+.dpl-climb-status h2 {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.dpl-climb-status p {
+  margin: 12px auto 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.dpl-climb-status__trust {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--text-dim);
+  font-size: 8px;
+}
+
+.dpl-climb-status--error.rh-result {
+  border-color: rgba(204, 91, 102, 0.38);
+}
+
+.dpl-climb-status__alert-mark {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  border: 1px solid rgba(204, 91, 102, 0.5);
+  border-radius: 50%;
+  background: rgba(204, 91, 102, 0.08);
+  color: #e58d96;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.dpl-climb-status--error .dpl-climb-status__eyebrow {
+  color: #e58d96;
+}
+
+.dpl-climb-status__actions {
+  margin-top: 22px;
+}
+
+.dpl-climb-status__actions .dpl-ladder-result-btn {
+  width: 100%;
+}
+
+.dpl-ladder-result-btn:focus-visible,
+.dpl-ladder-share-result-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tier-standard) 72%, white);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .dpl-climb-result .dpl-climb-result__header {
+    padding: 20px 18px;
+  }
+
+  .dpl-climb-result__rail {
+    gap: 6px;
+    margin: 16px 0 20px;
+  }
+
+  .dpl-climb-result__hero {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 18px;
+  }
+
+  .dpl-climb-result__score {
+    justify-items: start;
+  }
+
+  .dpl-climb-result__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .dpl-climb-result__summary > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .dpl-climb-result__summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .dpl-climb-result__breakdown {
+    grid-template-columns: repeat(5, minmax(46px, 1fr));
+    overflow-x: auto;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .dpl-climb-result__breakdown > div {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dpl-climb-result.rh-result {
+    animation: none;
+  }
+
+  .dpl-climb-status__mark span {
+    animation: none;
+  }
+}

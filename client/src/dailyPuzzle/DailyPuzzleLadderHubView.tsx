@@ -15,6 +15,7 @@ import {
 import { formatDateLabel, getLadderPuzzleCardState } from './ladderHelpers';
 import type { LadderSlotRowViewModel } from './ladderSlotRowViewModel';
 import type { DailyPuzzleSlotIndex } from './types';
+import './dailyPuzzleClimb.css';
 
 export type LadderHubLabels = {
   showNav: boolean;
@@ -234,52 +235,67 @@ export function DailyPuzzleLadderHubView({
               </div>
 
               <div className="df-pvf-section">
-                <div className="fritz-section-label">2. LADDER PROGRESS</div>
-                <div className="df-pvf-progress-grid" role="list" aria-label="Ladder progress">
+                <div className="dpl-climb-heading">
+                  <div className="fritz-section-label">2. FIVE-STAGE CLIMB</div>
+                  <span className="dpl-climb-heading__total">{ladderTotalPoints} PTS AT THE SUMMIT</span>
+                </div>
+                <div className="dpl-climb-track" role="list" aria-label="Five-stage Daily Climb">
                   {ladderSlotRows.map((row) => {
                     const cardState = getLadderPuzzleCardState(row);
-                    const cardClass =
-                      cardState === 'done'
-                        ? 'dpl-puzzle-card--done'
-                        : cardState === 'idle'
-                          ? 'dpl-puzzle-card--idle'
-                          : `df-game-card--${cardState}`;
-                    const hintLine = row.slotResult
-                      ? `${row.slotResult.awardedPoints} pts awarded`
-                      : row.unlockHint ??
-                        (row.slot?.slotMaxPoints != null ? `Up to ${row.slot.slotMaxPoints} pts` : null);
+                    const tileCount = row.slot?.startingHand?.length;
+                    const tileLabel = tileCount == null
+                      ? 'Daily deal'
+                      : `${tileCount} tile${tileCount === 1 ? '' : 's'}`;
+                    const pointLabel = row.slot?.slotMaxPoints != null
+                      ? `${row.slot.slotMaxPoints} pts`
+                      : 'Points pending';
+                    const stateLabel = cardState === 'locked'
+                      ? 'Locked'
+                      : cardState === 'done'
+                        ? `${row.slotResult?.awardedPoints ?? 0} pts earned`
+                        : cardState === 'active'
+                          ? 'Play now'
+                          : 'Up next';
+                    const isFinale = row.slotIndex === 5;
 
                     return (
                       <article
                         key={row.slotIndex}
                         role="listitem"
-                        className={['df-pvf-progress-card', 'df-game-card', cardClass].filter(Boolean).join(' ')}
+                        aria-label={`${row.step.title}: ${stateLabel}`}
+                        className={[
+                          'dpl-climb-stage',
+                          `dpl-climb-stage--${cardState}`,
+                          isFinale ? 'dpl-climb-stage--finale' : '',
+                        ].filter(Boolean).join(' ')}
                       >
-                        <div className="df-pvf-progress-index" aria-hidden>
-                          {row.slotIndex}
+                        <div className="dpl-climb-stage__topline">
+                          <span className="dpl-climb-stage__node" aria-hidden>
+                            {cardState === 'done' ? '✓' : row.slotIndex}
+                          </span>
+                          <span className="dpl-climb-stage__code">P{row.slotIndex}</span>
+                          {isFinale ? <span className="dpl-climb-stage__finale">CROWN STAGE</span> : null}
                         </div>
-                        <div className="df-pvf-progress-body">
-                          <span className="df-pvf-progress-eyebrow">{row.step.subtitle}</span>
-                          <h3 className="df-pvf-progress-title">{row.step.title}</h3>
-                          <p className="df-pvf-progress-status">{row.statusSub}</p>
-                          {hintLine ? <p className="df-pvf-progress-hint">{hintLine}</p> : null}
-                          <div className="df-pvf-progress-footer">
-                            <span className="df-pvf-progress-meta">
-                              {cardState === 'locked'
-                                ? 'Locked'
-                                : cardState === 'done'
-                                  ? 'Completed'
-                                  : cardState === 'active'
-                                    ? 'Available now'
-                                    : 'Up next'}
+                        <span className="dpl-climb-stage__eyebrow">{row.step.subtitle}</span>
+                        <h3 className="dpl-climb-stage__title">{row.step.title}</h3>
+                        <div className="dpl-climb-stage__stakes" aria-label={`${tileLabel}, ${pointLabel}`}>
+                          <span>{tileLabel}</span>
+                          <span>{pointLabel}</span>
+                        </div>
+                        <div className="dpl-climb-stage__status">
+                          <span>{stateLabel}</span>
+                          {cardState === 'locked' ? (
+                            <span className="dpl-climb-stage__lock" aria-hidden>
+                              <DplIconLock />
                             </span>
-                            {cardState === 'locked' ? (
-                              <span className="df-pvf-progress-lock" aria-hidden>
-                                <DplIconLock />
-                              </span>
-                            ) : null}
-                          </div>
+                          ) : null}
+                          {cardState === 'active' ? (
+                            <span className="dpl-climb-stage__pulse" aria-hidden />
+                          ) : null}
                         </div>
+                        {row.unlockHint ? (
+                          <span className="dpl-climb-stage__unlock">After P{row.slotIndex - 1}</span>
+                        ) : null}
                       </article>
                     );
                   })}

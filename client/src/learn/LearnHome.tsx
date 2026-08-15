@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type MouseEvent } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import { GlobalNav } from '../components';
+import { Button } from '../components/primitives';
 import type { AppMode } from '../types';
 import '../screens/RacehorseHomeArt.css';
 import '../screens/SinglePlayerModes.css';
@@ -26,6 +27,7 @@ import {
   validateGuidedMatchCandidate,
   type GuidedMatchCandidateValidationIssue,
 } from './guidedMatch/guidedMatchCandidateValidation';
+import labScientistArt from '../assets/singlePlayerHub/fritzScientistLab.png';
 const themeVars = {
   '--rh-bg': '#050911',
   '--rh-panel': '#09101A',
@@ -47,7 +49,7 @@ const LockIcon = () => (
   </svg>
 );
 
-type LearnCardAction = 'guided' | 'howToPlay';
+type LearnCardAction = 'guided' | 'howToPlay' | 'noBrainer';
 
 type LearnModeCard = {
   id: string;
@@ -91,6 +93,20 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     ctaLabel: 'Play',
   },
   {
+    id: 'lab',
+    unlocked: true,
+    containerClass: 'sp-lab-mode-card-container learn-lab-card-container',
+    sectionRounded: 'rounded-[20px] rounded-br-[5px]',
+    title: 'The Lab',
+    titleColor: '#C77DFF',
+    desc: 'A “no brainer” is a hand you can clear all seven tiles in one turn. This mode lets you practice chaining tiles together until those finishes feel automatic.',
+    badges: ['NO-BRAINER COMBOS', 'ONE-TURN CLEARS'],
+    variant: 'tier-master',
+    chevronColor: '#E9D5FF',
+    action: 'noBrainer',
+    ctaLabel: 'Play',
+  },
+  {
     id: 'library',
     unlocked: false,
     containerClass: 'learn-library-card-container',
@@ -98,15 +114,6 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     title: 'Lesson Library',
     titleColor: '#34D399',
     desc: 'Short focused lessons on strategy and scoring.',
-  },
-  {
-    id: 'drills',
-    unlocked: false,
-    containerClass: 'learn-drills-card-container',
-    sectionRounded: 'rounded-[20px] rounded-br-[5px]',
-    title: 'Position Drills',
-    titleColor: '#22D3EE',
-    desc: 'Find the best move from real board positions.',
   },
 ];
 
@@ -312,6 +319,10 @@ export default function LearnHome({
       onOpenHowToPlay?.();
       return;
     }
+    if (mode.action === 'noBrainer') {
+      onNavigate?.('noBrainer');
+      return;
+    }
     if (mode.action === 'guided') {
       const start = resolveGuidedMatchStart();
       if (!start.route) {
@@ -364,18 +375,24 @@ export default function LearnHome({
               aria-hidden="true"
             />
 
-            <button type="button" className="pvf-back-btn learn-hub-back" onClick={onBack}>
+            <Button
+              variant="ghost"
+              className="absolute left-14 top-10 z-20 rh-back-button"
+              onClick={onBack}
+              type="button"
+              aria-label="Back to Home"
+            >
               ← Back to Home
-            </button>
+            </Button>
 
             <div className="relative z-10 text-center">
               <h1
-                className="text-[64px] font-black leading-[0.9] tracking-[-0.03em] text-[var(--rh-text)]"
+                className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
                 style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}
               >
                 Learn
               </h1>
-              <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">
+              <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
                 Coach-led practice modes to sharpen your Racehorse strategy.
               </p>
               {guidedV2StartError ? (
@@ -385,7 +402,7 @@ export default function LearnHome({
               ) : null}
             </div>
 
-            <div className="relative z-10 mt-[42px] learn-hub-grid--modes min-h-0 w-full flex-1 px-14 pb-2">
+            <div className="relative z-10 mt-[42px] learn-hub-grid--modes rh-mode-card-grid min-h-0 w-full flex-1 px-14 pb-2">
               {LEARN_MODE_CARDS.map((mode) => {
                 const isLocked =
                   mode.id === 'howToPlay'
@@ -411,6 +428,16 @@ export default function LearnHome({
                       className={`sp-solo-mode-card__art-slot learn-art-slice learn-art-slice--${mode.id}`}
                       aria-hidden
                     />
+                    {mode.id === 'lab' ? (
+                      <img
+                        src={labScientistArt}
+                        alt=""
+                        className="learn-lab-scientist"
+                        draggable={false}
+                        decoding="async"
+                        aria-hidden
+                      />
+                    ) : null}
                     <div className="learn-mode-card__art-tint" aria-hidden="true" />
                     <div className="home-card-scrim learn-mode-card__read-scrim" aria-hidden="true" />
                     <div className="learn-mode-card__bottom-vignette" aria-hidden="true" />
@@ -448,7 +475,7 @@ export default function LearnHome({
                         ) : mode.action === 'howToPlay' ? (
                           <button
                             type="button"
-                            className="pvf-start-btn learn-mode-card__rules-cta"
+                            className="pvf-start-btn learn-mode-card__rules-cta rh-mode-card__cta"
                             onClick={(e: MouseEvent) => {
                               e.stopPropagation();
                               onOpenHowToPlay?.();
@@ -460,10 +487,25 @@ export default function LearnHome({
                               ›
                             </span>
                           </button>
+                        ) : mode.action === 'noBrainer' ? (
+                          <button
+                            type="button"
+                            className="pvf-start-btn learn-mode-card__play learn-mode-card__lab-cta rh-mode-card__cta"
+                            onClick={(e: MouseEvent) => {
+                              e.stopPropagation();
+                              handleLearnCardActivate(mode);
+                            }}
+                            disabled={!onNavigate}
+                          >
+                            <span>{mode.ctaLabel ?? 'Play'}</span>
+                            <span className="pvf-start-arrow" aria-hidden="true">
+                              ›
+                            </span>
+                          </button>
                         ) : (
                           <button
                             type="button"
-                            className="pvf-start-btn learn-mode-card__play"
+                            className="pvf-start-btn learn-mode-card__play rh-mode-card__cta"
                             onClick={(e: MouseEvent) => {
                               e.stopPropagation();
                               handleLearnCardActivate({ ...mode, action: 'guided' });

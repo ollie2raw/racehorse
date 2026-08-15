@@ -1,0 +1,1612 @@
+.fritz-challenge-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 5, 12, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.pvf-challenge-launch {
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  border: 1px solid rgba(231, 182, 74, 0.3);
+  border-radius: 11px;
+  background: #0a111d;
+  color: #e9d6a1;
+  font: 700 14px/1 var(--font-body);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.pvf-primary-actions {
+  width: 100%;
+  margin-top: auto;
+}
+
+.pvf-primary-actions.has-challenge {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(190px, 1fr);
+  gap: 10px;
+}
+
+.pvf-root--setup .pvf-control-panel .pvf-primary-actions .pvf-start-btn {
+  margin-top: 0;
+}
+
+.pvf-challenge-launch:hover {
+  border-color: rgba(231, 182, 74, 0.62);
+  background: #0d1725;
+  color: #f4dfaa;
+}
+
+.fritz-challenge-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: hidden;
+  padding: 34px;
+  border: 1px solid rgba(231, 182, 74, 0.34);
+  border-radius: 20px;
+  background: #070c16;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #f2eee8;
+}
+
+.fritz-challenge-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: #0c1421;
+  color: #aab3c2;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.fritz-challenge-eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  color: #e7b64a;
+  font: 700 11px/1.2 var(--font-body);
+  letter-spacing: 0.22em;
+}
+
+.fritz-challenge-dialog h2 {
+  max-width: none;
+  margin: 0;
+  color: #f7f4ee;
+  font: 800 clamp(28px, 4vw, 40px)/1.02 var(--font-display);
+}
+
+.fritz-challenge-intro {
+  max-width: 470px;
+  margin: 14px 0 24px;
+  color: #9ca6b5;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.fritz-challenge-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.fritz-challenge-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #0a111d;
+}
+
+.fritz-challenge-summary span,
+.fritz-challenge-code span {
+  color: #737f90;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-summary strong {
+  color: #f2eee8;
+  font-size: 15px;
+}
+
+.fritz-challenge-recipient-picker {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+  min-height: 0;
+}
+
+.fritz-challenge-recipient-picker > span {
+  color: #737f90;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.fritz-challenge-friend-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  max-height: min(238px, 28dvh);
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(231, 182, 74, 0.58) #0a111d;
+  scrollbar-width: thin;
+}
+
+.fritz-challenge-friend-list > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: #0a111d;
+  color: #f2eee8;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fritz-challenge-friend-list > button.is-selected {
+  border-color: rgba(231, 182, 74, 0.8);
+  box-shadow: inset 3px 0 0 #e7b64a;
+}
+
+.fritz-challenge-friend-list strong { font-size: 14px; }
+.fritz-challenge-friend-list button span { color: #96a3b4; font-size: 12px; }
+
+.fritz-challenge-batch-success {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid rgba(74, 222, 128, 0.24);
+  border-radius: 14px;
+  background: rgba(74, 222, 128, 0.06);
+}
+
+.fritz-challenge-batch-success > strong {
+  color: #d9ffe5;
+  font-size: 16px;
+}
+
+.fritz-challenge-batch-success > span {
+  color: #9db3a4;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.fritz-challenge-batch-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(238px, 28dvh);
+  margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(74, 222, 128, 0.5) #0a111d;
+  scrollbar-width: thin;
+}
+
+.fritz-challenge-batch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #0a111d;
+}
+
+.fritz-challenge-batch-item > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fritz-challenge-batch-item strong { color: #f2eee8; font-size: 14px; }
+.fritz-challenge-batch-item span { color: #96a3b4; font-size: 11px; }
+
+.fritz-challenge-batch-item button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 8px;
+  background: #102018;
+  color: #d9ffe5;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fritz-challenge-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(231, 182, 74, 0.28);
+  border-radius: 14px;
+  background: #0c111b;
+}
+
+.fritz-challenge-code strong {
+  color: #e7b64a;
+  font: 800 24px/1 var(--font-display);
+  letter-spacing: 0.14em;
+}
+
+.fritz-challenge-primary {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid #e7b64a;
+  border-radius: 12px;
+  background: #e7b64a;
+  color: #07101b;
+  font: 800 16px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.fritz-challenge-primary:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.fritz-challenge-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.fritz-challenge-actions button {
+  min-height: 44px;
+  border: 1px solid rgba(78, 159, 255, 0.28);
+  border-radius: 11px;
+  background: #0b1524;
+  color: #dfeaff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fritz-challenge-ready,
+.fritz-challenge-state,
+.fritz-challenge-error {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.fritz-challenge-ready {
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  background: rgba(74, 222, 128, 0.06);
+}
+
+.fritz-challenge-ready span,
+.fritz-challenge-state {
+  color: #96a3b4;
+  font-size: 13px;
+}
+
+.fritz-challenge-error {
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.07);
+  color: #fca5a5;
+}
+
+.fritz-challenge-room {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  background: #030812;
+  color: #f2eee8;
+}
+
+.fritz-challenge-room__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(1440px, calc(100% - 64px));
+  min-height: 0;
+  margin: 0 auto;
+  padding: clamp(24px, 3vh, 38px) 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: clamp(22px, 2.8vh, 34px);
+  overflow: hidden;
+}
+
+.fritz-challenge-room__header {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(420px, 1.6fr) minmax(210px, 0.7fr);
+  align-items: end;
+  gap: 28px;
+  flex: 0 0 auto;
+}
+
+.fritz-challenge-room__back {
+  align-self: start;
+  justify-self: start;
+}
+
+.fritz-challenge-room__heading h1 {
+  margin: 0;
+  color: #f7f4ee;
+  font: 800 clamp(38px, 4.4vw, 64px)/0.98 var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+.fritz-challenge-room__heading p {
+  margin: 12px 0 0;
+  color: #9ca6b5;
+  font: 500 clamp(14px, 1.2vw, 17px)/1.4 var(--font-body);
+}
+
+.fritz-challenge-room__code {
+  display: flex;
+  min-height: 74px;
+  padding: 15px 18px;
+  border: 1px solid rgba(231, 182, 74, 0.28);
+  border-radius: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #09101b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.fritz-challenge-room__code span,
+.fritz-challenge-room__kicker {
+  color: #7f8a9a;
+  font: 800 10px/1.2 var(--font-body);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-room__code strong {
+  color: #e7b64a;
+  font: 800 21px/1 var(--font-display);
+  letter-spacing: 0.13em;
+}
+
+.fritz-challenge-room__board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.78fr);
+  min-height: 520px;
+  max-height: 640px;
+  flex: 1 1 640px;
+  gap: 16px;
+}
+
+.fritz-challenge-room__main,
+.fritz-challenge-room__side,
+.fritz-challenge-room__loading {
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 22px;
+  background: #070d17;
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.fritz-challenge-room__main,
+.fritz-challenge-room__side {
+  display: flex;
+  padding: clamp(22px, 2.4vw, 34px);
+  flex-direction: column;
+}
+
+.fritz-challenge-room__side {
+  border-color: rgba(231, 182, 74, 0.2);
+}
+
+.fritz-challenge-room__panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.fritz-challenge-room__panel-head h2 {
+  margin: 8px 0 0;
+  color: #f4f0e9;
+  font: 750 clamp(20px, 1.8vw, 28px)/1.08 var(--font-display);
+}
+
+.fritz-challenge-room__status {
+  padding: 8px 11px;
+  border: 1px solid rgba(74, 222, 128, 0.24);
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.06);
+  color: #7ee2a1;
+  font: 800 10px/1 var(--font-body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-room__status:not(.is-open):not(.is-active) {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #0b1320;
+  color: #9ca6b5;
+}
+
+.fritz-challenge-room__games {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: clamp(24px, 4vh, 44px) 0;
+}
+
+.fritz-challenge-room__game {
+  position: relative;
+  display: flex;
+  min-height: 150px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: #0a111d;
+  overflow: hidden;
+}
+
+.fritz-challenge-room__game::before {
+  position: absolute;
+  top: 16px;
+  right: 17px;
+  width: 28px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  content: '';
+  opacity: 0.54;
+}
+
+.fritz-challenge-room__game::after {
+  position: absolute;
+  top: 36px;
+  right: 17px;
+  width: 28px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  content: '';
+}
+
+.fritz-challenge-room__game.is-next {
+  border-color: rgba(231, 182, 74, 0.36);
+  background: #0d121b;
+  box-shadow: inset 3px 0 0 #e7b64a;
+}
+
+.fritz-challenge-room__game > span {
+  margin-bottom: 8px;
+  color: #e7b64a;
+  font: 800 10px/1 var(--font-body);
+  letter-spacing: 0.16em;
+}
+
+.fritz-challenge-room__game strong {
+  color: #f4f0e9;
+  font: 750 19px/1.1 var(--font-body);
+}
+
+.fritz-challenge-room__game small {
+  margin-top: 6px;
+  color: #7f8a9a;
+  font: 500 12px/1.3 var(--font-body);
+}
+
+.fritz-challenge-room__settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  background: #09101a;
+}
+
+.fritz-challenge-room__fair-play {
+  display: flex;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(78, 159, 255, 0.17);
+  border-radius: 13px;
+  align-items: center;
+  gap: 16px;
+  background: #081321;
+}
+
+.fritz-challenge-room__fair-play > span {
+  flex: 0 0 auto;
+  color: #5da9ff;
+  font: 800 9px/1 var(--font-body);
+  letter-spacing: 0.14em;
+}
+
+.fritz-challenge-room__fair-play div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fritz-challenge-room__fair-play strong {
+  color: #e7edf6;
+  font: 750 12px/1.2 var(--font-body);
+}
+
+.fritz-challenge-room__fair-play small {
+  color: #7e8b9d;
+  font: 500 11px/1.3 var(--font-body);
+}
+
+.fritz-challenge-room__settings > div {
+  display: flex;
+  min-width: 0;
+  padding: 15px 17px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fritz-challenge-room__settings > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fritz-challenge-room__settings span {
+  color: #687486;
+  font: 800 9px/1 var(--font-body);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-room__settings strong {
+  overflow: hidden;
+  color: #e9e5de;
+  font: 700 13px/1.25 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fritz-challenge-room__players {
+  display: flex;
+  margin: 26px 0 18px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fritz-challenge-room__player {
+  display: grid;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: #09101b;
+}
+
+.fritz-challenge-room__avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  place-items: center;
+  color: #8a95a5;
+  font-weight: 800;
+}
+
+.fritz-challenge-room__player.is-ready .fritz-challenge-room__avatar {
+  border-color: rgba(231, 182, 74, 0.46);
+  color: #e7b64a;
+  box-shadow: 0 0 18px rgba(231, 182, 74, 0.1);
+}
+
+.fritz-challenge-room__player div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fritz-challenge-room__player strong {
+  color: #f0ece5;
+  font: 750 14px/1.1 var(--font-body);
+}
+
+.fritz-challenge-room__player small {
+  overflow: hidden;
+  color: #7e8999;
+  font: 500 11px/1.25 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fritz-challenge-room__player-state {
+  color: #727e8e;
+  font: 800 9px/1 var(--font-body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-room__player.is-ready .fritz-challenge-room__player-state {
+  color: #73d99a;
+}
+
+.fritz-challenge-room__secondary {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 10px;
+  border: 1px solid rgba(78, 159, 255, 0.27);
+  border-radius: 12px;
+  background: #0a1422;
+  color: #dce9ff;
+  font: 750 13px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.fritz-challenge-room__secondary--disabled {
+  display: grid;
+  min-height: 44px;
+  place-items: center;
+  color: #8793a5;
+  cursor: default;
+  opacity: 0.82;
+}
+
+.fritz-challenge-room__ready-note {
+  display: flex;
+  margin-top: auto;
+  padding: 16px;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 13px;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.fritz-challenge-room__ready-note strong {
+  color: #e9f5ed;
+  font: 750 13px/1.25 var(--font-body);
+}
+
+.fritz-challenge-room__ready-note span {
+  color: #8fa29a;
+  font: 500 12px/1.45 var(--font-body);
+}
+
+.fritz-challenge-room__steps {
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.fritz-challenge-room__steps ol {
+  display: flex;
+  margin: 14px 0 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+}
+
+.fritz-challenge-room__steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9aa5b4;
+}
+
+.fritz-challenge-room__steps li span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(231, 182, 74, 0.25);
+  border-radius: 50%;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #e7b64a;
+  font: 800 9px/1 var(--font-body);
+}
+
+.fritz-challenge-room__steps li strong {
+  font: 650 12px/1.2 var(--font-body);
+}
+
+.fritz-challenge-room__loading {
+  display: grid;
+  flex: 1 1 0;
+  place-items: center;
+  color: #98a3b3;
+}
+
+.fritz-challenge-room__error {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fritz-challenge-room__error button {
+  border: 0;
+  background: transparent;
+  color: #f6c1c1;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 980px) {
+  .fritz-challenge-room__content {
+    width: min(100% - 32px, 780px);
+    overflow-y: auto;
+  }
+
+  .fritz-challenge-room__header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .fritz-challenge-room__back {
+    grid-column: 1 / -1;
+  }
+
+  .fritz-challenge-room__board {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    max-height: none;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 981px) {
+  .fritz-challenge-room__content {
+    padding: 18px 0;
+    gap: 18px;
+  }
+
+  .fritz-challenge-room__heading h1 {
+    font-size: 42px;
+  }
+
+  .fritz-challenge-room__heading p {
+    margin-top: 8px;
+  }
+
+  .fritz-challenge-room__board {
+    min-height: 430px;
+    max-height: 500px;
+    flex-basis: 500px;
+  }
+
+  .fritz-challenge-room__main,
+  .fritz-challenge-room__side {
+    padding: 20px;
+  }
+
+  .fritz-challenge-room__games {
+    margin: 20px 0;
+  }
+
+  .fritz-challenge-room__game {
+    min-height: 116px;
+  }
+
+  .fritz-challenge-room__steps {
+    padding-top: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .fritz-challenge-dialog {
+    padding: 28px 20px 22px;
+  }
+
+  .fritz-challenge-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .fritz-challenge-code {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pvf-primary-actions.has-challenge {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .pvf-challenge-launch {
+    font-size: 12px;
+  }
+
+  .fritz-challenge-room__content {
+    width: calc(100% - 24px);
+    padding: 16px 0 22px;
+    gap: 18px;
+  }
+
+  .fritz-challenge-room__header {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .fritz-challenge-room__heading h1 {
+    font-size: 38px;
+  }
+
+  .fritz-challenge-room__code {
+    min-height: 62px;
+  }
+
+  .fritz-challenge-room__main,
+  .fritz-challenge-room__side {
+    padding: 20px 16px;
+    border-radius: 18px;
+  }
+
+  .fritz-challenge-room__games {
+    grid-template-columns: 1fr;
+    margin: 22px 0;
+  }
+
+  .fritz-challenge-room__game {
+    min-height: 112px;
+  }
+
+  .fritz-challenge-room__settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fritz-challenge-room__settings > div:nth-child(3) {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 0;
+  }
+
+  .fritz-challenge-room__settings > div:nth-child(4) {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+}
+
+/* Asynchronous challenge hub — mirrors the Daily Fritz setup composition. */
+.fritz-challenge-hub {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1500px, calc(100% - 72px));
+  min-height: 0;
+  margin: 0 auto;
+  padding: clamp(24px, 3vh, 38px) 0;
+  flex: 1 1 0;
+  grid-template-columns: minmax(390px, 0.9fr) minmax(620px, 1.1fr);
+  align-items: stretch;
+  gap: 32px;
+  overflow: hidden;
+}
+
+.fritz-challenge-hub__left {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.fritz-challenge-hub__back {
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+
+.fritz-challenge-hub__header {
+  margin: clamp(22px, 3vh, 34px) 0 22px;
+  flex: 0 0 auto;
+}
+
+.fritz-challenge-hub__header h1 {
+  margin: 0;
+  color: #f7f4ee;
+  font: 800 clamp(40px, 4.2vw, 64px)/0.98 var(--font-display);
+  letter-spacing: -0.028em;
+}
+
+.fritz-challenge-hub__header p {
+  max-width: 560px;
+  margin: 14px 0 0;
+  color: #9ca6b5;
+  font: 500 clamp(14px, 1.15vw, 17px)/1.45 var(--font-body);
+}
+
+.fritz-challenge-hub__hero {
+  position: relative;
+  min-height: 0;
+  border: 1px solid rgba(231, 182, 74, 0.24);
+  border-radius: 22px;
+  flex: 1 1 0;
+  background: #080d16;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  contain: paint;
+  overflow: hidden;
+}
+
+.fritz-challenge-hub__hero > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 57% center;
+  opacity: 0.7;
+}
+
+.fritz-challenge-hub__hero-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 16, 0.42);
+}
+
+.fritz-challenge-hub__hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 310px;
+  padding: clamp(28px, 3vw, 42px);
+}
+
+.fritz-challenge-hub__hero-copy > span {
+  color: #aeb7c5;
+  font: 800 10px/1 var(--font-body);
+  letter-spacing: 0.17em;
+}
+
+.fritz-challenge-hub__hero-copy h2 {
+  margin: 12px 0 10px;
+  color: #e7b64a;
+  font: 800 clamp(42px, 4vw, 62px)/0.9 var(--font-display);
+}
+
+.fritz-challenge-hub__hero-copy p {
+  margin: 0;
+  color: #d3d8df;
+  font: 550 14px/1.5 var(--font-body);
+}
+
+.fritz-challenge-hub__hero-badges {
+  position: absolute;
+  z-index: 1;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(4, 9, 17, 0.9);
+  overflow: hidden;
+}
+
+.fritz-challenge-hub__hero-badges > div {
+  display: flex;
+  min-width: 0;
+  padding: 14px 15px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fritz-challenge-hub__hero-badges > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fritz-challenge-hub__hero-badges strong {
+  color: #e7b64a;
+  font: 750 11px/1.2 var(--font-body);
+}
+
+.fritz-challenge-hub__hero-badges span {
+  overflow: hidden;
+  color: #8994a4;
+  font: 500 9px/1.3 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fritz-challenge-hub__panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(24px, 2.4vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  flex-direction: column;
+  gap: clamp(20px, 2.3vh, 27px);
+  background: #070c15;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.fritz-challenge-hub__section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fritz-challenge-hub__section--action {
+  margin-top: auto;
+}
+
+.fritz-challenge-hub__section-label {
+  color: #8792a2;
+  font: 800 11px/1 var(--font-display);
+  letter-spacing: 0.18em;
+}
+
+.fritz-challenge-hub__code {
+  display: flex;
+  min-height: 68px;
+  padding: 13px 16px;
+  border: 1px solid rgba(231, 182, 74, 0.3);
+  border-radius: 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: #0a101a;
+}
+
+.fritz-challenge-hub__code > div {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.fritz-challenge-hub__code span,
+.fritz-challenge-hub__details span,
+.fritz-challenge-hub__run-status span {
+  color: #778294;
+  font: 800 9px/1 var(--font-body);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-hub__code strong {
+  color: #e7b64a;
+  font: 800 22px/1 var(--font-display);
+  letter-spacing: 0.14em;
+}
+
+.fritz-challenge-hub__code > span {
+  padding: 7px 10px;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.05);
+  color: #77d99a;
+  white-space: nowrap;
+}
+
+.fritz-challenge-hub__details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  background: #09101a;
+}
+
+.fritz-challenge-hub__details > div {
+  display: flex;
+  min-width: 0;
+  padding: 12px 14px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fritz-challenge-hub__details > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fritz-challenge-hub__details strong {
+  overflow: hidden;
+  color: #ebe7e0;
+  font: 700 12px/1.2 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fritz-challenge-hub__games {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fritz-challenge-hub__game {
+  display: grid;
+  min-height: 118px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  background: #0a111c;
+}
+
+.fritz-challenge-hub__game.is-active {
+  border-color: rgba(231, 182, 74, 0.48);
+  background: #0e131c;
+  box-shadow: inset 0 0 22px rgba(231, 182, 74, 0.05);
+}
+
+.fritz-challenge-hub__game-number {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  place-items: center;
+  color: #778294;
+  font: 800 11px/1 var(--font-body);
+}
+
+.fritz-challenge-hub__game.is-active .fritz-challenge-hub__game-number {
+  border-color: #e7b64a;
+  color: #e7b64a;
+  box-shadow: 0 0 16px rgba(231, 182, 74, 0.12);
+}
+
+.fritz-challenge-hub__game > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.fritz-challenge-hub__game > div > span {
+  margin-bottom: 7px;
+  color: #8a95a5;
+  font: 800 8px/1 var(--font-body);
+  letter-spacing: 0.13em;
+}
+
+.fritz-challenge-hub__game strong {
+  color: #f0ece5;
+  font: 750 13px/1.15 var(--font-body);
+}
+
+.fritz-challenge-hub__game small {
+  margin-top: 5px;
+  color: #758192;
+  font: 500 10px/1.25 var(--font-body);
+}
+
+.fritz-challenge-hub__run-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid rgba(78, 159, 255, 0.18);
+  border-radius: 13px;
+  background: #081321;
+}
+
+.fritz-challenge-hub__run-status > div {
+  display: flex;
+  padding: 13px 15px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fritz-challenge-hub__run-status > div + div {
+  border-left: 1px solid rgba(78, 159, 255, 0.14);
+}
+
+.fritz-challenge-hub__run-status strong {
+  color: #dfe8f4;
+  font: 700 12px/1.2 var(--font-body);
+}
+
+.fritz-challenge-hub__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.8fr);
+  gap: 10px;
+}
+
+.fritz-challenge-hub__actions .fritz-challenge-room__secondary {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .fritz-challenge-hub {
+    width: min(100% - 36px, 820px);
+    padding: 20px 0;
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .fritz-challenge-hub__hero {
+    min-height: 430px;
+    flex: 0 0 430px;
+  }
+
+  .fritz-challenge-hub__panel {
+    overflow: visible;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 1101px) {
+  .fritz-challenge-hub {
+    padding: 18px 0;
+    gap: 30px;
+  }
+
+  .fritz-challenge-hub__header {
+    margin: 14px 0 16px;
+  }
+
+  .fritz-challenge-hub__header h1 {
+    font-size: 42px;
+  }
+
+  .fritz-challenge-hub__panel {
+    padding: 20px 24px;
+    gap: 16px;
+  }
+
+  .fritz-challenge-hub__game {
+    min-height: 100px;
+  }
+}
+
+@media (max-width: 600px) {
+  .fritz-challenge-hub {
+    width: calc(100% - 24px);
+    gap: 18px;
+  }
+
+  .fritz-challenge-hub__header {
+    margin: 18px 0;
+  }
+
+  .fritz-challenge-hub__header h1 {
+    font-size: 40px;
+  }
+
+  .fritz-challenge-hub__hero {
+    min-height: 420px;
+    flex-basis: 420px;
+  }
+
+  .fritz-challenge-hub__hero-copy {
+    padding: 24px;
+  }
+
+  .fritz-challenge-hub__hero-badges,
+  .fritz-challenge-hub__games,
+  .fritz-challenge-hub__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .fritz-challenge-hub__hero-badges > div + div {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 0;
+  }
+
+  .fritz-challenge-hub__panel {
+    padding: 20px 16px;
+  }
+
+  .fritz-challenge-hub__code,
+  .fritz-challenge-hub__code > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fritz-challenge-hub__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fritz-challenge-hub__details > div:nth-child(3) {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 0;
+  }
+
+  .fritz-challenge-hub__details > div:nth-child(4) {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .fritz-challenge-hub__run-status {
+    grid-template-columns: 1fr;
+  }
+
+  .fritz-challenge-hub__run-status > div + div {
+    border-top: 1px solid rgba(78, 159, 255, 0.14);
+    border-left: 0;
+  }
+}
+
+/* Daily Fritz-density right panel. */
+.fritz-challenge-hub__panel {
+  align-self: stretch;
+  min-height: 0;
+  padding: 24px 32px 20px;
+  justify-content: flex-start;
+  gap: 16px;
+  overflow: visible;
+}
+
+.fritz-challenge-hub__section--action {
+  margin-top: 0;
+}
+
+.fritz-challenge-hub__overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fritz-challenge-hub__overview article {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 15px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  background: #0a1019;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.fritz-challenge-hub__overview article.is-highlighted {
+  border: 2px solid #e7b64a;
+  background: #17140f;
+  box-shadow: inset 0 0 24px rgba(231, 182, 74, 0.06);
+}
+
+.fritz-challenge-hub__overview-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  border: 2px solid rgba(231, 182, 74, 0.47);
+  border-radius: 50%;
+  place-items: center;
+  color: #e7b64a;
+}
+
+.fritz-challenge-hub__overview-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fritz-challenge-hub__overview article > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.fritz-challenge-hub__overview strong {
+  color: #f3efe8;
+  font: 750 clamp(14px, 1.15vw, 18px)/1.15 var(--font-body);
+  white-space: nowrap;
+}
+
+.fritz-challenge-hub__overview article:first-child strong {
+  color: #e7b64a;
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.fritz-challenge-hub__overview article:last-child strong {
+  font-size: clamp(13px, 1vw, 16px);
+}
+
+.fritz-challenge-hub__overview article > div > span {
+  color: #737d8c;
+  font: 800 9px/1 var(--font-body);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-hub__game {
+  min-height: 0;
+  padding: 14px 13px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 15px;
+}
+
+.fritz-challenge-hub__game-number {
+  width: 48px;
+  height: 48px;
+  font-size: 14px;
+}
+
+.fritz-challenge-hub__game > div > span {
+  margin: 0 0 6px;
+  font-size: 9px;
+}
+
+.fritz-challenge-hub__game h3 {
+  margin: 0 0 7px;
+  color: #f4f0e9;
+  font: 760 clamp(17px, 1.35vw, 22px)/1.05 var(--font-display);
+}
+
+.fritz-challenge-hub__game strong {
+  color: #dfe6ef;
+  font: 700 15px/1.15 var(--font-body);
+}
+
+.fritz-challenge-hub__game small {
+  margin-top: 9px;
+  font-size: 11px;
+}
+
+.fritz-challenge-hub__game em {
+  margin-top: 10px;
+  color: #6f7988;
+  font: normal 800 9px/1 var(--font-body);
+  letter-spacing: 0.14em;
+}
+
+.fritz-challenge-hub__game.is-active em {
+  color: #e7b64a;
+}
+
+.fritz-challenge-hub__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: #0a1019;
+  overflow: hidden;
+}
+
+.fritz-challenge-hub__summary > div {
+  display: grid;
+  min-width: 0;
+  padding: 10px 12px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.fritz-challenge-hub__summary > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fritz-challenge-hub__summary-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #e7b64a;
+}
+
+.fritz-challenge-hub__summary-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.fritz-challenge-hub__summary > div > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fritz-challenge-hub__summary strong {
+  color: #f0ece5;
+  font: 750 13px/1.2 var(--font-body);
+}
+
+.fritz-challenge-hub__summary > div > div > span {
+  color: #707a89;
+  font: 800 8px/1 var(--font-body);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fritz-challenge-hub__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fritz-challenge-hub__actions .fritz-challenge-primary {
+  min-height: 48px;
+  font-size: 17px;
+}
+
+.fritz-challenge-hub__actions .fritz-challenge-room__secondary {
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+  color: #e7b64a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@media (max-height: 820px) and (min-width: 1101px) {
+  .fritz-challenge-hub__panel {
+    min-height: 0;
+    padding: 20px 24px;
+    gap: 16px;
+    justify-content: flex-start;
+  }
+
+  .fritz-challenge-hub__section {
+    gap: 12px;
+  }
+
+  .fritz-challenge-hub__overview article {
+    min-height: 96px;
+    padding: 12px;
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .fritz-challenge-hub__overview-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .fritz-challenge-hub__game {
+    min-height: 136px;
+    padding: 15px;
+  }
+
+  .fritz-challenge-hub__game em {
+    margin-top: 10px;
+  }
+
+  .fritz-challenge-hub__summary {
+    min-height: 76px;
+  }
+
+  .fritz-challenge-hub__hero {
+    flex: 1 1 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .fritz-challenge-hub__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fritz-challenge-hub__games,
+  .fritz-challenge-hub__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .fritz-challenge-hub__summary > div + div {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 0;
+  }
+}

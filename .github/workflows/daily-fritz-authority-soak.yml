@@ -11,12 +11,12 @@ on:
       users:
         description: Number of ephemeral authenticated players
         required: true
-        default: '5'
+        default: '20'
         type: string
       concurrency:
         description: Concurrent player wave size
         required: true
-        default: '2'
+        default: '5'
         type: string
       run_date:
         description: Optional non-production YYYY-MM-DD challenge fixture date
@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   authority-soak:
-    name: Game 1 authority and recovery soak
+    name: Full best-of-three authority and recovery soak
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production-soak

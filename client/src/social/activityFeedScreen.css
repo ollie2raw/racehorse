@@ -958,7 +958,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .rh-sf-page-inner,
   .social-page-inner {
     padding: 16px 14px 20px;
@@ -974,6 +974,7 @@
 
   .rh-sf-challenge-btn {
     flex: 1 1 auto;
+    min-height: var(--touch-min);
   }
 
   .rh-sf-trend,
@@ -983,5 +984,23 @@
 
   .rh-sf-row-chevron {
     display: none;
+  }
+
+  .rh-sf-highlights-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .rh-sf-ranked-row {
+    grid-template-columns: 22px 16px 28px minmax(0, 1fr) auto;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .rh-sf-ranked-row strong,
+  .rh-sf-ranked-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

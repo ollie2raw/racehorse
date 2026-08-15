@@ -7,6 +7,7 @@ import {
   emitHandLifecycleDebugLog,
   logDailyFritzHandBreadcrumb,
   resolveHandRevealScheduleMode,
+  isChallengeHandOnlyGameOver,
   shouldShowHandRevealForHand,
 } from './handLifecycleRules.ts';
 import { dailyFritzDebugLog } from '../../daily/dailyFritzMatchDiagnostics.ts';
@@ -21,6 +22,7 @@ export type UseHandRevealSchedulerArgs = {
   isDailyFritzMode: boolean;
   isGuidedMode: boolean;
   isGuidedV2Mode: boolean;
+  challengeWinningScore?: number | null;
   lastDailyFlowLabelRef: React.MutableRefObject<string>;
   traceHandLifecycle: TraceHandLifecycle;
   onAutoAdvance: () => void;
@@ -38,6 +40,7 @@ export function useHandRevealScheduler({
   isDailyFritzMode,
   isGuidedMode,
   isGuidedV2Mode,
+  challengeWinningScore,
   lastDailyFlowLabelRef,
   traceHandLifecycle,
   onAutoAdvance,
@@ -156,11 +159,17 @@ export function useHandRevealScheduler({
   }, []);
 
   useEffect(() => {
-    if (!handReveal || match.gameOver) {
+    const challengeHandOnlyGameOver = isChallengeHandOnlyGameOver({
+      gameOver: match.gameOver,
+      youScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      winningScore: challengeWinningScore,
+    });
+    if (!handReveal || (match.gameOver && !challengeHandOnlyGameOver)) {
       setHandRevealProgress(1);
       onRevealHidden();
       handRevealShownAtRef.current = null;
-      if (match.gameOver) {
+      if (match.gameOver && !challengeHandOnlyGameOver) {
         dailyFritzMinAdvanceAtRef.current = null;
       }
       clearAutoAdvanceTimer(handReveal ? 'game-complete' : 'hidden');
@@ -187,7 +196,7 @@ export function useHandRevealScheduler({
     setHandRevealProgress(1);
     onRevealShown();
 
-    if (isGuidedMode || isGuidedV2Mode) return;
+    if (isGuidedMode || isGuidedV2Mode || mode === 'stakes') return;
 
     if (isDailyFritzMode) {
       dailyFritzDebugLog('[daily-flow] reveal countdown started', {
@@ -233,6 +242,7 @@ export function useHandRevealScheduler({
     };
   }, [
     clearAutoAdvanceTimer,
+    challengeWinningScore,
     handReveal,
     handTransitionInFlight,
     isDailyFritzMode,
@@ -240,6 +250,8 @@ export function useHandRevealScheduler({
     isGuidedV2Mode,
     match.gameOver,
     match.handNumber,
+    match.players.bot.score,
+    match.players.you.score,
     matchRef,
     mode,
     onRevealHidden,

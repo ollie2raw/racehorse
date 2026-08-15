@@ -4,7 +4,9 @@
 :root {
   /* ── Backgrounds ─────────────────────────────────── */
   --bg-obsidian: #04070c;
-  --bg-card:     #0d121f;
+  /* App.css redeclared --bg-card and loads after this file, so its value
+     (#2d3548) was already the one actually rendering, not #0d121f below. */
+  --bg-card: #2d3548;
 
   /* ── Tier accent system ──────────────────────────── */
   --tier-rookie:   #4ADE80;   /* green  — streaks, positive progression */
@@ -29,23 +31,46 @@
   --border-strong: rgba(255, 255, 255, 0.28);
 
   /* ── Text ────────────────────────────────────────── */
-  --text-primary:   #f8fafc;
-  --text-secondary: rgba(255, 255, 255, 0.6);
+  /* App.css redeclared --text-primary/--text-secondary and loads after
+     this file, so its values were already the ones actually rendering. */
+  --text-primary:   #ffffff;
+  --text-secondary: #a0a8c0;
   --text-dim:       rgba(255, 255, 255, 0.35);
   /* High-contrast copy on solid elite / gold CTAs */
   --text-on-elite:  #1a1200;
 
   /* ── Shadows ─────────────────────────────────────── */
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.60);
+  /* App.css declared its own --shadow-sm/md/lg with different values and
+     loads after this file, so its values were already the ones actually
+     rendering. Consolidated here as-is (no value change) rather than
+     silently reverting the app to this file's original numbers. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
 
   /* ── Spatial ─────────────────────────────────────── */
-  --radius-sm:   8px;
-  --radius-md:   14px;
+  /* Same story as the shadows above — App.css's --radius-sm/md values were
+     the ones in effect; keeping them rather than changing rendered output. */
+  --radius-sm:   4px;
+  --radius-md:   8px;
   --radius-card: 24px;
   --radius-pill: 999px;
   --hud-lift:    20px;
+
+  /*
+   * Responsive breakpoints (documentation + JS/layout use).
+   * CSS custom properties cannot drive @media conditions — keep
+   * media query literals in sync with client/src/styles/breakpoints.ts:
+   *   phone:  max-width 767px
+   *   tablet: min-width 768px
+   *   hub stack preference: max-width 900px
+   */
+  --bp-phone-max: 767px;
+  --bp-tablet-min: 768px;
+  --bp-hub-stack: 900px;
+  --touch-min: 44px;
+  --rh-bottom-tab-h: 56px;
+  --rh-bottom-tab-offset: calc(var(--rh-bottom-tab-h) + env(safe-area-inset-bottom, 0px));
 
   /* Match board arena (inGameBoardShell — Pass A playfield) */
   --rh-arena-mount-bg: rgba(4, 9, 18, 0.96);
@@ -148,4 +173,124 @@
   --rh-match-board-sheen-wash: rgba(255, 247, 236, 0.022);
   /* Inset guide ring on the board — faint structure without dulling the lift */
   --rh-match-board-inner-frame-fill: rgba(18, 28, 44, 0.1);
+
+  /* ── Legacy App.css tokens (consolidated from App.css :root) ────── */
+  --space-xs: 8px;
+  --space-sm: 16px;
+  --space-md: 24px;
+  --space-lg: 40px;
+  --space-xl: 64px;
+
+  --tray-height: 64px;
+  --score-header-height: 72px;
+  --bg-primary: #1a1f2e;
+  --bg-secondary: #252b3d;
+
+  --text-muted: #6b7280;
+
+  --accent-primary: var(--tier-standard);
+  --accent-secondary: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+
+  /* Premium tile styling */
+  --tile-bg: #fffef5;
+  --tile-bg-gradient: linear-gradient(145deg, #fffef5 0%, #f5f0e0 100%);
+  --tile-border: #8b7355;
+  --tile-pip: #1a1a1a;
+  --tile-selected: rgba(80, 160, 255, 0.9);
+  --tile-highlight: rgba(80, 160, 255, 0.95);
+  --tile-play-glow: rgba(80, 160, 255, 0.3);
+  --tile-shadow: 0 3px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --tile-shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
+
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+
+  /* Mobile Breakpoints */
+  --mobile-w: 600px;
+  --very-small-w: 380px;
+
+  /* Shared non-game background stack */
+  --menu-bg-base:
+    linear-gradient(180deg, #03101d 0%, #031324 38%, #02111f 100%);
+  --menu-bg-spot-a:
+    radial-gradient(ellipse 46% 32% at 50% 0%, rgba(56, 189, 248, 0.34) 0%, rgba(56, 189, 248, 0.10) 28%, rgba(56, 189, 248, 0.06) 46%, rgba(56, 189, 248, 0.00) 74%);
+  --menu-bg-spot-b:
+    linear-gradient(90deg, rgba(3, 15, 29, 0.00) 0%, rgba(34, 211, 238, 0.09) 50%, rgba(3, 15, 29, 0.00) 100%);
+  --menu-bg-beam:
+    linear-gradient(90deg, rgba(2, 12, 24, 0.00) 0%, rgba(56, 189, 248, 0.18) 50%, rgba(2, 12, 24, 0.00) 100%);
+  --menu-bg-vignette:
+    radial-gradient(circle at 50% 18%, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.10) 58%, rgba(0, 0, 0, 0.46) 100%);
+
+  /* ── Consolidated from styles/walnut-live.css :root ──────────────── */
+  --wl-bg-top: #08100f;
+  --wl-bg-mid: #0b1d1a;
+  --wl-bg-bottom: #05090d;
+  --wl-gold: #d8b56f;
+  --wl-mint: #95f0ca;
+  --wl-card: rgba(238, 248, 244, 0.09);
+  --wl-card-border: rgba(245, 255, 251, 0.24);
+  --wl-panel: rgba(9, 15, 19, 0.72);
+  --wl-shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.48);
+  --wl-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.34);
+
+  /* ── Consolidated from styles/_fritz-screen-shell.css :root ──────── */
+  --fritz-muted-label: #8891a0;
+  --fritz-summary-radius: 12px;
+  --fritz-card-radius-md: 14px;
+  --fritz-card-border: rgba(255, 255, 255, 0.08);
+  --fritz-card-border-strong: rgba(255, 255, 255, 0.1);
+  --fritz-card-bg: rgba(255, 255, 255, 0.03);
+  --fritz-card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --fritz-summary-item-gap: 12px;
+  --fritz-summary-item-pad-y: 10px;
+  --fritz-summary-item-pad-x: 16px;
+  --fritz-summary-icon-size: 32px;
+  --fritz-summary-value-size: 15px;
+  --fritz-summary-key-size: 10px;
+  --fritz-summary-note-size: 11px;
+  --fritz-summary-divider: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.08), transparent);
+  --fritz-section-stack-gap: 16px;
+  --fritz-section-label-mb: 8px;
+  --fritz-selectable-gap: 14px;
+  --fritz-selectable-pad-x: 14px;
+  --fritz-selectable-min-h: 56px;
+  --fritz-selectable-max-h: 64px;
+  --fritz-selectable-muted-opacity: 0.78;
+  --fritz-selectable-muted-sat: 0.5;
+  --fritz-games-stack-gap: 16px;
+  --fritz-compact-badge-gap: 8px;
+  --fritz-compact-badge-pad-y: 10px;
+  --fritz-compact-badge-pad-x: 12px;
+  --fritz-compact-badge-radius: 10px;
+
+  /* ── Consolidated from styles/racehorse-background.css :root ─────── */
+  --rh-bg-top: #050914;
+  --rh-bg-mid: #02040a;
+  --rh-bg-bottom: #000104;
+  --rh-surface: rgba(11, 15, 24, 0.9);
+  --rh-surface-soft: rgba(13, 18, 30, 0.76);
+  --rh-border: rgba(148, 163, 184, 0.14);
+  --rh-border-strong: rgba(148, 163, 184, 0.22);
+  --rh-nav-fade: rgba(2, 4, 10, 0.56);
+  --page-accent-rgb: 59, 130, 246;
+
+  /* ── Consolidated from styles/_pvf-layout.css :root ───────────────── */
+  --pvf-bg:        #040b17;
+  --pvf-text:      #F2EEE8;
+  --pvf-muted:     #8891A0;
+  --pvf-para:      #AAA6B4;
+  --pvf-dim:       #727083;
+  --pvf-radius-lg: 20px;
+  --pvf-radius-md: 14px;
+  --pvf-radius-sm: 12px;
+  --color-obsidian: #04070c;
+  --color-rookie: var(--tier-rookie);
+  --color-standard: #3B82F6;
+  --color-elite: var(--tier-elite);
+  --color-master: #A855F7;
 }

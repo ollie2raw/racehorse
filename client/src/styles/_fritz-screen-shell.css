@@ -4,36 +4,8 @@
  * Palette / page backgrounds stay on each screen file.
  */
 
-:root {
-  --fritz-muted-label: #8891a0;
-  --fritz-summary-radius: 12px;
-  --fritz-card-radius-md: 14px;
-  --fritz-card-border: rgba(255, 255, 255, 0.08);
-  --fritz-card-border-strong: rgba(255, 255, 255, 0.1);
-  --fritz-card-bg: rgba(255, 255, 255, 0.03);
-  --fritz-card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --fritz-summary-item-gap: 12px;
-  --fritz-summary-item-pad-y: 10px;
-  --fritz-summary-item-pad-x: 16px;
-  --fritz-summary-icon-size: 32px;
-  --fritz-summary-value-size: 15px;
-  --fritz-summary-key-size: 10px;
-  --fritz-summary-note-size: 11px;
-  --fritz-summary-divider: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.08), transparent);
-  --fritz-section-stack-gap: 16px;
-  --fritz-section-label-mb: 8px;
-  --fritz-selectable-gap: 14px;
-  --fritz-selectable-pad-x: 14px;
-  --fritz-selectable-min-h: 56px;
-  --fritz-selectable-max-h: 64px;
-  --fritz-selectable-muted-opacity: 0.78;
-  --fritz-selectable-muted-sat: 0.5;
-  --fritz-games-stack-gap: 16px;
-  --fritz-compact-badge-gap: 8px;
-  --fritz-compact-badge-pad-y: 10px;
-  --fritz-compact-badge-pad-x: 12px;
-  --fritz-compact-badge-radius: 10px;
-}
+/* --fritz-* variables consolidated into styles/tokens.css. Do not add a
+   new :root block here. */
 
 /* — Section label (matches PlayVsFritz .pvf-section-label) — */
 .fritz-section-label {

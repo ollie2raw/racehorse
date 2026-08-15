@@ -2,7 +2,7 @@ import type { ReactNode, RefObject } from 'react';
 
 type BotMatchScreenShellProps = {
   rootRef: RefObject<HTMLDivElement | null>;
-  mode: 'bot' | 'ghost' | 'daily-fritz';
+  mode: 'bot' | 'ghost' | 'daily-fritz' | 'stakes';
   isDailyFritzMode: boolean;
   dailyFritzBoardHasPlay: boolean;
   isLessonLayoutMode: boolean;

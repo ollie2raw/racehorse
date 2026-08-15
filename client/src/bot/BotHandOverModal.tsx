@@ -34,6 +34,8 @@ export interface BotHandOverModalProps {
   onRetryGhost: () => void;
   onRetryHandAdvance: () => void;
   handNumber: number;
+  mode?: string;
+  onStakesProceed?: () => void;
 }
 
 export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
@@ -54,6 +56,8 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
   onRetryGhost,
   onRetryHandAdvance,
   handNumber,
+  mode,
+  onStakesProceed,
 }) => {
   if (!handReveal || gameOver) return null;
 
@@ -63,6 +67,7 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
     <GameOverlayPortal>
       <HandOverModal
         variant="sp"
+        cardClassName={isDailyFritzMode ? 'hand-over-modal--daily-fritz' : undefined}
         pointsAwarded={handReveal.pointsAwarded}
         winnerSide={winnerSide}
         winnerLabel={winnerDisplayLabel(winnerSide, opponentLabel)}
@@ -131,6 +136,15 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
                       : 'Continue'}
                 </button>
               </div>
+            </footer>
+          ) : mode === 'stakes' ? (
+            <footer className="hand-over-modal__footer">
+              <button type="button" className="pvf-start-btn" onClick={onStakesProceed}>
+                <span>Proceed to Settlement</span>
+                <span className="pvf-start-arrow" aria-hidden>
+                  ›
+                </span>
+              </button>
             </footer>
           ) : isGuidedMode || isGuidedV2Mode ? (
             <footer className="hand-over-modal__footer">

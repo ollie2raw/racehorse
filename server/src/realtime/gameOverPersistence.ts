@@ -20,6 +20,7 @@ import {
   resolvePendingFritzMatch,
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
+import { recordOperationalFailure } from '../operationalTelemetry';
 
 /**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
@@ -100,7 +101,12 @@ export function createGameOverPersistScheduler(io: Server) {
           winnerScore: winnerSeatId === aId ? scoreA : scoreB,
           loserScore: winnerSeatId === aId ? scoreB : scoreA,
           fritzTier: fritzActivityCtx?.fritzTier ?? null,
-        }).catch(() => {});
+        }).catch((error) => {
+          recordOperationalFailure('multiplayer.activity_write', error, {
+            roomCode: room.code,
+            matchId: sourceMatchId,
+          });
+        });
 
         if (a.userId && b.userId && !fritzActivityCtx) {
           const ratedWinnerUserId = winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;

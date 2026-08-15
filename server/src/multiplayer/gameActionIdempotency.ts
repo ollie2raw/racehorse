@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 export type GameActionAck = {
   ok: boolean;
   sequence?: number | null;
@@ -13,6 +15,7 @@ export type GameActionAck = {
 
 type CacheEntry = {
   ack: GameActionAck;
+  requestDigest: string;
   expiresAt: number;
 };
 
@@ -35,6 +38,11 @@ export function normalizeGameActionRequestId(value: unknown): string | null {
 
 function cacheKeyFor(playerSeatId: string, requestId: string): string {
   return `${playerSeatId}:${requestId}`;
+}
+
+/** Stable digest binds a request id to exactly one gameplay intent. */
+export function digestGameActionRequest(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 function inFlightKeyFor(roomCode: string, playerSeatId: string, requestId: string): string {
@@ -79,12 +87,16 @@ function readCachedAck(
   roomCode: string,
   playerSeatId: string,
   requestId: string,
+  requestDigest: string,
 ): GameActionAck | null {
   pruneExpiredEntries(roomCode);
   const roomCache = cacheByRoomCode.get(normalizeRoomCode(roomCode));
   if (!roomCache) return null;
   const entry = roomCache.get(cacheKeyFor(playerSeatId, requestId));
   if (!entry || entry.expiresAt <= Date.now()) return null;
+  if (entry.requestDigest !== requestDigest) {
+    return { ok: false, error: 'request_id_conflict' };
+  }
   return { ...entry.ack, duplicate: true };
 }
 
@@ -92,11 +104,13 @@ function storeCachedAck(
   roomCode: string,
   playerSeatId: string,
   requestId: string,
+  requestDigest: string,
   ack: GameActionAck,
 ): void {
   if (!ack.ok && !ack.uncertain) return;
   const roomCache = getRoomCache(roomCode);
   roomCache.set(cacheKeyFor(playerSeatId, requestId), {
+    requestDigest,
     ack: {
       ok: ack.ok,
       sequence: ack.sequence ?? null,
@@ -117,14 +131,25 @@ export async function withGameActionIdempotency(
   roomCode: string,
   playerSeatId: string,
   requestId: unknown,
-  execute: () => Promise<GameActionAck>,
+  requestDigestOrExecute: string | (() => Promise<GameActionAck>),
+  maybeExecute?: () => Promise<GameActionAck>,
 ): Promise<GameActionAck> {
+  // The legacy overload keeps isolated callers/tests safe while gameplay
+  // handlers always pass a semantic digest. It can be removed once every
+  // command source speaks the revisioned protocol.
+  const requestDigest = typeof requestDigestOrExecute === 'string'
+    ? requestDigestOrExecute
+    : `legacy:${String(requestId)}`;
+  const execute = typeof requestDigestOrExecute === 'function'
+    ? requestDigestOrExecute
+    : maybeExecute;
+  if (!execute) throw new Error('Game action idempotency requires an executor.');
   const normalizedRequestId = normalizeGameActionRequestId(requestId);
   if (!normalizedRequestId) {
     return execute();
   }
 
-  const cached = readCachedAck(roomCode, playerSeatId, normalizedRequestId);
+  const cached = readCachedAck(roomCode, playerSeatId, normalizedRequestId, requestDigest);
   if (cached) return cached;
 
   const inflightKey = inFlightKeyFor(roomCode, playerSeatId, normalizedRequestId);
@@ -137,7 +162,7 @@ export async function withGameActionIdempotency(
   const inflight = (async () => {
     const result = await execute();
     if (result.ok || result.uncertain) {
-      storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
+      storeCachedAck(roomCode, playerSeatId, normalizedRequestId, requestDigest, result);
     }
     return result;
   })().finally(() => {

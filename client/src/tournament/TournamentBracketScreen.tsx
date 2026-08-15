@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo } from 'react';
-import { GlobalNav } from '../components';
+import { GlobalNav, SubsectionHeader } from '../components';
 import { useSyncNow } from '../ui/useSyncNow';
 import type { AppMode } from '../types';
 import {
@@ -729,17 +729,15 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         compactChrome={isWaitingRoom}
       />
       <div className={`tb-shell${isWaitingRoom ? ' tb-shell--waiting' : ''}`}>
-        <div className={`tb-toolbar${isWaitingRoom ? ' tb-toolbar--waiting' : ''}`}>
-          <button
-            className="tb-back"
-            type="button"
-            onClick={isTerminalBracket ? props.onExitToHub : props.onBack}
-          >
-            <span aria-hidden>←</span>{' '}
-            {isTerminalBracket ? 'Back to Tournament Home' : 'Back to Tournament'}
-          </button>
-          {!isWaitingRoom ? (
-            <>
+        <SubsectionHeader
+          title={isTerminalBracket ? 'Tournament Home' : 'Bracket'}
+          onBack={isTerminalBracket ? props.onExitToHub : props.onBack}
+          backAriaLabel={
+            isTerminalBracket ? 'Back to Tournament Home' : 'Back to Tournament'
+          }
+        />
+        {!isWaitingRoom ? (
+          <div className="tb-toolbar">
               {isBracketLobby && assigned ? (
                 <div className="tb-countdown-card" aria-live="polite">
                   <span className="tb-countdown-card__eyebrow">Bracket locked</span>
@@ -759,20 +757,9 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                     You vs <strong>{opponentDisplayName}</strong>
                   </span>
                 </div>
-              ) : (
-                <div className="tb-toolbar-spacer" aria-hidden />
-              )}
-              <div className="tb-head">
-                <div className="tb-kicker">
-                  {isBracketLobby ? 'Bracket locked' : 'Tournament'}
-                </div>
-                <h2 className="tb-title">
-                  {isBracketLobby ? 'Bracket Lobby' : 'Bracket'}
-                </h2>
-              </div>
-            </>
-          ) : null}
-        </div>
+              ) : null}
+          </div>
+        ) : null}
 
         {bracket && isWaitingRoom ? (
           <WaitingRoomPanel

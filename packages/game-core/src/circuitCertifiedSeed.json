@@ -1,0 +1,1906 @@
+[
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:scoring-take-five",
+    "certification": "certified",
+    "difficulty": 1,
+    "categories": [
+      "scoring"
+    ],
+    "title": "Take the five",
+    "prompt": "Find the immediate scoring play.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 3
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 0,
+      "rightEnd": 4,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 0,
+        "high": 5
+      },
+      {
+        "low": 1,
+        "high": 2
+      },
+      {
+        "low": 4,
+        "high": 5
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[4|5] on the right makes open ends sum to 5 and scores immediately.",
+      "impact": "+5 now",
+      "byMove": {
+        "4-5@right": "Immediate +5 while keeping a productive five on the board.",
+        "0-5@left": "Strong — also creates a five — but scores nothing and is slower than taking the count now."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 4,
+          "high": 5
+        },
+        "position": "right"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 5
+          },
+          "position": "left"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 4,
+        "high": 5
+      },
+      "position": "right"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 0,
+          "high": 5
+        },
+        "position": "left"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:scoring-double-ten",
+    "certification": "certified",
+    "difficulty": 2,
+    "categories": [
+      "scoring",
+      "tempo"
+    ],
+    "title": "Park the double",
+    "prompt": "Convert the open 5 into a counting score.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        },
+        {
+          "tile": {
+            "low": 0,
+            "high": 2
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 5,
+      "rightEnd": 0,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 5,
+        "high": 5
+      },
+      {
+        "low": 0,
+        "high": 4
+      },
+      {
+        "low": 1,
+        "high": 3
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "Park [5|5] on the open five to expose a double end and bank 10.",
+      "impact": "+10 now",
+      "byMove": {
+        "5-5@left": "Parking [5|5] on the open five doubles the exposed end and banks 10 immediately.",
+        "0-4@right": "Closing the blank scores nothing and gives away the only counting chance on this board."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 5,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [],
+      "inaccurate": [],
+      "blunder": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 4
+          },
+          "position": "right"
+        }
+      ]
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 5,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": []
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:control-hold-left",
+    "certification": "certified",
+    "difficulty": 1,
+    "categories": [
+      "board_control",
+      "risk_management"
+    ],
+    "title": "Hold one end",
+    "prompt": "Keep pressure without handing over a flexible reply.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 1,
+      "rightEnd": 3,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 1,
+        "high": 4
+      },
+      {
+        "low": 3,
+        "high": 6
+      },
+      {
+        "low": 1,
+        "high": 3
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "Claim the one-end with [1|4] so the three stays tight and replies stay limited.",
+      "impact": "Keeps the three-end constrained",
+      "byMove": {
+        "1-4@left": "Claiming the one-end with [1|4] keeps the three-end tight and denies a flexible reply.",
+        "1-3@left": "Same end idea, but [1|3] burns a connector you may need later without improving the squeeze.",
+        "1-3@right": "Playing through the three opens both sides at once and hands the opponent options.",
+        "3-6@right": "The tempting six-side play softens the board and gifts a flexible answer."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 1,
+          "high": 4
+        },
+        "position": "left"
+      },
+      "strong": [],
+      "inaccurate": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 3
+          },
+          "position": "left"
+        }
+      ],
+      "blunder": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 3
+          },
+          "position": "right"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "position": "right"
+        }
+      ]
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 1,
+        "high": 4
+      },
+      "position": "left"
+    },
+    "strongAlternatives": []
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:control-preserve-pressure",
+    "certification": "certified",
+    "difficulty": 2,
+    "categories": [
+      "board_control"
+    ],
+    "title": "Preserve pressure",
+    "prompt": "Choose the end that keeps your opponent cramped.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 1,
+      "rightEnd": 3,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 1,
+        "high": 5
+      },
+      {
+        "low": 3,
+        "high": 4
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[1|5] on the left keeps the squeeze; relieving the other end frees the opponent.",
+      "impact": "Denies a second open lane",
+      "byMove": {
+        "1-5@left": "[1|5] holds the pressured end and keeps the opponent cramped.",
+        "3-4@right": "Relieving the three-end without compensation opens both sides and releases the squeeze."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 1,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [],
+      "inaccurate": [],
+      "blunder": [
+        {
+          "tile": {
+            "low": 3,
+            "high": 4
+          },
+          "position": "right"
+        }
+      ]
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 1,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": []
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:blocking-seal-right",
+    "certification": "certified",
+    "difficulty": 2,
+    "categories": [
+      "blocking",
+      "board_control"
+    ],
+    "title": "Seal the escape",
+    "prompt": "Cut the open right before it blooms.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 2,
+            "high": 3
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 2,
+      "rightEnd": 4,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 2,
+        "high": 5
+      },
+      {
+        "low": 1,
+        "high": 4
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "Cut the two-end with [2|5] before the four-side escape blooms.",
+      "impact": "Cuts the two-end escape first",
+      "byMove": {
+        "2-5@left": "Sealing the two-end first cuts the escape before the four can bloom.",
+        "1-4@right": "Touching the four now leaves the two-end live and lets the table expand."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 2,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [],
+      "inaccurate": [],
+      "blunder": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 4
+          },
+          "position": "right"
+        }
+      ]
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 2,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": []
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:tempo-claim-six",
+    "certification": "certified",
+    "difficulty": 3,
+    "categories": [
+      "tempo",
+      "scoring"
+    ],
+    "title": "Claim the six",
+    "prompt": "Take the productive end before the window closes.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        },
+        {
+          "tile": {
+            "low": 1,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        }
+      ],
+      "leftEnd": 5,
+      "rightEnd": 6,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 5,
+        "high": 5
+      },
+      {
+        "low": 0,
+        "high": 6
+      },
+      {
+        "low": 3,
+        "high": 4
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[0|6] on the right scores and removes the hot six before the opponent can answer it. Leaving the six live trades immediate points for a structural double that can wait one beat.",
+      "impact": "+5 and tempo",
+      "byMove": {
+        "0-6@right": "Immediate effect: score now and erase the dangerous six. Leaving it live risks a free answer on that end.",
+        "5-5@left": "Strong structure — parks a double — but the scoring six stays live for one more beat and can be stolen."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 0,
+          "high": 6
+        },
+        "position": "right"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 5,
+            "high": 5
+          },
+          "position": "left"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 0,
+        "high": 6
+      },
+      "position": "right"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 5,
+          "high": 5
+        },
+        "position": "left"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:endgame-go-down",
+    "certification": "certified",
+    "difficulty": 3,
+    "categories": [
+      "endgame",
+      "counting"
+    ],
+    "title": "Go down clean",
+    "prompt": "With two tiles left, exit through the safer end.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 4
+          },
+          "orientation": "horizontal-flipped"
+        },
+        {
+          "tile": {
+            "low": 1,
+            "high": 3
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        }
+      ],
+      "leftEnd": 4,
+      "rightEnd": 6,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 0,
+        "high": 4
+      },
+      {
+        "low": 2,
+        "high": 6
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[2|6] on the right advances the exit while keeping a clean answer on the four.",
+      "impact": "Safer path toward empty",
+      "byMove": {
+        "2-6@right": "Progresses toward empty with the safer connector.",
+        "0-4@left": "Also legal progress, but the six-side exit is cleaner with two tiles left."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 2,
+          "high": 6
+        },
+        "position": "right"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 4
+          },
+          "position": "left"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 2,
+        "high": 6
+      },
+      "position": "right"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 0,
+          "high": 4
+        },
+        "position": "left"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:risk-avoid-bleed",
+    "certification": "certified",
+    "difficulty": 3,
+    "categories": [
+      "risk_management",
+      "board_control"
+    ],
+    "title": "Avoid the bleed",
+    "prompt": "Do not gift both ends without compensation.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 4
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 4,
+            "high": 5
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 0,
+      "rightEnd": 3,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 0,
+        "high": 5
+      },
+      {
+        "low": 3,
+        "high": 6
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "Answer the zero with [0|5] instead of gifting a second open lane.",
+      "impact": "No second open lane",
+      "byMove": {
+        "0-5@left": "[0|5] answers the zero cleanly without opening a second dangerous lane.",
+        "3-6@right": "Extending the three into a six overextends both ends with no score or control payoff."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 0,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [],
+      "inaccurate": [],
+      "blunder": [
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "position": "right"
+        }
+      ]
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 0,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": []
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:scoring-setup-count",
+    "certification": "certified",
+    "difficulty": 4,
+    "categories": [
+      "scoring",
+      "counting"
+    ],
+    "title": "Count before you cut",
+    "prompt": "Prefer the line that scores while limiting replies.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        },
+        {
+          "tile": {
+            "low": 0,
+            "high": 2
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 5,
+      "rightEnd": 0,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 5,
+        "high": 5
+      },
+      {
+        "low": 0,
+        "high": 6
+      },
+      {
+        "low": 1,
+        "high": 3
+      },
+      {
+        "low": 4,
+        "high": 4
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[5|5] left banks 10 immediately; anything else leaves free points on the table.",
+      "impact": "+10",
+      "byMove": {
+        "5-5@left": "Immediate +10 before the lane changes. Walking past it leaves free points on the table.",
+        "0-6@right": "Strong conversion play off the blank, but it walks past an immediate free 10 on the five."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 5,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 6
+          },
+          "position": "right"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 5,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 0,
+          "high": 6
+        },
+        "position": "right"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:opening-anchor",
+    "certification": "certified",
+    "difficulty": 1,
+    "categories": [
+      "opening",
+      "board_control"
+    ],
+    "title": "Anchor early",
+    "prompt": "Establish a controlled end early.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 2,
+            "high": 3
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 2,
+      "rightEnd": 4,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 2,
+        "high": 5
+      },
+      {
+        "low": 0,
+        "high": 4
+      },
+      {
+        "low": 1,
+        "high": 1
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[2|5] on the left claims a stable early end while your blank-four answer still covers the other side. Opening the four first invites early counters you cannot yet punish.",
+      "impact": "Safer early end claimed",
+      "byMove": {
+        "2-5@left": "Immediate effect: safer end claimed. Strategic reason: keeps [0|4] as cover. Tempting alternative opens the four before you have pressure.",
+        "0-4@right": "Playable, but spending the blank-four reply early softens your opening cover and invites counters on the two."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 2,
+          "high": 5
+        },
+        "position": "left"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 4
+          },
+          "position": "right"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 2,
+        "high": 5
+      },
+      "position": "left"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 0,
+          "high": 4
+        },
+        "position": "right"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:counting-read-ends",
+    "certification": "certified",
+    "difficulty": 4,
+    "categories": [
+      "counting",
+      "endgame"
+    ],
+    "title": "Read the ends",
+    "prompt": "Pick the end that keeps your remaining outs alive.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 0,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 5,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        }
+      ],
+      "leftEnd": 0,
+      "rightEnd": 6,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 0,
+        "high": 4
+      },
+      {
+        "low": 3,
+        "high": 6
+      },
+      {
+        "low": 1,
+        "high": 1
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[0|4] on the left preserves the six-side outs you still hold. Spending [3|6] now converts a future answer into an early end change with no count payoff.",
+      "impact": "Six-answer preserved",
+      "byMove": {
+        "0-4@left": "Immediate effect: closes the blank. Strategic reason: your [3|6] still answers the open six later. Tempting six-play spends that answer early.",
+        "3-6@right": "Usable conversion, but it spends the six connector before you need it and leaves the blank unreplied."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 0,
+          "high": 4
+        },
+        "position": "left"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 3,
+            "high": 6
+          },
+          "position": "right"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 0,
+        "high": 4
+      },
+      "position": "left"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 3,
+          "high": 6
+        },
+        "position": "right"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "single_gate",
+    "id": "circuit:certified:blocking-hard-cut",
+    "certification": "certified",
+    "difficulty": 5,
+    "categories": [
+      "blocking",
+      "risk_management"
+    ],
+    "title": "Hard cut",
+    "prompt": "Shut the dangerous end even if it looks quiet.",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 4
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "orientation": "horizontal-normal"
+        }
+      ],
+      "leftEnd": 1,
+      "rightEnd": 6,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 1,
+        "high": 5
+      },
+      {
+        "low": 3,
+        "high": 6
+      },
+      {
+        "low": 0,
+        "high": 0
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "explanation": {
+      "optimal": "[3|6] on the right denies the flexible six even when it looks quiet.",
+      "impact": "Six escape removed",
+      "byMove": {
+        "3-6@right": "Shuts the dangerous end before it becomes a lane.",
+        "1-5@left": "Strong control on the one, but leaves the six escape intact."
+      }
+    },
+    "moveClassifications": {
+      "optimal": {
+        "tile": {
+          "low": 3,
+          "high": 6
+        },
+        "position": "right"
+      },
+      "strong": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 5
+          },
+          "position": "left"
+        }
+      ],
+      "inaccurate": [],
+      "blunder": []
+    },
+    "optimalMove": {
+      "tile": {
+        "low": 3,
+        "high": 6
+      },
+      "position": "right"
+    },
+    "strongAlternatives": [
+      {
+        "tile": {
+          "low": 1,
+          "high": 5
+        },
+        "position": "left"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "checkpoint_hand",
+    "id": "circuit:certified:checkpoint-protect-lead",
+    "certification": "certified",
+    "difficulty": 3,
+    "categories": [
+      "board_control",
+      "tempo",
+      "scoring"
+    ],
+    "title": "Protect the Lead",
+    "prompt": "Protect the lead",
+    "objective": "Keep control across three linked decisions without bleeding the board.",
+    "explanation": {
+      "summary": "A short linked hand: claim left, extend control, then close the right safely."
+    },
+    "pressureTitle": "Protect the Lead",
+    "entranceLine": "Three linked decisions. Hold the squeeze or the lead evaporates.",
+    "stakesLine": "Fail any step and control slips — the lead is gone.",
+    "completionLine": "Lead protected. The line held under pressure.",
+    "failureLine": "The squeeze broke. Control slipped when you needed it most.",
+    "transitionModel": "authored_linked_states",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 1,
+            "high": 2
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-normal"
+        },
+        {
+          "tile": {
+            "low": 3,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 1,
+      "rightEnd": 3,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 1,
+        "high": 4
+      },
+      {
+        "low": 4,
+        "high": 6
+      },
+      {
+        "low": 0,
+        "high": 3
+      },
+      {
+        "low": 2,
+        "high": 2
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "steps": [
+      {
+        "id": "cp1",
+        "prompt": "Start by claiming the safer end.",
+        "explanation": {
+          "optimal": "Claim the one-end with [1|4] first so the three stays constrained through the gate. Relieving the three now abandons the controlled left-side line this sequence needs.",
+          "impact": "Controlled left lane opened",
+          "byMove": {
+            "1-4@left": "Immediate effect: seize the one-end. Strategic reason: keeps the three tight for steps two and three. Tempting right-side relief breaks the protect line.",
+            "0-3@right": "Works locally but abandons the controlled left-side line this Pressure Gate needs."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 1,
+              "high": 4
+            },
+            "position": "left"
+          },
+          "strong": [],
+          "inaccurate": [
+            {
+              "tile": {
+                "low": 0,
+                "high": 3
+              },
+              "position": "right"
+            }
+          ],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 1,
+            "high": 4
+          },
+          "position": "left"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 1,
+                  "high": 2
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 3,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              }
+            ],
+            "leftEnd": 1,
+            "rightEnd": 3,
+            "leftEndIsDouble": false,
+            "rightEndIsDouble": false,
+            "hubDoubles": []
+          },
+          "playerHand": [
+            {
+              "low": 1,
+              "high": 4
+            },
+            {
+              "low": 4,
+              "high": 6
+            },
+            {
+              "low": 0,
+              "high": 3
+            },
+            {
+              "low": 2,
+              "high": 2
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 0,
+          "opponentScore": 0
+        },
+        "transitionIn": null
+      },
+      {
+        "id": "cp2",
+        "prompt": "Extend without opening a soft reply.",
+        "explanation": {
+          "optimal": "Extend the left with [4|6] to keep pressure without softening the right. Cutting the three now breaks the protect sequence mid-gate.",
+          "impact": "Squeeze held one step longer",
+          "byMove": {
+            "4-6@left": "Immediate effect: lengthens the controlled lane. Strategic reason: the right stays constrained. Cutting three now breaks continuity.",
+            "0-3@right": "Cutting the three now breaks the protect sequence and frees both sides before the finish."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 4,
+              "high": 6
+            },
+            "position": "left"
+          },
+          "strong": [],
+          "inaccurate": [
+            {
+              "tile": {
+                "low": 0,
+                "high": 3
+              },
+              "position": "right"
+            }
+          ],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "position": "left"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 1,
+                  "high": 4
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 1,
+                  "high": 2
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 3,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              }
+            ],
+            "leftEnd": 4,
+            "rightEnd": 3,
+            "leftEndIsDouble": false,
+            "rightEndIsDouble": false,
+            "hubDoubles": []
+          },
+          "playerHand": [
+            {
+              "low": 4,
+              "high": 6
+            },
+            {
+              "low": 0,
+              "high": 3
+            },
+            {
+              "low": 2,
+              "high": 2
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 0,
+          "opponentScore": 0
+        },
+        "transitionIn": "Your opponent answers on the right. The scoring lane is still yours if you keep extending left."
+      },
+      {
+        "id": "cp3",
+        "prompt": "Close the remaining open end cleanly.",
+        "explanation": {
+          "optimal": "Close the remaining three with [0|3] to finish the protected line. This is the only legal finish — seal it before an escape develops.",
+          "impact": "Last open end sealed",
+          "byMove": {
+            "0-3@right": "Immediate effect: seals the last open end. The protect sequence completes only if this end dies now."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 0,
+              "high": 3
+            },
+            "position": "right"
+          },
+          "strong": [],
+          "inaccurate": [],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 0,
+            "high": 3
+          },
+          "position": "right"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 4,
+                  "high": 6
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 1,
+                  "high": 4
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 1,
+                  "high": 2
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-normal"
+              },
+              {
+                "tile": {
+                  "low": 3,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              }
+            ],
+            "leftEnd": 6,
+            "rightEnd": 3,
+            "leftEndIsDouble": false,
+            "rightEndIsDouble": false,
+            "hubDoubles": []
+          },
+          "playerHand": [
+            {
+              "low": 0,
+              "high": 3
+            },
+            {
+              "low": 2,
+              "high": 2
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 0,
+          "opponentScore": 0
+        },
+        "transitionIn": "One end remains open. Close it cleanly before the table softens."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "kind": "checkpoint_hand",
+    "id": "circuit:certified:checkpoint-force-count",
+    "certification": "certified",
+    "difficulty": 4,
+    "categories": [
+      "scoring",
+      "endgame",
+      "tempo"
+    ],
+    "title": "Force the Count",
+    "prompt": "Force the count",
+    "objective": "Bank score, then convert the resulting ends across a short sequence.",
+    "explanation": {
+      "summary": "Score first, then navigate the resulting ends without giving the table away."
+    },
+    "pressureTitle": "Force the Count",
+    "entranceLine": "Bank the count, then convert the ends before the window closes.",
+    "stakesLine": "Miss the score now and the gate collapses.",
+    "completionLine": "Count forced. Conversion complete.",
+    "failureLine": "The count got away — the sequence never recovered.",
+    "transitionModel": "authored_linked_states",
+    "board": {
+      "mainLine": [
+        {
+          "tile": {
+            "low": 2,
+            "high": 5
+          },
+          "orientation": "horizontal-flipped"
+        },
+        {
+          "tile": {
+            "low": 0,
+            "high": 2
+          },
+          "orientation": "horizontal-flipped"
+        }
+      ],
+      "leftEnd": 5,
+      "rightEnd": 0,
+      "leftEndIsDouble": false,
+      "rightEndIsDouble": false,
+      "hubDoubles": []
+    },
+    "playerHand": [
+      {
+        "low": 5,
+        "high": 5
+      },
+      {
+        "low": 0,
+        "high": 4
+      },
+      {
+        "low": 4,
+        "high": 6
+      },
+      {
+        "low": 1,
+        "high": 3
+      }
+    ],
+    "opponentHand": [],
+    "playerScore": 0,
+    "opponentScore": 0,
+    "steps": [
+      {
+        "id": "cp2a",
+        "prompt": "Take the counting play now.",
+        "explanation": {
+          "optimal": "Bank [5|5] on the open five for 10 before converting the rest of the gate. Missing the count now collapses the Force the Count objective.",
+          "impact": "+10",
+          "byMove": {
+            "5-5@left": "Immediate effect: +10. Strategic reason: Force the Count starts by taking free points before conversion.",
+            "0-4@right": "Walks past free points and weakens the Force the Count objective before conversion even starts."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 5,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "strong": [],
+          "inaccurate": [
+            {
+              "tile": {
+                "low": 0,
+                "high": 4
+              },
+              "position": "right"
+            }
+          ],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 5,
+            "high": 5
+          },
+          "position": "left"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 0,
+                  "high": 2
+                },
+                "orientation": "horizontal-flipped"
+              }
+            ],
+            "leftEnd": 5,
+            "rightEnd": 0,
+            "leftEndIsDouble": false,
+            "rightEndIsDouble": false,
+            "hubDoubles": []
+          },
+          "playerHand": [
+            {
+              "low": 5,
+              "high": 5
+            },
+            {
+              "low": 0,
+              "high": 4
+            },
+            {
+              "low": 4,
+              "high": 6
+            },
+            {
+              "low": 1,
+              "high": 3
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 0,
+          "opponentScore": 0
+        },
+        "transitionIn": null
+      },
+      {
+        "id": "cp2b",
+        "prompt": "After the double, choose the productive end.",
+        "explanation": {
+          "optimal": "After the double, convert off the blank with [0|4] so the forced count keeps converting into a clean exit.",
+          "impact": "Blank converted after the count",
+          "byMove": {
+            "0-4@right": "Immediate effect: answers the blank. Strategic reason: keeps the Force the Count conversion alive toward the final close."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "strong": [],
+          "inaccurate": [],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 0,
+            "high": 4
+          },
+          "position": "right"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 5,
+                  "high": 5
+                },
+                "orientation": "vertical-normal"
+              },
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 0,
+                  "high": 2
+                },
+                "orientation": "horizontal-flipped"
+              }
+            ],
+            "leftEnd": 5,
+            "rightEnd": 0,
+            "leftEndIsDouble": true,
+            "rightEndIsDouble": false,
+            "hubDoubles": [
+              {
+                "hubId": 0,
+                "laneType": "mainline",
+                "laneRef": "mainline",
+                "tileIndex": 0,
+                "mainlineIndex": 0,
+                "hubValue": 5,
+                "isCrossed": false,
+                "leftSideFilled": false,
+                "rightSideFilled": true,
+                "branches": []
+              }
+            ]
+          },
+          "playerHand": [
+            {
+              "low": 0,
+              "high": 4
+            },
+            {
+              "low": 4,
+              "high": 6
+            },
+            {
+              "low": 1,
+              "high": 3
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 2,
+          "opponentScore": 0
+        },
+        "transitionIn": "Your double lands. Convert off the blank before the structure softens."
+      },
+      {
+        "id": "cp2c",
+        "prompt": "Finish with the remaining connector.",
+        "explanation": {
+          "optimal": "Finish the converted line with [4|6] before the structure softens. This closes Force the Count with the count already banked.",
+          "impact": "Forced-count line closed",
+          "byMove": {
+            "4-6@right": "Immediate effect: closes the remaining end. Completes the Forced Count sequence after the banked double."
+          }
+        },
+        "moveClassifications": {
+          "optimal": {
+            "tile": {
+              "low": 4,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "strong": [],
+          "inaccurate": [],
+          "blunder": []
+        },
+        "optimalMove": {
+          "tile": {
+            "low": 4,
+            "high": 6
+          },
+          "position": "right"
+        },
+        "strongAlternatives": [],
+        "position": {
+          "board": {
+            "mainLine": [
+              {
+                "tile": {
+                  "low": 5,
+                  "high": 5
+                },
+                "orientation": "vertical-normal"
+              },
+              {
+                "tile": {
+                  "low": 2,
+                  "high": 5
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 0,
+                  "high": 2
+                },
+                "orientation": "horizontal-flipped"
+              },
+              {
+                "tile": {
+                  "low": 0,
+                  "high": 4
+                },
+                "orientation": "horizontal-normal"
+              }
+            ],
+            "leftEnd": 5,
+            "rightEnd": 4,
+            "leftEndIsDouble": true,
+            "rightEndIsDouble": false,
+            "hubDoubles": [
+              {
+                "hubId": 0,
+                "laneType": "mainline",
+                "laneRef": "mainline",
+                "tileIndex": 0,
+                "mainlineIndex": 0,
+                "hubValue": 5,
+                "isCrossed": false,
+                "leftSideFilled": false,
+                "rightSideFilled": true,
+                "branches": []
+              }
+            ]
+          },
+          "playerHand": [
+            {
+              "low": 4,
+              "high": 6
+            },
+            {
+              "low": 1,
+              "high": 3
+            }
+          ],
+          "opponentHand": [],
+          "playerScore": 2,
+          "opponentScore": 0
+        },
+        "transitionIn": "Finish the converted line before the opponent can reopen it."
+      }
+    ]
+  }
+]

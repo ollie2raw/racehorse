@@ -7,6 +7,8 @@ import { GlobalNav } from "../components";
 import { Button } from "../components/primitives";
 import { useSinglePlayerHubStats, type HubStatRow } from "./useSinglePlayerHubStats";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
+import { isCircuitModeEnabled } from "../config/circuitModeFeature";
+import { loadCircuitProgress } from "../circuit/run/circuitProgressStorage";
 
 interface SinglePlayerHubScreenProps {
   userId?: string | null;
@@ -70,7 +72,7 @@ function StatIcon({ icon }: { icon: StatIconName }) {
   }
 }
 
-const MODES: CardConfig[] = [
+const BASE_MODES: CardConfig[] = [
   {
     key: "botSetup" as AppMode,
     containerClass: "daily-fritz-card-container",
@@ -91,17 +93,19 @@ const MODES: CardConfig[] = [
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
   },
-  {
-    key: "noBrainer" as AppMode,
-    containerClass: "sp-lab-mode-card-container",
-    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
-    title: "The Lab",
-    titleColor: "#C77DFF",
-    desc: "Drill every no brainer combination until you never miss one.",
-    variant: "tier-master",
-    chevronColor: "#C77DFF",
-  },
 ];
+
+/** Dev-only recovery card — never featured; only when Circuit flag is explicitly enabled. */
+const CIRCUIT_DEV_MODE: CardConfig = {
+  key: "circuit" as AppMode,
+  containerClass: "daily-puzzle-card-container",
+  sectionRounded: "rounded-[20px]",
+  title: "The Circuit (dev)",
+  titleColor: "#58A6FF",
+  desc: "Preserved quiz-run work. Not a flagship mode.",
+  variant: "tier-standard",
+  chevronColor: "#68B3FF",
+};
 
 const themeVars = {
   "--rh-bg": "#050911",
@@ -120,10 +124,23 @@ const themeVars = {
 function statsForMode(
   modeKey: AppMode,
   hubStats: ReturnType<typeof useSinglePlayerHubStats>,
+  circuitPb: number,
 ): HubStatRow[] {
   if (modeKey === "botSetup") return hubStats.fritz;
   if (modeKey === "ghostSetup") return hubStats.ghost;
-  if (modeKey === "noBrainer") return hubStats.lab;
+  if (modeKey === "circuit") {
+    return [
+      { label: "Best", value: String(circuitPb), icon: "bolt" },
+      { label: "Mode", value: "Dev", icon: "puzzle" },
+    ];
+  }
+  if (modeKey === "stakes") {
+    const pb = typeof window !== 'undefined' ? (localStorage.getItem('stakes_pb') ?? '0') : '0';
+    return [
+      { label: "Best", value: pb, icon: "bolt" },
+      { label: "Mode", value: "Dev", icon: "puzzle" },
+    ];
+  }
   return [];
 }
 
@@ -135,6 +152,16 @@ export default function SinglePlayerHubScreen({
   onOpenAccount,
 }: SinglePlayerHubScreenProps) {
   const hubStats = useSinglePlayerHubStats(userId);
+  const circuitEnabled = isCircuitModeEnabled();
+  const circuitProgress = useMemo(
+    () => (circuitEnabled ? loadCircuitProgress(userId) : { personalBest: 0 }),
+    [circuitEnabled, userId],
+  );
+  const MODES = useMemo(() => {
+    const list = [...BASE_MODES];
+    if (circuitEnabled) list.push(CIRCUIT_DEV_MODE);
+    return list;
+  }, [circuitEnabled]);
   const loadFritzArt = useCallback(
     () => import("../assets/singlePlayerHub/fritzwave1.webp"),
     [],
@@ -143,20 +170,16 @@ export default function SinglePlayerHubScreen({
     () => import("../assets/singlePlayerHub/fritzghost2.webp"),
     [],
   );
-  const loadLabArt = useCallback(
-    () => import("../assets/singlePlayerHub/leftfacingfritzNOBRAINER.webp"),
-    [],
-  );
   const artFritzSrc = useDeferredAsset("single-player-fritz-art", loadFritzArt);
   const artGhostSrc = useDeferredAsset("single-player-ghost-art", loadGhostArt);
-  const artLabSrc = useDeferredAsset("single-player-lab-art", loadLabArt);
   const modeArtByKey = useMemo(
     () => ({
       botSetup: artFritzSrc,
       ghostSetup: artGhostSrc,
-      noBrainer: artLabSrc,
+      circuit: artGhostSrc,
+      stakes: artFritzSrc,
     }),
-    [artFritzSrc, artGhostSrc, artLabSrc],
+    [artFritzSrc, artGhostSrc],
   );
 
   return (
@@ -205,18 +228,31 @@ export default function SinglePlayerHubScreen({
             >
               Single Player
             </h1>
-            <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">
+            <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
               Sharpen your skills. Master the game at your own pace.
             </p>
           </div>
 
           <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
-            <div className="grid grid-cols-3 items-stretch gap-5">
+            <div
+              className={`sp-solo-grid rh-mode-card-grid items-stretch gap-5${
+                MODES.length <= 2 ? ' sp-solo-grid--pair' : ''
+              }`}
+            >
             {MODES.map((mode) => (
               <section
                 key={mode.key}
                 className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex cursor-pointer flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded}`}
                 onClick={() => onNavigate(mode.key)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onNavigate(mode.key);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={mode.key === 'circuit' ? 'The Circuit — development recovery only' : undefined}
               >
                 <div className="sp-solo-mode-card__art-slot" aria-hidden>
                   {modeArtByKey[mode.key as keyof typeof modeArtByKey] ? (
@@ -240,7 +276,7 @@ export default function SinglePlayerHubScreen({
                       <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
                     </div>
                     <div className="sp-solo-stats mt-6 flex flex-wrap items-center gap-x-10 gap-y-3">
-                      {statsForMode(mode.key, hubStats).map((stat) => (
+                      {statsForMode(mode.key, hubStats, circuitProgress.personalBest).map((stat) => (
                         <div key={stat.label} className="flex min-w-0 items-start gap-2">
                           <span className="sp-solo-stat-icon mt-0.5" style={{ color: mode.titleColor }}>
                             <StatIcon icon={stat.icon} />
@@ -259,7 +295,7 @@ export default function SinglePlayerHubScreen({
                       e.stopPropagation();
                       onNavigate(mode.key);
                     }}
-                    className="self-start"
+                    className="rh-mode-card__cta self-start"
                     style={{ width: 188, height: 50, justifyContent: "space-between" }}
                     type="button"
                   >

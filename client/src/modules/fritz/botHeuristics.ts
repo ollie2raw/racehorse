@@ -1584,6 +1584,10 @@ export function chooseBotMove(
   difficulty: BotDifficulty = 'hard',
 ): BotChoice | null {
   const state = asVisibleState(inputState);
+  const profile = (inputState as typeof inputState & {
+    policyProfile?: 'scoring' | 'blocking' | 'closing' | 'default';
+    config?: { policyProfile?: 'scoring' | 'blocking' | 'closing' | 'default' };
+  }).config?.policyProfile;
   const t0 = performance.now();
   const isDevRuntime = Boolean(import.meta.env?.DEV);
 
@@ -1685,14 +1689,24 @@ export function chooseBotMove(
         const p = previewPlayMove(state, 'bot', m);
         if (!p) return null;
         const threat = opponentThreat(p.openEnds, p.openSum, weights);
-        return {
-          move: m,
-          score:
+        let moveScore =
             p.immediateScore * 60 +
             selfOpportunity(p.openEnds, p.openSum, p.nextHand) * 10 +
             -threat * 8 +
             handMobility(p.nextHand, p.openEnds) * 5 +
-            (m.tile ? m.tile.low + m.tile.high : 0) * 0.5,
+            (m.tile ? m.tile.low + m.tile.high : 0) * 0.5;
+
+        if (profile === 'scoring') {
+          moveScore += p.immediateScore * 25;
+        } else if (profile === 'blocking') {
+          moveScore += -threat * 20;
+        } else if (profile === 'closing') {
+          moveScore += (m.tile ? m.tile.low + m.tile.high : 0) * 5;
+        }
+
+        return {
+          move: m,
+          score: moveScore,
           breakdown: {
             immediate: p.immediateScore,
             doubleBias: m.tile && isDoubleTile(m.tile) ? 1 : 0,
@@ -1842,12 +1856,23 @@ export function chooseBotMove(
         mcSampleCount,
         difficulty,
       );
+      let moveScore = strategic.score + mc * mcBlend;
+      if (profile === 'scoring') {
+        moveScore += (p?.immediateScore ?? 0) * 25;
+      } else if (profile === 'blocking') {
+        const denial = p ? -opponentThreat(p.openEnds, p.openSum, weights) : 0;
+        moveScore += denial * 20;
+      } else if (profile === 'closing') {
+        const unload = (move.tile?.low ?? 0) + (move.tile?.high ?? 0);
+        moveScore += unload * 5;
+      }
+
       return {
         move,
         strategic,
         strategicScore: strategic.score,
         mcScore: mc,
-        score: strategic.score + mc * mcBlend,
+        score: moveScore,
         breakdown: {
           immediate: p?.immediateScore ?? 0,
           doubleBias: move.tile && isDoubleTile(move.tile) ? 1 : 0,

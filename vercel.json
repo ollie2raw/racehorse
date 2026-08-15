@@ -1,0 +1,6 @@
+{
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build --workspace=@racehorse/game-core && npm run build --workspace=server",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "crons": [{ "path": "/api/cron/weekly-ranking-maintenance", "schedule": "0 0 * * 0" }]
+}

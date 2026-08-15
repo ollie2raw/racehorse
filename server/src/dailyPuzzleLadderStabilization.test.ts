@@ -210,6 +210,39 @@ describe('Daily Puzzle ladder stabilization', () => {
     expect(normalized.reviewUnlocked).toBe(true);
   });
 
+  it('recovers attempt progress from authoritative slot results after a partial write', () => {
+    const normalized = normalizeDailyPuzzleAttempt(
+      {
+        id: 'attempt-1',
+        puzzle_date: '2026-05-17',
+        user_id: 'user-1',
+        username: 'Player',
+        status: 'started',
+        set_version: 1,
+        current_slot_index: 4,
+        puzzles_completed: 3,
+        total_score: 180,
+        master_chain_score: 0,
+        completed_at: null,
+        started_at: '2026-05-17T10:00:00.000Z',
+        updated_at: '2026-05-17T12:05:00.000Z',
+        review_unlocked: false,
+        result: {},
+      },
+      [
+        slotResult({ slotIndex: 1, awardedPoints: 60 }),
+        slotResult({ slotIndex: 2, awardedPoints: 60 }),
+        slotResult({ slotIndex: 3, awardedPoints: 60 }),
+        slotResult({ slotIndex: 4, awardedPoints: 75 }),
+      ],
+    );
+
+    expect(normalized.currentSlotIndex).toBe(5);
+    expect(normalized.puzzlesCompleted).toBe(4);
+    expect(normalized.totalScore).toBe(255);
+    expect(normalized.result.slots.map((slot) => slot.slotIndex)).toEqual([1, 2, 3, 4]);
+  });
+
   describe('server-authoritative timing calculations', () => {
     it('calculates slot 1 elapsed seconds based on attempt start time', () => {
       const attempt = baseAttempt({

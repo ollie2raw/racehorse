@@ -9,6 +9,33 @@ import {
 } from '../../daily/dailyFritzMatchDiagnostics.ts';
 import { resolveDailyFritzNextHandCache } from './handLifecycleRules.ts';
 import type { DailyFritzNextHandCacheEntry, DailyFritzPrefetchParams } from './types.ts';
+import { nextFritzChallengeHand } from '../../../fritzChallenge/api.ts';
+
+function requestNextHand(params: DailyFritzPrefetchParams): Promise<DailyFritzNextHandResponse> {
+  const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
+  if (dailyFritzPackage.challenge_code) {
+    if (!transcript) return Promise.reject(new Error('Challenge verification evidence could not be built.'));
+    return nextFritzChallengeHand({
+      code: dailyFritzPackage.challenge_code,
+      attemptId: dailyFritzPackage.attempt_id,
+      verifiedMatchId: dailyFritzPackage.verified_match_id,
+      gameNumber,
+      completedHandIndex: dailyFritzHandIndex,
+      transcript,
+      completedHandScores: params.completedHandScores,
+    });
+  }
+  return nextDailyFritzHand({
+    attemptId: dailyFritzPackage.attempt_id,
+    verifiedMatchId: dailyFritzPackage.verified_match_id,
+    runDate: dailyFritzPackage.run_date,
+    gameNumber,
+    completedHandIndex: dailyFritzHandIndex,
+    transcript,
+    completedHandScores: params.completedHandScores,
+    timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
+  });
+}
 
 /**
  * Owns the Daily Fritz next-hand request cache. Daily Fritz deliberately
@@ -43,7 +70,7 @@ export class HandPrefetchCoordinator {
     // Hand completion can be observed by more than one presentation/lifecycle
     // callback. Never replace the request for its frozen evidence.
     if (this.cache?.promise || this.cache?.result) return;
-    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
+    const { dailyFritzHandIndex, gameNumber, transcript } = params;
     dailyFritzDebugLog('[daily-fritz-hand] requesting next hand', {
       source: 'prefetch',
       gameNumber,
@@ -52,16 +79,7 @@ export class HandPrefetchCoordinator {
     });
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const cache: DailyFritzNextHandCacheEntry = {
-      promise: nextDailyFritzHand({
-        attemptId: dailyFritzPackage.attempt_id,
-        verifiedMatchId: dailyFritzPackage.verified_match_id,
-        runDate: dailyFritzPackage.run_date,
-        gameNumber,
-        completedHandIndex: dailyFritzHandIndex,
-        transcript,
-        completedHandScores: params.completedHandScores,
-        timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
-      }),
+      promise: requestNextHand(params),
       result: null,
       error: null,
       startedAt: requestStartedAt,
@@ -102,18 +120,9 @@ export class HandPrefetchCoordinator {
       return this.cache;
     }
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript } = params;
+    const { dailyFritzHandIndex, gameNumber, transcript } = params;
     this.cache = {
-      promise: nextDailyFritzHand({
-        attemptId: dailyFritzPackage.attempt_id,
-        verifiedMatchId: dailyFritzPackage.verified_match_id,
-        runDate: dailyFritzPackage.run_date,
-        gameNumber,
-        completedHandIndex: dailyFritzHandIndex,
-        transcript,
-        completedHandScores: params.completedHandScores,
-        timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
-      }),
+      promise: requestNextHand(params),
       result: null,
       error: null,
       startedAt: requestStartedAt,

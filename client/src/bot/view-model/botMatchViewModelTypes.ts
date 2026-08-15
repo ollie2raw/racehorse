@@ -19,6 +19,7 @@ import type { PreGameDrawState } from '../../match/preGameDraw/preGameDrawLogic'
 import type { LearningCoachApi } from '../../learning/useLearningCoach';
 import type { BotDealSize, BotMatchState } from '../../modules/match/runtime/botEngine.ts';
 import type { BotChoice } from '../../modules/fritz/botHeuristics.ts';
+import type { TableOffer, HandResult } from '../../stakes/stakesEconomy';
 import type {
   BotHandReveal,
   GuidedCoachTip,
@@ -78,13 +79,16 @@ export type BotMatchNavigationViewModel = {
 };
 
 export type BotMatchLayoutViewModel = {
-  mode: 'bot' | 'ghost' | 'daily-fritz';
+  mode: 'bot' | 'ghost' | 'daily-fritz' | 'stakes';
   winningScore: number;
   dealSize: BotDealSize;
   isDailyFritzMode: boolean;
   dailyFritzBoardHasPlay: boolean;
   isLessonLayoutMode: boolean;
   isGhostMode: boolean;
+  stakesConfig?: TableOffer;
+  onStakesHandComplete?: (won: boolean, stats: Omit<HandResult, 'won'>) => void;
+  replay?: { moveLog: readonly MoveEntry[] };
   isGuidedMode: boolean;
   isAuthoringMode: boolean;
   isAuthoringV2Mode: boolean;
@@ -131,6 +135,8 @@ export type MatchHudViewModel = {
 export type BoardViewModel = {
   boardRef: RefObject<BoardHandle | null>;
   boneyardRef: RefObject<HTMLDivElement | null>;
+  /** Mid-draw overlay boneyard count; falls back to match.boneyard.length. */
+  boneyardDisplayCount: number | null;
   ghostBoardPulse: boolean;
   openEnds: number[];
   openEndsSum: number;

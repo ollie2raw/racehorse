@@ -22,5 +22,9 @@ export function ingestDailyFritzNextHandDebug(payload: DailyFritzNextHandDebugPa
       timestamp: Date.now(),
       ...payload,
     }),
-  }).catch(() => {});
+  }).catch((error) => {
+    if (import.meta.env.DEV) {
+      console.warn('[daily-fritz-debug] ingest unavailable', error);
+    }
+  });
 }

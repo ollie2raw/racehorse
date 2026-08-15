@@ -18,19 +18,24 @@ import type { FritzChallengeAttemptRecord } from '../stores/fritzChallengeStore'
 type Handler = (req: any, res: any) => unknown | Promise<unknown>;
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
+const OPPONENT_ID = '33333333-3333-4333-8333-333333333333';
 const ATTEMPT_ID = '22222222-2222-4222-8222-222222222222';
 const NOW = new Date('2026-07-26T12:00:00.000Z');
 
 function makeChallenge(): GeneratedFritzChallenge {
-  return createGeneratedFritzChallenge({
+  return {
+    ...createGeneratedFritzChallenge({
     creatorUserId: USER_ID,
+    recipientUserId: OPPONENT_ID,
     fritzTier: 'elite',
     dealSize: 7,
     id: '33333333-3333-4333-8333-333333333333',
     shareCode: 'ABCDEFGH',
     seed: 'challenge-lifecycle-e2e-seed',
     now: NOW,
-  });
+    }),
+    acceptedAt: NOW.toISOString(),
+  };
 }
 
 function makeAttempt(challenge: GeneratedFritzChallenge): FritzChallengeAttemptRecord {
@@ -143,6 +148,48 @@ describe('Fritz Challenge lifecycle authority', () => {
     });
     expect(start.status).toBe(200);
     expect(attempt.revision).toBe(1);
+
+    const resumedStart = await request('/api/fritz-challenges/:shareCode/start', {
+      verification_protocol_version: 2,
+      game_rules_version: GAME_RULES_VERSION,
+      fritz_policy_version: FRITZ_POLICY_VERSION,
+      verifier_version: DAILY_FRITZ_VERIFIER_VERSION,
+    });
+    expect(resumedStart.status).toBe(200);
+    expect(resumedStart.body).toMatchObject({
+      ok: true,
+      attempt: { current_game_number: 1, current_hand_index: 0 },
+    });
+    expect(attempt.revision).toBe(1);
+
+    const initialAuthority = buildHonestDailyFritzHandTranscript({
+      challengeId: buildFritzChallengeIdentity(challenge),
+      attemptId: ATTEMPT_ID,
+      gameNumber: 1,
+      handIndex: 0,
+      deal: generateFritzChallengeHand(challenge.seed, 1, 0, challenge.config.dealSize),
+      drawWinner: getFritzChallengeDrawWinner(challenge.seed, 1),
+      winningScore: challenge.config.winningScore,
+      dealSize: challenge.config.dealSize,
+      playerScore: 0,
+      fritzScore: 0,
+      fritzTier: challenge.config.fritzTier,
+      fritzPolicyVersion: challenge.versions.fritzPolicyVersion as 1 | 2,
+    });
+    const tampered = await request('/api/fritz-challenges/:shareCode/next-hand', {
+      attempt_id: ATTEMPT_ID,
+      verified_match_id: ATTEMPT_ID,
+      game_number: 1,
+      completed_hand_index: 0,
+      transcript: {
+        ...initialAuthority.transcript,
+        challengeId: 'fritz-challenge:tampered',
+      },
+    });
+    expect(tampered.status).toBe(400);
+    expect(tampered.body).toMatchObject({ code: 'challenge_mismatch' });
+    expect(attempt.revision).toBe(1);
+    expect(commitCalls).toHaveLength(0);
 
     let terminalRequest: Record<string, unknown> | null = null;
     for (let gameNumber = 1 as 1 | 2 | 3; gameNumber <= 3; gameNumber = (gameNumber + 1) as 1 | 2 | 3) {

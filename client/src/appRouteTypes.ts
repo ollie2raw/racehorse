@@ -12,11 +12,14 @@ import type { useTournament } from './tournament/useTournament';
 import type { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 
 import type { UserProfile } from './auth/useAuth';
+import type { StakesAction, StakesRunState } from './stakes/stakesRunState';
+import type { DailyFritzStartResponse } from './dailyFritz/api';
+import type { MoveEntry } from './game/moveLogger';
 
 export const LEARN_MODE_VISIBLE = true;
 
-/** Flagship campaign — hidden until ready to ship. */
-export const JOURNEY_MODE_VISIBLE = true;
+/** Journey campaign — hidden from production navigation (not a current retention bet). */
+export const JOURNEY_MODE_VISIBLE = false;
 
 /** Pivotal-turn post-game review + full game analyzer — hidden until ready to ship. */
 export const POST_GAME_REVIEW_VISIBLE = true;
@@ -27,6 +30,7 @@ export type AppMode =
   | 'noBrainer'
   | 'botSetup'
   | 'bot'
+  | 'stakes'
   | 'ghostSetup'
   | 'ghost'
   | 'daily'
@@ -39,6 +43,7 @@ export type AppMode =
   | 'ratingHistory'
   | 'singlePlayerHub'
   | 'journey'
+  | 'circuit'
   | 'tournament'
   | 'leaderboard'
   | 'profile'
@@ -101,6 +106,17 @@ export type AppRoutesBotMatchProps = {
   isAuthoringMode: boolean;
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
+  challengePackage: DailyFritzStartResponse | null;
+  onStartFritzChallenge: (code: string) => Promise<void>;
+  onFritzChallengeGameComplete: (result: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+    movesUsed: number;
+    handsPlayed: number;
+    currentHandIndex: number;
+    moveLog: MoveEntry[];
+  }) => Promise<void>;
 };
 
 /** Ghost opponent profile and setup state. */
@@ -185,6 +201,10 @@ export type AppRoutesProps = {
   homeOverlays: AppRoutesHomeOverlayProps;
   multiplayer: AppRoutesMultiplayerProps;
   tournament: AppRoutesTournamentProps;
+  stakes: {
+    runState: StakesRunState;
+    dispatch: Dispatch<StakesAction>;
+  };
 };
 
 /** Route-domain bundles constructed at the App host source call site. */
@@ -201,4 +221,8 @@ export type AppRoutesHostRouteBundles = {
   homeOverlays: AppRoutesHomeOverlayProps;
   tournament: AppRoutesTournamentProps;
   multiplayerRoute: Pick<AppRoutesMultiplayerProps, 'mpSubView' | 'error' | 'setError'>;
+  stakes: {
+    runState: StakesRunState;
+    dispatch: Dispatch<StakesAction>;
+  };
 };

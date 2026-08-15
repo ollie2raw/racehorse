@@ -126,7 +126,9 @@ export function useGhostMatchCompletion({
             console.warn('[Fritz Rating] profile refresh failed:', err);
           });
           window.setTimeout(() => {
-            void Promise.resolve(onProfileRefresh()).catch(() => {});
+            void Promise.resolve(onProfileRefresh()).catch((error) => {
+              logger.error('ghost.profile_refresh_retry', error);
+            });
           }, 1200);
         }
         if (!onGhostProfileChange) return;

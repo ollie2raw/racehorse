@@ -5,6 +5,7 @@ import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
 import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
+import { normalizeUntrustedGuestId } from '../platform/auth/guestIdentity';
 
 const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
@@ -41,13 +42,6 @@ async function fetchPlayerRating(userId: string): Promise<number> {
   }
 }
 
-function isUuidLike(value: string | null | undefined): boolean {
-  return Boolean(
-    value &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
-  );
-}
-
 export function resolveQueueIdentity(
   socket: Pick<Socket, 'data'>,
   payload: { userId?: string; username?: string } | null | undefined,
@@ -69,11 +63,12 @@ export function resolveQueueIdentity(
     return { ok: false, error: 'missing_identity' };
   }
 
-  if (isUuidLike(payloadUserId)) {
+  const guestUserId = normalizeUntrustedGuestId(payloadUserId);
+  if (!guestUserId) {
     return { ok: false, error: 'not_authenticated' };
   }
 
-  return { ok: true, userId: payloadUserId, username: payloadUsername, authenticated: false };
+  return { ok: true, userId: guestUserId, username: payloadUsername, authenticated: false };
 }
 
 export function getOnlineCount(io: Server): number {

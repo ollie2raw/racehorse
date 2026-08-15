@@ -17,6 +17,8 @@ export type FritzChallengeRow = {
   share_code: string;
   creator_user_id: string;
   opponent_user_id: string | null;
+  invited_at?: string | null;
+  accepted_at?: string | null;
   seed: string;
   format: 'best_of_3';
   fritz_tier: DailyFritzTier;
@@ -142,6 +144,8 @@ const CHALLENGE_SELECT = [
   'share_code',
   'creator_user_id',
   'opponent_user_id',
+  'invited_at',
+  'accepted_at',
   'seed',
   'format',
   'fritz_tier',
@@ -163,6 +167,8 @@ export function toFritzChallengeRecord(row: FritzChallengeRow): GeneratedFritzCh
     shareCode: row.share_code,
     creatorUserId: row.creator_user_id,
     opponentUserId: row.opponent_user_id,
+    invitedAt: row.invited_at ?? null,
+    acceptedAt: row.accepted_at ?? null,
     seed: row.seed,
     status: row.status,
     config: {
@@ -187,6 +193,8 @@ export function toFritzChallengeRow(challenge: GeneratedFritzChallenge): FritzCh
     share_code: challenge.shareCode,
     creator_user_id: challenge.creatorUserId,
     opponent_user_id: challenge.opponentUserId,
+    invited_at: challenge.invitedAt,
+    accepted_at: challenge.acceptedAt,
     seed: challenge.seed,
     format: 'best_of_3',
     fritz_tier: challenge.config.fritzTier,
@@ -236,9 +244,27 @@ function isShareCodeCollision(error: unknown): boolean {
   );
 }
 
+function mapInviteCreationError(error: unknown): FritzChallengeError | null {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('fritz_challenge_recipient_not_friend')) {
+    return new FritzChallengeError('Choose an accepted friend for this challenge.', 'recipient_not_friend');
+  }
+  if (message.includes('fritz_challenge_active_invite_exists')) {
+    return new FritzChallengeError(
+      'Finish, cancel, or let your current Fritz Challenge expire before creating another one.',
+      'active_invite_exists',
+    );
+  }
+  if (message.includes('fritz_challenge_recipient_must_differ')) {
+    return new FritzChallengeError('You cannot challenge yourself.', 'invalid_config');
+  }
+  return null;
+}
+
 export async function createFritzChallenge(
   input: {
     creatorUserId: string;
+    recipientUserId: string;
     fritzTier: DailyFritzTier;
     dealSize: 7 | 14;
     now?: Date;
@@ -249,11 +275,23 @@ export async function createFritzChallenge(
     const challenge = createGeneratedFritzChallenge(input);
     try {
       const rows = await deps.fetch<FritzChallengeRow[]>(
-        '/rest/v1/fritz_challenges',
+        '/rest/v1/rpc/create_fritz_challenge_invite',
         {
           method: 'POST',
-          headers: { Prefer: 'return=representation' },
-          body: JSON.stringify([toFritzChallengeRow(challenge)]),
+          body: JSON.stringify({
+            p_creator_user_id: challenge.creatorUserId,
+            p_recipient_user_id: challenge.opponentUserId,
+            p_share_code: challenge.shareCode,
+            p_seed: challenge.seed,
+            p_fritz_tier: challenge.config.fritzTier,
+            p_deal_size: challenge.config.dealSize,
+            p_winning_score: challenge.config.winningScore,
+            p_rules_version: challenge.versions.rulesVersion,
+            p_fritz_policy_version: challenge.versions.fritzPolicyVersion,
+            p_verifier_version: challenge.versions.verifierVersion,
+            p_generator_version: challenge.versions.generatorVersion,
+            p_expires_at: challenge.expiresAt,
+          }),
         },
       );
       const row = rows?.[0];
@@ -264,6 +302,8 @@ export async function createFritzChallenge(
     } catch (error) {
       if (attempt < 2 && isShareCodeCollision(error)) continue;
       if (error instanceof FritzChallengeError) throw error;
+      const inviteError = mapInviteCreationError(error);
+      if (inviteError) throw inviteError;
       throw new FritzChallengeError(
         error instanceof Error ? error.message : 'Challenge creation failed.',
         'persistence_failed',
@@ -300,6 +340,12 @@ export async function claimFritzChallengeOpponent(
     throw new FritzChallengeError(
       'The challenge creator cannot claim the opponent slot.',
       'creator_cannot_join',
+    );
+  }
+  if (!input.challenge.opponentUserId || !input.challenge.invitedAt) {
+    throw new FritzChallengeError(
+      'This challenge needs a recipient before it can be accepted.',
+      'invite_required',
     );
   }
   if (

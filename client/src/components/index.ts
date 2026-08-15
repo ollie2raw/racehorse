@@ -20,6 +20,11 @@ export type { BoardOpenEndsPillProps } from './BoardOpenEndsPill';
 export { RotateOverlay } from './RotateOverlay';
 export { BrandLogo } from './BrandLogo';
 export { GlobalNav } from './GlobalNav';
+export { AppBottomTabBar } from './nav/AppBottomTabBar';
+export { SubsectionHeader } from './nav/SubsectionHeader';
+export type { SubsectionHeaderProps } from './nav/SubsectionHeader';
+export { APP_PRIMARY_TABS } from './nav/appPrimaryTabs';
+export type { AppPrimaryTab } from './nav/appPrimaryTabs';
 export {
   ZoomOutIcon,
   ZoomInIcon,

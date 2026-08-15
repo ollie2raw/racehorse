@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Socket } from 'socket.io-client';
+import { SubsectionHeader } from '../components';
 import {
   acceptFriendRequest,
   declineFriendRequest,
@@ -365,11 +366,7 @@ export default function FriendsScreen({
   return (
     <div className={`friends-page${selectedFriend ? ' has-selection' : ''}`} role="dialog" aria-modal="true" aria-label="Friends">
       <header className="friends-page-topbar">
-        <div className="friends-page-brand">RACEHORSE</div>
-        <button type="button" className="friends-page-back rh-back-button" onClick={onClose}>
-          <span aria-hidden="true">←</span>
-          <span>Back</span>
-        </button>
+        <SubsectionHeader title="Friends" onBack={onClose} backAriaLabel="Back" />
       </header>
 
       <div className="friends-page-split">

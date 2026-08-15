@@ -1,16 +1,8 @@
 /* Shared Racehorse page atmosphere: heavy obsidian base, restrained route accents. */
 
-:root {
-  --rh-bg-top: #050914;
-  --rh-bg-mid: #02040a;
-  --rh-bg-bottom: #000104;
-  --rh-surface: rgba(11, 15, 24, 0.9);
-  --rh-surface-soft: rgba(13, 18, 30, 0.76);
-  --rh-border: rgba(148, 163, 184, 0.14);
-  --rh-border-strong: rgba(148, 163, 184, 0.22);
-  --rh-nav-fade: rgba(2, 4, 10, 0.56);
-  --page-accent-rgb: 59, 130, 246;
-}
+/* This file's --rh-bg, --rh-surface, --rh-border, --rh-nav-fade, and
+   --page-accent-rgb variables were consolidated into styles/tokens.css.
+   Do not add a new :root block here. */
 
 .racehorse-page-bg,
 .home-page-root,

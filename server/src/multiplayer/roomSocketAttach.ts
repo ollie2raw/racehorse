@@ -234,7 +234,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       throw new Error('room_shell_only');
     }
 
-    let existingRoom = peekRoom(roomCode);
+    const existingRoom = peekRoom(roomCode);
     if (!existingRoom) {
       const message = 'Room not found.';
       console.log(

@@ -1,7 +1,7 @@
 import type { BotDealSize } from './primitives.ts';
 
 /** Surface that launched the local match experience. */
-export type LocalMatchMode = 'bot' | 'ghost' | 'daily-fritz';
+export type LocalMatchMode = 'bot' | 'ghost' | 'daily-fritz' | 'stakes';
 
 /** Optional overlays on top of a local match (learn, journey, ranked, etc.). */
 export type MatchExperienceOverlay =

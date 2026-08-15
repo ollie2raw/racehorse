@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import type { MatchFoundPayload } from './types';
 import { fetchRankingProfile, fetchUserStatsByUserId } from '../stats/statsApi';
+import { logger } from '../utils/logger';
 import './matchFoundOverlay.css';
 
 type Props = {
@@ -92,7 +93,9 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
           const streak = ratingProfile?.currentWinStreak ?? 0;
           setYouStats({ record, streak });
         }
-      }).catch(() => {});
+      }).catch((error) => {
+        logger.error('matchmaking.local_stats_load', error, { userId: yourUserId });
+      });
     }
   }, [yourUserId]);
 
@@ -110,7 +113,9 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
           const streak = ratingProfile?.currentWinStreak ?? 0;
           setOppStats({ record, streak });
         }
-      }).catch(() => {});
+      }).catch((error) => {
+        logger.error('matchmaking.opponent_stats_load', error, { userId: oppId });
+      });
     }
   }, [payload.opponent.userId]);
 

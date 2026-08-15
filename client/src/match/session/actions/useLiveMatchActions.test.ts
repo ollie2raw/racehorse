@@ -95,6 +95,7 @@ function makeParams(overrides: Partial<UseLiveMatchActionsParams> = {}): UseLive
     onGameStart: vi.fn(),
     appendMultiplayerMove: vi.fn(),
     flashLastPlayed: vi.fn(),
+    requestAuthoritativeResync: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -169,6 +170,27 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
 
     expect(vi.mocked(emitGameAction).mock.calls[1][2].requestId).toBe(firstRequestId);
     expect(logicalGameplayActionRef.current).toBe(null);
+  });
+
+  it('resyncs silently instead of showing a player error after a stale-state acknowledgement', async () => {
+    const requestAuthoritativeResync = vi.fn().mockResolvedValue(true);
+    const setActionError = vi.fn();
+    const params = makeParams({
+      legalMoves: [{ type: 'pass' } as any],
+      legalMovesRef: { current: [{ type: 'pass' } as any] },
+      requestAuthoritativeResync,
+      setActionError,
+    });
+    vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: false, error: 'stale_state', sequence: 2 });
+
+    const { result } = renderHook(() => useLiveMatchActions(params));
+    await act(async () => {
+      await result.current.pass();
+    });
+
+    expect(requestAuthoritativeResync).toHaveBeenCalledWith('action_pass_stale_state');
+    expect(setActionError).toHaveBeenCalledTimes(1);
+    expect(setActionError).toHaveBeenCalledWith('');
   });
 
   it('reuses MOVE requestId when the first ack is lost and the user retries', async () => {

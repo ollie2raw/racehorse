@@ -52,7 +52,7 @@ describe('Daily Fritz attempt operation lock', () => {
       await firstGate;
       order.push('first-finish');
       throw new Error('simulated lost response after write');
-    }).catch(() => undefined);
+    }).catch((_expectedLockError) => undefined);
 
     const second = withDailyFritzAttemptLock('attempt-duplicate', async () => {
       order.push('second-start');

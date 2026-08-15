@@ -15,69 +15,8 @@ body,
   box-sizing: border-box;
 }
 
-/* ─── Variables ─────────────────────────────────────────────── */
-
-:root {
-  --space-xs: 8px;
-  --space-sm: 16px;
-  --space-md: 24px;
-  --space-lg: 40px;
-  --space-xl: 64px;
-
-  --tray-height: 64px;
-  --score-header-height: 72px;
-  --bg-primary: #1a1f2e;
-  --bg-secondary: #252b3d;
-  --bg-card: #2d3548;
-
-  --text-primary: #ffffff;
-  --text-secondary: #a0a8c0;
-  --text-muted: #6b7280;
-
-  --accent-primary: var(--tier-standard);
-  --accent-secondary: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
-
-  /* Premium tile styling */
-  --tile-bg: #fffef5;
-  --tile-bg-gradient: linear-gradient(145deg, #fffef5 0%, #f5f0e0 100%);
-  --tile-border: #8b7355;
-  --tile-pip: #1a1a1a;
-  --tile-selected: rgba(80, 160, 255, 0.9);
-  --tile-highlight: rgba(80, 160, 255, 0.95);
-  --tile-play-glow: rgba(80, 160, 255, 0.3);
-  --tile-shadow: 0 3px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --tile-shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
-
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-
-  --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
-
-  /* Mobile Breakpoints */
-  --mobile-w: 600px;
-  --very-small-w: 380px;
-
-  /* Shared non-game background stack */
-  --menu-bg-base:
-    linear-gradient(180deg, #03101d 0%, #031324 38%, #02111f 100%);
-  --menu-bg-spot-a:
-    radial-gradient(ellipse 46% 32% at 50% 0%, rgba(56, 189, 248, 0.34) 0%, rgba(56, 189, 248, 0.10) 28%, rgba(56, 189, 248, 0.06) 46%, rgba(56, 189, 248, 0.00) 74%);
-  --menu-bg-spot-b:
-    linear-gradient(90deg, rgba(3, 15, 29, 0.00) 0%, rgba(34, 211, 238, 0.09) 50%, rgba(3, 15, 29, 0.00) 100%);
-  --menu-bg-beam:
-    linear-gradient(90deg, rgba(2, 12, 24, 0.00) 0%, rgba(56, 189, 248, 0.18) 50%, rgba(2, 12, 24, 0.00) 100%);
-  --menu-bg-vignette:
-    radial-gradient(circle at 50% 18%, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.10) 58%, rgba(0, 0, 0, 0.46) 100%);
-}
+/* Variables consolidated into styles/tokens.css — see that file's
+   "Legacy App.css tokens" section. Do not add a new :root block here. */
 
 .layout-screen {
   --ui-presence: 1.08;

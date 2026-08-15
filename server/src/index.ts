@@ -1,5 +1,9 @@
 import * as Sentry from '@sentry/node';
 import { config } from './config';
+import { recordOperationalFailure } from './operationalTelemetry';
+import { childLogger, rootLogger } from './logger';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { getSocketIoPubSubClients } from './redisClient';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -35,7 +39,10 @@ import { computeWeeklyAwards } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
-import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
+import {
+  deliverPendingMultiplayerInvites,
+  registerFriendInviteHandlers,
+} from './social/registerFriendInviteHandlers';
 import {
   emitPresenceUpdateToFriends,
   registerPresenceHandlers,
@@ -115,7 +122,7 @@ import {
   FRITZ_STANDARD_ID,
   isFritzId,
 } from './ranking/glicko2';
-import { startRankingCron } from './ranking/cron';
+import { startRankingCron, runWeeklyRankingMaintenance } from './ranking/cron';
 import {
   scheduleDailyFritzWarmup,
   scheduleDailyPuzzleLadderWarmup,
@@ -153,7 +160,6 @@ import {
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
 } from './multiplayer/disconnectGrace';
-import { registerLegacyTournamentHandlers } from './legacyTournament/registerLegacyTournamentHandlers';
 import {
   cancelRoomCleanup,
   clearReconnectSeatsForSocket,
@@ -204,7 +210,7 @@ import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchSt
 import type { BranchArm, GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
 import {
-  InMemoryRateLimiter,
+  createRateLimiter,
   createRateLimitMiddleware,
   socketRateLimitKey,
   failedRoomLookupLimiter,
@@ -216,6 +222,7 @@ import {
   registerGracefulShutdownHandlers,
 } from './platform/gracefulShutdown';
 import { constantTimeEqualSecret, isAdminSecret } from './platform/auth/adminSecret';
+import { normalizeUntrustedGuestId } from './platform/auth/guestIdentity';
 import {
   getAuthenticatedUserId,
   getAuthenticatedUserIdFromToken,
@@ -286,6 +293,7 @@ import {
   probeDailyFritzAuthoritySchema,
 } from './http/stores/dailyFritzAuthorityReadiness';
 import { isDailyFritzTransactionalAuthorityEnabled } from './dailyFritzAuthorityFeature';
+import { registerFritzChallengeRoutes } from './http/routes/fritzChallenges';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
 import {
   listCompletedDailyFritzDatesForUser,
@@ -356,8 +364,20 @@ const app = express();
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 
-const restRateLimiter = new InMemoryRateLimiter({ windowMs: 5 * 60_000, max: 600 });
-const socketRateLimiter = new InMemoryRateLimiter({ windowMs: 60_000, max: 600 });
+app.use((req, res, next) => {
+  const correlationId = randomUUID();
+  req.log = childLogger('http', { correlationId, method: req.method, path: req.path });
+  res.setHeader('X-Correlation-Id', correlationId);
+  Sentry.setTag('correlation_id', correlationId);
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    req.log.info({ status: res.statusCode, durationMs: Date.now() - startedAt }, 'request completed');
+  });
+  next();
+});
+
+const restRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: 600 }, 'rest');
+const socketRateLimiter = createRateLimiter({ windowMs: 60_000, max: 600 }, 'socket');
 const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api');
 const dailySubmitLimit = createRateLimitMiddleware(
   restRateLimiter,
@@ -380,6 +400,10 @@ app.use('/api/daily-fritz/reset-attempt', adminLimit);
 app.use('/api/daily-fritz/metrics', adminLimit);
 app.use('/api/daily-fritz/events', adminLimit);
 app.use('/api/ranking/process', adminLimit);
+// Note: /api/cron/weekly-ranking-maintenance is already covered by the
+// broader '/api/cron' prefix match above — do not add a second cronLimit
+// registration here, it would double-count each request against the
+// same bucket (which is exactly what happened during testing).
 app.use('/league/run-forfeits', adminLimit);
 app.use('/league/run-rollover', adminLimit);
 app.use('/bot-matches/cleanup-stale', adminLimit);
@@ -441,6 +465,17 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e6,
 });
 
+// Required once >1 server instance is running (Vercel Fluid Compute) —
+// without it, matchmaking/room broadcasts only reach sockets connected to
+// the same process that emitted them. No-op locally when REDIS_URL is unset.
+const socketIoRedisClients = getSocketIoPubSubClients();
+if (socketIoRedisClients) {
+  io.adapter(createAdapter(socketIoRedisClients.pubClient, socketIoRedisClients.subClient));
+  rootLogger.info('socket.io redis adapter enabled — multi-instance broadcasts active');
+} else {
+  rootLogger.warn('socket.io redis adapter disabled (no REDIS_URL) — single-instance only');
+}
+
 io.use((socket, next) => {
   if (isGracefulShutdownInProgress()) {
     next(new Error('server_shutting_down'));
@@ -474,6 +509,33 @@ registerRankingRoutes(app, {
   isFritzId,
   DEFAULT_RATING,
   DEFAULT_RD,
+});
+
+function isAuthorizedRankingCronRequest(req: express.Request): boolean {
+  // CRON_SECRET is Vercel's own convention: when set on the project, Vercel
+  // automatically sends `Authorization: Bearer <CRON_SECRET>` on its own
+  // cron invocations, so no extra wiring is needed on the Vercel side.
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return false;
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+  const m = authHeader.match(/^Bearer\s+(.+)$/i);
+  return constantTimeEqualSecret(m?.[1]?.trim(), secret);
+}
+
+app.get('/api/cron/weekly-ranking-maintenance', async (req, res) => {
+  if (!isAuthorizedRankingCronRequest(req)) {
+    res.status(401).json({ error: 'Unauthorized.' });
+    return;
+  }
+  try {
+    const result = await runWeeklyRankingMaintenance();
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    req.log.error({ err: error }, 'weekly ranking maintenance failed');
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Weekly ranking maintenance failed.',
+    });
+  }
 });
 
 registerGhostRoutes(app, {
@@ -510,6 +572,7 @@ registerBotMatchesRoutes(app, {
 
 registerDailyPuzzleRoutes(app);
 registerDailyFritzRoutes(app);
+registerFritzChallengeRoutes(app);
 
 registerRoomEventsRoutes(app, {
   getAuthenticatedUserId,
@@ -526,6 +589,7 @@ const SOCKET_EVENT_LIMITS: Record<string, RateLimitRule> = {
   'queue:join': { windowMs: 60_000, max: config.limitQueueJoinMax },
   'friend:invite': { windowMs: 60_000, max: config.limitFriendInviteMax },
   'friend:invite:decline': { windowMs: 60_000, max: config.limitFriendDeclineMax },
+  'friend:invite:accept': { windowMs: 60_000, max: config.limitFriendDeclineMax },
   'room:chat:send': { windowMs: 60_000, max: config.limitRoomChatMax },
   'room:emote:send': { windowMs: 60_000, max: config.limitRoomEmoteMax },
   'game:action': { windowMs: 60_000, max: config.limitGameActionMax },
@@ -538,35 +602,34 @@ function installSocketRateLimit(socket: Socket): void {
   socket.use((packet, next) => {
     const eventName = typeof packet[0] === 'string' ? packet[0] : 'unknown';
 
-    // Protect room:join and room:spectate from brute-force scans
-    if (eventName === 'room:join' || eventName === 'room:spectate') {
-      const rateLimitKey = socketRateLimitKey(socket);
-      const failedLookupsKey = `failed_lookups:${rateLimitKey}`;
-      const checkResult = failedRoomLookupLimiter.check(failedLookupsKey);
-      if (!checkResult.allowed) {
-        const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
-        ack?.({ ok: false, error: 'rate_limited', retryAfterMs: checkResult.retryAfterMs });
-        socket.emit('rate_limited', { event: eventName, retryAfterMs: checkResult.retryAfterMs });
-        next(new Error('rate_limited'));
+    void (async () => {
+      // Protect room:join and room:spectate from brute-force scans
+      if (eventName === 'room:join' || eventName === 'room:spectate') {
+        const rateLimitKey = socketRateLimitKey(socket);
+        const failedLookupsKey = `failed_lookups:${rateLimitKey}`;
+        const checkResult = await failedRoomLookupLimiter.check(failedLookupsKey);
+        if (!checkResult.allowed) {
+          const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
+          ack?.({ ok: false, error: 'rate_limited', retryAfterMs: checkResult.retryAfterMs });
+          socket.emit('rate_limited', { event: eventName, retryAfterMs: checkResult.retryAfterMs });
+          next(new Error('rate_limited'));
+          return;
+        }
+      }
+
+      const rule = SOCKET_EVENT_LIMITS[eventName] ?? DEFAULT_SOCKET_EVENT_LIMIT;
+      const result = await socketRateLimiter.take(`socket:${eventName}:${socketRateLimitKey(socket)}`, rule);
+      if (result.allowed) {
+        next();
         return;
       }
-    }
-
-    const rule = SOCKET_EVENT_LIMITS[eventName] ?? DEFAULT_SOCKET_EVENT_LIMIT;
-    const result = socketRateLimiter.take(`socket:${eventName}:${socketRateLimitKey(socket)}`, rule);
-    if (result.allowed) {
-      next();
-      return;
-    }
-    const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
-    ack?.({ ok: false, error: 'rate_limited', retryAfterMs: result.retryAfterMs });
-    socket.emit('rate_limited', { event: eventName, retryAfterMs: result.retryAfterMs });
-    next(new Error('rate_limited'));
+      const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
+      ack?.({ ok: false, error: 'rate_limited', retryAfterMs: result.retryAfterMs });
+      socket.emit('rate_limited', { event: eventName, retryAfterMs: result.retryAfterMs });
+      next(new Error('rate_limited'));
+    })();
   });
 }
-
-let finalizeTournamentMatchHook: ((room: any) => void) | null = null;
-
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -586,17 +649,30 @@ function normalizeAuthToken(value: unknown): string | null {
 }
 
 async function resolveSocketIdentity(config: RoomJoinConfig): Promise<{ username: string; userId: string | null }> {
-  const username = normalizeUsername(config.username);
   const claimedUserId = normalizeUserId(config.userId);
+  const guestUserId = normalizeUntrustedGuestId(claimedUserId);
+  const normalizedUsername = normalizeUsername(config.username);
+  const username = normalizedUsername === 'Guest'
+    ? normalizeGuestDisplayName(guestUserId, normalizedUsername)
+    : normalizedUsername;
   const authToken = normalizeAuthToken(config.authToken);
   if (!authToken) {
-    // Do not trust client-claimed production UUIDs without a verified token.
-    // Non-UUID ids are kept for local smoke tests and legacy guest-style flows.
-    return { username, userId: claimedUserId && !isUuidLike(claimedUserId) ? claimedUserId : null };
+    // Guest ids provide unranked continuity only. Account identity always
+    // requires a token verified through Supabase Auth.
+    return { username, userId: guestUserId };
   }
 
   const verifiedUserId = await getAuthenticatedUserIdFromToken(authToken);
   return { username, userId: verifiedUserId };
+}
+
+function normalizeGuestDisplayName(userId: string | null, fallback: string): string {
+  if (!userId?.startsWith('guest_')) return fallback;
+  let hash = 0;
+  for (const character of userId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return `Guest ${String(hash % 10000).padStart(4, '0')}`;
 }
 
 function isUuidLike(value: string | null | undefined): boolean {
@@ -614,7 +690,9 @@ function notifyRoomPlayersInGame(roomCode: string): void {
     const pSocket = io.sockets.sockets.get(connectionId);
     const playerId = normalizeUserId(pSocket?.data?.userId);
     if (playerId) {
-      void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
+      void upsertPresence(playerId, 'in_game', roomCode).catch((error) => {
+        recordOperationalFailure('presence.in_game_upsert', error, { playerId, roomCode });
+      });
       emitPresenceUpdateToFriends({ io, socketsByUserId }, playerId, 'in_game');
     }
   }
@@ -629,7 +707,6 @@ async function onAfterMatchStarted(room: Room): Promise<void> {
 initRoomSession(io, {
   persistRoomMatchLog,
   onGameOver: createGameOverPersistScheduler(io),
-  finalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
   resolveSocketIdentity,
   normalizeUsername,
   normalizeUserId,
@@ -637,13 +714,16 @@ initRoomSession(io, {
   waitUntilMatchmakingRoomSocketsReady,
   onAfterMatchStarted,
   notifyRoomPlayersInGame,
-  maybeFinalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
 });
 
 io.on('connection', (socket: Socket) => {
-  console.log(`[socket.io] client connected id=${socket.id} transport=${socket.conn.transport.name}`);
+  const connectionId = randomUUID();
+  socket.data.connectionId = connectionId;
+  const socketLog = childLogger('socket', { connectionId, socketId: socket.id });
+  socket.data.log = socketLog;
+  socketLog.info({ transport: socket.conn.transport.name }, 'client connected');
   socket.conn.on('upgrade', (transport) => {
-    console.log(`[socket.io] transport upgraded id=${socket.id} -> ${transport.name}`);
+    socketLog.info({ transport: transport.name }, 'transport upgraded');
   });
   installSocketRateLimit(socket);
   registerSpectatorHandlersIfEnabled(io, socket);
@@ -662,33 +742,19 @@ io.on('connection', (socket: Socket) => {
     resolveSocketIdentity,
     normalizeUserId,
     isUuidLike,
+    onIdentified: async (userId) => {
+      if (config.multiplayerDurableInvites) {
+        await deliverPendingMultiplayerInvites(io, socket, userId);
+      }
+    },
   });
 
   registerFriendInviteHandlers(io, socket, socketsByUserId, {
     normalizeUserId,
     normalizeUsername,
     isAuthenticatedUserId: isUuidLike,
+    durableInvitesEnabled: config.multiplayerDurableInvites,
   });
-
-  socket.on(
-    'friend:invite:decline',
-    (payload: { toUserId?: string; roomCode?: string; inviteId?: string }) => {
-      const challengerUserId = normalizeUserId(payload?.toUserId);
-      if (!challengerUserId) return;
-      const challengerSockets = socketsByUserId.get(challengerUserId);
-      if (!challengerSockets) return;
-      const fromUsername = normalizeUsername(socket.data?.username as string | undefined);
-      const roomCode = String(payload?.roomCode ?? '').trim().toUpperCase();
-      const inviteId = String(payload?.inviteId ?? '').slice(0, 80);
-      for (const socketId of challengerSockets) {
-        io.to(socketId).emit('friend:invite:declined', {
-          inviteId: inviteId || undefined,
-          fromUsername,
-          roomCode: roomCode || undefined,
-        });
-      }
-    },
-  );
 
   registerRoomChatEmoteHandlers(socket);
 
@@ -704,16 +770,6 @@ io.on('connection', (socket: Socket) => {
 
 
   console.log('Client connected:', socket.id);
-
-  // TOURNAMENT_HELPERS
-  const ENABLE_LEGACY_TOURNAMENTS = config.enableLegacyTournaments;
-  if (ENABLE_LEGACY_TOURNAMENTS) {
-    finalizeTournamentMatchHook = registerLegacyTournamentHandlers(socket, {
-      io,
-      normalizeUsername,
-      normalizeUserId,
-    });
-  }
 
 
 
@@ -796,9 +852,15 @@ registerHealthRoutes({
   probeDailyFritzAuthoritySchema,
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  bootstrapScheduledTournamentInfrastructure(io, app);
+/**
+ * On Vercel, the exported `server` below is invoked per-request by the
+ * platform's Node runtime — it must not bind a port itself. Everywhere else
+ * (local dev, a traditional always-on host) this is the real entrypoint.
+ */
+function startServer(): void {
+  server.listen(PORT, () => {
+    rootLogger.info({ port: PORT }, 'server listening');
+    bootstrapScheduledTournamentInfrastructure(io, app);
   void probeRoomMatchLogsTable()
     .then((ok) => {
       console.log('[room-match-logs] startup probe', {
@@ -834,7 +896,17 @@ server.listen(PORT, () => {
     }, 10 * 60 * 1000);
   }
   startRankingCron();
+  // Best-effort pre-warms — the daily puzzle ladder also self-heals via the
+  // gen-puzzles GitHub Actions cron every 6h, so these being unreliable on a
+  // scale-to-zero platform (Vercel) degrades latency, not correctness.
   scheduleDailyFritzWarmup();
   scheduleDailyPuzzleLadderWarmup();
   scheduleStartupDailyWarmups();
-});
+  });
+}
+
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default server;

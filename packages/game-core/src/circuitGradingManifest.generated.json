@@ -1,0 +1,518 @@
+{
+  "generatedAt": "2026-07-17T01:08:25.891Z",
+  "schemaVersion": 2,
+  "decisionStateCount": 18,
+  "states": [
+    {
+      "scenarioId": "circuit:certified:scoring-take-five",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-5@left",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "strong"
+        },
+        {
+          "moveKey": "4-5@right",
+          "move": {
+            "tile": {
+              "low": 4,
+              "high": 5
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:scoring-double-ten",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-4@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        },
+        {
+          "moveKey": "5-5@left",
+          "move": {
+            "tile": {
+              "low": 5,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:control-hold-left",
+      "stepId": null,
+      "legalMoveCount": 4,
+      "grades": [
+        {
+          "moveKey": "1-3@left",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 3
+            },
+            "position": "left"
+          },
+          "grade": "inaccurate"
+        },
+        {
+          "moveKey": "1-3@right",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 3
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        },
+        {
+          "moveKey": "1-4@left",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 4
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        },
+        {
+          "moveKey": "3-6@right",
+          "move": {
+            "tile": {
+              "low": 3,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:control-preserve-pressure",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "1-5@left",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        },
+        {
+          "moveKey": "3-4@right",
+          "move": {
+            "tile": {
+              "low": 3,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:blocking-seal-right",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "1-4@right",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        },
+        {
+          "moveKey": "2-5@left",
+          "move": {
+            "tile": {
+              "low": 2,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:tempo-claim-six",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-6@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        },
+        {
+          "moveKey": "5-5@left",
+          "move": {
+            "tile": {
+              "low": 5,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "strong"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:endgame-go-down",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-4@left",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "left"
+          },
+          "grade": "strong"
+        },
+        {
+          "moveKey": "2-6@right",
+          "move": {
+            "tile": {
+              "low": 2,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:risk-avoid-bleed",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-5@left",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        },
+        {
+          "moveKey": "3-6@right",
+          "move": {
+            "tile": {
+              "low": 3,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "blunder"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:scoring-setup-count",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-6@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "strong"
+        },
+        {
+          "moveKey": "5-5@left",
+          "move": {
+            "tile": {
+              "low": 5,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:opening-anchor",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-4@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "strong"
+        },
+        {
+          "moveKey": "2-5@left",
+          "move": {
+            "tile": {
+              "low": 2,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:counting-read-ends",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-4@left",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        },
+        {
+          "moveKey": "3-6@right",
+          "move": {
+            "tile": {
+              "low": 3,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "strong"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:blocking-hard-cut",
+      "stepId": null,
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "1-5@left",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "strong"
+        },
+        {
+          "moveKey": "3-6@right",
+          "move": {
+            "tile": {
+              "low": 3,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-protect-lead",
+      "stepId": "cp1",
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-3@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 3
+            },
+            "position": "right"
+          },
+          "grade": "inaccurate"
+        },
+        {
+          "moveKey": "1-4@left",
+          "move": {
+            "tile": {
+              "low": 1,
+              "high": 4
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-protect-lead",
+      "stepId": "cp2",
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-3@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 3
+            },
+            "position": "right"
+          },
+          "grade": "inaccurate"
+        },
+        {
+          "moveKey": "4-6@left",
+          "move": {
+            "tile": {
+              "low": 4,
+              "high": 6
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-protect-lead",
+      "stepId": "cp3",
+      "legalMoveCount": 1,
+      "grades": [
+        {
+          "moveKey": "0-3@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 3
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-force-count",
+      "stepId": "cp2a",
+      "legalMoveCount": 2,
+      "grades": [
+        {
+          "moveKey": "0-4@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "inaccurate"
+        },
+        {
+          "moveKey": "5-5@left",
+          "move": {
+            "tile": {
+              "low": 5,
+              "high": 5
+            },
+            "position": "left"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-force-count",
+      "stepId": "cp2b",
+      "legalMoveCount": 1,
+      "grades": [
+        {
+          "moveKey": "0-4@right",
+          "move": {
+            "tile": {
+              "low": 0,
+              "high": 4
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    },
+    {
+      "scenarioId": "circuit:certified:checkpoint-force-count",
+      "stepId": "cp2c",
+      "legalMoveCount": 1,
+      "grades": [
+        {
+          "moveKey": "4-6@right",
+          "move": {
+            "tile": {
+              "low": 4,
+              "high": 6
+            },
+            "position": "right"
+          },
+          "grade": "optimal"
+        }
+      ]
+    }
+  ]
+}

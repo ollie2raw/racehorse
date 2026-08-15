@@ -11,25 +11,28 @@ export function formatGhostName(rawName: string): string {
 }
 
 export function renderScoreToastMessage(message: string): ReactNode {
+  const turnMatch = message.match(/Turn\s+(\d+)/i);
   const pointsMatch = message.match(/\+\d+/);
-  if (!pointsMatch || typeof pointsMatch.index !== 'number') return message;
+  if (!pointsMatch || typeof pointsMatch.index !== 'number') {
+    if (turnMatch && typeof turnMatch.index === 'number') {
+      const start = turnMatch.index;
+      const end = start + turnMatch[0].length;
+      return (
+        <>
+          {message.slice(0, start)}
+          <span className="rh-score-toast-emphasis">{turnMatch[0]}</span>
+          {message.slice(end)}
+        </>
+      );
+    }
+    return message;
+  }
   const start = pointsMatch.index;
   const end = start + pointsMatch[0].length;
   return (
     <>
       {message.slice(0, start)}
-      <span
-        style={{
-          fontSize: '1.48rem',
-          fontWeight: 800,
-          lineHeight: 1,
-          letterSpacing: '0.01em',
-          display: 'inline-block',
-          margin: '0 2px',
-        }}
-      >
-        {pointsMatch[0]}
-      </span>
+      <span className="rh-score-toast-emphasis">{pointsMatch[0]}</span>
       {message.slice(end)}
     </>
   );

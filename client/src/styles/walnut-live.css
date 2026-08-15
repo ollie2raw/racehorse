@@ -1,15 +1,5 @@
-:root {
-  --wl-bg-top: #08100f;
-  --wl-bg-mid: #0b1d1a;
-  --wl-bg-bottom: #05090d;
-  --wl-gold: #d8b56f;
-  --wl-mint: #95f0ca;
-  --wl-card: rgba(238, 248, 244, 0.09);
-  --wl-card-border: rgba(245, 255, 251, 0.24);
-  --wl-panel: rgba(9, 15, 19, 0.72);
-  --wl-shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.48);
-  --wl-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.34);
-}
+/* --wl-* variables consolidated into styles/tokens.css. Do not add a new
+   :root block here. */
 
 body {
   font-family: 'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif;
