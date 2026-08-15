@@ -89,9 +89,15 @@
 /* ─── Placement Zones ───────────────────────────────────────── */
 
 .placement-zone {
+  appearance: none;
+  -webkit-appearance: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  font: inherit;
+  color: inherit;
   border: 2px solid rgba(255, 255, 255, 0.4);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
@@ -164,6 +170,7 @@
 .placement-arrow {
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1;
   color: var(--tile-highlight);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }

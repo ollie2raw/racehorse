@@ -1,6 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import {
-  FitBoardIcon,
   FullscreenIcon,
   HomeIcon,
   VolumeIcon,
@@ -51,19 +50,6 @@ export function BotMatchBoardControlsTray({
         }}
       >
         <ZoomOutIcon />
-      </button>
-      <button
-        type="button"
-        className="wl-control-btn"
-        title="Fit board"
-        aria-label="Fit board"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          boardRef.current?.resetCamera();
-        }}
-      >
-        <FitBoardIcon />
       </button>
       <button
         type="button"

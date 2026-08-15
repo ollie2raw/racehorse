@@ -11,7 +11,7 @@ import {
   type ForwardedRef,
 } from 'react';
 import { DominoTile } from './DominoTile';
-import { ZoomInIcon, ZoomOutIcon, FitBoardIcon } from './MatchBoardControlIcons';
+import { ZoomInIcon, ZoomOutIcon } from './MatchBoardControlIcons';
 import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
 import { tileEquals } from '../game/tileUtils';
 import { isDouble } from '../game/openEndsGeometry';
@@ -1110,7 +1110,7 @@ function BoardComponent(
           const width = zone.width * unitToPixels;
           const height = zone.height * unitToPixels;
 
-          // Determine arrow direction from computed endpoint direction.
+          // Opening tile uses '+'; ends use a direction glyph — same as 3cd8858.
           let arrow = '+';
           if (zone.dirX < 0) arrow = '←';
           else if (zone.dirX > 0) arrow = '→';
@@ -1133,8 +1133,6 @@ function BoardComponent(
                 height,
                 transform: 'translate(-50%, -50%)',
                 touchAction: 'none',
-                background: 'none',
-                border: 'none',
                 padding: 0,
                 cursor: 'pointer',
               }}
@@ -1215,21 +1213,6 @@ function BoardComponent(
           }}
         >
           <ZoomOutIcon />
-        </button>
-        <button
-          type="button"
-          className="board-zoom-btn"
-          title="Fit board"
-          aria-label="Fit board"
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            resetCameraToFit();
-          }}
-        >
-          <FitBoardIcon />
         </button>
         <button
           type="button"

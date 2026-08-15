@@ -9,7 +9,6 @@ import {
   HomeIcon,
   RotateOverlay,
   ScoreTrackOverlay,
-  FitBoardIcon,
   VolumeIcon,
   ZoomInIcon,
   ZoomOutIcon,
@@ -894,19 +893,6 @@ export function LiveMatchScreen({
                       }}
                     >
                       <ZoomOutIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="wl-control-btn"
-                      title="Fit board"
-                      aria-label="Fit board"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        boardRef.current?.resetCamera();
-                      }}
-                    >
-                      <FitBoardIcon />
                     </button>
                     <button
                       type="button"

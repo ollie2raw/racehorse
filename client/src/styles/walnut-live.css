@@ -1541,6 +1541,7 @@ body {
 
 .screen.game-screen.walnut-live .open-ends-pill__label,
 .screen.game-screen.walnut-live .boneyard-meta {
+  font-family: var(--font-display);
   font-size: var(--match-counter-label-size, 0.76rem);
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1551,6 +1552,7 @@ body {
 
 .screen.game-screen.walnut-live .open-ends-count,
 .screen.game-screen.walnut-live .boneyard-count {
+  font-family: var(--font-display);
   font-size: var(--match-counter-value-size, 1.35rem);
   font-weight: 800;
   line-height: 1;

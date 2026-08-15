@@ -75,15 +75,3 @@ export function HomeIcon({ style }: { style?: CSSProperties }) {
     </svg>
   );
 }
-
-export function FitBoardIcon({ style }: { style?: CSSProperties }) {
-  return (
-    <svg {...svgProps} style={style}>
-      <path d="M9 4H4v5" />
-      <path d="M15 4h5v5" />
-      <path d="M9 20H4v-5" />
-      <path d="M15 20h5v-5" />
-      <rect x="8" y="8" width="8" height="8" rx="1" strokeWidth="1.4" />
-    </svg>
-  );
-}

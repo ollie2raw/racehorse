@@ -21,7 +21,7 @@ import {
   type NoBrainerPracticeState,
 } from './noBrainerLogic';
 import { getNoBrainerSolvedCount, markNoBrainerHandSolved } from './noBrainerLabProgress';
-import { ZoomInIcon, ZoomOutIcon, FitBoardIcon } from '../components';
+import { ZoomInIcon, ZoomOutIcon } from '../components';
 import './noBrainerLab.css';
 
 interface NoBrainerLabScreenProps {
@@ -328,19 +328,6 @@ export default function NoBrainerLabScreen({
               }}
             >
               <ZoomOutIcon />
-            </button>
-            <button
-              type="button"
-              className="board-zoom-btn"
-              title="Fit board"
-              aria-label="Fit board"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                boardRef.current?.resetCamera();
-              }}
-            >
-              <FitBoardIcon />
             </button>
             <button
               type="button"
