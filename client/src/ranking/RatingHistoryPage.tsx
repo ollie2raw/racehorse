@@ -359,7 +359,7 @@ export default function RatingHistoryPage({
             <p style={{ color: 'rgba(191,213,223,0.72)', margin: 0 }}>No ranked players yet.</p>
           ) : (
             <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
-              {leaderboard.map((entry) => (
+              {leaderboard.map((entry, i) => (
                 <li
                   key={entry.userId}
                   style={{
@@ -373,11 +373,13 @@ export default function RatingHistoryPage({
                   }}
                 >
                   <span style={{ color: 'rgba(191,213,223,0.72)', minWidth: 28, fontVariantNumeric: 'tabular-nums' }}>
-                    #{entry.rank}
+                    #{i + 1}
                   </span>
-                  <span style={{ flex: 1, color: 'rgba(241,248,245,0.92)', marginLeft: 8 }}>{entry.username}</span>
+                  <span style={{ flex: 1, color: 'rgba(241,248,245,0.92)', marginLeft: 8 }}>
+                    {entry.username ?? entry.userId.slice(0, 8)}
+                  </span>
                   <span style={{ color: 'rgba(52,211,153,0.9)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {Math.round(entry.rating)}
+                    {Math.round(entry.glicko_rating)}
                   </span>
                 </li>
               ))}

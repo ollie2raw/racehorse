@@ -23,9 +23,9 @@ export type RatingHistoryResponse = {
 
 export type LeaderboardEntry = {
   userId: string;
-  username: string;
-  rating: number;
-  rank: number;
+  username: string | null;
+  glicko_rating: number;
+  ranked_games_played: number;
 };
 
 export type LeaderboardResponse = {
