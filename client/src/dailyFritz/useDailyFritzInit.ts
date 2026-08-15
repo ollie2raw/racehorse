@@ -165,9 +165,10 @@ export function useDailyFritzInit({ userId }: UseDailyFritzInitParams): UseDaily
           payload: { attemptStatus: response.attempt_status },
         });
         dfInitLog('state', { phase: 'ready' });
-      } catch {
+      } catch (initErr) {
         if (initRequestIdRef.current !== requestId) return;
-        setLoadError('Please try again.');
+        console.error('[daily-fritz] init failed:', initErr);
+        setLoadError(friendlyDailyFritzInitError(initErr));
         setInitPhase('failed');
         dfInitLog('state', { phase: 'failed' });
       } finally {
