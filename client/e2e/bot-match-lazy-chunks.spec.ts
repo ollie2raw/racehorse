@@ -5,7 +5,7 @@ test.describe.configure({ timeout: 60_000 });
 
 async function openPlayVsFritzSetup(page: import('@playwright/test').Page) {
   await page.goto('/');
-  await page.getByText('Single Player', { exact: false }).first().click();
+  await page.getByLabel('Game modes').getByRole('button', { name: 'Single Player', exact: true }).click();
   await page.getByText('Play vs Fritz', { exact: false }).first().click();
   await expect(page.getByText('Start Match', { exact: false }).first()).toBeVisible({
     timeout: 15_000,
@@ -63,7 +63,7 @@ test.describe('Bot match lazy chunks — guided V2', () => {
     tracker.reset();
 
     await page.goto('/');
-    await page.getByText('Learn', { exact: false }).first().click();
+    await page.getByLabel('Game modes').getByRole('button', { name: 'Learn', exact: true }).click();
     await expect(page.getByText('Guided Match', { exact: false })).toBeVisible({ timeout: 15_000 });
 
     const guidedError = page.getByRole('alert');

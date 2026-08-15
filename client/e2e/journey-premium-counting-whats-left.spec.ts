@@ -7,7 +7,7 @@ async function shot(page: Page, info: TestInfo, name: string) { await page.scree
 async function open(page: Page) {
   await page.goto('/journey');
   await page.getByLabel('Puzzle Gate, Current').click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('.rh-journey-detail__actions').getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Counting What’s Left' })).toBeVisible();
   await page.getByRole('button', { name: /take a seat/i }).click();
   await page.getByRole('button', { name: /i see the known tiles/i }).click();

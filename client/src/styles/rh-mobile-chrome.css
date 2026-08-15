@@ -16,6 +16,14 @@
     padding-bottom: var(--rh-bottom-tab-offset);
     box-sizing: border-box;
   }
+
+  .rh-journey-root .rh-journey-main {
+    padding-bottom: calc(18px + var(--rh-bottom-tab-offset));
+  }
+
+  .rh-journey-root .rh-journey-detail__actions {
+    scroll-margin-bottom: calc(var(--rh-bottom-tab-offset) + 16px);
+  }
 }
 
 @media (min-width: 768px) {

@@ -1,7 +1,25 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { AppMode } from '../../types';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './appPrimaryTabs';
 import './AppBottomTabBar.css';
+
+const PHONE_TAB_QUERY = '(max-width: 767px)';
+
+function usePhoneViewport() {
+  const [isPhone, setIsPhone] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(PHONE_TAB_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(PHONE_TAB_QUERY);
+    const sync = () => setIsPhone(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  return isPhone;
+}
 
 interface AppBottomTabBarProps {
   currentMode?: AppMode;
@@ -55,6 +73,9 @@ export function AppBottomTabBar({
   activeColor,
   onNavigate,
 }: AppBottomTabBarProps) {
+  const isPhone = usePhoneViewport();
+  if (!isPhone) return null;
+
   return (
     <nav
       className="rh-bottom-tab-bar"
