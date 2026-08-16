@@ -814,6 +814,7 @@ async function persistFritzGhostTrainingProfile(params: {
   opponentScore: number;
   trainingMoveLog: GhostMoveLogEntry[];
   matchId?: string | null;
+  applyGlicko: boolean;
 }): Promise<void> {
   const { isNewGame } = await insertGhostGameRow({
     userId: params.userId,
@@ -827,7 +828,12 @@ async function persistFritzGhostTrainingProfile(params: {
   const recentGames = styleGames.slice(0, 20);
   const compositeLog = buildCompositeLog(recentGames, styleGames, params.profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
-  const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
+  // Same fail-closed contract as the profiles.glicko_rating write this
+  // function runs alongside: applyGlicko === false means the caller could not
+  // verify finalScore/opponentScore against a server-owned deal-snapshot
+  // replay, so this training-profile "Ghost Rating" — also shown to users —
+  // must not move from that unverified number either.
+  const isRatingEligible = params.applyGlicko && isGhostRatingEligible(params.finalScore, params.opponentScore);
   const rating = isRatingEligible
     ? computeFritzRatingChange(
         Number(params.profile.ghost_rating ?? 800),
@@ -935,6 +941,7 @@ export async function completeGhostGame(params: {
       opponentScore: params.opponentScore,
       trainingMoveLog,
       matchId: params.matchId,
+      applyGlicko: params.applyGlicko !== false,
     }).catch((error) => {
       log.warn({
         userId: params.userId,
@@ -979,7 +986,11 @@ export async function completeGhostGame(params: {
   const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
-  const rating = isRatingEligible
+  // Same fail-closed contract as the Fritz branch above: applyGlicko === false
+  // (no server-verified deal-snapshot replay behind this completion) means no
+  // rating change and no games_played increment — not a smaller/softer one.
+  const ratingEligibleAndVerified = isRatingEligible && params.applyGlicko !== false;
+  const rating = ratingEligibleAndVerified
     ? params.opponentUserId
       ? computeRatingChange(
           Number(profile.ghost_rating ?? 800),
@@ -998,7 +1009,9 @@ export async function completeGhostGame(params: {
     composite_log: compositeLog,
     style_profile: styleProfile,
     games_played:
-      isNewGame && isRatingEligible ? Number(profile.games_played ?? 0) + 1 : Number(profile.games_played ?? 0),
+      isNewGame && ratingEligibleAndVerified
+        ? Number(profile.games_played ?? 0) + 1
+        : Number(profile.games_played ?? 0),
   });
 
   return {

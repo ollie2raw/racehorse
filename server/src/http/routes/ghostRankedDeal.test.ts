@@ -308,3 +308,120 @@ describe('ranked Fritz start/complete deal authority', () => {
     warn.mockRestore();
   });
 });
+
+const OPPONENT_USER_ID = '22222222-2222-4222-8222-222222222222';
+
+describe('ranked non-Fritz Ghost start/complete deal authority', () => {
+  beforeEach(() => {
+    glickoWrites.length = 0;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('mutates one tile in a submitted non-Fritz Ghost move log and is rejected with no rating write', async () => {
+    const harness = makeHarness();
+    const started = await harness.request('POST', '/api/ghost/start', {
+      userId: USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      opponentUserId: OPPONENT_USER_ID,
+      winningScore: 10,
+      dealSize: 7,
+      matchStarter: 'you',
+    });
+    expect(started.status).toBe(200);
+    const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
+    const honest = playHonestRankedGame(snapshot);
+    const mutated = mutateOnePlayedTile(honest.moveLog);
+
+    const response = await harness.request('POST', '/api/ghost/complete', {
+      userId: USER_ID,
+      matchId: started.body.matchId,
+      opponentUserId: OPPONENT_USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      finalScore: 200,
+      opponentScore: 0,
+      moveLog: toGhostBodyLog(mutated),
+      playerMoveLog: toGhostBodyLog(mutated.filter((entry) => entry.actor === 'you')),
+    });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(glickoWrites).toEqual([]);
+    expect(harness.completeCalls).toEqual([]);
+  });
+
+  it('accepts an honest non-Fritz Ghost log and applies rating from the exact replayed score, not the submitted finalScore', async () => {
+    const harness = makeHarness();
+    const started = await harness.request('POST', '/api/ghost/start', {
+      userId: USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      opponentUserId: OPPONENT_USER_ID,
+      winningScore: 10,
+      dealSize: 7,
+      matchStarter: 'you',
+    });
+    const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
+    const honest = playHonestRankedGame(snapshot);
+
+    const response = await harness.request('POST', '/api/ghost/complete', {
+      userId: USER_ID,
+      matchId: started.body.matchId,
+      opponentUserId: OPPONENT_USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      finalScore: 199,
+      opponentScore: 199,
+      moveLog: toGhostBodyLog(honest.moveLog),
+      playerMoveLog: toGhostBodyLog(honest.moveLog.filter((entry) => entry.actor === 'you')),
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.completeCalls).toHaveLength(1);
+    expect(harness.completeCalls[0]?.finalScore).toBe(honest.playerScore);
+    expect(harness.completeCalls[0]?.opponentScore).toBe(honest.opponentScore);
+    expect(harness.completeCalls[0]?.applyGlicko).not.toBe(false);
+  });
+
+  it('fails closed on a non-Fritz Ghost match missing a snapshot: no rating write, not a trust fallback to client score', async () => {
+    const harness = makeHarness();
+    const match = makeMatch({ mode: 'ghost', opponentUserId: OPPONENT_USER_ID, dealSnapshot: null });
+    harness.matches.set(match.matchId, match);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await harness.request('POST', '/api/ghost/complete', {
+      userId: USER_ID,
+      matchId: match.matchId,
+      opponentUserId: OPPONENT_USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      finalScore: 60,
+      opponentScore: 10,
+      moveLog: [
+        {
+          turn: 1,
+          actor: 'you',
+          board_state: 'board:empty',
+          tile_played: '3|3',
+          branch: 'left',
+          hand_before: ['3|3'],
+          score_delta: 0,
+        },
+      ],
+      playerMoveLog: [
+        {
+          turn: 1,
+          actor: 'you',
+          board_state: 'board:empty',
+          tile_played: '3|3',
+          branch: 'left',
+          hand_before: ['3|3'],
+          score_delta: 0,
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.completeCalls[0]?.applyGlicko).toBe(false);
+    warn.mockRestore();
+  });
+});

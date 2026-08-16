@@ -176,7 +176,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       res.status(400).json({ error: 'moveLog is required for Fritz matches.' });
       return;
     }
-    if (!isFritzMatch) {
+    if (!isFritzMatch && !rankedSequence) {
       const trainingMoveLog =
         safePlayerMoveLog && safePlayerMoveLog.length > 0 ? safePlayerMoveLog : safeMoveLog;
       const playerScoredPoints = trainingMoveLog.reduce(
@@ -236,32 +236,36 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         return;
       }
 
+      // Ranked-write parity: every mode that can move a rating (Fritz Glicko or
+      // non-Fritz ghost_rating) is scored the same way — exact replay against a
+      // server-owned deal snapshot from /start, never the client-submitted
+      // finalScore/opponentScore. A match with no snapshot to replay against
+      // fails closed (applyGlicko: false) rather than trusting the client value.
       let scoredFinal = finalScore;
       let scoredOpponent = opponentScore;
-      let applyGlicko = isFritzMatch;
-      if (isFritzMatch) {
-        if (isRankedDealSnapshot(verifiedMatch.dealSnapshot)) {
-          if (!rankedSequence) {
-            res.status(400).json({ error: 'moveLog is required for Fritz matches.' });
-            return;
-          }
-          const replayed = replayRankedMoveLog(verifiedMatch.dealSnapshot, rankedSequence);
-          if (!replayed.ok) {
-            res.status(409).json({
-              error: replayed.reason,
-              entryIndex: replayed.entryIndex,
-            });
-            return;
-          }
-          scoredFinal = replayed.playerScore;
-          scoredOpponent = replayed.opponentScore;
-        } else {
-          console.warn('[ranked-fritz] missing deal snapshot; completing unranked', {
-            matchId,
-            userId,
-          });
-          applyGlicko = false;
+      let applyGlicko = false;
+      if (isRankedDealSnapshot(verifiedMatch.dealSnapshot)) {
+        if (!rankedSequence) {
+          res.status(400).json({ error: 'moveLog is required to verify a ranked completion.' });
+          return;
         }
+        const replayed = replayRankedMoveLog(verifiedMatch.dealSnapshot, rankedSequence);
+        if (!replayed.ok) {
+          res.status(409).json({
+            error: replayed.reason,
+            entryIndex: replayed.entryIndex,
+          });
+          return;
+        }
+        scoredFinal = replayed.playerScore;
+        scoredOpponent = replayed.opponentScore;
+        applyGlicko = true;
+      } else {
+        console.warn('[ranked-ghost] missing deal snapshot; completing unranked', {
+          matchId,
+          userId,
+          mode: isFritzMatch ? 'fritz' : 'ghost',
+        });
       }
 
       const completionHash = buildGhostCompletionHash({
