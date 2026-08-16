@@ -44,6 +44,9 @@ vi.mock('../stores/dailyFritzStore', async () => {
     getDailyFritzAttempt: getAttemptMock,
     upsertDailyFritzAttempt: upsertAttemptMock,
     getDailyFritzRun: getRunMock,
+    // /start resumes via ensureDailyFritzRunForDate, not getDailyFritzRun.
+    // Without this, CI (no Supabase) 500s while a laptop with env credentials can pass.
+    ensureDailyFritzRunForDate: getRunMock,
   };
 });
 
