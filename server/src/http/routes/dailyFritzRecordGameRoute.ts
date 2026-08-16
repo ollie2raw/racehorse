@@ -431,7 +431,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
         payload: { operation: 'record-game', message: error instanceof Error ? error.message : String(error) },
       });
     }
-    if (respondVerificationError(res, error)) return;
+    if (respondVerificationError(res, error, { attemptId, gameNumber })) return;
     capture500(error, { route: 'record-game' });
     res.status(500).json({
       error: prodSafeError(error, 'Failed to record Daily Fritz game.'),

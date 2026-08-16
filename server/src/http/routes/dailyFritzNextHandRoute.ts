@@ -395,6 +395,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         requestId: diagnostics.requestId,
         eventType: 'verification_failed',
         verifierCode: error.code,
+        handIndex: completedHandIndex,
         idempotencyKey: `${attemptId || 'unknown'}:verification_failed:${diagnostics.requestId}`,
         payload: { operation: 'next-hand', message: error.message },
       });
@@ -409,7 +410,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         payload: { operation: 'next-hand', message: error instanceof Error ? error.message : String(error) },
       });
     }
-    if (respondVerificationError(res, error)) return;
+    if (respondVerificationError(res, error, { attemptId, handIndex: completedHandIndex })) return;
     log.warn({
       attemptId,
       error: error instanceof Error ? error.message : String(error),

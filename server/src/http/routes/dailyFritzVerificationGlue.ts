@@ -31,7 +31,27 @@ import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { resolveDailyFritzPublishedGameAuthority } from './dailyFritzPublishedAuthority';
 import type { DailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
 import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
-import { log } from './dailyFritzRouteErrors';
+import { log, capture500 } from './dailyFritzRouteErrors';
+
+/**
+ * Mirrors client/src/dailyFritz/dailyFritzNextHandFailurePolicy.ts's
+ * REBUILD_CODES. Any verifier code NOT in this set makes the client fall
+ * straight through to the permanently-stuck "Couldn't verify this hand yet"
+ * Hand Over banner with no auto-retry — i.e. this is exactly the set of
+ * codes a real player is stranded on. Keep in sync with the client file.
+ */
+const CLIENT_STUCK_CODES = new Set([
+  'malformed_transcript',
+  'challenge_mismatch',
+  'attempt_mismatch',
+  'game_mismatch',
+  'hand_mismatch',
+  'illegal_action',
+  'post_terminal_action',
+  'fritz_recovery_failed',
+  'fritz_policy_version_mismatch',
+  'fritz_policy_contract_mismatch',
+]);
 
 export async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Promise<void> {
   try {
@@ -212,7 +232,11 @@ export function verifyAttemptHand(input: {
   });
 }
 
-export function respondVerificationError(res: Response, error: unknown): boolean {
+export function respondVerificationError(
+  res: Response,
+  error: unknown,
+  context?: { attemptId?: string | null; gameNumber?: number | null; handIndex?: number | null },
+): boolean {
   if (!(error instanceof DailyFritzVerificationError)) return false;
   const status = error.code.endsWith('_mismatch') || error.code === 'wrong_actor' ? 409 : 400;
   const recoverable = [
@@ -222,6 +246,25 @@ export function respondVerificationError(res: Response, error: unknown): boolean
     'fritz_policy_contract_mismatch',
     'missing_fritz_state_digest',
   ].includes(error.code);
+  if (CLIENT_STUCK_CODES.has(error.code)) {
+    // The client has no auto-retry path for this code: a real player is
+    // about to land on the permanently-stuck Hand Over banner right now.
+    // Surface it loudly instead of waiting for a player screenshot.
+    log.error({
+      attemptId: context?.attemptId ?? null,
+      gameNumber: context?.gameNumber ?? null,
+      handIndex: context?.handIndex ?? null,
+      verifierCode: error.code,
+      message: error.message,
+    }, '[daily-fritz] player stranded on Hand Over — non-retryable verification rejection');
+    capture500(error, {
+      tag: 'daily_fritz_player_stranded',
+      attemptId: context?.attemptId ?? null,
+      gameNumber: context?.gameNumber ?? null,
+      handIndex: context?.handIndex ?? null,
+      verifierCode: error.code,
+    });
+  }
   res.status(status).json({
     error: recoverable
       ? 'Daily Fritz detected a synchronization issue. Refresh to resume from the last verified hand.'
