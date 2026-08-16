@@ -44,6 +44,7 @@ export type BotTurnExecutionResult = {
   drew: boolean;
   passed: boolean;
   drawCount: number;
+  onStepDrawCount: number;
   chosen: BotChoice | null;
   ghostChosen: GhostResolvedMove | null;
   playedTileForHighlight: Tile | null;
@@ -60,6 +61,7 @@ export async function executeBotTurn(
   let drew = false;
   let passed = false;
   let drawCount = 0;
+  let onStepDrawCount = 0;
   let chosen: BotChoice | null = null;
   let ghostChosen: GhostResolvedMove | null = null;
   let playedTileForHighlight: Tile | null = null;
@@ -93,6 +95,7 @@ export async function executeBotTurn(
         drew: false,
         passed: false,
         drawCount: 0,
+        onStepDrawCount: 0,
         chosen: null,
         ghostChosen: null,
         playedTileForHighlight: null,
@@ -106,6 +109,7 @@ export async function executeBotTurn(
     drew = drawPassOutcome.drew;
     passed = drawPassOutcome.passed;
     drawCount = drawPassOutcome.drawCount;
+    onStepDrawCount = drawPassOutcome.onStepDrawCount;
     chosen = drawPassOutcome.chosen;
     ghostChosen = drawPassOutcome.ghostChosen;
     playedTileForHighlight = drawPassOutcome.playedTileForHighlight;
@@ -148,6 +152,7 @@ export async function executeBotTurn(
     drew,
     passed,
     drawCount,
+    onStepDrawCount,
     chosen,
     ghostChosen,
     playedTileForHighlight,
@@ -184,6 +189,7 @@ export function finalizeBotTurnExecution(input: {
     drew: execution.drew,
     passed: execution.passed,
     drawCount: execution.drawCount,
+    onStepDrawCount: execution.onStepDrawCount,
     workingHandNumber: execution.workingHandNumber,
     snapshot,
     chosen: execution.chosen,

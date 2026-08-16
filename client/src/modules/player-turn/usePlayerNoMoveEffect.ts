@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import type { RunDrawSequence } from '../bot-turn/drawSequence.ts';
-import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
+import {
+  capDailyFritzDrawLogCount,
+  resolveTranscriptDrawLogCount,
+} from '../daily/dailyFritzDrawTranscript.ts';
 import { collectBotTurnSnapshot } from '../bot-turn/botMoveSnapshot.ts';
 import { buildBotPassMoveLogEntry } from '../bot-turn/botMoveLogEntries.ts';
 import {
@@ -192,7 +195,15 @@ export function usePlayerNoMoveEffect({
               }),
             );
           }
-          const drawLogCount = resolveTranscriptDrawLogCount(isDailyFritzMode, drawCount);
+          // Never log more 'draw' transcript actions than we have real, positively
+          // observed per-step snapshots for — see capDailyFritzDrawLogCount for why an
+          // extra/fabricated draw entry is an unrecoverable server-side rejection while
+          // an under-count safely self-heals.
+          const drawLogCount = capDailyFritzDrawLogCount(
+            isDailyFritzMode,
+            resolveTranscriptDrawLogCount(isDailyFritzMode, drawCount),
+            drawSnapshots.length,
+          );
           for (let index = 0; index < drawLogCount; index += 1) {
             appendMove(
               buildDrawMoveLogEntry(match, drawSnapshots[index] ?? snapshot, fritzDifficulty),

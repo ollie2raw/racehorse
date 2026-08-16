@@ -21,6 +21,14 @@ export type BotDrawPassOutcome = {
   passed: boolean;
   /** Individual tiles drawn during the sequence (not including forced play draws). */
   drawCount: number;
+  /**
+   * Real, positively-observed onStep draw count (uncorrected by the boneyard
+   * delta). Use this — never the boneyard-corrected `drawCount` above — to
+   * cap how many 'draw' MoveEntries a Daily Fritz transcript may log; see
+   * capDailyFritzDrawLogCount for why fabricating an extra draw beyond what
+   * onStep actually observed is an unrecoverable server-side rejection.
+   */
+  onStepDrawCount: number;
   chosen: import('../fritz/botHeuristics.ts').BotChoice | null;
   ghostChosen: import('../ghost/ghostContracts.ts').GhostResolvedMove | null;
   playedTileForHighlight: import('../../types.ts').Tile | null;
@@ -49,6 +57,7 @@ export async function runBotDrawPassSequence(input: {
   let ghostChosen: BotDrawPassOutcome['ghostChosen'] = null;
   let playedTileForHighlight: BotDrawPassOutcome['playedTileForHighlight'] = null;
   let drawCount = 0;
+  let onStepDrawCount = 0;
   const boneyardBefore = working.boneyard.length;
 
   input.ports.setDrawSequenceActiveBoth(true);
@@ -57,7 +66,10 @@ export async function runBotDrawPassSequence(input: {
     'bot',
     input.runToken,
     (step) => {
-      if (step.actionKind === 'draw') drawCount += 1;
+      if (step.actionKind === 'draw') {
+        drawCount += 1;
+        onStepDrawCount += 1;
+      }
       input.ports.captureGuidedMatchCandidateAction(
         'fritz',
         step.actionKind,
@@ -74,6 +86,7 @@ export async function runBotDrawPassSequence(input: {
       drew: false,
       passed: false,
       drawCount: 0,
+      onStepDrawCount: 0,
       chosen,
       ghostChosen,
       playedTileForHighlight,
@@ -124,6 +137,7 @@ export async function runBotDrawPassSequence(input: {
           drew: Boolean(drawPass.drew),
           passed: false,
           drawCount,
+          onStepDrawCount,
           chosen,
           ghostChosen,
           playedTileForHighlight,
@@ -164,6 +178,7 @@ export async function runBotDrawPassSequence(input: {
     drew: Boolean(drawPass.drew),
     passed: Boolean(drawPass.passed),
     drawCount,
+    onStepDrawCount,
     chosen,
     ghostChosen,
     playedTileForHighlight,

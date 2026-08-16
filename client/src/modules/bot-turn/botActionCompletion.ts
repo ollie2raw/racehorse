@@ -6,7 +6,10 @@ import type { GhostResolvedMove } from '../ghost/ghostContracts.ts';
 import type { Tile } from '../../types.ts';
 import { getDailyFritzAuthorityStateDigest } from '@racehorse/game-core';
 import { toCoreGameState } from '../match/runtime/gameCoreAdapter.ts';
-import { resolveTranscriptDrawLogCount } from '../daily/dailyFritzDrawTranscript.ts';
+import {
+  capDailyFritzDrawLogCount,
+  resolveTranscriptDrawLogCount,
+} from '../daily/dailyFritzDrawTranscript.ts';
 import { notifyBotAuthoringCaptures } from './botAuthoringCapture.ts';
 import { computeBotChainPaused } from './botChainPause.ts';
 import { buildBotGhostPlayEntry } from './botGhostSync.ts';
@@ -109,6 +112,8 @@ export function completeBotTurnAction(input: {
   passed?: boolean;
   /** Individual tiles drawn before any follow-up play (excludes forced play draws). */
   drawCount?: number;
+  /** Real, positively-observed onStep draw count — see capDailyFritzDrawLogCount. */
+  onStepDrawCount?: number;
   workingHandNumber: number;
   snapshot: BotTurnSnapshot;
   chosen: BotChoice | null;
@@ -151,9 +156,15 @@ export function completeBotTurnAction(input: {
     isGhostMode: input.isGhostMode,
   });
 
-  const drawLogCount = resolveTranscriptDrawLogCount(
+  const rawDrawCount = input.drawCount ?? (input.drew ? 1 : 0);
+  // Never log more 'draw' transcript actions than were positively observed via
+  // onStep — see capDailyFritzDrawLogCount for why a fabricated extra bot draw
+  // entry (from the boneyard-delta upward correction in
+  // runBotDrawPassSequence) is an unrecoverable server-side rejection.
+  const drawLogCount = capDailyFritzDrawLogCount(
     input.isDailyFritzMode,
-    input.drawCount ?? (input.drew ? 1 : 0),
+    resolveTranscriptDrawLogCount(input.isDailyFritzMode, rawDrawCount),
+    input.onStepDrawCount ?? rawDrawCount,
   );
   for (let index = 0; index < drawLogCount; index += 1) {
     input.ports.appendMove(
