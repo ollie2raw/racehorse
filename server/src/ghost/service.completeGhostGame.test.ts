@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// service.ts reads SUPABASE_URL/SUPABASE_SERVICE_KEY into module-level
+// constants at import time (not lazily per-call), so these must be set
+// before the module graph below is evaluated — vi.hoisted runs first.
+vi.hoisted(() => {
+  process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'test-service-key';
+});
+
 import { completeGhostGame } from './service';
 import { FRITZ_ELITE_ID } from '../ranking/glicko2';
 
