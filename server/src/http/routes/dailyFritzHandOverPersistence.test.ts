@@ -1,6 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from 'express';
-import { FRITZ_POLICY_VERSION } from '@racehorse/game-core';
+import {
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+  DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+  FRITZ_POLICY_VERSION,
+  GAME_RULES_VERSION,
+  getFritzPolicyContract,
+} from '@racehorse/game-core';
 import { buildDailyFritzChallengeId } from '../../dailyFritzIdentity';
 import { getDailyFritzSeed } from '../../dailyFritz';
 import { buildHonestDailyFritzHandTranscript } from '../../testing/dailyFritzTranscriptDriver';
@@ -13,9 +19,10 @@ import type { DailyFritzAttemptRecord, DailyFritzRunRecord } from '../stores/dai
 // the same attempt fails with a 4xx. A hard refresh must be able to recover
 // from server-persisted state alone.
 
-const { authUserMock, getAttemptByIdMock, upsertAttemptMock, getRunMock } = vi.hoisted(() => ({
+const { authUserMock, getAttemptByIdMock, getAttemptMock, upsertAttemptMock, getRunMock } = vi.hoisted(() => ({
   authUserMock: vi.fn(),
   getAttemptByIdMock: vi.fn(),
+  getAttemptMock: vi.fn(),
   upsertAttemptMock: vi.fn(),
   getRunMock: vi.fn(),
 }));
@@ -31,6 +38,10 @@ vi.mock('../stores/dailyFritzStore', async () => {
   return {
     ...actual,
     getDailyFritzAttemptById: getAttemptByIdMock,
+    // getDailyFritzAttempt (by run date + user) is what the /start "resume"
+    // route uses to look up an in-progress attempt for a brand-new client
+    // request — i.e. a hard refresh with zero prior client state.
+    getDailyFritzAttempt: getAttemptMock,
     upsertDailyFritzAttempt: upsertAttemptMock,
     getDailyFritzRun: getRunMock,
   };
@@ -188,6 +199,8 @@ function wireStore(initialAttempt: DailyFritzAttemptRecord, run: DailyFritzRunRe
   let stored = initialAttempt;
   getAttemptByIdMock.mockImplementation(async (id: string, userId: string) =>
     (id === stored.id && userId === stored.userId ? { ...stored } : null));
+  getAttemptMock.mockImplementation(async (runDate: string, userId: string) =>
+    (runDate === stored.runDate && userId === stored.userId ? { ...stored } : null));
   upsertAttemptMock.mockImplementation(async (record: DailyFritzAttemptRecord) => {
     stored = { ...record, revision: record.revision + 1 };
     return { ...stored };
@@ -198,10 +211,167 @@ function wireStore(initialAttempt: DailyFritzAttemptRecord, run: DailyFritzRunRe
   };
 }
 
+// A hard refresh means a brand-new client process: no in-memory state, no
+// knowledge of any prior /next-hand response. The only thing it can send is
+// what a fresh page load sends — the same capability-advertising body the
+// real client (client/src/dailyFritz/api.ts:startDailyFritz) always sends.
+// POST /api/daily-fritz/start is the resume entrypoint the client actually
+// calls in this situation (see continueSet/beginRun in
+// useDailyFritzRunController.ts) — it is the only route whose response
+// carries hand-level resume fields (current_hand_index, current_game_scores).
+// GET /today deliberately carries no such fields (no current_hand_index,
+// no active-game score) in its response shape, so it cannot answer either
+// question below on its own.
+function freshClientStartRequestBody() {
+  return {
+    // Only used so this test harness can pin the run date to the fixture
+    // RUN_DATE instead of the real wall-clock date; the real client never
+    // sends this. Requires DAILY_FRITZ_TEST_FIXTURES_ENABLED=true, set below.
+    debug_date: RUN_DATE,
+    verification_protocol_version: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    game_rules_version: GAME_RULES_VERSION,
+    fritz_policy_version: FRITZ_POLICY_VERSION,
+    fritz_policy_contract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+    state_digest_version: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    supported_transcript_protocol_versions: [1, DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION],
+    supported_fritz_policies: ([1, 2] as const).map((version) => ({
+      version,
+      contract: getFritzPolicyContract(version),
+    })),
+    supported_state_digest_versions: [DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
+    client_release: 'test-client',
+  };
+}
+
+describe('Daily Fritz: refresh reconstructs state from server storage alone', () => {
+  const previousFixturesFlag = process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
+
+  beforeEach(() => {
+    // /start's run-date resolution otherwise falls back to the real
+    // wall-clock date; pin it to our fixture RUN_DATE via debug_date.
+    process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = 'true';
+  });
+
+  afterEach(() => {
+    authUserMock.mockReset();
+    getAttemptByIdMock.mockReset();
+    getAttemptMock.mockReset();
+    upsertAttemptMock.mockReset();
+    getRunMock.mockReset();
+    if (previousFixturesFlag === undefined) delete process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
+    else process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = previousFixturesFlag;
+  });
+
+  it('mid-hand refresh: a fresh client resuming via /start sees the hand index and score that /next-hand actually persisted, not stale/default values', async () => {
+    authUserMock.mockResolvedValue(USER_ID);
+    // High winning score: hand 0 completes but does not end the game, so we
+    // land mid-attempt (hand 1 in progress) rather than in the terminal path.
+    const run = buildRun({ winningScore: 100, handDeals: [GO_OUT_DEAL] });
+    const store = wireStore(buildAttempt(), run);
+    const { transcript } = buildTranscriptFor(GO_OUT_DEAL, 0);
+
+    const request = makeHarness();
+    const nextHandResponse = await request('POST', '/api/daily-fritz/next-hand', {
+      body: {
+        attempt_id: ATTEMPT_ID,
+        verified_match_id: VERIFIED_MATCH_ID,
+        run_date: RUN_DATE,
+        game_number: 1,
+        completed_hand_index: 0,
+        transcript,
+      },
+    });
+    expect(nextHandResponse.status).toBe(200);
+    expect(nextHandResponse.body.current_hand_index).toBe(1);
+
+    // What was actually written to durable storage — the ground truth a
+    // hard-refreshed client has zero visibility into directly.
+    const persisted = store.current();
+    expect(persisted.currentHandIndex).toBe(1);
+    const persistedScores = (persisted.result as any)?.active_game;
+    expect(persistedScores).toMatchObject({ game_number: 1 });
+    // Guard against a vacuous pass: the score must actually be non-zero here
+    // (the player dominoes out immediately against a 5-pip Fritz hand), so a
+    // reconstruction bug that silently defaults to {you:0, fritz:0} would be
+    // caught rather than accidentally matching.
+    expect(persistedScores.you > 0 || persistedScores.fritz > 0).toBe(true);
+
+    // Simulate a hard refresh: a brand-new request, with no client-held
+    // memory of the /next-hand response above — only what a fresh page load
+    // always sends.
+    const resumeResponse = await request('POST', '/api/daily-fritz/start', {
+      body: freshClientStartRequestBody(),
+    });
+
+    expect(resumeResponse.status).toBe(200);
+    expect(resumeResponse.body.current_hand_index).toBe(persisted.currentHandIndex);
+    expect(resumeResponse.body.current_game_scores).toEqual({
+      you: persistedScores.you,
+      fritz: persistedScores.fritz,
+    });
+    // And it must match what /next-hand itself reported in the moment, i.e.
+    // reconstruction from storage alone reproduces the live response.
+    expect(resumeResponse.body.current_game_scores).toEqual(nextHandResponse.body.current_game_scores);
+  });
+
+  it('game-ending hand survives a 409-then-refresh: a fresh client resuming via /start still sees the terminal hand score, before record-game ever runs', async () => {
+    authUserMock.mockResolvedValue(USER_ID);
+    const run = buildRun({ handDeals: [GO_OUT_DEAL] }); // winningScore: 1 — first hand ends the game
+    const store = wireStore(buildAttempt(), run);
+    const { transcript, terminalState } = buildTranscriptFor(GO_OUT_DEAL, 0);
+    expect(terminalState.gameOver).toBe(true);
+
+    const request = makeHarness();
+    const nextHandResponse = await request('POST', '/api/daily-fritz/next-hand', {
+      body: {
+        attempt_id: ATTEMPT_ID,
+        verified_match_id: VERIFIED_MATCH_ID,
+        run_date: RUN_DATE,
+        game_number: 1,
+        completed_hand_index: 0,
+        transcript,
+      },
+    });
+    expect(nextHandResponse.status).toBe(409);
+
+    const persisted = store.current();
+    const ledgerHands = (persisted.result as any)?.authority?.hands ?? [];
+    expect(ledgerHands).toHaveLength(1);
+    const persistedScores = (persisted.result as any)?.active_game;
+    expect(persistedScores).toMatchObject({
+      game_number: 1,
+      you: ledgerHands[0].playerScoreAfter,
+      fritz: ledgerHands[0].fritzScoreAfter,
+    });
+    expect(persistedScores.you > 0 || persistedScores.fritz > 0).toBe(true);
+
+    // No call to /record-game here — we're proving the score survives a
+    // refresh that happens strictly between the 409 and finalization.
+    const resumeResponse = await request('POST', '/api/daily-fritz/start', {
+      body: freshClientStartRequestBody(),
+    });
+
+    expect(resumeResponse.status).toBe(200);
+    // The hand did not advance (record-game still expects hand 0).
+    expect(resumeResponse.body.current_hand_index).toBe(0);
+    // But the verified terminal hand's score must be visible to the fresh
+    // client — it is not held only in the 409 response no one may have seen.
+    expect(resumeResponse.body.current_game_scores).toEqual({
+      you: ledgerHands[0].playerScoreAfter,
+      fritz: ledgerHands[0].fritzScoreAfter,
+    });
+    expect(resumeResponse.body.current_game_scores).toEqual({
+      you: persistedScores.you,
+      fritz: persistedScores.fritz,
+    });
+  });
+});
+
 describe('Daily Fritz: verified hand scores survive game-ending 409s and later 4xxs', () => {
   afterEach(() => {
     authUserMock.mockReset();
     getAttemptByIdMock.mockReset();
+    getAttemptMock.mockReset();
     upsertAttemptMock.mockReset();
     getRunMock.mockReset();
   });

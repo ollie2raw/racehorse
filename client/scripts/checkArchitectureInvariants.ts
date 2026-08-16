@@ -843,12 +843,21 @@ function checkNoBackupFiles(): void {
 // ---------------------------------------------------------------------------
 // 13. Daily Fritz Score Trust (heuristic guardrail, not a proof)
 // ---------------------------------------------------------------------------
+// Exported so the detection heuristic can be unit-tested directly (see
+// checkArchitectureInvariants.test.ts) without spawning the full script.
+export const DAILY_FRITZ_VERIFIER_SIGNAL = /verif/i;
+export const DAILY_FRITZ_SUSPICIOUS_BODY_ACCESS = /\breq\.body\??\.\[?['"]?\w*(score|result)\w*/i;
+
+export function isSuspiciousDailyFritzScoreAccess(content: string): boolean {
+  return (
+    DAILY_FRITZ_SUSPICIOUS_BODY_ACCESS.test(content) && !DAILY_FRITZ_VERIFIER_SIGNAL.test(content)
+  );
+}
+
 function checkDailyFritzScoreTrust(): void {
   const errors: string[] = [];
   const warnings: string[] = [];
   const routesDir = path.join(SERVER_SRC, 'http/routes');
-  const verifierSignal = /verif/i;
-  const suspiciousBodyAccess = /\breq\.body\??\.\[?['"]?\w*(score|result)\w*/i;
 
   const files = fs.existsSync(routesDir)
     ? fs
@@ -859,18 +868,18 @@ function checkDailyFritzScoreTrust(): void {
   let flaggedFiles = 0;
   for (const file of files) {
     const content = fs.readFileSync(path.join(routesDir, file), 'utf8');
-    if (suspiciousBodyAccess.test(content) && !verifierSignal.test(content)) {
+    if (isSuspiciousDailyFritzScoreAccess(content)) {
       flaggedFiles += 1;
-      warnings.push(
-        `server/src/http/routes/${file} reads a client-supplied score/result field from req.body with no verifier reference in the file — confirm it does not persist without verification (heuristic guardrail, may be a false positive)`,
+      errors.push(
+        `server/src/http/routes/${file} reads a client-supplied score/result field from req.body with no verifier reference in the file — this must be verified before being trusted/persisted (INV-13 hard gate)`,
       );
     }
   }
 
   addResult({
     id: 'INV-13',
-    name: 'Daily Fritz Score Trust (heuristic)',
-    status: 'pass',
+    name: 'Daily Fritz Score Trust',
+    status: errors.length === 0 ? 'pass' : 'fail',
     errors,
     warnings,
     metrics: { dailyFritzRouteFilesScanned: files.length, flaggedFiles },
@@ -1028,4 +1037,15 @@ function main(): void {
   printReport(manifest);
 }
 
-main();
+// Only run the full check when this file is executed directly (e.g. via
+// `npm run check:architecture`), not when imported by a test file that wants
+// to exercise an individual check's exported helper functions.
+const isDirectExecution = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === `file://${entry}` || import.meta.url === entry;
+})();
+
+if (isDirectExecution) {
+  main();
+}
