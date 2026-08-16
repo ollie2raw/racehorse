@@ -1,6 +1,7 @@
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { completeGhostGame } from '../ghost/service';
+import { verifyPlayerMoveLog } from '../ghost/verifier';
 import { recordLeagueLiveResult } from '../league/results';
 import { appendMatch } from '../stats/matchLog';
 import { recordPublicOnlineMatch } from '../stats/recordPublicMatch';
@@ -164,6 +165,24 @@ export function createGameOverPersistScheduler(io: Server) {
 
               const moveLog = room.ghostMoveLogs[p.me.id] ?? [];
               if (moveLog.length > 0) {
+                // Live in-room Fritz completions reach completeGhostGame outside
+                // the /api/ghost/complete route, so they skip that route's
+                // verifyPlayerMoveLog gate. completeGhostGame applies Glicko for
+                // a Fritz opponent by default (applyGlicko !== false) — without
+                // this check, an unverifiable log could still move rating
+                // through this side door. Known residual: this checks internal
+                // log consistency only, not a bound server-side session
+                // snapshot (no deal/seed is persisted for live in-room bot
+                // seats the way async Ghost sessions persist one at start).
+                const isFritzOpponent = opponentId === FRITZ_SYSTEM_ID;
+                const verification = isFritzOpponent ? verifyPlayerMoveLog(moveLog) : null;
+                if (isFritzOpponent && verification && !verification.ok) {
+                  log.warn({
+                    roomCode: room.code,
+                    userId: p.me.userId,
+                    reason: verification.reason,
+                  }, 'fritz in-room move log failed verification — recording without Glicko');
+                }
                 await completeGhostGame({
                   userId: p.me.userId,
                   opponentUserId: opponentId,
@@ -171,6 +190,7 @@ export function createGameOverPersistScheduler(io: Server) {
                   opponentScore: p.oppScore,
                   moveLog,
                   matchId: sourceMatchId,
+                  applyGlicko: isFritzOpponent ? Boolean(verification?.ok) : undefined,
                 });
               }
             }

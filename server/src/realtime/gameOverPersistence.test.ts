@@ -20,6 +20,7 @@ const {
   recordLeagueLiveResultMock,
   isRankedGameSourceColumnsEnabledMock,
   logWarnMock,
+  verifyPlayerMoveLogMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -36,6 +37,11 @@ const {
   recordLeagueLiveResultMock: vi.fn(),
   isRankedGameSourceColumnsEnabledMock: vi.fn(),
   logWarnMock: vi.fn(),
+  verifyPlayerMoveLogMock: vi.fn(),
+}));
+
+vi.mock('../ghost/verifier', () => ({
+  verifyPlayerMoveLog: (...args: unknown[]) => verifyPlayerMoveLogMock(...args),
 }));
 
 vi.mock('../scheduledTournament', () => ({
@@ -164,6 +170,7 @@ describe('createGameOverPersistScheduler', () => {
     isRankedGameSourceColumnsEnabledMock.mockReturnValue(true);
     supabaseFetchMock.mockResolvedValue([]);
     insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
+    verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
     processRealtimeMultiplayerGameMock.mockResolvedValue({ playerA: { delta: 1 }, playerB: { delta: -1 } });
     recordLeagueLiveResultMock.mockResolvedValue(undefined);
   });
@@ -371,5 +378,47 @@ describe('createGameOverPersistScheduler', () => {
     await expect(runPersist(buildInput())).resolves.toBeUndefined();
 
     expect(logWarnMock).toHaveBeenCalledWith({ err: boom }, 'ranking/match logging failed');
+  });
+
+  describe('live in-room Fritz completion — the category-1 side door', () => {
+    function buildFritzInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<Room> } = {}) {
+      const a = { id: 'seat-a', userId: 'user-a', username: 'A', socketId: 'sock-a' };
+      const b = { id: 'bot:fritz:elite', userId: null, username: 'Fritz', socketId: '' };
+      return buildInput({
+        a,
+        b,
+        aId: 'seat-a',
+        bId: 'bot:fritz:elite',
+        room: { ghostMoveLogs: { 'seat-a': [{ some: 'entry' }] as any } },
+        ...overrides,
+      });
+    }
+
+    it('is the function that determines the final Glicko input for a Fritz completion: verifyPlayerMoveLog gates completeGhostGame.applyGlicko', async () => {
+      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+
+      await runPersist(buildFritzInput());
+
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith([{ some: 'entry' }]);
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a', applyGlicko: true }),
+      );
+    });
+
+    it('closes the side door: an unverifiable in-room Fritz move log still completes the match but writes no Glicko', async () => {
+      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: false, reason: 'fabricated board_state', entryIndex: 0 });
+
+      await runPersist(buildFritzInput());
+
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ applyGlicko: false }),
+      );
+      expect(logWarnMock).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: 'fabricated board_state' }),
+        'fritz in-room move log failed verification — recording without Glicko',
+      );
+    });
   });
 });
