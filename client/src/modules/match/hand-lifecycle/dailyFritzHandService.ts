@@ -67,10 +67,20 @@ export function buildDailyFritzPrefetchParams(
       moveLog,
       protocolVersion: transcriptProtocolVersion,
       fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+      // Seal using the REAL authoritative post-hand engine state
+      // (match.consecutivePasses / match.currentPlayer), never a guess
+      // re-derived from the move log — see missingBlockedHandPassActors for
+      // why a move-log-only heuristic can append a pass action after a hand
+      // that already terminated inside a preceding play (post_terminal_action).
       sealBlockedHand: match.handOver
         && match.players.you.hand.length > 0
         && match.players.bot.hand.length > 0
-        && match.boneyard.length <= match.deadTiles.length,
+        && match.boneyard.length <= match.deadTiles.length
+        ? {
+            consecutivePasses: match.consecutivePasses,
+            nextActor: match.currentPlayer === 'you' ? 'player' : 'fritz',
+          }
+        : null,
     });
   } catch (error) {
     transcriptError = error instanceof Error

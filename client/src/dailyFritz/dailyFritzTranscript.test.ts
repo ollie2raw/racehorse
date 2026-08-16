@@ -180,7 +180,10 @@ describe('Daily Fritz transcript adapter', () => {
       gameNumber: 1,
       handIndex: 0,
       handNumber: 1,
-      sealBlockedHand: true,
+      // Authoritative post-hand engine state (e.g. BotMatchState after the
+      // real local hand): the non-scoring, non-double play handed the turn
+      // to the player with zero passes banked yet.
+      sealBlockedHand: { consecutivePasses: 0, nextActor: 'player' },
       moveLog: [{
         ...base,
         moveNumber: 1,
@@ -206,7 +209,9 @@ describe('Daily Fritz transcript adapter', () => {
       gameNumber: 1,
       handIndex: 0,
       handNumber: 1,
-      sealBlockedHand: true,
+      // Authoritative post-hand engine state: one pass has already banked
+      // (the player's), turn now rests with fritz.
+      sealBlockedHand: { consecutivePasses: 1, nextActor: 'fritz' },
       moveLog: [
         {
           ...base,
@@ -235,7 +240,10 @@ describe('Daily Fritz transcript adapter', () => {
       gameNumber: 1,
       handIndex: 0,
       handNumber: 1,
-      sealBlockedHand: true,
+      // Authoritative post-hand engine state: the scoring play kept the
+      // turn with the player (boneyard was already empty before the play,
+      // so no embedded auto-pass occurred) — zero passes banked.
+      sealBlockedHand: { consecutivePasses: 0, nextActor: 'player' },
       moveLog: [{
         ...base,
         moveNumber: 1,
@@ -250,6 +258,47 @@ describe('Daily Fritz transcript adapter', () => {
     expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
       'player:play',
       'player:pass',
+      'fritz:pass',
+    ]);
+  });
+
+  it('does not append a bogus pass when the block already fully resolved inside the preceding play (regression)', () => {
+    // Root-cause regression test for the production incident: a scoring play
+    // or double whose forced-draw chain drains the boneyard to empty (with
+    // the actor still unable to play) makes engine.ts embed a silent
+    // internal pass inside that single 'play' command — already banking one
+    // pass and flipping the turn with no separate MoveEntry produced. If
+    // that embedded pass was itself the second consecutive pass, the hand is
+    // ALREADY fully terminal after the two logged actions below, and sealing
+    // must append nothing — appending an extra pass here previously caused
+    // the server to reject the transcript with 'post_terminal_action' once
+    // it reached its real terminal state one action earlier.
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      // Authoritative post-hand engine state: the block already fully
+      // resolved (both passes already banked) inside the two real actions
+      // below — nextActor is irrelevant once consecutivePasses >= 2.
+      sealBlockedHand: { consecutivePasses: 2, nextActor: 'player' },
+      moveLog: [
+        {
+          ...base,
+          moveNumber: 1,
+          handNumber: 1,
+          player: 'you',
+          action: 'place',
+          tile: [4, 4],
+          position: 'left',
+          pointsScored: 0,
+        },
+        { ...base, moveNumber: 2, handNumber: 1, player: 'opponent', action: 'pass' },
+      ],
+    });
+    expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
+      'player:play',
       'fritz:pass',
     ]);
   });

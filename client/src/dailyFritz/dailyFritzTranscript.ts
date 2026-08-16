@@ -18,29 +18,36 @@ function otherActor(actor: TranscriptActor): TranscriptActor {
 }
 
 /**
- * Official passes still required for a blocked hand. Play resets the streak;
- * a scoring play or double keeps the turn (extra turn).
+ * Official passes still required for a blocked hand.
+ *
+ * IMPORTANT: this must never be re-derived by pattern-matching the move log
+ * (player/action/tile/pointsScored). A scoring play or double keeps the turn
+ * ("extra turn") ONLY when the boneyard was already empty at the moment of
+ * the play. When the play's forced-draw chain itself drains the boneyard to
+ * empty while the actor still has no legal play,
+ * packages/game-core/src/engine.ts's applyMove embeds a silent internal pass
+ * for that same actor inside the single 'play' command — flipping the turn
+ * and incrementing the engine's true consecutivePasses count with no
+ * separate MoveEntry ever produced for it (by design; see the comment in
+ * engine.ts near the forced-draw chain). A move-log-only heuristic cannot
+ * distinguish these two cases (the log carries no boneyard information), so
+ * it silently undercounts consecutivePasses and can append a synthetic pass
+ * action after a hand that already reached handOver inside the preceding
+ * play — which the server verifier rejects as 'post_terminal_action'
+ * (production incident: players stuck on Hand Over after two-sided blocks).
+ *
+ * The caller must instead supply the actual authoritative post-hand state
+ * (e.g. BotMatchState.consecutivePasses / currentPlayer from the real local
+ * engine run of this hand) so this only ever pads what the real engine says
+ * is still missing — including padding zero passes when the hand already
+ * resolved entirely inside a preceding play action.
  */
-export function missingBlockedHandPassActors(
-  entries: readonly Pick<MoveEntry, 'player' | 'action' | 'tile' | 'pointsScored'>[],
-): TranscriptActor[] {
-  let consecutivePasses = 0;
-  let nextActor: TranscriptActor = 'player';
-
-  for (const entry of entries) {
-    const actor: TranscriptActor = entry.player === 'you' ? 'player' : 'fritz';
-    if (entry.action === 'place') {
-      consecutivePasses = 0;
-      const extraTurn = (entry.pointsScored ?? 0) > 0
-        || Boolean(entry.tile && entry.tile[0] === entry.tile[1]);
-      nextActor = extraTurn ? actor : otherActor(actor);
-    } else if (entry.action === 'pass') {
-      consecutivePasses += 1;
-      nextActor = otherActor(actor);
-    } else {
-      nextActor = actor;
-    }
-  }
+export function missingBlockedHandPassActors(authoritative: {
+  consecutivePasses: number;
+  nextActor: TranscriptActor;
+}): TranscriptActor[] {
+  let consecutivePasses = authoritative.consecutivePasses;
+  let nextActor = authoritative.nextActor;
 
   const missing: TranscriptActor[] = [];
   while (consecutivePasses < 2) {
@@ -53,9 +60,9 @@ export function missingBlockedHandPassActors(
 
 export function sealBlockedDailyFritzTranscript(
   transcript: DailyFritzTranscript,
-  entries: readonly Pick<MoveEntry, 'player' | 'action' | 'tile' | 'pointsScored'>[],
+  authoritative: { consecutivePasses: number; nextActor: TranscriptActor },
 ): DailyFritzTranscript {
-  const missing = missingBlockedHandPassActors(entries);
+  const missing = missingBlockedHandPassActors(authoritative);
   if (missing.length === 0) return transcript;
   const actions = [...transcript.actions];
   for (const actor of missing) {
@@ -74,8 +81,15 @@ export function buildDailyFritzTranscript(input: {
   protocolVersion?: 1 | 2;
   fritzPolicyVersion?: number;
   clientRelease?: string;
-  /** When the local hand ended blocked, append any official passes the move log omitted. */
-  sealBlockedHand?: boolean;
+  /**
+   * When the local hand ended blocked, append any official passes still
+   * missing to reach the real (authoritative) terminal state — e.g. from
+   * BotMatchState.consecutivePasses / currentPlayer after the real local
+   * engine ran this hand. Must come from the authoritative engine state, not
+   * be re-derived from the move log (see missingBlockedHandPassActors).
+   * Pass `null`/omit when the hand is not being sealed.
+   */
+  sealBlockedHand?: { consecutivePasses: number; nextActor: 'player' | 'fritz' } | null;
 }): DailyFritzTranscript {
   const entries = canonicalizeDailyFritzMoveLog(input.moveLog)
     .filter((entry) => entry.handNumber === input.handNumber);
@@ -121,6 +135,6 @@ export function buildDailyFritzTranscript(input: {
   };
 
   return input.sealBlockedHand
-    ? sealBlockedDailyFritzTranscript(transcript, entries)
+    ? sealBlockedDailyFritzTranscript(transcript, input.sealBlockedHand)
     : transcript;
 }

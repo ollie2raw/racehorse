@@ -660,6 +660,16 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     setHandAdvanceError(null);
     handTransitionInFlightRef.current = false;
     prefetchCoordinator.clear();
+    // Manual "Retry"/"Continue" must rebuild the transcript from the current
+    // move log rather than resend the exact evidence that was just
+    // rejected. Without this, a manual retry reuses
+    // completedHandEvidenceRef's frozen prefetchParams (same evidenceKey ==
+    // same hand) and resubmits the byte-identical transcript that just
+    // failed — guaranteed to fail again forever for any deterministic
+    // rejection (e.g. a malformed transcript), not just transient ones.
+    // Only the automatic 'rebuild' decision path cleared this before;
+    // manual retry must too.
+    completedHandEvidenceRef.current = null;
     advanceHandRef.current();
   }, [dailyFritzPackage, prefetchCoordinator]);
 
