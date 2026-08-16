@@ -22,6 +22,9 @@ import { supabaseFetch } from '../supabaseUtils';
 import type { ProfileRow } from '../supabaseTypes';
 import { writeForfeitActivity } from '../social/activityWriter';
 import { queryVerifiedSinglePlayerMatchByLocalKey } from './verifiedSinglePlayerMatch';
+import { childLogger } from '../logger';
+
+const log = childLogger('fritz-match-lifecycle');
 
 export function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
   const cfg = room.config;
@@ -119,8 +122,16 @@ export async function finalizeFritzForfeit(params: {
   source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null };
   youScore?: number | null;
   botScore?: number | null;
+  /**
+   * Server-derived scores only (e.g. readFritzForfeitScoresFromRoom's live
+   * room.state read). Never pass client-submitted req.body scores here —
+   * they are untrusted and must not determine a Glicko write. When absent,
+   * recordPendingFritzDisconnectLoss writes no rating at all rather than
+   * inventing a result.
+   */
+  verifiedScores?: { youScore: number; botScore: number } | null;
 }): Promise<void> {
-  await recordPendingFritzDisconnectLoss(params.userId, params.fritzTier, params.source);
+  await recordPendingFritzDisconnectLoss(params.userId, params.fritzTier, params.source, params.verifiedScores ?? null);
   await writeFritzForfeitActivityFeed(params);
 }
 
@@ -185,11 +196,28 @@ export async function resolveLocalFritzAbandonRankedSource(
   };
 }
 
+/**
+ * Records a Fritz loss-by-abandon/disconnect. Requires a server-derived
+ * verifiedScores pair (never a client-submitted score, never a synthesized
+ * one). If no real score is available at cleanup time — e.g. the stale-match
+ * sweep runs long after the in-memory room is gone — this writes NO ranked
+ * game and applies NO rating change. That match stays unranked rather than
+ * getting a fabricated result.
+ */
 export async function recordPendingFritzDisconnectLoss(
   userId: string,
   fritzTier: unknown = 'elite',
   source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null },
+  verifiedScores?: { youScore: number; botScore: number } | null,
 ) {
+  if (!verifiedScores) {
+    log.info(
+      { userId, fritzTier, source },
+      'fritz forfeit has no server-verified score at cleanup time — leaving match unranked, no Glicko write',
+    );
+    return;
+  }
+
   const profileRows = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
   const profile = profileRows?.[0];
   if (!profile) {
@@ -204,8 +232,8 @@ export async function recordPendingFritzDisconnectLoss(
     body: JSON.stringify(buildRankedGameInsertPayload({
       playerId: userId,
       opponentId: fritzId,
-      playerScore: 0,
-      opponentScore: 60,
+      playerScore: verifiedScores.youScore,
+      opponentScore: verifiedScores.botScore,
       gameType,
       ratingBefore: profile.glicko_rating ?? 0,
       rdBefore: profile.glicko_rd ?? 0,
