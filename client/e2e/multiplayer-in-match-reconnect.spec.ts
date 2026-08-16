@@ -23,6 +23,7 @@ import {
   readStaleMoveAck,
   emitStaleMoveNow,
   fetchDisconnectGraceSeats,
+  readE2eSocketConnected,
 } from './helpers/multiplayerMatch';
 
 test.describe.configure({ mode: 'serial', timeout: 360_000 });
@@ -111,7 +112,15 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     await waitForActiveMatch(secondaryPage);
     expect(await readLastRoomCode(secondaryPage)).toBe(roomCode);
 
-    await emitStaleMoveNow(primaryPage, roomCode);
+    // The old (primary) socket is force-disconnected by the server shortly
+    // after supersession (resource cleanup — see roomSocketAttach.ts), so by
+    // the time secondaryPage has fully settled into the match, primaryPage's
+    // socket is no longer connected and a freshly emitted action would never
+    // even reach the server to get an ack. installStaleMoveProbe (armed
+    // before the takeover started) already fired its own stale MOVE the
+    // instant primaryPage received room:session:superseded — before the
+    // disconnect tears the transport down — and captured that ack. Poll for
+    // that already-captured ack rather than emitting a new one now.
     await expect
       .poll(async () => {
         const ack = await readStaleMoveAck(primaryPage);
@@ -121,6 +130,12 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
     await expect(secondaryPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
+
+    // Resource-cleanup half of this test: the old socket must actually be
+    // gone, not left connected indefinitely.
+    await expect
+      .poll(async () => readE2eSocketConnected(primaryPage), { timeout: 20_000 })
+      .toBe(false);
 
     await primaryContext.close();
     await secondaryContext.close();
@@ -176,23 +191,41 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
       })(),
       (async () => {
         // Fire stale MOVEs continuously for as long as the second tab's
-        // takeover is in flight, PLUS a few more afterward — spanning the
-        // entire migration window (not a fixed short burst that might finish
-        // before migration even starts) so this test actually samples both
-        // the pre-migration and post-migration sides of the race, not just
-        // whichever one happens to be faster on a given run.
+        // takeover is in flight AND the primary socket is still connected —
+        // spanning the whole pre-disconnect race window, not a fixed short
+        // burst that might finish before migration even starts. The old
+        // socket is force-disconnected once the seat is safely reassigned
+        // (resource cleanup — see roomSocketAttach.ts), so once that
+        // happens an emitted action can no longer even reach the server to
+        // get an ack; this loop stops firing at that point rather than
+        // treating "no ack because the transport is gone" as a failure —
+        // the assertion this test makes is about every ack that WAS
+        // received while still connected, i.e. before/during the
+        // disconnect, not some indefinite window after it.
         const acks: Array<{ ok?: boolean; error?: string } | null> = [];
         let attempt = 0;
         const maxAttempts = 40;
         while (attempt < maxAttempts && (!secondaryTakeoverDone || attempt < 3)) {
+          const stillConnected = await readE2eSocketConnected(primaryPage);
+          if (stillConnected === false) break;
           attempt += 1;
           await primaryPage.evaluate(() => {
             (window as unknown as { __e2eStaleMoveAck?: unknown }).__e2eStaleMoveAck = undefined;
           });
           await emitStaleMoveNow(primaryPage, roomCode);
-          await expect
-            .poll(async () => (await readStaleMoveAck(primaryPage)) !== null, { timeout: 5_000 })
-            .toBeTruthy();
+          const ackArrived = await expect
+            .poll(async () => (await readStaleMoveAck(primaryPage)) !== null, { timeout: 3_000 })
+            .toBeTruthy()
+            .then(() => true)
+            .catch(() => false);
+          if (!ackArrived) {
+            // Timed out waiting — almost certainly the disconnect landed
+            // mid-flight. Confirm that's actually why before stopping,
+            // rather than silently swallowing a genuine hang.
+            const connectedNow = await readE2eSocketConnected(primaryPage);
+            expect(connectedNow).toBe(false);
+            break;
+          }
           acks.push(await readStaleMoveAck(primaryPage));
         }
         return acks;
@@ -233,6 +266,12 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
     await expect(secondaryPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
+
+    // Resource-cleanup half of this test: the old socket must actually be
+    // gone by the time the race settles, not left connected indefinitely.
+    await expect
+      .poll(async () => readE2eSocketConnected(primaryPage), { timeout: 20_000 })
+      .toBe(false);
 
     await primaryContext.close();
     await secondaryContext.close();

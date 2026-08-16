@@ -301,6 +301,11 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
 
         if (oldSocket && oldSocketId && oldSocket.connected) {
           log.info(`[${via}] SUPERSEDE: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
+          // Order matters: invalidate cached seat identity and leave the
+          // room's channel BEFORE disconnecting, so resolveActorSeatId
+          // already rejects this socket even in the brief window before the
+          // transport actually tears down (a resend racing the disconnect
+          // gets an explicit ack rejection, not just a dropped connection).
           if (oldSocket.data?.playerId === existingPlayer.id) {
             oldSocket.data.playerId = undefined;
           }
@@ -309,6 +314,23 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           }
           oldSocket.leave(roomCode);
           oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
+          // Leaving a superseded socket connected is a real resource leak:
+          // socket.io's ping/pong keepalive (pingTimeout/pingInterval in
+          // index.ts) only reaps genuinely dead connections — a merely-open
+          // stale tab keeps answering pings forever with zero application
+          // code involved, so an unclosed old tab (or repeated
+          // refreshes/second-tabs) would accumulate live connections
+          // indefinitely. Force-disconnect once the seat is safely
+          // reassigned; correctness no longer depends on this (that's
+          // resolveActorSeatId's job now), this is purely resource cleanup.
+          // A brief delay before the actual teardown gives an in-flight
+          // client reaction to the supersede notice (e.g. its own stale
+          // action attempt) a real round trip to land and be rejected by an
+          // explicit ack, rather than the transport already being gone by
+          // the time it arrives — disconnect(true) alone closes immediately
+          // with no such window.
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          oldSocket.disconnect(true);
         }
       }
     }

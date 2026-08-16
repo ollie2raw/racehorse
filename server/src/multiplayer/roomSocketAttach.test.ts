@@ -286,14 +286,20 @@ describe('createRoomSocketAttach', () => {
     expect(getSeatIdForSocket(roomCode, 'sock-new')).toBe('p1');
     expect(resolveActorSeatId(roomCode, newSocket)).toBe('p1');
 
-    // Old socket was told it was superseded and removed from the room channel,
-    // but left connected so a MOVE it still emits is rejected with an ack.
+    // Old socket was told it was superseded, removed from the room channel,
+    // and force-disconnected — leaving it connected indefinitely would leak
+    // a live socket.io connection for as long as the stale tab stays open
+    // (ping/pong keepalive only reaps genuinely dead connections, not a
+    // merely-superseded-but-responsive one). Correctness does not depend on
+    // this disconnect: seat invalidation + leave() happen first, so
+    // resolveActorSeatId already rejects this socket even in the brief
+    // window before the transport actually tears down.
     expect(oldSocket.emit).toHaveBeenCalledWith(
       'room:session:superseded',
       expect.objectContaining({ newSocketId: 'sock-new' }),
     );
     expect(oldSocket.leave).toHaveBeenCalledWith(roomCode);
-    expect(oldSocket.disconnect).not.toHaveBeenCalled();
+    expect(oldSocket.disconnect).toHaveBeenCalledWith(true);
 
     // Old socket can no longer resolve or act as the seat's authority, even
     // via its stale cached socket.data.playerId (the duplicate-tab race this
