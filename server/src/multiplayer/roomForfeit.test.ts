@@ -154,14 +154,14 @@ describe('applyActiveMatchForfeit', () => {
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledTimes(2);
 
-    // Loser p1 had score 15, mapped to Math.min(15, 60 - 5) = 15
-    // Winner p2 had score 20, mapped to Math.max(60, 20) = 60
+    // No score synthesis: loser p1's actual room.state score (15) and
+    // winner p2's actual room.state score (20) are used as-is.
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({
         playerId: 'u1',
         opponentId: 'u2',
         playerScore: 15,
-        opponentScore: 60,
+        opponentScore: 20,
       })
     );
   });
@@ -197,6 +197,47 @@ describe('applyActiveMatchForfeit', () => {
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
         ratingScale: 0.5,
+      })
+    );
+  });
+
+  it('never inflates a low winner score or clamps the loser score — writes room.state as-is even below the old 60-floor', async () => {
+    const roomCode = 'FORF5';
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+    ]);
+
+    const room = getRoom(roomCode);
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 60 },
+      playerIds: ['p1', 'p2'],
+      players: {
+        p1: { id: 'p1', hand: [], score: 3 },
+        p2: { id: 'p2', hand: [], score: 10 },
+      },
+    } as any;
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    await applyActiveMatchForfeit(io, socket, roomCode, {
+      id: 'p1',
+      username: 'P1',
+      userId: 'u1',
+    }, 'manual');
+
+    // Old behavior would have written opponentScore: 60 (Math.max(60, 10))
+    // and playerScore: min(3, 55) = 3. The winner's real score (10) is far
+    // below the old synthesized floor of 60 — it must be written honestly.
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerId: 'u1',
+        opponentId: 'u2',
+        playerScore: 3,
+        opponentScore: 10,
       })
     );
   });

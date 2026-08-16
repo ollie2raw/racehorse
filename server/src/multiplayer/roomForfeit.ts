@@ -97,14 +97,16 @@ export async function applyActiveMatchForfeit(
   const a = roster.find((p) => p.id === aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
   const b = roster.find((p) => p.id === bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
 
+  // Glicko writes on forfeit use the actual room.state scores at the moment of
+  // forfeit — never a synthesized/inflated number. A forfeit at a low score
+  // genuinely produces a small expected-score delta for the winner; if that's
+  // an undesirable product outcome, the fix is a Glicko K-factor/period design
+  // change, not fabricating a score here.
   const loserActualScore = room.state?.players[abandoningPlayer.id]?.score ?? 0;
   const winnerActualScore = opponentSeatId ? (room.state?.players[opponentSeatId]?.score ?? 0) : 0;
 
-  const winnerScore = Math.max(60, winnerActualScore);
-  const loserScore = Math.min(loserActualScore, winnerScore - 5);
-
-  const scoreA = abandoningPlayer.id === aId ? loserScore : winnerScore;
-  const scoreB = abandoningPlayer.id === aId ? winnerScore : loserScore;
+  const scoreA = abandoningPlayer.id === aId ? loserActualScore : winnerActualScore;
+  const scoreB = abandoningPlayer.id === aId ? winnerActualScore : loserActualScore;
 
   if (
     isPrivate &&
