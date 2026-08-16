@@ -444,6 +444,80 @@ describe('Daily Fritz: verified hand scores survive game-ending 409s and later 4
     expect(game.handsPlayed).toBe(1);
   });
 
+  it('/complete 4xx after game 1 is already verified never discards it or marks the attempt abandoned — the single most important unresolved claim in this pillar, forced and observed directly', async () => {
+    authUserMock.mockResolvedValue(USER_ID);
+    // A go-out at winningScore: 1 skunks Fritz to 0 in game 1, which — a
+    // real Daily Fritz rule, not a test artifact — instantly decides the
+    // whole 2-of-3 set (instant-skunk). That actually makes /complete
+    // succeed here, so it can't be this test's failure trigger. Use a
+    // mismatched verified_match_id instead: a realistic failure mode (a
+    // stale/retried request carrying the wrong session id) that reliably
+    // 4xxs regardless of set-completion state, while game 1's data is
+    // already verified and persisted underneath it.
+    const run = buildRun({ handDeals: [GO_OUT_DEAL] });
+    const store = wireStore(buildAttempt(), run);
+    const { transcript } = buildTranscriptFor(GO_OUT_DEAL, 0);
+
+    const request = makeHarness();
+    await request('POST', '/api/daily-fritz/next-hand', {
+      body: {
+        attempt_id: ATTEMPT_ID,
+        verified_match_id: VERIFIED_MATCH_ID,
+        run_date: RUN_DATE,
+        game_number: 1,
+        completed_hand_index: 0,
+        transcript,
+      },
+    });
+    const recordGameResponse = await request('POST', '/api/daily-fritz/record-game', {
+      body: {
+        attempt_id: ATTEMPT_ID,
+        verified_match_id: VERIFIED_MATCH_ID,
+        run_date: RUN_DATE,
+        game_number: 1,
+        transcript,
+      },
+    });
+    expect(recordGameResponse.status).toBe(200);
+
+    // Ground truth: game 1 is verified and persisted (the attempt's status
+    // may already reflect a decided set here, per the instant-skunk rule
+    // above — that's fine, this test's claim doesn't depend on it).
+    const beforePrematureComplete = store.current();
+    const gamesBefore = (beforePrematureComplete.result as any)?.games ?? [];
+    expect(gamesBefore).toHaveLength(1);
+    expect(gamesBefore[0].playerWon).toBe(true);
+    const upsertCallsBeforePrematureComplete = upsertAttemptMock.mock.calls.length;
+
+    // Force a real 4xx on /complete: a mismatched verified_match_id hits the
+    // server's own "Verified match does not match this attempt." guard —
+    // this is a real failure path (e.g. a stale retried request), not a
+    // synthetic error injection.
+    const prematureCompleteResponse = await request('POST', '/api/daily-fritz/complete', {
+      body: {
+        attempt_id: ATTEMPT_ID,
+        verified_match_id: 'some-other-verified-match-id',
+        run_date: RUN_DATE,
+        completion_hash: 'not-a-real-hash',
+      },
+    });
+    expect(prematureCompleteResponse.status).toBe(403);
+
+    // The definitive answer: nothing was written as a result of this failure
+    // (no additional upsert call at all — /complete's 4xx exit paths return
+    // before ever mutating the in-memory attempt object, let alone
+    // persisting it), the attempt is still 'started' (never 'abandoned' —
+    // /complete contains no code path that ever sets that status; only the
+    // separate POST /abandon endpoint does, and nothing calls it here), and
+    // game 1's verified result is byte-for-byte unchanged.
+    expect(upsertAttemptMock.mock.calls.length).toBe(upsertCallsBeforePrematureComplete);
+    const afterPrematureComplete = store.current();
+    expect(afterPrematureComplete.status).toBe('started');
+    expect(afterPrematureComplete).toEqual(beforePrematureComplete);
+    const gamesAfter = (afterPrematureComplete.result as any)?.games ?? [];
+    expect(gamesAfter).toEqual(gamesBefore);
+  });
+
   it('block: persists the verified terminal hand before rejecting next-hand, so record-game can finalize it without losing the score', async () => {
     authUserMock.mockResolvedValue(USER_ID);
     const run = buildRun({ handDeals: [BLOCK_DEAL] });
