@@ -19,7 +19,35 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_ROOT = path.resolve(__dirname, '..');
 const CLIENT_SRC = path.join(CLIENT_ROOT, 'src');
 const REPO_ROOT = path.resolve(CLIENT_ROOT, '..');
+const SERVER_SRC = path.join(REPO_ROOT, 'server/src');
 const MANIFEST_PATH = path.join(REPO_ROOT, 'docs/architecture/architecture-manifest.json');
+
+// ---------------------------------------------------------------------------
+// Wave 3 — Invariants guarding the server-authority takeover (dailyFritz.ts,
+// useLiveMatchActions.ts, AppRoutes.tsx extraction). These are intentionally
+// simple heuristic checks (guardrails, not proofs) per the Wave 3 charter.
+// ---------------------------------------------------------------------------
+
+// Files (relative to server/src) that legitimately call socket.on() but do
+// not follow the register*Handlers.ts naming convention. This list is a
+// closed grandfather set frozen at Wave 3 time — it must not grow. Any new
+// file outside this set and outside the register*Handlers.ts pattern that
+// calls socket.on() is a regression and fails INV-11.
+const SERVER_SOCKET_ON_GRANDFATHER: string[] = [
+  'index.ts',
+  'matchmaking/index.ts',
+  'scheduledTournament/socketHandlers.ts',
+  'spectator/spectatorRegistry.ts',
+  'legacyTournament/registerLegacyTournamentHandlers.ts',
+  'social/registerFriendInviteHandlers.ts',
+  'social/registerPresenceHandlers.ts',
+];
+
+const LOC_CAPS: Array<{ file: string; cap: number }> = [
+  { file: 'server/src/http/routes/dailyFritz.ts', cap: 800 },
+  { file: 'client/src/match/session/actions/useLiveMatchActions.ts', cap: 400 },
+  { file: 'client/src/AppRoutes.tsx', cap: 500 },
+];
 
 type CheckResult = {
   id: string;
@@ -741,6 +769,146 @@ function checkDependencyCruiser(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 11. Server Socket Registrar Boundary
+// ---------------------------------------------------------------------------
+function checkServerSocketRegistrarBoundary(): void {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const registrarPattern = /register[\w]*Handlers\.ts$/;
+  const grandfather = new Set(SERVER_SOCKET_ON_GRANDFATHER);
+
+  const serverFiles = walkTsFiles(SERVER_SRC)
+    .map((abs) => path.relative(SERVER_SRC, abs).split(path.sep).join('/'))
+    .filter((f) => !/\.test\.ts$/.test(f));
+
+  let violatingFiles = 0;
+  for (const file of serverFiles) {
+    if (registrarPattern.test(file) || grandfather.has(file)) continue;
+    const content = fs.readFileSync(path.join(SERVER_SRC, file), 'utf8');
+    if (/\bsocket\.on\s*\(/.test(content)) {
+      violatingFiles += 1;
+      errors.push(
+        `server/src/${file} calls socket.on() outside an approved register*Handlers.ts registrar or the frozen grandfather list`,
+      );
+    }
+  }
+
+  addResult({
+    id: 'INV-11',
+    name: 'Server Socket Registrar Boundary',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings,
+    metrics: {
+      serverFilesScanned: serverFiles.length,
+      grandfatheredFiles: grandfather.size,
+      violatingFiles,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 12. No Backup Files
+// ---------------------------------------------------------------------------
+function checkNoBackupFiles(): void {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  let output = '';
+  try {
+    output = execSync(
+      "find . -iname '*.bak*' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.worktrees/*' -not -path '*/.claude/*' -not -path '*/dist/*'",
+      { cwd: REPO_ROOT, stdio: 'pipe', encoding: 'utf8' },
+    );
+  } catch (error) {
+    const err = error as { stdout?: string; stderr?: string };
+    output = err.stdout ?? '';
+  }
+
+  const bakFiles = output.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const file of bakFiles) {
+    errors.push(`Stray backup file found: ${file} — remove before merge`);
+  }
+
+  addResult({
+    id: 'INV-12',
+    name: 'No Backup Files',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings,
+    metrics: { bakFilesFound: bakFiles.length },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 13. Daily Fritz Score Trust (heuristic guardrail, not a proof)
+// ---------------------------------------------------------------------------
+function checkDailyFritzScoreTrust(): void {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const routesDir = path.join(SERVER_SRC, 'http/routes');
+  const verifierSignal = /verif/i;
+  const suspiciousBodyAccess = /\breq\.body\??\.\[?['"]?\w*(score|result)\w*/i;
+
+  const files = fs.existsSync(routesDir)
+    ? fs
+        .readdirSync(routesDir)
+        .filter((f) => /^dailyFritz.*\.ts$/.test(f) && !/\.test\.ts$/.test(f))
+    : [];
+
+  let flaggedFiles = 0;
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(routesDir, file), 'utf8');
+    if (suspiciousBodyAccess.test(content) && !verifierSignal.test(content)) {
+      flaggedFiles += 1;
+      warnings.push(
+        `server/src/http/routes/${file} reads a client-supplied score/result field from req.body with no verifier reference in the file — confirm it does not persist without verification (heuristic guardrail, may be a false positive)`,
+      );
+    }
+  }
+
+  addResult({
+    id: 'INV-13',
+    name: 'Daily Fritz Score Trust (heuristic)',
+    status: 'pass',
+    errors,
+    warnings,
+    metrics: { dailyFritzRouteFilesScanned: files.length, flaggedFiles },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 14. Godfile LOC Caps
+// ---------------------------------------------------------------------------
+function checkLocCaps(): void {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const metrics: Record<string, number | string | boolean> = {};
+
+  for (const { file, cap } of LOC_CAPS) {
+    const absolute = path.join(REPO_ROOT, file);
+    if (!fs.existsSync(absolute)) {
+      errors.push(`LOC-capped file missing: ${file}`);
+      continue;
+    }
+    const lineCount = fs.readFileSync(absolute, 'utf8').split('\n').length;
+    metrics[file] = lineCount;
+    if (lineCount > cap) {
+      errors.push(`${file} is ${lineCount} lines — exceeds cap of ${cap}`);
+    }
+  }
+
+  addResult({
+    id: 'INV-14',
+    name: 'Godfile LOC Caps',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings,
+    metrics,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -774,6 +942,10 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Singleton Runtime', 'Construction site audit', 'check:architecture'],
     ['React Boundary', 'Hook/value import scan', 'check:architecture'],
     ['Documentation Drift', 'Manifest vs source', 'check:architecture'],
+    ['Server Socket Registrar Boundary', 'socket.on() scan + frozen grandfather list', 'check:architecture'],
+    ['No Backup Files', 'repo-wide *.bak* find', 'check:architecture'],
+    ['Daily Fritz Score Trust', 'req.body score/result heuristic (guardrail)', 'check:architecture'],
+    ['Godfile LOC Caps', 'line count vs cap', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -848,6 +1020,10 @@ function main(): void {
   checkReactBoundary(manifest);
   checkDocumentationDrift(manifest);
   checkDependencyCruiser();
+  checkServerSocketRegistrarBoundary();
+  checkNoBackupFiles();
+  checkDailyFritzScoreTrust();
+  checkLocCaps();
 
   printReport(manifest);
 }

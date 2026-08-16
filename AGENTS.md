@@ -113,3 +113,12 @@ Every coding task should end with:
 - `server/src/game/` — core game rules/state (via `@racehorse/game-core` workspace package).
 - `client/src/match/`, `client/src/bot/` — live match screen and bot opponent view logic.
 - `docs/agent-skills/` — design/UI source-of-truth docs (see Section 2); not engineering-owned.
+
+Automated invariants (`npm run check:architecture --prefix client`, run in CI on every PR — see `client/scripts/checkArchitectureInvariants.ts` and `docs/architecture/architecture-manifest.json`):
+
+- No new `socket.on(...)` outside `register*Handlers.ts` registrar files (server and client).
+- Daily Fritz score/result writes must go through the verifier — do not persist `req.body` score/result fields directly.
+- No stray `*.bak` files committed anywhere in the repo.
+- Godfile LOC caps: `server/src/http/routes/dailyFritz.ts` ≤800, `client/src/match/session/actions/useLiveMatchActions.ts` ≤400, `client/src/AppRoutes.tsx` ≤500 lines.
+
+Do not add routes to `index.ts` / `dailyFritz.ts` blobs — split into a dedicated route/registrar file instead, following the existing `dailyFritz*Route.ts` / `register*Handlers.ts` patterns.
