@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from 'express';
 import type { BoardState } from '@racehorse/game-core';
-import type { DailyPuzzleAttemptRow, DailyPuzzleSlotResultRow, DailyPuzzleSlotRow } from '../../dailyPuzzle';
+import {
+  calculateDailyPuzzleAwardedPoints,
+  type DailyPuzzleAttemptRow,
+  type DailyPuzzleSlotResultRow,
+  type DailyPuzzleSlotRow,
+} from '../../dailyPuzzle';
 
 // This test closes the residual gap in the prior pillar-4 pass:
 // dailyPuzzleLeaderboardForgery.test.ts proves buildDailyPuzzleLeaderboard
@@ -40,6 +45,20 @@ const RUN_DATE = '2026-08-16';
 const USER_ID = 'user-forger';
 const ATTEMPT_ID = 'attempt-forger-1';
 const PUZZLE_ID = 'puzzle-slot-1';
+const FORGED_RAW_SCORE = 999999;
+const HONEST_RAW_SCORE = 2; // engine score for the legal 0-5-on-right line
+const BEST_POSSIBLE_SCORE = 10; // higher than the submitted line so awardedPoints is not capped at slotMax
+const SLOT_MAX_POINTS = 150;
+const HONEST_AWARDED_POINTS = calculateDailyPuzzleAwardedPoints(
+  HONEST_RAW_SCORE,
+  BEST_POSSIBLE_SCORE,
+  SLOT_MAX_POINTS,
+);
+const FORGED_AWARDED_POINTS = calculateDailyPuzzleAwardedPoints(
+  FORGED_RAW_SCORE,
+  BEST_POSSIBLE_SCORE,
+  SLOT_MAX_POINTS,
+);
 
 const startingBoard: BoardState = {
   mainLine: [{ tile: { low: 5, high: 5 }, orientation: 'vertical-normal' }],
@@ -74,15 +93,15 @@ function makePuzzleRow(overrides: Partial<DailyPuzzleSlotRow> = {}): DailyPuzzle
       { low: 1, high: 1 },
     ],
     max_moves: 1,
-    target_score: 2,
+    target_score: BEST_POSSIBLE_SCORE,
     puzzle_type: 'one_turn_high_score',
     deal_size: 14,
     slot_index: 1,
     slot_title: 'Quick Line',
     tier: 'quick_line',
-    slot_max_points: 150,
+    slot_max_points: SLOT_MAX_POINTS,
     objective_type: 'one_turn_high_score',
-    objective_payload: { best_possible_score: 2 },
+    objective_payload: { best_possible_score: BEST_POSSIBLE_SCORE },
     set_version: 1,
     published: true,
     ...overrides,
@@ -121,9 +140,16 @@ function makeAttemptRow(overrides: Partial<DailyPuzzleAttemptRow> = {}): DailyPu
   };
 }
 
-const attemptsTable = new Map<string, DailyPuzzleAttemptRow>([[ATTEMPT_ID, makeAttemptRow()]]);
+const attemptsTable = new Map<string, DailyPuzzleAttemptRow>();
 const slotResultsTable = new Map<string, DailyPuzzleSlotResultRow>();
 let slotResultSeq = 0;
+
+function resetTables() {
+  attemptsTable.clear();
+  attemptsTable.set(ATTEMPT_ID, makeAttemptRow());
+  slotResultsTable.clear();
+  slotResultSeq = 0;
+}
 
 function matchEqFilters(url: URL, row: Record<string, unknown>): boolean {
   for (const [key, value] of url.searchParams.entries()) {
@@ -260,11 +286,19 @@ function makeHarness() {
 authUserMock.mockImplementation(async () => USER_ID);
 
 describe('POST /api/daily-puzzle/submit-slot — forged rawScore is honest end-to-end through the real HTTP path', () => {
-  it('persists and leaderboards only the server-computed score, never a forged client rawScore, when going through the real route + real validation + real store + real leaderboard build', async () => {
-    const request = makeHarness();
+  beforeEach(() => {
+    resetTables();
+  });
 
-    const FORGED_RAW_SCORE = 999999;
-    const HONEST_RAW_SCORE = 2; // what validateDailyPuzzleSubmission actually computes for this legal line
+  it('persists and leaderboards only the server-computed score, never a forged client rawScore, when going through the real route + real validation + real store + real leaderboard build', async () => {
+    // If the route trusted clientRawScore for awardedPoints, the cap would
+    // award slotMax (150) instead of the honest 30. That divergence is what
+    // makes this test fail under a forged-score-acceptance bug.
+    expect(HONEST_AWARDED_POINTS).toBe(30);
+    expect(FORGED_AWARDED_POINTS).toBe(SLOT_MAX_POINTS);
+    expect(HONEST_AWARDED_POINTS).not.toBe(FORGED_AWARDED_POINTS);
+
+    const request = makeHarness();
 
     const response = await request('POST', '/api/daily-puzzle/submit-slot', {
       body: {
@@ -287,7 +321,10 @@ describe('POST /api/daily-puzzle/submit-slot — forged rawScore is honest end-t
     expect(response.body.ok).toBe(true);
     expect(response.body.slotResult.rawScore).toBe(HONEST_RAW_SCORE);
     expect(response.body.slotResult.rawScore).not.toBe(FORGED_RAW_SCORE);
-    expect(response.body.attempt.totalScore).not.toBe(FORGED_RAW_SCORE);
+    expect(response.body.slotResult.awardedPoints).toBe(HONEST_AWARDED_POINTS);
+    expect(response.body.slotResult.awardedPoints).not.toBe(FORGED_AWARDED_POINTS);
+    expect(response.body.attempt.totalScore).toBe(HONEST_AWARDED_POINTS);
+    expect(response.body.attempt.totalScore).not.toBe(FORGED_AWARDED_POINTS);
 
     // Prove this isn't a vacuous pass: the forged value really was sent,
     // really is wildly different from the honest score, and really did reach
@@ -298,6 +335,7 @@ describe('POST /api/daily-puzzle/submit-slot — forged rawScore is honest end-t
     expect(persistedSlotRow).toBeDefined();
     expect(persistedSlotRow!.result?.clientRawScore).toBe(FORGED_RAW_SCORE);
     expect(persistedSlotRow!.raw_score).toBe(HONEST_RAW_SCORE);
+    expect(persistedSlotRow!.awarded_points).toBe(HONEST_AWARDED_POINTS);
 
     // 2. Now call the REAL leaderboard-building path for this date — real
     // buildDailyPuzzleLeaderboardForDate, real listDailyPuzzleAttemptsForDate,
@@ -308,12 +346,15 @@ describe('POST /api/daily-puzzle/submit-slot — forged rawScore is honest end-t
     const entry = leaderboard.find((row) => row.userId === USER_ID);
 
     expect(entry).toBeDefined();
-    expect(entry!.totalScore).not.toBe(FORGED_RAW_SCORE);
+    expect(entry!.totalScore).toBe(HONEST_AWARDED_POINTS);
+    expect(entry!.totalScore).not.toBe(FORGED_AWARDED_POINTS);
     expect(entry!.breakdown[0]).toMatchObject({
       slotIndex: 1,
+      awardedPoints: HONEST_AWARDED_POINTS,
+      perfect: false,
       solved: true,
     });
-    expect(entry!.breakdown[0].awardedPoints).not.toBe(FORGED_RAW_SCORE);
+    expect(entry!.breakdown[0].awardedPoints).not.toBe(FORGED_AWARDED_POINTS);
 
     // The leaderboard's awardedPoints must match exactly what the real route
     // computed and persisted for this slot — proving the leaderboard path is
