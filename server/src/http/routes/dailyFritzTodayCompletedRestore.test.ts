@@ -11,10 +11,11 @@ import type { DailyFritzAttemptRecord, DailyFritzRunRecord } from '../stores/dai
 // from server storage alone, not from anything the client remembers — at the
 // route level instead.
 
-const { authUserMock, getAttemptMock, getRunMock, leaderboardMock } = vi.hoisted(() => ({
+const { authUserMock, getAttemptMock, getRunMock, getRunSummaryMock, leaderboardMock } = vi.hoisted(() => ({
   authUserMock: vi.fn(),
   getAttemptMock: vi.fn(),
   getRunMock: vi.fn(),
+  getRunSummaryMock: vi.fn(),
   leaderboardMock: vi.fn(),
 }));
 
@@ -30,6 +31,13 @@ vi.mock('../stores/dailyFritzStore', async () => {
     ...actual,
     getDailyFritzAttempt: getAttemptMock,
     ensureDailyFritzRunForDate: getRunMock,
+    // dailyFritzTodayRoute.ts also calls this separately from
+    // ensureDailyFritzRunForDate for the response's run-summary fields — it
+    // hits real Supabase if left unmocked, which is exactly what happened
+    // in CI (no ambient SUPABASE_URL there, unlike a local dev shell with a
+    // real .env — this test passed locally for the wrong reason the first
+    // time around).
+    getDailyFritzRunSummary: getRunSummaryMock,
     buildDailyFritzLeaderboard: leaderboardMock,
     getDailyFritzStreak: vi.fn().mockResolvedValue(0),
     listDailyFritzAttemptsForUser: vi.fn().mockResolvedValue([]),
@@ -80,6 +88,7 @@ describe('GET /api/daily-fritz/today — hard refresh after the full set is veri
     authUserMock.mockReset();
     getAttemptMock.mockReset();
     getRunMock.mockReset();
+    getRunSummaryMock.mockReset();
     leaderboardMock.mockReset();
     if (previousFixturesFlag === undefined) delete process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
     else process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = previousFixturesFlag;
@@ -139,6 +148,13 @@ describe('GET /api/daily-fritz/today — hard refresh after the full set is veri
     };
     getAttemptMock.mockResolvedValue(completedAttempt);
     getRunMock.mockResolvedValue(run);
+    getRunSummaryMock.mockResolvedValue({
+      runDate: run.runDate,
+      fritzTier: run.fritzTier,
+      dealSize: run.dealSize,
+      winningScore: run.winningScore,
+      status: run.status,
+    });
 
     // A brand-new request with zero client-held memory — the only thing a
     // hard-refreshed page can send: a plain GET with the debug date pinned
