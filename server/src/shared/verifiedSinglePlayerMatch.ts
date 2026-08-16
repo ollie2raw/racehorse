@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
+import { isRankedDealSnapshot, type RankedDealSnapshot } from '../ghost/rankedDealAuthority';
 import { supabaseFetch } from '../supabaseUtils';
 
 export type VerifiedSinglePlayerMatch = {
@@ -13,6 +14,7 @@ export type VerifiedSinglePlayerMatch = {
   completedAt: string | null;
   completionHash: string | null;
   completionResult: Record<string, unknown> | null;
+  dealSnapshot: RankedDealSnapshot | null;
 };
 
 export type VerifiedSinglePlayerMatchRow = {
@@ -27,10 +29,21 @@ export type VerifiedSinglePlayerMatchRow = {
   completed_at: string | null;
   completion_hash: string | null;
   completion_result: Record<string, unknown> | null;
+  deal_snapshot: RankedDealSnapshot | null;
 };
 export const verifiedSinglePlayerMatches = new Map<string, VerifiedSinglePlayerMatch>();
 export const verifiedSinglePlayerMatchesByLocalKey = new Map<string, string>();
 export let persistentVerifiedMatchesAvailable: boolean | null = null;
+export let persistentDealSnapshotColumnAvailable: boolean | null = null;
+
+const VERIFIED_MATCH_SELECT_BASE =
+  'match_id,user_id,local_match_id,mode,opponent_user_id,fritz_tier,status,started_at,completed_at,completion_hash,completion_result';
+
+function verifiedMatchSelect(): string {
+  return persistentDealSnapshotColumnAvailable === false
+    ? VERIFIED_MATCH_SELECT_BASE
+    : `${VERIFIED_MATCH_SELECT_BASE},deal_snapshot`;
+}
 export function isGhostTileKey(value: unknown): value is string {
   return typeof value === 'string' && /^[0-6]\|[0-6]$/.test(value);
 }
@@ -131,6 +144,7 @@ export function toVerifiedSinglePlayerMatch(row: VerifiedSinglePlayerMatchRow): 
     completedAt: row.completed_at,
     completionHash: row.completion_hash,
     completionResult: row.completion_result,
+    dealSnapshot: isRankedDealSnapshot(row.deal_snapshot) ? row.deal_snapshot : null,
   };
 }
 
@@ -149,6 +163,7 @@ export function toVerifiedSinglePlayerMatchRow(
     completed_at: record.completedAt,
     completion_hash: record.completionHash,
     completion_result: record.completionResult,
+    deal_snapshot: record.dealSnapshot,
   };
 }
 
@@ -172,6 +187,17 @@ export function isMissingVerifiedMatchesTable(error: unknown): boolean {
   );
 }
 
+export function isMissingDealSnapshotColumn(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('deal_snapshot') &&
+    (message.includes('does not exist') ||
+      message.includes('pgrst204') ||
+      message.includes('schema cache') ||
+      message.includes('could not find the'))
+  );
+}
+
 export async function queryVerifiedSinglePlayerMatchByLocalKey(
   userId: string,
   localMatchId: string,
@@ -185,7 +211,7 @@ export async function queryVerifiedSinglePlayerMatchByLocalKey(
   if (persistentVerifiedMatchesAvailable === false) return null;
   try {
     const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
-      `/rest/v1/verified_single_player_matches?select=match_id,user_id,local_match_id,mode,opponent_user_id,fritz_tier,status,started_at,completed_at,completion_hash,completion_result&user_id=eq.${encodeURIComponent(userId)}&local_match_id=eq.${encodeURIComponent(localMatchId)}&limit=1`,
+      `/rest/v1/verified_single_player_matches?select=${verifiedMatchSelect()}&user_id=eq.${encodeURIComponent(userId)}&local_match_id=eq.${encodeURIComponent(localMatchId)}&limit=1`,
       { method: 'GET' },
     );
     persistentVerifiedMatchesAvailable = true;
@@ -196,6 +222,10 @@ export async function queryVerifiedSinglePlayerMatchByLocalKey(
       persistentVerifiedMatchesAvailable = false;
       console.warn('[verified-matches] persistence table missing, using in-memory fallback');
       return null;
+    }
+    if (isMissingDealSnapshotColumn(error) && persistentDealSnapshotColumnAvailable !== false) {
+      persistentDealSnapshotColumnAvailable = false;
+      return queryVerifiedSinglePlayerMatchByLocalKey(userId, localMatchId);
     }
     throw error;
   }
@@ -209,7 +239,7 @@ export async function queryVerifiedSinglePlayerMatchByMatchId(
   if (persistentVerifiedMatchesAvailable === false) return null;
   try {
     const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
-      `/rest/v1/verified_single_player_matches?select=match_id,user_id,local_match_id,mode,opponent_user_id,fritz_tier,status,started_at,completed_at,completion_hash,completion_result&match_id=eq.${encodeURIComponent(matchId)}&limit=1`,
+      `/rest/v1/verified_single_player_matches?select=${verifiedMatchSelect()}&match_id=eq.${encodeURIComponent(matchId)}&limit=1`,
       { method: 'GET' },
     );
     persistentVerifiedMatchesAvailable = true;
@@ -220,6 +250,10 @@ export async function queryVerifiedSinglePlayerMatchByMatchId(
       persistentVerifiedMatchesAvailable = false;
       return null;
     }
+    if (isMissingDealSnapshotColumn(error) && persistentDealSnapshotColumnAvailable !== false) {
+      persistentDealSnapshotColumnAvailable = false;
+      return queryVerifiedSinglePlayerMatchByMatchId(matchId);
+    }
     throw error;
   }
 }
@@ -229,6 +263,10 @@ export async function persistVerifiedSinglePlayerMatch(
 ): Promise<VerifiedSinglePlayerMatch> {
   cacheVerifiedSinglePlayerMatch(record);
   if (persistentVerifiedMatchesAvailable === false) return record;
+  const row = toVerifiedSinglePlayerMatchRow(record);
+  const persistRow = persistentDealSnapshotColumnAvailable === false
+    ? (({ deal_snapshot: _dealSnapshot, ...rest }) => rest)(row)
+    : row;
   try {
     await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
       `/rest/v1/verified_single_player_matches?on_conflict=match_id`,
@@ -237,7 +275,7 @@ export async function persistVerifiedSinglePlayerMatch(
         headers: {
           Prefer: 'return=representation,resolution=merge-duplicates',
         },
-        body: JSON.stringify([toVerifiedSinglePlayerMatchRow(record)]),
+        body: JSON.stringify([persistRow]),
       },
     );
     persistentVerifiedMatchesAvailable = true;
@@ -247,6 +285,11 @@ export async function persistVerifiedSinglePlayerMatch(
       persistentVerifiedMatchesAvailable = false;
       console.warn('[verified-matches] persistence table missing, using in-memory fallback');
       return record;
+    }
+    if (isMissingDealSnapshotColumn(error) && persistentDealSnapshotColumnAvailable !== false) {
+      persistentDealSnapshotColumnAvailable = false;
+      console.warn('[verified-matches] deal_snapshot column missing; ranked complete will fail closed');
+      return persistVerifiedSinglePlayerMatch(record);
     }
     throw error;
   }
@@ -258,6 +301,7 @@ export async function startVerifiedSinglePlayerMatch(params: {
   mode: 'ghost' | 'fritz';
   opponentUserId: string | null;
   fritzTier?: string | null;
+  dealSnapshot?: RankedDealSnapshot | null;
 }): Promise<VerifiedSinglePlayerMatch> {
   const existing = await queryVerifiedSinglePlayerMatchByLocalKey(params.userId, params.localMatchId);
   if (existing) {
@@ -276,6 +320,7 @@ export async function startVerifiedSinglePlayerMatch(params: {
     completedAt: null,
     completionHash: null,
     completionResult: null,
+    dealSnapshot: params.dealSnapshot ?? null,
   };
   return persistVerifiedSinglePlayerMatch(record);
 }

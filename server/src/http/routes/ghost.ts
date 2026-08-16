@@ -1,11 +1,19 @@
 import type { Application, Request } from 'express';
 import type { BotMatchPendingRow } from '../../supabaseTypes';
 import {
-  completeGhostGame,
+  completeGhostGame as completeGhostGameDefault,
   getGhostProfileSummary,
   getGhostProfileSummaryByUsername,
   type GhostMoveLogEntry,
 } from '../../ghost/service';
+import {
+  createRankedDealSnapshot,
+  isRankedDealSnapshot,
+  isSafeRankedMoveSequence,
+  rankedDealStartPayload,
+  replayRankedMoveLog,
+  type RankedDealSnapshot,
+} from '../../ghost/rankedDealAuthority';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 import { setPublicShortCache } from './cacheControl';
 import { verifyPlayerMoveLog } from '../../ghost/verifier';
@@ -21,6 +29,7 @@ export type GhostRouteDeps = {
     mode: 'ghost' | 'fritz';
     opponentUserId: string | null;
     fritzTier?: string | null;
+    dealSnapshot?: RankedDealSnapshot | null;
   }) => Promise<VerifiedSinglePlayerMatch>;
   isSafeGhostMoveLog: (raw: unknown) => raw is Array<Record<string, unknown>>;
   buildGhostCompletionHash: (params: {
@@ -45,6 +54,7 @@ export type GhostRouteDeps = {
   }) => Promise<unknown>;
   formatFritzActivityOpponentLabel: (rawTier: string) => string;
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  completeGhostGame?: typeof completeGhostGameDefault;
 };
 
 export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): void {
@@ -59,6 +69,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
     writeMatchActivity,
     formatFritzActivityOpponentLabel,
     supabaseFetch,
+    completeGhostGame = completeGhostGameDefault,
   } = deps;
 
   app.get('/api/ghost/profile/:userId', async (req, res) => {
@@ -142,7 +153,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       res.status(400).json({ error: 'moveLog is required.' });
       return;
     }
-    if (playerMoveLog && !isSafeGhostMoveLog(playerMoveLog)) {
+    if (playerMoveLog && !isFritzMatch && !isSafeGhostMoveLog(playerMoveLog)) {
       res.status(400).json({ error: 'playerMoveLog is invalid.' });
       return;
     }
@@ -154,23 +165,28 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       res.status(400).json({ error: 'localMatchId is invalid.' });
       return;
     }
-    const safeMoveLog = moveLog as GhostMoveLogEntry[];
+    const safeMoveLog = (moveLog ?? []) as GhostMoveLogEntry[];
     const safePlayerMoveLog = playerMoveLog as GhostMoveLogEntry[] | undefined;
-    if (isFritzMatch && (!safePlayerMoveLog || safePlayerMoveLog.length === 0)) {
-      res.status(400).json({ error: 'playerMoveLog is required for Fritz matches.' });
-      return;
-    }
-    const trainingMoveLog =
-      isFritzMatch && safePlayerMoveLog && safePlayerMoveLog.length > 0 ? safePlayerMoveLog : safeMoveLog;
-    const playerScoredPoints = trainingMoveLog.reduce(
-      (sum, entry) => sum + Math.max(0, Number(entry.score_delta ?? 0)),
-      0,
-    );
-    if (playerScoredPoints > finalScore) {
-      res.status(400).json({ error: 'player scoring log exceeds finalScore.' });
+    const rankedSequence = isSafeRankedMoveSequence(moveLog)
+      ? moveLog
+      : isSafeRankedMoveSequence(playerMoveLog)
+        ? playerMoveLog
+        : null;
+    if (isFritzMatch && !rankedSequence && (!safePlayerMoveLog || safePlayerMoveLog.length === 0)) {
+      res.status(400).json({ error: 'moveLog is required for Fritz matches.' });
       return;
     }
     if (!isFritzMatch) {
+      const trainingMoveLog =
+        safePlayerMoveLog && safePlayerMoveLog.length > 0 ? safePlayerMoveLog : safeMoveLog;
+      const playerScoredPoints = trainingMoveLog.reduce(
+        (sum, entry) => sum + Math.max(0, Number(entry.score_delta ?? 0)),
+        0,
+      );
+      if (playerScoredPoints > finalScore) {
+        res.status(400).json({ error: 'player scoring log exceeds finalScore.' });
+        return;
+      }
       const opponentScoredPoints = safeMoveLog
         .filter((entry) => entry.actor === 'ghost')
         .reduce((sum, entry) => sum + Math.max(0, Number(entry.score_delta ?? 0)), 0);
@@ -178,14 +194,14 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(400).json({ error: 'ghost scoring log exceeds opponentScore.' });
         return;
       }
-    }
-    const moveLogVerification = verifyPlayerMoveLog(trainingMoveLog);
-    if (!moveLogVerification.ok) {
-      res.status(400).json({
-        error: `Invalid move log: ${moveLogVerification.reason}`,
-        entryIndex: moveLogVerification.entryIndex,
-      });
-      return;
+      const moveLogVerification = verifyPlayerMoveLog(trainingMoveLog);
+      if (!moveLogVerification.ok) {
+        res.status(400).json({
+          error: `Invalid move log: ${moveLogVerification.reason}`,
+          entryIndex: moveLogVerification.entryIndex,
+        });
+        return;
+      }
     }
 
     try {
@@ -219,13 +235,42 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(409).json({ error: 'verified session mode mismatch.' });
         return;
       }
+
+      let scoredFinal = finalScore;
+      let scoredOpponent = opponentScore;
+      let applyGlicko = isFritzMatch;
+      if (isFritzMatch) {
+        if (isRankedDealSnapshot(verifiedMatch.dealSnapshot)) {
+          if (!rankedSequence) {
+            res.status(400).json({ error: 'moveLog is required for Fritz matches.' });
+            return;
+          }
+          const replayed = replayRankedMoveLog(verifiedMatch.dealSnapshot, rankedSequence);
+          if (!replayed.ok) {
+            res.status(409).json({
+              error: replayed.reason,
+              entryIndex: replayed.entryIndex,
+            });
+            return;
+          }
+          scoredFinal = replayed.playerScore;
+          scoredOpponent = replayed.opponentScore;
+        } else {
+          console.warn('[ranked-fritz] missing deal snapshot; completing unranked', {
+            matchId,
+            userId,
+          });
+          applyGlicko = false;
+        }
+      }
+
       const completionHash = buildGhostCompletionHash({
         userId,
         localMatchId,
         matchId,
         opponentUserId,
-        finalScore,
-        opponentScore,
+        finalScore: scoredFinal,
+        opponentScore: scoredOpponent,
         moveLog: safeMoveLog,
         playerMoveLog: safePlayerMoveLog,
       });
@@ -255,11 +300,12 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       const result = await completeGhostGame({
         userId,
         opponentUserId,
-        finalScore,
-        opponentScore,
+        finalScore: scoredFinal,
+        opponentScore: scoredOpponent,
         moveLog: safeMoveLog,
         playerMoveLog: safePlayerMoveLog,
         matchId,
+        applyGlicko,
       });
       verifiedMatch.status = 'completed';
       verifiedMatch.completedAt = new Date().toISOString();
@@ -277,10 +323,10 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         );
       }
       if (isFritzMatch) {
-        const playerWon = Math.round(finalScore) > Math.round(opponentScore);
+        const playerWon = Math.round(scoredFinal) > Math.round(scoredOpponent);
         const fritzLabel = formatFritzActivityOpponentLabel(verifiedMatch.fritzTier ?? 'elite');
-        const roundedPlayerScore = Math.round(finalScore);
-        const roundedFritzScore = Math.round(opponentScore);
+        const roundedPlayerScore = Math.round(scoredFinal);
+        const roundedFritzScore = Math.round(scoredOpponent);
         void writeMatchActivity({
           winnerUserId: playerWon ? userId : null,
           loserUserId: playerWon ? null : userId,
@@ -321,13 +367,19 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(403).json({ error: 'Forbidden' });
         return;
       }
+      const { snapshot } = createRankedDealSnapshot({
+        dealSize: Number(req.body?.dealSize),
+        winningScore: Number(req.body?.winningScore),
+        matchStarter: typeof req.body?.matchStarter === 'string' ? req.body.matchStarter : null,
+      });
       const verifiedMatch = await startVerifiedSinglePlayerMatch({
         userId,
         localMatchId,
         mode: 'ghost',
         opponentUserId,
+        dealSnapshot: snapshot,
       });
-      res.json({ ok: true, matchId: verifiedMatch.matchId });
+      res.json(rankedDealStartPayload(verifiedMatch));
     } catch (error) {
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to start verified ghost match.',

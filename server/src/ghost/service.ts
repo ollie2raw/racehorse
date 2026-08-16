@@ -858,6 +858,7 @@ export async function completeGhostGame(params: {
   playerMoveLog?: GhostMoveLogEntry[];
   opponentUserId?: string | null;
   matchId?: string | null;
+  applyGlicko?: boolean;
 }): Promise<{
   newRating: number;
   ratingDelta: number;
@@ -896,7 +897,7 @@ export async function completeGhostGame(params: {
       throw new Error('Ranking profile not found for Fritz match.');
     }
 
-    if (isRatingEligible) {
+    if (isRatingEligible && params.applyGlicko !== false) {
       const now = new Date().toISOString();
       const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
       await supabaseFetch(`/rest/v1/ranked_games`, {

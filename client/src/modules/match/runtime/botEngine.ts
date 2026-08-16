@@ -15,7 +15,7 @@ import type {
   PlacementPosition,
   Tile,
 } from '../../../types.ts';
-import { generateFullSet, isDouble as isCoreDouble } from '@racehorse/game-core';
+import { generateFullSet, isDouble as isCoreDouble, createDeterministicDoubleSixDeal } from '@racehorse/game-core';
 import {
   applyCorePlay,
   drawCoreTile,
@@ -69,6 +69,10 @@ export interface BotMatchState {
   lastHandWinner: BotPlayerId | null;
   lastHandReason: BotHandEndReason | null;
   dealSize: BotDealSize;
+  /** Server-owned ranked deal seed. Subsequent hands must be derived from this, not Math.random. */
+  dealSeed?: string | null;
+  /** Local fallback deck if ranked /start fails after the pre-game draw. */
+  pendingDrawDeck?: Tile[] | null;
   /** Hand-1 starter from pre-game draw; odd hands use this player, even hands alternate. */
   matchStarter?: BotPlayerId;
   // Opponent hand inference
@@ -222,6 +226,20 @@ function cloneTile(tile: Tile): Tile {
   return { low: tile.low, high: tile.high };
 }
 
+function dealFromRankedSeed(seed: string, handNumber: number, dealSize: BotDealSize): BotHandDeal {
+  const dealt = createDeterministicDoubleSixDeal({
+    seed: `${seed}:h${handNumber}`,
+    tilesPerPlayer: dealSize,
+    deadTileCount: dealSize === 14 ? 0 : 2,
+  });
+  return {
+    player_tiles: dealt.playerTiles.map(cloneTile),
+    fritz_tiles: dealt.opponentTiles.map(cloneTile),
+    boneyard: dealt.boneyard.map(cloneTile),
+    locked: dealt.deadTiles.map(cloneTile),
+  };
+}
+
 export function createFixedBotHand(
   scores: Record<BotPlayerId, number>,
   handNumber: number,
@@ -298,6 +316,19 @@ export function createFixedBotMatchWithStarter(
 }
 
 export function startNextBotHand(state: BotMatchState): BotMatchState {
+  if (state.dealSeed) {
+    return {
+      ...createFixedBotHand(
+        { you: state.players.you.score, bot: state.players.bot.score },
+        state.handNumber + 1,
+        state.winningScore,
+        state.dealSize,
+        dealFromRankedSeed(state.dealSeed, state.handNumber + 1, state.dealSize),
+        state.matchStarter ?? 'you',
+      ),
+      dealSeed: state.dealSeed,
+    };
+  }
   return createDealtHand(
     { you: state.players.you.score, bot: state.players.bot.score },
     state.handNumber + 1,
@@ -308,14 +339,17 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
 }
 
 export function startNextFixedBotHand(state: BotMatchState, handDeal: BotHandDeal): BotMatchState {
-  return createFixedBotHand(
-    { you: state.players.you.score, bot: state.players.bot.score },
-    state.handNumber + 1,
-    state.winningScore,
-    state.dealSize,
-    handDeal,
-    state.matchStarter ?? 'you',
-  );
+  return {
+    ...createFixedBotHand(
+      { you: state.players.you.score, bot: state.players.bot.score },
+      state.handNumber + 1,
+      state.winningScore,
+      state.dealSize,
+      handDeal,
+      state.matchStarter ?? 'you',
+    ),
+    dealSeed: state.dealSeed ?? null,
+  };
 }
 
 function hubIdAt(hub: BoardState['hubDoubles'][number], fallbackIdx: number): number {

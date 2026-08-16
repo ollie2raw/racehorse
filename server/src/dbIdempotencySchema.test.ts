@@ -102,6 +102,15 @@ describe('DB idempotency schema guardrails', () => {
     expect(verifiedSql).toContain('create unique index if not exists idx_verified_single_player_matches_user_local on public.verified_single_player_matches (user_id, local_match_id)');
   });
 
+  it('adds a server-owned deal_snapshot column for ranked Fritz/Ghost matches', () => {
+    const migration = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-15_verified_match_deal_snapshot.sql',
+    ));
+    const verifiedSql = compactSql(readRepoFile('supabase/verified_matches.sql'));
+    expect(migration).toContain('alter table public.verified_single_player_matches add column if not exists deal_snapshot jsonb');
+    expect(verifiedSql).toContain('deal_snapshot jsonb null');
+  });
+
   it('keeps Fritz Challenge participants, attempts, and hands idempotent', () => {
     const sql = compactSql(readRepoFile('supabase/fritz_challenges.sql'));
 

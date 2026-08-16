@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
+import { createDeterministicDoubleSixDeal } from '@racehorse/game-core';
 import type { BotMatchState } from '../runtime/botEngine.ts';
+import { createBotMatchWithStarter, createFixedBotMatchWithStarter } from '../runtime/botEngine.ts';
 import { abandonLocalBotMatch, startLocalBotMatch } from '../api/botMatchApi.ts';
 import { resolveGameServerUrl } from '../../../lib/gameServerUrl';
 import { supabase } from '../../../lib/supabase';
@@ -12,11 +14,14 @@ type UseStandaloneFritzRatingSessionArgs = {
   isGuidedMode: boolean;
   isAuthoringMode: boolean;
   fritzTier: string;
+  winningScore: number;
+  dealSize: 7 | 14;
   activeLocalMatchId: string;
   accessTokenRef: React.MutableRefObject<string | null>;
   localPendingRegisteredRef: React.MutableRefObject<boolean>;
   localPendingResolvedRef: React.MutableRefObject<boolean>;
   matchRef: React.MutableRefObject<BotMatchState>;
+  setMatch: (state: BotMatchState) => void;
   setVerifiedMatchId: (matchId: string) => void;
   setResultLoading: (loading: boolean) => void;
   setResultError: (error: string | null) => void;
@@ -34,11 +39,14 @@ export function useStandaloneFritzRatingSession({
   isGuidedMode,
   isAuthoringMode,
   fritzTier,
+  winningScore,
+  dealSize,
   activeLocalMatchId,
   accessTokenRef,
   localPendingRegisteredRef,
   localPendingResolvedRef,
   matchRef,
+  setMatch,
   setVerifiedMatchId,
   setResultLoading,
   setResultError,
@@ -86,6 +94,9 @@ export function useStandaloneFritzRatingSession({
             userId,
             fritzTier,
             localMatchId: activeLocalMatchId,
+            winningScore,
+            dealSize,
+            matchStarter: matchRef.current.matchStarter ?? 'you',
           },
           accessTokenRef.current,
         );
@@ -94,8 +105,42 @@ export function useStandaloneFritzRatingSession({
         if (matchId) {
           setVerifiedMatchId(matchId);
         }
+        const seed = typeof response?.seed === 'string' ? response.seed.trim() : '';
+        if (seed && !cancelled) {
+          const live = matchRef.current;
+          if (!live.handOpen && !live.gameOver) {
+            const dealt = createDeterministicDoubleSixDeal({
+              seed: `${seed}:h1`,
+              tilesPerPlayer: dealSize,
+              deadTileCount: dealSize === 14 ? 0 : 2,
+            });
+            setMatch({
+              ...createFixedBotMatchWithStarter(
+                {
+                  player_tiles: dealt.playerTiles,
+                  fritz_tiles: dealt.opponentTiles,
+                  boneyard: dealt.boneyard,
+                  locked: dealt.deadTiles,
+                },
+                live.matchStarter ?? 'you',
+                winningScore,
+                dealSize,
+              ),
+              dealSeed: seed,
+            });
+          }
+        }
       } catch (err) {
         console.warn('[Fritz Pending] start failed', err);
+        const live = matchRef.current;
+        if (live.pendingDrawDeck && live.pendingDrawDeck.length === 26 && dealSize === 7) {
+          setMatch(createBotMatchWithStarter(
+            live.pendingDrawDeck,
+            live.matchStarter ?? 'you',
+            winningScore,
+            dealSize,
+          ));
+        }
         if (matchRef.current.gameOver) {
           setResultLoading(false);
           setResultError(err instanceof Error ? err.message : 'Rating session failed to start.');
@@ -110,12 +155,15 @@ export function useStandaloneFritzRatingSession({
     activeLocalMatchId,
     enabled,
     fritzTier,
+    winningScore,
+    dealSize,
     isAuthoringMode,
     isGuidedMode,
     localPendingRegisteredRef,
     matchGameOver,
     matchRef,
     preGameDrawActive,
+    setMatch,
     setResultError,
     setResultLoading,
     setVerifiedMatchId,

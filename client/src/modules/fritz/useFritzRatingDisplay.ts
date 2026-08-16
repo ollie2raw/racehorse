@@ -38,6 +38,9 @@ export function useFritzRatingDisplay({
     preGameDrawActive,
     fritzConfig,
     matchRef,
+    setMatch,
+    winningScore,
+    dealSize,
   } = bootstrap;
 
   const { isGuidedMode, isAuthoringMode } = guidedBoot;
@@ -63,11 +66,14 @@ export function useFritzRatingDisplay({
     isGuidedMode,
     isAuthoringMode,
     fritzTier,
+    winningScore,
+    dealSize,
     activeLocalMatchId,
     accessTokenRef,
     localPendingRegisteredRef,
     localPendingResolvedRef,
     matchRef,
+    setMatch,
     setVerifiedMatchId,
     setResultLoading: setGhostResultLoading,
     setResultError: setGhostResultError,

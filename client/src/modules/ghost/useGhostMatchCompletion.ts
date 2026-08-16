@@ -91,7 +91,9 @@ export function useGhostMatchCompletion({
       opponentScore: match.players.bot.score,
     });
     const genericGhostCompatibleMoveLog = moveEntriesToGhostMoveLog([...moveLog]);
-    const fritzPlayerMoveLog = !isGhostMode ? genericGhostCompatibleMoveLog : undefined;
+    const fritzPlayerMoveLog = !isGhostMode
+      ? genericGhostCompatibleMoveLog.filter((entry) => entry.actor === 'you')
+      : undefined;
     const effectiveGhostMoveLog =
       ghostMoveLog.length > 0 ? ghostMoveLog : genericGhostCompatibleMoveLog;
 
@@ -107,7 +109,7 @@ export function useGhostMatchCompletion({
       localMatchId: activeLocalMatchId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
-      moveLog: isGhostMode ? effectiveGhostMoveLog : fritzPlayerMoveLog ?? effectiveGhostMoveLog,
+      moveLog: isGhostMode ? effectiveGhostMoveLog : genericGhostCompatibleMoveLog,
       playerMoveLog: fritzPlayerMoveLog,
       accessToken: accessTokenRef.current,
     })

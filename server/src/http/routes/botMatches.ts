@@ -1,5 +1,7 @@
 import type { Application, Request } from 'express';
 import type { BotMatchPendingRow } from '../../supabaseTypes';
+import type { RankedDealSnapshot } from '../../ghost/rankedDealAuthority';
+import { createRankedDealSnapshot, rankedDealStartPayload } from '../../ghost/rankedDealAuthority';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 
 export type BotMatchesRouteDeps = {
@@ -13,6 +15,7 @@ export type BotMatchesRouteDeps = {
     mode: 'ghost' | 'fritz';
     opponentUserId: string | null;
     fritzTier?: string | null;
+    dealSnapshot?: RankedDealSnapshot | null;
   }) => Promise<VerifiedSinglePlayerMatch>;
   abandonVerifiedSinglePlayerMatch: (userId: string, localMatchId: string) => Promise<void>;
   getFritzIdentityForTier: (rawTier: unknown) => { fritzId: string; gameType: string };
@@ -97,6 +100,11 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
       const roomCode = `local:${localMatchId}`;
 
       const fritzIdentity = getFritzIdentityForTier(fritzTier);
+      const { snapshot } = createRankedDealSnapshot({
+        dealSize: Number(req.body?.dealSize),
+        winningScore: Number(req.body?.winningScore),
+        matchStarter: typeof req.body?.matchStarter === 'string' ? req.body.matchStarter : null,
+      });
 
       const verifiedMatch = await startVerifiedSinglePlayerMatch({
         userId,
@@ -104,6 +112,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
         mode: 'fritz',
         opponentUserId: fritzIdentity.fritzId,
         fritzTier,
+        dealSnapshot: snapshot,
       });
 
       const existing = await supabaseFetch<BotMatchPendingRow[]>(
@@ -122,7 +131,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
           }),
         });
       }
-      res.json({ ok: true, roomCode, matchId: verifiedMatch.matchId });
+      res.json({ ...rankedDealStartPayload(verifiedMatch), roomCode });
     } catch (error) {
       console.error('[Local Fritz Start] error', {
         message: error instanceof Error ? error.message : String(error),

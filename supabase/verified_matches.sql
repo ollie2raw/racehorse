@@ -11,7 +11,8 @@ create table if not exists public.verified_single_player_matches (
   started_at timestamptz not null default now(),
   completed_at timestamptz null,
   completion_hash text null,
-  completion_result jsonb null
+  completion_result jsonb null,
+  deal_snapshot jsonb null
 );
 
 create unique index if not exists idx_verified_single_player_matches_user_local

@@ -4,6 +4,7 @@ import {
   createBotMatchWithStarter,
   createFixedBotMatchWithStarter,
 } from '../match/runtime/botEngine.ts';
+import { createPreGameDrawShellMatch } from '../../match/preGameDraw/preGameDrawEligibility.ts';
 import {
   dailyFritzDebugLog,
 } from './dailyFritzMatchDiagnostics.ts';
@@ -64,6 +65,7 @@ export function useDailyFritzRuntime({
     dailyFritzScriptedDrawReady,
     resumablePersistedDailyFritzMatch,
     opponentLabel,
+    isStandaloneFritzMatch,
   } = bootstrap;
 
   const { isGuidedMode, isAuthoringMode } = guidedBoot;
@@ -186,9 +188,18 @@ export function useDailyFritzRuntime({
         );
         return;
       }
+      if (isStandaloneFritzMatch) {
+        setMatch({
+          ...createPreGameDrawShellMatch(winningScore, dealSize),
+          matchStarter: payload.winner,
+          pendingDrawDeck: payload.remainingDeck,
+          handOver: true,
+        });
+        return;
+      }
       setMatch(createBotMatchWithStarter(payload.remainingDeck, payload.winner, winningScore, dealSize));
     },
-    [dealSize, winningScore, mode, dailyFritzPackage, setPreGameDrawCompleted, setMatch],
+    [dealSize, winningScore, mode, dailyFritzPackage, isStandaloneFritzMatch, setPreGameDrawCompleted, setMatch],
   );
 
   const dailyFritzScriptedDraw = dailyFritzScriptedDrawReady ? dailyFritzPackage : null;

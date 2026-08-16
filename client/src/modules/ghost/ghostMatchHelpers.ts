@@ -22,15 +22,13 @@ export function formatRatingDelta(value: number): string {
 }
 
 export function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
-  return entries
-    .filter((entry) => entry.player === 'you')
-    .map((entry) => ({
-      turn: entry.moveNumber,
-      actor: 'you',
-      board_state: serializeGhostBoardState(entry.boardRenderState),
-      tile_played: entry.action === 'place' && entry.tile ? `${entry.tile[0]}|${entry.tile[1]}` : null,
-      branch: entry.action === 'draw' ? 'draw' : entry.action === 'pass' ? 'pass' : entry.action === 'place' && entry.tile ? (entry.boardState.find(s => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1])?.position ?? 'left') : null,
-      hand_before: entry.handBefore.map(([low, high]) => `${low}|${high}`),
-      score_delta: entry.pointsScored,
-    }));
+  return entries.map((entry) => ({
+    turn: entry.moveNumber,
+    actor: entry.player === 'you' ? 'you' : 'ghost',
+    board_state: serializeGhostBoardState(entry.boardRenderState),
+    tile_played: entry.action === 'place' && entry.tile ? `${entry.tile[0]}|${entry.tile[1]}` : null,
+    branch: entry.action === 'draw' ? 'draw' : entry.action === 'pass' ? 'pass' : entry.action === 'place' && entry.tile ? (entry.boardState.find(s => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1])?.position ?? 'left') : null,
+    hand_before: entry.handBefore.map(([low, high]) => `${low}|${high}`),
+    score_delta: entry.pointsScored,
+  }));
 }
