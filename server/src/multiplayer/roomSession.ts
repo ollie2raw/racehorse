@@ -196,7 +196,15 @@ export function resolveActorSeatId(roomCode: string, socket: Socket): string {
   const fromData = typeof socket.data?.playerId === 'string' ? socket.data.playerId : null;
   if (fromData) {
     const roster = getRoomRoster(roomCode);
-    if (roster.some((player) => player.id === fromData)) {
+    // Trusting socket.data.playerId alone is not enough: it is a value
+    // cached on this specific socket object at attach time, and a
+    // duplicate-tab takeover migrates the seat's roster entry to the new
+    // socket without necessarily having invalidated this (stale) socket's
+    // cached data yet — the exact race window between seat migration and
+    // old-socket teardown. Require the roster to say THIS socket currently
+    // owns that seat, not just that the seat exists somewhere in the room.
+    const owner = roster.find((player) => player.id === fromData);
+    if (owner && owner.socketId === socket.id) {
       return fromData;
     }
   }
