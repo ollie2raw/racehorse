@@ -1,97 +1,32 @@
 import { computeBestPossiblePuzzleScore } from './generatePuzzles';
+import {
+  DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
+  type DailyPuzzleAttempt,
+  type DailyPuzzleAttemptStatus,
+  type DailyPuzzleLeaderboardEntry,
+  type DailyPuzzlePracticeMode,
+  type DailyPuzzleSlot,
+  type DailyPuzzleSlotIndex,
+  type DailyPuzzleSlotResult,
+  type DailyPuzzleTier,
+} from '@racehorse/game-core';
 
-export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
-export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
-export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
-export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
-export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
-export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
-
-export interface DailyPuzzleSlot {
-  id: string;
-  puzzleDate: string;
-  slotIndex: DailyPuzzleSlotIndex;
-  slotTitle: string;
-  tier: DailyPuzzleTier;
-  puzzleType: string;
-  maxMoves: number;
-  targetScore: number;
-  dealSize: number;
-  slotMaxPoints: number;
-  bestPossibleScore: number | null;
-  startingBoard: unknown;
-  startingHand: unknown;
-  objectiveType: string;
-  objectivePayload: Record<string, unknown>;
-  setVersion: number;
-  published: boolean;
-}
-
-export interface DailyPuzzleSlotResult {
-  id: string;
-  attemptId: string;
-  puzzleId: string;
-  puzzleDate: string;
-  userId: string;
-  slotIndex: DailyPuzzleSlotIndex;
-  tier: DailyPuzzleTier;
-  slotTitle: string;
-  puzzleType: string;
-  rawScore: number;
-  awardedPoints: number;
-  bestPossibleScore: number;
-  slotMaxPoints: number;
-  solved: boolean;
-  perfect: boolean;
-  movesUsed: number;
-  elapsedSeconds: number;
-  completedAt: string;
-  submittedLine: Array<Record<string, unknown>>;
-  result: Record<string, unknown>;
-}
-
-export interface DailyPuzzleAttempt {
-  id: string;
-  puzzleDate: string;
-  userId: string;
-  username: string | null;
-  status: Exclude<DailyPuzzleAttemptStatus, 'none'>;
-  setVersion: number;
-  currentSlotIndex: DailyPuzzleSlotIndex;
-  puzzlesCompleted: number;
-  totalScore: number;
-  masterChainScore: number;
-  completedAt: string | null;
-  startedAt: string;
-  updatedAt: string;
-  reviewUnlocked: boolean;
-  practiceMode: DailyPuzzlePracticeMode;
-  result: {
-    slots: DailyPuzzleSlotResult[];
-    final?: {
-      puzzlesCompleted: number;
-      totalScore: number;
-      masterChainScore: number;
-      completedAt: string;
-    };
-  };
-}
-
-export interface DailyPuzzleLeaderboardEntry {
-  rank: number;
-  userId: string;
-  username: string;
-  puzzlesCompleted: number;
-  totalScore: number;
-  masterChainScore: number;
-  completedAt: string | null;
-  breakdown: Array<{
-    slotIndex: DailyPuzzleSlotIndex;
-    awardedPoints: number | null;
-    perfect: boolean;
-    solved: boolean;
-  }>;
-}
+// Re-exported from the shared contracts package (@racehorse/game-core/dtoContracts)
+// so the client and server share a single declaration — see that file for the
+// canonical definitions and the drift-prevention rationale.
+export {
+  DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
+  type DailyPuzzleAttempt,
+  type DailyPuzzleAttemptStatus,
+  type DailyPuzzleLeaderboardEntry,
+  type DailyPuzzlePracticeMode,
+  type DailyPuzzleSlot,
+  type DailyPuzzleSlotIndex,
+  type DailyPuzzleSlotResult,
+  type DailyPuzzleTier,
+};
 
 export interface DailyPuzzleSlotRow {
   id: string;

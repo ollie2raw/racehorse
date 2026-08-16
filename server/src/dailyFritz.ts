@@ -5,7 +5,18 @@ import {
   createDeterministicRandom,
   generateFullSet,
   shuffleDeterministically,
+  type DailyFritzDrawWinner,
+  type DailyFritzSetGameNumber,
+  type DailyFritzSetGameResult,
+  type DailyFritzSetResult,
 } from '@racehorse/game-core';
+
+// DailyFritzSetGameNumber / DailyFritzDrawWinner / DailyFritzSetGameResult /
+// DailyFritzSetResult are single-sourced from @racehorse/game-core's
+// dtoContracts module and re-exported here so both this file and the client
+// (client/src/dailyFritz/api.ts) share one declaration instead of each
+// hand-maintaining a copy.
+export type { DailyFritzDrawWinner, DailyFritzSetGameNumber, DailyFritzSetGameResult, DailyFritzSetResult };
 
 export type DailyFritzTier = 'rookie' | 'standard' | 'elite' | 'master';
 export type DailyFritzRunStatus = 'live' | 'archived' | 'invalidated';
@@ -52,37 +63,6 @@ export interface DailyFritzLeaderboardEntry {
     skunkBy?: 'player' | 'fritz';
   }>;
   rank?: number;
-}
-
-export type DailyFritzSetGameNumber = 1 | 2 | 3;
-export type DailyFritzDrawWinner = 'you' | 'bot';
-
-export interface DailyFritzSetGameResult {
-  gameNumber: DailyFritzSetGameNumber;
-  seed: string;
-  playerWon: boolean;
-  playerScore: number;
-  fritzScore: number;
-  pointDiff: number;
-  movesUsed?: number;
-  handsPlayed?: number;
-  completedAt: string;
-  skunk?: boolean;
-  skunkBy?: 'player' | 'fritz';
-}
-
-export interface DailyFritzSetResult {
-  version: 2;
-  format: 'best_of_3';
-  playerGamesWon: number;
-  fritzGamesWon: number;
-  totalPointDiff: number;
-  games: DailyFritzSetGameResult[];
-  setWinner?: 'player' | 'fritz';
-  hasSkunk?: boolean;
-  instantSkunk?: boolean;
-  skunkGameNumber?: DailyFritzSetGameNumber | null;
-  skunkBy?: 'player' | 'fritz' | null;
 }
 
 function cloneTile(tile: Tile): Tile {

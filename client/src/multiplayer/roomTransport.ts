@@ -2,6 +2,10 @@
 
 import type { GameState } from '../types';
 import { recordJoinAckTimeout } from './mpTelemetry';
+// Single-sourced from @racehorse/game-core's dtoContracts module (also used
+// by server/src/rooms.ts's ActionPayload) so the client and server can't
+// silently diverge on the MOVE/PASS/DRAW wire shape.
+import type { RoomGameActionPayload } from '@racehorse/game-core';
 
 export const SOCKET_ACK_TIMEOUT_MS = 8000;
 
@@ -54,14 +58,7 @@ export type RoomAbandonPayload = {
   tournamentMatchId: string | null;
 };
 
-export type GameActionPayload =
-  | { type: 'DRAW'; requestId: string }
-  | { type: 'PASS'; requestId: string }
-  | {
-      type: 'MOVE';
-      requestId: string;
-      move: { tile: { high: number; low: number }; position: string };
-    };
+export type GameActionPayload = RoomGameActionPayload;
 
 export type TournamentAttachPayload = {
   matchId: string;

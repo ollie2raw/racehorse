@@ -1,17 +1,33 @@
 import type { BoardState, Tile } from '../types';
+// Single source of truth for these shapes lives in @racehorse/game-core's
+// dtoContracts module, imported by both client and server, so the two sides
+// cannot silently drift apart (a prior audit caught a client LeaderboardEntry
+// type with fields the server never sent — this import is what prevents a
+// repeat of that bug class).
+import {
+  DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
+  type DailyPuzzleAttemptStatus,
+  type DailyPuzzleLeaderboardEntry,
+  type DailyPuzzlePracticeMode,
+  type DailyPuzzleSlotIndex,
+  type DailyPuzzleTier,
+} from '@racehorse/game-core';
+
+export {
+  DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
+  type DailyPuzzleAttemptStatus,
+  type DailyPuzzlePracticeMode,
+  type DailyPuzzleSlotIndex,
+  type DailyPuzzleTier,
+};
 
 export type DailyPuzzleType =
   | 'reach_target'
   | 'one_turn_high_score'
   | 'setup_and_strike'
   | 'branch_mastery';
-
-export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
-export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
-export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
-export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
-export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
-export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
 
 export interface CuratedDailyPuzzleRow {
   id: string;
@@ -190,21 +206,9 @@ export interface DailyPuzzleCompleteResponse {
   replayed: boolean;
 }
 
-export interface DailyPuzzleLeaderboardRow {
-  rank: number;
-  userId: string;
-  username: string;
-  puzzlesCompleted: number;
-  totalScore: number;
-  masterChainScore: number;
-  completedAt: string | null;
-  breakdown: Array<{
-    slotIndex: DailyPuzzleSlotIndex;
-    awardedPoints: number | null;
-    perfect: boolean;
-    solved: boolean;
-  }>;
-}
+// Identical shape to the server's DailyPuzzleLeaderboardEntry — single-sourced
+// from @racehorse/game-core so client and server can't diverge on field names.
+export type DailyPuzzleLeaderboardRow = DailyPuzzleLeaderboardEntry;
 
 export interface DailyPuzzleLeaderboardResponse {
   ok: true;

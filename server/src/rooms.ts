@@ -1,4 +1,5 @@
 import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
+import type { RoomGameActionPayload } from '@racehorse/game-core';
 import { assertTileCountInvariant, assertValidGameState } from './game/invariants';
 import { withRoomGameplayLock } from './multiplayer/roomGameplayLock';
 import type { Server } from 'socket.io';
@@ -777,15 +778,10 @@ export async function readyForNextHand(
   return { started: false, room: markPhase.room, waitMs: markPhase.waitMs };
 }
 
-export interface ActionPayload {
-  type: 'DRAW' | 'MOVE' | 'PASS';
-  requestId?: string;
-  move?: {
-    tile: { high: number; low: number };
-    position?: PlacementPosition;
-    end?: 'left' | 'right';
-  };
-}
+// Single-sourced from @racehorse/game-core's dtoContracts module — the client
+// (client/src/multiplayer/roomTransport.ts's GameActionPayload) imports the
+// same type so the two sides of the wire protocol can't silently diverge.
+export type ActionPayload = RoomGameActionPayload;
 
 function commitResolvedGameState(room: Room, assertLabel: string, nextState: GameState, autoPassExtras?: string[]) {
   const finalized = finalizeMandatoryAutoPasses(nextState);

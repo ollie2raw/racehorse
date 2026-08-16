@@ -3,6 +3,16 @@ import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 import type { Tile } from '../types.ts';
 import { normalizePreGameDrawTile } from '../match/preGameDraw/preGameDrawLogic.ts';
+// DailyFritzSetGameNumber / DailyFritzDrawWinner / DailyFritzSetGameResult are
+// single-sourced from @racehorse/game-core's dtoContracts module (also used by
+// server/src/dailyFritz.ts) so the client and server can't silently diverge on
+// these shapes.
+import type {
+  DailyFritzDrawWinner as SharedDailyFritzDrawWinner,
+  DailyFritzSetGameNumber as SharedDailyFritzSetGameNumber,
+  DailyFritzSetGameResult as SharedDailyFritzSetGameResult,
+  DailyFritzSetResult as SharedDailyFritzSetResult,
+} from '@racehorse/game-core';
 
 export const DAILY_FRITZ_REQUEST_ID_HEADER = 'x-racehorse-request-id';
 
@@ -287,36 +297,15 @@ export async function getDailyFritzHistory(limit = 5): Promise<DailyFritzHistory
   return result.data?.results ?? [];
 }
 
-export type DailyFritzSetGameNumber = 1 | 2 | 3;
+export type DailyFritzSetGameNumber = SharedDailyFritzSetGameNumber;
 
-export type DailyFritzDrawWinner = 'you' | 'bot';
+export type DailyFritzDrawWinner = SharedDailyFritzDrawWinner;
 
-export interface DailyFritzSetGameResult {
-  gameNumber: DailyFritzSetGameNumber;
-  seed: string;
-  playerWon: boolean;
-  playerScore: number;
-  fritzScore: number;
-  pointDiff: number;
-  movesUsed?: number;
-  handsPlayed?: number;
-  completedAt: string;
-  skunk?: boolean;
-  skunkBy?: 'player' | 'fritz';
-}
+export type DailyFritzSetGameResult = SharedDailyFritzSetGameResult;
 
-export interface DailyFritzSetResult {
-  version: 2;
-  format: 'best_of_3';
-  playerGamesWon: number;
-  fritzGamesWon: number;
-  totalPointDiff: number;
-  games: DailyFritzSetGameResult[];
-  setWinner?: 'player' | 'fritz';
-  hasSkunk?: boolean;
-  instantSkunk?: boolean;
-  skunkGameNumber?: DailyFritzSetGameNumber | null;
-  skunkBy?: 'player' | 'fritz' | null;
+// Extends the shared base shape with legacy snake_case fields some older
+// server responses still include.
+export interface DailyFritzSetResult extends SharedDailyFritzSetResult {
   run_date?: string;
   final_score?: number;
   opponent_score?: number;
