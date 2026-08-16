@@ -43,10 +43,6 @@ import type {
   UseHandLifecycleArgs,
   UseHandLifecycleResult,
 } from '../hand-lifecycle/types.ts';
-import {
-  buildDailyFritzStorageKey,
-  discardDailyFritzSnapshotBeforeReload,
-} from '../../daily/dailyFritzSessionStorage.ts';
 import { recordDailyFritzTelemetry } from '../../../dailyFritz/api.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../../dailyFritz/telemetry.ts';
 
@@ -88,7 +84,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   const [showManualHandAdvance, setShowManualHandAdvance] = useState(false);
 
   const handTransitionInFlightRef = useRef(false);
-  const reloadRequiredRef = useRef(false);
   const transitionStateRef = useRef({ dailyFritzNextHandFailureCount: 0 });
   const prefetchCoordinatorRef = useRef(new HandPrefetchCoordinator());
   const completedHandEvidenceRef = useRef<{
@@ -208,7 +203,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         });
         setDailyFritzHandResult(null);
         transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
-        reloadRequiredRef.current = false;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
         // Keep the hand-over surface mounted until the new deal is accepted.
@@ -663,20 +657,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   );
 
   const retryHandAdvance = useCallback(() => {
-    if (reloadRequiredRef.current) {
-      if (dailyFritzPackage) {
-        discardDailyFritzSnapshotBeforeReload(
-          buildDailyFritzStorageKey(
-            dailyFritzPackage.attempt_id,
-            dailyFritzPackage.current_game_number ?? 1,
-          ),
-          () => window.location.reload(),
-        );
-      } else {
-        window.location.reload();
-      }
-      return;
-    }
     setHandAdvanceError(null);
     handTransitionInFlightRef.current = false;
     prefetchCoordinator.clear();
