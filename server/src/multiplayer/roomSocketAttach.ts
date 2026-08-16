@@ -300,20 +300,15 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         });
 
         if (oldSocket && oldSocketId && oldSocket.connected) {
-          log.info(`[${via}] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
-          // Invalidate the old socket's cached seat identity so even an
-          // in-flight message it sends before its transport actually closes
-          // cannot fall back to a stale socket.data.playerId and be treated
-          // as authoritative for this seat.
+          log.info(`[${via}] SUPERSEDE: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
           if (oldSocket.data?.playerId === existingPlayer.id) {
             oldSocket.data.playerId = undefined;
           }
           if (oldSocket.data?.roomId === roomCode) {
             oldSocket.data.roomId = undefined;
           }
+          oldSocket.leave(roomCode);
           oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
-          oldSocket.disconnect(true);
-          await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
     }

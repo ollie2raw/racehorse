@@ -4,6 +4,7 @@ import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/s
 import { formatAuthErrorMessage } from './authErrors';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
+import { readE2eDevAuth } from './e2eDevAuth';
 
 export interface UserProfile {
   id: string;
@@ -366,6 +367,20 @@ export function useAuth() {
     };
 
     const init = async () => {
+      const e2eAuth = readE2eDevAuth();
+      if (e2eAuth) {
+        if (active) {
+          setUser(e2eAuth.user);
+          setAccessToken(e2eAuth.token);
+          setProfile({
+            id: e2eAuth.user.id,
+            username: 'e2e_daily_fritz',
+          });
+          setLoading(false);
+        }
+        return;
+      }
+
       if (!supabase) {
         if (active) {
           setUser(null);

@@ -21,6 +21,17 @@ import {
 import { supabaseFetch } from '../../supabaseUtils';
 import { getPacificDateKey } from '../../shared/pacificDate';
 import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
+import {
+  isDailyFritzMemoryStoreEnabled,
+  memoryCreateAttempt,
+  memoryGetAttempt,
+  memoryGetAttemptById,
+  memoryGetRun,
+  memoryListAttemptsForDate,
+  memoryListAttemptsForUser,
+  memoryUpsertAttempt,
+  memoryUpsertRun,
+} from './dailyFritzMemoryStore';
 
 const DAILY_FRITZ_ATTEMPT_LEGACY_COLUMNS =
   'id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played';
@@ -413,6 +424,11 @@ export function isMissingDailyFritzTable(error: unknown): boolean {
 }
 
 export async function getDailyFritzRun(runDate: string): Promise<DailyFritzRunRecord | null> {
+  if (isDailyFritzMemoryStoreEnabled()) {
+    const record = memoryGetRun(runDate);
+    if (record) dailyFritzRunCache.set(runDate, record);
+    return record;
+  }
   const cached = dailyFritzRunCache.get(runDate);
   if (cached) return cached;
   const rows = await supabaseFetch<DailyFritzRunRow[]>(
@@ -425,6 +441,17 @@ export async function getDailyFritzRun(runDate: string): Promise<DailyFritzRunRe
 }
 
 export async function getDailyFritzRunSummary(runDate: string): Promise<DailyFritzRunSummary | null> {
+  if (isDailyFritzMemoryStoreEnabled()) {
+    const cached = memoryGetRun(runDate);
+    if (!cached) return null;
+    return {
+      runDate: cached.runDate,
+      fritzTier: cached.fritzTier,
+      dealSize: cached.dealSize,
+      winningScore: cached.winningScore,
+      status: cached.status,
+    };
+  }
   const cached = dailyFritzRunCache.get(runDate);
   if (cached) {
     return {
@@ -459,6 +486,11 @@ export async function getDailyFritzRunSummary(runDate: string): Promise<DailyFri
 }
 
 export async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<DailyFritzRunRecord> {
+  if (isDailyFritzMemoryStoreEnabled()) {
+    const saved = memoryUpsertRun(record);
+    dailyFritzRunCache.set(saved.runDate, saved);
+    return saved;
+  }
   const rows = await supabaseFetch<DailyFritzRunRow[]>(
     '/rest/v1/daily_fritz_runs?on_conflict=run_date',
     {
@@ -536,6 +568,7 @@ export async function ensureDailyFritzRunForDate(
   }
 }
 export async function getDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord | null> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryGetAttempt(runDate, userId);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
     { method: 'GET' },
@@ -547,6 +580,7 @@ export async function getDailyFritzAttemptById(
   attemptId: string,
   userId: string,
 ): Promise<DailyFritzAttemptRecord | null> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryGetAttemptById(attemptId, userId);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&id=eq.${encodeURIComponent(attemptId)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
     { method: 'GET' },
@@ -555,6 +589,7 @@ export async function getDailyFritzAttemptById(
 }
 
 export async function upsertDailyFritzAttempt(record: DailyFritzAttemptRecord): Promise<DailyFritzAttemptRecord> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryUpsertAttempt(record);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     '/rest/v1/daily_fritz_attempts?on_conflict=id',
     {
@@ -571,6 +606,7 @@ export async function upsertDailyFritzAttempt(record: DailyFritzAttemptRecord): 
 }
 
 export async function createDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryCreateAttempt(runDate, userId);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     '/rest/v1/daily_fritz_attempts',
     {
@@ -596,6 +632,7 @@ export async function createDailyFritzAttempt(runDate: string, userId: string): 
 const LEADERBOARD_ATTEMPT_CAP = 2_000;
 
 export async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryListAttemptsForDate(runDate);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc&limit=${LEADERBOARD_ATTEMPT_CAP}`,
     { method: 'GET', circuitBreakable: true },
@@ -605,6 +642,7 @@ export async function listDailyFritzAttemptsForDate(runDate: string): Promise<Da
 
 export async function listDailyFritzAttemptsForUser(userId: string, limit = 10): Promise<DailyFritzAttemptRecord[]> {
   const bounded = Math.max(1, Math.min(30, Math.floor(limit)));
+  if (isDailyFritzMemoryStoreEnabled()) return memoryListAttemptsForUser(userId, bounded);
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc,completed_at.desc&limit=${bounded}`,
     { method: 'GET' },
@@ -698,6 +736,7 @@ export function isDailyFritzAttemptLeaderboardEligible(
     && (protocol === 1 || protocol === 2);
 }
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
+  if (isDailyFritzMemoryStoreEnabled()) return 0;
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
     `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=365`,
     { method: 'GET' },

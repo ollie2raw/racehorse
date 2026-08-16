@@ -34,6 +34,10 @@ export default defineConfig({
             ...process.env,
             // Unlock winningScore=5 so rematch/leave protocol proof can finish in E2E.
             MP_PRIVATE_CERT_MODE: '1',
+            E2E_INSPECT: '1',
+            DAILY_FRITZ_MEMORY_STORE: '1',
+            DAILY_FRITZ_TEST_FIXTURES_ENABLED: 'true',
+            NODE_ENV: process.env.NODE_ENV === 'production' ? 'development' : (process.env.NODE_ENV ?? 'development'),
           },
         },
         {
@@ -42,6 +46,10 @@ export default defineConfig({
           url: 'http://localhost:5173',
           reuseExistingServer: !process.env.CI,
           timeout: 60_000,
+          env: {
+            ...process.env,
+            VITE_SERVER_URL: 'http://localhost:3001',
+          },
         },
       ],
 });

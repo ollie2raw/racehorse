@@ -14,6 +14,7 @@
 
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
+import { readE2eDevAuth } from '../auth/e2eDevAuth';
 
 export type ApiResult<T> = {
   data: T | null;
@@ -37,6 +38,13 @@ export async function getAuthHeaders(options?: {
   const headers: Record<string, string> = {};
   if (!options?.skipContentType) {
     headers['Content-Type'] = 'application/json';
+  }
+
+  const e2eAuth = readE2eDevAuth();
+  if (e2eAuth) {
+    headers['Authorization'] = `Bearer ${e2eAuth.token}`;
+    headers['x-e2e-daily-fritz-user'] = e2eAuth.user.id;
+    return { headers, hasToken: true };
   }
 
   if (!supabase) {

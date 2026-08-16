@@ -467,3 +467,130 @@ export async function waitForGameServerReady(baseUrl = 'http://127.0.0.1:3001') 
   }
   throw new Error(`Game server not ready at ${baseUrl}: ${lastError}`);
 }
+
+type E2eServerStateSnapshot = {
+  at: number;
+  sequence: number | null;
+  scores: Record<string, number> | null;
+  boardLen: number | null;
+  currentPlayerIndex: number | null;
+};
+
+export async function attachServerStateProbe(page: Page) {
+  await page.evaluate(() => {
+    const win = window as E2eSocketWindow & {
+      __e2eServerStateLog?: E2eServerStateSnapshot[];
+    };
+    win.__e2eServerStateLog = [];
+    const sock = win.__racehorseE2eSocket as
+      | (NonNullable<E2eSocketWindow['__racehorseE2eSocket']> & {
+          on?: (event: string, handler: (payload: unknown) => void) => void;
+        })
+      | undefined;
+    sock?.on?.('state:update', (payload: unknown) => {
+      const record = payload as { state?: Record<string, unknown> };
+      const state = record?.state ?? (payload as Record<string, unknown>);
+      const players = state?.players as Record<string, { score?: number }> | undefined;
+      const scores = players
+        ? Object.fromEntries(
+            Object.entries(players).map(([id, player]) => [id, Number(player?.score ?? 0)]),
+          )
+        : null;
+      win.__e2eServerStateLog?.push({
+        at: Date.now(),
+        sequence: typeof state?.sequence === 'number' ? state.sequence : null,
+        scores,
+        boardLen: Array.isArray(state?.board) ? state.board.length : null,
+        currentPlayerIndex:
+          typeof state?.currentPlayerIndex === 'number' ? state.currentPlayerIndex : null,
+      });
+    });
+  });
+}
+
+export async function readLastServerStateSnapshot(page: Page): Promise<E2eServerStateSnapshot | null> {
+  return page.evaluate(() => {
+    const log = (window as { __e2eServerStateLog?: E2eServerStateSnapshot[] }).__e2eServerStateLog;
+    return log && log.length > 0 ? log[log.length - 1]! : null;
+  });
+}
+
+export async function wipeNonIdentityLocalStorage(page: Page) {
+  await page.evaluate((keys) => {
+    const keep = new Set(keys);
+    const toRemove: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && !keep.has(key)) toRemove.push(key);
+    }
+    toRemove.forEach((key) => window.localStorage.removeItem(key));
+  }, [GUEST_ID_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, LAST_ROOM_STORAGE_KEY]);
+}
+
+export async function installStaleMoveProbe(page: Page, roomCode: string) {
+  await page.evaluate((code) => {
+    const win = window as E2eSocketWindow & { __e2eStaleMoveAck?: unknown };
+    const sock = win.__racehorseE2eSocket as
+      | (NonNullable<E2eSocketWindow['__racehorseE2eSocket']> & {
+          on?: (event: string, handler: () => void) => void;
+          emit?: (...args: unknown[]) => void;
+          connected?: boolean;
+        })
+      | undefined;
+    if (!sock?.on || !sock.emit) return;
+    const emitStaleMove = () => {
+      sock.emit?.(
+        'game:action',
+        code,
+        {
+          type: 'MOVE',
+          requestId: `e2e-stale-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          move: { tile: { low: 0, high: 0 }, position: 'left' },
+        },
+        (ack: unknown) => {
+          win.__e2eStaleMoveAck = ack;
+        },
+      );
+    };
+    sock.on('room:session:superseded', emitStaleMove);
+  }, roomCode);
+}
+
+export async function readStaleMoveAck(page: Page): Promise<{ ok?: boolean; error?: string } | null> {
+  return page.evaluate(() => {
+    const ack = (window as { __e2eStaleMoveAck?: { ok?: boolean; error?: string } }).__e2eStaleMoveAck;
+    return ack ?? null;
+  });
+}
+
+export async function emitStaleMoveNow(page: Page, roomCode: string) {
+  await page.evaluate((code) => {
+    const win = window as E2eSocketWindow & { __e2eStaleMoveAck?: unknown };
+    const sock = win.__racehorseE2eSocket as
+      | (NonNullable<E2eSocketWindow['__racehorseE2eSocket']> & {
+          emit?: (...args: unknown[]) => void;
+        })
+      | undefined;
+    sock?.emit?.(
+      'game:action',
+      code,
+      {
+        type: 'MOVE',
+        requestId: `e2e-stale-late-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        move: { tile: { low: 0, high: 0 }, position: 'left' },
+      },
+      (ack: unknown) => {
+        win.__e2eStaleMoveAck = ack;
+      },
+    );
+  }, roomCode);
+}
+
+export async function fetchDisconnectGraceSeats(roomCode: string): Promise<string[]> {
+  const response = await fetch(`http://127.0.0.1:3001/api/e2e/disconnect-grace/${roomCode}`);
+  if (!response.ok) {
+    throw new Error(`disconnect-grace inspect failed: ${response.status}`);
+  }
+  const body = (await response.json()) as { seats?: string[] };
+  return Array.isArray(body.seats) ? body.seats : [];
+}

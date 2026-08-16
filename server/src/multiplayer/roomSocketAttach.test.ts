@@ -286,12 +286,14 @@ describe('createRoomSocketAttach', () => {
     expect(getSeatIdForSocket(roomCode, 'sock-new')).toBe('p1');
     expect(resolveActorSeatId(roomCode, newSocket)).toBe('p1');
 
-    // Old socket was told it was superseded and forcibly disconnected.
+    // Old socket was told it was superseded and removed from the room channel,
+    // but left connected so a MOVE it still emits is rejected with an ack.
     expect(oldSocket.emit).toHaveBeenCalledWith(
       'room:session:superseded',
       expect.objectContaining({ newSocketId: 'sock-new' }),
     );
-    expect(oldSocket.disconnect).toHaveBeenCalledWith(true);
+    expect(oldSocket.leave).toHaveBeenCalledWith(roomCode);
+    expect(oldSocket.disconnect).not.toHaveBeenCalled();
 
     // Old socket can no longer resolve or act as the seat's authority, even
     // via its stale cached socket.data.playerId (the duplicate-tab race this

@@ -215,6 +215,7 @@ import {
   type RateLimitRule,
 } from './rateLimit';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
+import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
   isGracefulShutdownInProgress,
   registerGracefulShutdownHandlers,
@@ -846,6 +847,8 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   console.error('[server] Failed to start server:', error);
   process.exit(1);
 });
+
+registerE2eInspectRoutes(app);
 
 registerHealthRoutes({
   app,

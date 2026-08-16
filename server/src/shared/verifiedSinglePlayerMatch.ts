@@ -208,6 +208,9 @@ export async function queryVerifiedSinglePlayerMatchByLocalKey(
     const cached = verifiedSinglePlayerMatches.get(cachedId);
     if (cached) return cached;
   }
+  if (process.env.NODE_ENV !== 'production' && process.env.DAILY_FRITZ_MEMORY_STORE === '1') {
+    return null;
+  }
   if (persistentVerifiedMatchesAvailable === false) return null;
   try {
     const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
@@ -236,6 +239,9 @@ export async function queryVerifiedSinglePlayerMatchByMatchId(
 ): Promise<VerifiedSinglePlayerMatch | null> {
   const cached = verifiedSinglePlayerMatches.get(matchId);
   if (cached) return cached;
+  if (process.env.NODE_ENV !== 'production' && process.env.DAILY_FRITZ_MEMORY_STORE === '1') {
+    return null;
+  }
   if (persistentVerifiedMatchesAvailable === false) return null;
   try {
     const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
@@ -262,6 +268,9 @@ export async function persistVerifiedSinglePlayerMatch(
   record: VerifiedSinglePlayerMatch,
 ): Promise<VerifiedSinglePlayerMatch> {
   cacheVerifiedSinglePlayerMatch(record);
+  if (process.env.NODE_ENV !== 'production' && process.env.DAILY_FRITZ_MEMORY_STORE === '1') {
+    return record;
+  }
   if (persistentVerifiedMatchesAvailable === false) return record;
   const row = toVerifiedSinglePlayerMatchRow(record);
   const persistRow = persistentDealSnapshotColumnAvailable === false

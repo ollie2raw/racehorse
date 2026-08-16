@@ -69,6 +69,16 @@ export function hasActiveDisconnectGraceForSeat(roomCode: string, playerSeatId: 
   return graceTimersByRoomSeat.has(graceKey(roomCode, playerSeatId));
 }
 
+export function listActiveDisconnectGraceSeats(roomCode: string): string[] {
+  const prefix = `${normalizeRoomCode(roomCode)}:`;
+  const seats: string[] = [];
+  for (const key of graceTimersByRoomSeat.keys()) {
+    if (!key.startsWith(prefix)) continue;
+    seats.push(key.slice(prefix.length));
+  }
+  return seats.sort();
+}
+
 /** Test-only reset between vitest cases. */
 export function resetDisconnectGraceForTests(): void {
   for (const entry of graceTimersByRoomSeat.values()) {
