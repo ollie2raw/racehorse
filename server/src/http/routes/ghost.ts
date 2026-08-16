@@ -8,6 +8,7 @@ import {
 } from '../../ghost/service';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 import { setPublicShortCache } from './cacheControl';
+import { verifyPlayerMoveLog } from '../../ghost/verifier';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -177,6 +178,14 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(400).json({ error: 'ghost scoring log exceeds opponentScore.' });
         return;
       }
+    }
+    const moveLogVerification = verifyPlayerMoveLog(trainingMoveLog);
+    if (!moveLogVerification.ok) {
+      res.status(400).json({
+        error: `Invalid move log: ${moveLogVerification.reason}`,
+        entryIndex: moveLogVerification.entryIndex,
+      });
+      return;
     }
 
     try {

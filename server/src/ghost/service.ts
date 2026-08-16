@@ -285,7 +285,7 @@ async function fetchRecentGhostGames(userId: string, limit = 5): Promise<GhostGa
   );
 }
 
-function parseTileKey(value: string | null | undefined): Tile | null {
+export function parseTileKey(value: string | null | undefined): Tile | null {
   if (!value) return null;
   const normalized = String(value).replace('-', '|');
   const [aRaw, bRaw] = normalized.split('|');
@@ -295,7 +295,7 @@ function parseTileKey(value: string | null | undefined): Tile | null {
   return { low: Math.min(a, b), high: Math.max(a, b) };
 }
 
-function parseGhostBoardState(value: string): BoardState | null {
+export function parseGhostBoardState(value: string): BoardState | null {
   if (!value || value === 'board:empty') return null;
   let raw: unknown;
   try {
@@ -396,7 +396,7 @@ function parseGhostBoardState(value: string): BoardState | null {
   };
 }
 
-function buildAnalysisState(board: BoardState | null, hand: Tile[]): GameState {
+export function buildAnalysisState(board: BoardState | null, hand: Tile[]): GameState {
   return {
     config: {
       maxPips: 6,
