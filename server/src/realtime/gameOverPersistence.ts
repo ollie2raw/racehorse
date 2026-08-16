@@ -148,13 +148,23 @@ export function createGameOverPersistScheduler(io: Server) {
                   rankingProfiles.set(p.me.userId, profile);
                 }
               }
-              if (profile) {
+              // completeGhostGame (below, for a Fritz opponent) performs its own
+              // ranked_games insert + processRatingPeriod call, gated on
+              // verifyPlayerMoveLog. Inserting a second, unverified row here
+              // with sourceType 'live_room' would sit unprocessed
+              // (rating_after: null) until processRatingPeriod's own
+              // no-sourceType-filter query — triggered moments later by that
+              // same completeGhostGame call — picked it up too, double-applying
+              // a Glicko delta for one match. Skip this insert for Fritz;
+              // human-vs-human still needs it for processRealtimeMultiplayerGame
+              // below.
+              if (profile && opponentId !== FRITZ_SYSTEM_ID) {
                 const insertResult = await insertRankedGameIdempotent({
                   playerId: p.me.userId,
                   opponentId,
                   playerScore: p.myScore,
                   opponentScore: p.oppScore,
-                  gameType: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
+                  gameType: 'multiplayer',
                   ratingBefore: profile.glicko_rating ?? 0,
                   rdBefore: profile.glicko_rd ?? 0,
                   playedAt: rankedPlayedAt,

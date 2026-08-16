@@ -394,6 +394,27 @@ describe('createGameOverPersistScheduler', () => {
       });
     }
 
+    it('does not double-insert a ranked_games row for the Fritz seat — completeGhostGame is the sole authoritative Glicko write for that seat', async () => {
+      // insertRankedGameIdempotent's dedup key is (player_id, source_match_id)
+      // only, not source_type. This loop's unconditional insert used
+      // sourceType 'live_room' with room.state's unverified score, then
+      // completeGhostGame's own insert (sourceType 'verified_single_player',
+      // same matchId) ran moments later and immediately called
+      // processRatingPeriod(userId) — whose query
+      // (ranked_games?player_id=eq...&rating_after=is.null) has no sourceType
+      // filter, so it would pick up and apply BOTH rows' scores as separate
+      // Glicko deltas for the same real match.
+      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+
+      await runPersist(buildFritzInput());
+
+      expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a', applyGlicko: true }),
+      );
+    });
+
     it('is the function that determines the final Glicko input for a Fritz completion: verifyPlayerMoveLog gates completeGhostGame.applyGlicko', async () => {
       supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
       verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
