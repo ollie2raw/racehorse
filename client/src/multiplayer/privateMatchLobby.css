@@ -2197,7 +2197,7 @@
 
 @media (max-width: 1024px) {
   .mp-hub-pvf-layout.pvf-layout {
-    flex-direction: column;
+    flex-direction: column !important;
   }
 
   .multiplayer-hub .pvf-left-col.pml-left--stack,
@@ -2450,4 +2450,41 @@
   box-shadow: none !important;
   cursor: default;
   opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .pml-info-bar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .pml-settings-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .multiplayer-hub .pml-room-stage .pml-matchup > .pml-duel-card {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    align-self: stretch !important;
+  }
+
+  .pml-matchup {
+    min-height: 0;
+    gap: 10px;
+  }
+
+  .pml-duel-name {
+    min-height: 0;
+  }
+
+  .pml-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pml-toolbar-start {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

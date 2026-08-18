@@ -5,6 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(clientDir, '..');
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
+const PHONE = { width: 390, height: 844 } as const;
 
 export default defineConfig({
   testDir: './e2e',
@@ -19,6 +20,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
+    {
+      name: 'chromium-mobile',
+      use: {
+        ...devices['Pixel 5'],
+        viewport: PHONE,
+      },
+    },
+    {
+      name: 'webkit-mobile',
+      use: {
+        ...devices['iPhone 12'],
+        viewport: PHONE,
+      },
+    },
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER

@@ -5641,5 +5641,58 @@
     padding: 20px 20px 18px;
   }
 }
+
+@media (max-width: 768px) {
+  .df-feature-bar {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px 10px 9px;
+  }
+
+  .df-feature-bar__col + .df-feature-bar__col {
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .df-pvf-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .df-streak-card {
+    grid-template-columns: 1fr;
+  }
+
+  .df-hero-fullbleed {
+    min-height: min(240px, 34vh);
+    max-height: 320px;
+  }
+
+  .df-opponent-card--pvf {
+    min-height: 220px;
+    max-height: min(340px, 42vh);
+  }
+
+  .df-pvf-layout,
+  .df-shell--daily-fritz .df-layout.df-pvf-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    flex-direction: column !important;
+    overflow: auto;
+  }
+
+  .df-pvf-opponent-card {
+    flex: 0 0 auto;
+    min-height: 200px;
+    max-height: min(240px, 30vh);
+  }
+
+  .df-pvf-card-badges {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    grid-template-columns: 1fr;
+  }
+}
 .daily-fritz-broadcast{position:fixed;z-index:60;top:calc(12px + env(safe-area-inset-top));right:14px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(231,182,74,.42);border-radius:8px;background:#0a1422;color:#f3f6ff;box-shadow:0 8px 24px rgba(0,0,0,.3)}.daily-fritz-broadcast strong{color:#63e6a8}.daily-fritz-broadcast button{border:1px solid rgba(88,166,255,.4);background:#102239;color:#f3f6ff;border-radius:6px;padding:7px 10px}.daily-fritz-broadcast button:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}@media(max-width:600px){.daily-fritz-broadcast{top:auto;bottom:calc(10px + env(safe-area-inset-bottom));left:12px;right:12px;justify-content:center}}
 .df-history-preview{margin-top:10px;padding:10px 12px;border:1px solid rgba(231,182,74,.2);border-radius:8px;background:#080e18;text-align:left}.df-history-preview h3{margin:0 0 7px;color:#f3e8c8;font-size:12px;letter-spacing:.08em;text-transform:uppercase}.df-history-preview ul{display:grid;gap:5px;margin:0;padding:0;list-style:none}.df-history-preview li{display:flex;justify-content:space-between;gap:12px;color:#aebbd0;font-size:12px}.df-history-preview strong{color:#f4f7fb;font-weight:700}

@@ -737,17 +737,35 @@
   flex-shrink: 0;
 }
 
-/* responsive */
+/* responsive — .pvf-layout is flex (not grid); must override row !important */
 @media (max-width:1100px) {
   .pvf-layout {
+    flex-direction: column !important;
     grid-template-columns: 1fr;
     grid-template-areas: none;
     padding: 16px 32px 40px;
   }
+  .pvf-left-col {
+    width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+  .pvf-control-panel {
+    width: 100% !important;
+    flex: 1 1 auto !important;
+  }
   .pvf-opponent-card { max-width:460px; height:auto; aspect-ratio: auto; }
   .pvf-difficulty-grid { grid-template-columns:repeat(2,1fr); }
 }
+@media (max-width: 768px) {
+  .pvf-layout {
+    padding: 12px 16px 24px !important;
+  }
+  .pvf-root > .pvf-layout {
+    overflow: auto !important;
+  }
+  .pvf-title { font-size: 36px; }
+}
 @media (max-width: 640px) {
-  .pvf-layout { padding:12px 20px 32px; }
+  .pvf-layout { padding:12px 16px 32px !important; }
   .pvf-title { font-size:40px; }
 }

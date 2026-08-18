@@ -1,11 +1,111 @@
-@media (max-width: 767px) {
+/* Phone chrome — shared GlobalNav compaction + bottom tab offset.
+   Breakpoint matches AppBottomTabBar (768px) and responsive.css. */
+
+@media (max-width: 768px) {
   .rh-nav-center-desktop {
     display: none !important;
+  }
+
+  /* Compact top bar: two-column flex row that actually reflows at 390px */
+  .rh-global-nav {
+    height: 56px !important;
+  }
+
+  .rh-nav-inner {
+    gap: 8px;
+    padding-inline: 12px !important;
   }
 
   .rh-nav-brand,
   .rh-nav-stats {
     min-width: 0 !important;
+    max-width: none;
+  }
+
+  .rh-nav-brand {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .rh-nav-wordmark {
+    margin-left: 10px !important;
+    font-size: 15px !important;
+    letter-spacing: 0.04em !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rh-nav-stats {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+
+  .rh-nav-stat-block {
+    gap: 6px !important;
+    padding: 6px 4px !important;
+  }
+
+  .rh-nav-stat-label {
+    display: none;
+  }
+
+  .rh-nav-stat-divider {
+    display: none;
+  }
+
+  .rh-nav-stat-value {
+    font-size: 15px !important;
+  }
+
+  .rh-nav-stat-icon {
+    width: 16px !important;
+    height: 16px !important;
+    flex-shrink: 0;
+  }
+
+  .rh-nav-user-block {
+    padding-left: 4px !important;
+    gap: 0 !important;
+  }
+
+  .rh-nav-user-block button:last-child {
+    display: none;
+  }
+
+  .rh-nav-user-block button:first-child {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* Hub screens: absolute back + centered title → stacked flow */
+  .home-main.sp-solo-main .rh-back-button.absolute,
+  .home-main.learn-hub-main .rh-back-button.absolute {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    z-index: 20;
+    align-self: flex-start;
+    margin: 4px 16px 0;
+  }
+
+  .home-main.sp-solo-main > .relative.z-10.text-center,
+  .home-main.learn-hub-main > .relative.z-10.text-center {
+    padding-inline: 16px;
+    margin-top: 12px;
+  }
+
+  .home-main.sp-solo-main,
+  .home-main.learn-hub-main {
+    padding-top: 8px !important;
+  }
+
+  /* Home: bottom tab bar replaces in-page mode strip on phone */
+  .home-mode-tabs {
+    display: none !important;
   }
 
   .home-shell,
@@ -27,7 +127,7 @@
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .rh-bottom-tab-bar {
     display: none !important;
   }

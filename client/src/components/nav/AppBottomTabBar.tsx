@@ -1,25 +1,10 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import type { AppMode } from '../../types';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './appPrimaryTabs';
 import './AppBottomTabBar.css';
 
-const PHONE_TAB_QUERY = '(max-width: 767px)';
-
-function usePhoneViewport() {
-  const [isPhone, setIsPhone] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(PHONE_TAB_QUERY).matches,
-  );
-
-  useEffect(() => {
-    const media = window.matchMedia(PHONE_TAB_QUERY);
-    const sync = () => setIsPhone(media.matches);
-    sync();
-    media.addEventListener('change', sync);
-    return () => media.removeEventListener('change', sync);
-  }, []);
-
-  return isPhone;
-}
+/** Must match rh-mobile-chrome.css max-width breakpoint (768px). */
+export const PHONE_TAB_MAX_WIDTH_PX = 768;
 
 interface AppBottomTabBarProps {
   currentMode?: AppMode;
@@ -73,9 +58,8 @@ export function AppBottomTabBar({
   activeColor,
   onNavigate,
 }: AppBottomTabBarProps) {
-  const isPhone = usePhoneViewport();
-  if (!isPhone) return null;
-
+  /* Always mount — phone/desktop visibility is CSS-only (rh-mobile-chrome.css).
+     Avoids Safari/layout races where matchMedia gated rendering hid mobile chrome. */
   return (
     <nav
       className="rh-bottom-tab-bar"

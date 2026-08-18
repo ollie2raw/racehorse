@@ -136,7 +136,7 @@ export function GlobalNav({
   return (
     <>
     <nav 
-      className={`relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
+      className={`rh-global-nav relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
       style={{
         boxSizing: 'border-box',
         overflow: 'visible',
@@ -158,12 +158,12 @@ export function GlobalNav({
           background: 'linear-gradient(180deg, rgba(2, 4, 10, 0.22) 0%, rgba(2, 4, 10, 0.08) 48%, rgba(2, 4, 10, 0) 100%)',
         }}
       />
-      <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
+      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
         {/* Left: Brand & Identity */}
         <button
           type="button"
           aria-label="Racehorse home"
-          className="rh-nav-brand flex min-w-[280px] cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
+          className="rh-nav-brand flex min-w-0 shrink cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
           onClick={() => onNavigate?.('home')}
         >
           <BrandLogo
@@ -177,14 +177,14 @@ export function GlobalNav({
                   : undefined
             }
           />
-          <div 
-            className="uppercase text-white"
-            style={{ 
+          <div
+            className="rh-nav-wordmark uppercase text-white"
+            style={{
               marginLeft: '14px',
               fontSize: '22px',
               fontWeight: 900,
               letterSpacing: '0.05em',
-              fontFamily: "'Montserrat', sans-serif"
+              fontFamily: "'Montserrat', sans-serif",
             }}
           >
             RACEHORSE
@@ -241,19 +241,21 @@ export function GlobalNav({
         </div>
 
         {/* Right Side: Player Statistics */}
-        <div className="rh-nav-stats flex items-center min-w-[280px] justify-end">
+        <div className="rh-nav-stats flex min-w-0 shrink-0 items-center justify-end">
           {/* Rating */}
-          <div className="flex items-center gap-3 px-5 py-2.5">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
+          <div className="rh-nav-stat-block flex items-center gap-3 px-5 py-2.5">
+            <svg className="rh-nav-stat-icon" width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
               <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
             </svg>
             <div className="leading-tight">
-              <div 
+              <div
+                className="rh-nav-stat-value"
                 style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
               >
                 {rating}
               </div>
-              <div 
+              <div
+                className="rh-nav-stat-label"
                 style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}
               >
                 Rating
@@ -261,25 +263,27 @@ export function GlobalNav({
             </div>
           </div>
 
-          <div className="mx-1 h-[28px] w-px bg-white/5" />
+          <div className="rh-nav-stat-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />
 
           {/* Friends Count */}
           <button
             type="button"
             onClick={() => onNavigate?.('friends')}
-            className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
+            className="rh-nav-stat-block flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg className="rh-nav-stat-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <div className="leading-tight text-left">
-              <div 
+              <div
+                className="rh-nav-stat-value"
                 style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
               >
                 {friendCountDisplay !== null ? friendCountDisplay : authUser ? '…' : '—'}
               </div>
-              <div 
+              <div
+                className="rh-nav-stat-label"
                 style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}
               >
                 Friends
@@ -287,9 +291,9 @@ export function GlobalNav({
             </div>
           </button>
 
-          <div className="mx-1 h-[28px] w-px bg-white/5" />
+          <div className="rh-nav-stat-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />
 
-          <div className="flex items-center gap-4 pl-5">
+          <div className="rh-nav-user-block flex items-center gap-4 pl-5">
             {/* Avatar */}
             <button
               type="button"
