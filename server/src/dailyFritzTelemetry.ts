@@ -25,6 +25,7 @@ export const DAILY_FRITZ_EVENT_TYPES = [
   'leaderboard_opened',
   'share_requested',
   'share_completed',
+  'checkpoint_saved',
 ] as const;
 
 export type DailyFritzEventType = typeof DAILY_FRITZ_EVENT_TYPES[number];

@@ -28,6 +28,9 @@ export const DAILY_FRITZ_INIT_TIMEOUT_MS = 10_000;
 
 /** Next-hand advance (prefetch + reveal auto-advance). Match init — Render cold starts can exceed 4.5s. */
 export const DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS = 10_000;
+/** Record-game must never strand the player on the Saving… overlay. */
+export const DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS = 15_000;
+export const DAILY_FRITZ_COMPLETE_TIMEOUT_MS = 15_000;
 
 export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 
@@ -197,18 +200,47 @@ async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
   return result;
 }
 
-async function timedApiPost<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+async function timedApiPost<T>(path: string, body: unknown, timeoutMs?: number): Promise<ApiResult<T>> {
   const start = performance.now();
-  const result = await apiPost<T>(path, body, {
-    headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
-  });
-  dfClientDebug('[daily-fritz-client] request', {
-    path,
-    ms: Number((performance.now() - start).toFixed(1)),
-    ok: result.error === null,
-    status: result.status,
-  });
-  return result;
+  const controller = typeof AbortController !== 'undefined' && timeoutMs != null ? new AbortController() : null;
+  let timedOut = false;
+  const timeoutId = controller && timeoutMs != null
+    ? window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : null;
+  try {
+    const result = await apiPost<T>(path, body, {
+      headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
+      signal: controller?.signal,
+    });
+    dfClientDebug('[daily-fritz-client] request', {
+      path,
+      ms: Number((performance.now() - start).toFixed(1)),
+      ok: result.error === null,
+      status: result.status,
+    });
+    if (timedOut && result.error) {
+      return {
+        ...result,
+        error: 'Daily Fritz request timed out. Check your connection and try again.',
+        status: result.status ?? 408,
+      };
+    }
+    return result;
+  } catch (error) {
+    if (timedOut) {
+      return {
+        data: null,
+        error: 'Daily Fritz request timed out. Check your connection and try again.',
+        status: 408,
+      };
+    }
+    throw error;
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
+  }
 }
 
 function throwApiResult<T>(result: ApiResult<T>): T {
@@ -379,6 +411,8 @@ export interface DailyFritzStartResponse {
   draw_fritz_tile: Tile;
   /** Present for asynchronous fixed-deal Fritz challenges. */
   challenge_code?: string;
+  /** Server-persisted mid-hand resume checkpoint when local storage is empty. */
+  resume_checkpoint?: Record<string, unknown> | null;
 }
 
 export interface DailyFritzNextHandResponse {
@@ -471,6 +505,36 @@ export async function startDailyFritz(options?: {
   });
   const normalized = normalizeDailyFritzStartDrawFields(response);
   return normalized;
+}
+
+export type DailyFritzCheckpointSaveResponse = {
+  ok: true;
+  checkpoint_revision: number;
+  authority_revision: number;
+};
+
+export async function saveDailyFritzCheckpoint(input: {
+  attemptId: string;
+  verifiedMatchId: string;
+  checkpoint: Record<string, unknown>;
+  timeoutMs?: number;
+}): Promise<DailyFritzCheckpointSaveResponse | null> {
+  try {
+    return await dfRequestJsonWithTimeout<DailyFritzCheckpointSaveResponse>(
+      '/api/daily-fritz/checkpoint',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          attempt_id: input.attemptId,
+          verified_match_id: input.verifiedMatchId,
+          checkpoint: input.checkpoint,
+        }),
+        timeoutMs: input.timeoutMs ?? 8_000,
+      },
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchDailyFritzLeaderboard(date: string): Promise<DailyFritzLeaderboardRow[]> {
@@ -763,7 +827,7 @@ export async function completeDailyFritz(input: {
       hands_played: input.handsPlayed,
       move_log: input.moveLog,
       set_result: input.setResult ?? null,
-    }),
+    }, DAILY_FRITZ_COMPLETE_TIMEOUT_MS),
   );
 }
 
@@ -784,15 +848,12 @@ export async function recordDailyFritzGame(input: {
       verified_match_id: input.verifiedMatchId,
       run_date: input.runDate,
       game_number: input.gameNumber,
-      ...(input.transcript
-        ? { transcript: input.transcript }
-        : {
-            player_score: input.playerScore,
-            fritz_score: input.fritzScore,
-            moves_used: input.movesUsed,
-            hands_played: input.handsPlayed,
-          }),
-    }),
+      player_score: input.playerScore,
+      fritz_score: input.fritzScore,
+      moves_used: input.movesUsed,
+      hands_played: input.handsPlayed,
+      ...(input.transcript ? { transcript: input.transcript } : {}),
+    }, DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS),
   );
 }
 

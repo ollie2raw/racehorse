@@ -169,6 +169,83 @@ export function resolveDailyFritzStorageKey(mode: string, dailyFritzPackage: Dai
   return buildDailyFritzStorageKey(dailyFritzPackage.attempt_id, dailyFritzPackage.current_game_number ?? 1);
 }
 
+function buildDailyFritzResumeAuthority(
+  dailyFritzPackage: DailyFritzStartResponse,
+): {
+  attemptId: string;
+  challengeId: string;
+  runFingerprint?: string | null;
+  cursor: DailyFritzAuthorityCursor;
+  fritzPolicyVersion?: number | null;
+  fritzPolicyContract?: string | null;
+} {
+  return {
+    attemptId: dailyFritzPackage.attempt_id,
+    challengeId: dailyFritzPackage.challenge_id ?? createDailyFritzChallengeIdentity(dailyFritzPackage.run_date).challengeId,
+    runFingerprint: dailyFritzPackage.run_fingerprint,
+    cursor: {
+      gameNumber: dailyFritzPackage.current_game_number ?? 1,
+      handIndex: dailyFritzPackage.current_hand_index,
+      revision: Number(dailyFritzPackage.authority_revision ?? 0),
+    },
+    fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+    fritzPolicyContract: dailyFritzPackage.fritz_policy_contract,
+  };
+}
+
+export function dailyFritzServerCheckpointToSnapshot(
+  checkpoint: Record<string, unknown>,
+  runDate: string,
+  now = new Date(),
+): DailyFritzPersistedSnapshot | null {
+  const withChallenge = {
+    ...checkpoint,
+    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    classification: 'official',
+    challenge: validChallenge(checkpoint.challenge)
+      ? checkpoint.challenge
+      : createDailyFritzChallengeIdentity(runDate),
+  };
+  return parseDailyFritzPersistedSnapshot(withChallenge, now);
+}
+
+export function loadDailyFritzResumeSnapshot(
+  storageKey: string | null,
+  dailyFritzPackage: DailyFritzStartResponse | null | undefined,
+  now = new Date(),
+): DailyFritzPersistedSnapshot | null {
+  if (!dailyFritzPackage?.attempt_id || !dailyFritzPackage.run_date) return null;
+  const authority = buildDailyFritzResumeAuthority(dailyFritzPackage);
+  const local = loadPersistedDailyFritzMatch(
+    storageKey,
+    dailyFritzPackage.attempt_id,
+    dailyFritzPackage.current_hand_index,
+    dailyFritzPackage.run_date,
+    now,
+    dailyFritzPackage.run_fingerprint,
+    dailyFritzPackage.fritz_policy_version,
+    dailyFritzPackage.fritz_policy_contract,
+    dailyFritzPackage.authority_revision,
+    dailyFritzPackage.current_game_number ?? 1,
+  );
+  const serverRaw = dailyFritzPackage.resume_checkpoint;
+  let server: DailyFritzPersistedSnapshot | null = null;
+  if (serverRaw && object(serverRaw)) {
+    const parsed = dailyFritzServerCheckpointToSnapshot(serverRaw, dailyFritzPackage.run_date, now);
+    if (parsed) {
+      const reconciled = reconcileDailyFritzResume(parsed, authority);
+      server = reconciled.accepted ? reconciled.snapshot : null;
+    }
+  }
+  if (local && server) {
+    const chosen = local.checkpointRevision >= server.checkpointRevision ? local : server;
+    if (chosen === server && storageKey) persistDailyFritzSnapshot(storageKey, server);
+    return chosen;
+  }
+  if (server && storageKey) persistDailyFritzSnapshot(storageKey, server);
+  return local ?? server ?? null;
+}
+
 export function loadPersistedDailyFritzMatch(
   storageKey: string | null,
   attemptId: string | undefined,

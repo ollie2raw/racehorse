@@ -12,7 +12,8 @@ export type DailyFritzMetricName =
   | 'retry_request'
   | 'mutation_request'
   | 'command_conflict'
-  | 'event_persistence_failed';
+  | 'event_persistence_failed'
+  | 'checkpoint_saved';
 
 type MetricBucket = {
   total: number;

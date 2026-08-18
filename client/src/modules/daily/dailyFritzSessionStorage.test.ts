@@ -8,6 +8,7 @@ import {
   discardDailyFritzSnapshot,
   discardDailyFritzSnapshotBeforeReload,
   loadPersistedDailyFritzMatch,
+  loadDailyFritzResumeSnapshot,
   parseDailyFritzPersistedSnapshot,
   persistDailyFritzSnapshot,
   reconcileDailyFritzResume,
@@ -459,5 +460,36 @@ describe('Daily Fritz v3 session persistence', () => {
     const value = snapshot();
     value.match.players.you.hand = [tile as never];
     expect(parseDailyFritzPersistedSnapshot(value, now)).toBeNull();
+  });
+
+  it('falls back to the server resume checkpoint when local storage is empty', () => {
+    const key = buildDailyFritzStorageKey('attempt-1', 1);
+    const serverSnapshot = snapshot({ checkpointRevision: 5 });
+    const loaded = loadDailyFritzResumeSnapshot(key, {
+      ok: true,
+      attempt_id: 'attempt-1',
+      verified_match_id: 'verified-1',
+      authority_revision: AUTHORITY_REVISION,
+      run_date: '2026-07-12',
+      run_fingerprint: RUN_FP,
+      current_hand_index: 2,
+      current_game_number: 1,
+      set_result: null,
+      fritz_tier: 'standard',
+      deal_size: 7,
+      winning_score: 100,
+      first_hand: {
+        player_tiles: [],
+        fritz_tiles: [],
+        boneyard: [],
+        locked: [],
+      },
+      draw_winner: 'you',
+      draw_player_tile: { low: 1, high: 2 },
+      draw_fritz_tile: { low: 2, high: 3 },
+      resume_checkpoint: serverSnapshot as unknown as Record<string, unknown>,
+    }, now);
+    expect(loaded?.checkpointRevision).toBe(5);
+    expect(window.localStorage.getItem(key)).not.toBeNull();
   });
 });

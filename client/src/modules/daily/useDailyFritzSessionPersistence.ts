@@ -11,13 +11,14 @@ import {
 } from './dailyFritzSessionStorage.ts';
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
-import { recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
+import { saveDailyFritzCheckpoint, recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../dailyFritz/telemetry.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
   storageKey: string | null;
   attemptId: string | null | undefined;
+  verifiedMatchId: string | null | undefined;
   runDate: string | null | undefined;
   runFingerprint: string | null | undefined;
   gameNumber: number;
@@ -39,6 +40,7 @@ export function useDailyFritzSessionPersistence({
   enabled,
   storageKey,
   attemptId,
+  verifiedMatchId,
   runDate,
   runFingerprint,
   gameNumber,
@@ -61,6 +63,40 @@ export function useDailyFritzSessionPersistence({
   const checkpointRevisionRef = useRef(initialCheckpointRevision);
   const firstMoveReportedRef = useRef(false);
   const divergenceReportedRef = useRef('');
+  const serverSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastServerSyncRevisionRef = useRef(initialCheckpointRevision);
+
+  const syncCheckpointToServer = (snapshot: DailyFritzPersistedSnapshot, immediate: boolean) => {
+    if (!attemptId || !verifiedMatchId) return;
+    if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
+    const runSync = () => {
+      void saveDailyFritzCheckpoint({
+        attemptId,
+        verifiedMatchId,
+        checkpoint: snapshot as unknown as Record<string, unknown>,
+      }).then((response) => {
+        if (response?.ok) {
+          lastServerSyncRevisionRef.current = Math.max(
+            lastServerSyncRevisionRef.current,
+            response.checkpoint_revision,
+          );
+        }
+      });
+    };
+    if (immediate) {
+      if (serverSyncTimerRef.current) {
+        clearTimeout(serverSyncTimerRef.current);
+        serverSyncTimerRef.current = null;
+      }
+      runSync();
+      return;
+    }
+    if (serverSyncTimerRef.current) clearTimeout(serverSyncTimerRef.current);
+    serverSyncTimerRef.current = setTimeout(() => {
+      serverSyncTimerRef.current = null;
+      runSync();
+    }, 1_500);
+  };
 
   useEffect(() => {
     if (!enabled || !attemptId || !runDate || firstMoveReportedRef.current) return;
@@ -171,6 +207,7 @@ export function useDailyFritzSessionPersistence({
       const finalSnapshot = buildSnapshot();
       storagePendingRef.current = { key: storageKey, payload: finalSnapshot };
       persistDailyFritzSnapshot(storageKey, finalSnapshot);
+      syncCheckpointToServer(finalSnapshot, true);
       storagePendingRef.current = null;
       return;
     }
@@ -180,11 +217,16 @@ export function useDailyFritzSessionPersistence({
     // state transition synchronously so a route click immediately after a
     // move cannot discard the latest hand/score state.
     persistDailyFritzSnapshot(storageKey, snapshot);
+    syncCheckpointToServer(snapshot, false);
     storagePendingRef.current = null;
     return () => {
       if (storageTimerRef.current) {
         clearTimeout(storageTimerRef.current);
         storageTimerRef.current = null;
+      }
+      if (serverSyncTimerRef.current) {
+        clearTimeout(serverSyncTimerRef.current);
+        serverSyncTimerRef.current = null;
       }
     };
   }, [
@@ -204,6 +246,7 @@ export function useDailyFritzSessionPersistence({
     storageKey,
     transcriptProtocolVersion,
     fritzPolicyVersion,
+    verifiedMatchId,
   ]);
 
   useEffect(() => {

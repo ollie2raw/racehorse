@@ -25,6 +25,7 @@ export type { DailyFritzSetOverlayViewModel } from './dailyFritzUiContracts.ts';
 export { buildShareText } from './dailyFritzUiContracts.ts';
 export {
   buildDailyFritzStorageKey,
+  loadDailyFritzResumeSnapshot,
   loadPersistedDailyFritzMatch,
   pruneNonPlayableDailyFritzSnapshot,
   resolveDailyFritzStorageKey,

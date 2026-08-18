@@ -22,6 +22,7 @@ import {
   readAuthorityLedger,
   requiresVerifiedDailyFritzEvidence,
 } from './dailyFritzVerificationPolicy';
+import { clearDailyFritzActiveCheckpoint } from './dailyFritzCheckpointPolicy';
 import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
 import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { loadDailyFritzPublishedAuthority } from './dailyFritzPublishedAuthority';
@@ -344,6 +345,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       setResult,
       hasTranscript: Boolean(parsedTranscript),
     });
+    attempt.result = clearDailyFritzActiveCheckpoint(attempt.result);
     if (!setResult.setWinner) {
       attempt.currentHandIndex = 0;
       attempt.currentGameNumber = Math.min(gameNumber + 1, 3) as DailyFritzSetGameNumber;
