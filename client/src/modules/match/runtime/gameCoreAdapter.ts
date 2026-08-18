@@ -343,8 +343,8 @@ export function drawUntilPlayableOrEmptyCoreState(
       const coreCurrent = toCoreGameState(current);
       if (getLegalMovesCoreState(coreCurrent, player).some((move) => move.type === 'play')) break;
       const step = drawCoreTile(current, player);
-      if (step.error) return step;
-      if (!step.drew) break;
+      // Locked/dead boneyard tiles are not drawable — treat as exhausted.
+      if (step.error || !step.drew) break;
       lastDrawn = step.drew.tile;
       current = step.state;
     }
