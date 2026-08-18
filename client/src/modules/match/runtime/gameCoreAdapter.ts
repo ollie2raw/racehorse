@@ -5,13 +5,16 @@ import {
   chooseOfficialFritzDecisionForVersion,
   isSupportedFritzPolicyVersion,
   applyMove as applyCoreMove,
-  drawUntilPlayableOrEmpty as drawUntilPlayableOrEmptyCore,
   computeGoOutBonusPoints,
   computeHandPenalty,
   computePlayScore as computeCorePlayScore,
   getLegalMoves as getCoreLegalMoves,
   getLegalMoves as getLegalMovesCoreState,
   simulatePlacement as simulateCorePlacement,
+  getDailyFritzAuthorityStateDigest,
+  appendDailyFritzJournalAction,
+  type DailyFritzJournalAction,
+  type DailyFritzJournalActionInput,
   type GameState as CoreGameState,
   type Move as CoreMove,
 } from '@racehorse/game-core';
@@ -31,6 +34,45 @@ function cloneTile(tile: Readonly<Tile>): Tile {
 
 function actionFailure(state: BotMatchState, code: string, message: string): BotActionResult {
   return { state, error: { code, message } satisfies BotActionError };
+}
+
+/**
+ * Record one accepted official command on the state it produced.
+ *
+ * This is the ONLY place Daily Fritz verification evidence is written. It runs
+ * inside the state transition, so the journal can never drift from the state:
+ * see packages/game-core/src/dailyFritzJournal.ts for why reconstructing this
+ * from the UI move log is unfixable.
+ *
+ * `coreBefore` must be the authoritative pre-command state (both hands
+ * visible, never a participant-masked projection) so the recorded digest
+ * matches the one the server computes while replaying.
+ */
+function journalOfficialAction(
+  next: BotMatchState,
+  previous: BotMatchState,
+  coreBefore: CoreGameState,
+  actor: BotPlayerId,
+  action: DailyFritzJournalActionInput,
+): BotMatchState {
+  // Only Fritz actions carry a digest: those are the ones the server compares
+  // (player digests are ignored on replay) and every extra field counts
+  // against the transcript's size cap on long hands.
+  const journalActor = actor === 'you' ? 'player' : 'fritz';
+  return {
+    ...next,
+    officialJournal: appendDailyFritzJournalAction(
+      previous.officialJournal,
+      previous.handNumber,
+      {
+        ...action,
+        actor: journalActor,
+        ...(journalActor === 'fritz'
+          ? { preStateDigest: getDailyFritzAuthorityStateDigest(coreBefore) }
+          : {}),
+      } as DailyFritzJournalAction,
+    ),
+  };
 }
 
 function cloneBoard(board: CoreGameState['board']): BoardState | null {
@@ -206,7 +248,13 @@ export function applyCorePlay(
       position: move.position,
     });
     const details = handEndDetails(state, result.state);
-    const next = fromCoreGameState(result.state, state, details.winner, details.reason);
+    const next = journalOfficialAction(
+      fromCoreGameState(result.state, state, details.winner, details.reason),
+      state,
+      coreBefore,
+      player,
+      { kind: 'play', tile: cloneTile(move.tile), position: move.position },
+    );
     return {
       state: next,
       ...(immediateScore > 0 ? { scored: { player, points: immediateScore } } : {}),
@@ -235,7 +283,13 @@ export function drawCoreTile(state: BotMatchState, player: BotPlayerId): BotActi
       kind: 'draw',
     });
     return {
-      state: fromCoreGameState(result.state, state),
+      state: journalOfficialAction(
+        fromCoreGameState(result.state, state),
+        state,
+        coreState,
+        player,
+        { kind: 'draw' },
+      ),
       drew: { player, tile: cloneTile(drawn) },
     };
   } catch (error) {
@@ -249,10 +303,17 @@ export function drawCoreTile(state: BotMatchState, player: BotPlayerId): BotActi
 
 export function passCoreTurn(state: BotMatchState, player: BotPlayerId): BotActionResult {
   try {
-    const result = applyCoreMove(toCoreGameState(state), player, { type: 'pass' } as CoreMove);
+    const coreBefore = toCoreGameState(state);
+    const result = applyCoreMove(coreBefore, player, { type: 'pass' } as CoreMove);
     const details = handEndDetails(state, result.state, 'blocked');
     return {
-      state: fromCoreGameState(result.state, state, details.winner, details.reason),
+      state: journalOfficialAction(
+        fromCoreGameState(result.state, state, details.winner, details.reason),
+        state,
+        coreBefore,
+        player,
+        { kind: 'pass' },
+      ),
       passed: { player },
       ...(details.handEnded ? { handEnded: details.handEnded } : {}),
     };
@@ -269,20 +330,37 @@ export function drawUntilPlayableOrEmptyCoreState(
   state: BotMatchState,
   player: BotPlayerId,
 ): BotActionResult {
-  const coreState = toCoreGameState(state);
+  const startingBoneyard = state.boneyard.length;
   try {
-    const result = drawUntilPlayableOrEmptyCore(coreState, player);
-    const drewCount = coreState.boneyard.length - result.state.boneyard.length;
-    const lastDrawn = drewCount > 0 ? coreState.boneyard[drewCount - 1] : undefined;
-    if (result.state.boneyard.length === coreState.boneyard.length && !getLegalMovesCoreState(result.state, player).some((move) => move.type === 'play')) {
-      const passed = passCoreTurn(fromCoreGameState(result.state, state), player);
+    // Drawn one tile at a time through drawCoreTile rather than in a single
+    // bulk core call, so every drawn tile lands in the official journal with
+    // its own pre-action digest. A bulk draw would advance the state by N
+    // commands while recording none of them.
+    let current = state;
+    let lastDrawn: Tile | undefined;
+    const maxDraws = startingBoneyard;
+    for (let index = 0; index < maxDraws; index += 1) {
+      const coreCurrent = toCoreGameState(current);
+      if (getLegalMovesCoreState(coreCurrent, player).some((move) => move.type === 'play')) break;
+      const step = drawCoreTile(current, player);
+      // Locked/dead boneyard tiles are not drawable — treat as exhausted.
+      if (step.error || !step.drew) break;
+      lastDrawn = step.drew.tile;
+      current = step.state;
+    }
+
+    const stillStuck = !getLegalMovesCoreState(toCoreGameState(current), player).some(
+      (move) => move.type === 'play',
+    );
+    if (current.boneyard.length === startingBoneyard && stillStuck) {
+      const passed = passCoreTurn(current, player);
       return {
         ...passed,
         ...(lastDrawn ? { drew: { player, tile: cloneTile(lastDrawn) } } : {}),
       };
     }
     return {
-      state: fromCoreGameState(result.state, state),
+      state: current,
       ...(lastDrawn ? { drew: { player, tile: cloneTile(lastDrawn) } } : {}),
     };
   } catch (error) {

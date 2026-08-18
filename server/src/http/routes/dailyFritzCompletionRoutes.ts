@@ -113,7 +113,10 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
       return;
     }
     const ledger = readAuthorityLedger(attempt.result);
-    const isVerified = hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
+    // A run that advanced any hand without a receipt stays unranked, even if
+    // every other game produced a complete authority record.
+    const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
+      && hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
     if (!canFinalizeDailyFritzAttempt(attempt.result, setResult)) {
       res.status(409).json({ error: 'Daily Fritz verification is incomplete.' });
       return;

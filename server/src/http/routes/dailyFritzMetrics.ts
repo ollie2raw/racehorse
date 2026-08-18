@@ -7,6 +7,8 @@ export type DailyFritzMetricName =
   | 'next_hand_replayed'
   | 'request_failed'
   | 'verification_failed'
+  /** A hand advanced without a receipt so the player was not stranded. */
+  | 'verification_bypassed'
   | 'retry_request'
   | 'mutation_request'
   | 'command_conflict'

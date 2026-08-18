@@ -185,11 +185,19 @@ export function buildRecordedDailyFritzAttemptResult(input: {
     };
   }
   const previousStatus = getDailyFritzVerificationStatus(previous);
+  // 'rejected' is sticky: once a hand advanced without a receipt, no later
+  // hand may promote the run back into leaderboard eligibility.
+  const nextStatus = previousStatus === 'rejected'
+    ? 'rejected'
+    : previousStatus === 'verified' ? 'verified' : 'in_progress';
   return {
     ...input.setResult as Record<string, unknown>,
     authority,
+    ...(Array.isArray(previous.unverified_hands)
+      ? { unverified_hands: previous.unverified_hands }
+      : {}),
     verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-    verification_status: previousStatus === 'verified' ? 'verified' : 'in_progress',
+    verification_status: nextStatus,
   };
 }
 
@@ -221,6 +229,10 @@ export function canFinalizeDailyFritzAttempt(
   setResult: { games: DailyFritzSetGameResult[] },
 ): boolean {
   if (hasCompleteDailyFritzGameAuthority(result, setResult)) return true;
+  // A run already marked unranked by the never-strand fallback must still be
+  // allowed to finish. Blocking it here would trap the player at the end of
+  // the set instead of on a Hand Over screen.
+  if (getDailyFritzVerificationStatus(result) === 'rejected') return true;
   if (requiresVerifiedDailyFritzEvidence(result)) return false;
   // Partial authority after a mid-set verifier drop must not finalize as silent unranked.
   const ledger = readAuthorityLedger(result);

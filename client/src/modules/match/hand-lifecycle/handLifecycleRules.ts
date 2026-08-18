@@ -117,7 +117,9 @@ export type DailyFritzHandBreadcrumbEvent =
   | 'reveal-restored'
   | 'draw-fallback'
   | 'manual-advance-shown'
-  | 'next-hand-silent-retry';
+  | 'next-hand-silent-retry'
+  | 'unverified-fallback-requested'
+  | 'unverified-fallback-accepted';
 
 /** Production-visible trust breadcrumbs for Daily Fritz hand lifecycle debugging. */
 export function logDailyFritzHandBreadcrumb(

@@ -15,7 +15,13 @@ import type {
   PlacementPosition,
   Tile,
 } from '../../../types.ts';
-import { generateFullSet, isDouble as isCoreDouble, createDeterministicDoubleSixDeal } from '@racehorse/game-core';
+import {
+  generateFullSet,
+  isDouble as isCoreDouble,
+  createDeterministicDoubleSixDeal,
+  createDailyFritzJournal,
+  type DailyFritzJournal,
+} from '@racehorse/game-core';
 import {
   applyCorePlay,
   drawCoreTile,
@@ -80,6 +86,12 @@ export interface BotMatchState {
   opponentDrawCount?: number;
   opponentKnownMissing?: number[];
   opponentMissingEvidence?: Array<{ pip: number; handNumber: number; turnIndex: number }>;
+  /**
+   * Official Daily Fritz verification evidence for the CURRENT hand, appended
+   * inside each accepted engine command (see gameCoreAdapter's
+   * journalOfficialAction). Never append to this from the presentation layer.
+   */
+  officialJournal?: DailyFritzJournal;
 }
 
 export interface BotHandDeal {
@@ -206,6 +218,8 @@ function createDealtHand(
     currentPlayer,
     consecutivePasses: 0,
     handNumber,
+    // Verification evidence is per hand; a new deal always starts empty.
+    officialJournal: createDailyFritzJournal(handNumber),
     turnIndex: 0,
     handOver: false,
     gameOver: false,
@@ -261,6 +275,8 @@ export function createFixedBotHand(
     currentPlayer,
     consecutivePasses: 0,
     handNumber,
+    // Verification evidence is per hand; a new deal always starts empty.
+    officialJournal: createDailyFritzJournal(handNumber),
     turnIndex: 0,
     handOver: false,
     gameOver: false,

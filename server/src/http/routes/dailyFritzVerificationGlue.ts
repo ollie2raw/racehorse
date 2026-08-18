@@ -53,6 +53,56 @@ const CLIENT_STUCK_CODES = new Set([
   'fritz_policy_contract_mismatch',
 ]);
 
+/**
+ * How many times a client must have failed to get a hand verified before the
+ * server will let the run continue without a verification receipt.
+ *
+ * The client rebuilds and retries on its own for the recoverable codes; by the
+ * time it asks for this, the player has been sitting on a Hand Over screen
+ * unable to advance. Continuing unranked is strictly better than trapping
+ * them — a stranded player loses the whole run either way.
+ */
+export const DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS = 3;
+
+export function readDailyFritzUnverifiedFallbackRequest(body: unknown): number | null {
+  const record = (body ?? {}) as Record<string, unknown>;
+  if (record.unverified_fallback !== true) return null;
+  const attempts = Number(record.verification_attempts);
+  if (!Number.isFinite(attempts)) return null;
+  const rounded = Math.floor(attempts);
+  return rounded >= DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS ? rounded : null;
+}
+
+/**
+ * Record that a hand advanced without a verification receipt.
+ *
+ * `verification_status: 'rejected'` is what removes the run from the
+ * leaderboard (isDailyFritzAttemptLeaderboardEligible admits only 'verified'),
+ * and it is sticky: no later hand can promote the attempt back to verified.
+ * The authority ledger is deliberately left untouched, so the missing receipt
+ * remains visible for review.
+ */
+export function writeUnverifiedDailyFritzHand(
+  result: Record<string, unknown> | null,
+  input: { gameNumber: DailyFritzSetGameNumber; handIndex: number; verifierCode: string },
+): Record<string, unknown> {
+  const previous = result ?? {};
+  const existing = Array.isArray(previous.unverified_hands) ? previous.unverified_hands : [];
+  return {
+    ...previous,
+    verification_status: 'rejected',
+    unverified_hands: [
+      ...existing,
+      {
+        game_number: input.gameNumber,
+        hand_index: input.handIndex,
+        verifier_code: input.verifierCode,
+        recorded_at: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
 export async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Promise<void> {
   try {
     await recordDailyFritzEvent(event);
@@ -169,6 +219,73 @@ export function readActiveGameProgress(result: Record<string, unknown> | null, g
 
 export function writeActiveGameProgress(result: Record<string, unknown> | null, progress: DailyFritzActiveGameProgress): Record<string, unknown> {
   return { ...(result ?? {}), active_game: { game_number: progress.gameNumber, you: progress.you, fritz: progress.fritz } };
+}
+
+export type AttemptHandVerificationResult =
+  | { ok: true; verified: ReturnType<typeof verifyAttemptHand> }
+  | { ok: false; error: DailyFritzVerificationError };
+
+/**
+ * Run hand verification without throwing. Callers that carry legacy scores can
+ * advance the run when verification fails instead of stranding the player.
+ */
+export function attemptVerifyHand(input: Parameters<typeof verifyAttemptHand>[0]): AttemptHandVerificationResult {
+  try {
+    return { ok: true, verified: verifyAttemptHand(input) };
+  } catch (error) {
+    if (error instanceof DailyFritzVerificationError) {
+      return { ok: false, error };
+    }
+    throw error;
+  }
+}
+
+export function isDailyFritzGameEndingScore(
+  you: number,
+  fritz: number,
+  winningScore: number,
+): boolean {
+  const leader = Math.max(you, fritz);
+  return leader >= winningScore && you !== fritz;
+}
+
+export async function recordDailyFritzAdvanceWithoutVerification(input: {
+  attemptId: string;
+  runDate: string;
+  userId: string;
+  requestId: string;
+  gameNumber: DailyFritzSetGameNumber;
+  handIndex: number;
+  verifierCode: string;
+  operation: 'next-hand' | 'record-game';
+  message: string;
+}): Promise<void> {
+  incrementDailyFritzMetric('verification_bypassed', input.verifierCode);
+  log.error({
+    attemptId: input.attemptId,
+    runDate: input.runDate,
+    userId: input.userId,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    verifierCode: input.verifierCode,
+    message: input.message,
+  }, '[daily-fritz] advancing without verification receipt — run is now unranked');
+  await recordDailyFritzEventBestEffort({
+    attemptId: input.attemptId,
+    runDate: input.runDate,
+    userId: input.userId,
+    requestId: input.requestId,
+    eventType: 'verification_failed',
+    verifierCode: input.verifierCode,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    idempotencyKey: `${input.attemptId}:verification_bypassed:${input.operation}:${input.gameNumber}:${input.handIndex}`,
+    payload: {
+      operation: input.operation,
+      outcome: 'advance_unverified',
+      message: input.message,
+    },
+  });
 }
 
 export function verifyAttemptHand(input: {

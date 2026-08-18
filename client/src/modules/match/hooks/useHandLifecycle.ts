@@ -111,6 +111,12 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   const prefetchCoordinator = prefetchCoordinatorRef.current;
   const advanceRetry = advanceRetryRef.current;
+  /**
+   * Set when the player has exhausted verification retries on a hand. The next
+   * /next-hand request then asks the server to advance the run without a
+   * receipt (which marks it unranked). Cleared as soon as one is accepted.
+   */
+  const unverifiedFallbackRef = useRef<{ attempts: number } | null>(null);
 
   useEffect(() => {
     const advanceRetry = advanceRetryRef.current;
@@ -396,9 +402,17 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       const activeCache = prefetchCoordinator.ensureRequest(prefetchParams, source);
 
       void prefetchCoordinator
-        .resolve(() => createDailyFritzNextHandRequest(prefetchParams))
+        .resolve(() => createDailyFritzNextHandRequest(prefetchParams, unverifiedFallbackRef.current))
         .then((response) => {
           activeCache.result = response;
+          if (unverifiedFallbackRef.current) {
+            logDailyFritzHandBreadcrumb('unverified-fallback-accepted', {
+              source,
+              attempts: unverifiedFallbackRef.current.attempts,
+              handIndex: dailyFritzHandIndex,
+            });
+            unverifiedFallbackRef.current = null;
+          }
           const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
           dailyFritzDebugLog('[daily-fritz-hand] next hand response', {
             source,
@@ -484,6 +498,23 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               status,
               failureAttempt,
             });
+            if (recovery.kind === 'unverified_fallback') {
+              // The player cannot get this hand verified. Continue the run
+              // without a receipt (the server marks it unranked) rather than
+              // leaving them stuck on Hand Over with nothing but a Retry.
+              unverifiedFallbackRef.current = { attempts: recovery.attempts };
+              prefetchCoordinator.clear();
+              logDailyFritzHandBreadcrumb('unverified-fallback-requested', {
+                reason: recovery.reason,
+                source,
+                failureAttempt,
+                status,
+                verifierCode,
+              });
+              emitModalFailureTelemetry('unverified_fallback');
+              advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
+              return;
+            }
             if (recovery.kind === 'rebuild') {
               prefetchCoordinator.clear();
               completedHandEvidenceRef.current = null;
@@ -501,13 +532,22 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
             });
             setShowManualHandAdvance(true);
             emitModalFailureTelemetry('show_modal_retry');
+            // Keep retrying on the player's behalf. Without this the failure
+            // counter only advances when they tap Retry, so the unranked
+            // fallback below would never be reached on its own and the banner
+            // would be a dead end.
+            advanceRetry.schedule(
+              Math.min(1200 * failureAttempt, 5000),
+              `${recovery.reason}-auto-retry`,
+              () => advanceHandRef.current(),
+            );
             traceHandLifecycle('error', {
               source,
               error: errMsg,
               failureAttempt,
               status,
               verifierCode,
-              willRetry: false,
+              willRetry: true,
             }, 'C');
             return;
           }
