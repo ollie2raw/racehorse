@@ -13,11 +13,9 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
     })).toEqual({ kind: 'rebuild', delayMs: 150, reason: 'rebuild-incomplete_transcript' });
   });
 
-  it('advances the run unranked once rebuilds and retries are exhausted', () => {
-    // A player who cannot get a hand verified must never be left with only a
-    // Retry button: the run continues without a receipt instead.
+  it('falls back to score-only advance once transport retries are exhausted', () => {
     const decision = resolveDailyFritzCompletedHandNextHandFailure({
-      verifierCode: 'incomplete_transcript',
+      verifierCode: 'illegal_action',
       status: 400,
       failureAttempt: DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS,
     });
@@ -27,16 +25,15 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
     }
   });
 
-  it('still shows Continue (never a reload) before the fallback threshold', () => {
+  it('shows a calm Continue message before the fallback threshold', () => {
     const decision = resolveDailyFritzCompletedHandNextHandFailure({
-      // A code with no rebuild path: Continue is the interim state until the
-      // fallback threshold is reached.
       verifierCode: 'illegal_action',
       status: 400,
-      failureAttempt: DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS - 1,
+      failureAttempt: 1,
     });
     expect(decision.kind).toBe('continue');
     if (decision.kind === 'continue') {
+      expect(decision.message).not.toMatch(/Couldn't verify/i);
       expect(decision.message).not.toMatch(/Reload the hand/i);
     }
   });
@@ -54,31 +51,10 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
       const decision = resolveDailyFritzCompletedHandNextHandFailure({
         verifierCode,
         status: 400,
-        failureAttempt: DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS + 3,
+        failureAttempt: DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS + 4,
       });
       expect(decision.kind, `${verifierCode} must not strand the player`).toBe('unverified_fallback');
     }
-  });
-
-  it('never requires a page reload for a generic 400 after Hand Over', () => {
-    const decision = resolveDailyFritzCompletedHandNextHandFailure({
-      verifierCode: 'illegal_action',
-      status: 400,
-      failureAttempt: 1,
-    });
-    expect(decision.kind).toBe('continue');
-  });
-
-  it('continues (never resets) on a bare 400 with no verifier code after Hand Over', () => {
-    // e.g. a malformed follow-up request rejected before any verification
-    // ran. The already-recorded score for the prior verified hand must not
-    // be treated as invalid just because this later request failed.
-    const decision = resolveDailyFritzCompletedHandNextHandFailure({
-      verifierCode: null,
-      status: 400,
-      failureAttempt: 1,
-    });
-    expect(decision).toEqual({ kind: 'continue', message: expect.any(String), reason: 'http-400' });
   });
 
   it('rebuilds Fritz mismatch before falling back to an unranked advance', () => {
@@ -90,7 +66,7 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
     expect(resolveDailyFritzCompletedHandNextHandFailure({
       verifierCode: 'fritz_action_mismatch',
       status: 409,
-      failureAttempt: DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS,
+      failureAttempt: 5,
     }).kind).toBe('unverified_fallback');
   });
 });

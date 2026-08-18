@@ -598,9 +598,7 @@ export async function nextDailyFritzHand(input: {
         game_number: input.gameNumber ?? 1,
         completed_hand_index: input.completedHandIndex,
         ...(input.transcript ? { transcript: input.transcript } : {}),
-        ...(input.transcript && !input.unverifiedFallback
-          ? {}
-          : { completed_hand_scores: input.completedHandScores }),
+        completed_hand_scores: input.completedHandScores,
         ...(input.unverifiedFallback
           ? {
               unverified_fallback: true,

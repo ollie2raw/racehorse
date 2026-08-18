@@ -4,7 +4,6 @@ import { buildDailyFritzChallengeId } from '../../dailyFritzIdentity';
 import { getDailyFritzSeed } from '../../dailyFritz';
 import { isDailyFritzAttemptLeaderboardEligible } from '../stores/dailyFritzStore';
 import type { DailyFritzAttemptRecord, DailyFritzRunRecord } from '../stores/dailyFritzStore';
-import { DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS } from './dailyFritzVerificationGlue';
 
 const { authUserMock, getAttemptByIdMock, getAttemptMock, upsertAttemptMock, getRunMock } = vi.hoisted(() => ({
   authUserMock: vi.fn(),
@@ -98,10 +97,7 @@ const DEAL = {
   locked: [],
 };
 
-/**
- * A transcript that cannot possibly replay: it opens with a tile the player
- * does not hold. Stands in for every unrecoverable verifier rejection.
- */
+/** A transcript that cannot replay — stands in for every unrecoverable verifier rejection. */
 function unverifiableTranscript() {
   return {
     protocolVersion: 2 as const,
@@ -184,6 +180,7 @@ function nextHandBody(extra: Record<string, unknown> = {}) {
     game_number: 1,
     completed_hand_index: 0,
     transcript: unverifiableTranscript(),
+    completed_hand_scores: { you: 12, fritz: 0 },
     ...extra,
   };
 }
@@ -197,46 +194,12 @@ describe('Daily Fritz never strands a player on an unverifiable hand', () => {
     getRunMock.mockReset();
   });
 
-  it('still rejects an unverifiable hand when no fallback is requested', async () => {
+  it('advances immediately on the first request when scores are present', async () => {
     authUserMock.mockResolvedValue(USER_ID);
     const store = wireStore(buildRun());
     const request = makeHarness();
 
     const response = await request('POST', '/api/daily-fritz/next-hand', { body: nextHandBody() });
-
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(store.current().currentHandIndex).toBe(0);
-  });
-
-  it('rejects a fallback that has not actually exhausted its retries', async () => {
-    authUserMock.mockResolvedValue(USER_ID);
-    const store = wireStore(buildRun());
-    const request = makeHarness();
-
-    const response = await request('POST', '/api/daily-fritz/next-hand', {
-      body: nextHandBody({
-        unverified_fallback: true,
-        verification_attempts: DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS - 1,
-        completed_hand_scores: { you: 12, fritz: 0 },
-      }),
-    });
-
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(store.current().currentHandIndex).toBe(0);
-  });
-
-  it('advances the run — unranked — once the player has exhausted retries', async () => {
-    authUserMock.mockResolvedValue(USER_ID);
-    const store = wireStore(buildRun());
-    const request = makeHarness();
-
-    const response = await request('POST', '/api/daily-fritz/next-hand', {
-      body: nextHandBody({
-        unverified_fallback: true,
-        verification_attempts: DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS,
-        completed_hand_scores: { you: 12, fritz: 0 },
-      }),
-    });
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
@@ -244,16 +207,39 @@ describe('Daily Fritz never strands a player on an unverifiable hand', () => {
     expect(response.body.hand).toBeTruthy();
 
     const attempt = store.current();
-    // The player moved on.
     expect(attempt.currentHandIndex).toBe(1);
-    // And the run can no longer place on the leaderboard.
     expect(attempt.result?.verification_status).toBe('rejected');
-    expect(attempt.result?.unverified_hands).toEqual([
-      expect.objectContaining({ game_number: 1, hand_index: 0 }),
-    ]);
     expect(isDailyFritzAttemptLeaderboardEligible({
       ...attempt,
       status: 'completed',
     })).toBe(false);
+  });
+
+  it('still rejects when verification fails and no scores were sent', async () => {
+    authUserMock.mockResolvedValue(USER_ID);
+    wireStore(buildRun());
+    const request = makeHarness();
+
+    const response = await request('POST', '/api/daily-fritz/next-hand', {
+      body: {
+        ...nextHandBody(),
+        completed_hand_scores: undefined,
+      },
+    });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('replays idempotently after an unverified advance', async () => {
+    authUserMock.mockResolvedValue(USER_ID);
+    const store = wireStore(buildRun());
+    const request = makeHarness();
+
+    await request('POST', '/api/daily-fritz/next-hand', { body: nextHandBody() });
+    const replay = await request('POST', '/api/daily-fritz/next-hand', { body: nextHandBody() });
+
+    expect(replay.status).toBe(200);
+    expect(replay.body.replayed).toBe(true);
+    expect(store.current().currentHandIndex).toBe(1);
   });
 });

@@ -221,6 +221,73 @@ export function writeActiveGameProgress(result: Record<string, unknown> | null, 
   return { ...(result ?? {}), active_game: { game_number: progress.gameNumber, you: progress.you, fritz: progress.fritz } };
 }
 
+export type AttemptHandVerificationResult =
+  | { ok: true; verified: ReturnType<typeof verifyAttemptHand> }
+  | { ok: false; error: DailyFritzVerificationError };
+
+/**
+ * Run hand verification without throwing. Callers that carry legacy scores can
+ * advance the run when verification fails instead of stranding the player.
+ */
+export function attemptVerifyHand(input: Parameters<typeof verifyAttemptHand>[0]): AttemptHandVerificationResult {
+  try {
+    return { ok: true, verified: verifyAttemptHand(input) };
+  } catch (error) {
+    if (error instanceof DailyFritzVerificationError) {
+      return { ok: false, error };
+    }
+    throw error;
+  }
+}
+
+export function isDailyFritzGameEndingScore(
+  you: number,
+  fritz: number,
+  winningScore: number,
+): boolean {
+  const leader = Math.max(you, fritz);
+  return leader >= winningScore && you !== fritz;
+}
+
+export async function recordDailyFritzAdvanceWithoutVerification(input: {
+  attemptId: string;
+  runDate: string;
+  userId: string;
+  requestId: string;
+  gameNumber: DailyFritzSetGameNumber;
+  handIndex: number;
+  verifierCode: string;
+  operation: 'next-hand' | 'record-game';
+  message: string;
+}): Promise<void> {
+  incrementDailyFritzMetric('verification_bypassed', input.verifierCode);
+  log.error({
+    attemptId: input.attemptId,
+    runDate: input.runDate,
+    userId: input.userId,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    verifierCode: input.verifierCode,
+    message: input.message,
+  }, '[daily-fritz] advancing without verification receipt — run is now unranked');
+  await recordDailyFritzEventBestEffort({
+    attemptId: input.attemptId,
+    runDate: input.runDate,
+    userId: input.userId,
+    requestId: input.requestId,
+    eventType: 'verification_failed',
+    verifierCode: input.verifierCode,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    idempotencyKey: `${input.attemptId}:verification_bypassed:${input.operation}:${input.gameNumber}:${input.handIndex}`,
+    payload: {
+      operation: input.operation,
+      outcome: 'advance_unverified',
+      message: input.message,
+    },
+  });
+}
+
 export function verifyAttemptHand(input: {
   transcript: unknown;
   attempt: DailyFritzAttemptRecord;

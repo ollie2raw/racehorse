@@ -3,14 +3,14 @@ export type DailyFritzNextHandFailureDecision =
   | { kind: 'unverified_fallback'; attempts: number; delayMs: number; reason: string }
   | { kind: 'continue'; message: string; reason: string };
 
+const CONTINUE_COPY =
+  'Saving your hand — the next deal is loading automatically.';
+
 /**
- * Failed verification attempts before the run continues without a receipt.
- *
- * Must stay >= the server's DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS
- * (server/src/http/routes/dailyFritzVerificationGlue.ts), which rejects the
- * fallback below that count.
+ * Transport failures only. Verification no longer blocks advancement on a
+ * modern server, but keep a short retry ladder for timeouts and 5xx responses.
  */
-export const DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS = 5;
+export const DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS = 2;
 
 const REBUILD_CODES = new Set([
   'incomplete_transcript',
@@ -21,12 +21,9 @@ const REBUILD_CODES = new Set([
   'fritz_action_mismatch',
 ]);
 
-const CONTINUE_COPY =
-  'Still confirming this hand — your result is saved and we’re retrying automatically.';
-
 /**
  * After a local Hand Over, never discard the checkpoint or force a full reload.
- * Rebuild race-prone transcripts, then keep Continue so the player is not trapped.
+ * Rebuild race-prone transcripts, then keep retrying so the player is not trapped.
  */
 export function resolveDailyFritzCompletedHandNextHandFailure(input: {
   verifierCode: string | null;
@@ -38,8 +35,7 @@ export function resolveDailyFritzCompletedHandNextHandFailure(input: {
   if (code && REBUILD_CODES.has(code) && input.failureAttempt <= rebuildLimit) {
     return { kind: 'rebuild', delayMs: 150, reason: `rebuild-${code}` };
   }
-  // Rebuilding did not help and the player is otherwise trapped on Hand Over.
-  // Continue the run unranked rather than ending it here.
+  // Legacy servers may still reject verification. Fall back to score-only advance.
   if (input.failureAttempt >= DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS) {
     return {
       kind: 'unverified_fallback',
