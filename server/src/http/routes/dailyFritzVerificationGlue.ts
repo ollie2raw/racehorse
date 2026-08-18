@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { parseDailyFritzTranscript } from '@racehorse/game-core';
 import type { Response } from 'express';
 import {
@@ -283,6 +284,24 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
     payload: {
       operation: input.operation,
       outcome: 'advance_unverified',
+      message: input.message,
+    },
+  });
+  // Player was not stranded, but verification failed — alert ops so we can
+  // chase the bug without waiting for a player report.
+  Sentry.captureMessage('[daily-fritz] verification bypassed — run advanced unranked', {
+    level: 'warning',
+    tags: {
+      daily_fritz_alert: 'verification_bypassed',
+      verifier_code: input.verifierCode,
+      operation: input.operation,
+    },
+    extra: {
+      attemptId: input.attemptId,
+      runDate: input.runDate,
+      userId: input.userId,
+      gameNumber: input.gameNumber,
+      handIndex: input.handIndex,
       message: input.message,
     },
   });
