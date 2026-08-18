@@ -31,7 +31,7 @@ const routes = [
     title: 'Daily Puzzle | Racehorse Dominoes',
     description: 'Solve five daily Racehorse Dominoes positions and compare your strategy on the shared leaderboard.',
     heading: 'Daily Puzzle',
-    body: 'Five daily puzzles. One shared strategy challenge.',
+    body: 'Three daily puzzles. The first one is today’s ritual.',
     image: defaultImage,
   },
   {

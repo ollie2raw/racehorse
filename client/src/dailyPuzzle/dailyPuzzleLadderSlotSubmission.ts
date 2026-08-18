@@ -72,6 +72,10 @@ export async function runLadderFinalizeSubmission(params: {
   });
 }
 
+export function recordRitualStreakIfNeeded(puzzleDate: string, submittedSlotIndex: number): void {
+  if (submittedSlotIndex === 1) recordSolvedStreak(puzzleDate);
+}
+
 export function recordLadderFinalizeStreak(puzzleDate: string): void {
   recordSolvedStreak(puzzleDate);
 }

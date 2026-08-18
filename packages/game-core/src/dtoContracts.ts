@@ -73,9 +73,13 @@ export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
 export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
 export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
 
-export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
-export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
-export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
+/** Published ladder length for new days. Archive days may still have 5 slots. */
+export const DAILY_PUZZLE_SLOT_COUNT = 3 as const;
+export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3] as const;
+export const LEGACY_DAILY_PUZZLE_SLOT_COUNT = 5 as const;
+export const LEGACY_DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
+/** Includes legacy 4–5 so archive rows still type-check. */
+export type DailyPuzzleSlotIndex = 1 | 2 | 3 | 4 | 5;
 
 export interface DailyPuzzleSlot {
   id: string;

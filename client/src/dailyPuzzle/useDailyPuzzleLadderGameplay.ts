@@ -4,6 +4,7 @@ import {
   ladderSlotRequiresFinalize,
   mergeTodayAfterAttemptUpdate,
   recordLadderFinalizeStreak,
+  recordRitualStreakIfNeeded,
   runLadderFinalizeSubmission,
   runLadderSlotSubmission,
   shouldShowPracticeOverlay,
@@ -136,6 +137,7 @@ export function useDailyPuzzleLadderGameplay({
         });
         setAttempt(response.attempt);
         setToday((current) => mergeTodayAfterAttemptUpdate(current, response.attempt));
+        recordRitualStreakIfNeeded(response.attempt.puzzleDate, activeSlot.slotIndex);
         if (ladderSlotRequiresFinalize(response)) {
           setFinalizePending(true);
           try {

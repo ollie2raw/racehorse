@@ -35,7 +35,7 @@ export function DailyPuzzleLoadingScreen({ onBack }: DailyPuzzleLoadingScreenPro
               DAILY PUZZLE
             </div>
             <h1 className="loading-title">Preparing today’s ladder</h1>
-            <p className="loading-subtitle">Five daily puzzles. One shared challenge.</p>
+            <p className="loading-subtitle">Three puzzles. The first one is today’s ritual.</p>
 
             <div className="loading-steps">
               {loadingSteps.map((step, index) => (

@@ -132,7 +132,7 @@ export function DailyPuzzleLadderHubView({
                 <div className="df-pvf-label">DAILY PUZZLE</div>
                 <h1 className="df-pvf-title">Daily Ladder</h1>
                 <p className="df-pvf-subtitle">
-                  Five curated boards in a fixed sequence.
+                  Three boards. Streak on the short one.
                   <br />
                   One scored run posts to the global ladder — practice stays open after you lock it in.
                 </p>

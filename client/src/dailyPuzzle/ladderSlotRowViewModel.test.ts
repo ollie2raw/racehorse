@@ -56,11 +56,11 @@ function makeSlotResult(overrides: Partial<DailyPuzzleSlotResult> = {}): DailyPu
 }
 
 describe('buildLadderSlotBreakdown', () => {
-  it('returns five chips with dashes when no results exist', () => {
+  it('returns three chips with dashes when no results exist', () => {
     const chips = buildLadderSlotBreakdown([]);
-    expect(chips).toHaveLength(5);
-    expect(chips.map((c) => c.value)).toEqual(['—', '—', '—', '—', '—']);
-    expect(chips.map((c) => c.label)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5']);
+    expect(chips).toHaveLength(3);
+    expect(chips.map((c) => c.value)).toEqual(['—', '—', '—']);
+    expect(chips.map((c) => c.label)).toEqual(['P1', 'P2', 'P3']);
   });
 
   it('fills awarded points for completed slots', () => {
@@ -71,8 +71,15 @@ describe('buildLadderSlotBreakdown', () => {
     expect(chips[0]).toMatchObject({ slotIndex: 1, label: 'P1', value: '7' });
     expect(chips[1]).toMatchObject({ slotIndex: 2, value: '—' });
     expect(chips[2]).toMatchObject({ slotIndex: 3, value: '12' });
-    expect(chips[3]).toMatchObject({ slotIndex: 4, value: '—' });
-    expect(chips[4]).toMatchObject({ slotIndex: 5, value: '—' });
+  });
+
+  it('expands to five chips for archive 5-slot results', () => {
+    const chips = buildLadderSlotBreakdown([
+      makeSlotResult({ slotIndex: 1, awardedPoints: 7 }),
+      makeSlotResult({ slotIndex: 5, awardedPoints: 40 }),
+    ]);
+    expect(chips).toHaveLength(5);
+    expect(chips[4]).toMatchObject({ slotIndex: 5, label: 'P5', value: '40' });
   });
 });
 
@@ -81,8 +88,6 @@ describe('buildLadderSlotRows', () => {
     makeSlot({ id: 's1', slotIndex: 1, slotMaxPoints: 10 }),
     makeSlot({ id: 's2', slotIndex: 2, slotMaxPoints: 15 }),
     makeSlot({ id: 's3', slotIndex: 3, slotMaxPoints: 20 }),
-    makeSlot({ id: 's4', slotIndex: 4, slotMaxPoints: 25 }),
-    makeSlot({ id: 's5', slotIndex: 5, slotMaxPoints: 30 }),
   ];
 
   it('marks slot 1 active when attempt started on first slot', () => {
@@ -92,7 +97,7 @@ describe('buildLadderSlotRows', () => {
       attemptStatus: 'started',
       nextSlotIndex: 1,
     });
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(3);
     expect(getLadderPuzzleCardState(rows[0])).toBe('active');
     expect(rows[0]).toMatchObject({
       rowVariant: 'active',
@@ -108,7 +113,8 @@ describe('buildLadderSlotRows', () => {
       isLocked: true,
     });
     expect(getLadderPuzzleCardState(rows[2])).toBe('locked');
-    expect(rows[2].unlockHint).toBe('Complete puzzle 2 to unlock');
+    expect(rows[2].statusSub).toBe('Optional');
+    expect(rows[2].unlockHint).toBe('Optional · finish Read to unlock');
   });
 
   it('marks slot 2 active when next slot is 2', () => {
@@ -145,29 +151,29 @@ describe('buildLadderSlotRows', () => {
       attemptStatus: undefined,
       nextSlotIndex: 1,
     });
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(3);
     expect(rows[0].slot).toBeUndefined();
     expect(getLadderPuzzleCardState(rows[0])).toBe('active');
   });
 
-  it('preserves slot ordering 1 through 5', () => {
+  it('preserves slot ordering 1 through 3', () => {
     const rows = buildLadderSlotRows({
       hubSlots: [hubSlots[2], hubSlots[0], hubSlots[1]],
       completedSlots: [],
       attemptStatus: 'started',
       nextSlotIndex: 1,
     });
-    expect(rows.map((r) => r.slotIndex)).toEqual([1, 2, 3, 4, 5]);
+    expect(rows.map((r) => r.slotIndex)).toEqual([1, 2, 3]);
     expect(rows[0].step.title).toBe('Puzzle 1');
-    expect(rows[4].step.title).toBe('Puzzle 5');
+    expect(rows[2].step.title).toBe('Puzzle 3');
   });
 
   it('uses stage identities only for newly published Daily Climb slots', () => {
-    const stageTitles = ['Quick Hit', 'Build', 'Read', 'Pressure', 'Master Chain'] as const;
+    const stageTitles = ['Quick Hit', 'Read', 'Master Chain'] as const;
     const rows = buildLadderSlotRows({
       hubSlots: stageTitles.map((slotTitle, index) => makeSlot({
         id: `climb-${index + 1}`,
-        slotIndex: (index + 1) as 1 | 2 | 3 | 4 | 5,
+        slotIndex: (index + 1) as 1 | 2 | 3,
         slotTitle,
       })),
       completedSlots: [],
@@ -186,10 +192,8 @@ describe('computeLadderTotalPoints', () => {
         makeSlot({ slotMaxPoints: 10 }),
         makeSlot({ slotMaxPoints: 15 }),
         makeSlot({ slotMaxPoints: 20 }),
-        makeSlot({ slotMaxPoints: 25 }),
-        makeSlot({ slotMaxPoints: 30 }),
       ]),
-    ).toBe(100);
+    ).toBe(45);
   });
 
   it('returns 0 for an empty slot list', () => {

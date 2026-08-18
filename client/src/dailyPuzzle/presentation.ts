@@ -10,18 +10,20 @@ function getDailyClimbStep(slotIndex: number): DailyPuzzleStepPresentation {
   if (slotIndex === 1) {
     return {
       title: 'Quick Hit',
-      subtitle: 'Warm-up',
+      subtitle: "Today's ritual",
       shortLabel: 'P1',
     };
   }
   if (slotIndex === 2) {
     return {
-      title: 'Build',
-      subtitle: 'Momentum',
+      title: 'Read',
+      subtitle: 'Par',
       shortLabel: 'P2',
     };
   }
-  if (slotIndex === 3) return { title: 'Read', subtitle: 'Tactical test', shortLabel: 'P3' };
+  if (slotIndex === 3) {
+    return { title: 'Master Chain', subtitle: 'Optional', shortLabel: 'P3' };
+  }
   if (slotIndex === 4) return { title: 'Pressure', subtitle: 'Final stretch', shortLabel: 'P4' };
   return { title: 'Master Chain', subtitle: 'Finale', shortLabel: 'P5' };
 }

@@ -254,7 +254,7 @@ function PodiumSlot({
       <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
       <span className="dflb-podium-name">{row.username}</span>
       <span className="dflb-podium-score">{row.totalScore} pts</span>
-      <span className="dflb-podium-margin">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT} · M5 {row.masterChainScore}</span>
+      <span className="dflb-podium-margin">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT} · M3 {row.masterChainScore}</span>
     </div>
   );
 }
@@ -476,7 +476,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   <span className="rh-hub-tag dflb-eyebrow dflb-eyebrow--ladder">Daily Puzzle Ladder</span>
                   <h1 className="dflb-command__title">Leaderboard</h1>
                   <p className="dflb-command__sub">
-                    Global ranking · Climb five puzzles for today&apos;s ladder total.
+                    Global ranking · Three puzzles. Total is the sum.
                   </p>
                 </div>
                 <div className="dflb-command__aside">

@@ -7,6 +7,8 @@ import type { BoardState, Tile } from '../types';
 import {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
+  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
+  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
   type DailyPuzzleAttemptStatus,
   type DailyPuzzleLeaderboardEntry,
   type DailyPuzzlePracticeMode,
@@ -17,6 +19,8 @@ import {
 export {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
+  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
+  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
   type DailyPuzzleAttemptStatus,
   type DailyPuzzlePracticeMode,
   type DailyPuzzleSlotIndex,
@@ -156,7 +160,7 @@ export interface DailyPuzzleTodayResponse {
   attemptStatus: DailyPuzzleAttemptStatus;
   attempt: DailyPuzzleAttempt | null;
   nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
-  /** All five slots scored but /complete not persisted yet. */
+  /** All published slots scored but /complete not persisted yet. */
   finalizeReady?: boolean;
   leaderboardPreview: DailyPuzzleLeaderboardRow[];
   legacySinglePuzzleDay: boolean;

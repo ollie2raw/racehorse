@@ -24,32 +24,26 @@ const tacticalProfile: LadderSlotGenerationProfile = {
 };
 
 describe('Daily Puzzle ladder generation budgets', () => {
-  it('publishes a five-stage difficulty and 1,000-point scoring curve', () => {
-    expect(DAILY_PUZZLE_LADDER_PROFILES).toHaveLength(5);
-    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotIndex)).toEqual([1, 2, 3, 4, 5]);
+  it('publishes a three-stage difficulty and 1,000-point scoring curve', () => {
+    expect(DAILY_PUZZLE_LADDER_PROFILES).toHaveLength(3);
+    expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotIndex)).toEqual([1, 2, 3]);
     expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotTitle)).toEqual([
       'Quick Hit',
-      'Build',
       'Read',
-      'Pressure',
       'Master Chain',
     ]);
     expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.targetHandSizeRange)).toEqual([
-      [3, 4],
       [4, 5],
-      [5, 6],
-      [6, 7],
+      [5, 7],
       [8, 10],
     ]);
     expect(DAILY_PUZZLE_LADDER_PROFILES.map((profile) => profile.slotMaxPoints)).toEqual([
-      100,
-      150,
-      200,
       250,
-      300,
+      350,
+      400,
     ]);
     expect(DAILY_PUZZLE_LADDER_PROFILES.reduce((sum, profile) => sum + profile.slotMaxPoints, 0)).toBe(1_000);
-    expect(DAILY_PUZZLE_LADDER_PROFILES[3].preferredPuzzleTypes).toEqual([
+    expect(DAILY_PUZZLE_LADDER_PROFILES[2].preferredPuzzleTypes).toEqual([
       'setup_and_strike',
       'one_turn_high_score',
     ]);
@@ -209,8 +203,16 @@ function slot(overrides: Partial<DailyPuzzleSlot>): DailyPuzzleSlot {
 }
 
 describe('Daily Puzzle ladder readiness and unavailable copy', () => {
-  it('returns false when fewer than five slots exist', () => {
+  it('returns false when fewer than three slots exist', () => {
     expect(isDailyPuzzleLadderReady([slot({ slotIndex: 1 }), slot({ slotIndex: 2 })])).toBe(false);
+  });
+
+  it('returns true for a complete three-slot ladder', () => {
+    expect(isDailyPuzzleLadderReady([
+      slot({ slotIndex: 1, slotTitle: 'Quick Hit', tier: 'quick_line', slotMaxPoints: 250 }),
+      slot({ slotIndex: 2, slotTitle: 'Read', tier: 'tactical_setup', slotMaxPoints: 350 }),
+      slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+    ])).toBe(true);
   });
 
   it('returns false when scoring metadata is missing', () => {
@@ -242,17 +244,17 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
   it('maps ladder slot indexes to clean user-facing puzzle labels', () => {
     expect(getDailyPuzzleStepPresentation(1)).toEqual({
       title: 'Quick Hit',
-      subtitle: 'Warm-up',
+      subtitle: "Today's ritual",
       shortLabel: 'P1',
     });
     expect(getDailyPuzzleStepPresentation(2)).toEqual({
-      title: 'Build',
-      subtitle: 'Momentum',
+      title: 'Read',
+      subtitle: 'Par',
       shortLabel: 'P2',
     });
     expect(getDailyPuzzleStepPresentation(3)).toEqual({
-      title: 'Read',
-      subtitle: 'Tactical test',
+      title: 'Master Chain',
+      subtitle: 'Optional',
       shortLabel: 'P3',
     });
   });
@@ -260,14 +262,15 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
   it('renders stored legacy slot titles with clean puzzle labels', () => {
     expect(getDailyPuzzleDisplayTitle(1, 'Quick Line')).toBe('Puzzle 1');
     expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).toBe('Puzzle 2');
-    expect(getDailyPuzzleDisplayTitle(3, 'Master Chain')).toBe('Puzzle 3');
+    expect(getDailyPuzzleDisplayTitle(3, 'Tactical Setup')).toBe('Puzzle 3');
     expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).not.toBe('Tactical Setup');
   });
 
   it('renders the published Daily Climb stage identities', () => {
     expect(getDailyPuzzleDisplayTitle(1, 'Quick Hit')).toBe('Quick Hit');
-    expect(getDailyPuzzleDisplayTitle(2, 'Build')).toBe('Build');
-    expect(getDailyPuzzleDisplayTitle(3, 'Read')).toBe('Read');
+    expect(getDailyPuzzleDisplayTitle(2, 'Read')).toBe('Read');
+    expect(getDailyPuzzleDisplayTitle(2, 'Build')).toBe('Puzzle 2');
+    expect(getDailyPuzzleDisplayTitle(3, 'Master Chain')).toBe('Master Chain');
     expect(getDailyPuzzleDisplayTitle(4, 'Pressure')).toBe('Pressure');
     expect(getDailyPuzzleDisplayTitle(5, 'Master Chain')).toBe('Master Chain');
   });

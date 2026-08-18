@@ -4,9 +4,11 @@ import {
   ladderFinalizeFailureMessage,
   ladderSlotRequiresFinalize,
   mergeTodayAfterAttemptUpdate,
+  recordRitualStreakIfNeeded,
   shouldShowPracticeOverlay,
   shouldSkipLadderSlotSubmission,
 } from './dailyPuzzleLadderSlotSubmission';
+import { readStreak } from './streakStorage';
 import type { DailyPuzzleAttempt, DailyPuzzleSubmitSlotResponse, DailyPuzzleTodayResponse } from './types';
 
 function makeAttempt(overrides: Partial<DailyPuzzleAttempt> = {}): DailyPuzzleAttempt {
@@ -84,5 +86,19 @@ describe('ladderFinalizeFailureMessage', () => {
     expect(ladderFinalizeFailureMessage('x')).toBe(
       'Run scored. Finalize from the hub to save leaderboard progress.',
     );
+  });
+});
+
+describe('recordRitualStreakIfNeeded', () => {
+  it('records the daily streak when puzzle 1 is submitted', () => {
+    window.localStorage.clear();
+    recordRitualStreakIfNeeded('2024-06-01', 1);
+    expect(readStreak()).toEqual({ lastCompletedDate: '2024-06-01', currentStreak: 1 });
+  });
+
+  it('does not record the streak for later puzzles', () => {
+    window.localStorage.clear();
+    recordRitualStreakIfNeeded('2024-06-01', 2);
+    expect(readStreak()).toEqual({ lastCompletedDate: null, currentStreak: 0 });
   });
 });

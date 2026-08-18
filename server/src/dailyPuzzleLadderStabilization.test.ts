@@ -124,6 +124,38 @@ describe('Daily Puzzle ladder stabilization', () => {
       },
     });
     expect(isDailyPuzzleAttemptFinalizeReady(attempt)).toBe(true);
+    expect(isDailyPuzzleAttemptFinalizeReady(attempt, 5)).toBe(true);
+  });
+
+  it('marks finalize-ready when three slot results exist on a three-slot day', () => {
+    const attempt = baseAttempt({
+      currentSlotIndex: 3,
+      puzzlesCompleted: 3,
+      totalScore: 180,
+      result: {
+        slots: [
+          slotResult({ slotIndex: 1, awardedPoints: 60 }),
+          slotResult({ slotIndex: 2, awardedPoints: 60 }),
+          slotResult({ slotIndex: 3, awardedPoints: 60 }),
+        ],
+      },
+    });
+    expect(isDailyPuzzleAttemptFinalizeReady(attempt)).toBe(true);
+  });
+
+  it('does not mark finalize-ready after three results on a five-slot archive day', () => {
+    const attempt = baseAttempt({
+      currentSlotIndex: 4,
+      puzzlesCompleted: 3,
+      result: {
+        slots: [
+          slotResult({ slotIndex: 1, awardedPoints: 60 }),
+          slotResult({ slotIndex: 2, awardedPoints: 60 }),
+          slotResult({ slotIndex: 3, awardedPoints: 60 }),
+        ],
+      },
+    });
+    expect(isDailyPuzzleAttemptFinalizeReady(attempt, 5)).toBe(false);
   });
 
   it('resumes the next unsubmitted slot for an in-flight attempt', () => {

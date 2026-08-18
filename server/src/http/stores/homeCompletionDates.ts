@@ -21,7 +21,7 @@ export async function listCompletedDailyFritzDatesForUser(userId: string): Promi
 
 export async function listCompletedDailyPuzzleLadderDatesForUser(userId: string): Promise<string[]> {
   const rows = await supabaseFetch<Array<{ puzzle_date: string | null }>>(
-    `/rest/v1/daily_puzzle_attempts?select=puzzle_date&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=puzzle_date.desc&limit=365`,
+    `/rest/v1/daily_puzzle_attempts?select=puzzle_date&user_id=eq.${encodeURIComponent(userId)}&puzzles_completed=gte.1&order=puzzle_date.desc&limit=365`,
     { method: 'GET' },
   );
   return Array.from(

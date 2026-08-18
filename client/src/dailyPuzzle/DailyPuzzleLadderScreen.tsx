@@ -21,7 +21,7 @@ import type {
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import { DAILY_PUZZLE_SLOT_COUNT } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT, LEGACY_DAILY_PUZZLE_SLOT_COUNT } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -120,15 +120,20 @@ export default function DailyPuzzleLadderScreen({
     [],
   );
   const heroSrc = useDeferredAsset('daily-puzzle-ladder-hero', loadHeroAsset);
+  const hubSlots = today.attemptSlots ?? today.slots;
+  const publishedSlotCount =
+    hubSlots.length === LEGACY_DAILY_PUZZLE_SLOT_COUNT
+      ? LEGACY_DAILY_PUZZLE_SLOT_COUNT
+      : DAILY_PUZZLE_SLOT_COUNT;
 
   const finalizeReady = useMemo(
     () =>
       Boolean(
         attempt &&
           attempt.status === 'started' &&
-          attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT,
+          attempt.result.slots.length >= publishedSlotCount,
       ),
-    [attempt],
+    [attempt, publishedSlotCount],
   );
 
   const { submitPending, runFinalize, completeSlot: submitLadderSlot } = useDailyPuzzleLadderGameplay({
@@ -213,8 +218,6 @@ export default function DailyPuzzleLadderScreen({
       setStartPending(false);
     }
   }, [attempt, finalizePending, finalizeReady, launchSlot, runFinalize, startPending, today.runDate]);
-
-  const hubSlots = today.attemptSlots ?? today.slots;
 
   const handleStartPractice = useCallback((slotIndex: DailyPuzzleSlotIndex) => {
     const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);
@@ -509,7 +512,9 @@ export default function DailyPuzzleLadderScreen({
     const trustLine = isLadderComplete
       ? 'Practice any puzzle after your scored run.'
       : needsFinalize
-        ? 'All five puzzles are scored. Finalize to unlock review and the leaderboard.'
+        ? publishedSlotCount === LEGACY_DAILY_PUZZLE_SLOT_COUNT
+          ? 'All five puzzles are scored. Finalize to unlock review and the leaderboard.'
+          : 'All three puzzles are scored. Finalize to unlock review and the leaderboard.'
         : 'Leaderboard updates after a scored run.';
 
     return (
@@ -576,7 +581,7 @@ export default function DailyPuzzleLadderScreen({
           hudCenter={
             <div className="wl-center-status" data-ui="turn-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
-                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 5</span>
+                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / {publishedSlotCount}</span>
             </div>
           }
           hudRight={
