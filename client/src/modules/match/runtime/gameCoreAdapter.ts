@@ -14,6 +14,7 @@ import {
   getDailyFritzAuthorityStateDigest,
   appendDailyFritzJournalAction,
   type DailyFritzJournalAction,
+  type DailyFritzJournalActionInput,
   type GameState as CoreGameState,
   type Move as CoreMove,
 } from '@racehorse/game-core';
@@ -52,7 +53,7 @@ function journalOfficialAction(
   previous: BotMatchState,
   coreBefore: CoreGameState,
   actor: BotPlayerId,
-  action: Omit<DailyFritzJournalAction, 'actor' | 'preStateDigest'>,
+  action: DailyFritzJournalActionInput,
 ): BotMatchState {
   // Only Fritz actions carry a digest: those are the ones the server compares
   // (player digests are ignored on replay) and every extra field counts

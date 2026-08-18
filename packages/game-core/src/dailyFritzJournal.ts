@@ -39,6 +39,12 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 /** Distributive so the play/draw-pass union members stay discriminated. */
 export type DailyFritzJournalAction = DistributiveOmit<DailyFritzTranscriptAction, 'sequence'>;
 
+/** Command payload accepted by appendDailyFritzJournalAction (no actor/digest). */
+export type DailyFritzJournalActionInput = DistributiveOmit<
+  DailyFritzJournalAction,
+  'actor' | 'preStateDigest'
+>;
+
 export type DailyFritzJournal = {
   /** The hand these actions belong to (1-based, matching GameState.handNumber). */
   handNumber: number;
