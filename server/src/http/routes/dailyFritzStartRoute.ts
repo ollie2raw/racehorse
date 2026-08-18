@@ -57,6 +57,7 @@ import {
   rejectModernAttemptWhenAuthorityDisabled,
 } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
+import { resolveDailyFritzResumeCheckpoint } from './dailyFritzCheckpointPolicy';
 
 export function registerDailyFritzStartRoute(app: Application): void {
   app.post('/api/daily-fritz/start', async (req, res) => {
@@ -328,6 +329,8 @@ export function registerDailyFritzStartRoute(app: Application): void {
           (run.metadata as Record<string, unknown>).draw_tiles_by_game,
       ),
     }, '[daily-fritz:start] draw package');
+    const runFingerprint = buildDailyFritzRunFingerprint(run);
+    const resumeCheckpoint = resolveDailyFritzResumeCheckpoint(attempt, runFingerprint);
     res.json({
       ok: true,
       attempt_id: attempt.id,
@@ -337,7 +340,7 @@ export function registerDailyFritzStartRoute(app: Application): void {
       challenge_id: publishedAuthority?.challengeId ?? buildDailyFritzChallengeId(run.runDate),
       rules_version: DAILY_FRITZ_RULES_VERSION,
       seed_version: DAILY_FRITZ_SEED_VERSION,
-      run_fingerprint: buildDailyFritzRunFingerprint(run),
+      run_fingerprint: runFingerprint,
       verification_protocol_version: authorityContract.transcriptProtocolVersion,
       game_rules_version: authorityContract.gameRulesVersion,
       fritz_policy_version: authorityContract.fritzPolicyVersion,
@@ -360,6 +363,7 @@ export function registerDailyFritzStartRoute(app: Application): void {
       draw_winner: drawWinner,
       draw_player_tile: drawTiles.playerTile,
       draw_fritz_tile: drawTiles.fritzTile,
+      ...(resumeCheckpoint ? { resume_checkpoint: resumeCheckpoint } : {}),
     });
   } catch (error) {
     log.error({

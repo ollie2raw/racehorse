@@ -135,6 +135,7 @@ export function useDailyFritzRuntime({
     enabled: isDailyFritzMode,
     storageKey: dailyFritzStorageKey,
     attemptId: dailyFritzPackage?.attempt_id,
+    verifiedMatchId: dailyFritzPackage?.verified_match_id,
     runDate: dailyFritzPackage?.run_date,
     runFingerprint: dailyFritzPackage?.run_fingerprint,
     gameNumber: dailyFritzPackage?.current_game_number ?? 1,

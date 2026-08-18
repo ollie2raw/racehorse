@@ -3,6 +3,7 @@ import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
   DAILY_FRITZ_INIT_TIMEOUT_MS,
+  DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS,
   DailyFritzAuthorityRecoveryError,
   recordDailyFritzGame,
   recordDailyFritzTelemetry,
@@ -71,6 +72,11 @@ export function useDailyFritzRunController({
 
   const activeRunRef = useRef<DailyFritzStartResponse | null>(activeRun);
   const recordGameInFlightRef = useRef(false);
+  const pendingRecordGameRef = useRef<{
+    game: DailyFritzGameCompletionPayload;
+    gameNumber: DailyFritzSetGameNumber;
+    fallbackCompletedGame: DailyFritzSetGameResult;
+  } | null>(null);
   const startActionInFlightRef = useRef(false);
   const completedAttemptIdRef = useRef<string | null>(null);
 
@@ -344,6 +350,7 @@ export function useDailyFritzRunController({
     recordGameInFlightRef.current = true;
     const gameNumber = getNextGameNumberFromSetResult(priorSet);
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
+    pendingRecordGameRef.current = { game, gameNumber, fallbackCompletedGame };
     setHubError(null);
     setSetOverlay({
       kind: 'saving',
@@ -529,9 +536,47 @@ export function useDailyFritzRunController({
       });
       throw err instanceof Error ? err : new Error(message);
     } finally {
+      pendingRecordGameRef.current = null;
       recordGameInFlightRef.current = false;
     }
   }, [buildCompletedGame, closeEmbeddedRun, loadToday, setHubError, submitSetCompletion]);
+
+  useEffect(() => {
+    if (setOverlay?.kind !== 'saving') return;
+    const watchdogMs = DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS + 5_000;
+    const timer = window.setTimeout(() => {
+      setSetOverlay((current) => {
+        if (current?.kind !== 'saving') return current;
+        const pending = pendingRecordGameRef.current;
+        if (!pending) {
+          return {
+            kind: 'record-error',
+            completedGame: current.completedGame,
+            message: 'Saving timed out.',
+            error: 'The save request took too long. Check your connection and try again.',
+            game: {
+              winner: null,
+              yourScore: current.completedGame.playerScore,
+              botScore: current.completedGame.fritzScore,
+              movesUsed: 0,
+              handsPlayed: 0,
+              currentHandIndex: 0,
+              moveLog: [],
+            },
+          };
+        }
+        return {
+          kind: 'record-error',
+          completedGame: pending.fallbackCompletedGame,
+          message: `Game ${pending.gameNumber} is finished, but the result has not been saved yet.`,
+          error: 'The save request took too long. Check your connection and try again.',
+          game: pending.game,
+        };
+      });
+      recordGameInFlightRef.current = false;
+    }, watchdogMs);
+    return () => window.clearTimeout(timer);
+  }, [setOverlay]);
 
   const handleDailyFritzGameComplete = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     await submitCompletedGame(game);

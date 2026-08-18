@@ -45,6 +45,7 @@ import {
   writeVerifiedHand,
 } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
+import { clearDailyFritzActiveCheckpoint } from './dailyFritzCheckpointPolicy';
 
 export function registerDailyFritzNextHandRoute(app: Application): void {
   app.post('/api/daily-fritz/next-hand', async (req, res) => {
@@ -220,6 +221,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         you: Math.round(legacyYouScore),
         fritz: Math.round(legacyFritzScore),
       });
+      attempt.result = clearDailyFritzActiveCheckpoint(attempt.result);
       attempt.currentHandIndex += 1;
       const saved = await upsertDailyFritzAttempt(attempt);
       respondWithCurrentHand(saved.currentHandIndex);
@@ -413,6 +415,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
       you: progressScores.you,
       fritz: progressScores.fritz,
     });
+    attempt.result = clearDailyFritzActiveCheckpoint(attempt.result);
     attempt.currentHandIndex += 1;
     let saved: DailyFritzAttemptRecord;
     const transactionalHand = Boolean(attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED);
