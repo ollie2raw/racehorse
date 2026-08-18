@@ -5674,24 +5674,47 @@
 
   .df-pvf-layout,
   .df-shell--daily-fritz .df-layout.df-pvf-layout {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) !important;
+    display: flex !important;
     flex-direction: column !important;
-    overflow: auto;
+    grid-template-columns: none !important;
+    align-items: stretch !important;
+    align-content: start !important;
+    overflow: auto !important;
+  }
+
+  .df-pvf-left-col {
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
   }
 
   .df-pvf-opponent-card {
-    flex: 0 0 auto;
+    flex: 0 0 auto !important;
+    width: 100%;
     min-height: 200px;
     max-height: min(240px, 30vh);
   }
 
-  .df-pvf-card-badges {
+  .df-pvf-card-content {
     position: relative;
+    inset: auto;
+    min-height: 200px;
+  }
+
+  .df-pvf-card-badges {
+    position: relative !important;
     left: auto;
     right: auto;
     bottom: auto;
+    margin-top: 12px;
     grid-template-columns: 1fr;
+  }
+
+  .df-shell--daily-fritz .pvf-control-panel.df-pvf-control-panel {
+    width: 100% !important;
+    flex: 0 1 auto !important;
+    position: relative !important;
+    margin-top: 8px;
   }
 }
 .daily-fritz-broadcast{position:fixed;z-index:60;top:calc(12px + env(safe-area-inset-top));right:14px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(231,182,74,.42);border-radius:8px;background:#0a1422;color:#f3f6ff;box-shadow:0 8px 24px rgba(0,0,0,.3)}.daily-fritz-broadcast strong{color:#63e6a8}.daily-fritz-broadcast button{border:1px solid rgba(88,166,255,.4);background:#102239;color:#f3f6ff;border-radius:6px;padding:7px 10px}.daily-fritz-broadcast button:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}@media(max-width:600px){.daily-fritz-broadcast{top:auto;bottom:calc(10px + env(safe-area-inset-bottom));left:12px;right:12px;justify-content:center}}

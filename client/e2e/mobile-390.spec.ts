@@ -67,7 +67,6 @@ async function capture(page: Page, name: string) {
 }
 
 test.describe('Mobile 390×844 — layout contract', () => {
-  test.skip((_fixtures, testInfo) => !testInfo.project.name.includes('mobile'), 'phone projects only');
   test('home — nav reflow, bottom tabs, no horizontal overflow', async ({ page }, testInfo) => {
     await page.goto('/');
     await assertViewportMeta(page);

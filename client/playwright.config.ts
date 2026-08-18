@@ -22,19 +22,26 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-mobile',
+      testMatch: /mobile-390\.spec\.ts/,
       use: {
         ...devices['Pixel 5'],
         viewport: PHONE,
       },
     },
-    {
-      name: 'webkit-mobile',
-      use: {
-        ...devices['iPhone 12'],
-        viewport: PHONE,
-      },
-    },
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // WebKit is verified locally; CI only installs Chromium.
+    ...(!process.env.CI
+      ? [
+          {
+            name: 'webkit-mobile',
+            testMatch: /mobile-390\.spec\.ts/,
+            use: {
+              ...devices['iPhone 12'],
+              viewport: PHONE,
+            },
+          },
+        ]
+      : []),
+    { name: 'chromium', testIgnore: /mobile-390\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined

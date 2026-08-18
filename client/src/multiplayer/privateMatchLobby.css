@@ -2478,6 +2478,26 @@
     min-height: 0;
   }
 
+  .pml-duel-name-text,
+  .pml-duel-awaiting-hint,
+  .pml-duel-placeholder-title,
+  .pml-duel-placeholder-sub {
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
+  }
+
+  .pml-duel-placeholder-title {
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .pml-duel-awaiting-hint,
+  .pml-duel-placeholder-sub {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
   .pml-toolbar {
     flex-direction: column;
     align-items: stretch;
