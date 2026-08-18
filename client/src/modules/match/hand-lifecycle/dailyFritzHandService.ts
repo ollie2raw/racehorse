@@ -67,6 +67,9 @@ export function buildDailyFritzPrefetchParams(
       moveLog,
       protocolVersion: transcriptProtocolVersion,
       fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+      // Authoritative evidence, written inside each engine command. When it is
+      // present the move-log reconstruction and the seal below are both unused.
+      journal: match.officialJournal ?? null,
       // Seal using the REAL authoritative post-hand engine state
       // (match.consecutivePasses / match.currentPlayer), never a guess
       // re-derived from the move log — see missingBlockedHandPassActors for
@@ -108,9 +111,16 @@ export function buildDailyFritzCompletedHandEvidenceKey(
 
 export function createDailyFritzNextHandRequest(
   params: DailyFritzPrefetchParams,
+  unverifiedFallback?: { attempts: number } | null,
 ): Promise<DailyFritzNextHandResponse> {
   const { dailyFritzPackage, dailyFritzHandIndex, gameNumber, transcript, completedHandScores } = params;
-  if (params.transcriptError && dailyFritzPackage.verification_status !== 'legacy_unverified') {
+  // The fallback exists precisely for the case where evidence is unusable, so
+  // a build failure must not block it.
+  if (
+    params.transcriptError
+    && !unverifiedFallback
+    && dailyFritzPackage.verification_status !== 'legacy_unverified'
+  ) {
     return Promise.reject(new Error(
       'Daily Fritz verification evidence could not be built. Reload the latest deployment and resume this attempt.',
     ));
@@ -123,6 +133,7 @@ export function createDailyFritzNextHandRequest(
     completedHandIndex: dailyFritzHandIndex,
     transcript,
     completedHandScores,
+    unverifiedFallback: unverifiedFallback ?? null,
     timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
   });
 }

@@ -34,11 +34,13 @@ import {
   parseTranscriptForRequest,
   pinAuthorityContractFromVerifiedTranscript,
   readActiveGameProgress,
+  readDailyFritzUnverifiedFallbackRequest,
   recordDailyFritzEventBestEffort,
   rejectModernAttemptWhenAuthorityDisabled,
   respondVerificationError,
   verifyAttemptHand,
   writeActiveGameProgress,
+  writeUnverifiedDailyFritzHand,
   writeVerifiedHand,
 } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
@@ -125,7 +127,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
 
     const respondWithCurrentHand = (
       currentHandIndex: number,
-      options: { replayed?: boolean; ignored?: boolean } = {},
+      options: { replayed?: boolean; ignored?: boolean; unverified?: boolean } = {},
     ) => {
       const publishedGameAuthority = publishedAuthority
         ? resolveDailyFritzPublishedGameAuthority({
@@ -177,6 +179,9 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         draw_fritz_tile: drawTiles.fritzTile,
         replayed: Boolean(options.replayed),
         ignored: Boolean(options.ignored),
+        // The hand advanced without a verification receipt; this run can no
+        // longer place on the leaderboard.
+        unverified: Boolean(options.unverified),
       });
     };
 
@@ -276,15 +281,67 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     // 60 points), not a fixed number of hands.  The pre-stored handDeals array
     // covers the common case; any hand beyond it is generated on-demand from
     // the same deterministic seed so all players still get identical tiles.
-    const verified = verifyAttemptHand({
-      transcript: parsedTranscript,
-      attempt,
-      run,
-      userId: authenticatedUserId,
-      gameNumber,
-      handIndex: completedHandIndex,
-      publishedChallenge: publishedAuthority,
-    });
+    let verified: ReturnType<typeof verifyAttemptHand>;
+    try {
+      verified = verifyAttemptHand({
+        transcript: parsedTranscript,
+        attempt,
+        run,
+        userId: authenticatedUserId,
+        gameNumber,
+        handIndex: completedHandIndex,
+        publishedChallenge: publishedAuthority,
+      });
+    } catch (error) {
+      // Last resort: a player who cannot get this hand verified must still be
+      // able to finish their run. Advancing costs them the leaderboard entry;
+      // refusing costs them the whole run and their trust in the game.
+      if (!(error instanceof DailyFritzVerificationError)) throw error;
+      const fallbackAttempts = readDailyFritzUnverifiedFallbackRequest(req.body);
+      if (fallbackAttempts == null || !hasLegacyScores) throw error;
+
+      incrementDailyFritzMetric('verification_bypassed', error.code);
+      log.error({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        gameNumber,
+        handIndex: completedHandIndex,
+        verifierCode: error.code,
+        failedAttempts: fallbackAttempts,
+        message: error.message,
+      }, '[daily-fritz] advancing an unverifiable hand — run is now unranked');
+      await recordDailyFritzEventBestEffort({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'verification_failed',
+        verifierCode: error.code,
+        gameNumber,
+        handIndex: completedHandIndex,
+        idempotencyKey: `${attemptId}:verification_bypassed:${gameNumber}:${completedHandIndex}`,
+        payload: {
+          operation: 'next-hand',
+          outcome: 'unverified_fallback',
+          failedAttempts: fallbackAttempts,
+          message: error.message,
+        },
+      });
+
+      attempt.result = writeActiveGameProgress(
+        writeUnverifiedDailyFritzHand(attempt.result, {
+          gameNumber,
+          handIndex: completedHandIndex,
+          verifierCode: error.code,
+        }),
+        { gameNumber, you: Math.round(legacyYouScore), fritz: Math.round(legacyFritzScore) },
+      );
+      attempt.currentHandIndex += 1;
+      const saved = await upsertDailyFritzAttempt(attempt);
+      respondWithCurrentHand(saved.currentHandIndex, { unverified: true });
+      return;
+    }
     if (verified.terminalState.gameOver) {
       // This hand crossed the winning score and ends the game, so it must be
       // finalized through /record-game rather than advanced here. But the

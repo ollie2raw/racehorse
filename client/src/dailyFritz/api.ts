@@ -557,6 +557,14 @@ export async function nextDailyFritzHand(input: {
   completedHandIndex: number;
   transcript: import('@racehorse/game-core').DailyFritzTranscript | null;
   completedHandScores: { you: number; fritz: number };
+  /**
+   * Set once the player has failed to get this hand verified repeatedly. The
+   * server then advances the run WITHOUT a verification receipt and marks it
+   * unranked, rather than leaving the player stuck on Hand Over. The scores
+   * are sent alongside the transcript here because the server needs them to
+   * carry progress forward when the transcript will not replay.
+   */
+  unverifiedFallback?: { attempts: number } | null;
   timeoutMs?: number;
 }): Promise<DailyFritzNextHandResponse> {
   const path = '/api/daily-fritz/next-hand';
@@ -589,9 +597,16 @@ export async function nextDailyFritzHand(input: {
         run_date: input.runDate,
         game_number: input.gameNumber ?? 1,
         completed_hand_index: input.completedHandIndex,
-        ...(input.transcript
-          ? { transcript: input.transcript }
+        ...(input.transcript ? { transcript: input.transcript } : {}),
+        ...(input.transcript && !input.unverifiedFallback
+          ? {}
           : { completed_hand_scores: input.completedHandScores }),
+        ...(input.unverifiedFallback
+          ? {
+              unverified_fallback: true,
+              verification_attempts: input.unverifiedFallback.attempts,
+            }
+          : {}),
       },
       {
         signal: controller.signal,

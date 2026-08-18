@@ -53,6 +53,56 @@ const CLIENT_STUCK_CODES = new Set([
   'fritz_policy_contract_mismatch',
 ]);
 
+/**
+ * How many times a client must have failed to get a hand verified before the
+ * server will let the run continue without a verification receipt.
+ *
+ * The client rebuilds and retries on its own for the recoverable codes; by the
+ * time it asks for this, the player has been sitting on a Hand Over screen
+ * unable to advance. Continuing unranked is strictly better than trapping
+ * them — a stranded player loses the whole run either way.
+ */
+export const DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS = 3;
+
+export function readDailyFritzUnverifiedFallbackRequest(body: unknown): number | null {
+  const record = (body ?? {}) as Record<string, unknown>;
+  if (record.unverified_fallback !== true) return null;
+  const attempts = Number(record.verification_attempts);
+  if (!Number.isFinite(attempts)) return null;
+  const rounded = Math.floor(attempts);
+  return rounded >= DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS ? rounded : null;
+}
+
+/**
+ * Record that a hand advanced without a verification receipt.
+ *
+ * `verification_status: 'rejected'` is what removes the run from the
+ * leaderboard (isDailyFritzAttemptLeaderboardEligible admits only 'verified'),
+ * and it is sticky: no later hand can promote the attempt back to verified.
+ * The authority ledger is deliberately left untouched, so the missing receipt
+ * remains visible for review.
+ */
+export function writeUnverifiedDailyFritzHand(
+  result: Record<string, unknown> | null,
+  input: { gameNumber: DailyFritzSetGameNumber; handIndex: number; verifierCode: string },
+): Record<string, unknown> {
+  const previous = result ?? {};
+  const existing = Array.isArray(previous.unverified_hands) ? previous.unverified_hands : [];
+  return {
+    ...previous,
+    verification_status: 'rejected',
+    unverified_hands: [
+      ...existing,
+      {
+        game_number: input.gameNumber,
+        hand_index: input.handIndex,
+        verifier_code: input.verifierCode,
+        recorded_at: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
 export async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Promise<void> {
   try {
     await recordDailyFritzEvent(event);

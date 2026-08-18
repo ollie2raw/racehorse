@@ -5,6 +5,8 @@ import {
   getFritzPolicyContract,
   isSupportedFritzPolicyVersion,
   GAME_RULES_VERSION,
+  toDailyFritzTranscriptActions,
+  type DailyFritzJournal,
   type DailyFritzTranscript,
   type DailyFritzTranscriptAction,
 } from '@racehorse/game-core';
@@ -90,7 +92,17 @@ export function buildDailyFritzTranscript(input: {
    * Pass `null`/omit when the hand is not being sealed.
    */
   sealBlockedHand?: { consecutivePasses: number; nextActor: 'player' | 'fritz' } | null;
+  /**
+   * Authoritative evidence: the engine's own record of the commands it applied
+   * for this hand (BotMatchState.officialJournal). When present it is used
+   * verbatim — no reconstruction, no sealing, no inferred draws.
+   *
+   * The move-log path below remains only for states captured before the
+   * journal existed (an in-flight attempt resumed across the deploy).
+   */
+  journal?: DailyFritzJournal | null;
 }): DailyFritzTranscript {
+  const journalActions = toDailyFritzTranscriptActions(input.journal, input.handNumber);
   const entries = canonicalizeDailyFritzMoveLog(input.moveLog)
     .filter((entry) => entry.handNumber === input.handNumber);
   const actions = entries.map((entry, sequence) => {
@@ -131,8 +143,12 @@ export function buildDailyFritzTranscript(input: {
     attemptId: input.attemptId,
     gameNumber: input.gameNumber,
     handIndex: input.handIndex,
-    actions,
+    actions: journalActions ?? actions,
   };
+
+  // A journalled transcript is already exactly what the engine applied; sealing
+  // it could only add an action the engine never accepted.
+  if (journalActions) return transcript;
 
   return input.sealBlockedHand
     ? sealBlockedDailyFritzTranscript(transcript, input.sealBlockedHand)

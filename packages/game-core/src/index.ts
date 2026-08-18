@@ -2,6 +2,7 @@ export * from './botHeuristics';
 export * from './commands';
 export * from './dailyFritzTranscript';
 export * from './dailyFritzAuthority';
+export * from './dailyFritzJournal';
 export * from './dtoContracts';
 export * from './engine';
 export * from './fritzPolicy';
