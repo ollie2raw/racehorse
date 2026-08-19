@@ -17,9 +17,13 @@ import {
 export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
 export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
 export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
-export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
-export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
-export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
+export type { DailyPuzzleSlotIndex };
+export {
+  DAILY_PUZZLE_SLOT_COUNT,
+  DAILY_PUZZLE_SLOT_INDICES,
+  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
+  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+};
 
 export interface DailyPuzzleSlot {
   id: string;
@@ -447,26 +451,33 @@ export function normalizeDailyPuzzleAttempt(
     row.review_unlocked ? 'review' : 'none';
   const completedAt = row.completed_at ?? null;
   const orderedSlotResults = [...slotResults].sort((a, b) => a.slotIndex - b.slotIndex);
-  const persistedPuzzlesCompleted = Number.isFinite(row.puzzles_completed)
-    ? Math.max(0, Math.min(LEGACY_DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0)))
+  const rowSlotIndex = clampSlotIndex(row.current_slot_index);
+  const rawPersistedPuzzlesCompleted = Number.isFinite(row.puzzles_completed)
+    ? Math.max(0, Math.round(row.puzzles_completed ?? 0))
     : 0;
+  const usesFiveSlotLadder =
+    orderedSlotResults.some((slot) => slot.slotIndex > LEGACY_DAILY_PUZZLE_SLOT_COUNT)
+    || rowSlotIndex > LEGACY_DAILY_PUZZLE_SLOT_COUNT
+    || rawPersistedPuzzlesCompleted > LEGACY_DAILY_PUZZLE_SLOT_COUNT;
+  const ladderSlotCount = usesFiveSlotLadder
+    ? DAILY_PUZZLE_SLOT_COUNT
+    : LEGACY_DAILY_PUZZLE_SLOT_COUNT;
+  const ladderIndices = usesFiveSlotLadder
+    ? DAILY_PUZZLE_SLOT_INDICES
+    : LEGACY_DAILY_PUZZLE_SLOT_INDICES;
+  const persistedPuzzlesCompleted = Math.min(ladderSlotCount, rawPersistedPuzzlesCompleted);
   const puzzlesCompleted = orderedSlotResults.length > 0
-    ? Math.min(LEGACY_DAILY_PUZZLE_SLOT_COUNT, orderedSlotResults.length)
+    ? Math.min(ladderSlotCount, orderedSlotResults.length)
     : persistedPuzzlesCompleted;
   const totalScore = orderedSlotResults.length > 0
     ? orderedSlotResults.reduce((sum, slot) => sum + slot.awardedPoints, 0)
     : Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0;
-  const masterSlotIndex = orderedSlotResults.some((slot) => slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT)
-    ? LEGACY_DAILY_PUZZLE_SLOT_COUNT
-    : DAILY_PUZZLE_SLOT_COUNT;
+  const masterSlotIndex = usesFiveSlotLadder
+    ? DAILY_PUZZLE_SLOT_COUNT
+    : LEGACY_DAILY_PUZZLE_SLOT_COUNT;
   const masterChainScore = orderedSlotResults.find((slot) => slot.slotIndex === masterSlotIndex)?.awardedPoints
     ?? (Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0);
   const submittedSlotIndexes = new Set(orderedSlotResults.map((slot) => slot.slotIndex));
-  const ladderIndices = orderedSlotResults.some((slot) => slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT)
-    || clampSlotIndex(row.current_slot_index) > DAILY_PUZZLE_SLOT_COUNT
-    || persistedPuzzlesCompleted > DAILY_PUZZLE_SLOT_COUNT
-    ? LEGACY_DAILY_PUZZLE_SLOT_INDICES
-    : DAILY_PUZZLE_SLOT_INDICES;
   const currentSlotIndex = orderedSlotResults.length > 0
     ? ladderIndices.find((index) => !submittedSlotIndexes.has(index)) ?? ladderIndices[ladderIndices.length - 1]
     : clampSlotIndex(row.current_slot_index);
@@ -477,10 +488,10 @@ export function normalizeDailyPuzzleAttempt(
     username: row.username?.trim() || null,
     status: row.status === 'completed' ? 'completed' : 'started',
     setVersion: Number.isFinite(row.set_version) ? Math.round(row.set_version ?? 1) : 1,
-    currentSlotIndex: clampSlotIndex(row.current_slot_index),
-    puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
-    totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
-    masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
+    currentSlotIndex,
+    puzzlesCompleted,
+    totalScore,
+    masterChainScore,
     completedAt,
     startedAt: row.started_at ?? new Date(0).toISOString(),
     updatedAt: row.updated_at ?? row.started_at ?? new Date(0).toISOString(),
@@ -492,9 +503,9 @@ export function normalizeDailyPuzzleAttempt(
       ...(completedAt
         ? {
             final: {
-              puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
-              totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
-              masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
+              puzzlesCompleted,
+              totalScore,
+              masterChainScore,
               completedAt,
             },
           }

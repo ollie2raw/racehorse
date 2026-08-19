@@ -117,8 +117,8 @@ describe('buildLadderSlotRows', () => {
       isLocked: true,
     });
     expect(getLadderPuzzleCardState(rows[2])).toBe('locked');
-    expect(rows[2].statusSub).toBe('Optional');
-    expect(rows[2].unlockHint).toBe('Optional · finish Read to unlock');
+    expect(rows[2].statusSub).toBe('Locked');
+    expect(rows[2].unlockHint).toBe('Complete puzzle 2 to unlock');
   });
 
   it('marks slot 2 active when next slot is 2', () => {
@@ -201,7 +201,13 @@ describe('buildLadderSlotRows', () => {
       nextSlotIndex: 1,
     });
 
-    expect(rows.map((row) => row.step.title)).toEqual(stageTitles);
+    expect(rows.map((row) => row.step.title)).toEqual([
+      'Quick Hit',
+      'Puzzle 2',
+      'Puzzle 3',
+      'Puzzle 4',
+      'Puzzle 5',
+    ]);
   });
 });
 

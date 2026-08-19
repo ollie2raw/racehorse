@@ -36,7 +36,7 @@ import DailyPuzzleScreen from './DailyPuzzleScreen';
 // 578), not a spinner with no exit. This test proves that state actually
 // renders for real, rather than re-asserting the trace.
 describe('DailyPuzzleScreen — generation-failure / incomplete-ladder honest state', () => {
-  it('renders a specific "check back soon" message with a Refresh action, not an indefinite spinner, when fewer than 3 slots are published', async () => {
+  it('renders a specific "check back soon" message with a Refresh action, not an indefinite spinner, when fewer than 5 slots are published', async () => {
     const incompleteResponse: DailyPuzzleTodayResponse = {
       ok: true,
       runDate: '2026-05-17',
@@ -55,7 +55,7 @@ describe('DailyPuzzleScreen — generation-failure / incomplete-ladder honest st
     const heading = await screen.findByText(/being prepared/i);
     expect(heading).toBeInTheDocument();
     expect(
-      screen.getByText(/couldn.t publish today.s full three-puzzle ladder yet/i),
+      screen.getByText(/couldn.t publish today.s full five-puzzle ladder yet/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Refresh$/i })).toBeInTheDocument();
 

@@ -35,6 +35,8 @@ describe('dailyPuzzleLadderReadiness', () => {
       slot({ slotIndex: 1 }),
       slot({ slotIndex: 2, slotTitle: 'Read', tier: 'tactical_setup', slotMaxPoints: 350 }),
       slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ slotIndex: 4, slotTitle: 'Pressure', tier: 'master_chain', slotMaxPoints: 450 }),
+      slot({ slotIndex: 5, slotTitle: 'Puzzle 5', tier: 'master_chain', slotMaxPoints: 500 }),
     ]);
     expect(readiness.ready).toBe(true);
     expect(readiness.shouldAlert).toBe(false);

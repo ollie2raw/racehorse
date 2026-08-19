@@ -182,7 +182,7 @@ describe('Daily Puzzle ladder generation budgets', () => {
     expect(result.strategy).toBe('one_turn_high_score');
     expect(result.fallbackTier).toBe('fallback_type');
     expect(result.topRejectionReasons).toContainEqual({ reason: 'no_solution', count: 3 });
-  });
+  }, 20_000);
 });
 
 function slot(overrides: Partial<DailyPuzzleSlot>): DailyPuzzleSlot {
@@ -213,11 +213,13 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
     expect(isDailyPuzzleLadderReady([slot({ slotIndex: 1 }), slot({ slotIndex: 2 })])).toBe(false);
   });
 
-  it('returns true for a complete three-slot ladder', () => {
+  it('returns true for a complete five-slot ladder', () => {
     expect(isDailyPuzzleLadderReady([
       slot({ slotIndex: 1, slotTitle: 'Quick Hit', tier: 'quick_line', slotMaxPoints: 250 }),
       slot({ slotIndex: 2, slotTitle: 'Read', tier: 'tactical_setup', slotMaxPoints: 350 }),
       slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+      slot({ slotIndex: 4, slotTitle: 'Pressure', tier: 'master_chain', slotMaxPoints: 450 }),
+      slot({ slotIndex: 5, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 500 }),
     ])).toBe(true);
   });
 

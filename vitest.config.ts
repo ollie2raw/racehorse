@@ -39,6 +39,7 @@ export default defineConfig({
       'client/scripts/**/*.test.ts',
       'server/src/**/*.test.ts',
       'packages/game-core/src/**/*.test.ts',
+      'packages/match-protocol/src/**/*.test.ts',
     ],
     // e2e Playwright specs must never run under vitest
     exclude: ['**/node_modules/**', '**/dist/**', 'client/e2e/**'],

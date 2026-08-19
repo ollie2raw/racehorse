@@ -25,12 +25,6 @@ export type LadderSlotRowViewModel = {
   isAvailable: boolean;
 };
 
-function ladderIndicesForSlots(slots: Array<{ slotIndex: number }>): readonly DailyPuzzleSlotIndex[] {
-  return slots.some((slot) => slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT)
-    ? LEGACY_DAILY_PUZZLE_SLOT_INDICES
-    : DAILY_PUZZLE_SLOT_INDICES;
-}
-
 export function buildLadderSlotBreakdown(
   completedSlots: DailyPuzzleSlotResult[],
 ): LadderSlotBreakdownChip[] {
