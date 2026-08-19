@@ -504,3 +504,44 @@
   }
 }
 
+
+/* Phone layout (complement of the app-wide `desk` breakpoint).
+   `.mm-page` is a fixed-viewport shell with `overflow: hidden`, which on a
+   handset simply clipped the mode cards and the Find Opponent control instead
+   of letting them scroll. Give the inner layout the scroll it needs, and clear
+   the fixed bottom tab bar that overlays it. */
+@media not all and (min-width: 769px) and (min-height: 600px) {
+  /* Bound the whole hub above the fixed tab bar. Padding inside the scroller
+     alone is not enough: panels on this route paint rows outside their own box,
+     so they escape the scroller's measurement — clipping at the shell is the
+     only placement that reliably keeps content off the bar. */
+  .mm-page,
+  .pml-root {
+    padding-bottom: var(--rh-bottom-tab-offset);
+  }
+
+  /* The panel and its body are `overflow: hidden` and `flex: 1 1 auto`, so in
+     the height-bounded column they shrink to a few pixels and silently clip the
+     rest of their content (the mode cards and the skill-window explainer) with
+     no way to scroll to it. On a phone the page scroller owns the scrolling, so
+     these panels should size to their content rather than clip it. */
+  .mm-page .pvf-control-panel.mm-mp-panel,
+  .mm-page .pml-panel-body.mm-panel-body,
+  .pml-root .pvf-control-panel.mm-mp-panel,
+  .pml-root .pml-panel-body.mm-panel-body {
+    height: auto;
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .mm-page .mp-hub-pvf-layout.pvf-layout,
+  .pml-root .mp-hub-pvf-layout.pvf-layout {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    padding-bottom: calc(16px + var(--rh-bottom-tab-offset));
+  }
+}

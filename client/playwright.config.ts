@@ -22,7 +22,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-mobile',
-      testMatch: /mobile-390\.spec\.ts/,
+      testMatch: /mobile-390.*\.spec\.ts/,
       use: {
         ...devices['Pixel 5'],
         viewport: PHONE,
@@ -33,7 +33,7 @@ export default defineConfig({
       ? [
           {
             name: 'webkit-mobile',
-            testMatch: /mobile-390\.spec\.ts/,
+            testMatch: /mobile-390.*\.spec\.ts/,
             use: {
               ...devices['iPhone 12'],
               viewport: PHONE,
@@ -41,7 +41,7 @@ export default defineConfig({
           },
         ]
       : []),
-    { name: 'chromium', testIgnore: /mobile-390\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', testIgnore: /mobile-390.*\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined

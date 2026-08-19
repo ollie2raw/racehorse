@@ -58,6 +58,7 @@ import {
 } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
 import { resolveDailyFritzResumeCheckpoint } from './dailyFritzCheckpointPolicy';
+import { resolveDailyFritzClientNextAction } from './dailyFritzClientPhase';
 
 export function registerDailyFritzStartRoute(app: Application): void {
   app.post('/api/daily-fritz/start', async (req, res) => {
@@ -331,6 +332,13 @@ export function registerDailyFritzStartRoute(app: Application): void {
     }, '[daily-fritz:start] draw package');
     const runFingerprint = buildDailyFritzRunFingerprint(run);
     const resumeCheckpoint = resolveDailyFritzResumeCheckpoint(attempt, runFingerprint);
+    const nextAction = resolveDailyFritzClientNextAction({
+      attemptStatus: attempt.status,
+      setResult: currentSetResult,
+      needsCompletion,
+      currentHandIndex: attempt.currentHandIndex,
+      hasResumeCheckpoint: Boolean(resumeCheckpoint),
+    });
     res.json({
       ok: true,
       attempt_id: attempt.id,
@@ -351,6 +359,7 @@ export function registerDailyFritzStartRoute(app: Application): void {
       verifier_version: DAILY_FRITZ_VERIFIER_VERSION,
       time_zone: DAILY_FRITZ_TIME_ZONE,
       verification_status: getDailyFritzVerificationStatus(attempt.result),
+      next_action: nextAction,
       current_hand_index: attempt.currentHandIndex,
       current_game_scores: { you: currentGameScores.you, fritz: currentGameScores.fritz },
       current_game_number: currentGameNumber,

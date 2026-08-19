@@ -37,6 +37,11 @@ export function incrementDailyFritzMetric(
   const target = bucket(name);
   target.total += 1;
   if (code) target.byCode[code] = (target.byCode[code] ?? 0) + 1;
+  if (name === 'request_failed' || name === 'verification_failed') {
+    void import('./dailyFritzMetricsExport').then(({ mirrorDailyFritzMetricIncrementBestEffort }) => {
+      mirrorDailyFritzMetricIncrementBestEffort(name, code);
+    }).catch(() => {});
+  }
 }
 
 export function getDailyFritzMetrics(): Record<DailyFritzMetricName, MetricBucket> {

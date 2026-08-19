@@ -18,3 +18,8 @@ client/coverage/
 client/playwright-report/
 client/test-results/
 reset-password.mjs
+
+# Local worktrees / build artifacts (do not commit)
+.worktrees/
+dump.rdb
+*.tsbuildinfo

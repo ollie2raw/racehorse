@@ -94,4 +94,6 @@ export interface DailyFritzGameCompletionPayload {
   handsPlayed: number;
   currentHandIndex: number;
   moveLog: unknown;
+  /** Authoritative engine journal for the terminal hand — required for modern verified attempts. */
+  journal?: import('@racehorse/game-core').DailyFritzJournal | null;
 }

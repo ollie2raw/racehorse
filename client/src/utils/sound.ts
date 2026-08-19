@@ -221,7 +221,7 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
     try {
       const instance = sample.cloneNode() as HTMLAudioElement;
       instance.volume = type === 'slam' ? 0.78 : type === 'deal' ? 0.42 : 0.64;
-      void instance.play();
+      void instance.play().catch(() => {});
       return;
     } catch {
       // Fall back to synth if sample playback fails.

@@ -14,23 +14,34 @@ import type {
   DailyFritzSetResult as SharedDailyFritzSetResult,
 } from '@racehorse/game-core';
 
-export const DAILY_FRITZ_REQUEST_ID_HEADER = 'x-racehorse-request-id';
-
-export function createDailyFritzRequestId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `df-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/** Init/today/start requests — 8–12s window before the UI leaves infinite loading. */
-export const DAILY_FRITZ_INIT_TIMEOUT_MS = 10_000;
-
-/** Next-hand advance (prefetch + reveal auto-advance). Match init — Render cold starts can exceed 4.5s. */
-export const DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS = 10_000;
-/** Record-game must never strand the player on the Saving… overlay. */
-export const DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS = 15_000;
-export const DAILY_FRITZ_COMPLETE_TIMEOUT_MS = 15_000;
+export {
+  createDailyFritzRequestId,
+  DAILY_FRITZ_REQUEST_ID_HEADER,
+} from './dailyFritzRequestIds';
+export {
+  classifyDailyFritzMutationFailure,
+  DAILY_FRITZ_CHECKPOINT_TIMEOUT_MS,
+  DAILY_FRITZ_COMPLETE_TIMEOUT_MS,
+  DAILY_FRITZ_INIT_TIMEOUT_MS,
+  DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
+  DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS,
+  timedDailyFritzMutationPost,
+  throwApiResult,
+  type DailyFritzMutationFailureKind,
+} from './dailyFritzMutations';
+import {
+  createDailyFritzRequestId,
+  DAILY_FRITZ_REQUEST_ID_HEADER,
+} from './dailyFritzRequestIds';
+import {
+  DAILY_FRITZ_COMPLETE_TIMEOUT_MS,
+  DAILY_FRITZ_INIT_TIMEOUT_MS,
+  DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
+  DAILY_FRITZ_RECORD_GAME_TIMEOUT_MS,
+  DAILY_FRITZ_CHECKPOINT_TIMEOUT_MS,
+  timedDailyFritzMutationPost,
+  throwApiResult,
+} from './dailyFritzMutations';
 
 export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 
@@ -201,51 +212,7 @@ async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
 }
 
 async function timedApiPost<T>(path: string, body: unknown, timeoutMs?: number): Promise<ApiResult<T>> {
-  const start = performance.now();
-  const controller = typeof AbortController !== 'undefined' && timeoutMs != null ? new AbortController() : null;
-  let timedOut = false;
-  const timeoutId = controller && timeoutMs != null
-    ? window.setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, timeoutMs)
-    : null;
-  try {
-    const result = await apiPost<T>(path, body, {
-      headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
-      signal: controller?.signal,
-    });
-    dfClientDebug('[daily-fritz-client] request', {
-      path,
-      ms: Number((performance.now() - start).toFixed(1)),
-      ok: result.error === null,
-      status: result.status,
-    });
-    if (timedOut && result.error) {
-      return {
-        ...result,
-        error: 'Daily Fritz request timed out. Check your connection and try again.',
-        status: result.status ?? 408,
-      };
-    }
-    return result;
-  } catch (error) {
-    if (timedOut) {
-      return {
-        data: null,
-        error: 'Daily Fritz request timed out. Check your connection and try again.',
-        status: 408,
-      };
-    }
-    throw error;
-  } finally {
-    if (timeoutId != null) window.clearTimeout(timeoutId);
-  }
-}
-
-function throwApiResult<T>(result: ApiResult<T>): T {
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
+  return timedDailyFritzMutationPost<T>(path, body, timeoutMs);
 }
 
 const DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES = new Set([
@@ -322,6 +289,14 @@ export interface DailyFritzLeaderboardRow {
   is_current_user?: boolean;
 }
 export type DailyFritzVerificationStatus = 'in_progress' | 'pending_verification' | 'verified' | 'rejected' | 'legacy_unverified';
+
+export type DailyFritzClientNextAction =
+  | 'start_set'
+  | 'resume_hand'
+  | 'between_games'
+  | 'finalize_set'
+  | 'view_results'
+  | 'locked';
 export type DailyFritzHistoryEntry = { challenge_date: string; player_score: number; fritz_score: number; won: boolean; completed_at: string | null; verification_status: DailyFritzVerificationStatus };
 export async function getDailyFritzHistory(limit = 5): Promise<DailyFritzHistoryEntry[]> {
   const result = await apiGet<{ ok: true; results: DailyFritzHistoryEntry[] }>(`/api/daily-fritz/history?limit=${Math.max(1,Math.min(10,Math.floor(limit)))}`);
@@ -359,6 +334,7 @@ export interface DailyFritzTodayResponse {
   winning_score: number;
   attempt_status: 'none' | 'started' | 'completed' | 'abandoned';
   authority_revision?: number | null;
+  next_action?: DailyFritzClientNextAction;
   current_game_number: DailyFritzSetGameNumber | null;
   needs_completion?: boolean;
   streak: number;
@@ -397,6 +373,7 @@ export interface DailyFritzStartResponse {
   verifier_version?: number;
   time_zone?: 'America/Los_Angeles';
   verification_status?: DailyFritzVerificationStatus;
+  next_action?: DailyFritzClientNextAction;
   current_hand_index: number;
   current_game_scores?: { you: number; fritz: number };
   current_game_number?: DailyFritzSetGameNumber | null;
@@ -529,7 +506,7 @@ export async function saveDailyFritzCheckpoint(input: {
           verified_match_id: input.verifiedMatchId,
           checkpoint: input.checkpoint,
         }),
-        timeoutMs: input.timeoutMs ?? 8_000,
+        timeoutMs: input.timeoutMs ?? DAILY_FRITZ_CHECKPOINT_TIMEOUT_MS,
       },
     );
   } catch {

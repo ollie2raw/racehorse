@@ -28,6 +28,7 @@ import type {
   DailyFritzOverlayState,
 } from './dailyFritzScreenTypes';
 import { buildDailyFritzTranscript } from './dailyFritzTranscript';
+import { reportDailyFritzOperationalAlert } from './dailyFritzObservability';
 import { createDailyFritzChallengeIdentity } from './dailyFritzChallengeIdentity';
 import type { MoveEntry } from '../game/moveLogger';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from './telemetry';
@@ -369,6 +370,7 @@ export function useDailyFritzRunController({
           handIndex: game.currentHandIndex,
           handNumber: game.handsPlayed,
           moveLog: game.moveLog as MoveEntry[],
+          journal: game.journal ?? null,
           fritzPolicyVersion: run.fritz_policy_version,
         });
       } catch (transcriptError) {
@@ -378,6 +380,17 @@ export function useDailyFritzRunController({
           && run.verification_status !== 'legacy_unverified'
           && Number(run.verification_protocol_version) > 0;
         if (competitive) {
+          reportDailyFritzOperationalAlert(
+            'transcript_build_failed',
+            'Daily Fritz record-game transcript build failed',
+            {
+              attemptId: run.attempt_id,
+              gameNumber,
+              handIndex: game.currentHandIndex,
+              hasJournal: Boolean(game.journal?.actions?.length),
+              error: transcriptError instanceof Error ? transcriptError.message : String(transcriptError),
+            },
+          );
           throw transcriptError instanceof Error
             ? transcriptError
             : new Error('Failed to build Daily Fritz verification transcript.');
@@ -502,6 +515,15 @@ export function useDailyFritzRunController({
         return;
       }
       const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
+      reportDailyFritzOperationalAlert(
+        'record_game_failed',
+        'Daily Fritz record-game failed',
+        {
+          attemptId: run.attempt_id,
+          gameNumber,
+          error: message,
+        },
+      );
       setSetOverlay({
         kind: 'record-error',
         completedGame: fallbackCompletedGame,
@@ -574,6 +596,16 @@ export function useDailyFritzRunController({
         };
       });
       recordGameInFlightRef.current = false;
+      const pendingSnapshot = pendingRecordGameRef.current;
+      const runSnapshot = activeRunRef.current;
+      reportDailyFritzOperationalAlert(
+        'saving_timeout',
+        'Daily Fritz record-game saving overlay timed out',
+        {
+          attemptId: runSnapshot?.attempt_id,
+          gameNumber: pendingSnapshot?.gameNumber,
+        },
+      );
     }, watchdogMs);
     return () => window.clearTimeout(timer);
   }, [setOverlay]);

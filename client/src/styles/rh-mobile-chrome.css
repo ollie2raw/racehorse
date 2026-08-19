@@ -1,92 +1,89 @@
-/* Phone chrome — shared GlobalNav compaction + bottom tab offset.
-   Breakpoint matches AppBottomTabBar (768px) and responsive.css. */
+/* Phone chrome — GlobalNav, bottom tab bar clearance and hub scroll containers.
+ *
+ * Mobile-first: the unprefixed rules below ARE the phone layout. Desktop is
+ * layered on top in the `min-width` block at the end of this file.
+ *
+ * The desktop condition also requires vertical room. A 390×844 handset is
+ * 844px *wide* in landscape, so a width-only breakpoint hands it the desktop
+ * layout inside a 390px-tall viewport — which is what removed the phone scroll
+ * containers in landscape and left hub content below the fold unreachable.
+ * `--rh-desk` in tailwind.config.js (`desk:`) uses the same condition.
+ */
 
-@media (max-width: 768px) {
-  .rh-nav-center-desktop {
-    display: none !important;
-  }
+/* ── Phone base ─────────────────────────────────────────────────── */
 
-  /* Compact top bar: two-column flex row that actually reflows at 390px */
-  .rh-global-nav {
-    height: 56px !important;
-  }
+.rh-nav-brand,
+.rh-nav-stats {
+  min-width: 0;
+  max-width: none;
+}
 
-  .rh-nav-inner {
-    gap: 8px;
-    padding-inline: 12px !important;
-  }
+.rh-nav-brand {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
 
-  .rh-nav-brand,
-  .rh-nav-stats {
-    min-width: 0 !important;
-    max-width: none;
-  }
+.rh-nav-wordmark {
+  margin-left: 10px;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  .rh-nav-brand {
-    flex: 1 1 auto;
-    overflow: hidden;
-  }
+.rh-nav-stats {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 2px;
+}
 
-  .rh-nav-wordmark {
-    margin-left: 10px !important;
-    font-size: 15px !important;
-    letter-spacing: 0.04em !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+.rh-nav-stat-block {
+  gap: 6px;
+  padding: 6px 4px;
+}
 
-  .rh-nav-stats {
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    gap: 2px;
-  }
+.rh-nav-stat-label,
+.rh-nav-stat-divider {
+  display: none;
+}
 
-  .rh-nav-stat-block {
-    gap: 6px !important;
-    padding: 6px 4px !important;
-  }
+.rh-nav-stat-value {
+  font-size: 15px;
+}
 
-  .rh-nav-stat-label {
-    display: none;
-  }
+.rh-nav-stat-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
 
-  .rh-nav-stat-divider {
-    display: none;
-  }
+.rh-nav-user-block {
+  padding-left: 4px;
+  gap: 0;
+}
 
-  .rh-nav-stat-value {
-    font-size: 15px !important;
-  }
+.rh-nav-user-block button:last-child {
+  display: none;
+}
 
-  .rh-nav-stat-icon {
-    width: 16px !important;
-    height: 16px !important;
-    flex-shrink: 0;
-  }
+.rh-nav-user-block button:first-child {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
 
-  .rh-nav-user-block {
-    padding-left: 4px !important;
-    gap: 0 !important;
-  }
-
-  .rh-nav-user-block button:last-child {
-    display: none;
-  }
-
-  .rh-nav-user-block button:first-child {
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px;
-    min-height: 36px;
-  }
-
-  /* Hub screens: absolute back + centered title → stacked flow */
+/* Hub screens: absolute back + centered title → stacked flow.
+   These three have no desktop meaning, and each out-specifies the Tailwind
+   utility it replaces, so they must stay inside the phone query rather than
+   sit in the base layer relying on the desktop layer to undo them. */
+@media not all and (min-width: 769px) and (min-height: 600px) {
   .home-main.sp-solo-main .rh-back-button.absolute,
   .home-main.learn-hub-main .rh-back-button.absolute {
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
+    position: relative;
+    left: auto;
+    top: auto;
     z-index: 20;
     align-self: flex-start;
     margin: 4px 16px 0;
@@ -100,35 +97,136 @@
 
   .home-main.sp-solo-main,
   .home-main.learn-hub-main {
-    padding-top: 8px !important;
-  }
-
-  /* Home: bottom tab bar replaces in-page mode strip on phone */
-  .home-mode-tabs {
-    display: none !important;
-  }
-
-  .home-shell,
-  .home-page-root .home-shell,
-  .sp-page,
-  .pvf-root,
-  .rh-hub-shell {
-    padding-bottom: var(--rh-bottom-tab-offset);
-    box-sizing: border-box;
-  }
-
-  .rh-journey-root .rh-journey-main {
-    padding-bottom: calc(18px + var(--rh-bottom-tab-offset));
-  }
-
-  .rh-journey-root .rh-journey-detail__actions {
-    padding-bottom: var(--rh-bottom-tab-offset);
-    scroll-margin-bottom: calc(var(--rh-bottom-tab-offset) + 16px);
+    padding-top: 8px;
   }
 }
 
-@media (min-width: 769px) {
+/* Home: bottom tab bar replaces in-page mode strip on phone */
+.home-mode-tabs {
+  display: none;
+}
+
+/*
+ * Bottom-tab clearance.
+ *
+ * The tab bar is `position: fixed`, so it sits over whatever is beneath it.
+ * `body` is `overflow: hidden` app-wide, which means hub pages never scroll the
+ * document — they scroll inside a panel. Padding therefore has to go on the
+ * element that actually scrolls; putting it on a non-scrolling ancestor leaves
+ * the last rows of content permanently parked under the bar (that is what put
+ * the Daily Puzzle PLAY button and the weekly-goal row behind it).
+ */
+.home-shell,
+.home-page-root .home-shell,
+.sp-page,
+.pvf-root,
+.rh-hub-shell {
+  box-sizing: border-box;
+}
+
+.home-main,
+.sp-solo-main,
+.rh-hub-body,
+.rh-hub-inner,
+.df-layout,
+.df-pvf-layout {
+  padding-bottom: calc(16px + var(--rh-bottom-tab-offset));
+  scroll-padding-bottom: var(--rh-bottom-tab-offset);
+}
+
+/*
+ * Hub pages must scroll on a phone in BOTH orientations. These containers were
+ * previously given `overflow-y: auto` only inside a `max-width: 768px` block,
+ * so in landscape (844px wide) they reverted to the desktop fixed-viewport
+ * layout and simply clipped everything below 390px.
+ */
+.home-main,
+.sp-solo-main,
+.df-layout,
+.rh-hub-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+.rh-journey-root .rh-journey-main {
+  padding-bottom: calc(18px + var(--rh-bottom-tab-offset));
+}
+
+.rh-journey-root .rh-journey-detail__actions {
+  padding-bottom: var(--rh-bottom-tab-offset);
+  scroll-margin-bottom: calc(var(--rh-bottom-tab-offset) + 16px);
+}
+
+/* ── Desktop layer ──────────────────────────────────────────────── */
+@media (min-width: 769px) and (min-height: 600px) {
   .rh-bottom-tab-bar {
-    display: none !important;
+    display: none;
+  }
+
+  .rh-nav-wordmark {
+    margin-left: 14px;
+    font-size: 22px;
+    letter-spacing: 0.05em;
+  }
+
+  .rh-nav-stats {
+    gap: 0;
+  }
+
+  .rh-nav-stat-block {
+    gap: 12px;
+    padding: 10px 20px;
+  }
+
+  .rh-nav-stat-label,
+  .rh-nav-stat-divider {
+    display: block;
+  }
+
+  .rh-nav-stat-value {
+    font-size: 18px;
+  }
+
+  .rh-nav-stat-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .rh-nav-user-block {
+    padding-left: 20px;
+    gap: 16px;
+  }
+
+  .rh-nav-user-block button:last-child {
+    display: flex;
+  }
+
+  .rh-nav-user-block button:first-child {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+  }
+
+  .home-mode-tabs {
+    display: block;
+  }
+
+  .home-main,
+  .sp-solo-main,
+  .rh-hub-body,
+  .rh-hub-inner,
+  .df-layout,
+  .df-pvf-layout {
+    padding-bottom: 0;
+    scroll-padding-bottom: 0;
+  }
+
+  .rh-journey-root .rh-journey-main,
+  .rh-journey-root .rh-journey-detail__actions {
+    padding-bottom: 0;
   }
 }

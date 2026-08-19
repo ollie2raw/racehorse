@@ -5613,7 +5613,11 @@
   }
 }
 
-@media (max-width: 720px) {
+/* Phone layout (the complement of the `desk` breakpoint used app-wide).
+   A width-only `max-width: 768px` gate misses a handset in landscape, which is
+   844px wide — that is why this screen lost its scroll container and clipped
+   everything below the fold when the phone was turned sideways. */
+@media not all and (min-width: 769px) and (min-height: 600px) {
   .df-pvf-title {
     font-size: 40px;
   }
@@ -5629,20 +5633,25 @@
   .df-shell--daily-fritz {
     padding-left: 20px;
     padding-right: 20px;
+    /* Keep the scroll viewport itself above the fixed tab bar. Padding inside
+       the scroller is not enough on its own here, because the control panel
+       paints rows outside its own box and escapes that measurement. */
+    padding-bottom: calc(22px + var(--rh-bottom-tab-offset));
   }
 
   .df-shell--daily-fritz .df-layout.df-pvf-layout {
     padding-top: 24px;
-    padding-bottom: 20px;
+    /* Load-bearing: this is the effective bottom clearance for the daily hubs'
+       scroll container. Without it the footer leaderboard link lands under the
+       fixed tab bar. */
+    padding-bottom: calc(20px + var(--rh-bottom-tab-offset));
     gap: 24px;
   }
 
   .df-shell--daily-fritz .pvf-control-panel.df-pvf-control-panel {
     padding: 20px 20px 18px;
   }
-}
 
-@media (max-width: 768px) {
   .df-feature-bar {
     grid-template-columns: 1fr;
     gap: 6px;
@@ -5680,6 +5689,22 @@
     align-items: stretch !important;
     align-content: start !important;
     overflow: auto !important;
+    /* This element is the scroll container, so the clearance for the fixed
+       bottom tab bar has to live here — on an ancestor it would scroll away. */
+    padding-bottom: calc(16px + var(--rh-bottom-tab-offset));
+  }
+
+  /* The control panel is height-constrained by the desktop grid but keeps
+     `overflow: visible`, so on a phone its rows painted outside its own box —
+     escaping the scroll container's measurement and parking the footer link
+     under the tab bar. Size it to its content instead. */
+  .df-pvf-layout .pvf-control-panel,
+  .df-pvf-layout .df-pvf-control-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
   }
 
   .df-pvf-left-col {

@@ -9,6 +9,12 @@ import type { AppMode } from '../types';
  * Each route mounts its own `<GlobalNav />`, so local state resets on navigation.
  * Keep last-known HUD values in module scope (per signed-in user) so rating / friends
  * do not flash placeholders while friends refetch or profile is briefly incomplete.
+ *
+ * `userId` is the owner of the cached values. It is deliberately readable while
+ * `useAuth()` is still resolving the session: during bootstrap `authUser` is null,
+ * so any guard written as `cache.userId === authUser.id` can never match and the
+ * HUD falls through to a placeholder. Reads below compare against the cache's own
+ * owner instead, and only discard it once we know a *different* user signed in.
  */
 const globalNavHudCache: {
   userId: string | null;
@@ -57,7 +63,7 @@ export function GlobalNav({
   compactChrome,
   solidDarkChrome,
 }: GlobalNavProps) {
-  const { user: authUser, profile: authProfile } = useAuth();
+  const { user: authUser, profile: authProfile, loading: authLoading } = useAuth();
   const authUserId = authUser?.id ?? null;
   const [friendCountOwnerId, setFriendCountOwnerId] = useState<string | null>(null);
   const [friendCountFetched, setFriendCountFetched] = useState<number | null>(null);
@@ -68,15 +74,20 @@ export function GlobalNav({
 
   useEffect(() => {
     if (!authUser) {
-      globalNavHudCache.userId = null;
-      globalNavHudCache.ratingDisplay = null;
-      globalNavHudCache.friendCount = null;
+      // Only a *settled* signed-out state clears the cache. While the session is
+      // still being restored `authUser` is null but the user may well be signed
+      // in, and wiping here is what left the HUD with nothing to fall back on.
+      if (!authLoading) {
+        globalNavHudCache.userId = null;
+        globalNavHudCache.ratingDisplay = null;
+        globalNavHudCache.friendCount = null;
+      }
       return;
     }
     if (authUser.id !== globalNavHudCache.userId) {
       globalNavHudCache.friendCount = null;
     }
-  }, [authUser]);
+  }, [authUser, authLoading]);
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -101,31 +112,52 @@ export function GlobalNav({
       });
   }, [authUser?.id]);
 
+  /**
+   * `—` means "signed out". `…` means "not resolved yet". Deriving either from
+   * `!authUser` alone conflates the two: restoring a Supabase session is async
+   * (and on a phone can take seconds, or stall on a token refresh), so a signed-in
+   * user renders with `authUser === null` for the whole bootstrap window. That is
+   * what put a bare `—` in the header for real logged-in accounts. Treat the
+   * signed-out glyph as reachable only once auth has actually settled.
+   */
+  const authSettled = !authLoading;
+  const cachedRating =
+    globalNavHudCache.userId != null &&
+    (authUser == null || globalNavHudCache.userId === authUser.id)
+      ? globalNavHudCache.ratingDisplay
+      : null;
+
   const rating =
     authProfile?.glicko_rating != null
       ? Math.round(Number(authProfile.glicko_rating)).toLocaleString()
-      : !authUser
-        ? '—'
-        : globalNavHudCache.userId === authUser.id && globalNavHudCache.ratingDisplay != null
-          ? globalNavHudCache.ratingDisplay
+      : cachedRating != null
+        ? cachedRating
+        : authSettled && !authUser
+          ? '—'
           : '…';
+
+  const cachedFriendCount =
+    globalNavHudCache.userId != null &&
+    (authUser == null || globalNavHudCache.userId === authUser.id)
+      ? globalNavHudCache.friendCount
+      : null;
 
   const friendCountDisplay =
     friendCountFetched !== null
       ? friendCountFetched
-      : authUser && globalNavHudCache.userId === authUser.id && globalNavHudCache.friendCount !== null
-        ? globalNavHudCache.friendCount
+      : cachedFriendCount !== null
+        ? cachedFriendCount
         : null;
 
   const initials = useMemo(() => {
     const username = authProfile?.username;
-    if (!username) return authUser ? '?' : '→';
+    if (!username) return authUser || !authSettled ? '?' : '→';
     const parts = username.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
     const init = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
     return init || username.slice(0, 2).toUpperCase();
-  }, [authProfile?.username, authUser]);
+  }, [authProfile?.username, authUser, authSettled]);
 
-  const displayName = authProfile?.username ?? (authUser ? 'Loading…' : 'Sign In');
+  const displayName = authProfile?.username ?? (authUser || !authSettled ? 'Loading…' : 'Sign In');
 
   const todayLabel = new Date().toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -136,7 +168,7 @@ export function GlobalNav({
   return (
     <>
     <nav 
-      className={`rh-global-nav relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
+      className={`rh-global-nav relative shrink-0 w-full z-50 h-[56px] ${compactChrome ? 'desk:h-[66px]' : 'desk:h-[78px]'}`}
       style={{
         boxSizing: 'border-box',
         overflow: 'visible',
@@ -158,7 +190,7 @@ export function GlobalNav({
           background: 'linear-gradient(180deg, rgba(2, 4, 10, 0.22) 0%, rgba(2, 4, 10, 0.08) 48%, rgba(2, 4, 10, 0) 100%)',
         }}
       />
-      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
+      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 ${compactChrome ? 'desk:px-7' : 'desk:px-9'}`}>
         {/* Left: Brand & Identity */}
         <button
           type="button"
@@ -180,10 +212,7 @@ export function GlobalNav({
           <div
             className="rh-nav-wordmark uppercase text-white"
             style={{
-              marginLeft: '14px',
-              fontSize: '22px',
               fontWeight: 900,
-              letterSpacing: '0.05em',
               fontFamily: "'Montserrat', sans-serif",
             }}
           >
@@ -192,7 +221,7 @@ export function GlobalNav({
         </button>
 
         {/* Center Content Logic (The Switch) */}
-        <div className={`rh-nav-center-desktop absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
+        <div className={`rh-nav-center-desktop absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center desk:flex ${compactChrome ? 'gap-6' : 'gap-8'}`}>
           {isHome ? (
             <div 
               className="uppercase"
@@ -250,7 +279,7 @@ export function GlobalNav({
             <div className="leading-tight">
               <div
                 className="rh-nav-stat-value"
-                style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
+                style={{ fontWeight: 700, color: 'white' }}
               >
                 {rating}
               </div>
@@ -278,9 +307,9 @@ export function GlobalNav({
             <div className="leading-tight text-left">
               <div
                 className="rh-nav-stat-value"
-                style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
+                style={{ fontWeight: 700, color: 'white' }}
               >
-                {friendCountDisplay !== null ? friendCountDisplay : authUser ? '…' : '—'}
+                {friendCountDisplay !== null ? friendCountDisplay : authSettled && !authUser ? '—' : '…'}
               </div>
               <div
                 className="rh-nav-stat-label"

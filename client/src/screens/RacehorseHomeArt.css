@@ -745,92 +745,100 @@
   }
 }
 
-/* ── Mobile Layout & Typography Overrides ── */
-@media (max-width: 800px) {
-  .home-page-root h1,
-  .home-page-root h2 {
-    font-size: clamp(32px, 8vw, 42px) !important;
-  }
-  
-  .home-page-root p {
-    font-size: clamp(14px, 4vw, 16px) !important;
-  }
-  
-  /* Stack grid-cols-2 -> grid-cols-1 */
-  .home-shell .grid-cols-2 {
-    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-    padding-inline: 16px !important;
-    margin-top: 16px !important;
-    gap: 16px !important;
-  }
-  
-  .home-shell .px-14 {
-    padding-inline: 16px !important;
-  }
-  
-  .home-shell .mx-14 {
-    margin-inline: 16px !important;
-  }
-  
-  /* Flex row -> flex column for streak tracker block */
-  .home-shell .mx-14.mt-4.flex {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    padding: 16px !important;
-    gap: 12px !important;
+/* ── Phone base (unprefixed) ──────────────────────────────────────
+   Type scale, card padding and the grid now come from the mobile-first
+   Tailwind classes in HomeScreen.tsx (base = phone, `desk:` = desktop),
+   so the old `max-width` overrides that used to force those values with
+   `!important` are gone. What remains here is structure the utility
+   classes cannot express. */
+
+/* The hero cards paint decorative art across the whole card and float live
+   text on top of it. On a wide card the art sits clear to the right of the
+   text column; at phone width the text spans the full card and runs across
+   the bright part of the image ("One shared challenge" over the domino
+   tiles). Reserve an explicit art zone so the two can never share space. */
+.home-card-text {
+  position: relative;
+  z-index: 5;
+  max-width: 56%;
+  min-width: 0;
+}
+
+/* Art is a composited layer (it carries both `filter` and `mask-image`).
+   WebKit does not always clip such a layer to an ancestor's border-radius,
+   which is how the puzzle tiles rendered past the card's rounded corner on
+   real iOS Safari while Chromium screenshots looked clean. Giving the layer
+   its own matching radius and clip makes containment a property of the art
+   itself rather than something inherited from the card. */
+.home-card-art {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.home-shell .mx-14 {
+  margin-inline: 16px;
+}
+
+.home-mode-tabs > div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.home-mode-tabs button {
+  display: flex;
+  height: 68px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 3px;
+}
+
+.home-mode-tabs button > span:last-of-type {
+  overflow: hidden;
+  max-width: 100%;
+  color: #b8c7da;
+  font-size: 10px;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-mode-tabs button > span:first-of-type svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── Desktop layer ──────────────────────────────────────────────── */
+@media (min-width: 769px) and (min-height: 600px) {
+  .home-card-text {
+    max-width: none;
   }
 
-  .home-shell .home-main {
-    overflow-y: auto !important;
-    max-height: 100% !important;
-  }
-  
-  .home-card-content h2 {
-    font-size: clamp(28px, 6vw, 36px) !important;
-  }
-  
-  .home-card-content p {
-    font-size: 14px !important;
-    margin-top: 4px !important;
-  }
-  
-  .home-card-content .mt-7 {
-    margin-top: 12px !important;
-  }
-  
-  .home-card-content {
-    height: auto !important;
-    min-height: 180px !important;
+  .home-shell .mx-14 {
+    margin-inline: 3.5rem;
   }
 
   .home-mode-tabs > div {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    display: flex;
   }
 
   .home-mode-tabs button {
-    display: flex;
-    height: 68px;
-    min-width: 0;
-    flex-direction: column;
-    gap: 5px;
-    padding: 6px 3px;
+    height: 76px;
+    flex-direction: row;
+    gap: 13px;
+    padding: 0;
   }
 
   .home-mode-tabs button > span:last-of-type {
-    overflow: hidden;
-    max-width: 100%;
-    color: #b8c7da !important;
-    font-size: 10px !important;
-    line-height: 1.1;
-    text-align: center;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: inherit;
+    font-size: inherit;
+    white-space: normal;
   }
 
   .home-mode-tabs button > span:first-of-type svg {
-    width: 20px;
-    height: 20px;
+    width: 26px;
+    height: 26px;
   }
 }
 

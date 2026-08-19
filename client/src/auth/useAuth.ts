@@ -320,6 +320,14 @@ export function useAuth() {
 
   useEffect(() => {
     let active = true;
+    /**
+     * Set once a live auth event has delivered a real signed-in user. The
+     * bootstrap `getSession()` call can stay pending long after it timed out,
+     * and when it finally settles it must not overwrite a *newer*, authoritative
+     * signed-in state that arrived via onAuthStateChange in the meantime —
+     * otherwise a slow connection silently signs the user back out.
+     */
+    let signedInObserved = false;
 
     const syncSession = async (
       event: AuthChangeEvent | 'INITIAL_BOOTSTRAP',
@@ -390,24 +398,62 @@ export function useAuth() {
         return;
       }
 
-      try {
-        const {
-          data: { session },
-        } = await withTimeout(supabase.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
+      // A slow session restore (phone on a weak connection, a stalled token
+      // refresh) must not be reported as "signed out". Timing out only means the
+      // answer has not arrived yet, so keep the session state unresolved and let
+      // the real result land via the late resolution below or onAuthStateChange.
+      const client = supabase;
+      const sessionPromise = client.auth.getSession();
+      let timedOut = false;
+
+      const applySession = async (
+        session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session'],
+      ) => {
+        if (!active) return;
         setAccessToken(session?.access_token ?? null);
         await syncSession('INITIAL_BOOTSTRAP', session?.user ?? null);
         if (session?.user && hasPasswordRecoveryPendingMarker()) {
           setPasswordRecoveryPending(true);
         }
+      };
+
+      try {
+        const {
+          data: { session },
+        } = await withTimeout(sessionPromise, SESSION_BOOTSTRAP_TIMEOUT_MS);
+        await applySession(session);
+        if (active) setLoading(false);
       } catch {
-        if (active) {
+        timedOut = true;
+        console.warn('[auth] session bootstrap did not settle in time; holding auth as unresolved');
+      }
+
+      if (!timedOut) return;
+
+      // Still unresolved: stay in the loading state (callers render "checking",
+      // not "signed out") until getSession actually answers. Whatever it answers
+      // is stale the moment a live auth event has already reported a signed-in
+      // user, so in that case only settle `loading` and leave the session alone.
+      void sessionPromise.then(
+        async ({ data: { session } }) => {
+          if (!active) return;
+          if (signedInObserved && !session?.user) {
+            setLoading(false);
+            return;
+          }
+          await applySession(session);
+          if (active) setLoading(false);
+        },
+        (err: unknown) => {
+          console.warn('[auth] session bootstrap failed', err);
+          if (!active) return;
+          setLoading(false);
+          if (signedInObserved) return;
           setUser(null);
           setProfile(null);
           setAccessToken(null);
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
+        },
+      );
     };
 
     void init();
@@ -422,6 +468,8 @@ export function useAuth() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!active) return;
       try {
+        if (session?.user) signedInObserved = true;
+        else if (event === 'SIGNED_OUT') signedInObserved = false;
         setAccessToken(session?.access_token ?? null);
         await syncSession(event, session?.user ?? null);
       } finally {
