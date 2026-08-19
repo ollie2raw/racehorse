@@ -423,6 +423,8 @@ export interface DailyFritzRecordGameResponse {
   authority_revision?: number;
   set_result: DailyFritzSetResult;
   next_game_number: DailyFritzSetGameNumber | null;
+  /** True when the game was recorded before async verification finished. */
+  verification_pending?: boolean;
 }
 
 export interface DailyFritzLeaderboardResponse {

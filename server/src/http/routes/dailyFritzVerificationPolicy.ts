@@ -174,6 +174,8 @@ export function buildRecordedDailyFritzAttemptResult(input: {
   previousResult: Record<string, unknown> | null;
   setResult: object;
   hasTranscript: boolean;
+  /** Advance-first path: game is recorded before async verification finishes. */
+  verificationPending?: boolean;
 }): Record<string, unknown> {
   const previous = input.previousResult ?? {};
   const authority = readAuthorityLedger(previous);
@@ -189,7 +191,9 @@ export function buildRecordedDailyFritzAttemptResult(input: {
   // hand may promote the run back into leaderboard eligibility.
   const nextStatus = previousStatus === 'rejected'
     ? 'rejected'
-    : previousStatus === 'verified' ? 'verified' : 'in_progress';
+    : input.verificationPending
+      ? 'pending_verification'
+      : previousStatus === 'verified' ? 'verified' : 'in_progress';
   return {
     ...input.setResult as Record<string, unknown>,
     authority,
