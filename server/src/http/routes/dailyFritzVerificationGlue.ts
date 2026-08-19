@@ -218,6 +218,84 @@ export function readActiveGameProgress(result: Record<string, unknown> | null, g
     : { gameNumber, you: 0, fritz: 0 };
 }
 
+/** Verifier codes that indicate server-side wiring/data loss — not client cheat rejection. */
+export const DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES = new Set([
+  'missing_hand_start_progress',
+]);
+
+/**
+ * Hand-start scores for transcript replay. The authority ledger is the durable
+ * source of truth; `active_game` is UI/progress bookkeeping and can be wiped
+ * (e.g. by `buildRecordedDailyFritzAttemptResult`).
+ */
+export function resolveHandStartScoresForVerification(input: {
+  result: Record<string, unknown> | null;
+  gameNumber: DailyFritzSetGameNumber;
+  handIndex: number;
+}): DailyFritzActiveGameProgress {
+  const { result, gameNumber, handIndex } = input;
+  if (handIndex <= 0) {
+    return { gameNumber, you: 0, fritz: 0 };
+  }
+
+  const immediatePrior = findVerifiedHand(result, gameNumber, handIndex - 1);
+  if (immediatePrior) {
+    return {
+      gameNumber,
+      you: immediatePrior.playerScoreAfter,
+      fritz: immediatePrior.fritzScoreAfter,
+    };
+  }
+
+  const ledger = readAuthorityLedger(result);
+  const latestPrior = ledger.hands
+    .filter((hand) => hand.gameNumber === gameNumber && hand.handIndex < handIndex)
+    .sort((left, right) => right.handIndex - left.handIndex)[0];
+  if (latestPrior) {
+    return {
+      gameNumber,
+      you: latestPrior.playerScoreAfter,
+      fritz: latestPrior.fritzScoreAfter,
+    };
+  }
+
+  return { gameNumber, you: 0, fritz: 0 };
+}
+
+export function assertHandStartScoresAvailableForVerification(input: {
+  result: Record<string, unknown> | null;
+  gameNumber: DailyFritzSetGameNumber;
+  handIndex: number;
+  startScores: DailyFritzActiveGameProgress;
+}): void {
+  if (input.handIndex <= 0) return;
+  if (input.startScores.you !== 0 || input.startScores.fritz !== 0) return;
+
+  const hasPriorVerifiedHands = readAuthorityLedger(input.result).hands.some(
+    (hand) => hand.gameNumber === input.gameNumber && hand.handIndex < input.handIndex,
+  );
+  if (!hasPriorVerifiedHands) return;
+
+  Sentry.captureMessage(
+    '[daily-fritz] verification infrastructure failure — hand-start progress unavailable',
+    {
+      level: 'error',
+      tags: {
+        daily_fritz_alert: 'verification_infrastructure_error',
+        verifier_code: 'missing_hand_start_progress',
+      },
+      extra: {
+        gameNumber: input.gameNumber,
+        handIndex: input.handIndex,
+      },
+    },
+  );
+  throw new DailyFritzVerificationError(
+    'Daily Fritz hand verification is missing authoritative hand-start scores while prior verified hands exist.',
+    'missing_hand_start_progress',
+  );
+}
+
 export function writeActiveGameProgress(result: Record<string, unknown> | null, progress: DailyFritzActiveGameProgress): Record<string, unknown> {
   return { ...(result ?? {}), active_game: { game_number: progress.gameNumber, you: progress.you, fritz: progress.fritz } };
 }
@@ -287,24 +365,28 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
       message: input.message,
     },
   });
+  const infrastructureFailure = DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES.has(input.verifierCode);
   // Player was not stranded, but verification failed — alert ops so we can
-  // chase the bug without waiting for a player report.
-  Sentry.captureMessage('[daily-fritz] verification bypassed — run advanced unranked', {
-    level: 'warning',
-    tags: {
-      daily_fritz_alert: 'verification_bypassed',
-      verifier_code: input.verifierCode,
-      operation: input.operation,
-    },
-    extra: {
-      attemptId: input.attemptId,
-      runDate: input.runDate,
-      userId: input.userId,
-      gameNumber: input.gameNumber,
-      handIndex: input.handIndex,
-      message: input.message,
-    },
-  });
+  // chase the bug without waiting for a player report. Infrastructure failures
+  // use a distinct alert tag so they are never confused with cheat rejection.
+  if (!infrastructureFailure) {
+    Sentry.captureMessage('[daily-fritz] verification bypassed — run advanced unranked', {
+      level: 'warning',
+      tags: {
+        daily_fritz_alert: 'verification_bypassed',
+        verifier_code: input.verifierCode,
+        operation: input.operation,
+      },
+      extra: {
+        attemptId: input.attemptId,
+        runDate: input.runDate,
+        userId: input.userId,
+        gameNumber: input.gameNumber,
+        handIndex: input.handIndex,
+        message: input.message,
+      },
+    });
+  }
 }
 
 export function verifyAttemptHand(input: {
@@ -323,7 +405,17 @@ export function verifyAttemptHand(input: {
   if (buildDailyFritzChallengeId(input.run.runDate) !== buildDailyFritzChallengeId(input.attempt.runDate)) {
     throw new DailyFritzVerificationError('Daily Fritz challenge identity is invalid.', 'challenge_mismatch');
   }
-  const progress = readActiveGameProgress(input.attempt.result, input.gameNumber);
+  const startScores = resolveHandStartScoresForVerification({
+    result: input.attempt.result,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+  });
+  assertHandStartScoresAvailableForVerification({
+    result: input.attempt.result,
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    startScores,
+  });
   const authorityContract = readDailyFritzAuthorityContract(input.attempt.result);
   const publishedAuthority = input.publishedChallenge
     ? resolveDailyFritzPublishedGameAuthority({
@@ -353,8 +445,8 @@ export function verifyAttemptHand(input: {
       drawWinner,
       winningScore,
       dealSize,
-      playerScore: progress.you,
-      fritzScore: progress.fritz,
+      playerScore: startScores.you,
+      fritzScore: startScores.fritz,
     }),
     expectedChallengeId: challengeId,
     expectedAttemptId: input.attempt.id,
