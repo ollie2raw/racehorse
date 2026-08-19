@@ -372,6 +372,9 @@ export function useDailyFritzRunController({
           moveLog: game.moveLog as MoveEntry[],
           journal: game.journal ?? null,
           fritzPolicyVersion: run.fritz_policy_version,
+          attemptPredatesJournalRollout:
+            run.verification_status === 'legacy_unverified'
+            || Number(run.verification_protocol_version ?? 0) <= 1,
         });
       } catch (transcriptError) {
         // Competitive attempts must not silently drop evidence and finish unranked.

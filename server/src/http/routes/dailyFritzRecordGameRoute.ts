@@ -40,17 +40,15 @@ import {
   findVerifiedHand,
   isRecoverableDailyFritzCommandConflict,
   parseTranscriptForRequest,
-  pinAuthorityContractFromVerifiedTranscript,
-  attemptVerifyHand,
-  recordDailyFritzAdvanceWithoutVerification,
+  readActiveGameProgress,
+  isDailyFritzGameEndingScore,
   recordDailyFritzEventBestEffort,
   rejectModernAttemptWhenAuthorityDisabled,
   respondVerificationError,
   writeActiveGameProgress,
-  writeUnverifiedDailyFritzHand,
   writeVerifiedGame,
-  writeVerifiedHand,
 } from './dailyFritzVerificationGlue';
+import { scheduleDailyFritzRecordGameVerification } from './dailyFritzRecordGameAsyncVerification';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
 import { DAILY_FRITZ_VERIFIER_VERSION } from '@racehorse/game-core';
 
@@ -200,7 +198,15 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     let movesUsed = Math.round(legacyMovesUsed);
     let handsPlayed = Math.round(legacyHandsPlayed);
     let terminalHandReceipt: VerifiedDailyFritzHandRecord | null = null;
-    let unverifiedFallback = false;
+    let verificationPending = false;
+    let asyncVerificationInput: {
+      transcript: NonNullable<ReturnType<typeof parseTranscriptForRequest>>;
+      expectedPlayerScore: number;
+      expectedFritzScore: number;
+      handIndex: number;
+    } | null = null;
+    const terminalHandIndex = attempt.currentHandIndex;
+    const winningScore = publishedAuthority?.winningScore ?? run.winningScore;
     if (parsedTranscript) {
       // /next-hand may already have verified and persisted this exact terminal
       // hand (it does so before returning "game is complete; finalize" so the
@@ -243,65 +249,51 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
         }
         verifiedHandResult = existingTerminalHand;
       } else {
-        const verification = attemptVerifyHand({
-          transcript: parsedTranscript,
-          attempt,
-          run,
-          userId: authenticatedUserId,
-          gameNumber,
-          handIndex: attempt.currentHandIndex,
-          publishedChallenge: publishedAuthority,
-        });
-        if (!verification.ok) {
-          // Same never-strand rule as /next-hand: a game-ending hand that will
-          // not verify must not trap the player one hand from the finish line.
-          if (!hasLegacyResult) throw verification.error;
-          await recordDailyFritzAdvanceWithoutVerification({
-            attemptId,
-            runDate: attempt.runDate,
-            userId: authenticatedUserId,
-            requestId: diagnostics.requestId,
-            gameNumber,
-            handIndex: attempt.currentHandIndex,
-            verifierCode: verification.error.code,
-            operation: 'record-game',
-            message: verification.error.message,
-          });
-          attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
-            gameNumber,
-            handIndex: attempt.currentHandIndex,
-            verifierCode: verification.error.code,
-          });
-          unverifiedFallback = true;
-          playerScore = Math.round(legacyPlayerScore);
-          fritzScore = Math.round(legacyFritzScore);
-          movesUsed = Math.round(legacyMovesUsed);
-          handsPlayed = Math.round(legacyHandsPlayed);
-          attempt.result = writeActiveGameProgress(attempt.result, {
-            gameNumber,
-            you: playerScore,
-            fritz: fritzScore,
-          });
-        }
-        if (!unverifiedFallback) {
-          const verified = verification.ok ? verification.verified : null;
-          if (!verified?.terminalState.gameOver || verified.result.playerScoreAfter === verified.result.fritzScoreAfter) {
+        // Advance-first: record the game now, verify the terminal hand async.
+        const progress = readActiveGameProgress(attempt.result, gameNumber);
+        const resolvedPlayerScore = hasLegacyResult ? playerScore : progress.you;
+        const resolvedFritzScore = hasLegacyResult ? fritzScore : progress.fritz;
+        if (!isDailyFritzGameEndingScore(resolvedPlayerScore, resolvedFritzScore, winningScore)) {
+          if (!hasLegacyResult) {
             res.status(409).json({ error: 'Daily Fritz game is not complete.' });
             return;
           }
-          verifiedHandResult = verified.result;
-          attempt.result = pinAuthorityContractFromVerifiedTranscript({
-            result: attempt.result,
-            run,
-            transcript: verified.transcript,
-          });
-          attempt.result = writeVerifiedHand(attempt.result, verified.result);
+          // Legacy score fallback when transcript evidence is unusable.
+          if (playerScore === fritzScore) {
+            res.status(400).json({ error: 'Daily Fritz games cannot be recorded with tied scores.' });
+            return;
+          }
+        } else {
+          playerScore = resolvedPlayerScore;
+          fritzScore = resolvedFritzScore;
         }
+        if (hasLegacyResult) {
+          movesUsed = Math.round(legacyMovesUsed);
+          handsPlayed = Math.round(legacyHandsPlayed);
+        } else {
+          const priorHands = readAuthorityLedger(attempt.result).hands.filter(
+            (hand) => hand.gameNumber === gameNumber,
+          );
+          movesUsed = priorHands.reduce((sum, hand) => sum + hand.actionCount, 0);
+          handsPlayed = attempt.currentHandIndex + 1;
+        }
+        attempt.result = writeActiveGameProgress(attempt.result, {
+          gameNumber,
+          you: playerScore,
+          fritz: fritzScore,
+        });
+        verificationPending = true;
+        asyncVerificationInput = {
+          transcript: parsedTranscript,
+          expectedPlayerScore: playerScore,
+          expectedFritzScore: fritzScore,
+          handIndex: terminalHandIndex,
+        };
       }
-      if (!unverifiedFallback) {
-        playerScore = verifiedHandResult!.playerScoreAfter;
-        fritzScore = verifiedHandResult!.fritzScoreAfter;
-        terminalHandReceipt = verifiedHandResult!;
+      if (verifiedHandResult) {
+        playerScore = verifiedHandResult.playerScoreAfter;
+        fritzScore = verifiedHandResult.fritzScoreAfter;
+        terminalHandReceipt = verifiedHandResult;
         attempt.result = writeActiveGameProgress(attempt.result, { gameNumber, you: playerScore, fritz: fritzScore });
         const gameHands = readAuthorityLedger(attempt.result).hands.filter((hand) => hand.gameNumber === gameNumber);
         movesUsed = gameHands.reduce((sum, hand) => sum + hand.actionCount, 0);
@@ -325,7 +317,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     };
     const setResult = appendDailyFritzGameToSet(currentSetResult, gameResult);
 
-    if (parsedTranscript) {
+    if (parsedTranscript && !verificationPending) {
       const gameHands = readAuthorityLedger(attempt.result).hands.filter((hand) => hand.gameNumber === gameNumber);
       const resultDigest = createHash('sha256')
         .update(`${attempt.id}:${gameNumber}:${playerScore}:${fritzScore}:${gameHands.map((hand) => hand.transcriptDigest).join(':')}`)
@@ -344,6 +336,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       previousResult: attempt.result,
       setResult,
       hasTranscript: Boolean(parsedTranscript),
+      verificationPending,
     });
     attempt.result = clearDailyFritzActiveCheckpoint(attempt.result);
     if (!setResult.setWinner) {
@@ -351,7 +344,9 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       attempt.currentGameNumber = Math.min(gameNumber + 1, 3) as DailyFritzSetGameNumber;
     }
     let saved: DailyFritzAttemptRecord;
-    const transactionalGame = Boolean(attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED);
+    const transactionalGame = Boolean(
+      attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED && !verificationPending,
+    );
     if (transactionalGame) {
       const authorityGame = readAuthorityLedger(attempt.result).games.find(
         (game) => game.gameNumber === gameNumber,
@@ -448,7 +443,24 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       authority_revision: saved.revision,
       set_result: savedSetResult ?? setResult,
       next_game_number: setResult.setWinner ? null : Math.min(setResult.games.length + 1, 3),
+      ...(verificationPending ? { verification_pending: true } : {}),
     });
+    if (asyncVerificationInput) {
+      scheduleDailyFritzRecordGameVerification({
+        attemptId,
+        userId: authenticatedUserId,
+        runDate: attempt.runDate,
+        requestId: diagnostics.requestId,
+        gameNumber,
+        handIndex: asyncVerificationInput.handIndex,
+        transcript: asyncVerificationInput.transcript,
+        run,
+        publishedChallenge: publishedAuthority,
+        expectedPlayerScore: asyncVerificationInput.expectedPlayerScore,
+        expectedFritzScore: asyncVerificationInput.expectedFritzScore,
+        challengeId: attempt.challengeId,
+      });
+    }
     });
   } catch (error) {
     if (error instanceof DailyFritzVerificationError) {

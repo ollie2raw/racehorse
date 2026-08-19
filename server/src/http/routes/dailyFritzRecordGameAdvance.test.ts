@@ -52,6 +52,11 @@ vi.mock('../../social/activityWriter', () => ({
 
 import { registerDailyFritzRoutes } from './dailyFritz';
 import { getDailyFritzMetrics, resetDailyFritzMetricsForTests } from './dailyFritzMetrics';
+import {
+  resetRecordGameVerificationDelayMsForTests,
+  runDailyFritzRecordGameVerification,
+  setRecordGameVerificationDelayMsForTests,
+} from './dailyFritzRecordGameAsyncVerification';
 
 type Handler = (req: unknown, res: unknown) => unknown | Promise<unknown>;
 
@@ -83,7 +88,7 @@ const USER_ID = 'user-1';
 const ATTEMPT_ID = 'attempt-1';
 const VERIFIED_MATCH_ID = 'verified-match-1';
 
-function buildAttempt(): DailyFritzAttemptRecord {
+function buildAttempt(overrides: Partial<DailyFritzAttemptRecord> = {}): DailyFritzAttemptRecord {
   return {
     id: ATTEMPT_ID,
     runDate: RUN_DATE,
@@ -141,6 +146,7 @@ function buildAttempt(): DailyFritzAttemptRecord {
     won: null,
     movesUsed: null,
     handsPlayed: null,
+    ...overrides,
   };
 }
 
@@ -159,58 +165,133 @@ function buildRun(): DailyFritzRunRecord {
   };
 }
 
-describe('record-game advance-first with legacy scores', () => {
+function malformedTranscript() {
+  return {
+    protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
+    rulesVersion: GAME_RULES_VERSION,
+    fritzPolicyVersion: FRITZ_POLICY_VERSION,
+    fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+    stateDigestVersion: 1,
+    clientRelease: 'test',
+    challengeId: buildDailyFritzChallengeId(RUN_DATE),
+    attemptId: ATTEMPT_ID,
+    gameNumber: 2,
+    handIndex: 3,
+    actions: [{ sequence: 0, actor: 'player', kind: 'pass' }],
+  };
+}
+
+function recordGameBody(overrides: Record<string, unknown> = {}) {
+  return {
+    attempt_id: ATTEMPT_ID,
+    verified_match_id: VERIFIED_MATCH_ID,
+    run_date: RUN_DATE,
+    game_number: 2,
+    player_score: 60,
+    fritz_score: 34,
+    moves_used: 18,
+    hands_played: 4,
+    transcript: malformedTranscript(),
+    ...overrides,
+  };
+}
+
+async function flushAsyncVerification() {
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+describe('record-game advance-first with async verification', () => {
   const request = makeHarness();
+  let persistedAttempt: DailyFritzAttemptRecord;
 
   beforeEach(() => {
     resetDailyFritzMetricsForTests();
+    resetRecordGameVerificationDelayMsForTests();
     authUserMock.mockResolvedValue(USER_ID);
     process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = 'true';
-    const attempt = buildAttempt();
-    getAttemptByIdMock.mockImplementation(async () => ({ ...attempt }));
-    getAttemptMock.mockImplementation(async () => ({ ...attempt }));
-    upsertAttemptMock.mockImplementation(async (record: DailyFritzAttemptRecord) => ({ ...record, revision: record.revision + 1 }));
+    persistedAttempt = buildAttempt();
+    getAttemptByIdMock.mockImplementation(async () => ({ ...persistedAttempt }));
+    getAttemptMock.mockImplementation(async () => ({ ...persistedAttempt }));
+    upsertAttemptMock.mockImplementation(async (record: DailyFritzAttemptRecord) => {
+      persistedAttempt = { ...record, revision: record.revision + 1 };
+      return persistedAttempt;
+    });
     getRunMock.mockImplementation(async () => buildRun());
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    resetRecordGameVerificationDelayMsForTests();
     delete process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
   });
 
-  it('records game 2 from legacy scores when transcript verification fails', async () => {
+  it('records game 2 from legacy scores when async verification fails', async () => {
     const response = await request('POST', '/api/daily-fritz/record-game', {
-      body: {
-        attempt_id: ATTEMPT_ID,
-        verified_match_id: VERIFIED_MATCH_ID,
-        run_date: RUN_DATE,
-        game_number: 2,
-        player_score: 60,
-        fritz_score: 34,
-        moves_used: 18,
-        hands_played: 4,
-        transcript: {
-          protocolVersion: DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
-          rulesVersion: GAME_RULES_VERSION,
-          fritzPolicyVersion: FRITZ_POLICY_VERSION,
-          fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
-          stateDigestVersion: 1,
-          clientRelease: 'test',
-          challengeId: buildDailyFritzChallengeId(RUN_DATE),
-          attemptId: ATTEMPT_ID,
-          gameNumber: 2,
-          handIndex: 3,
-          actions: [{ sequence: 0, actor: 'player', kind: 'pass' }],
-        },
-      },
+      body: recordGameBody(),
     });
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
+    expect(response.body.verification_pending).toBe(true);
     const games = (response.body.set_result as { games: Array<{ gameNumber: number; playerScore: number; fritzScore: number }> }).games;
     expect(games).toHaveLength(2);
     expect(games[1]).toMatchObject({ gameNumber: 2, playerScore: 60, fritzScore: 34 });
-    expect(getDailyFritzMetrics().verification_bypassed.total).toBeGreaterThan(0);
     expect(response.body.next_game_number).toBe(3);
+
+    await flushAsyncVerification();
+    expect(getDailyFritzMetrics().verification_bypassed.total).toBeGreaterThan(0);
+    expect(persistedAttempt.result?.verification_status).toBe('rejected');
+    expect(persistedAttempt.result?.games).toHaveLength(2);
+    expect((persistedAttempt.result as { games: Array<{ gameNumber: number }> }).games[1].gameNumber).toBe(2);
+  });
+
+  it('returns before a slow async verifier finishes', async () => {
+    setRecordGameVerificationDelayMsForTests(400);
+
+    const startedAt = Date.now();
+    const responsePromise = request('POST', '/api/daily-fritz/record-game', {
+      body: recordGameBody(),
+    });
+    const response = await responsePromise;
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(response.status).toBe(200);
+    expect(response.body.verification_pending).toBe(true);
+    expect(elapsedMs).toBeLessThan(200);
+
+    await flushAsyncVerification();
+    await new Promise((resolve) => {
+      setTimeout(resolve, 450);
+    });
+    expect(persistedAttempt.result?.verification_status).toBe('rejected');
+  });
+
+  it('keeps the recorded game result when async verification rejects the attempt', async () => {
+    const response = await request('POST', '/api/daily-fritz/record-game', {
+      body: recordGameBody(),
+    });
+    expect(response.status).toBe(200);
+    const shownGame = (response.body.set_result as {
+      games: Array<{ gameNumber: number; playerScore: number; fritzScore: number }>;
+    }).games[1];
+
+    await flushAsyncVerification();
+
+    expect(persistedAttempt.result?.verification_status).toBe('rejected');
+    const persistedGame = (persistedAttempt.result as {
+      games: Array<{ gameNumber: number; playerScore: number; fritzScore: number }>;
+    }).games[1];
+    expect(persistedGame).toMatchObject(shownGame);
+    expect(persistedAttempt.currentGameNumber).toBe(3);
+    expect(persistedAttempt.currentHandIndex).toBe(0);
+  });
+
+  it('runDailyFritzRecordGameVerification is exported for deterministic async tests', async () => {
+    expect(typeof runDailyFritzRecordGameVerification).toBe('function');
   });
 });

@@ -20,6 +20,8 @@ type MetricBucket = {
   byCode: Record<string, number>;
 };
 
+// Ephemeral per-process cache only. Canonical operational metrics for
+// dashboards/alerting come from durable daily_fritz_events aggregates.
 const buckets = new Map<DailyFritzMetricName, MetricBucket>();
 
 function bucket(name: DailyFritzMetricName): MetricBucket {
@@ -37,11 +39,10 @@ export function incrementDailyFritzMetric(
   const target = bucket(name);
   target.total += 1;
   if (code) target.byCode[code] = (target.byCode[code] ?? 0) + 1;
-  if (name === 'request_failed' || name === 'verification_failed') {
-    void import('./dailyFritzMetricsExport').then(({ mirrorDailyFritzMetricIncrementBestEffort }) => {
-      mirrorDailyFritzMetricIncrementBestEffort(name, code);
-    }).catch(() => {});
-  }
+  // Mirror to durable events so restarts/horizontal scale keep canonical counts.
+  void import('./dailyFritzMetricsExport').then(({ mirrorDailyFritzMetricIncrementBestEffort }) => {
+    mirrorDailyFritzMetricIncrementBestEffort(name, code);
+  }).catch(() => {});
 }
 
 export function getDailyFritzMetrics(): Record<DailyFritzMetricName, MetricBucket> {

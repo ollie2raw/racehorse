@@ -101,10 +101,24 @@ export function buildDailyFritzTranscript(input: {
    * journal existed (an in-flight attempt resumed across the deploy).
    */
   journal?: DailyFritzJournal | null;
+  /**
+   * Explicit legacy gate: move-log reconstruction is allowed only for attempts
+   * that predate the journal rollout.
+   */
+  attemptPredatesJournalRollout?: boolean;
 }): DailyFritzTranscript {
   const journalActions = toDailyFritzTranscriptActions(input.journal, input.handNumber);
-  const entries = canonicalizeDailyFritzMoveLog(input.moveLog)
-    .filter((entry) => entry.handNumber === input.handNumber);
+  const hasJournal = Boolean(journalActions);
+  // Contract: reconstruct from move-log only when there is no journal AND this
+  // is a pre-journal legacy attempt.
+  const useLegacyMoveLogReconstruction = !hasJournal && input.attemptPredatesJournalRollout === true;
+  if (!hasJournal && !useLegacyMoveLogReconstruction) {
+    throw new Error('Daily Fritz official journal is required for post-journal attempts.');
+  }
+  const entries = useLegacyMoveLogReconstruction
+    ? canonicalizeDailyFritzMoveLog(input.moveLog)
+      .filter((entry) => entry.handNumber === input.handNumber)
+    : [];
   const actions = entries.map((entry, sequence) => {
     const actor = entry.player === 'you' ? 'player' as const : 'fritz' as const;
     if (entry.action === 'place') {
@@ -148,7 +162,7 @@ export function buildDailyFritzTranscript(input: {
 
   // A journalled transcript is already exactly what the engine applied; sealing
   // it could only add an action the engine never accepted.
-  if (journalActions) return transcript;
+  if (hasJournal) return transcript;
 
   return input.sealBlockedHand
     ? sealBlockedDailyFritzTranscript(transcript, input.sealBlockedHand)

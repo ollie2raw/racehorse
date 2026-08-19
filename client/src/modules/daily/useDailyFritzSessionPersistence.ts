@@ -193,7 +193,9 @@ export function useDailyFritzSessionPersistence({
             handIndex: dailyFritzHandIndex,
             handNumber: match.handNumber,
             moveLog,
+            journal: match.officialJournal ?? null,
             fritzPolicyVersion,
+            attemptPredatesJournalRollout: transcriptProtocolVersion === 1,
           });
         } catch {
           return null;

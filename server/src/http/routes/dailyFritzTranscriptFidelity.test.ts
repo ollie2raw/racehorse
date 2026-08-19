@@ -300,6 +300,7 @@ function buildTranscriptForHand(
   const { match, moveLog } = hand;
   return buildDailyFritzTranscript({
     ...(useJournal ? { journal: match.officialJournal ?? null } : {}),
+    attemptPredatesJournalRollout: !useJournal,
     challengeId: CHALLENGE_ID,
     attemptId: ATTEMPT_ID,
     gameNumber: 1,

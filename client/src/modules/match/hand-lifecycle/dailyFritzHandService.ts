@@ -67,6 +67,9 @@ export function buildDailyFritzPrefetchParams(
       moveLog,
       protocolVersion: transcriptProtocolVersion,
       fritzPolicyVersion: dailyFritzPackage.fritz_policy_version,
+      attemptPredatesJournalRollout:
+        transcriptProtocolVersion === 1
+        || dailyFritzPackage.verification_status === 'legacy_unverified',
       // Authoritative evidence, written inside each engine command. When it is
       // present the move-log reconstruction and the seal below are both unused.
       journal: match.officialJournal ?? null,
