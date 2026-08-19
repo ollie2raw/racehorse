@@ -20,6 +20,8 @@ import {
   getNextGameNumberFromSetResult,
   normalizeGameNumber,
   normalizeSetResult,
+  resolveStartNextAction,
+  resolveTodayNextAction,
   normalizeStartResponse,
   resolveDailyFritzCurrentGameNumber,
 } from './dailyFritzScreenHelpers';
@@ -244,7 +246,7 @@ export function useDailyFritzRunController({
     fallbackSetResult: DailyFritzSetResult | null,
   ) => {
     const normalized = normalizeStartResponse(started, fallbackSetResult);
-    if (normalized.needs_completion && normalized.set_result?.setWinner) {
+    if (resolveStartNextAction(normalized) === 'finalize_set' && normalized.set_result?.setWinner) {
       const completedGame =
         normalized.set_result.games[normalized.set_result.games.length - 1] ??
         buildCompletedGame(normalized, {
@@ -333,12 +335,8 @@ export function useDailyFritzRunController({
   }, [handleStartResponse, setOverlay, setHubError, today]);
 
   useEffect(() => {
-    if (
-      today?.attempt_status !== 'started'
-      || !today.needs_completion
-      || !normalizeSetResult(today.set_result ?? today.result)?.setWinner
-      || activeRun
-    ) return;
+    if (resolveTodayNextAction(today) !== 'finalize_set' || activeRun) return;
+    if (!normalizeSetResult(today?.set_result ?? today?.result)?.setWinner) return;
     void continueSet();
   }, [activeRun, continueSet, today]);
 
