@@ -12,6 +12,7 @@ import {
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
 import { saveDailyFritzCheckpoint, recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
+import { reportDailyFritzOperationalAlert } from '../../dailyFritz/dailyFritzObservability.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../dailyFritz/telemetry.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
@@ -136,6 +137,17 @@ export function useDailyFritzSessionPersistence({
           matchHandNumber: match.handNumber,
           lifecyclePhase: match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand',
         });
+        reportDailyFritzOperationalAlert(
+          'cursor_divergence',
+          'Daily Fritz checkpoint cursor divergence',
+          {
+            attemptId,
+            gameNumber,
+            handIndex: dailyFritzHandIndex,
+            authorityRevision,
+            matchHandNumber: match.handNumber,
+          },
+        );
         const sessionId = getDailyFritzTelemetrySession(runDate);
         void recordDailyFritzTelemetry({
           eventId: dailyFritzTelemetryEventId(attemptId, 'recovery_started', `cursor-divergence:${divergenceKey}`),

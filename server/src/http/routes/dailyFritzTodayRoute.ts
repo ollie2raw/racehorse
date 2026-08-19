@@ -28,6 +28,8 @@ import {
 } from './dailyFritzVerificationPolicy';
 import { DAILY_FRITZ_COMPETITIVE_VERIFICATION_AVAILABLE } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
+import { readDailyFritzActiveCheckpoint } from './dailyFritzCheckpointPolicy';
+import { resolveDailyFritzClientNextAction } from './dailyFritzClientPhase';
 
 export function registerDailyFritzTodayRoutes(app: Application): void {
   app.get('/api/daily-fritz/history', async (req, res) => {
@@ -192,6 +194,20 @@ export function registerDailyFritzTodayRoutes(app: Application): void {
     }
 
     const serializeStartedAt = Date.now();
+    const activeCheckpoint = attempt ? readDailyFritzActiveCheckpoint(attempt.result) : null;
+    const hasResumeCheckpoint = Boolean(
+      activeCheckpoint
+      && attempt
+      && activeCheckpoint.currentHandIndex === attempt.currentHandIndex
+      && activeCheckpoint.authorityRevision === attempt.revision,
+    );
+    const nextAction = resolveDailyFritzClientNextAction({
+      attemptStatus: attempt?.status ?? null,
+      setResult: attemptSetResult,
+      needsCompletion,
+      currentHandIndex: attempt?.currentHandIndex ?? 0,
+      hasResumeCheckpoint,
+    });
     const payload = {
       ok: true,
       run_date: run.runDate,
@@ -204,6 +220,7 @@ export function registerDailyFritzTodayRoutes(app: Application): void {
       winning_score: run.winningScore,
       attempt_status: attempt?.status ?? 'none',
       authority_revision: attempt?.revision ?? null,
+      next_action: nextAction,
       verification_protocol_version:
         attemptAuthorityContract?.transcriptProtocolVersion
         ?? DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,

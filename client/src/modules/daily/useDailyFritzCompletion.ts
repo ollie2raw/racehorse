@@ -107,6 +107,7 @@ export function useDailyFritzCompletion({
       handsPlayed: match.handNumber,
       currentHandIndex: dailyFritzHandIndex,
       moveLog: JSON.parse(JSON.stringify(moveLog)) as MoveEntry[],
+      journal: match.officialJournal ?? null,
     };
     void Promise.resolve(onDailyFritzGameComplete(payload))
       .then(() => {
@@ -126,6 +127,7 @@ export function useDailyFritzCompletion({
     enabled,
     match.gameOver,
     match.handNumber,
+    match.officialJournal,
     match.players.bot.score,
     match.players.you.score,
     match.winnerId,
