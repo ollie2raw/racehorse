@@ -6,6 +6,8 @@ import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 export interface DailyPuzzleScreenProps {
   user: User | null;
   profile: UserProfile | null;
+  initialView?: 'hub' | 'leaderboard';
+  onLeaderboardClose?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/daily-fritz", "destination": "/daily-fritz.html" },
+    { "source": "/daily-fritz/leaderboard", "destination": "/daily-fritz-leaderboard.html" },
+    { "source": "/daily", "destination": "/daily.html" },
+    { "source": "/daily/leaderboard", "destination": "/daily-leaderboard.html" },
+    { "source": "/solo", "destination": "/solo.html" },
+    { "source": "/solo/fritz", "destination": "/solo-fritz.html" },
+    { "source": "/solo/ghost", "destination": "/solo-ghost.html" },
+    { "source": "/multiplayer", "destination": "/multiplayer.html" },
+    { "source": "/multiplayer/private", "destination": "/multiplayer-private.html" },
+    { "source": "/social", "destination": "/social.html" },
+    { "source": "/players/:username", "destination": "/players.html" },
+    { "source": "/journey", "destination": "/journey.html" },
+    { "source": "/learn", "destination": "/learn.html" },
+    { "source": "/learn/how-to-play", "destination": "/learn-how-to-play.html" },
+    { "source": "/tournament", "destination": "/tournament.html" },
+    { "source": "/tournament/:id/result", "destination": "/tournament-result.html" },
+    { "source": "/tournament/:id", "destination": "/tournament-detail.html" },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

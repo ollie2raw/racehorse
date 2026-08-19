@@ -19,6 +19,7 @@ export type UseDailyPuzzleArchiveLeaderboardParams = {
   userId: string | null;
   puzzleDate: string | null | undefined;
   showLobby: boolean;
+  initialLeaderboardOpen?: boolean;
 };
 
 export function useDailyPuzzleArchiveLeaderboard({
@@ -26,11 +27,12 @@ export function useDailyPuzzleArchiveLeaderboard({
   userId,
   puzzleDate,
   showLobby,
+  initialLeaderboardOpen = false,
 }: UseDailyPuzzleArchiveLeaderboardParams) {
   const [selectedDateSeed, setSelectedDateSeed] = useState(localDateKey);
   const [archiveDateInput, setArchiveDateInput] = useState(localDateKey);
   const [archivePickerOpen, setArchivePickerOpen] = useState(false);
-  const [dailyLeaderboardOpen, setDailyLeaderboardOpen] = useState(false);
+  const [dailyLeaderboardOpen, setDailyLeaderboardOpen] = useState(initialLeaderboardOpen);
   const [leaderboard, setLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const leaderboardLoadIdRef = useRef(0);

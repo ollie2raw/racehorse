@@ -55,6 +55,13 @@ grants. The later files remain responsible for source idempotency, making its
 unique index inferable by PostgREST's explicit conflict target, and the atomic
 rating-update RPC respectively.
 
+After those files, run
+`supabase/migrations/2026-08-11_authoritative_ranking_and_bot_pending.sql`.
+This removes direct `anon`/`authenticated` access to ranking records and
+`bot_match_pending`, makes the Glicko commit RPC service-role-only, and limits
+direct profile writes to updates of the authenticated user's `username`; the
+signup trigger remains responsible for inserting the profile row.
+
 ## Daily Fritz transactional-authority upgrade (2026-08-01)
 
 Keep `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=false` while applying these files in this exact order:

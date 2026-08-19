@@ -41,7 +41,7 @@ async function openLiveNow(page: Page) {
 }
 
 async function openDailyFritzMatch(page: Page) {
-  await page.goto('/#/daily-fritz');
+    await page.goto('/daily-fritz');
   await expect(page.getByRole('heading', { name: 'Daily Fritz' })).toBeVisible({ timeout: 20_000 });
   await page.locator('.df-pvf-start-btn').click();
   await expect(page.locator('.bot-match-screen.bot-match-mode-daily-fritz')).toBeVisible({ timeout: 30_000 });

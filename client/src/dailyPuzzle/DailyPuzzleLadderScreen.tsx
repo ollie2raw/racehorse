@@ -60,6 +60,8 @@ interface DailyPuzzleLadderScreenProps {
   user: User | null;
   profile: UserProfile | null;
   initialToday: DailyPuzzleTodayResponse;
+  initialLeaderboardOpen?: boolean;
+  onLeaderboardClose?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -73,6 +75,8 @@ export default function DailyPuzzleLadderScreen({
   user,
   profile,
   initialToday,
+  initialLeaderboardOpen = false,
+  onLeaderboardClose,
   onBack,
   onNavigate,
   onOpenAuth,
@@ -92,7 +96,7 @@ export default function DailyPuzzleLadderScreen({
   const [hubError, setHubError] = useState<string | null>(null);
   const [startPending, setStartPending] = useState(false);
   const [finalizePending, setFinalizePending] = useState(false);
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(initialLeaderboardOpen);
   const [slotOverlay, setSlotOverlay] = useState<{
     response: DailyPuzzleSubmitSlotResponse;
     rawScore: number;
@@ -456,7 +460,8 @@ export default function DailyPuzzleLadderScreen({
         onFinalLeaderboard: () => {
           setFinalOverlay(null);
           exitPlayToHub();
-          setLeaderboardOpen(true);
+          if (onNavigate) onNavigate('dailyPuzzleLeaderboard');
+          else setLeaderboardOpen(true);
         },
       }}
     />
@@ -470,7 +475,10 @@ export default function DailyPuzzleLadderScreen({
         currentUsername={profile?.username ?? null}
         currentUserId={user?.id ?? null}
         glickoRating={profile?.glicko_rating ?? null}
-        onBack={() => setLeaderboardOpen(false)}
+        onBack={() => {
+          if (onLeaderboardClose) onLeaderboardClose();
+          else setLeaderboardOpen(false);
+        }}
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
         onOpenAccount={onOpenAccount}
@@ -534,7 +542,10 @@ export default function DailyPuzzleLadderScreen({
           onOpenAccount,
           onStartScored: handleStartScored,
           onStartPractice: handleStartPractice,
-          onOpenLeaderboard: () => setLeaderboardOpen(true),
+          onOpenLeaderboard: () => {
+            if (onNavigate) onNavigate('dailyPuzzleLeaderboard');
+            else setLeaderboardOpen(true);
+          },
           onShareResult: handleShareLadderResult,
         }}
       />

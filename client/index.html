@@ -4,7 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Racehorse Dominoes</title>
+    <title>Racehorse Dominoes | Daily Strategy Game</title>
+    <meta name="description" content="Play Racehorse Dominoes with daily strategy challenges, competitive modes, guided learning, and Fritz." />
+    <link rel="canonical" href="https://playracehorse.com/" />
+    <meta property="og:title" content="Racehorse Dominoes | Daily Strategy Game" />
+    <meta property="og:description" content="Play Racehorse Dominoes with daily strategy challenges, competitive modes, guided learning, and Fritz." />
+    <meta property="og:image" content="https://playracehorse.com/homeOG.png" />
+    <meta property="og:url" content="https://playracehorse.com/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Racehorse Dominoes | Daily Strategy Game" />
+    <meta name="twitter:description" content="Play Racehorse Dominoes with daily strategy challenges, competitive modes, guided learning, and Fritz." />
+    <meta name="twitter:image" content="https://playracehorse.com/homeOG.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -12,11 +23,57 @@
       body {
         margin: 0;
         background: #020617;
+        color: #f7f1e3;
+        font-family: "Outfit", system-ui, sans-serif;
+      }
+      .prerendered-page {
+        box-sizing: border-box;
+        min-height: 100vh;
+        display: grid;
+        align-content: center;
+        gap: 16px;
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 48px 24px;
+      }
+      .prerendered-page h1,
+      .prerendered-page p {
+        margin: 0;
+      }
+      .prerendered-page h1 {
+        font-size: clamp(40px, 7vw, 72px);
+        line-height: 0.98;
+      }
+      .prerendered-page p,
+      .prerendered-page a {
+        color: #b9c7db;
+        font-size: 18px;
+      }
+      .prerendered-page nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .prerendered-page a {
+        color: #58a6ff;
       }
     </style>
-</head>
+  </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="prerendered-page">
+        <p>Racehorse Dominoes</p>
+        <h1>Daily dominoes, built for strategy.</h1>
+        <p>Play today’s Daily Fritz set, solve the Daily Puzzle, learn the game, or compete online.</p>
+        <nav aria-label="Game modes">
+          <a href="/daily-fritz">Daily Fritz</a>
+          <a href="/daily">Daily Puzzle</a>
+          <a href="/solo">Single Player</a>
+          <a href="/learn">Learn</a>
+          <a href="/tournament">Tournament</a>
+        </nav>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
