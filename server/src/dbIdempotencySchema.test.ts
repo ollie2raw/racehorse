@@ -127,6 +127,37 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql.match(/on conflict do nothing/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('ships Fritz Challenge CAS, immutable verification receipts, and attempt-scoped outbox primitives', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_fritz_challenge_authority_primitives.sql',
+    ));
+    expect(sql).toContain('add column if not exists revision bigint not null default 0');
+    expect(sql).toContain('create trigger protect_fritz_challenge_contract');
+    expect(sql).toContain('fritz_challenge_contract_is_immutable');
+    expect(sql).toContain('create trigger protect_fritz_challenge_hand');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_attempt_operations');
+    expect(sql).toContain('unique (attempt_id, operation_id)');
+    expect(sql).toContain('unique (user_id, challenge_id, operation_id)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_verified_hands');
+    expect(sql).toContain('primary key (attempt_id, game_number, hand_index)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_verified_games');
+    expect(sql).toContain('primary key (attempt_id, game_number)');
+    expect(sql).toContain('create table if not exists public.fritz_challenge_outbox');
+    expect(sql).toContain('unique (attempt_id, operation_id, event_type)');
+    expect(sql).toContain('where delivered_at is null');
+    expect(sql).toContain('create or replace function public.commit_fritz_challenge_attempt_command');
+    expect(sql).toContain('for update');
+    expect(sql).toContain("'stale_revision'");
+    expect(sql).toContain("'command_slot_conflict'");
+    expect(sql).toContain('revision = next_revision');
+    expect(sql).toContain('insert into public.fritz_challenge_verified_hands');
+    expect(sql).toContain('insert into public.fritz_challenge_verified_games');
+    expect(sql).toContain('insert into public.fritz_challenge_outbox');
+    expect(sql).toContain('create or replace function public.start_fritz_challenge_attempt_command');
+    expect(sql).toContain('pg_advisory_xact_lock');
+    expect(sql).toContain("'operation_id_reused'");
+  });
+
   it('keeps scheduled tournament bracket-slot uniqueness', () => {
     const sql = compactSql(readRepoFile('supabase/migrations/2026-05-14_scheduled_tournaments.sql'));
 
@@ -244,19 +275,18 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('idx_daily_fritz_events_user_retention');
   });
 
-  it('ships room_command_receipts for durable game:action idempotency', () => {
-    const standalone = compactSql(readRepoFile('supabase/room_command_receipts.sql'));
-    const migration = compactSql(
-      readRepoFile('supabase/migrations/2026-08-01_room_command_receipts.sql'),
-    );
-
-    for (const sql of [standalone, migration]) {
-      expect(sql).toContain('create table if not exists public.room_command_receipts');
-      expect(sql).toContain('primary key (room_code, player_seat_id, request_id)');
-      expect(sql).toContain('ack jsonb not null');
-      expect(sql).toContain('expires_at timestamptz not null');
-      expect(sql).toContain('alter table public.room_command_receipts enable row level security');
-      expect(sql).toContain('room_command_receipts_no_client_write');
-    }
+  it('ships Fritz Challenge canonical funnel and failure metrics', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-02_fritz_challenge_canonical_telemetry.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.fritz_challenge_events');
+    expect(sql).toContain('idempotency_key text not null unique');
+    expect(sql).toContain("'attempt_completed'");
+    expect(sql).toContain("'verification_failed'");
+    expect(sql).toContain('create or replace function public.project_fritz_challenge_outbox_event');
+    expect(sql).toContain("'outbox:' || new.id::text");
+    expect(sql).toContain('analytics_projected_at');
+    expect(sql).toContain('create or replace view public.fritz_challenge_funnel_metrics');
+    expect(sql).toContain('create or replace view public.fritz_challenge_failure_metrics');
   });
 });

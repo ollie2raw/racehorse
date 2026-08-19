@@ -17,7 +17,6 @@ import {
 } from './api';
 import {
   DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
   type CuratedDailyPuzzle,
   type DailyPuzzleTodayResponse,
   type PuzzleValidationResult,
@@ -167,11 +166,7 @@ export default function DailyPuzzleScreen({
         const todayResponse = await getTodayDailyPuzzleLadder();
         if (cancelled) return;
         setLadderStatusError(null);
-        const publishedCount = todayResponse.slots.length;
-        if (
-          !todayResponse.legacySinglePuzzleDay
-          && (publishedCount === DAILY_PUZZLE_SLOT_COUNT || publishedCount === LEGACY_DAILY_PUZZLE_SLOT_COUNT)
-        ) {
+        if (!todayResponse.legacySinglePuzzleDay && todayResponse.slots.length === DAILY_PUZZLE_SLOT_COUNT) {
           setLadderToday(todayResponse);
           setEntryMode('ladder');
           return;
@@ -585,11 +580,11 @@ export default function DailyPuzzleScreen({
       <LayoutScreen
         className="screen lobby-screen mode-home-screen daily-puzzle-root"
         title="Today’s Puzzle Ladder is being prepared"
-        subtitle="Three puzzles. Same boards for everyone."
+        subtitle="Five fixed puzzles. Same ladder for everyone."
         contentClassName="screen-shell"
       >
         <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }} role="alert">
-          We couldn’t publish today’s full three-puzzle ladder yet. Please check back soon, or refresh in a few
+          We couldn’t publish today’s full five-puzzle ladder yet. Please check back soon, or refresh in a few
           minutes.
         </p>
         <button
@@ -618,7 +613,7 @@ export default function DailyPuzzleScreen({
         {import.meta.env.DEV ? (
           <p className="lobby-server" style={{ marginTop: '1rem', maxWidth: '42rem' }}>
             Local dev: ensure API is running on port 3001 (Vite proxies <code>/api</code> there), with{' '}
-            <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code> in the server env, then seed three slots:{' '}
+            <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code> in the server env, then seed five slots:{' '}
             <code>
               {`npm run build --prefix server && node server/dist/seedDailyPuzzleLadder.js --date ${ladderToday.runDate} --force`}
             </code>

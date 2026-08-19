@@ -3,12 +3,7 @@ import {
   type DailyPuzzleStepPresentation,
 } from './presentation';
 import type { DailyPuzzleSlot, DailyPuzzleSlotResult } from './types';
-import {
-  DAILY_PUZZLE_SLOT_COUNT,
-  DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
-  type DailyPuzzleSlotIndex,
-} from './types';
+import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlotIndex } from './types';
 
 export type LadderSlotBreakdownChip = {
   slotIndex: DailyPuzzleSlotIndex;
@@ -39,7 +34,7 @@ function ladderIndicesForSlots(slots: Array<{ slotIndex: number }>): readonly Da
 export function buildLadderSlotBreakdown(
   completedSlots: DailyPuzzleSlotResult[],
 ): LadderSlotBreakdownChip[] {
-  return ladderIndicesForSlots(completedSlots).map((slotIndex) => {
+  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const result = completedSlots.find((entry) => entry.slotIndex === slotIndex);
     const step = getDailyPuzzleStepPresentation(slotIndex);
     return {
@@ -57,9 +52,7 @@ export function buildLadderSlotRows(params: {
   nextSlotIndex: DailyPuzzleSlotIndex | null;
 }): LadderSlotRowViewModel[] {
   const { hubSlots, completedSlots, attemptStatus, nextSlotIndex } = params;
-  const indices = ladderIndicesForSlots(hubSlots);
-  const isThreeRung = indices.length === DAILY_PUZZLE_SLOT_COUNT;
-  return indices.map((slotIndex) => {
+  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const slot = hubSlots.find((s) => s.slotIndex === slotIndex);
     const slotResult = completedSlots.find((e) => e.slotIndex === slotIndex);
     const isCompleteRun = attemptStatus === 'completed';
@@ -75,11 +68,8 @@ export function buildLadderSlotRows(params: {
     } else if (isAvailable) {
       statusSub = 'Available now';
     } else if (isLocked) {
-      const isOptionalMaster = isThreeRung && slotIndex === DAILY_PUZZLE_SLOT_COUNT;
-      statusSub = isOptionalMaster ? 'Optional' : 'Locked';
-      unlockHint = isOptionalMaster
-        ? 'Optional · finish Read to unlock'
-        : `Complete puzzle ${slotIndex - 1} to unlock`;
+      statusSub = 'Locked';
+      unlockHint = `Complete puzzle ${slotIndex - 1} to unlock`;
     } else {
       statusSub = 'Up next';
     }

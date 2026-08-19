@@ -18,6 +18,11 @@ on:
         required: true
         default: '2'
         type: string
+      run_date:
+        description: Optional non-production YYYY-MM-DD challenge fixture date
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -56,6 +61,7 @@ jobs:
           DAILY_FRITZ_SOAK_BASE_URL: ${{ inputs.base_url }}
           DAILY_FRITZ_SOAK_USERS: ${{ inputs.users }}
           DAILY_FRITZ_SOAK_CONCURRENCY: ${{ inputs.concurrency }}
+          DAILY_FRITZ_SOAK_RUN_DATE: ${{ inputs.run_date }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

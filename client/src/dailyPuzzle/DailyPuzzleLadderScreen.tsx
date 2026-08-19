@@ -21,7 +21,7 @@ import type {
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import { DAILY_PUZZLE_SLOT_COUNT, LEGACY_DAILY_PUZZLE_SLOT_COUNT } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -131,7 +131,7 @@ export default function DailyPuzzleLadderScreen({
       Boolean(
         attempt &&
           attempt.status === 'started' &&
-          attempt.result.slots.length >= publishedSlotCount,
+          attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT,
       ),
     [attempt, publishedSlotCount],
   );
@@ -218,6 +218,8 @@ export default function DailyPuzzleLadderScreen({
       setStartPending(false);
     }
   }, [attempt, finalizePending, finalizeReady, launchSlot, runFinalize, startPending, today.runDate]);
+
+  const hubSlots = today.attemptSlots ?? today.slots;
 
   const handleStartPractice = useCallback((slotIndex: DailyPuzzleSlotIndex) => {
     const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);
@@ -512,9 +514,7 @@ export default function DailyPuzzleLadderScreen({
     const trustLine = isLadderComplete
       ? 'Practice any puzzle after your scored run.'
       : needsFinalize
-        ? publishedSlotCount === LEGACY_DAILY_PUZZLE_SLOT_COUNT
-          ? 'All five puzzles are scored. Finalize to unlock review and the leaderboard.'
-          : 'All three puzzles are scored. Finalize to unlock review and the leaderboard.'
+        ? 'All five puzzles are scored. Finalize to unlock review and the leaderboard.'
         : 'Leaderboard updates after a scored run.';
 
     return (
@@ -581,7 +581,7 @@ export default function DailyPuzzleLadderScreen({
           hudCenter={
             <div className="wl-center-status" data-ui="turn-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
-                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / {publishedSlotCount}</span>
+                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 5</span>
             </div>
           }
           hudRight={

@@ -66,7 +66,15 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   const dailyFritzStorageKey = resolveDailyFritzStorageKey(mode, dailyFritzPackage);
   const initialPersistedDailyFritzMatch = loadDailyFritzResumeSnapshot(
     dailyFritzStorageKey,
-    dailyFritzPackage,
+    dailyFritzPackage?.attempt_id,
+    Number(dailyFritzPackage?.current_hand_index ?? 0),
+    dailyFritzPackage?.run_date,
+    undefined,
+    dailyFritzPackage?.run_fingerprint,
+    dailyFritzPackage?.fritz_policy_version,
+    dailyFritzPackage?.fritz_policy_contract,
+    dailyFritzPackage?.authority_revision,
+    dailyFritzPackage?.current_game_number ?? 1,
   );
   const resumablePersistedDailyFritzMatch =
     initialPersistedDailyFritzMatch?.match &&

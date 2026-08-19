@@ -33,6 +33,13 @@ export type DailyPuzzleType =
   | 'setup_and_strike'
   | 'branch_mastery';
 
+export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
+export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
+export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
+export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
+export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
+export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
+
 export interface CuratedDailyPuzzleRow {
   id: string;
   puzzle_date: string;
@@ -160,7 +167,7 @@ export interface DailyPuzzleTodayResponse {
   attemptStatus: DailyPuzzleAttemptStatus;
   attempt: DailyPuzzleAttempt | null;
   nextAvailableSlotIndex: DailyPuzzleSlotIndex | null;
-  /** All published slots scored but /complete not persisted yet. */
+  /** All five slots scored but /complete not persisted yet. */
   finalizeReady?: boolean;
   leaderboardPreview: DailyPuzzleLeaderboardRow[];
   legacySinglePuzzleDay: boolean;
@@ -210,9 +217,21 @@ export interface DailyPuzzleCompleteResponse {
   replayed: boolean;
 }
 
-// Identical shape to the server's DailyPuzzleLeaderboardEntry — single-sourced
-// from @racehorse/game-core so client and server can't diverge on field names.
-export type DailyPuzzleLeaderboardRow = DailyPuzzleLeaderboardEntry;
+export interface DailyPuzzleLeaderboardRow {
+  rank: number;
+  userId: string;
+  username: string;
+  puzzlesCompleted: number;
+  totalScore: number;
+  masterChainScore: number;
+  completedAt: string | null;
+  breakdown: Array<{
+    slotIndex: DailyPuzzleSlotIndex;
+    awardedPoints: number | null;
+    perfect: boolean;
+    solved: boolean;
+  }>;
+}
 
 export interface DailyPuzzleLeaderboardResponse {
   ok: true;

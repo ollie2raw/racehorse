@@ -43,6 +43,10 @@ import type {
   UseHandLifecycleArgs,
   UseHandLifecycleResult,
 } from '../hand-lifecycle/types.ts';
+import {
+  buildDailyFritzStorageKey,
+  discardDailyFritzSnapshot,
+} from '../../daily/dailyFritzSessionStorage.ts';
 import { recordDailyFritzTelemetry } from '../../../dailyFritz/api.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../../dailyFritz/telemetry.ts';
 
@@ -209,6 +213,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         });
         setDailyFritzHandResult(null);
         transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
+        reloadRequiredRef.current = false;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
         // Keep the hand-over surface mounted until the new deal is accepted.
@@ -477,6 +482,25 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               },
             });
           };
+          // A hand-end callback can run before the final move-log write is
+          // observable. Never make the player recover from that local timing
+          // race: discard the frozen prefetch evidence and rebuild it once.
+          if (verifierCode === 'incomplete_transcript' && failureAttempt <= 2) {
+            prefetchCoordinator.clear();
+            completedHandEvidenceRef.current = null;
+            advanceRetry.schedule(150, 'rebuild-incomplete-transcript', () => advanceHandRef.current());
+            return;
+          }
+          // A concurrent resume or a checkpoint assembled during a move-log
+          // write can briefly submit actions out of order. Rebuild the frozen
+          // evidence once or twice before surfacing recovery UI; the server
+          // still verifies the rebuilt transcript exactly.
+          if (verifierCode === 'wrong_actor' && failureAttempt <= 2) {
+            prefetchCoordinator.clear();
+            completedHandEvidenceRef.current = null;
+            advanceRetry.schedule(150, 'rebuild-wrong-actor-transcript', () => advanceHandRef.current());
+            return;
+          }
           emitHandLifecycleDebugLog({
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
@@ -493,27 +517,17 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           });
           if (!isRetryable) {
             const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
-            const recovery = resolveDailyFritzCompletedHandNextHandFailure({
-              verifierCode,
-              status,
-              failureAttempt,
-            });
-            if (recovery.kind === 'unverified_fallback') {
-              // The player cannot get this hand verified. Continue the run
-              // without a receipt (the server marks it unranked) rather than
-              // leaving them stuck on Hand Over with nothing but a Retry.
-              unverifiedFallbackRef.current = { attempts: recovery.attempts };
-              prefetchCoordinator.clear();
-              logDailyFritzHandBreadcrumb('unverified-fallback-requested', {
-                reason: recovery.reason,
-                source,
-                failureAttempt,
-                status,
-                verifierCode,
-              });
-              emitModalFailureTelemetry('unverified_fallback');
-              advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
-              return;
+            if (status === 400 || isRecoverableDailyFritzAuthorityCode(verifierCode)) {
+              discardDailyFritzSnapshot(buildDailyFritzStorageKey(
+                dailyFritzPackage.attempt_id,
+                prefetchParams.gameNumber,
+              ));
+              reloadRequiredRef.current = true;
+              setHandAdvanceError(
+                'This hand could not be verified. Restore the official hand to continue; your verified score is safe.',
+              );
+            } else {
+              setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
             }
             if (recovery.kind === 'rebuild') {
               prefetchCoordinator.clear();
@@ -531,16 +545,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               error: errMsg,
             });
             setShowManualHandAdvance(true);
-            emitModalFailureTelemetry('show_modal_retry');
-            // Keep retrying on the player's behalf. Without this the failure
-            // counter only advances when they tap Retry, so the unranked
-            // fallback below would never be reached on its own and the banner
-            // would be a dead end.
-            advanceRetry.schedule(
-              Math.min(1200 * failureAttempt, 5000),
-              `${recovery.reason}-auto-retry`,
-              () => advanceHandRef.current(),
-            );
+            emitModalFailureTelemetry(reloadRequiredRef.current
+              ? 'discard_checkpoint_and_reload_authority'
+              : 'show_modal_retry');
             traceHandLifecycle('error', {
               source,
               error: errMsg,

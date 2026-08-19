@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../components';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
-import type { LegacyReviewEvaluationDisclosure } from '@racehorse/game-core/reviewContracts';
-import type { AnalyzedMove, GameAnalysis, MoveRating } from './moveAnalyzer';
+import {
+  LEGACY_ANALYSIS_DISCLOSURE,
+  type AnalyzedMove,
+  type GameAnalysis,
+  type MoveRating,
+} from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import { buildReviewSidebarCopy } from './reviewSidebarCopy';
 import './GameReviewer.css';

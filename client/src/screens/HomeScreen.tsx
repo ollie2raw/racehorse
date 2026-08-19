@@ -287,10 +287,10 @@ export default function RacehorseHomeScreen({
             <section className={`daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-5 py-5 desk:px-7 desk:py-8${puzzleCompleted ? ' daily-card--completed' : ''}`} aria-label={puzzleCompleted ? 'Daily Puzzle completed results' : 'Daily Puzzle'}>
               <div className="home-card-art home-card-art--puzzle" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
-              <div className="home-card-content relative flex items-center desk:h-[268px]">
-                <div className="home-card-text flex flex-1 flex-col justify-center">
-                  <h2 className="text-[27px] font-bold tracking-[-0.05em] text-[#58A6FF] desk:text-[44px] desk:tracking-[-0.055em]">Daily Puzzle</h2>
-                  <p className="mt-1.5 text-[14px] text-[#C4C1CC] leading-snug desk:mt-3 desk:text-[18px] desk:leading-relaxed">{puzzleCompleted ? "Today's result" : 'Three puzzles. The first one is today’s ritual.'}</p>
+              <div className="home-card-content relative flex h-[268px] items-center">
+                <div className="flex flex-1 flex-col justify-center">
+                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Five daily puzzles. One shared challenge.'}</p>
                   {puzzleCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Puzzle result summary">
                       <span className="home-daily-result-badge" role="status">{puzzleResultCopy.badge}</span>

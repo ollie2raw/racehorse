@@ -14,23 +14,98 @@ import {
   type DailyPuzzleTier,
 } from '@racehorse/game-core';
 
-// Re-exported from the shared contracts package (@racehorse/game-core/dtoContracts)
-// so the client and server share a single declaration — see that file for the
-// canonical definitions and the drift-prevention rationale.
-export {
-  DAILY_PUZZLE_SLOT_COUNT,
-  DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
-  type DailyPuzzleAttempt,
-  type DailyPuzzleAttemptStatus,
-  type DailyPuzzleLeaderboardEntry,
-  type DailyPuzzlePracticeMode,
-  type DailyPuzzleSlot,
-  type DailyPuzzleSlotIndex,
-  type DailyPuzzleSlotResult,
-  type DailyPuzzleTier,
-};
+export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
+export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
+export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
+export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
+export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
+export type DailyPuzzleSlotIndex = (typeof DAILY_PUZZLE_SLOT_INDICES)[number];
+
+export interface DailyPuzzleSlot {
+  id: string;
+  puzzleDate: string;
+  slotIndex: DailyPuzzleSlotIndex;
+  slotTitle: string;
+  tier: DailyPuzzleTier;
+  puzzleType: string;
+  maxMoves: number;
+  targetScore: number;
+  dealSize: number;
+  slotMaxPoints: number;
+  bestPossibleScore: number | null;
+  startingBoard: unknown;
+  startingHand: unknown;
+  objectiveType: string;
+  objectivePayload: Record<string, unknown>;
+  setVersion: number;
+  published: boolean;
+}
+
+export interface DailyPuzzleSlotResult {
+  id: string;
+  attemptId: string;
+  puzzleId: string;
+  puzzleDate: string;
+  userId: string;
+  slotIndex: DailyPuzzleSlotIndex;
+  tier: DailyPuzzleTier;
+  slotTitle: string;
+  puzzleType: string;
+  rawScore: number;
+  awardedPoints: number;
+  bestPossibleScore: number;
+  slotMaxPoints: number;
+  solved: boolean;
+  perfect: boolean;
+  movesUsed: number;
+  elapsedSeconds: number;
+  completedAt: string;
+  submittedLine: Array<Record<string, unknown>>;
+  result: Record<string, unknown>;
+}
+
+export interface DailyPuzzleAttempt {
+  id: string;
+  puzzleDate: string;
+  userId: string;
+  username: string | null;
+  status: Exclude<DailyPuzzleAttemptStatus, 'none'>;
+  setVersion: number;
+  currentSlotIndex: DailyPuzzleSlotIndex;
+  puzzlesCompleted: number;
+  totalScore: number;
+  masterChainScore: number;
+  completedAt: string | null;
+  startedAt: string;
+  updatedAt: string;
+  reviewUnlocked: boolean;
+  practiceMode: DailyPuzzlePracticeMode;
+  result: {
+    slots: DailyPuzzleSlotResult[];
+    final?: {
+      puzzlesCompleted: number;
+      totalScore: number;
+      masterChainScore: number;
+      completedAt: string;
+    };
+  };
+}
+
+export interface DailyPuzzleLeaderboardEntry {
+  rank: number;
+  userId: string;
+  username: string;
+  puzzlesCompleted: number;
+  totalScore: number;
+  masterChainScore: number;
+  completedAt: string | null;
+  breakdown: Array<{
+    slotIndex: DailyPuzzleSlotIndex;
+    awardedPoints: number | null;
+    perfect: boolean;
+    solved: boolean;
+  }>;
+}
 
 export interface DailyPuzzleSlotRow {
   id: string;
@@ -129,7 +204,7 @@ function extractBestPossibleScore(
 /**
  * Ladder readiness requires a positive best-possible score. Older rows may omit
  * objective_payload.best_possible_score; recompute from board + hand so a valid
- * five-slot day is not stuck in legacy mode. New days publish three slots.
+ * five-slot day is not stuck in legacy mode.
  */
 function inferBestPossibleScoreFromBoard(row: DailyPuzzleSlotRow, targetScore: number): number | null {
   const board = row.starting_board;
@@ -243,7 +318,7 @@ function pickLadderFromSortedSlots(
 
 export function findReadyDailyPuzzleLadderSlots(slots: DailyPuzzleSlot[]): DailyPuzzleSlot[] | null {
   if (slots.length < DAILY_PUZZLE_SLOT_COUNT) return null;
-
+  
   const byVersion: Record<number, DailyPuzzleSlot[]> = {};
   for (const slot of slots) {
     if (!byVersion[slot.setVersion]) byVersion[slot.setVersion] = [];
@@ -253,9 +328,15 @@ export function findReadyDailyPuzzleLadderSlots(slots: DailyPuzzleSlot[]): Daily
   const versions = Object.keys(byVersion).map(Number).sort((a, b) => b - a);
 
   for (const version of versions) {
-    const sorted = sortDailyPuzzleSlots(byVersion[version]);
-    const picked = pickLadderFromSortedSlots(sorted, { requirePublishedMeta: true });
-    if (picked) return picked;
+    const versionSlots = byVersion[version];
+    if (versionSlots.length !== DAILY_PUZZLE_SLOT_COUNT) continue;
+    
+    const sorted = sortDailyPuzzleSlots(versionSlots);
+    if (sorted.some((slot) => !slot.published)) continue;
+    if (!DAILY_PUZZLE_SLOT_INDICES.every((slotIndex, index) => sorted[index]?.slotIndex === slotIndex)) continue;
+    if (sorted.every((slot) => slot.slotMaxPoints > 0 && (slot.bestPossibleScore ?? 0) > 0)) {
+      return sorted;
+    }
   }
 
   return null;
@@ -266,8 +347,7 @@ export function isDailyPuzzleLadderReady(slots: DailyPuzzleSlot[]): boolean {
 }
 
 /**
- * Returns the published ladder slots for an attempt's setVersion, or null if incomplete.
- * Accepts today's 3-slot ladder or a legacy 5-slot archive day.
+ * Returns the five ladder slots for an attempt's setVersion, or null if incomplete.
  * Does not require full "readiness" metadata (best_possible_score); boards must be present.
  */
 export function findLadderSlotsForAttemptSet(
@@ -275,20 +355,36 @@ export function findLadderSlotsForAttemptSet(
 ): DailyPuzzleSlot[] | null {
   if (slots.length < DAILY_PUZZLE_SLOT_COUNT) return null;
   const sorted = sortDailyPuzzleSlots(slots);
-  return pickLadderFromSortedSlots(sorted, { requirePublishedMeta: false });
+  if (!DAILY_PUZZLE_SLOT_INDICES.every((slotIndex, index) => sorted[index]?.slotIndex === slotIndex)) {
+    return null;
+  }
+  const hasPlayableData = (slot: DailyPuzzleSlot) =>
+    Boolean(slot.startingBoard) &&
+    Array.isArray(slot.startingHand) &&
+    slot.startingHand.length > 0;
+  if (!sorted.every(hasPlayableData)) return null;
+  return sorted;
 }
 
 /** Stricter readiness for publishing / today endpoint display. */
 export function isDailyPuzzleLadderReadyForVersion(slots: DailyPuzzleSlot[]): boolean {
-  return pickLadderFromSortedSlots(sortDailyPuzzleSlots(slots), { requirePublishedMeta: true }) !== null;
+  if (slots.length !== DAILY_PUZZLE_SLOT_COUNT) return false;
+  return slots.every(
+    (slot) =>
+      slot.published &&
+      slot.slotMaxPoints > 0 &&
+      (slot.bestPossibleScore ?? 0) > 0 &&
+      Boolean(slot.startingBoard) &&
+      Array.isArray(slot.startingHand) &&
+      slot.startingHand.length > 0,
+  );
 }
 
 export function isDailyPuzzleAttemptFinalizeReady(
   attempt: Pick<DailyPuzzleAttempt, 'status' | 'result'>,
   publishedSlotCount: number = DAILY_PUZZLE_SLOT_COUNT,
 ): boolean {
-  const needed = Math.max(DAILY_PUZZLE_SLOT_COUNT, Math.min(LEGACY_DAILY_PUZZLE_SLOT_COUNT, publishedSlotCount));
-  return attempt.status === 'started' && attempt.result.slots.length >= needed;
+  return attempt.status === 'started' && attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
 }
 
 export function resolveActiveSlotForAttempt(
@@ -298,15 +394,11 @@ export function resolveActiveSlotForAttempt(
   const ladder = findLadderSlotsForAttemptSet(versionSlots);
   if (!ladder) return null;
   if (attempt.status === 'completed') {
-    const reviewIndex = Math.min(
-      Math.max(attempt.result.slots.length, 1),
-      ladder.length,
-    ) as DailyPuzzleSlotIndex;
+    const reviewIndex = Math.min(Math.max(attempt.result.slots.length, 1), DAILY_PUZZLE_SLOT_COUNT) as DailyPuzzleSlotIndex;
     return ladder.find((slot) => slot.slotIndex === reviewIndex) ?? ladder[ladder.length - 1];
   }
   const submitted = new Set(attempt.result.slots.map((slot) => slot.slotIndex));
-  const nextIndex = ladder.map((slot) => slot.slotIndex).find((index) => !submitted.has(index))
-    ?? attempt.currentSlotIndex;
+  const nextIndex = DAILY_PUZZLE_SLOT_INDICES.find((index) => !submitted.has(index)) ?? attempt.currentSlotIndex;
   return ladder.find((slot) => slot.slotIndex === nextIndex) ?? ladder[0];
 }
 
@@ -385,10 +477,10 @@ export function normalizeDailyPuzzleAttempt(
     username: row.username?.trim() || null,
     status: row.status === 'completed' ? 'completed' : 'started',
     setVersion: Number.isFinite(row.set_version) ? Math.round(row.set_version ?? 1) : 1,
-    currentSlotIndex,
-    puzzlesCompleted,
-    totalScore,
-    masterChainScore,
+    currentSlotIndex: clampSlotIndex(row.current_slot_index),
+    puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
+    totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
+    masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
     completedAt,
     startedAt: row.started_at ?? new Date(0).toISOString(),
     updatedAt: row.updated_at ?? row.started_at ?? new Date(0).toISOString(),
@@ -400,9 +492,9 @@ export function normalizeDailyPuzzleAttempt(
       ...(completedAt
         ? {
             final: {
-              puzzlesCompleted,
-              totalScore,
-              masterChainScore,
+              puzzlesCompleted: Number.isFinite(row.puzzles_completed) ? Math.max(0, Math.min(DAILY_PUZZLE_SLOT_COUNT, Math.round(row.puzzles_completed ?? 0))) : 0,
+              totalScore: Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0,
+              masterChainScore: Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0,
               completedAt,
             },
           }
@@ -434,11 +526,7 @@ export function buildDailyPuzzleLeaderboard(
     totalScore: attempt.totalScore,
     masterChainScore: attempt.masterChainScore,
     completedAt: attempt.completedAt,
-    breakdown: (
-      attempts.some((entry) => entry.result.slots.some((slot) => slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT))
-        ? LEGACY_DAILY_PUZZLE_SLOT_INDICES
-        : DAILY_PUZZLE_SLOT_INDICES
-    ).map((slotIndex) => {
+    breakdown: DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
       const slot = attempt.result.slots.find((entry) => entry.slotIndex === slotIndex);
       return {
         slotIndex: slotIndex as DailyPuzzleSlotIndex,

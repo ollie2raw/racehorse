@@ -64,40 +64,6 @@ export function useDailyFritzSessionPersistence({
   const checkpointRevisionRef = useRef(initialCheckpointRevision);
   const firstMoveReportedRef = useRef(false);
   const divergenceReportedRef = useRef('');
-  const serverSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastServerSyncRevisionRef = useRef(initialCheckpointRevision);
-
-  const syncCheckpointToServer = (snapshot: DailyFritzPersistedSnapshot, immediate: boolean) => {
-    if (!attemptId || !verifiedMatchId) return;
-    if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
-    const runSync = () => {
-      void saveDailyFritzCheckpoint({
-        attemptId,
-        verifiedMatchId,
-        checkpoint: snapshot as unknown as Record<string, unknown>,
-      }).then((response) => {
-        if (response?.ok) {
-          lastServerSyncRevisionRef.current = Math.max(
-            lastServerSyncRevisionRef.current,
-            response.checkpoint_revision,
-          );
-        }
-      });
-    };
-    if (immediate) {
-      if (serverSyncTimerRef.current) {
-        clearTimeout(serverSyncTimerRef.current);
-        serverSyncTimerRef.current = null;
-      }
-      runSync();
-      return;
-    }
-    if (serverSyncTimerRef.current) clearTimeout(serverSyncTimerRef.current);
-    serverSyncTimerRef.current = setTimeout(() => {
-      serverSyncTimerRef.current = null;
-      runSync();
-    }, 1_500);
-  };
 
   useEffect(() => {
     if (!enabled || !attemptId || !runDate || firstMoveReportedRef.current) return;
@@ -137,17 +103,6 @@ export function useDailyFritzSessionPersistence({
           matchHandNumber: match.handNumber,
           lifecyclePhase: match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand',
         });
-        reportDailyFritzOperationalAlert(
-          'cursor_divergence',
-          'Daily Fritz checkpoint cursor divergence',
-          {
-            attemptId,
-            gameNumber,
-            handIndex: dailyFritzHandIndex,
-            authorityRevision,
-            matchHandNumber: match.handNumber,
-          },
-        );
         const sessionId = getDailyFritzTelemetrySession(runDate);
         void recordDailyFritzTelemetry({
           eventId: dailyFritzTelemetryEventId(attemptId, 'recovery_started', `cursor-divergence:${divergenceKey}`),

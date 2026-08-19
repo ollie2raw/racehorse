@@ -50,6 +50,7 @@ type StartPackage = Json & {
   draw_winner: DailyFritzDrawWinner;
 };
 type HandPackage = Json & {
+  current_game_number: 1 | 2 | 3;
   current_hand_index: number;
   authority_revision: number;
   current_game_scores: { you: number; fritz: number };
@@ -64,6 +65,7 @@ const anonKey = required('VITE_SUPABASE_ANON_KEY');
 const users = positiveInt(process.env.DAILY_FRITZ_SOAK_USERS, 1);
 const concurrency = positiveInt(process.env.DAILY_FRITZ_SOAK_CONCURRENCY, 1);
 const timeoutMs = positiveInt(process.env.DAILY_FRITZ_SOAK_TIMEOUT_MS, 20_000);
+const runDateOverride = process.env.DAILY_FRITZ_SOAK_RUN_DATE?.trim() ?? '';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -149,20 +151,30 @@ const startBody = {
   }],
   supported_state_digest_versions: [DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
   client_release: 'daily-fritz-authority-soak',
+  ...(runDateOverride ? { debug_date: runDateOverride } : {}),
 };
 
-function handCommand(pkg: StartPackage, handIndex: number, transcript: DailyFritzTranscript): Json {
+function handCommand(
+  pkg: StartPackage,
+  gameNumber: 1 | 2 | 3,
+  handIndex: number,
+  transcript: DailyFritzTranscript,
+): Json {
   return {
     attempt_id: pkg.attempt_id,
     verified_match_id: pkg.verified_match_id,
     run_date: pkg.run_date,
-    game_number: 1,
+    game_number: gameNumber,
     completed_hand_index: handIndex,
     transcript,
   };
 }
 
-async function assertAuthorityRows(attemptId: string, expectedHands: number): Promise<void> {
+async function assertAuthorityRows(
+  attemptId: string,
+  expectedHands: number,
+  expectedGames: number,
+): Promise<void> {
   const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` };
   let rows: {
     hands: Json[]; games: Json[]; operations: Json[]; outbox: Json[]; events: Json[];
@@ -178,10 +190,10 @@ async function assertAuthorityRows(attemptId: string, expectedHands: number): Pr
     ]);
     rows = { hands, games, operations, outbox, events };
     const auditComplete = hands.length === expectedHands
-      && games.length === 1
+      && games.length === expectedGames
       && outbox.some((row) => row.event_type === 'game_recorded')
       && outbox.every((row) => Boolean(row.analytics_projected_at))
-      && events.filter((row) => row.event_type === 'game_recorded').length === 1;
+      && events.filter((row) => row.event_type === 'game_recorded').length === expectedGames;
     if (auditComplete) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   } while (Date.now() < auditDeadline);
@@ -198,7 +210,9 @@ async function assertAuthorityRows(attemptId: string, expectedHands: number): Pr
     events: events.map((row) => ({ type: row.event_type, source: row.source })),
   });
   if (hands.length !== expectedHands) throw new Error(`Expected ${expectedHands} verified hands, found ${hands.length}.`);
-  if (games.length !== 1) throw new Error(`Expected one verified game, found ${games.length}.`);
+  if (games.length !== expectedGames) {
+    throw new Error(`Expected ${expectedGames} verified games, found ${games.length}.`);
+  }
   if (new Set(operations.map((row) => row.operation_id)).size !== operations.length) {
     throw new Error('Duplicate durable operation receipts detected.');
   }
@@ -209,12 +223,85 @@ async function assertAuthorityRows(attemptId: string, expectedHands: number): Pr
     throw new Error(`Committed authority outbox event was not projected into canonical analytics: ${evidence}`);
   }
   const gameEvents = events.filter((row) => row.event_type === 'game_recorded');
-  if (gameEvents.length !== 1 || gameEvents[0]?.source !== 'outbox') {
-    throw new Error(`Expected exactly one canonical outbox game event, found ${gameEvents.length}: ${evidence}`);
+  if (gameEvents.length !== expectedGames || gameEvents.some((event) => event.source !== 'outbox')) {
+    throw new Error(`Expected ${expectedGames} canonical outbox game events, found ${gameEvents.length}: ${evidence}`);
   }
   if (new Set(events.map((row) => row.idempotency_key)).size !== events.length) {
     throw new Error('Duplicate canonical analytics identities detected.');
   }
+}
+
+type SetResult = {
+  setWinner?: 'player' | 'fritz';
+  playerGamesWon: number;
+  fritzGamesWon: number;
+  games: Array<{ gameNumber: number }>;
+};
+
+async function playRemainingVerifiedGame(params: {
+  user: { accessToken: string };
+  pkg: StartPackage;
+  gameNumber: 2 | 3;
+}): Promise<{ handCount: number; setResult: SetResult }> {
+  const resumed = await api(params.user.accessToken, '/api/daily-fritz/start', startBody) as StartPackage;
+  if (resumed.attempt_id !== params.pkg.attempt_id || resumed.current_game_number !== params.gameNumber) {
+    throw new Error(`Authoritative resume did not open Daily Fritz game ${params.gameNumber}.`);
+  }
+
+  let handIndex = resumed.current_hand_index;
+  let hand = resumed.first_hand;
+  let scores = resumed.current_game_scores;
+  let terminalTranscript: DailyFritzTranscript | null = null;
+  let handCount = 0;
+  while (handCount < 64) {
+    const driven = buildHonestDailyFritzHandTranscript({
+      challengeId: resumed.challenge_id,
+      attemptId: resumed.attempt_id,
+      gameNumber: params.gameNumber,
+      handIndex,
+      deal: hand,
+      drawWinner: resumed.draw_winner,
+      winningScore: resumed.winning_score,
+      dealSize: resumed.deal_size,
+      playerScore: scores.you,
+      fritzScore: scores.fritz,
+      fritzTier: resumed.fritz_tier,
+      fritzPolicyVersion: resumed.fritz_policy_version,
+    });
+    terminalTranscript = driven.transcript;
+    handCount += 1;
+    if (driven.terminalState.gameOver) break;
+
+    const next = await api(params.user.accessToken, '/api/daily-fritz/next-hand',
+      handCommand(resumed, params.gameNumber, handIndex, driven.transcript)) as HandPackage;
+    if (next.current_game_number !== params.gameNumber) {
+      throw new Error(`Daily Fritz advanced away from game ${params.gameNumber} before its verified result.`);
+    }
+    handIndex = next.current_hand_index;
+    hand = next.hand;
+    scores = next.current_game_scores;
+  }
+  if (!terminalTranscript) throw new Error(`Daily Fritz game ${params.gameNumber} produced no terminal transcript.`);
+
+  const recordBody = {
+    attempt_id: resumed.attempt_id,
+    verified_match_id: resumed.verified_match_id,
+    run_date: resumed.run_date,
+    game_number: params.gameNumber,
+    transcript: terminalTranscript,
+  };
+  const records = await Promise.all([
+    api(params.user.accessToken, '/api/daily-fritz/record-game', recordBody),
+    api(params.user.accessToken, '/api/daily-fritz/record-game', recordBody),
+  ]);
+  const setResult = records[0]?.set_result as SetResult | undefined;
+  if (!setResult || records.some((record) => !(record as Json).set_result)) {
+    throw new Error(`Daily Fritz game ${params.gameNumber} did not durably record its set result.`);
+  }
+  if (!records.some((record) => (record as Json).replayed === true)) {
+    throw new Error(`Duplicate Daily Fritz game ${params.gameNumber} recording did not replay.`);
+  }
+  return { handCount, setResult };
 }
 
 async function runOne(index: number): Promise<Json> {
@@ -255,7 +342,7 @@ async function runOne(index: number): Promise<Json> {
       handCount += 1;
       if (driven.terminalState.gameOver) break;
 
-      const command = handCommand(pkg, handIndex, driven.transcript);
+      const command = handCommand(pkg, 1, handIndex, driven.transcript);
       let next: HandPackage;
       if (handCount === 1) {
         const duplicates = await Promise.all([
@@ -286,7 +373,7 @@ async function runOne(index: number): Promise<Json> {
           const conflict = await apiExpect(
             user.accessToken,
             '/api/daily-fritz/next-hand',
-            handCommand(pkg, handIndex, alternate.transcript),
+            handCommand(pkg, 1, handIndex, alternate.transcript),
             [409],
           );
           if (conflict.code !== 'verified_hand_conflict'
@@ -307,7 +394,10 @@ async function runOne(index: number): Promise<Json> {
       scores = next.current_game_scores;
 
       if (handCount === 2) {
-        const today = await api(user.accessToken, '/api/daily-fritz/today');
+        const today = await api(
+          user.accessToken,
+          `/api/daily-fritz/today${runDateOverride ? `?debugDate=${encodeURIComponent(runDateOverride)}` : ''}`,
+        );
         const resumed = await api(user.accessToken, '/api/daily-fritz/start', startBody) as StartPackage;
         if (today.attempt_status !== 'started' || resumed.current_hand_index !== handIndex) {
           throw new Error('Refresh/reconnect did not return the authoritative hand index.');
@@ -332,8 +422,48 @@ async function runOne(index: number): Promise<Json> {
     if (gameResults.some((value) => !value.set_result)) {
       throw new Error('Game-one verification did not return a set result.');
     }
-    await assertAuthorityRows(pkg.attempt_id, handCount);
-    return { index, attemptId: pkg.attempt_id, handCount, elapsedMs: Date.now() - startedAt };
+    if (!gameResults.some((value) => value.replayed === true)) {
+      throw new Error('Duplicate Daily Fritz game-one recording did not replay.');
+    }
+
+    let setResult = gameResults[0].set_result as SetResult;
+    let totalHands = handCount;
+    for (const gameNumber of [2, 3] as const) {
+      if (setResult.setWinner) break;
+      const game = await playRemainingVerifiedGame({ user, pkg, gameNumber });
+      totalHands += game.handCount;
+      setResult = game.setResult;
+    }
+    if (!setResult.setWinner) throw new Error('Daily Fritz did not decide the best-of-three set after game three.');
+
+    const completionBody = {
+      attempt_id: pkg.attempt_id,
+      verified_match_id: pkg.verified_match_id,
+      run_date: pkg.run_date,
+    };
+    const completions = await Promise.all([
+      api(user.accessToken, '/api/daily-fritz/complete', completionBody),
+      api(user.accessToken, '/api/daily-fritz/complete', completionBody),
+    ]);
+    if (!completions.some((completion) => completion.replayed === true)) {
+      throw new Error('Duplicate Daily Fritz completion did not replay the authoritative result.');
+    }
+    const completedToday = await api(
+      user.accessToken,
+      `/api/daily-fritz/today${runDateOverride ? `?debugDate=${encodeURIComponent(runDateOverride)}` : ''}`,
+    );
+    if (completedToday.attempt_status !== 'completed' || completedToday.rank == null) {
+      throw new Error('Verified Daily Fritz completion was not eligible for the leaderboard.');
+    }
+    await assertAuthorityRows(pkg.attempt_id, totalHands, setResult.games.length);
+    return {
+      index,
+      attemptId: pkg.attempt_id,
+      handCount: totalHands,
+      gameCount: setResult.games.length,
+      setOutcome: `${setResult.playerGamesWon}-${setResult.fritzGamesWon}`,
+      elapsedMs: Date.now() - startedAt,
+    };
   } finally {
     await deleteUser(user.id);
   }
@@ -341,15 +471,34 @@ async function runOne(index: number): Promise<Json> {
 
 async function main(): Promise<void> {
   const results: Json[] = [];
+  process.stdout.write(`${JSON.stringify({
+    phase: 'started',
+    users,
+    concurrency,
+    baseUrl,
+  })}\n`);
   for (let offset = 0; offset < users; offset += concurrency) {
     const wave = Array.from({ length: Math.min(concurrency, users - offset) }, (_, waveIndex) =>
       runOne(offset + waveIndex));
-    results.push(...await Promise.all(wave));
+    const completed = await Promise.all(wave);
+    results.push(...completed);
+    process.stdout.write(`${JSON.stringify({
+      phase: 'wave_completed',
+      completedUsers: results.length,
+      users,
+    })}\n`);
   }
   process.stdout.write(`${JSON.stringify({ ok: true, users, concurrency, baseUrl, results }, null, 2)}\n`);
 }
 
-void main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
-  process.exitCode = 1;
-});
+void main()
+  .then(() => {
+    process.stdout.write(`${JSON.stringify({ phase: 'complete' })}\n`);
+  })
+  .catch((error) => {
+    process.stdout.write(`${JSON.stringify({
+      phase: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    })}\n`);
+    process.exitCode = 1;
+  });

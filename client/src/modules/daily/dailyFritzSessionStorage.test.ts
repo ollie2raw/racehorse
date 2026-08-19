@@ -2,19 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
-import {
-  buildDailyFritzStorageKey,
-  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
-  discardDailyFritzSnapshot,
-  discardDailyFritzSnapshotBeforeReload,
-  loadPersistedDailyFritzMatch,
-  loadDailyFritzResumeSnapshot,
-  parseDailyFritzPersistedSnapshot,
-  persistDailyFritzSnapshot,
-  reconcileDailyFritzResume,
-  type DailyFritzPersistedSnapshot,
-  type DailyFritzResumeRejection,
-} from './dailyFritzSessionStorage.ts';
+import { buildDailyFritzStorageKey, DAILY_FRITZ_SESSION_SCHEMA_VERSION, loadPersistedDailyFritzMatch, parseDailyFritzPersistedSnapshot, persistDailyFritzSnapshot, reconcileDailyFritzResume, type DailyFritzPersistedSnapshot, type DailyFritzResumeRejection } from './dailyFritzSessionStorage.ts';
 
 const now = new Date('2026-07-12T20:00:00.000Z');
 const RUN_FP = 'abc123fingerprint00000000000000';
@@ -199,21 +187,6 @@ describe('Daily Fritz v3 session persistence', () => {
     });
     expect(persistDailyFritzSnapshot(key, authoritativeHand)).toBe(true);
     expect(JSON.parse(window.localStorage.getItem(key)!).checkpointRevision).toBe(1);
-  });
-  it('discards a checkpoint re-persisted before an authority reload', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
-    discardDailyFritzSnapshot(key);
-    // The mounted persistence effect can recreate the rejected checkpoint
-    // between the 409 response and the player's recovery click.
-    expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 3 }))).toBe(true);
-    let checkpointAtReload: string | null = 'not-checked';
-
-    discardDailyFritzSnapshotBeforeReload(key, () => {
-      checkpointAtReload = window.localStorage.getItem(key);
-    });
-
-    expect(checkpointAtReload).toBeNull();
   });
   it('removes and replaces a checkpoint from the unsafe draw-presentation schema', () => {
     const key = buildDailyFritzStorageKey('attempt-1', 1);

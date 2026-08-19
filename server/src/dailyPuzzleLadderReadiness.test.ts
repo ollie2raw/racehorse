@@ -30,7 +30,7 @@ function slot(overrides: Partial<DailyPuzzleSlot>): DailyPuzzleSlot {
 }
 
 describe('dailyPuzzleLadderReadiness', () => {
-  it('marks a three-slot ladder ready', () => {
+  it('marks a five-slot ladder ready', () => {
     const readiness = assessDailyPuzzleLadderReadiness('2026-06-11', [
       slot({ slotIndex: 1 }),
       slot({ slotIndex: 2, slotTitle: 'Read', tier: 'tactical_setup', slotMaxPoints: 350 }),
@@ -62,7 +62,7 @@ describe('dailyPuzzleLadderReadiness', () => {
     );
     expect(readiness.ready).toBe(false);
     expect(readiness.publishedSlotCount).toBe(2);
-    expect(readiness.missingSlotIndexes).toEqual([2]);
+    expect(readiness.missingSlotIndexes).toEqual([2, 4, 5]);
     expect(readiness.shouldAlert).toBe(true);
     expect(readiness.alertReason).toContain('missing: 2');
   });

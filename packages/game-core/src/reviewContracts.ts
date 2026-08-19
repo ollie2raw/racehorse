@@ -226,6 +226,7 @@ export function canonicalizeReviewAuthorityState(state: GameState): string {
       endHandBonus: state.config.endHandBonus,
       winningScore: state.config.winningScore,
       skipPregameDraw: state.config.skipPregameDraw ?? false,
+      policyProfile: state.config.policyProfile ?? null,
     },
     playerIds: [...state.playerIds],
     players: state.playerIds.map((id) => ({

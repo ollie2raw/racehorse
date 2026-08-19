@@ -232,12 +232,10 @@ export function DailyPuzzleLadderOverlays({
             <div className="rh-result__summary">
               <div>
                 <span className="rh-result__summary-label">Completed</span>
-                <span className="rh-result__summary-value">
-                  {finalOverlay.response.attempt.puzzlesCompleted}/{Math.max(DAILY_PUZZLE_SLOT_COUNT, currentSlotBreakdown.length)}
-                </span>
+                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/5</span>
               </div>
               <div>
-                <span className="rh-result__summary-label">Master Chain</span>
+                <span className="rh-result__summary-label">Puzzle 5</span>
                 <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
               </div>
               <div>

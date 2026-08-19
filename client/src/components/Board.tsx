@@ -865,21 +865,7 @@ function BoardComponent(
       const nextCamera = { x: 0, y: cameraY, scale: nextScale };
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }, [layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
-
-  useEffect(() => {
-    fitCameraToContainerRef.current = fitCameraToContainer;
-  }, [fitCameraToContainer]);
-
-  // Re-fit automatically when a new tile is placed, unless user has manually adjusted the camera.
-  const prevBoardTileCountRef = useRef(boardTileCount);
-  useEffect(() => {
-    if (staticView) return;
-    if (boardTileCount > prevBoardTileCountRef.current && !manualCameraRef.current) {
-      fitCameraToContainerRef.current('tile-placed-auto-fit');
-    }
-    prevBoardTileCountRef.current = boardTileCount;
-  }, [boardTileCount, staticView]);
+  }
 
   // Single authoritative camera auto-fit: respond to layout and container size.
   useEffect(() => {
@@ -921,7 +907,6 @@ function BoardComponent(
       }
     };
   }, [
-    fitCameraToContainer,
     containFullBoard,
     layout,
     minCameraScale,
@@ -940,7 +925,7 @@ function BoardComponent(
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * delta));
+        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale * delta));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'wheel',
           x: Number(cam.x.toFixed(2)),
@@ -1010,7 +995,7 @@ function BoardComponent(
     setCamera((cam) => ({
       ...cam,
       scale: (() => {
-        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * factor));
+        const nextScale = Math.min(1.8, Math.max(minCameraScale, cam.scale + delta));
         traceCameraDebug('[camera-debug] setCamera', {
           reason: 'manual-zoom',
           x: Number(cam.x.toFixed(2)),
@@ -1021,11 +1006,6 @@ function BoardComponent(
       })(),
     }));
   }, [markManualCamera, minCameraScale]);
-
-  const resetCameraToFit = useCallback(() => {
-    manualCameraRef.current = false;
-    fitCameraToContainerRef.current('manual-reset', undefined, undefined, true);
-  }, []);
 
   useImperativeHandle(
     ref,
@@ -1209,7 +1189,12 @@ function BoardComponent(
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            applyZoomStep(1 / 1.22);
+            traceCameraDebug('[camera-debug] manual zoom click', {
+              direction: 'out',
+              beforeScale: Number(camera.scale.toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale - 0.12)).toFixed(3)),
+            });
+            applyZoomStep(-0.12);
           }}
         >
           <ZoomOutIcon />
@@ -1224,7 +1209,12 @@ function BoardComponent(
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            applyZoomStep(1.22);
+            traceCameraDebug('[camera-debug] manual zoom click', {
+              direction: 'in',
+              beforeScale: Number(camera.scale.toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(minCameraScale, camera.scale + 0.12)).toFixed(3)),
+            });
+            applyZoomStep(0.12);
           }}
         >
           <ZoomInIcon />
