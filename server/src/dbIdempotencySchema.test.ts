@@ -245,6 +245,16 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).not.toContain("jsonb_array_length(p_new_result->'games') not in (2, 3)");
   });
 
+  it('allows legacy_unverified set finalize without verified_games receipts', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-19_daily_fritz_finalize_legacy_unverified.sql',
+    ));
+    expect(sql).toContain("finalize_verification_status := coalesce(p_new_result->>'verification_status', '')");
+    expect(sql).toContain("finalize_verification_status = 'legacy_unverified'");
+    expect(sql).toContain('unranked advance-first path: setwinner + persisted games is enough');
+    expect(sql).toContain("finalize_verification_status = 'verified'");
+  });
+
   it('repairs Daily Fritz outbox idempotency to be player-attempt scoped', () => {
     const sql = compactSql(readRepoFile(
       'supabase/migrations/2026-08-02_daily_fritz_outbox_attempt_scope.sql',
