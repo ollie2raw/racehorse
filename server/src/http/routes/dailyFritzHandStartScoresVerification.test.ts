@@ -7,8 +7,8 @@ import { verifyDailyFritzHand, createOfficialDailyFritzHandState } from '../../d
 import { buildHonestDailyFritzHandTranscript } from '../../testing/dailyFritzTranscriptDriver';
 import type { DailyFritzAttemptRecord, DailyFritzRunRecord } from '../stores/dailyFritzStore';
 import { buildRecordedDailyFritzAttemptResult } from './dailyFritzVerificationPolicy';
+import type { VerifiedDailyFritzHandRecord } from '../../dailyFritzVerifier';
 import {
-  assertHandStartScoresAvailableForVerification,
   attemptVerifyHand,
   readActiveGameProgress,
   recordDailyFritzAdvanceWithoutVerification,
@@ -67,6 +67,38 @@ function buildAttempt(result: Record<string, unknown>): DailyFritzAttemptRecord 
     startedAt: '2026-08-19T22:04:16.000Z',
     updatedAt: '2026-08-19T22:10:25.000Z',
   };
+}
+
+function stubVerifiedHand(handIndex: number, playerAfter: number, fritzAfter: number): VerifiedDailyFritzHandRecord {
+  return {
+    verificationVersion: 2,
+    transcriptDigest: `${handIndex}`.repeat(64).slice(0, 64),
+    challengeId: CHALLENGE_ID,
+    attemptId: ATTEMPT_ID,
+    userId: USER_ID,
+    gameNumber: 1,
+    handIndex,
+    winner: 'player',
+    reason: 'domino',
+    pointsAwarded: 5,
+    playerScoreBefore: Math.max(0, playerAfter - 5),
+    fritzScoreBefore: Math.max(0, fritzAfter - 1),
+    playerScoreAfter: playerAfter,
+    fritzScoreAfter: fritzAfter,
+    actionCount: 10,
+    fritzPolicyVersion: 2,
+    fritzPolicyContract: 'fritz-policy-v2-deterministic-canonical-ties',
+    lastAuthorityStateDigest: null,
+    verifiedAt: '2026-08-01T00:00:00.000Z',
+  };
+}
+
+function ledgerWithHands(hands: VerifiedDailyFritzHandRecord[]): Record<string, unknown> {
+  let result: Record<string, unknown> = { authority: { version: 1, hands: [], games: [] } };
+  for (const hand of hands) {
+    result = writeVerifiedHand(result, hand);
+  }
+  return result;
 }
 
 describe('Daily Fritz hand-start scores for verification', () => {
@@ -208,7 +240,7 @@ describe('Daily Fritz hand-start scores for verification', () => {
     expect(verification.verified.result.playerScoreAfter).toBeGreaterThan(0);
   });
 
-  it('fails closed when hand-start would be 0-0 but prior verified hands exist', () => {
+  it('fails closed when the immediate prior hand receipt is missing from the ledger', () => {
     const runDate = '2026-08-01';
     const deal0 = generateSingleDailyFritzGameHand(runDate, 1, 0, 7);
     const drawWinner = getDailyFritzDrawWinner(runDate, 1);
@@ -246,19 +278,17 @@ describe('Daily Fritz hand-start scores for verification', () => {
     });
     const result = writeVerifiedHand(null, hand0Verified.result);
 
-    expect(() => assertHandStartScoresAvailableForVerification({
+    expect(() => resolveHandStartScoresForVerification({
       result,
       gameNumber: 1,
       handIndex: 2,
-      startScores: { gameNumber: 1, you: 0, fritz: 0 },
     })).toThrow(/hand-start scores/i);
 
     try {
-      assertHandStartScoresAvailableForVerification({
+      resolveHandStartScoresForVerification({
         result,
         gameNumber: 1,
         handIndex: 2,
-        startScores: { gameNumber: 1, you: 0, fritz: 0 },
       });
     } catch (error) {
       expect((error as { code: string }).code).toBe('missing_hand_start_progress');
@@ -273,6 +303,58 @@ describe('Daily Fritz hand-start scores for verification', () => {
         }),
       }),
     );
+  });
+
+  it('fails closed on a ledger gap instead of falling back to an earlier hand', () => {
+    // Ledger has hands 1, 2, skips 3, has 4 (1-based) → indices 0, 1, skip 2, has 3.
+    // Verifying hand 5 (index 4) must fail because hand 3 (index 2) is missing.
+    const result = ledgerWithHands([
+      stubVerifiedHand(0, 10, 5),
+      stubVerifiedHand(1, 20, 8),
+      stubVerifiedHand(3, 35, 12),
+    ]);
+
+    expect(() => resolveHandStartScoresForVerification({
+      result,
+      gameNumber: 1,
+      handIndex: 4,
+    })).toThrow(/hand-start scores/i);
+
+    const runDate = '2026-08-01';
+    const deal4 = generateSingleDailyFritzGameHand(runDate, 1, 4, 7);
+    const drawWinner = getDailyFritzDrawWinner(runDate, 1);
+    const hand4 = buildHonestDailyFritzHandTranscript({
+      challengeId: CHALLENGE_ID,
+      attemptId: ATTEMPT_ID,
+      gameNumber: 1,
+      handIndex: 4,
+      deal: deal4,
+      drawWinner,
+      winningScore: 60,
+      dealSize: 7,
+      playerScore: 35,
+      fritzScore: 12,
+      fritzTier: 'elite',
+      fritzPolicyVersion: FRITZ_POLICY_VERSION,
+    });
+    const run = {
+      ...buildRun(),
+      handDeals: [deal4],
+    };
+
+    const verification = attemptVerifyHand({
+      transcript: hand4.transcript,
+      attempt: buildAttempt(result),
+      run,
+      userId: USER_ID,
+      gameNumber: 1,
+      handIndex: 4,
+      publishedChallenge: null,
+    });
+
+    expect(verification.ok).toBe(false);
+    if (verification.ok) throw new Error('Expected gap ledger to fail closed.');
+    expect(verification.error.code).toBe('missing_hand_start_progress');
   });
 
   it('does not emit cheat-style bypass alerts for infrastructure verifier codes', async () => {

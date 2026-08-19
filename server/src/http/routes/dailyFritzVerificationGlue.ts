@@ -227,6 +227,9 @@ export const DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES = new Set([
  * Hand-start scores for transcript replay. The authority ledger is the durable
  * source of truth; `active_game` is UI/progress bookkeeping and can be wiped
  * (e.g. by `buildRecordedDailyFritzAttemptResult`).
+ *
+ * Requires a contiguous verified chain for this game: hands 0..N-1 must all
+ * be present before hand N can replay. No fallback to an earlier hand.
  */
 export function resolveHandStartScoresForVerification(input: {
   result: Record<string, unknown> | null;
@@ -238,44 +241,29 @@ export function resolveHandStartScoresForVerification(input: {
     return { gameNumber, you: 0, fritz: 0 };
   }
 
-  const immediatePrior = findVerifiedHand(result, gameNumber, handIndex - 1);
-  if (immediatePrior) {
-    return {
-      gameNumber,
-      you: immediatePrior.playerScoreAfter,
-      fritz: immediatePrior.fritzScoreAfter,
-    };
+  for (let priorIndex = 0; priorIndex < handIndex; priorIndex += 1) {
+    if (!findVerifiedHand(result, gameNumber, priorIndex)) {
+      throwMissingHandStartProgress({
+        gameNumber,
+        handIndex,
+        missingPriorHandIndex: priorIndex,
+      });
+    }
   }
 
-  const ledger = readAuthorityLedger(result);
-  const latestPrior = ledger.hands
-    .filter((hand) => hand.gameNumber === gameNumber && hand.handIndex < handIndex)
-    .sort((left, right) => right.handIndex - left.handIndex)[0];
-  if (latestPrior) {
-    return {
-      gameNumber,
-      you: latestPrior.playerScoreAfter,
-      fritz: latestPrior.fritzScoreAfter,
-    };
-  }
-
-  return { gameNumber, you: 0, fritz: 0 };
+  const immediatePrior = findVerifiedHand(result, gameNumber, handIndex - 1)!;
+  return {
+    gameNumber,
+    you: immediatePrior.playerScoreAfter,
+    fritz: immediatePrior.fritzScoreAfter,
+  };
 }
 
-export function assertHandStartScoresAvailableForVerification(input: {
-  result: Record<string, unknown> | null;
+function throwMissingHandStartProgress(input: {
   gameNumber: DailyFritzSetGameNumber;
   handIndex: number;
-  startScores: DailyFritzActiveGameProgress;
-}): void {
-  if (input.handIndex <= 0) return;
-  if (input.startScores.you !== 0 || input.startScores.fritz !== 0) return;
-
-  const hasPriorVerifiedHands = readAuthorityLedger(input.result).hands.some(
-    (hand) => hand.gameNumber === input.gameNumber && hand.handIndex < input.handIndex,
-  );
-  if (!hasPriorVerifiedHands) return;
-
+  missingPriorHandIndex: number;
+}): never {
   Sentry.captureMessage(
     '[daily-fritz] verification infrastructure failure — hand-start progress unavailable',
     {
@@ -287,6 +275,7 @@ export function assertHandStartScoresAvailableForVerification(input: {
       extra: {
         gameNumber: input.gameNumber,
         handIndex: input.handIndex,
+        missingPriorHandIndex: input.missingPriorHandIndex,
       },
     },
   );
@@ -409,12 +398,6 @@ export function verifyAttemptHand(input: {
     result: input.attempt.result,
     gameNumber: input.gameNumber,
     handIndex: input.handIndex,
-  });
-  assertHandStartScoresAvailableForVerification({
-    result: input.attempt.result,
-    gameNumber: input.gameNumber,
-    handIndex: input.handIndex,
-    startScores,
   });
   const authorityContract = readDailyFritzAuthorityContract(input.attempt.result);
   const publishedAuthority = input.publishedChallenge
