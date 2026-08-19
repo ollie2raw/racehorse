@@ -21,7 +21,7 @@ import type {
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import { DAILY_PUZZLE_SLOT_COUNT } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT, LEGACY_DAILY_PUZZLE_SLOT_COUNT } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -218,8 +218,6 @@ export default function DailyPuzzleLadderScreen({
       setStartPending(false);
     }
   }, [attempt, finalizePending, finalizeReady, launchSlot, runFinalize, startPending, today.runDate]);
-
-  const hubSlots = today.attemptSlots ?? today.slots;
 
   const handleStartPractice = useCallback((slotIndex: DailyPuzzleSlotIndex) => {
     const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);

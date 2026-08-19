@@ -47,6 +47,16 @@ function toGhostBodyLog(moveLog: RankedMoveSequenceEntry[]) {
   }));
 }
 
+function mutateFirstMoveActor(moveLog: RankedMoveSequenceEntry[]): RankedMoveSequenceEntry[] {
+  const index = moveLog.findIndex((entry) => entry.action === 'play');
+  if (index < 0) throw new Error('No play to mutate actor.');
+  return moveLog.map((entry, entryIndex) =>
+    entryIndex === index
+      ? { ...entry, actor: entry.actor === 'you' ? 'ghost' : 'you' }
+      : entry,
+  );
+}
+
 function makeHarness() {
   const routes = new Map<string, RouteHandler>();
   const app = {
@@ -204,7 +214,7 @@ describe('ranked Fritz start/complete deal authority', () => {
     });
     const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
     const honest = playHonestRankedGame(snapshot);
-    const mutated = mutateOnePlayedTile(honest.moveLog);
+    const mutated = mutateFirstMoveActor(mutateOnePlayedTile(honest.moveLog));
     expect(isSafeRankedMoveSequence(mutated)).toBe(true);
 
     const response = await harness.request('POST', '/api/ghost/complete', {
@@ -333,7 +343,7 @@ describe('ranked non-Fritz Ghost start/complete deal authority', () => {
     expect(started.status).toBe(200);
     const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
     const honest = playHonestRankedGame(snapshot);
-    const mutated = mutateOnePlayedTile(honest.moveLog);
+    const mutated = mutateFirstMoveActor(mutateOnePlayedTile(honest.moveLog));
 
     const response = await harness.request('POST', '/api/ghost/complete', {
       userId: USER_ID,

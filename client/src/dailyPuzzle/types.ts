@@ -4,6 +4,7 @@ import {
   DAILY_PUZZLE_SLOT_INDICES,
   LEGACY_DAILY_PUZZLE_SLOT_COUNT,
   LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+  type DailyPuzzleLeaderboardEntry,
   type DailyPuzzleSlotIndex,
 } from '@racehorse/game-core';
 

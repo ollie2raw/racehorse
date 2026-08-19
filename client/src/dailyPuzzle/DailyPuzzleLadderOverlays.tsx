@@ -5,7 +5,6 @@ import type {
   DailyPuzzleSlot,
   DailyPuzzleSubmitSlotResponse,
 } from './types';
-import { DAILY_PUZZLE_SLOT_COUNT } from './types';
 
 export type LadderSlotOverlayData = {
   response: DailyPuzzleSubmitSlotResponse;

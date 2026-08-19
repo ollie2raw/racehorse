@@ -50,6 +50,7 @@ describe('useDailyFritzSessionPersistence', () => {
       enabled: true,
       storageKey,
       attemptId: 'attempt-1',
+      verifiedMatchId: 'verified-1',
       runDate: '2026-07-25',
       runFingerprint: 'run-fingerprint',
       gameNumber: 1,

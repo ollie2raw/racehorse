@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, setRoomRoster } from './roomSession';
 import { applyActiveMatchForfeit } from './roomForfeit';
+import {
+  resetLiveRoomPersistenceForTests,
+  setLiveRoomPersistenceShuttingDown,
+} from './roomLivePersistence';
 import { processRealtimeMultiplayerGame } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
@@ -43,6 +47,8 @@ function makeIo() {
 
 describe('applyActiveMatchForfeit', () => {
   beforeEach(() => {
+    resetLiveRoomPersistenceForTests();
+    setLiveRoomPersistenceShuttingDown(true);
     resetRoomRuntimeForTests();
     persistRoomMatchLogMock.mockClear();
     vi.mocked(processRealtimeMultiplayerGame).mockClear();
@@ -60,6 +66,10 @@ describe('applyActiveMatchForfeit', () => {
       persistRoomMatchLog: persistRoomMatchLogMock,
       onGameOver: () => null,
     });
+  });
+
+  afterEach(() => {
+    resetLiveRoomPersistenceForTests();
   });
 
   it('returns null without mutating when the room is already abandoned', async () => {

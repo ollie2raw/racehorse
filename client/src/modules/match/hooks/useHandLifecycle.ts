@@ -90,6 +90,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   const handTransitionInFlightRef = useRef(false);
   const transitionStateRef = useRef({ dailyFritzNextHandFailureCount: 0 });
   const prefetchCoordinatorRef = useRef(new HandPrefetchCoordinator());
+  const reloadRequiredRef = useRef(false);
   const completedHandEvidenceRef = useRef<{
     key: string;
     params: DailyFritzPrefetchParams;
@@ -517,7 +518,12 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           });
           if (!isRetryable) {
             const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
-            if (status === 400 || isRecoverableDailyFritzAuthorityCode(verifierCode)) {
+            const recovery = resolveDailyFritzCompletedHandNextHandFailure({
+              verifierCode,
+              status,
+              failureAttempt,
+            });
+            if (status === 400) {
               discardDailyFritzSnapshot(buildDailyFritzStorageKey(
                 dailyFritzPackage.attempt_id,
                 prefetchParams.gameNumber,
@@ -526,18 +532,23 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               setHandAdvanceError(
                 'This hand could not be verified. Restore the official hand to continue; your verified score is safe.',
               );
-            } else {
-              setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
-            }
-            if (recovery.kind === 'rebuild') {
+            } else if (recovery.kind === 'rebuild') {
+              prefetchCoordinator.clear();
+              completedHandEvidenceRef.current = null;
+              advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
+              return;
+            } else if (recovery.kind === 'unverified_fallback') {
+              unverifiedFallbackRef.current = { attempts: recovery.attempts };
               prefetchCoordinator.clear();
               completedHandEvidenceRef.current = null;
               advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
               return;
             }
-            setHandAdvanceError(recovery.message);
+            setHandAdvanceError(recovery.kind === 'continue'
+              ? recovery.message
+              : formatDailyFritzNextHandUserMessage(errMsg));
             logDailyFritzHandBreadcrumb('manual-advance-shown', {
-              reason: recovery.reason,
+              reason: recovery.kind === 'continue' ? recovery.reason : 'nonretryable',
               source,
               failureAttempt,
               status,

@@ -1,8 +1,10 @@
 import {
+  FRITZ_CHALLENGE_MAX_PARTICIPANTS,
   FritzChallengeError,
   createGeneratedFritzChallenge,
   generateFritzChallengeHand,
   type FritzChallengeStatus,
+  type FritzChallengeParticipant,
   type GeneratedFritzChallenge,
 } from '../../fritzChallenge';
 import type {
@@ -158,6 +160,20 @@ const CHALLENGE_SELECT = [
 ].join(',');
 
 export function toFritzChallengeRecord(row: FritzChallengeRow): GeneratedFritzChallenge {
+  const participants: FritzChallengeParticipant[] = [
+    {
+      userId: row.creator_user_id,
+      role: 'creator',
+      joinedAt: row.created_at,
+    },
+  ];
+  if (row.opponent_user_id) {
+    participants.push({
+      userId: row.opponent_user_id,
+      role: 'invitee',
+      joinedAt: row.created_at,
+    });
+  }
   return {
     id: row.id,
     shareCode: row.share_code,
@@ -176,6 +192,8 @@ export function toFritzChallengeRecord(row: FritzChallengeRow): GeneratedFritzCh
       verifierVersion: row.verifier_version,
       generatorVersion: row.generator_version,
     },
+    maxParticipants: FRITZ_CHALLENGE_MAX_PARTICIPANTS,
+    participants,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
   };

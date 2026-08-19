@@ -4,14 +4,7 @@ import {
   DAILY_PUZZLE_SLOT_INDICES,
   LEGACY_DAILY_PUZZLE_SLOT_COUNT,
   LEGACY_DAILY_PUZZLE_SLOT_INDICES,
-  type DailyPuzzleAttempt,
-  type DailyPuzzleAttemptStatus,
-  type DailyPuzzleLeaderboardEntry,
-  type DailyPuzzlePracticeMode,
-  type DailyPuzzleSlot,
   type DailyPuzzleSlotIndex,
-  type DailyPuzzleSlotResult,
-  type DailyPuzzleTier,
 } from '@racehorse/game-core';
 
 export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
