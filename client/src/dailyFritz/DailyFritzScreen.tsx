@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../screens/RacehorseHomeArt.css';
 
-import { normalizeSetResult } from './dailyFritzScreenHelpers';
+import { normalizeSetResult, resolveTodayNextAction } from './dailyFritzScreenHelpers';
 import type { DailyFritzScreenProps } from './dailyFritzScreenTypes';
 import { DailyFritzLoadingScreen } from './DailyFritzLoadingScreen';
 import { useDailyFritzInit } from './useDailyFritzInit';
@@ -87,14 +87,21 @@ export default function DailyFritzScreen({
   }, [onNavigate]);
 
   const handleSetAction = useCallback(() => {
-    if (today?.attempt_status === 'completed') { openLeaderboard(); return; }
-    const isStarted = today?.attempt_status === 'started';
-    if (isStarted) {
+    const nextAction = resolveTodayNextAction(today);
+    if (nextAction === 'view_results') {
+      openLeaderboard();
+      return;
+    }
+    if (nextAction === 'locked') {
+      setHubError('Today’s Daily Fritz run is locked.');
+      return;
+    }
+    if (today?.attempt_status === 'started') {
       void continueSet();
       return;
     }
     void beginRun();
-  }, [beginRun, continueSet, openLeaderboard, today?.attempt_status]);
+  }, [beginRun, continueSet, openLeaderboard, setHubError, today]);
 
   const setOverlayConfig = useMemo(() => {
     if (!setOverlay) return null;

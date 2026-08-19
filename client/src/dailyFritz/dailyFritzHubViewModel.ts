@@ -3,6 +3,7 @@ import { formatOrdinalPlace } from './format';
 import {
   formatCountdownHms,
   formatDateLabel,
+  resolveTodayNextAction,
   secondsUntilNextPacificMidnight,
   tierDisplayLabel,
   titleCaseTier,
@@ -129,14 +130,17 @@ export function buildDailyFritzHubViewModel(
   const streakLabel = today ? `${today.streak} day${today.streak === 1 ? '' : 's'}` : '0 days';
   const winTarget = today?.winning_score ?? 60;
 
-  const isComplete = today?.attempt_status === 'completed';
+  const nextAction = resolveTodayNextAction(today);
+  const isComplete = nextAction === 'view_results';
   const isStarted = today?.attempt_status === 'started';
 
-  const primaryCtaLabel = isComplete
+  const primaryCtaLabel = nextAction === 'view_results'
     ? "View Today's Result"
-    : isStarted
-      ? "Resume Today's Set"
-      : "Play Today's Set";
+    : nextAction === 'locked'
+      ? 'Locked'
+      : isStarted
+        ? "Resume Today's Set"
+        : "Play Today's Set";
 
   const games = buildDailyFritzHubGameCards(todaySetResult, {
     isComplete,
@@ -157,7 +161,11 @@ export function buildDailyFritzHubViewModel(
       : today?.competitive_verification_available === false
         ? 'Competitive verification temporarily unavailable'
         : 'Play today to appear on the leaderboard';
-  const setStatusLabel = isComplete ? 'Complete' : isStarted ? 'In Progress' : 'Ready';
+  const setStatusLabel = nextAction === 'locked'
+    ? 'Locked'
+    : isComplete
+      ? 'Complete'
+      : isStarted ? 'In Progress' : 'Ready';
   const setStakesLabel = isComplete
     ? 'Return tomorrow for a new set'
     : today?.competitive_verification_available === false

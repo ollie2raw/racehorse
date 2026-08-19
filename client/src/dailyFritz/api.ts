@@ -291,12 +291,15 @@ export interface DailyFritzLeaderboardRow {
 export type DailyFritzVerificationStatus = 'in_progress' | 'pending_verification' | 'verified' | 'rejected' | 'legacy_unverified';
 
 export type DailyFritzClientNextAction =
-  | 'start_set'
-  | 'resume_hand'
+  | 'play_hand'
   | 'between_games'
   | 'finalize_set'
   | 'view_results'
   | 'locked';
+export type DailyFritzServerNextAction =
+  | DailyFritzClientNextAction
+  | 'start_set'
+  | 'resume_hand';
 export type DailyFritzHistoryEntry = { challenge_date: string; player_score: number; fritz_score: number; won: boolean; completed_at: string | null; verification_status: DailyFritzVerificationStatus };
 export async function getDailyFritzHistory(limit = 5): Promise<DailyFritzHistoryEntry[]> {
   const result = await apiGet<{ ok: true; results: DailyFritzHistoryEntry[] }>(`/api/daily-fritz/history?limit=${Math.max(1,Math.min(10,Math.floor(limit)))}`);
@@ -334,7 +337,7 @@ export interface DailyFritzTodayResponse {
   winning_score: number;
   attempt_status: 'none' | 'started' | 'completed' | 'abandoned';
   authority_revision?: number | null;
-  next_action?: DailyFritzClientNextAction;
+  next_action?: DailyFritzServerNextAction;
   current_game_number: DailyFritzSetGameNumber | null;
   needs_completion?: boolean;
   streak: number;
@@ -373,7 +376,7 @@ export interface DailyFritzStartResponse {
   verifier_version?: number;
   time_zone?: 'America/Los_Angeles';
   verification_status?: DailyFritzVerificationStatus;
-  next_action?: DailyFritzClientNextAction;
+  next_action?: DailyFritzServerNextAction;
   current_hand_index: number;
   current_game_scores?: { you: number; fritz: number };
   current_game_number?: DailyFritzSetGameNumber | null;

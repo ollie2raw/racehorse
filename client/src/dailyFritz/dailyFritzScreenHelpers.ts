@@ -1,4 +1,6 @@
 import type {
+  DailyFritzClientNextAction,
+  DailyFritzServerNextAction,
   DailyFritzSetGameNumber,
   DailyFritzSetGameResult,
   DailyFritzSetResult,
@@ -38,6 +40,47 @@ export function shouldClearStaleClientState(
   if (cached.attempt_status === 'started' && server.attempt_status !== 'started') return true;
   if (cached.attempt_status === 'completed' && server.attempt_status === 'none') return true;
   return false;
+}
+
+function inferFallbackNextActionFromToday(today: DailyFritzTodayResponse | null): DailyFritzClientNextAction {
+  if (!today) return 'play_hand';
+  if (today.attempt_status === 'completed') return 'view_results';
+  if (today.attempt_status === 'abandoned') return 'locked';
+  if (today.attempt_status === 'started' && (today.needs_completion || today.set_result?.setWinner)) {
+    return 'finalize_set';
+  }
+  return 'play_hand';
+}
+
+function inferFallbackNextActionFromStart(started: DailyFritzStartResponse): DailyFritzClientNextAction {
+  if (started.needs_completion || started.set_result?.setWinner) return 'finalize_set';
+  return 'play_hand';
+}
+
+export function normalizeDailyFritzNextAction(
+  nextAction: DailyFritzServerNextAction | null | undefined,
+  fallback: DailyFritzClientNextAction,
+): DailyFritzClientNextAction {
+  if (nextAction === 'play_hand'
+    || nextAction === 'between_games'
+    || nextAction === 'finalize_set'
+    || nextAction === 'view_results'
+    || nextAction === 'locked') {
+    return nextAction;
+  }
+  // Backward-compatibility with older cached API payloads.
+  if (nextAction === 'start_set' || nextAction === 'resume_hand') {
+    return 'play_hand';
+  }
+  return fallback;
+}
+
+export function resolveTodayNextAction(today: DailyFritzTodayResponse | null): DailyFritzClientNextAction {
+  return normalizeDailyFritzNextAction(today?.next_action, inferFallbackNextActionFromToday(today));
+}
+
+export function resolveStartNextAction(started: DailyFritzStartResponse): DailyFritzClientNextAction {
+  return normalizeDailyFritzNextAction(started.next_action, inferFallbackNextActionFromStart(started));
 }
 
 export function friendlyDailyFritzInitError(error: unknown): string {

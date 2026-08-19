@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { buildDailyFritzHubGameCards, buildDailyFritzHubViewModel } from './dailyFritzHubViewModel';
 import type { DailyFritzSetResult, DailyFritzTodayResponse } from './api';
 
-function makeToday(attemptStatus: DailyFritzTodayResponse['attempt_status']): DailyFritzTodayResponse {
+function makeToday(
+  attemptStatus: DailyFritzTodayResponse['attempt_status'],
+  nextAction: DailyFritzTodayResponse['next_action'] = 'play_hand',
+): DailyFritzTodayResponse {
   return {
     ok: true,
     run_date: '2026-07-05',
@@ -11,6 +14,7 @@ function makeToday(attemptStatus: DailyFritzTodayResponse['attempt_status']): Da
     deal_size: 7,
     winning_score: 60,
     attempt_status: attemptStatus,
+    next_action: nextAction,
     current_game_number: null,
     streak: attemptStatus === 'none' ? 3 : 1,
     result: null,
@@ -71,23 +75,34 @@ describe('buildDailyFritzHubGameCards', () => {
 });
 
 describe('buildDailyFritzHubViewModel', () => {
-  it('returns play CTA when attempt not started', () => {
-    const vm = buildDailyFritzHubViewModel(makeToday('none'), null, 0, false, true);
+  it('maps play_hand to play CTA for a fresh start', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('none', 'play_hand'), null, 0, false, true);
     expect(vm.primaryCtaLabel).toBe("Play Today's Set");
     expect(vm.isComplete).toBe(false);
     expect(vm.isStarted).toBe(false);
   });
 
-  it('returns resume CTA when attempt started', () => {
-    const vm = buildDailyFritzHubViewModel(makeToday('started'), emptySetResult, 0, false, true);
+  it('maps between_games to resume CTA', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('started', 'between_games'), emptySetResult, 0, false, true);
     expect(vm.primaryCtaLabel).toBe("Resume Today's Set");
     expect(vm.isStarted).toBe(true);
   });
 
-  it('renders the authoritative completed hub after a lost /complete response', () => {
-    const vm = buildDailyFritzHubViewModel(makeToday('completed'), emptySetResult, 0, false, true);
+  it('maps finalize_set to resume CTA', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('started', 'finalize_set'), emptySetResult, 0, false, true);
+    expect(vm.primaryCtaLabel).toBe("Resume Today's Set");
+  });
+
+  it('maps view_results to completed render', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('completed', 'view_results'), emptySetResult, 0, false, true);
     expect(vm.primaryCtaLabel).toBe("View Today's Result");
     expect(vm.setStatusLabel).toBe('Complete');
     expect(vm.isComplete).toBe(true);
+  });
+
+  it('maps locked to locked render', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('abandoned', 'locked'), emptySetResult, 0, false, true);
+    expect(vm.primaryCtaLabel).toBe('Locked');
+    expect(vm.setStatusLabel).toBe('Locked');
   });
 });
