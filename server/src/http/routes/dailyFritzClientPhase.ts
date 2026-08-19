@@ -1,8 +1,7 @@
 import type { DailyFritzSetResult } from '../../dailyFritz';
 
 export type DailyFritzClientNextAction =
-  | 'start_set'
-  | 'resume_hand'
+  | 'play_hand'
   | 'between_games'
   | 'finalize_set'
   | 'view_results'
@@ -15,11 +14,14 @@ export function resolveDailyFritzClientNextAction(input: {
   currentHandIndex: number;
   hasResumeCheckpoint: boolean;
 }): DailyFritzClientNextAction {
-  if (input.attemptStatus === 'completed' || input.attemptStatus === 'abandoned') {
+  if (input.attemptStatus === 'completed') {
     return 'view_results';
   }
+  if (input.attemptStatus === 'abandoned') {
+    return 'locked';
+  }
   if (input.attemptStatus !== 'started') {
-    return 'start_set';
+    return 'play_hand';
   }
   if (input.needsCompletion || input.setResult?.setWinner) {
     return 'finalize_set';
@@ -28,8 +30,5 @@ export function resolveDailyFritzClientNextAction(input: {
   if (gamesRecorded > 0 && input.currentHandIndex === 0) {
     return 'between_games';
   }
-  if (input.hasResumeCheckpoint || input.currentHandIndex > 0) {
-    return 'resume_hand';
-  }
-  return 'start_set';
+  return 'play_hand';
 }

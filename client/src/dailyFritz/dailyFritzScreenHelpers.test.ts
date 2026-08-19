@@ -12,6 +12,7 @@ import {
   friendlyDailyFritzInitError,
   normalizeSetResult,
   getNextGameNumberFromSetResult,
+  resolveTodayNextAction,
 } from './dailyFritzScreenHelpers';
 
 describe('formatDateLabel', () => {
@@ -129,5 +130,42 @@ describe('normalizeSetResult', () => {
 describe('getNextGameNumberFromSetResult', () => {
   it('returns 1 when set result is null', () => {
     expect(getNextGameNumberFromSetResult(null)).toBe(1);
+  });
+});
+
+describe('resolveTodayNextAction', () => {
+  it('uses server next_action when present', () => {
+    expect(resolveTodayNextAction({
+      ok: true,
+      run_date: '2026-08-19',
+      fritz_tier: 'elite',
+      deal_size: 7,
+      winning_score: 60,
+      attempt_status: 'started',
+      next_action: 'between_games',
+      current_game_number: 2,
+      streak: 1,
+      result: null,
+      set_result: null,
+      rank: null,
+      leaderboard_preview: [],
+    })).toBe('between_games');
+  });
+
+  it('falls back gracefully when next_action is missing', () => {
+    expect(resolveTodayNextAction({
+      ok: true,
+      run_date: '2026-08-19',
+      fritz_tier: 'elite',
+      deal_size: 7,
+      winning_score: 60,
+      attempt_status: 'completed',
+      current_game_number: null,
+      streak: 1,
+      result: null,
+      set_result: null,
+      rank: null,
+      leaderboard_preview: [],
+    })).toBe('view_results');
   });
 });

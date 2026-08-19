@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { resolveDailyFritzClientNextAction } from './dailyFritzClientPhase';
 
 describe('resolveDailyFritzClientNextAction', () => {
-  it('returns start_set for a fresh attempt', () => {
+  it('returns play_hand for a fresh attempt', () => {
     expect(resolveDailyFritzClientNextAction({
       attemptStatus: 'started',
       setResult: null,
       currentHandIndex: 0,
       hasResumeCheckpoint: false,
-    })).toBe('start_set');
+    })).toBe('play_hand');
   });
 
-  it('returns resume_hand when a checkpoint exists mid-hand', () => {
+  it('returns play_hand when a checkpoint exists mid-hand', () => {
     expect(resolveDailyFritzClientNextAction({
       attemptStatus: 'started',
       setResult: { version: 2, format: 'best_of_3', playerGamesWon: 0, fritzGamesWon: 0, totalPointDiff: 0, games: [] },
       currentHandIndex: 2,
       hasResumeCheckpoint: true,
-    })).toBe('resume_hand');
+    })).toBe('play_hand');
   });
 
   it('returns between_games after a game is recorded but the set continues', () => {
@@ -71,5 +71,14 @@ describe('resolveDailyFritzClientNextAction', () => {
       currentHandIndex: 0,
       hasResumeCheckpoint: false,
     })).toBe('view_results');
+  });
+
+  it('returns locked for abandoned attempts', () => {
+    expect(resolveDailyFritzClientNextAction({
+      attemptStatus: 'abandoned',
+      setResult: null,
+      currentHandIndex: 0,
+      hasResumeCheckpoint: false,
+    })).toBe('locked');
   });
 });
