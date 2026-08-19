@@ -462,9 +462,8 @@ export async function startDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzStartResponse> {
   const core = await import('@racehorse/game-core');
-  const response = await dfRequestJsonWithTimeout<DailyFritzStartResponse>('/api/daily-fritz/start', {
-    method: 'POST',
-    body: JSON.stringify({
+  const response = throwApiResult(
+    await timedApiPost<DailyFritzStartResponse>('/api/daily-fritz/start', {
       verification_protocol_version: core.DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
       game_rules_version: core.GAME_RULES_VERSION,
       fritz_policy_version: core.FRITZ_POLICY_VERSION,
@@ -477,9 +476,8 @@ export async function startDailyFritz(options?: {
       })),
       supported_state_digest_versions: [core.DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
       client_release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
-    }),
-    timeoutMs: options?.timeoutMs,
-  });
+    }, options?.timeoutMs ?? DAILY_FRITZ_INIT_TIMEOUT_MS),
+  );
   const normalized = normalizeDailyFritzStartDrawFields(response);
   return normalized;
 }
@@ -610,12 +608,6 @@ export async function nextDailyFritzHand(input: {
 }): Promise<DailyFritzNextHandResponse> {
   const path = '/api/daily-fritz/next-hand';
   const timeoutMs = Math.max(1000, input.timeoutMs ?? DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS);
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
   dfNextHandIngest({
     location: 'dailyFritz/api.ts:nextDailyFritzHand',
     message: 'request-start',
@@ -630,7 +622,7 @@ export async function nextDailyFritzHand(input: {
 
   let result: ApiResult<DailyFritzNextHandResponse>;
   try {
-    result = await apiPost<DailyFritzNextHandResponse>(
+    result = await timedApiPost<DailyFritzNextHandResponse>(
       path,
       {
         attempt_id: input.attemptId,
@@ -647,10 +639,7 @@ export async function nextDailyFritzHand(input: {
             }
           : {}),
       },
-      {
-        signal: controller.signal,
-        headers: { [DAILY_FRITZ_REQUEST_ID_HEADER]: createDailyFritzRequestId() },
-      },
+      timeoutMs,
     );
   } catch (error) {
     const name = error instanceof Error ? error.name : 'unknown';
@@ -664,12 +653,7 @@ export async function nextDailyFritzHand(input: {
     if (import.meta.env.DEV) {
       console.warn('[daily-fritz:next-hand] request failed', { url: path, name, message });
     }
-    if ((error instanceof DOMException && error.name === 'AbortError') || timedOut) {
-      throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
-    }
     throw error;
-  } finally {
-    window.clearTimeout(timeoutId);
   }
 
   dfNextHandIngest({
@@ -679,7 +663,7 @@ export async function nextDailyFritzHand(input: {
     data: { url: path, status: result.status, ok: result.error === null },
   });
 
-  if (controller.signal.aborted && timedOut) {
+  if (result.status === 408) {
     throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
   }
 

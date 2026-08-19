@@ -25,6 +25,7 @@ describe('Daily Fritz transcript adapter', () => {
     ];
     const transcript = buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 1, handNumber: 2, moveLog,
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions).toEqual([
       { sequence: 0, actor: 'player', kind: 'play', tile: { low: 6, high: 6 }, position: 'left' },
@@ -42,6 +43,7 @@ describe('Daily Fritz transcript adapter', () => {
     ];
     const transcript = buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1, moveLog,
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions).toEqual([
       { sequence: 0, actor: 'player', kind: 'play', tile: { low: 2, high: 4 }, position: 'left' },
@@ -70,6 +72,7 @@ describe('Daily Fritz transcript adapter', () => {
       handIndex: 0,
       handNumber: 1,
       moveLog: [placement, { ...placement, moveNumber: 2 }],
+      attemptPredatesJournalRollout: true,
     });
 
     expect(transcript.actions).toEqual([
@@ -112,6 +115,7 @@ describe('Daily Fritz transcript adapter', () => {
           boardState: [{ tile: [0, 5], position: 'left', source: 'mainline' }],
         },
       ],
+      attemptPredatesJournalRollout: true,
     });
 
     expect(transcript.actions).toEqual([
@@ -130,6 +134,7 @@ describe('Daily Fritz transcript adapter', () => {
     expect(() => buildDailyFritzTranscript({
       challengeId: 'challenge', attemptId: 'attempt', gameNumber: 1, handIndex: 0, handNumber: 1,
       moveLog: [{ ...base, moveNumber: 1, handNumber: 1, player: 'you', action: 'place', tile: [1, 2] }],
+      attemptPredatesJournalRollout: true,
     })).toThrow(/placement/i);
   });
 
@@ -142,6 +147,7 @@ describe('Daily Fritz transcript adapter', () => {
       handNumber: 2,
       protocolVersion: 1,
       moveLog: [{ ...base, moveNumber: 1, handNumber: 2, player: 'opponent', action: 'pass' }],
+      attemptPredatesJournalRollout: true,
     });
 
     expect(transcript.protocolVersion).toBe(1);
@@ -166,6 +172,7 @@ describe('Daily Fritz transcript adapter', () => {
         position: 'left',
         authorityPreStateDigest: 'df-state-v1:12345678',
       }],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.fritzPolicyVersion).toBe(1);
     expect(transcript.fritzPolicyContract).toBe(getFritzPolicyContract(1));
@@ -194,6 +201,7 @@ describe('Daily Fritz transcript adapter', () => {
         position: 'left',
         pointsScored: 0,
       }],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
       'fritz:play',
@@ -225,6 +233,7 @@ describe('Daily Fritz transcript adapter', () => {
         },
         { ...base, moveNumber: 2, handNumber: 1, player: 'you', action: 'pass' },
       ],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
       'fritz:play',
@@ -254,6 +263,7 @@ describe('Daily Fritz transcript adapter', () => {
         position: 'left',
         pointsScored: 5,
       }],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
       'player:play',
@@ -296,6 +306,7 @@ describe('Daily Fritz transcript adapter', () => {
         },
         { ...base, moveNumber: 2, handNumber: 1, player: 'opponent', action: 'pass' },
       ],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions.map((action) => `${action.actor}:${action.kind}`)).toEqual([
       'player:play',
@@ -319,7 +330,38 @@ describe('Daily Fritz transcript adapter', () => {
         tile: [3, 5],
         position: 'left',
       }],
+      attemptPredatesJournalRollout: true,
     });
     expect(transcript.actions).toHaveLength(1);
+  });
+
+  it('uses journal evidence even when the attempt is marked legacy', () => {
+    const transcript = buildDailyFritzTranscript({
+      challengeId: 'challenge',
+      attemptId: 'attempt',
+      gameNumber: 1,
+      handIndex: 0,
+      handNumber: 1,
+      moveLog: [{ ...base, moveNumber: 1, handNumber: 1, player: 'you', action: 'pass' }],
+      journal: {
+        handNumber: 1,
+        actions: [{
+          actor: 'fritz',
+          kind: 'play',
+          tile: { low: 6, high: 6 },
+          position: 'left',
+        }],
+      },
+      attemptPredatesJournalRollout: true,
+    });
+    expect(transcript.actions).toEqual([
+      {
+        sequence: 0,
+        actor: 'fritz',
+        kind: 'play',
+        tile: { low: 6, high: 6 },
+        position: 'left',
+      },
+    ]);
   });
 });

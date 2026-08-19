@@ -292,6 +292,7 @@ describe('Daily Fritz: real client transcript builder on a two-sided block, thro
       handIndex: 0,
       handNumber: 1,
       moveLog: buildRealClientMoveLog(),
+      attemptPredatesJournalRollout: true,
       protocolVersion: 2,
       clientRelease: 'test-client',
       // This is the authoritative post-hand engine state a real client would
@@ -349,6 +350,7 @@ describe('Daily Fritz: real client transcript builder on a two-sided block, thro
       handIndex: 0,
       handNumber: 1,
       moveLog: buildRealClientMoveLog(),
+      attemptPredatesJournalRollout: true,
       protocolVersion: 2,
       clientRelease: 'test-client',
       sealBlockedHand: { consecutivePasses: 2, nextActor: 'player' },
@@ -440,6 +442,7 @@ describe('Daily Fritz: real client transcript builder on a two-sided block, thro
       handIndex: 0,
       handNumber: 1,
       moveLog,
+      attemptPredatesJournalRollout: true,
       protocolVersion: 2,
       clientRelease: 'test-client',
       sealBlockedHand: { consecutivePasses: 2, nextActor: 'player' },
@@ -522,6 +525,7 @@ describe('Daily Fritz: a two-sided block that hit the pre-fix bug does not perma
       handIndex: 0,
       handNumber: 1,
       moveLog: buildRealClientMoveLog(),
+      attemptPredatesJournalRollout: true,
       protocolVersion: 2,
       clientRelease: 'test-client',
       sealBlockedHand: { consecutivePasses: 1, nextActor: 'player' }, // the old, wrong count
@@ -571,6 +575,7 @@ describe('Daily Fritz: a two-sided block that hit the pre-fix bug does not perma
       handIndex: 0,
       handNumber: 1,
       moveLog: buildRealClientMoveLog(),
+      attemptPredatesJournalRollout: true,
       protocolVersion: 2,
       clientRelease: 'test-client',
       sealBlockedHand: { consecutivePasses: 2, nextActor: 'player' }, // the correct, authoritative count
