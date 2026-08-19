@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { assertDesktopNavRegionsDoNotOverlap } from './helpers/navOverlap';
 
 test.describe('browser routing', () => {
   test.beforeEach(async ({ page }) => {
@@ -78,6 +79,23 @@ test.describe('browser routing', () => {
     await expect(page.getByRole('button', { name: 'Global', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'By Mode', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/\/social$/);
+  });
+
+  test('desktop nav regions keep separate hit targets at common widths', async ({ page }) => {
+    for (const width of [769, 1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 720 });
+      await page.goto('/solo', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: 'Single Player' })).toBeVisible({ timeout: 15_000 });
+      await assertDesktopNavRegionsDoNotOverlap(page);
+
+      await page.getByRole('button', { name: 'Learn', exact: true }).click();
+      await expect(page).toHaveURL(/\/learn$/);
+      await expect(page.getByRole('heading', { name: 'Learn' })).toBeVisible({ timeout: 15_000 });
+      await assertDesktopNavRegionsDoNotOverlap(page);
+
+      await page.getByRole('button', { name: 'Racehorse home' }).click();
+      await expect(page).toHaveURL(/\/$/);
+    }
   });
 
   for (const path of [

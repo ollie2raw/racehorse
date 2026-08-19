@@ -211,6 +211,37 @@
     min-height: 42px;
   }
 
+  /*
+   * Desktop nav uses a 3-column grid (brand | tabs | stats). The old absolute
+   * center stack sat on top of siblings while `.rh-nav-brand { flex: 1 1 auto }`
+   * expanded the logo hit target across the full row — intercepting tab clicks
+   * (and vice versa depending on paint order).
+   */
+  .rh-nav-brand {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .rh-nav-center-desktop {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .rh-nav-center-desktop > div {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .rh-nav-center-desktop button {
+    white-space: nowrap;
+  }
+
+  .rh-nav-stats {
+    min-width: 0;
+  }
+
   .home-mode-tabs {
     display: block;
   }
