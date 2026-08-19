@@ -51,6 +51,7 @@ export interface Config {
   readonly endHandBonus: EndHandBonus;
   readonly winningScore: number; // 60
   readonly skipPregameDraw?: boolean;
+  readonly policyProfile?: string | null;
 }
 
 export const DEFAULT_CONFIG: Config = {
