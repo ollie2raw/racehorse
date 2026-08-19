@@ -166,7 +166,7 @@ export default function SinglePlayerHubScreen({
           onOpenAccount={onOpenAccount}
         />
 
-        <main className="sp-solo-main relative flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-5 pt-10 home-main">
+        <main className="sp-solo-main relative flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pb-[calc(16px+var(--rh-bottom-tab-offset))] pt-4 home-main desk:overflow-hidden desk:pb-5 desk:pt-10">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]"
             aria-hidden="true"

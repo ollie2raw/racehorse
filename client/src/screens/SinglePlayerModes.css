@@ -20,6 +20,12 @@
   left: 38%;
   z-index: 1;
   pointer-events: none;
+  /* Every card's art is scaled and nudged with `transform` for framing, which
+     pushes it past this slot (up to ~120px at phone widths). Containment is a
+     property of the slot rather than something each card has to re-tune, so the
+     art can be framed freely without escaping the card's border. */
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 /* Standardized Art styling matching fritzwave baseline */

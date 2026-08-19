@@ -457,8 +457,6 @@
    RIGHT — control panel
    ============================================= */
 .pvf-control-panel {
-  flex: 1 1 0 !important; /* Remaining width + shared row height with left column */
-  min-height: 0 !important;
   display: flex; flex-direction: column;
   background: rgba(7,9,16,0.92);
   border: 1px solid rgba(255,255,255,0.09);
@@ -751,21 +749,52 @@
   }
   .pvf-control-panel {
     width: 100% !important;
-    flex: 1 1 auto !important;
   }
   .pvf-opponent-card { max-width:460px; height:auto; aspect-ratio: auto; }
   .pvf-difficulty-grid { grid-template-columns:repeat(2,1fr); }
 }
-@media (max-width: 768px) {
+
+/* Remaining width + shared row height with the left column. Desktop-only: on a
+   phone the panel is stacked, and this contract collapsed it below its content. */
+@media (min-width: 769px) and (min-height: 600px) {
+  .pvf-control-panel {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+  }
+}
+
+/* Letting the panel flex-shrink is only safe where the column has room to
+   spare. On a phone it collapses the panel to a few pixels and its rows spill
+   out of the scroller's measurement, so this is scoped away from phones. */
+@media (max-width: 1100px) and (min-width: 769px) and (min-height: 600px) {
+  .pvf-control-panel {
+    flex: 1 1 auto !important;
+  }
+}
+/* Phone layout (complement of the app-wide `desk` breakpoint). A width-only
+   gate misses a handset in landscape (844px wide), which is how this layout
+   lost its scroll container and its bottom-tab clearance when turned sideways.
+   The bottom padding clears the fixed tab bar that overlays this scroller. */
+@media not all and (min-width: 769px) and (min-height: 600px) {
   .pvf-layout {
-    padding: 12px 16px 24px !important;
+    padding: 12px 16px calc(24px + var(--rh-bottom-tab-offset)) !important;
   }
   .pvf-root > .pvf-layout {
     overflow: auto !important;
   }
+  /* `flex: 1 1 auto` lets the panel shrink below its content inside the
+     height-bounded column; with `overflow: visible` its rows then paint outside
+     its own box, so the scroll container never measures them and the last rows
+     sit under the tab bar unreachable. Stop it shrinking so the scroller sees
+     the real content height. */
+  .pvf-layout .pvf-control-panel,
+  .pvf-layout .pvf-left-col {
+    flex: 0 0 auto;
+    max-height: none;
+  }
   .pvf-title { font-size: 36px; }
 }
 @media (max-width: 640px) {
-  .pvf-layout { padding:12px 16px 32px !important; }
+  .pvf-layout { padding:12px 16px calc(32px + var(--rh-bottom-tab-offset)) !important; }
   .pvf-title { font-size:40px; }
 }
