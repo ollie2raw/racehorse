@@ -428,13 +428,29 @@ export function useDailyFritzRunController({
               }
             : current,
         );
-        await submitSetCompletion({
-          run: recordedRun,
-          setResult,
-          completedGame,
-          currentHandIndex: game.currentHandIndex,
-          boardContext: true,
-        });
+        try {
+          await submitSetCompletion({
+            run: recordedRun,
+            setResult,
+            completedGame,
+            currentHandIndex: game.currentHandIndex,
+            boardContext: true,
+          });
+        } catch (completeErr) {
+          const completeMessage = completeErr instanceof Error
+            ? completeErr.message
+            : 'Failed to complete Daily Fritz attempt.';
+          reportDailyFritzOperationalAlert(
+            'complete_failed',
+            'Daily Fritz complete failed',
+            {
+              attemptId: run.attempt_id,
+              gameNumber,
+              error: completeMessage,
+            },
+          );
+          return;
+        }
         return;
       }
 
