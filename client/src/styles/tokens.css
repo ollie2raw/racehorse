@@ -67,7 +67,7 @@
   --mobile-w:           600px;
   --very-small-w:       380px;
   --touch-min:          44px;
-  --rh-bottom-tab-h:    56px;
+  --rh-bottom-tab-h:    60px;
   --rh-bottom-tab-offset: calc(var(--rh-bottom-tab-h) + env(safe-area-inset-bottom, 0px));
 
   /* Match board arena (inGameBoardShell — Pass A playfield) */
