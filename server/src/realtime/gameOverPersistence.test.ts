@@ -21,6 +21,7 @@ const {
   isRankedGameSourceColumnsEnabledMock,
   logWarnMock,
   verifyPlayerMoveLogMock,
+  emitMpAuthorityFunnelMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -38,6 +39,7 @@ const {
   isRankedGameSourceColumnsEnabledMock: vi.fn(),
   logWarnMock: vi.fn(),
   verifyPlayerMoveLogMock: vi.fn(),
+  emitMpAuthorityFunnelMock: vi.fn(),
 }));
 
 vi.mock('../ghost/verifier', () => ({
@@ -97,6 +99,10 @@ vi.mock('../ranking/rankedGamePayload', () => ({
 
 vi.mock('../logger', () => ({
   childLogger: () => ({ warn: logWarnMock, error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+}));
+
+vi.mock('../multiplayer/mpAuthorityTelemetry', () => ({
+  emitMpAuthorityFunnel: (...args: unknown[]) => emitMpAuthorityFunnelMock(...args),
 }));
 
 import { createGameOverPersistScheduler } from './gameOverPersistence';
@@ -437,9 +443,149 @@ describe('createGameOverPersistScheduler', () => {
         expect.objectContaining({ applyGlicko: false }),
       );
       expect(logWarnMock).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: 'fabricated board_state' }),
+        expect.objectContaining({ reason: 'fabricated board_state', entryIndex: 0 }),
         'fritz in-room move log failed verification — recording without Glicko',
       );
+      expect(emitMpAuthorityFunnelMock).toHaveBeenCalledWith(
+        'private_move_log_verification_failed',
+        expect.objectContaining({
+          roomCode: 'ROOM1',
+          seatId: 'seat-a',
+          failureCode: 'move_log_verification_failed',
+          extra: expect.objectContaining({
+            sourceMatchId: 'match-1',
+            reason: 'fabricated board_state',
+            entryIndex: 0,
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('human live-room completion — verify-first Glicko gate', () => {
+    const logA = [{ turn: 1, board_state: 'board:empty', tile_played: '3|3' }] as any;
+    const logB = [{ turn: 2, board_state: 'board:empty', tile_played: '4|4' }] as any;
+
+    function buildHumanInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<Room> } = {}) {
+      const { room: roomOverrides, ...restOverrides } = overrides;
+      return buildInput({
+        room: {
+          ghostMoveLogs: {
+            'seat-a': logA,
+            'seat-b': logB,
+          },
+          ...roomOverrides,
+        },
+        ...restOverrides,
+      });
+    }
+
+    function mockHumanProfilesAndInserts() {
+      const profileA = { id: 'user-a', glicko_rating: 1500, glicko_rd: 200 };
+      const profileB = { id: 'user-b', glicko_rating: 1500, glicko_rd: 200 };
+      const gameA = { id: 'g-a', player_id: 'user-a', opponent_id: 'user-b', player_score: 30, opponent_score: 10, played_at: 't' };
+      const gameB = { id: 'g-b', player_id: 'user-b', opponent_id: 'user-a', player_score: 10, opponent_score: 30, played_at: 't' };
+
+      supabaseFetchMock.mockImplementation(async (path: string) => {
+        if (path.includes('/rest/v1/profiles?id=eq.user-a')) return [profileA];
+        if (path.includes('/rest/v1/profiles?id=eq.user-b')) return [profileB];
+        return [];
+      });
+      insertRankedGameIdempotentMock
+        .mockResolvedValueOnce({ isNew: true, game: gameA })
+        .mockResolvedValueOnce({ isNew: true, game: gameB });
+
+      return { profileA, profileB, gameA, gameB };
+    }
+
+    it('verifies both logs before ranked insert and applies Glicko when both pass', async () => {
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+      const { profileA, profileB, gameA, gameB } = mockHumanProfilesAndInserts();
+
+      await runPersist(buildHumanInput());
+
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA);
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logB);
+      expect(insertRankedGameIdempotentMock).toHaveBeenCalledTimes(2);
+      expect(processRealtimeMultiplayerGameMock).toHaveBeenCalledWith({
+        playerAProfile: profileA,
+        playerBProfile: profileB,
+        playerAGame: gameA,
+        playerBGame: gameB,
+      });
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a', applyGlicko: undefined }),
+      );
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-b', applyGlicko: undefined }),
+      );
+    });
+
+    it('does not insert ranked_games or apply Glicko when either log fails verification', async () => {
+      verifyPlayerMoveLogMock
+        .mockReturnValueOnce({ ok: true })
+        .mockReturnValueOnce({ ok: false, reason: 'fabricated board_state', entryIndex: 0 });
+      mockHumanProfilesAndInserts();
+
+      await runPersist(buildHumanInput());
+
+      expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+      expect(processRealtimeMultiplayerGameMock).not.toHaveBeenCalled();
+      expect(logWarnMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roomCode: 'ROOM1',
+          sourceMatchId: 'match-1',
+          seatId: 'seat-b',
+          reason: 'fabricated board_state',
+          entryIndex: 0,
+        }),
+        'human live-room move log failed verification — recording without Glicko',
+      );
+      expect(emitMpAuthorityFunnelMock).toHaveBeenCalledWith(
+        'private_move_log_verification_failed',
+        expect.objectContaining({
+          roomCode: 'ROOM1',
+          seatId: 'seat-b',
+          failureCode: 'move_log_verification_failed',
+          extra: expect.objectContaining({
+            sourceMatchId: 'match-1',
+            reason: 'fabricated board_state',
+            entryIndex: 0,
+          }),
+        }),
+      );
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a', applyGlicko: false }),
+      );
+      expect(completeGhostGameMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-b', applyGlicko: false }),
+      );
+    });
+
+    it('allows Glicko when one seat has an empty log and the other verifies', async () => {
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+      const { profileA, profileB, gameA, gameB } = mockHumanProfilesAndInserts();
+
+      await runPersist(
+        buildHumanInput({
+          room: {
+            ghostMoveLogs: {
+              'seat-a': logA,
+              'seat-b': [],
+            },
+          },
+        }),
+      );
+
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledTimes(1);
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA);
+      expect(insertRankedGameIdempotentMock).toHaveBeenCalledTimes(2);
+      expect(processRealtimeMultiplayerGameMock).toHaveBeenCalledWith({
+        playerAProfile: profileA,
+        playerBProfile: profileB,
+        playerAGame: gameA,
+        playerBGame: gameB,
+      });
     });
   });
 });

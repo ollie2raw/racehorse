@@ -15,7 +15,8 @@ export type MpAuthorityFunnelEvent =
   | 'private_match_abandoned'
   | 'private_match_archived'
   | 'private_durability_degraded'
-  | 'private_durability_failed';
+  | 'private_durability_failed'
+  | 'private_move_log_verification_failed';
 
 export type MpAuthorityFailureCode =
   | 'missing_request_id'
@@ -25,7 +26,8 @@ export type MpAuthorityFailureCode =
   | 'invariant_violation'
   | 'hydration_rejected'
   | 'session_superseded'
-  | 'recovery_exhausted';
+  | 'recovery_exhausted'
+  | 'move_log_verification_failed';
 
 type EmitPayload = {
   roomCode?: string;

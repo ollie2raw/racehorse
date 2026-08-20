@@ -23,8 +23,62 @@ import {
   resolvePendingFritzMatch,
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
+import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
+import type { GhostMoveLogEntry } from '../ghost/service';
+import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
 
 const log = childLogger('realtime:game-over');
+
+function verifySeatMoveLog(moveLog: GhostMoveLogEntry[]): GhostMoveLogVerificationResult {
+  if (moveLog.length === 0) return { ok: true };
+  return verifyPlayerMoveLog(moveLog);
+}
+
+type HumanMoveLogVerificationFailure = {
+  seatId: string;
+  reason: string;
+  entryIndex: number;
+};
+
+function evaluateHumanMoveLogVerification(
+  roomCode: string,
+  sourceMatchId: string,
+  seats: Array<{ id: string }>,
+  ghostMoveLogs: Record<string, GhostMoveLogEntry[]>,
+): { eligible: true } | { eligible: false; failure: HumanMoveLogVerificationFailure } {
+  for (const seat of seats) {
+    const verification = verifySeatMoveLog(ghostMoveLogs[seat.id] ?? []);
+    if (!verification.ok) {
+      const failure: HumanMoveLogVerificationFailure = {
+        seatId: seat.id,
+        reason: verification.reason,
+        entryIndex: verification.entryIndex,
+      };
+      log.warn(
+        {
+          roomCode,
+          sourceMatchId,
+          seatId: failure.seatId,
+          reason: failure.reason,
+          entryIndex: failure.entryIndex,
+        },
+        'human live-room move log failed verification — recording without Glicko',
+      );
+      emitMpAuthorityFunnel('private_move_log_verification_failed', {
+        roomCode,
+        seatId: failure.seatId,
+        failureCode: 'move_log_verification_failed',
+        extra: {
+          sourceMatchId,
+          reason: failure.reason,
+          entryIndex: failure.entryIndex,
+        },
+      });
+      return { eligible: false, failure };
+    }
+  }
+  return { eligible: true };
+}
 
 /**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
@@ -136,6 +190,12 @@ export function createGameOverPersistScheduler(io: Server) {
           rankedSourceColumnsEnabled,
         }, 'game-over persist ranked insert');
 
+        const isHumanVsHuman = Boolean(a.userId && b.userId && !fritzActivityCtx);
+        const humanMoveLogVerification = isHumanVsHuman
+          ? evaluateHumanMoveLogVerification(room.code, sourceMatchId, [a, b], room.ghostMoveLogs)
+          : { eligible: true as const };
+        const humanGlickoEligible = humanMoveLogVerification.eligible;
+
         for (const p of rankingParticipants) {
           if (p.me.userId) {
             const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
@@ -156,9 +216,8 @@ export function createGameOverPersistScheduler(io: Server) {
               // no-sourceType-filter query — triggered moments later by that
               // same completeGhostGame call — picked it up too, double-applying
               // a Glicko delta for one match. Skip this insert for Fritz;
-              // human-vs-human still needs it for processRealtimeMultiplayerGame
-              // below.
-              if (profile && opponentId !== FRITZ_SYSTEM_ID) {
+              // human-vs-human inserts only after verify-first gate passes.
+              if (profile && opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
                 const insertResult = await insertRankedGameIdempotent({
                   playerId: p.me.userId,
                   opponentId,
@@ -185,14 +244,26 @@ export function createGameOverPersistScheduler(io: Server) {
                 // snapshot (no deal/seed is persisted for live in-room bot
                 // seats the way async Ghost sessions persist one at start).
                 const isFritzOpponent = opponentId === FRITZ_SYSTEM_ID;
-                const verification = isFritzOpponent ? verifyPlayerMoveLog(moveLog) : null;
-                if (isFritzOpponent && verification && !verification.ok) {
+                const fritzVerification = isFritzOpponent ? verifySeatMoveLog(moveLog) : null;
+                if (isFritzOpponent && fritzVerification && !fritzVerification.ok) {
                   log.warn({
                     roomCode: room.code,
                     userId: p.me.userId,
-                    reason: verification.reason,
+                    reason: fritzVerification.reason,
+                    entryIndex: fritzVerification.entryIndex,
                   }, 'fritz in-room move log failed verification — recording without Glicko');
+                  emitMpAuthorityFunnel('private_move_log_verification_failed', {
+                    roomCode: room.code,
+                    seatId: p.me.id,
+                    failureCode: 'move_log_verification_failed',
+                    extra: {
+                      sourceMatchId,
+                      reason: fritzVerification.reason,
+                      entryIndex: fritzVerification.entryIndex,
+                    },
+                  });
                 }
+                const humanApplyGlicko = humanGlickoEligible ? undefined : false;
                 await completeGhostGame({
                   userId: p.me.userId,
                   opponentUserId: opponentId,
@@ -200,7 +271,7 @@ export function createGameOverPersistScheduler(io: Server) {
                   opponentScore: p.oppScore,
                   moveLog,
                   matchId: sourceMatchId,
-                  applyGlicko: isFritzOpponent ? Boolean(verification?.ok) : undefined,
+                  applyGlicko: isFritzOpponent ? Boolean(fritzVerification?.ok) : humanApplyGlicko,
                 });
               }
             }
