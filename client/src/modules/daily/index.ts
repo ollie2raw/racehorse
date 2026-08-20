@@ -37,7 +37,7 @@ export {
   type DailyFritzMatchSession,
   type DailyFritzSessionAction,
 } from './dailyFritzMatchSession.ts';
-export { resolveDailyFritzSession, buildDailyFritzAuthorityCursor } from './resolveDailyFritzSession.ts';
+export { resolveDailyFritzMatchSession, buildDailyFritzAuthorityCursor } from './resolveDailyFritzSession.ts';
 export { useDailyFritzSessionPersistence } from './useDailyFritzSessionPersistence.ts';
 export { useDailyFritzCompletion } from './useDailyFritzCompletion.ts';
 export { useDailyFritzDiagnostics, type UseDailyFritzDiagnosticsArgs } from './useDailyFritzDiagnostics.ts';

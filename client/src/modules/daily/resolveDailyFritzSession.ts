@@ -44,7 +44,7 @@ function resolveDailyFritzMatch(
  * Pre-game draw shells may be temporarily incoherent (handNumber 0); persistence
  * skips checkpoints while the draw UI is active.
  */
-export function resolveDailyFritzSession(
+export function resolveDailyFritzMatchSession(
   input: ResolveDailyFritzSessionInput,
 ): DailyFritzMatchSession {
   const cursor = buildDailyFritzAuthorityCursor(

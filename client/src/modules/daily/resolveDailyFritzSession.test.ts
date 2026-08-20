@@ -1,4 +1,4 @@
-import { resolveDailyFritzSession } from './resolveDailyFritzSession.ts';
+import { resolveDailyFritzMatchSession } from './resolveDailyFritzSession.ts';
 import { isCoherentDailyFritzSession } from './dailyFritzMatchSession.ts';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
@@ -28,7 +28,7 @@ function startPackage(overrides: Partial<DailyFritzStartResponse> = {}): DailyFr
   } as DailyFritzStartResponse;
 }
 
-describe('resolveDailyFritzSession', () => {
+describe('resolveDailyFritzMatchSession', () => {
   it('binds persisted snapshot cursor and match together', () => {
     const match = createBotMatch(60, 7);
     match.handNumber = 3;
@@ -38,7 +38,7 @@ describe('resolveDailyFritzSession', () => {
       match,
     } as DailyFritzPersistedSnapshot;
 
-    const session = resolveDailyFritzSession({
+    const session = resolveDailyFritzMatchSession({
       dailyFritzPackage: startPackage(),
       winningScore: 60,
       persistedSnapshot: persisted,
@@ -53,7 +53,7 @@ describe('resolveDailyFritzSession', () => {
   });
 
   it('uses server package cursor when no persisted snapshot exists', () => {
-    const session = resolveDailyFritzSession({
+    const session = resolveDailyFritzMatchSession({
       dailyFritzPackage: startPackage({ current_hand_index: 0, authority_revision: 3 }),
       winningScore: 60,
       persistedSnapshot: null,

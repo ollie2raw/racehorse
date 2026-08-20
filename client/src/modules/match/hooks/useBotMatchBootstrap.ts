@@ -29,7 +29,7 @@ import {
   type DailyFritzAuthorityCursor,
   type DailyFritzMatchSession,
 } from '../../daily/dailyFritzMatchSession.ts';
-import { resolveDailyFritzSession } from '../../daily/resolveDailyFritzSession.ts';
+import { resolveDailyFritzMatchSession } from '../../daily/resolveDailyFritzSession.ts';
 import type { StateUpdater } from '../store/MatchSessionStore.ts';
 
 /** Shared draw cadence for Fritz and player forced-draw presentation. */
@@ -114,7 +114,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
 
   const initialDailyFritzSession = useMemo((): DailyFritzMatchSession | null => {
     if (mode !== 'daily-fritz' || !dailyFritzPackage) return null;
-    return resolveDailyFritzSession({
+    return resolveDailyFritzMatchSession({
       dailyFritzPackage,
       winningScore,
       persistedSnapshot: resumablePersistedDailyFritzMatch,
