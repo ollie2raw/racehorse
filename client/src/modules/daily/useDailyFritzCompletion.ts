@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { MoveEntry } from '../../game/moveLogger';
-import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
@@ -19,11 +18,12 @@ type DailyFritzGameCompleteResult = {
   moveLog: MoveEntry[];
 };
 
+import type { DailyFritzMatchSession } from './dailyFritzMatchSession.ts';
+
 type UseDailyFritzCompletionArgs = {
   enabled: boolean;
   dailyFritzPackage: DailyFritzStartResponse | null | undefined;
-  dailyFritzHandIndex: number;
-  match: BotMatchState;
+  session: DailyFritzMatchSession;
   moveLog: readonly MoveEntry[];
   movesUsed: number;
   userId: string | null | undefined;
@@ -50,8 +50,7 @@ type UseDailyFritzCompletionResult = {
 export function useDailyFritzCompletion({
   enabled,
   dailyFritzPackage,
-  dailyFritzHandIndex,
-  match,
+  session,
   moveLog,
   movesUsed,
   userId,
@@ -63,6 +62,8 @@ export function useDailyFritzCompletion({
   resultLoading,
   resultError,
 }: UseDailyFritzCompletionArgs): UseDailyFritzCompletionResult {
+  const { match } = session;
+  const dailyFritzHandIndex = session.cursor.handIndex;
   const [dailyFritzLeaderboard, setDailyFritzLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
   const [dailyFritzRank, setDailyFritzRank] = useState<number | null>(null);
 

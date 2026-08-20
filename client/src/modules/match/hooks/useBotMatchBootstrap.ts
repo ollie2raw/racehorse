@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Tile } from '../../../types.ts';
 import type { BotPlayerId, BotMatchState } from '../runtime/botEngine.ts';
 import { fairnessLog } from '../runtime/fairnessLog.ts';
@@ -24,6 +24,13 @@ import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
 import { BOT_DRAW_STEP_MS } from '../../bot-turn/botTurnGuards.ts';
 import { shouldRunDailyFritzPreGameDraw } from '../../daily/createDailyFritzOfficialMatch.ts';
 import { DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION } from '@racehorse/game-core';
+import {
+  dailyFritzSessionReducer,
+  type DailyFritzAuthorityCursor,
+  type DailyFritzMatchSession,
+} from '../../daily/dailyFritzMatchSession.ts';
+import { resolveDailyFritzSession } from '../../daily/resolveDailyFritzSession.ts';
+import type { StateUpdater } from '../store/MatchSessionStore.ts';
 
 /** Shared draw cadence for Fritz and player forced-draw presentation. */
 export const DRAW_STEP_MS = BOT_DRAW_STEP_MS;
@@ -104,6 +111,17 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
         && shouldRunDailyFritzPreGameDraw(dailyFritzPackage)
       )
     );
+
+  const initialDailyFritzSession = useMemo((): DailyFritzMatchSession | null => {
+    if (mode !== 'daily-fritz' || !dailyFritzPackage) return null;
+    return resolveDailyFritzSession({
+      dailyFritzPackage,
+      winningScore,
+      persistedSnapshot: resumablePersistedDailyFritzMatch,
+      preGameDrawEligible,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap-time snapshot only
+  }, []);
 
   const [preGameDrawCompleted, setPreGameDrawCompleted] = useState(() =>
     Boolean(resumablePersistedDailyFritzMatch),
@@ -193,20 +211,63 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     guidedInitSourceRef,
   };
 
-  const { match, setMatch, matchRef, runtime: matchRuntime } = useMatchRuntimeBridge<BotMatchState>({
-    createInitialState: () => resolveInitialBotMatchState({
-      ...bootstrapInputRef.current,
-      resumablePersistedDailyFritzMatch: bootstrapInputRef.current.resumablePersistedDailyFritzMatch?.match
-        ? {
-            match: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.match,
-            movesUsed: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.movesUsed,
-            moveLog: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.moveLog,
-          }
-        : null,
-    }),
+  const initialDailyFritzSessionRef = useRef(initialDailyFritzSession);
+  initialDailyFritzSessionRef.current = initialDailyFritzSession;
+
+  const { match, setMatch: rawSetMatch, matchRef, runtime: matchRuntime } = useMatchRuntimeBridge<BotMatchState>({
+    createInitialState: () => initialDailyFritzSessionRef.current?.match
+      ?? resolveInitialBotMatchState({
+        ...bootstrapInputRef.current,
+        resumablePersistedDailyFritzMatch: bootstrapInputRef.current.resumablePersistedDailyFritzMatch?.match
+          ? {
+              match: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.match,
+              movesUsed: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.movesUsed,
+              moveLog: bootstrapInputRef.current.resumablePersistedDailyFritzMatch.moveLog,
+            }
+          : null,
+      }),
     capabilities: matchCapabilities,
     instanceKey: bootstrapInstanceKey,
   });
+
+  const [dailyFritzSession, dispatchDailyFritzSession] = useReducer(
+    dailyFritzSessionReducer,
+    initialDailyFritzSession ?? {
+      cursor: { gameNumber: 1, handIndex: 0, revision: 0 },
+      match,
+    },
+  );
+
+  const isDailyFritzMode = mode === 'daily-fritz';
+
+  const setMatch = useCallback((updater: StateUpdater<BotMatchState>) => {
+    rawSetMatch((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (isDailyFritzMode && initialDailyFritzSessionRef.current) {
+        dispatchDailyFritzSession({ type: 'APPLY_ENGINE_RESULT', match: next });
+      }
+      return next;
+    });
+  }, [rawSetMatch, isDailyFritzMode]);
+
+  const applyDailyFritzNextHand = useCallback((input: {
+    cursor: DailyFritzAuthorityCursor;
+    match: BotMatchState;
+  }) => {
+    dispatchDailyFritzSession({
+      type: 'APPLY_NEXT_HAND',
+      cursor: input.cursor,
+      match: input.match,
+    });
+    rawSetMatch(input.match);
+  }, [rawSetMatch]);
+
+  const dailyFritzHandIndex = isDailyFritzMode
+    ? dailyFritzSession.cursor.handIndex
+    : 0;
+  const dailyFritzAuthorityRevision = isDailyFritzMode
+    ? dailyFritzSession.cursor.revision
+    : 0;
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [, setSelectedController] = useState<BotPlayerId | null>(null);
@@ -216,7 +277,6 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   const [showRecommendation, setShowRecommendation] = useState(true);
 
   const isGhostMode = mode === 'ghost';
-  const isDailyFritzMode = mode === 'daily-fritz';
   const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isJourneyTrial = Boolean(journeyTrial);
@@ -279,6 +339,11 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     setMatch,
     matchRef,
     matchRuntime,
+    dailyFritzSession: isDailyFritzMode ? dailyFritzSession : null,
+    dailyFritzHandIndex,
+    dailyFritzAuthorityRevision,
+    applyDailyFritzNextHand,
+    initialDailyFritzSession,
     selectedTile,
     setSelectedTile,
     setSelectedController,

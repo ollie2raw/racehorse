@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { useDailyFritzSessionPersistence } from './useDailyFritzSessionPersistence.ts';
+import type { DailyFritzMatchSession } from './dailyFritzMatchSession.ts';
 import { DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS } from '../../dailyFritz/dailyFritzCheckpointUnload.ts';
 
 const { saveDailyFritzCheckpointMock, flushDailyFritzCheckpointOnUnloadMock } = vi.hoisted(() => ({
@@ -32,6 +33,14 @@ vi.mock('../../api/client.ts', () => ({
   })),
 }));
 
+function sessionFromHand(handIndex: number, match = createBotMatch(60, 7)): DailyFritzMatchSession {
+  match.handNumber = handIndex + 1;
+  return {
+    cursor: { gameNumber: 1, handIndex, revision: handIndex + 4 },
+    match,
+  };
+}
+
 describe('useDailyFritzSessionPersistence', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -45,7 +54,6 @@ describe('useDailyFritzSessionPersistence', () => {
 
   it('does not checkpoint intermediate draw presentation state', () => {
     const storageKey = 'racehorse:daily-fritz:test-draw-transaction';
-    const match = createBotMatch(60, 7);
     const base = {
       enabled: true,
       storageKey,
@@ -53,10 +61,7 @@ describe('useDailyFritzSessionPersistence', () => {
       verifiedMatchId: 'verified-1',
       runDate: '2026-07-25',
       runFingerprint: 'run-fingerprint',
-      gameNumber: 1,
-      dailyFritzHandIndex: 0,
-      authorityRevision: 1,
-      match,
+      session: sessionFromHand(0),
       moveLog: [],
       movesUsed: 0,
       preGameDrawActive: false,
@@ -78,10 +83,10 @@ describe('useDailyFritzSessionPersistence', () => {
     expect(JSON.parse(window.localStorage.getItem(storageKey)!).transcriptProtocolVersion).toBe(2);
   });
 
-  it('never persists a new authority cursor with the previous hand match', () => {
+  it('persists coherent session snapshots atomically', () => {
     const storageKey = 'racehorse:daily-fritz:test-authority-cursor';
-    const handOne = createBotMatch(60, 7);
-    const handTwo = { ...handOne, handNumber: 2 };
+    const handOne = sessionFromHand(0);
+    const handTwo = sessionFromHand(1, { ...handOne.match, handNumber: 2 });
     const base = {
       enabled: true,
       storageKey,
@@ -89,7 +94,6 @@ describe('useDailyFritzSessionPersistence', () => {
       verifiedMatchId: 'verified-1',
       runDate: '2026-07-25',
       runFingerprint: 'run-fingerprint',
-      gameNumber: 1,
       moveLog: [],
       movesUsed: 0,
       preGameDrawActive: false,
@@ -98,26 +102,16 @@ describe('useDailyFritzSessionPersistence', () => {
     };
 
     const { rerender } = renderHook(
-      ({ handIndex, authorityRevision, match }) => {
-        useDailyFritzSessionPersistence({
-          ...base,
-          dailyFritzHandIndex: handIndex,
-          authorityRevision,
-          match,
-        });
+      ({ session }: { session: DailyFritzMatchSession }) => {
+        useDailyFritzSessionPersistence({ ...base, session });
       },
-      { initialProps: { handIndex: 0, authorityRevision: 4, match: handOne } },
+      { initialProps: { session: handOne } },
     );
 
     expect(JSON.parse(window.localStorage.getItem(storageKey)!).authorityRevision).toBe(4);
 
-    rerender({ handIndex: 1, authorityRevision: 5, match: handOne });
-    const duringBoundary = JSON.parse(window.localStorage.getItem(storageKey)!);
-    expect(duringBoundary.currentHandIndex).toBe(0);
-    expect(duringBoundary.authorityRevision).toBe(4);
-    expect(duringBoundary.match.handNumber).toBe(1);
+    rerender({ session: handTwo });
 
-    rerender({ handIndex: 1, authorityRevision: 5, match: handTwo });
     const afterBoundary = JSON.parse(window.localStorage.getItem(storageKey)!);
     expect(afterBoundary.currentHandIndex).toBe(1);
     expect(afterBoundary.authorityRevision).toBe(5);
@@ -126,8 +120,6 @@ describe('useDailyFritzSessionPersistence', () => {
 
   it('flushes a pending debounced checkpoint on pagehide before the timer fires', async () => {
     const storageKey = 'racehorse:daily-fritz:test-pagehide-flush';
-    const match = createBotMatch(60, 7);
-    match.handNumber = 1;
     const base = {
       enabled: true,
       storageKey,
@@ -135,10 +127,7 @@ describe('useDailyFritzSessionPersistence', () => {
       verifiedMatchId: 'verified-1',
       runDate: '2026-07-25',
       runFingerprint: 'run-fingerprint',
-      gameNumber: 1,
-      dailyFritzHandIndex: 0,
-      authorityRevision: 1,
-      match,
+      session: sessionFromHand(0),
       moveLog: [{
         moveNumber: 1,
         handNumber: 1,
