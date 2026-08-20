@@ -338,6 +338,62 @@ describe('disconnectGrace', () => {
     expect(room.state!.sequence).toBe(sequenceBefore);
   });
 
+  it('recovers mid-retry: flush fails once then succeeds — commits once, no forfeit from failed attempt', async () => {
+    const room = seedLiveRoom('GRACE_RECOVER', 0);
+    const sequenceBefore = room.state!.sequence;
+    const broadcast = vi.fn();
+    const rollbackSpy = vi.spyOn(rooms, 'rollbackRoomGameplayCommit');
+    recoverableSpy.mockReturnValueOnce(false).mockReturnValue(true);
+    const { io, roomEmit } = makeIo(false);
+
+    onActivePlayerSocketDisconnect('GRACE_RECOVER', 'seat-a', io, broadcast);
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
+
+    // First expiry: act attempted, flush not durable → rollback + stall retry.
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(rollbackSpy).toHaveBeenCalledTimes(1);
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(room.disconnectExpiries?.['seat-a'] ?? 0).toBe(0);
+    expect(room.state!.sequence).toBe(sequenceBefore);
+    expect(roomEmit).toHaveBeenCalledWith('player:disconnect_stall', {
+      playerId: 'seat-a',
+      phase: 'retry',
+      message: DISCONNECT_STALL_RETRY_MESSAGE,
+    });
+    expect(hasActiveDisconnectGrace('GRACE_RECOVER')).toBe(true);
+
+    roomEmit.mockClear();
+    await vi.advanceTimersByTimeAsync(DISCONNECT_DURABILITY_RETRY_MS);
+
+    // Second attempt (within retry window): durability recovered → commit + broadcast.
+    expect(actSpy).toHaveBeenCalledTimes(2);
+    expect(rollbackSpy).toHaveBeenCalledTimes(1);
+    expect(flushSpy).toHaveBeenCalledTimes(2);
+    expect(broadcast).toHaveBeenCalledWith('GRACE_RECOVER');
+    expect(room.disconnectExpiries?.['seat-a']).toBe(1);
+    expect(room.abandonedAt).toBeUndefined();
+    expect(hasActiveDisconnectGrace('GRACE_RECOVER')).toBe(false);
+
+    // Stall UI path ends: no further retry/paused stall; normal timeout + board update path.
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'player:disconnect_stall',
+      expect.objectContaining({ phase: 'retry' }),
+    );
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'player:disconnect_stall',
+      expect.objectContaining({ phase: 'paused' }),
+    );
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'player:disconnect_stall',
+      expect.objectContaining({ message: DISCONNECT_STALL_RETRY_MESSAGE }),
+    );
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'player:disconnect_stall',
+      expect.objectContaining({ message: DISCONNECT_STALL_PAUSED_MESSAGE }),
+    );
+    expect(roomEmit).toHaveBeenCalledWith('player:reconnect_timeout', { playerId: 'seat-a' });
+  });
+
   it('skips act and emits stall when durability already blocks gameplay', async () => {
     const room = seedLiveRoom('GRACE_PRE_FAIL', 0);
     room.durability = {
