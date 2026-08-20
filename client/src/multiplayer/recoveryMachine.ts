@@ -102,6 +102,8 @@ const TERMINAL_JOIN_MARKERS = [
   'abandoned',
   'completed',
   'match_completed',
+  'match_terminal',
+  'snapshot_terminal',
   'forfeited',
   'expired',
   'not found',

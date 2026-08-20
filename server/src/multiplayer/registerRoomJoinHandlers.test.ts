@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests } from './roomSession';
 import { registerRoomJoinHandlers } from './registerRoomJoinHandlers';
+import { MatchTerminalJoinError } from './matchTerminalJoin';
 
 function makeSocket() {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -57,5 +58,43 @@ describe('registerRoomJoinHandlers', () => {
     const cb = vi.fn();
     await handlers.get('room:join')?.('MISSING', cb);
     expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Room not found.' });
+  });
+
+  it('room:join surfaces structured match_terminal ack when archive exists', async () => {
+    const io = {} as any;
+    const { socket, handlers } = makeSocket();
+    const attachSocketToTrackedRoom = vi.fn(async () => {
+      throw new MatchTerminalJoinError({
+        status: 'completed',
+        matchId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        recoverable: true,
+      });
+    });
+
+    registerRoomJoinHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'Guest', userId: 'user-1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+      },
+      attachSocketToTrackedRoom,
+    });
+
+    const cb = vi.fn();
+    await handlers.get('room:join')?.('ARCHV1', cb);
+    expect(cb).toHaveBeenCalledWith({
+      ok: false,
+      error: 'match_terminal',
+      terminal: {
+        status: 'completed',
+        matchId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        recoverable: true,
+      },
+    });
   });
 });

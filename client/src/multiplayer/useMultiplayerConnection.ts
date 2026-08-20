@@ -17,7 +17,6 @@ import { getOrCreateGuestDisplayName } from '../match/recovery/matchRecovery';
 import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
 import {
   createRecoveryMachine,
-  isTerminalJoinError,
   type RecoveryEffect,
   type RecoveryEvent,
   type RecoveryMachine,
@@ -42,11 +41,8 @@ import {
   selectJoinedRoomCode,
   selectMatchStarted,
 } from './session/sessionStateMachine';
-import {
-  buildTerminalArchiveFallbackNotice,
-  recoverTerminalMatchArchive,
-  type RecoveredTerminalMatchNotice,
-} from './terminalRoomArchiveRecovery';
+import type { RecoveredTerminalMatchNotice } from './terminalRoomArchiveRecovery';
+import { handleTerminalJoinFailure } from './handleTerminalJoinFailure';
 import {
   beginRoomOperation,
   invalidateRoomOperations,
@@ -154,8 +150,19 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         }
 
         const errorText = String(resp?.error ?? 'not_ok');
-        if (isTerminalJoinError(errorText)) {
-          dispatchSocketEvent({ type: 'ROOM_JOIN_TERMINAL', payload: { error: errorText } });
+        const terminalHandled = await handleTerminalJoinFailure({
+          resp,
+          roomCode,
+          serverUrl: scope.config.serverUrl,
+          authToken: scope.auth.authAccessTokenRef.current,
+          setRecoveredTerminalMatchNotice,
+          onNavigateMultiplayer: () => scope.navigation.setAppMode('multiplayer'),
+          dispatchRecovery,
+        });
+        if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+          return;
+        }
+        if (terminalHandled === 'handled') {
           return;
         }
         dispatchRecovery({ type: 'ROOM_JOIN_TRANSIENT', error: errorText });
@@ -328,42 +335,23 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           recordJoinLatency(joinEndedAt - joinStartedAt, 'join');
         }
         if (!resp?.ok) {
-          const errorText = String(resp?.error ?? '').toLowerCase();
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(scope.config.lastRoomStorageKey);
+          const terminalHandled = await handleTerminalJoinFailure({
+            resp,
+            roomCode: savedCode,
+            serverUrl: scope.config.serverUrl,
+            authToken: scope.auth.authAccessTokenRef.current,
+            lastRoomStorageKey: scope.config.lastRoomStorageKey,
+            clearSavedRoomOnAttempt: true,
+            restoreSavedRoomOnDegraded: true,
+            setRecoveredTerminalMatchNotice,
+            onNavigateMultiplayer: () => scope.navigation.setAppMode('multiplayer'),
+            dispatchRecovery,
+          });
+          if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
+            return;
           }
-          if (errorText.includes('completed')) {
-            dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
-          }
-          if (errorText.includes('completed') || errorText.includes('abandoned')) {
-            const archiveResult = await recoverTerminalMatchArchive({
-              serverUrl: scope.config.serverUrl,
-              roomCode: savedCode,
-              authToken: scope.auth.authAccessTokenRef.current,
-            });
-            if (!isCurrentRoomOperation(scope.roomOperationEpochRef, operationToken)) {
-              return;
-            }
-            if (archiveResult.status === 'found') {
-              setRecoveredTerminalMatchNotice?.(archiveResult.notice);
-              scope.navigation.setAppMode('multiplayer');
-              dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
-              return;
-            }
-            if (
-              archiveResult.status === 'temporarily_unavailable' ||
-              archiveResult.status === 'unauthorized'
-            ) {
-              if (typeof window !== 'undefined') {
-                window.localStorage.setItem(scope.config.lastRoomStorageKey, savedCode);
-              }
-              setRecoveredTerminalMatchNotice?.(
-                buildTerminalArchiveFallbackNotice(archiveResult.status, savedCode),
-              );
-              scope.navigation.setAppMode('multiplayer');
-              dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
-              return;
-            }
+          if (terminalHandled === 'handled') {
+            return;
           }
           scope.config.showToast('Saved room is no longer available.', 2000);
           return;

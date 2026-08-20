@@ -11,6 +11,12 @@ import {
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { ensureRoomHydrated } from './roomLivePersistence';
+import {
+  isTerminalHydrationError,
+  MatchTerminalJoinError,
+  resolveArchivedTerminalJoin,
+  throwArchivedTerminalJoinOrError,
+} from './matchTerminalJoin';
 import { normalizeMatchmakingRoomShellHydrationResult } from '../matchmaking/roomShellHydration';
 import { onPlayerSocketRejoined } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
@@ -215,6 +221,9 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       throw new Error('room_snapshot_uncommitted');
     }
     if (hydrated.kind === 'snapshot_invalid' || hydrated.kind === 'snapshot_stale') {
+      if (isTerminalHydrationError(hydrated.error)) {
+        await throwArchivedTerminalJoinOrError(roomCode, hydrated.error);
+      }
       throw new Error(hydrated.error);
     }
 
@@ -236,6 +245,14 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
 
     let existingRoom = peekRoom(roomCode);
     if (!existingRoom) {
+      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      if (archivedTerminal) {
+        log.info(
+          { roomCode, matchId: archivedTerminal.terminal.matchId, via },
+          'join rejected: archived terminal match',
+        );
+        throw archivedTerminal;
+      }
       const message = 'Room not found.';
       log.info(
         `[${via}] ERROR: ${message} live=${hydrated.kind} shell=${shellHydrationResult.kind}`,
@@ -243,9 +260,19 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       throw new Error(message);
     }
     if (existingRoom.abandonedAt) {
+      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      if (archivedTerminal) throw archivedTerminal;
       throw new Error('match_abandoned');
     }
     if (existingRoom.state?.gameOver) {
+      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      if (archivedTerminal) {
+        log.info(
+          { roomCode, matchId: archivedTerminal.terminal.matchId, via },
+          'join rejected: archived terminal match',
+        );
+        throw archivedTerminal;
+      }
       log.info({ roomCode }, 'rejected completed room');
       throw new Error('match_completed');
     }
