@@ -97,12 +97,15 @@ export async function queryMpAuthorityFunnelMetrics(): Promise<MpAuthorityFunnel
   }));
 }
 
-let persistChain: Promise<void> = Promise.resolve();
+const pendingPersists = new Set<Promise<void>>();
 
 export function queueMpAuthorityEventPersist(row: MpAuthorityEventRecord): void {
-  persistChain = persistChain.then(() => recordMpAuthorityEventBestEffort(row));
+  const pending = recordMpAuthorityEventBestEffort(row).finally(() => {
+    pendingPersists.delete(pending);
+  });
+  pendingPersists.add(pending);
 }
 
 export async function flushMpAuthorityEventPersistForTests(): Promise<void> {
-  await persistChain;
+  await Promise.all([...pendingPersists]);
 }
