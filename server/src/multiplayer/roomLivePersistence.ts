@@ -675,7 +675,21 @@ export function getLiveRoomDurabilityState(room: Room) {
   return getRoomDurabilityState(room);
 }
 
+/**
+ * Test-only: after flush, treat the room as not durably recoverable so
+ * gameplay callers exercise mutate-then-rollback. Hard-blocked in production.
+ */
+let forceLiveRoomFlushUnrecoverableForTests = false;
+
+export function setForceLiveRoomFlushUnrecoverableForTests(enabled: boolean): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('setForceLiveRoomFlushUnrecoverableForTests is blocked in production');
+  }
+  forceLiveRoomFlushUnrecoverableForTests = enabled;
+}
+
 export function isLiveRoomDurablyRecoverable(room: Room): boolean {
+  if (forceLiveRoomFlushUnrecoverableForTests) return false;
   return isRoomDurablyRecoverable(room);
 }
 
@@ -1016,6 +1030,7 @@ async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationRe
 
 /** Test-only reset for debounce timers and table-availability cache. */
 export function resetLiveRoomPersistenceForTests(): void {
+  forceLiveRoomFlushUnrecoverableForTests = false;
   for (const timer of flushTimersByRoomCode.values()) {
     clearTimeout(timer);
   }
