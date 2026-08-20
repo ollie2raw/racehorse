@@ -1,10 +1,6 @@
 import React from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
-import {
-  DailyFritzFritzReaction,
-  dailyFritzMoodFromGameHeadline,
-} from '../dailyFritz/DailyFritzFritzReaction';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 
 export interface BotDailyFritzSetOverlayProps {
@@ -34,33 +30,19 @@ export const BotDailyFritzSetOverlay: React.FC<BotDailyFritzSetOverlayProps> = (
     );
   }
 
-  const playerWonGame = overlay.headline.startsWith('You take');
-  const interstitialOutcome = playerWonGame ? 'is-player-win' : 'is-fritz-win';
-  const fritzMood = dailyFritzMoodFromGameHeadline(overlay.headline);
-
   return (
     <GameOverlayPortal>
       <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
-        <div
-          className={`game-over-card daily-fritz-set-overlay-card ${interstitialOutcome}`}
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
           <div className="daily-fritz-set-overlay-hero">
-            <DailyFritzFritzReaction
-              mood={fritzMood}
-              size="sm"
-              className="daily-fritz-set-overlay-fritz"
-            />
-            <div className="daily-fritz-set-overlay-copy-block">
-              <span className="daily-fritz-set-overlay-kicker">{overlay.eyebrow}</span>
-              {overlay.skunkBadge ? (
-                <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
-                  {overlay.skunkBadge}
-                </span>
-              ) : null}
-              <h2 className="daily-fritz-set-overlay-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
-              <p className="daily-fritz-set-overlay-copy">{overlay.subheadline}</p>
-            </div>
+            <span className="daily-fritz-set-overlay-kicker">{overlay.eyebrow}</span>
+            {overlay.skunkBadge ? (
+              <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
+                {overlay.skunkBadge}
+              </span>
+            ) : null}
+            <h2 className="daily-fritz-set-overlay-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
+            <p className="daily-fritz-set-overlay-copy">{overlay.subheadline}</p>
           </div>
 
           <div className="daily-fritz-set-overlay-stats" aria-label="Daily Fritz set summary">

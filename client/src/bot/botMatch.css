@@ -718,31 +718,7 @@
 
 .daily-fritz-set-overlay-hero {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-}
-
-.daily-fritz-set-overlay-copy-block {
-  display: grid;
   gap: 8px;
-  min-width: 0;
-}
-
-.daily-fritz-set-overlay-fritz {
-  align-self: center;
-}
-
-.daily-fritz-set-overlay-card.is-player-win {
-  border-color: rgba(149, 240, 202, 0.22);
-}
-
-.daily-fritz-set-overlay-card.is-fritz-win {
-  border-color: rgba(231, 182, 74, 0.3);
-  box-shadow:
-    0 28px 72px rgba(0, 0, 0, 0.44),
-    0 0 36px rgba(231, 182, 74, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .daily-fritz-set-overlay-kicker {
@@ -1063,20 +1039,6 @@
     width: calc(100vw - 20px);
     border-radius: 22px;
     padding: 20px 14px;
-  }
-
-  .daily-fritz-set-overlay-hero {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-  }
-
-  .daily-fritz-set-overlay-copy-block {
-    justify-items: center;
-  }
-
-  .daily-fritz-set-overlay-kicker {
-    margin-inline: auto;
   }
 
   .daily-fritz-set-overlay-title {
