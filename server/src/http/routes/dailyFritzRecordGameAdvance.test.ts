@@ -53,12 +53,8 @@ vi.mock('../../social/activityWriter', () => ({
 import { recordDailyFritzEvent } from '../stores/dailyFritzEventStore';
 import { registerDailyFritzRoutes } from './dailyFritz';
 import { getDailyFritzMetrics, resetDailyFritzMetricsForTests } from './dailyFritzMetrics';
-import {
-  resetRecordGameVerificationDelayMsForTests,
-  runDailyFritzRecordGameVerification,
-  setRecordGameVerificationDelayMsForTests,
-} from './dailyFritzRecordGameAsyncVerification';
 import { digestDailyFritzTranscript } from '../../dailyFritzVerifier';
+
 type Handler = (req: unknown, res: unknown) => unknown | Promise<unknown>;
 
 function makeHarness() {
@@ -79,7 +75,15 @@ function makeHarness() {
       setHeader() { return res; },
       once() { return res; },
     };
-    await handler({ headers: {}, params: {}, query: {}, body: input.body ?? {}, method, path, get() { return undefined; } }, res);
+    await handler({
+      headers: {},
+      params: {},
+      query: {},
+      body: input.body ?? {},
+      method,
+      path,
+      get() { return undefined; },
+    }, res);
     return { status, body: body as Record<string, unknown> };
   };
 }
@@ -197,22 +201,12 @@ function recordGameBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function flushAsyncVerification() {
-  await new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
-}
-
-describe('record-game advance-first with async verification', () => {
+describe('record-game sync verify before advance', () => {
   const request = makeHarness();
   let persistedAttempt: DailyFritzAttemptRecord;
 
   beforeEach(() => {
     resetDailyFritzMetricsForTests();
-    resetRecordGameVerificationDelayMsForTests();
     authUserMock.mockResolvedValue(USER_ID);
     process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = 'true';
     persistedAttempt = buildAttempt();
@@ -227,47 +221,38 @@ describe('record-game advance-first with async verification', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    resetRecordGameVerificationDelayMsForTests();
     delete process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
   });
 
-  it('records game 2 from legacy scores when async verification fails', async () => {
+  it('advances with sticky rejected in the same request when sync verify fails', async () => {
     const response = await request('POST', '/api/daily-fritz/record-game', {
       body: recordGameBody(),
     });
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
-    expect(response.body.verification_pending).toBe(true);
+    expect(response.body.verification_pending).toBeUndefined();
+    expect(response.body.unverified).toBe(true);
     const games = (response.body.set_result as { games: Array<{ gameNumber: number; playerScore: number; fritzScore: number }> }).games;
     expect(games).toHaveLength(2);
     expect(games[1]).toMatchObject({ gameNumber: 2, playerScore: 60, fritzScore: 34 });
     expect(response.body.next_game_number).toBe(3);
 
-    const scheduled = vi.mocked(recordDailyFritzEvent).mock.calls
-      .map((call) => call[0])
-      .find((event) => event.eventType === 'async_verification_scheduled');
-    expect(scheduled).toMatchObject({
-      eventType: 'async_verification_scheduled',
-      transcriptDigest: digestDailyFritzTranscript(recordGameBody().transcript as never),
-      payload: expect.objectContaining({
-        outcome: 'async_verification_scheduled',
-        transcript: expect.objectContaining({ gameNumber: 2, handIndex: 3 }),
-      }),
-    });
-
-    await flushAsyncVerification();
-    expect(getDailyFritzMetrics().verification_bypassed.total).toBeGreaterThan(0);
+    // Settled synchronously — no pending_verification, no async schedule event.
     expect(persistedAttempt.result?.verification_status).toBe('rejected');
-    expect(persistedAttempt.result?.games).toHaveLength(2);
-    expect((persistedAttempt.result as { games: Array<{ gameNumber: number }> }).games[1].gameNumber).toBe(2);
+    expect(persistedAttempt.currentGameNumber).toBe(3);
+    expect(persistedAttempt.currentHandIndex).toBe(0);
+    expect(getDailyFritzMetrics().verification_bypassed.total).toBeGreaterThan(0);
+
+    const eventTypes = vi.mocked(recordDailyFritzEvent).mock.calls.map((call) => call[0].eventType);
+    expect(eventTypes).not.toContain('async_verification_scheduled');
 
     const bypassed = vi.mocked(recordDailyFritzEvent).mock.calls
       .map((call) => call[0])
       .find((event) => event.eventType === 'verification_failed'
         && (event.payload as { outcome?: string } | undefined)?.outcome === 'advance_unverified');
     expect(bypassed).toMatchObject({
-      transcriptDigest: expect.any(String),
+      transcriptDigest: digestDailyFritzTranscript(recordGameBody().transcript as never),
       payload: expect.objectContaining({
         outcome: 'advance_unverified',
         transcript: expect.objectContaining({ gameNumber: 2, handIndex: 3 }),
@@ -275,28 +260,16 @@ describe('record-game advance-first with async verification', () => {
     });
   });
 
-  it('returns before a slow async verifier finishes', async () => {
-    setRecordGameVerificationDelayMsForTests(400);
-
-    const startedAt = Date.now();
-    const responsePromise = request('POST', '/api/daily-fritz/record-game', {
+  it('does not leave pending_verification after a failed sync verify', async () => {
+    const response = await request('POST', '/api/daily-fritz/record-game', {
       body: recordGameBody(),
     });
-    const response = await responsePromise;
-    const elapsedMs = Date.now() - startedAt;
-
     expect(response.status).toBe(200);
-    expect(response.body.verification_pending).toBe(true);
-    expect(elapsedMs).toBeLessThan(200);
-
-    await flushAsyncVerification();
-    await new Promise((resolve) => {
-      setTimeout(resolve, 450);
-    });
     expect(persistedAttempt.result?.verification_status).toBe('rejected');
+    expect(persistedAttempt.result?.verification_status).not.toBe('pending_verification');
   });
 
-  it('keeps the recorded game result when async verification rejects the attempt', async () => {
+  it('keeps the recorded game result when sync verify rejects the attempt', async () => {
     const response = await request('POST', '/api/daily-fritz/record-game', {
       body: recordGameBody(),
     });
@@ -304,8 +277,6 @@ describe('record-game advance-first with async verification', () => {
     const shownGame = (response.body.set_result as {
       games: Array<{ gameNumber: number; playerScore: number; fritzScore: number }>;
     }).games[1];
-
-    await flushAsyncVerification();
 
     expect(persistedAttempt.result?.verification_status).toBe('rejected');
     const persistedGame = (persistedAttempt.result as {
@@ -343,10 +314,8 @@ describe('record-game advance-first with async verification', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
-    expect(response.body.verification_pending).toBe(true);
-  });
-
-  it('runDailyFritzRecordGameVerification is exported for deterministic async tests', async () => {
-    expect(typeof runDailyFritzRecordGameVerification).toBe('function');
+    expect(response.body.verification_pending).toBeUndefined();
+    expect(response.body.unverified).toBe(true);
+    expect(persistedAttempt.result?.verification_status).toBe('rejected');
   });
 });
