@@ -60,12 +60,11 @@ const CLIENT_STUCK_CODES = new Set([
  * How many times a client must have failed to get a hand verified before the
  * server will let the run continue without a verification receipt.
  *
- * The client rebuilds and retries on its own for the recoverable codes; by the
- * time it asks for this, the player has been sitting on a Hand Over screen
- * unable to advance. Continuing unranked is strictly better than trapping
- * them — a stranded player loses the whole run either way.
+ * Keep in sync with client
+ * `DAILY_FRITZ_UNVERIFIED_FALLBACK_AFTER_ATTEMPTS` (currently 2): the client
+ * starts sending `unverified_fallback` once failureAttempt reaches that floor.
  */
-export const DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS = 3;
+export const DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS = 2;
 
 export function readDailyFritzUnverifiedFallbackRequest(body: unknown): number | null {
   const record = (body ?? {}) as Record<string, unknown>;
@@ -74,6 +73,20 @@ export function readDailyFritzUnverifiedFallbackRequest(body: unknown): number |
   if (!Number.isFinite(attempts)) return null;
   const rounded = Math.floor(attempts);
   return rounded >= DAILY_FRITZ_UNVERIFIED_FALLBACK_MIN_ATTEMPTS ? rounded : null;
+}
+
+/**
+ * Infrastructure verifier codes must not burn a competitive run on the first
+ * failure. The client retries, then explicitly sends unverified_fallback; only
+ * then may we never-strand. Genuine transcript failures still never-strand
+ * without that flag (existing /next-hand behavior).
+ */
+export function canNeverStrandDailyFritzVerification(input: {
+  verifierCode: string;
+  unverifiedFallbackAttempts: number | null;
+}): boolean {
+  if (!DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES.has(input.verifierCode)) return true;
+  return input.unverifiedFallbackAttempts != null;
 }
 
 /**

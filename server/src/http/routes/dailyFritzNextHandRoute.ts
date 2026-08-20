@@ -36,6 +36,8 @@ import {
   readActiveGameProgress,
   attemptVerifyHand,
   isDailyFritzGameEndingScore,
+  canNeverStrandDailyFritzVerification,
+  readDailyFritzUnverifiedFallbackRequest,
   recordDailyFritzAdvanceWithoutVerification,
   recordDailyFritzEventBestEffort,
   dailyFritzTranscriptEvidenceFields,
@@ -317,6 +319,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     // covers the common case; any hand beyond it is generated on-demand from
     // the same deterministic seed so all players still get identical tiles.
     const winningScore = publishedAuthority?.winningScore ?? run.winningScore;
+    const unverifiedFallbackAttempts = readDailyFritzUnverifiedFallbackRequest(req.body);
     const verification = parsedTranscript
       ? attemptVerifyHand({
           transcript: parsedTranscript,
@@ -339,6 +342,44 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     if (!progressScores) {
       if (verificationError) throw verificationError;
       res.status(400).json({ error: 'completed_hand_scores are required when verification evidence is unusable.' });
+      return;
+    }
+
+    if (
+      verificationError
+      && !canNeverStrandDailyFritzVerification({
+        verifierCode: verificationError.code,
+        unverifiedFallbackAttempts,
+      })
+    ) {
+      // Infrastructure failure without an explicit client fallback request:
+      // refuse advance so a transient server blip does not sticky-reject the run.
+      const evidence = dailyFritzTranscriptEvidenceFields(parsedTranscript);
+      await recordDailyFritzEventBestEffort({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        eventType: 'verification_failed',
+        verifierCode: verificationError.code,
+        gameNumber,
+        handIndex: completedHandIndex,
+        statusCode: 409,
+        transcriptDigest: evidence.transcriptDigest,
+        idempotencyKey: `${attemptId}:verification_failed:infra:${diagnostics.requestId}`,
+        payload: {
+          operation: 'next-hand',
+          outcome: 'refused_advance_infrastructure',
+          message: verificationError.message,
+          ...evidence.payload,
+        },
+      });
+      res.status(409).json({
+        error: 'Daily Fritz could not verify this hand due to a temporary server issue. Retry to continue.',
+        code: verificationError.code,
+        recoverable: true,
+        recovery_action: 'retry',
+      });
       return;
     }
 

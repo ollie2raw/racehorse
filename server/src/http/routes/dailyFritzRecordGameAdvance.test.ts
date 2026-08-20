@@ -318,4 +318,21 @@ describe('record-game sync verify before advance', () => {
     expect(response.body.unverified).toBe(true);
     expect(persistedAttempt.result?.verification_status).toBe('rejected');
   });
+
+  it('still never-strands on first sync verify failure for infrastructure codes (no unverified_fallback on record-game)', async () => {
+    // /record-game has no client unverified_fallback ladder; capped transport
+    // retries then hard-stop is the escape hatch. Infra codes therefore still
+    // sticky-reject in the same request so the game can be saved unranked.
+    const response = await request('POST', '/api/daily-fritz/record-game', {
+      body: recordGameBody(),
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.unverified).toBe(true);
+    expect(persistedAttempt.result?.verification_status).toBe('rejected');
+    const bypassed = vi.mocked(recordDailyFritzEvent).mock.calls
+      .map((call) => call[0])
+      .find((event) => event.eventType === 'verification_failed'
+        && (event.payload as { outcome?: string } | undefined)?.outcome === 'advance_unverified');
+    expect(bypassed?.verifierCode).toBe('missing_hand_start_progress');
+  });
 });
