@@ -1,5 +1,11 @@
 import type { Server, Socket } from 'socket.io';
-import { act, getRoom, readyForNextHand } from '../rooms';
+import {
+  act,
+  captureRoomGameplaySnapshot,
+  getRoom,
+  readyForNextHand,
+  rollbackRoomGameplayCommit,
+} from '../rooms';
 import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
 import { childLogger } from '../logger';
 
@@ -18,6 +24,9 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+
+/** Actor-facing copy when a move mutates memory but cannot be proven durable (then rolled back). */
+export const GAME_ACTION_PERSIST_RETRY_MESSAGE = "Move couldn't be saved — try again.";
 
 export type RegisterGameplayActionHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -67,6 +76,12 @@ export function registerGameplayActionHandlers(
         playerSeatId,
         requestId,
         async () => {
+          const roomBefore = getRoom(roomCode);
+          const snapshot = captureRoomGameplaySnapshot(roomBefore);
+          if (!snapshot) {
+            return { ok: false, error: 'Game not started.' };
+          }
+
           const result = await act(roomCode, playerSeatId, action, io, (code) =>
             broadcastStateUpdate(code),
           );
@@ -81,12 +96,10 @@ export function registerGameplayActionHandlers(
           const durability = getLiveRoomDurabilityState(room);
           const committed = isLiveRoomDurablyRecoverable(room);
           if (!committed) {
+            rollbackRoomGameplayCommit(room, snapshot);
             return {
               ok: false,
-              error:
-                durability.status === 'failed' || durability.status === 'degraded'
-                  ? 'room_persistence_failed'
-                  : 'room_snapshot_uncommitted',
+              error: GAME_ACTION_PERSIST_RETRY_MESSAGE,
               uncertain: true,
               sequence: room.state?.sequence ?? null,
             };
@@ -109,6 +122,7 @@ export function registerGameplayActionHandlers(
               action: action?.type,
               sequence: room.state?.sequence ?? null,
               flushedRoomCodes: flushResult.flushedRoomCodes,
+              durabilityStatus: durability.status,
             }, '');
           }
           const forcedMeta = result.forcedDrawAnimation

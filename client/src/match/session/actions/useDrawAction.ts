@@ -120,7 +120,10 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
       });
       if (!resp?.ok) {
         if (resp?.uncertain) {
-          markUncertainAndResync(requestId, resp.error ?? 'Move uncertain — resyncing.');
+          markUncertainAndResync(
+            requestId,
+            resp.error ?? "Move couldn't be saved — try again.",
+          );
         } else {
           setActionError(resp?.error ?? 'Unable to draw.');
         }

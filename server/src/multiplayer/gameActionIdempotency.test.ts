@@ -89,10 +89,12 @@ describe('gameActionIdempotency', () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it('caches uncertain actions and replays the same logical request without re-executing', async () => {
+  it('does not cache uncertain acks so same requestId can re-execute after rollback', async () => {
+    // After mutate-then-persist rollback, uncertain means nothing stuck —
+    // caching would trap actor retries (client reuses requestId while uncertain).
     const execute = vi.fn(async () => ({
       ok: false,
-      error: 'room_persistence_failed',
+      error: "Move couldn't be saved — try again.",
       uncertain: true,
       sequence: 11,
     }));
@@ -102,18 +104,21 @@ describe('gameActionIdempotency', () => {
 
     expect(first).toEqual({
       ok: false,
-      error: 'room_persistence_failed',
+      error: "Move couldn't be saved — try again.",
       uncertain: true,
       sequence: 11,
     });
     expect(second).toEqual({
       ok: false,
-      error: 'room_persistence_failed',
+      error: "Move couldn't be saved — try again.",
       uncertain: true,
       sequence: 11,
-      duplicate: true,
     });
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(persistRoomCommandReceipt).not.toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'uncertain-req' }),
+    );
+    expect(getGameActionIdempotencyCacheSize('room1')).toBe(0);
   });
 
   it('clears cache entries after TTL and on room cleanup', async () => {

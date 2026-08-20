@@ -80,7 +80,7 @@ export async function persistRoomCommandReceipt(
     return;
   }
   if (persistentRoomCommandReceiptsAvailable === false) return;
-  if (!input.ack.ok && !input.ack.uncertain) return;
+  if (!input.ack.ok) return;
 
   const row: RoomCommandReceiptRow = {
     room_code: normalizeRoomCode(input.roomCode),

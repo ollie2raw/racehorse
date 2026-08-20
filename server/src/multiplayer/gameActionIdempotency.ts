@@ -106,7 +106,9 @@ function storeCachedAck(
   requestId: string,
   ack: GameActionAck,
 ): void {
-  if (!ack.ok && !ack.uncertain) return;
+  // Only durable successes are replay-blocked. Uncertain means rollback —
+  // the actor must be able to re-execute the same requestId on retry.
+  if (!ack.ok) return;
   const roomCache = getRoomCache(roomCode);
   roomCache.set(cacheKeyFor(playerSeatId, requestId), {
     ack: {
@@ -114,7 +116,6 @@ function storeCachedAck(
       sequence: ack.sequence ?? null,
       ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
       ...(ack.error ? { error: ack.error } : {}),
-      ...(ack.uncertain ? { uncertain: ack.uncertain } : {}),
     },
     expiresAt: Date.now() + ACTION_IDEMPOTENCY_TTL_MS,
   });
@@ -179,7 +180,8 @@ export function hydrateGameActionReceiptsForRoom(
     if (!entry.ack || typeof entry.ack !== 'object') continue;
     const ack = entry.ack as GameActionAck;
     if (typeof ack.ok !== 'boolean') continue;
-    if (!ack.ok && !ack.uncertain) continue;
+    // Skip legacy uncertain receipts — they must not block post-rollback retries.
+    if (!ack.ok) continue;
 
     const key = cacheKeyFor(entry.playerSeatId, entry.requestId);
     const existing = roomCache.get(key);
@@ -191,7 +193,6 @@ export function hydrateGameActionReceiptsForRoom(
         sequence: typeof ack.sequence === 'number' ? ack.sequence : null,
         ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
         ...(typeof ack.error === 'string' ? { error: ack.error } : {}),
-        ...(ack.uncertain ? { uncertain: true } : {}),
       },
       expiresAt: entry.expiresAt,
     });
@@ -203,7 +204,8 @@ export function hydrateGameActionReceiptsForRoom(
 
 /**
  * Server-authoritative idempotency for retried `game:action` submissions.
- * Successful and uncertain mutations are cached; plain failures are not replay-blocked.
+ * Only durable successes are cached/persisted. Uncertain (rolled-back) and
+ * plain failures are not replay-blocked so the actor can retry.
  */
 export async function withGameActionIdempotency(
   roomCode: string,
@@ -228,7 +230,7 @@ export async function withGameActionIdempotency(
 
   const inflight = (async () => {
     const result = await execute();
-    if (result.ok || result.uncertain) {
+    if (result.ok) {
       storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
       const expiresAtMs = Date.now() + ACTION_IDEMPOTENCY_TTL_MS;
       void persistRoomCommandReceipt({
@@ -236,11 +238,10 @@ export async function withGameActionIdempotency(
         playerSeatId,
         requestId: normalizedRequestId,
         ack: {
-          ok: result.ok,
+          ok: true,
           sequence: result.sequence ?? null,
           ...(result.forcedDraw ? { forcedDraw: result.forcedDraw } : {}),
           ...(result.error ? { error: result.error } : {}),
-          ...(result.uncertain ? { uncertain: result.uncertain } : {}),
         },
         expiresAtMs,
       });
