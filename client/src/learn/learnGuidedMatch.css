@@ -253,6 +253,10 @@
   padding-top: 10px;
 }
 
+.learn-guided-hero-card__footer--actions-only {
+  justify-content: flex-end;
+}
+
 .learn-guided-hero-card__context-strip {
   display: flex;
   flex-wrap: wrap;

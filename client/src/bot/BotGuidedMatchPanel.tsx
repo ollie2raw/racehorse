@@ -139,12 +139,7 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
                   ) : null}
                 </div>
                 {lessonCoachPanelContent?.showFooter ? (
-                  <div className="learn-guided-hero-card__footer" aria-label="Lesson utilities">
-                    <div className="learn-guided-hero-card__context-strip" aria-label="Decision context">
-                      {(lessonCoachPanelContent.contextChips ?? []).map((chip: string) => (
-                        <span key={chip}>{chip}</span>
-                      ))}
-                    </div>
+                  <div className="learn-guided-hero-card__footer learn-guided-hero-card__footer--actions-only" aria-label="Lesson utilities">
                     <div className="learn-guided-hero-card__action-row">
                       {showLessonCoachPanel ? (
                         <button
@@ -163,14 +158,6 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
                       >
                         Play Move
                       </button>
-                    </div>
-                  </div>
-                ) : lessonCoachPanelContent?.contextChips?.length ? (
-                  <div className="learn-guided-hero-card__footer learn-guided-hero-card__footer--compact" aria-label="Turn status">
-                    <div className="learn-guided-hero-card__context-strip" aria-label="Turn context">
-                      {lessonCoachPanelContent.contextChips.map((chip: string) => (
-                        <span key={chip}>{chip}</span>
-                      ))}
                     </div>
                   </div>
                 ) : null}

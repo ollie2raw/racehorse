@@ -99,7 +99,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     sectionRounded: 'rounded-[20px] rounded-br-[5px]',
     title: 'The Lab',
     titleColor: '#C77DFF',
-    desc: 'A “no brainer” is a hand you can clear all seven tiles in one turn. This mode lets you practice chaining tiles together until those finishes feel automatic.',
+    desc: "Clear all 7 tiles in one turn. Chain them until it's automatic.",
     badges: ['NO-BRAINER COMBOS', 'ONE-TURN CLEARS'],
     variant: 'tier-master',
     chevronColor: '#E9D5FF',
