@@ -427,7 +427,9 @@ describe('createGameOverPersistScheduler', () => {
 
       await runPersist(buildFritzInput());
 
-      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith([{ some: 'entry' }]);
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith([{ some: 'entry' }], {
+        strictHandContinuity: true,
+      });
       expect(completeGhostGameMock).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'user-a', applyGlicko: true }),
       );
@@ -504,8 +506,8 @@ describe('createGameOverPersistScheduler', () => {
 
       await runPersist(buildHumanInput());
 
-      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA);
-      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logB);
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA, { strictHandContinuity: true });
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logB, { strictHandContinuity: true });
       expect(insertRankedGameIdempotentMock).toHaveBeenCalledTimes(2);
       expect(processRealtimeMultiplayerGameMock).toHaveBeenCalledWith({
         playerAProfile: profileA,
@@ -578,7 +580,7 @@ describe('createGameOverPersistScheduler', () => {
       );
 
       expect(verifyPlayerMoveLogMock).toHaveBeenCalledTimes(1);
-      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA);
+      expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA, { strictHandContinuity: true });
       expect(insertRankedGameIdempotentMock).toHaveBeenCalledTimes(2);
       expect(processRealtimeMultiplayerGameMock).toHaveBeenCalledWith({
         playerAProfile: profileA,

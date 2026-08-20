@@ -31,7 +31,7 @@ const log = childLogger('realtime:game-over');
 
 function verifySeatMoveLog(moveLog: GhostMoveLogEntry[]): GhostMoveLogVerificationResult {
   if (moveLog.length === 0) return { ok: true };
-  return verifyPlayerMoveLog(moveLog);
+  return verifyPlayerMoveLog(moveLog, { strictHandContinuity: true });
 }
 
 type HumanMoveLogVerificationFailure = {
