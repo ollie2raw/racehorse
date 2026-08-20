@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import type { MoveEntry } from '../../game/moveLogger';
-import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { BotHandReveal } from '../match/types.ts';
 import { pruneNonPlayableDailyFritzSnapshot } from './dailyFritzSessionStorage';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
@@ -19,6 +18,11 @@ import {
 import { getAuthHeaders } from '../../api/client.ts';
 import { reportDailyFritzOperationalAlert } from '../../dailyFritz/dailyFritzObservability.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../dailyFritz/telemetry.ts';
+import {
+  assertDailyFritzSessionCoherent,
+  isCoherentDailyFritzSession,
+  type DailyFritzMatchSession,
+} from './dailyFritzMatchSession.ts';
 
 type UseDailyFritzSessionPersistenceArgs = {
   enabled: boolean;
@@ -27,10 +31,7 @@ type UseDailyFritzSessionPersistenceArgs = {
   verifiedMatchId: string | null | undefined;
   runDate: string | null | undefined;
   runFingerprint: string | null | undefined;
-  gameNumber: number;
-  dailyFritzHandIndex: number;
-  authorityRevision: number;
-  match: BotMatchState;
+  session: DailyFritzMatchSession;
   moveLog: readonly MoveEntry[];
   movesUsed: number;
   preGameDrawActive: boolean;
@@ -49,10 +50,7 @@ export function useDailyFritzSessionPersistence({
   verifiedMatchId,
   runDate,
   runFingerprint,
-  gameNumber,
-  dailyFritzHandIndex,
-  authorityRevision,
-  match,
+  session,
   moveLog,
   movesUsed,
   preGameDrawActive,
@@ -63,6 +61,9 @@ export function useDailyFritzSessionPersistence({
   transcriptProtocolVersion = 2,
   fritzPolicyVersion,
 }: UseDailyFritzSessionPersistenceArgs): void {
+  const { cursor, match } = session;
+  const { gameNumber, handIndex: dailyFritzHandIndex, revision: authorityRevision } = cursor;
+
   const storageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storagePendingRef = useRef<{ key: string; payload: object } | null>(null);
   const startedAtRef = useRef(initialStartedAt ?? new Date().toISOString());
@@ -166,10 +167,13 @@ export function useDailyFritzSessionPersistence({
     // can see each tile arrive. Those states are not authoritative resume
     // points until the matching transcript actions and final state commit.
     if (preGameDrawActive || drawSequenceActive) return;
-    // The authority cursor and match live in different stores. A hand-boundary
-    // render can briefly observe one side before the other; never let that torn
-    // view replace the last coherent checkpoint.
-    if (match.handNumber !== dailyFritzHandIndex + 1) {
+
+    assertDailyFritzSessionCoherent(session, 'checkpoint-persist');
+
+    // Defense-in-depth: the unified session should make this unreachable during
+    // normal play. Keep the guard until the reducer path has shipped and proven
+    // stable in production.
+    if (!isCoherentDailyFritzSession(session)) {
       const divergenceKey = `${gameNumber}:${dailyFritzHandIndex}:${authorityRevision}:${match.handNumber}`;
       if (divergenceReportedRef.current !== divergenceKey) {
         divergenceReportedRef.current = divergenceKey;
@@ -300,6 +304,7 @@ export function useDailyFritzSessionPersistence({
     movesUsed,
     preGameDrawActive,
     drawSequenceActive,
+    session,
     storageKey,
     transcriptProtocolVersion,
     fritzPolicyVersion,

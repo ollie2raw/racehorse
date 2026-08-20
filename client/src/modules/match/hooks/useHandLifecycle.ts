@@ -71,7 +71,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     dailyFritzTranscriptProtocolVersion,
     dailyFritzHandIndex,
     dailyFritzAuthorityRevision,
-    applyDailyFritzAuthorityCursor,
+    applyDailyFritzNextHand,
     initialDailyFritzHandResult,
     setDailyFritzHandResult,
     frozenV2Lesson,
@@ -203,14 +203,19 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       );
       const applied = nextStateResult.applied;
       if (nextStateResult.applied) {
-        // Commit the server cursor only when the matching deal can also be
-        // committed. Persistence rejects the brief cross-store render, so the
-        // cursor can never durably relabel the previous terminal hand.
-        applyDailyFritzAuthorityCursor({
-          handIndex: response.current_hand_index,
-          revision: response.authority_revision
-            ?? dailyFritzPackage?.authority_revision
-            ?? 0,
+        const gameNumber = (response.current_game_number
+          ?? response.game_number
+          ?? dailyFritzPackage?.current_game_number
+          ?? 1) as import('../../daily/dailyFritzContracts.ts').DailyFritzSetGameNumber;
+        applyDailyFritzNextHand({
+          cursor: {
+            gameNumber,
+            handIndex: response.current_hand_index,
+            revision: response.authority_revision
+              ?? dailyFritzPackage?.authority_revision
+              ?? 0,
+          },
+          match: nextStateResult.nextState,
         });
         setDailyFritzHandResult(null);
         transitionStateRef.current.dailyFritzNextHandFailureCount = 0;
@@ -221,7 +226,6 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         // If application fails, the same reveal must remain available to show
         // the retry/error state instead of leaving the old board uncovered.
         reveal.dismissRevealForAdvance();
-        setMatch(nextStateResult.nextState);
       } else {
         warnHandLifecycleStuck('setMatch skipped — hand not over', {
           handOver: live.handOver,
@@ -289,9 +293,8 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       matchRef,
       prefetchCoordinator,
       reveal,
-      applyDailyFritzAuthorityCursor,
+      applyDailyFritzNextHand,
       setDailyFritzHandResult,
-      setMatch,
       traceHandLifecycle,
     ],
   );

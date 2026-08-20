@@ -2,6 +2,7 @@ import type { Tile } from '../../../types.ts';
 import type { BotActionResult, BotMatchState } from '../runtime/botEngine.ts';
 import type { BotChoice } from '../../fritz/botHeuristics.ts';
 import type { BotHandReveal } from '../types.ts';
+import type { DailyFritzAuthorityCursor } from '../../daily/dailyFritzMatchSession.ts';
 import type {
   DailyFritzNextHandResponse,
   DailyFritzSetGameNumber,
@@ -84,7 +85,10 @@ export type UseHandLifecycleArgs = {
   dailyFritzTranscriptProtocolVersion: 1 | 2;
   dailyFritzHandIndex: number;
   dailyFritzAuthorityRevision: number;
-  applyDailyFritzAuthorityCursor: (cursor: { handIndex: number; revision: number }) => void;
+  applyDailyFritzNextHand: (input: {
+    cursor: DailyFritzAuthorityCursor;
+    match: BotMatchState;
+  }) => void;
   initialDailyFritzHandResult: BotHandReveal | null;
   setDailyFritzHandResult: (result: BotHandReveal | null) => void;
   frozenV2Lesson: import('../../../learn/lessonV2.ts').LessonV2 | null;

@@ -66,6 +66,8 @@ export function useDailyFritzRuntime({
     resumablePersistedDailyFritzMatch,
     opponentLabel,
     isStandaloneFritzMatch,
+    dailyFritzSession,
+    dailyFritzHandIndex,
   } = bootstrap;
 
   const { isGuidedMode, isAuthoringMode } = guidedBoot;
@@ -105,25 +107,6 @@ export function useDailyFritzRuntime({
     setShareCopied(false);
   }, [dailyFritzShareText]);
 
-  const [dailyFritzAuthorityCursor, setDailyFritzAuthorityCursor] = useState(() => {
-    const persisted = resumablePersistedDailyFritzMatch?.currentHandIndex;
-    const handIndex = typeof persisted === 'number' && Number.isFinite(persisted)
-      ? persisted
-      : dailyFritzPackage?.current_hand_index ?? 0;
-    return {
-      handIndex,
-      revision: resumablePersistedDailyFritzMatch?.authorityRevision
-        ?? dailyFritzPackage?.authority_revision
-        ?? 0,
-    };
-  });
-  const dailyFritzHandIndex = dailyFritzAuthorityCursor.handIndex;
-  const applyDailyFritzAuthorityCursor = useCallback((input: {
-    handIndex: number;
-    revision: number;
-  }) => {
-    setDailyFritzAuthorityCursor(input);
-  }, []);
   const [persistedHandResult, setPersistedHandResult] = useState(
     resumablePersistedDailyFritzMatch?.handResult ?? null,
   );
@@ -131,6 +114,16 @@ export function useDailyFritzRuntime({
   const [dailyLeaderboard, setDailyLeaderboard] = useState<import('../../dailyPuzzle/api.ts').DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
+
+  const persistenceSession = dailyFritzSession ?? {
+    cursor: {
+      gameNumber: (dailyFritzPackage?.current_game_number ?? 1) as 1,
+      handIndex: dailyFritzHandIndex,
+      revision: dailyFritzPackage?.authority_revision ?? 0,
+    },
+    match,
+  };
+
   useDailyFritzSessionPersistence({
     enabled: isDailyFritzMode,
     storageKey: dailyFritzStorageKey,
@@ -138,10 +131,7 @@ export function useDailyFritzRuntime({
     verifiedMatchId: dailyFritzPackage?.verified_match_id,
     runDate: dailyFritzPackage?.run_date,
     runFingerprint: dailyFritzPackage?.run_fingerprint,
-    gameNumber: dailyFritzPackage?.current_game_number ?? 1,
-    dailyFritzHandIndex,
-    authorityRevision: dailyFritzAuthorityCursor.revision,
-    match,
+    session: persistenceSession,
     moveLog,
     movesUsed,
     preGameDrawActive,
@@ -161,8 +151,7 @@ export function useDailyFritzRuntime({
   } = useDailyFritzCompletion({
     enabled: isDailyFritzMode,
     dailyFritzPackage,
-    dailyFritzHandIndex,
-    match,
+    session: persistenceSession,
     moveLog,
     movesUsed,
     userId,
@@ -239,9 +228,6 @@ export function useDailyFritzRuntime({
   return {
     shareCopied,
     handleShareResult,
-    dailyFritzHandIndex,
-    dailyFritzAuthorityRevision: dailyFritzAuthorityCursor.revision,
-    applyDailyFritzAuthorityCursor,
     persistedHandResult,
     setPersistedHandResult,
     dailyFritzLeaderboard,
