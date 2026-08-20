@@ -1,11 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { predictFritzGlickoUpdate } from '../../ranking/predictFritzGlickoUpdate.ts';
-import { roundedRatingDelta } from '../ghost/ghostMatchHelpers.ts';
 import { useStandaloneFritzRatingSession } from '../match/hooks/useStandaloneFritzRatingSession.ts';
 import type { BotMatchScreenProps } from '../match/types.ts';
 import type { UseBotMatchBootstrapResult } from '../match/hooks/useBotMatchBootstrap.ts';
 import type { UseGhostRuntimeResult } from '../ghost/useGhostRuntime.ts';
 import type { UseGuidedLessonBootResult } from '../guided/index.ts';
+import {
+  deriveFritzRatingDisplayState,
+  resolveFritzProfilePatchRating,
+} from './fritzRatingDisplayState.ts';
 
 export type UseFritzRatingDisplayArgs = {
   props: BotMatchScreenProps;
@@ -105,33 +108,26 @@ export function useFritzRatingDisplay({
     rankedGamesPlayed,
   ]);
 
+  // Profile patch only after server ghostResult — never from client prediction.
   useEffect(() => {
-    if (!predictedFritzGlicko || !onProfilePatch) return;
-    if (ghostResult?.glickoRating != null) return;
-    onProfilePatch({ glicko_rating: predictedFritzGlicko.glickoRating });
-  }, [ghostResult?.glickoRating, onProfilePatch, predictedFritzGlicko]);
+    if (isGhostMode || !onProfilePatch) return;
+    const rating = resolveFritzProfilePatchRating(ghostResult);
+    if (rating == null) return;
+    onProfilePatch({ glicko_rating: rating });
+  }, [ghostResult, isGhostMode, onProfilePatch]);
 
-  const fritzGlickoDelta =
-    !isGhostMode && ghostResult?.glickoDelta != null
-      ? roundedRatingDelta(ghostResult.glickoDelta)
-      : !isGhostMode && predictedFritzGlicko != null
-        ? roundedRatingDelta(predictedFritzGlicko.glickoDelta)
-      : !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
-        ? roundedRatingDelta(ghostResult.glickoRating - matchStartGlickoRating)
-      : null;
-
-  const fritzNewGlickoRating =
-    !isGhostMode && ghostResult?.glickoRating != null
-      ? Math.round(ghostResult.glickoRating)
-      : !isGhostMode && predictedFritzGlicko != null
-        ? predictedFritzGlicko.glickoRating
-      : null;
-
-  const hasConfirmedFritzRatingUpdate =
-    fritzGlickoDelta != null || (!isGhostMode && (ghostResult != null || predictedFritzGlicko != null));
-
-  const showFritzRatingSyncing =
-    ghostResultLoading && predictedFritzGlicko == null && ghostResult?.glickoRating == null;
+  const {
+    fritzGlickoDelta,
+    fritzNewGlickoRating,
+    hasConfirmedFritzRatingUpdate,
+    showFritzRatingSyncing,
+  } = deriveFritzRatingDisplayState({
+    isGhostMode,
+    ghostResult,
+    predictedFritzGlicko,
+    ghostResultLoading,
+    matchStartGlickoRating,
+  });
 
   return {
     predictedFritzGlicko,
