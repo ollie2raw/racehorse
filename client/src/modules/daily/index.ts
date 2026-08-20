@@ -25,8 +25,13 @@ export type { DailyFritzSetOverlayViewModel } from './dailyFritzUiContracts.ts';
 export { buildShareText } from './dailyFritzUiContracts.ts';
 export {
   buildDailyFritzStorageKey,
+  buildDailyFritzPersistedSnapshot,
+  DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION,
+  DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION,
+  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
   pruneNonPlayableDailyFritzSnapshot,
   resolveDailyFritzStorageKey,
+  serializeDailyFritzCheckpointForServer,
 } from './dailyFritzSessionStorage.ts';
 export type { DailyFritzPersistedSnapshot } from './dailyFritzSessionStorage.ts';
 export {

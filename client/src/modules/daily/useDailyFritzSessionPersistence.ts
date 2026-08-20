@@ -4,8 +4,9 @@ import type { BotHandReveal } from '../match/types.ts';
 import { pruneNonPlayableDailyFritzSnapshot } from './dailyFritzSessionStorage';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
 import {
-  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+  buildDailyFritzPersistedSnapshot,
   persistDailyFritzSnapshot,
+  serializeDailyFritzCheckpointForServer,
   type DailyFritzPersistedSnapshot,
 } from './dailyFritzSessionStorage.ts';
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
@@ -88,6 +89,7 @@ export function useDailyFritzSessionPersistence({
     if (!attemptId || !verifiedMatchId) return;
     if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
     pendingServerSyncSnapshotRef.current = snapshot;
+    const serverCheckpoint = serializeDailyFritzCheckpointForServer(snapshot);
     const runSync = () => {
       pendingServerSyncSnapshotRef.current = null;
       void getAuthHeaders().then(({ headers }) => {
@@ -98,7 +100,7 @@ export function useDailyFritzSessionPersistence({
       void saveDailyFritzCheckpoint({
         attemptId,
         verifiedMatchId,
-        checkpoint: snapshot as unknown as Record<string, unknown>,
+        checkpoint: serverCheckpoint,
       }).then((response) => {
         if (response?.ok) {
           lastServerSyncRevisionRef.current = Math.max(
@@ -138,7 +140,7 @@ export function useDailyFritzSessionPersistence({
     flushDailyFritzCheckpointOnUnload({
       attemptId,
       verifiedMatchId,
-      checkpoint: snapshot as unknown as Record<string, unknown>,
+      checkpoint: serializeDailyFritzCheckpointForServer(snapshot),
       accessToken: accessTokenRef.current,
     });
   };
@@ -217,17 +219,12 @@ export function useDailyFritzSessionPersistence({
     divergenceReportedRef.current = '';
     const now = new Date().toISOString();
     const lifecyclePhase = match.gameOver ? 'completed' : match.handOver ? 'hand_transition' : 'active_hand';
-    const buildSnapshot = (): DailyFritzPersistedSnapshot => ({
-      schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    const buildSnapshot = (): DailyFritzPersistedSnapshot => buildDailyFritzPersistedSnapshot(session, {
       challenge: createDailyFritzChallengeIdentity(runDate),
       classification: 'official',
       attemptId,
       runFingerprint,
-      gameNumber,
-      currentHandIndex: dailyFritzHandIndex,
-      authorityRevision,
       lifecyclePhase,
-      match,
       handResult,
       movesUsed,
       moveLog: [...moveLog],

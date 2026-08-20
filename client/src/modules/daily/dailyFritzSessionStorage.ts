@@ -5,18 +5,17 @@ import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
 import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type DailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
 import type { DailyFritzTranscript } from '@racehorse/game-core';
 import { canonicalizeDailyFritzMoveLog } from '../../dailyFritz/dailyFritzMoveEvidence.ts';
+import type { DailyFritzAuthorityCursor, DailyFritzMatchSession } from './dailyFritzMatchSession.ts';
+import { isCoherentDailyFritzSession } from './dailyFritzMatchSession.ts';
 
-// Bump when the local match state is no longer safe to replay against the
-// server verifier. Version 9 binds every checkpoint to the server authority
-// revision and rejects match/index pairs torn across a hand transition.
-export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 9;
+/** Canonical client checkpoint schema — stores `session` as the authority blob. */
+export const DAILY_FRITZ_SESSION_SCHEMA_VERSION = 10;
+/** Legacy flat cursor + match layout (still accepted on read; upgraded in memory). */
+export const DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION = 9;
+/** Server checkpoint parser version — unchanged until a dedicated server migration. */
+export const DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION = 9;
+
 export type DailyFritzPersistedPhase = 'active_hand' | 'hand_transition' | 'completed';
-
-export type DailyFritzAuthorityCursor = {
-  gameNumber: number;
-  handIndex: number;
-  revision: number;
-};
 
 export type DailyFritzResumeRejection =
   | 'attempt_mismatch'
@@ -32,19 +31,21 @@ export type DailyFritzResumeReconciliation =
   | { accepted: true; snapshot: DailyFritzPersistedSnapshot }
   | { accepted: false; reason: DailyFritzResumeRejection };
 
+/** Normalized in-memory checkpoint (always schema 10 after parse). */
 export type DailyFritzPersistedSnapshot = {
-  schemaVersion: 9;
+  schemaVersion: typeof DAILY_FRITZ_SESSION_SCHEMA_VERSION;
+  session: DailyFritzMatchSession;
   challenge: DailyFritzChallengeIdentity;
   classification: 'official';
   attemptId: string;
   /** Binds resume to the exact published run (seed/deals/status). */
   runFingerprint: string;
+  /** Denormalized compat fields — derived from `session` on write (one-release bridge). */
   gameNumber: number;
   currentHandIndex: number;
-  /** Server attempt revision from which this hand state was derived. */
   authorityRevision: number;
-  lifecyclePhase: DailyFritzPersistedPhase;
   match: BotMatchState;
+  lifecyclePhase: DailyFritzPersistedPhase;
   handResult: BotHandReveal | null;
   movesUsed: number;
   moveLog: MoveEntry[];
@@ -58,6 +59,16 @@ export type DailyFritzPersistedSnapshot = {
   transcriptProtocolVersion?: 1 | 2;
   fritzPolicyVersion?: 1 | 2;
   fritzPolicyContract?: string;
+};
+
+type ParsedCheckpointEnvelope = Omit<
+  DailyFritzPersistedSnapshot,
+  'schemaVersion' | 'session' | 'gameNumber' | 'currentHandIndex' | 'authorityRevision' | 'match'
+> & {
+  gameNumber: number;
+  currentHandIndex: number;
+  authorityRevision: number;
+  match: BotMatchState;
 };
 
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -90,6 +101,7 @@ function validChallenge(value: unknown): value is DailyFritzChallengeIdentity {
   return object(value) && typeof value.challengeDate === 'string' && typeof value.challengeId === 'string'
     && Number.isInteger(value.rulesVersion) && Number.isInteger(value.seedVersion);
 }
+
 function validHandResult(value: unknown): value is BotHandReveal | null {
   if (value === null) return true;
   return object(value) && (value.winner === 'you' || value.winner === 'bot' || value.winner === null)
@@ -99,32 +111,210 @@ function validHandResult(value: unknown): value is BotHandReveal | null {
     && Array.isArray(value.botRemainingTiles) && value.botRemainingTiles.every(validTile);
 }
 
-export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date()): DailyFritzPersistedSnapshot | null {
-  if (!object(value) || value.schemaVersion !== DAILY_FRITZ_SESSION_SCHEMA_VERSION || value.classification !== 'official') return null;
+function validSessionCursor(value: unknown): value is DailyFritzAuthorityCursor {
+  if (!object(value)) return false;
+  const gameNumber = Number(value.gameNumber);
+  if (gameNumber !== 1 && gameNumber !== 2 && gameNumber !== 3) return false;
+  return nonNegativeInteger(value.handIndex) && nonNegativeInteger(value.revision);
+}
+
+function validSession(value: unknown): value is DailyFritzMatchSession {
+  if (!object(value) || !validSessionCursor(value.cursor) || !validMatch(value.match)) return false;
+  return isCoherentDailyFritzSession({
+    cursor: {
+      gameNumber: Number(value.cursor.gameNumber) as DailyFritzAuthorityCursor['gameNumber'],
+      handIndex: Number(value.cursor.handIndex),
+      revision: Number(value.cursor.revision),
+    },
+    match: value.match as BotMatchState,
+  });
+}
+
+function denormalizedFieldsMatchSession(
+  session: DailyFritzMatchSession,
+  gameNumber: number,
+  currentHandIndex: number,
+  authorityRevision: number,
+  match: BotMatchState,
+): boolean {
+  return session.cursor.gameNumber === gameNumber
+    && session.cursor.handIndex === currentHandIndex
+    && session.cursor.revision === authorityRevision
+    && match.handNumber === session.match.handNumber
+    && match.handNumber === currentHandIndex + 1
+    && match.handOver === session.match.handOver
+    && match.gameOver === session.match.gameOver;
+}
+
+export function buildDailyFritzMatchSessionFromLegacyFields(input: {
+  gameNumber: number;
+  currentHandIndex: number;
+  authorityRevision: number;
+  match: BotMatchState;
+}): DailyFritzMatchSession {
+  return {
+    cursor: {
+      gameNumber: input.gameNumber as DailyFritzAuthorityCursor['gameNumber'],
+      handIndex: input.currentHandIndex,
+      revision: input.authorityRevision,
+    },
+    match: input.match,
+  };
+}
+
+export function deriveLegacyFieldsFromSession(session: DailyFritzMatchSession): {
+  gameNumber: number;
+  currentHandIndex: number;
+  authorityRevision: number;
+  match: BotMatchState;
+} {
+  return {
+    gameNumber: session.cursor.gameNumber,
+    currentHandIndex: session.cursor.handIndex,
+    authorityRevision: session.cursor.revision,
+    match: session.match,
+  };
+}
+
+function finalizeParsedCheckpoint(
+  envelope: ParsedCheckpointEnvelope,
+  session: DailyFritzMatchSession,
+): DailyFritzPersistedSnapshot {
+  const legacy = deriveLegacyFieldsFromSession(session);
+  return {
+    ...envelope,
+    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    session,
+    gameNumber: legacy.gameNumber,
+    currentHandIndex: legacy.currentHandIndex,
+    authorityRevision: legacy.authorityRevision,
+    match: legacy.match,
+  };
+}
+
+function parseCheckpointEnvelope(value: Record<string, unknown>, now: Date): ParsedCheckpointEnvelope | null {
+  if (value.classification !== 'official') return null;
   if (!validChallenge(value.challenge) || !isDailyFritzChallengeCurrent(value.challenge, now)) return null;
   if (typeof value.attemptId !== 'string' || !value.attemptId || typeof value.runFingerprint !== 'string' || !value.runFingerprint) return null;
   if (!nonNegativeInteger(value.gameNumber) || !nonNegativeInteger(value.currentHandIndex) || !nonNegativeInteger(value.authorityRevision)) return null;
-  if (!['active_hand','hand_transition','completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;
-  if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog) || !validHandResult(value.handResult) || !validIso(value.startedAt) || !validIso(value.lastTransitionAt) || Date.parse(value.lastTransitionAt) < Date.parse(value.startedAt) || !nonNegativeInteger(value.checkpointRevision)) return null;
+  if (!['active_hand', 'hand_transition', 'completed'].includes(String(value.lifecyclePhase)) || !validMatch(value.match)) return null;
+  if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog) || !validHandResult(value.handResult) || !validIso(value.startedAt) || !validIso(value.lastTransitionAt) || Date.parse(String(value.lastTransitionAt)) < Date.parse(String(value.startedAt)) || !nonNegativeInteger(value.checkpointRevision)) return null;
+
   const phase = value.lifecyclePhase as DailyFritzPersistedPhase;
   const match = value.match as BotMatchState;
   if (phase === 'active_hand' && (match.handOver || match.gameOver)) return null;
   if (phase === 'hand_transition' && (!match.handOver || match.gameOver || value.handResult === null)) return null;
   if (phase === 'completed' && !match.gameOver) return null;
   if (match.handNumber !== Number(value.currentHandIndex) + 1) return null;
+
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
   if (value.fritzPolicyVersion != null && value.fritzPolicyVersion !== 1 && value.fritzPolicyVersion !== 2) return null;
   if (value.fritzPolicyContract != null && typeof value.fritzPolicyContract !== 'string') return null;
+
   return {
-    ...value,
-    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+    challenge: value.challenge,
+    classification: 'official',
+    attemptId: value.attemptId,
     runFingerprint: value.runFingerprint,
-    transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
+    gameNumber: Number(value.gameNumber),
+    currentHandIndex: Number(value.currentHandIndex),
+    authorityRevision: Number(value.authorityRevision),
+    lifecyclePhase: phase,
+    match,
+    handResult: value.handResult as BotHandReveal | null,
+    movesUsed: Number(value.movesUsed),
     moveLog: canonicalizeDailyFritzMoveLog(value.moveLog as MoveEntry[]),
+    transcript: object(value.transcript) ? value.transcript as unknown as DailyFritzTranscript : null,
     verificationPhase,
+    startedAt: String(value.startedAt),
+    lastTransitionAt: String(value.lastTransitionAt),
+    checkpointRevision: Number(value.checkpointRevision),
     transcriptProtocolVersion,
-  } as unknown as DailyFritzPersistedSnapshot;
+    ...(value.fritzPolicyVersion === 1 || value.fritzPolicyVersion === 2
+      ? { fritzPolicyVersion: value.fritzPolicyVersion as 1 | 2 }
+      : {}),
+    ...(typeof value.fritzPolicyContract === 'string'
+      ? { fritzPolicyContract: value.fritzPolicyContract }
+      : {}),
+  };
+}
+
+function parseSchema10Checkpoint(value: Record<string, unknown>, now: Date): DailyFritzPersistedSnapshot | null {
+  if (!validSession(value.session)) return null;
+  const envelope = parseCheckpointEnvelope(value, now);
+  if (!envelope) return null;
+  const session = value.session as DailyFritzMatchSession;
+  if (!denormalizedFieldsMatchSession(
+    session,
+    envelope.gameNumber,
+    envelope.currentHandIndex,
+    envelope.authorityRevision,
+    envelope.match,
+  )) {
+    return null;
+  }
+  return finalizeParsedCheckpoint(envelope, session);
+}
+
+function parseLegacySchema9Checkpoint(value: Record<string, unknown>, now: Date): DailyFritzPersistedSnapshot | null {
+  const envelope = parseCheckpointEnvelope(value, now);
+  if (!envelope) return null;
+  const session = buildDailyFritzMatchSessionFromLegacyFields({
+    gameNumber: envelope.gameNumber,
+    currentHandIndex: envelope.currentHandIndex,
+    authorityRevision: envelope.authorityRevision,
+    match: envelope.match,
+  });
+  return finalizeParsedCheckpoint(envelope, session);
+}
+
+export function parseDailyFritzPersistedSnapshot(value: unknown, now = new Date()): DailyFritzPersistedSnapshot | null {
+  if (!object(value)) return null;
+  if (value.schemaVersion === DAILY_FRITZ_SESSION_SCHEMA_VERSION) {
+    return parseSchema10Checkpoint(value, now);
+  }
+  if (value.schemaVersion === DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION) {
+    return parseLegacySchema9Checkpoint(value, now);
+  }
+  return null;
+}
+
+/** Build a schema-10 checkpoint with denormalized compat fields derived from `session`. */
+export function buildDailyFritzPersistedSnapshot(
+  session: DailyFritzMatchSession,
+  fields: Omit<
+    ParsedCheckpointEnvelope,
+    'gameNumber' | 'currentHandIndex' | 'authorityRevision' | 'match'
+  >,
+): DailyFritzPersistedSnapshot {
+  const legacy = deriveLegacyFieldsFromSession(session);
+  return finalizeParsedCheckpoint({
+    ...fields,
+    gameNumber: legacy.gameNumber,
+    currentHandIndex: legacy.currentHandIndex,
+    authorityRevision: legacy.authorityRevision,
+    match: legacy.match,
+  }, session);
+}
+
+/**
+ * Server checkpoint route still validates schema 9 flat layout.
+ * Strip `session` and emit v9 wire fields derived from the canonical blob.
+ */
+export function serializeDailyFritzCheckpointForServer(
+  snapshot: DailyFritzPersistedSnapshot,
+): Record<string, unknown> {
+  const legacy = deriveLegacyFieldsFromSession(snapshot.session);
+  const { session: _session, schemaVersion: _schemaVersion, ...rest } = snapshot;
+  return {
+    ...rest,
+    schemaVersion: DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION,
+    gameNumber: legacy.gameNumber,
+    currentHandIndex: legacy.currentHandIndex,
+    authorityRevision: legacy.authorityRevision,
+    match: legacy.match,
+  };
 }
 
 export function reconcileDailyFritzResume(
@@ -143,10 +333,11 @@ export function reconcileDailyFritzResume(
   if (authority.runFingerprint && snapshot.runFingerprint !== authority.runFingerprint) {
     return { accepted: false, reason: 'run_mismatch' };
   }
-  if (snapshot.gameNumber !== authority.cursor.gameNumber) return { accepted: false, reason: 'game_mismatch' };
-  if (snapshot.currentHandIndex !== authority.cursor.handIndex) return { accepted: false, reason: 'hand_mismatch' };
-  if (snapshot.authorityRevision !== authority.cursor.revision) return { accepted: false, reason: 'revision_mismatch' };
-  if (snapshot.match.handNumber !== authority.cursor.handIndex + 1) {
+  const { cursor, match } = snapshot.session;
+  if (cursor.gameNumber !== authority.cursor.gameNumber) return { accepted: false, reason: 'game_mismatch' };
+  if (cursor.handIndex !== authority.cursor.handIndex) return { accepted: false, reason: 'hand_mismatch' };
+  if (cursor.revision !== authority.cursor.revision) return { accepted: false, reason: 'revision_mismatch' };
+  if (match.handNumber !== authority.cursor.handIndex + 1) {
     return { accepted: false, reason: 'match_hand_mismatch' };
   }
   if (
@@ -176,8 +367,8 @@ export function dailyFritzServerCheckpointToSnapshot(
 ): DailyFritzPersistedSnapshot | null {
   const withChallenge = {
     ...checkpoint,
-    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
-    classification: 'official',
+    schemaVersion: checkpoint.schemaVersion ?? DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION,
+    classification: checkpoint.classification ?? 'official',
     challenge: validChallenge(checkpoint.challenge)
       ? checkpoint.challenge
       : createDailyFritzChallengeIdentity(runDate),
@@ -185,12 +376,17 @@ export function dailyFritzServerCheckpointToSnapshot(
   return parseDailyFritzPersistedSnapshot(withChallenge, now);
 }
 
+function isKnownCheckpointSchemaVersion(schemaVersion: unknown): boolean {
+  return schemaVersion === DAILY_FRITZ_SESSION_SCHEMA_VERSION
+    || schemaVersion === DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION;
+}
+
 export function persistDailyFritzSnapshot(storageKey: string, snapshot: DailyFritzPersistedSnapshot): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const existingRaw = window.localStorage.getItem(storageKey);
     const existing = existingRaw ? JSON.parse(existingRaw) as unknown : null;
-    if (object(existing) && existing.schemaVersion === DAILY_FRITZ_SESSION_SCHEMA_VERSION) {
+    if (object(existing) && isKnownCheckpointSchemaVersion(existing.schemaVersion)) {
       const revision = Number(existing.checkpointRevision);
       const transitionAt = typeof existing.lastTransitionAt === 'string'
         ? Date.parse(existing.lastTransitionAt)

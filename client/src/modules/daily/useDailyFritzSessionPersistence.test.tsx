@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { useDailyFritzSessionPersistence } from './useDailyFritzSessionPersistence.ts';
 import type { DailyFritzMatchSession } from './dailyFritzMatchSession.ts';
+import {
+  DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION,
+  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+} from './dailyFritzSessionStorage.ts';
 import { DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS } from '../../dailyFritz/dailyFritzCheckpointUnload.ts';
 
 const { saveDailyFritzCheckpointMock, flushDailyFritzCheckpointOnUnloadMock } = vi.hoisted(() => ({
@@ -80,7 +84,10 @@ describe('useDailyFritzSessionPersistence', () => {
     rerender({ drawSequenceActive: false });
 
     expect(window.localStorage.getItem(storageKey)).not.toBeNull();
-    expect(JSON.parse(window.localStorage.getItem(storageKey)!).transcriptProtocolVersion).toBe(2);
+    const persisted = JSON.parse(window.localStorage.getItem(storageKey)!);
+    expect(persisted.schemaVersion).toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
+    expect(persisted.session.cursor.handIndex).toBe(0);
+    expect(persisted.transcriptProtocolVersion).toBe(2);
   });
 
   it('persists coherent session snapshots atomically', () => {
@@ -113,6 +120,8 @@ describe('useDailyFritzSessionPersistence', () => {
     rerender({ session: handTwo });
 
     const afterBoundary = JSON.parse(window.localStorage.getItem(storageKey)!);
+    expect(afterBoundary.schemaVersion).toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
+    expect(afterBoundary.session.cursor.handIndex).toBe(1);
     expect(afterBoundary.currentHandIndex).toBe(1);
     expect(afterBoundary.authorityRevision).toBe(5);
     expect(afterBoundary.match.handNumber).toBe(2);
@@ -191,9 +200,16 @@ describe('useDailyFritzSessionPersistence', () => {
         attemptId: 'attempt-1',
         verifiedMatchId: 'verified-1',
         accessToken: 'test-token',
-        checkpoint: expect.objectContaining({ checkpointRevision: expect.any(Number) }),
+        checkpoint: expect.objectContaining({
+          schemaVersion: DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION,
+          checkpointRevision: expect.any(Number),
+        }),
       }),
     );
+    const flushCall = flushDailyFritzCheckpointOnUnloadMock.mock.calls.at(0)?.at(0) as
+      | { checkpoint: Record<string, unknown> }
+      | undefined;
+    expect(flushCall?.checkpoint).not.toHaveProperty('session');
 
     act(() => {
       vi.advanceTimersByTime(500);
