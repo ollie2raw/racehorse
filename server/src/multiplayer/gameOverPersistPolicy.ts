@@ -10,6 +10,10 @@ export const GAME_OVER_PERSIST_RETRY_DELAYS_MS = [0, 400, 1200, 2800] as const;
 export const MATCH_RESULT_PERSIST_FAILED_MESSAGE =
   "Match finished, but the result couldn't be saved. Ratings may not update.";
 
+/** Tournament seats after applyMatchResult exhausts the same retry ceiling. */
+export const TOURNAMENT_RESULT_PERSIST_FAILED_MESSAGE =
+  "Match finished, but the tournament result couldn't be saved. The bracket may not advance — hang tight or contact support.";
+
 /** Rematch ack while persist is still in flight / retrying (R1). */
 export const MATCH_RESULT_STILL_SAVING_MESSAGE =
   "Result still saving — rematch isn't available yet.";

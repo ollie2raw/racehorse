@@ -252,50 +252,159 @@ describe('createGameOverPersistScheduler', () => {
     expect(resolvePendingFritzMatchMock).not.toHaveBeenCalled();
   });
 
-  it('returns early for scheduledTournamentMatchId without downstream persist', async () => {
-    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
-
-    await runPersist(buildInput({
+  it('tournament apply mid-retry recovery: fail then succeed — latches once, no give-up emit', async () => {
+    vi.useFakeTimers();
+    applyTournamentGameOverFromRoomMock
+      .mockRejectedValueOnce(new Error('db_blip'))
+      .mockResolvedValue(true);
+    const input = buildInput({
       room: { scheduledTournamentMatchId: 'sched-match-1' },
-    }));
+    });
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
 
+    expect(outcome).toBe('succeeded');
+    expect(input.room.matchLogged).toBe(true);
+    expect(input.room.gameOverPersistStatus).toBe('succeeded');
+    expect(applyTournamentGameOverFromRoomMock).toHaveBeenCalledTimes(2);
     expect(appendMatchMock).not.toHaveBeenCalled();
-    expect(logWarnMock).not.toHaveBeenCalled();
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.anything(),
+    );
+    vi.useRealTimers();
   });
 
-  it('warns on scheduledTournamentMatchId when winnerUserId is missing', async () => {
-    await runPersist(buildInput({
+  it('tournament apply give-up: 4 failures → terminal failed + tournament copy, no matchLogged', async () => {
+    vi.useFakeTimers();
+    applyTournamentGameOverFromRoomMock.mockRejectedValue(new Error('db_down'));
+    const input = buildInput({
+      room: { scheduledTournamentMatchId: 'sched-match-1' },
+    });
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
+
+    expect(outcome).toBe('failed');
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(applyTournamentGameOverFromRoomMock.mock.calls.length).toBe(4);
+    expect(roomEmit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        matchId: input.room.matchId,
+        message: expect.stringContaining('tournament result'),
+      }),
+    );
+    expect(emitMpAuthorityFunnelMock).toHaveBeenCalledWith(
+      'private_game_over_persist_failed',
+      expect.objectContaining({
+        roomCode: 'ROOM1',
+        extra: expect.objectContaining({
+          kind: 'tournament_apply',
+          scheduledTournamentMatchId: 'sched-match-1',
+          attempts: 4,
+        }),
+      }),
+    );
+    vi.useRealTimers();
+  });
+
+  it('tournament missing winnerUserId: does not latch success — gives up with tournament copy', async () => {
+    vi.useFakeTimers();
+    const input = buildInput({
       room: { scheduledTournamentMatchId: 'sched-match-1' },
       winnerSeatId: 'seat-unknown',
-    }));
+    });
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
 
+    expect(outcome).toBe('failed');
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(applyTournamentGameOverFromRoomMock).not.toHaveBeenCalled();
     expect(logWarnMock).toHaveBeenCalledWith(
       { roomCode: 'ROOM1', matchId: 'sched-match-1' },
       'missing winner user id',
     );
-    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(roomEmit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        message: expect.stringContaining('tournament result'),
+      }),
+    );
+    vi.useRealTimers();
   });
 
-  it('returns early when findTournamentMatchByRoom finds a match', async () => {
-    findTournamentMatchByRoomMock.mockResolvedValue({ id: 'tour-match-9' });
+  it('tournament apply returns false with scheduled match id: retries then give-up', async () => {
+    vi.useFakeTimers();
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
+    const input = buildInput({
+      room: { scheduledTournamentMatchId: 'sched-match-1' },
+    });
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
 
-    await runPersist(buildInput());
-
-    expect(findTournamentMatchByRoomMock).toHaveBeenCalledWith('ROOM1');
+    expect(outcome).toBe('failed');
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(applyTournamentGameOverFromRoomMock.mock.calls.length).toBe(4);
     expect(appendMatchMock).not.toHaveBeenCalled();
-    expect(logWarnMock).not.toHaveBeenCalled();
+    expect(roomEmit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        message: expect.stringContaining('tournament result'),
+      }),
+    );
+    vi.useRealTimers();
   });
 
-  it('warns on findTournamentMatchByRoom path when winnerUserId is missing', async () => {
+  it('private room continues when apply returns false and no tournament match by room', async () => {
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
+    findTournamentMatchByRoomMock.mockResolvedValue(null);
+
+    const outcome = await runPersist(buildInput());
+
+    expect(outcome).toBe('succeeded');
+    expect(appendMatchMock).toHaveBeenCalled();
+  });
+
+  it('findTournamentMatchByRoom hit with winner but apply returned false: give-up', async () => {
+    vi.useFakeTimers();
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
     findTournamentMatchByRoomMock.mockResolvedValue({ id: 'tour-match-9' });
+    const pending = runPersist(buildInput());
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
 
-    await runPersist(buildInput({ winnerSeatId: 'seat-unknown' }));
+    expect(outcome).toBe('failed');
+    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(roomEmit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        message: expect.stringContaining('tournament result'),
+      }),
+    );
+    vi.useRealTimers();
+  });
 
+  it('findTournamentMatchByRoom with missing winner: give-up, not silent success', async () => {
+    vi.useFakeTimers();
+    findTournamentMatchByRoomMock.mockResolvedValue({ id: 'tour-match-9' });
+    const pending = runPersist(buildInput({ winnerSeatId: 'seat-unknown' }));
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
+
+    expect(outcome).toBe('failed');
     expect(logWarnMock).toHaveBeenCalledWith(
       { roomCode: 'ROOM1', matchId: 'tour-match-9' },
       'missing winner user id',
     );
     expect(appendMatchMock).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('awaits resolvePendingFritzMatch before appendMatch when Fritz context exists', async () => {

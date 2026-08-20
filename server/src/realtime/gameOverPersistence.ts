@@ -36,6 +36,7 @@ import {
   GAME_OVER_PERSIST_MAX_ATTEMPTS,
   GAME_OVER_PERSIST_RETRY_DELAYS_MS,
   MATCH_RESULT_PERSIST_FAILED_MESSAGE,
+  TOURNAMENT_RESULT_PERSIST_FAILED_MESSAGE,
   markGameOverPersistFailed,
   markGameOverPersistSucceeded,
   type GameOverPersistOutcome,
@@ -43,6 +44,10 @@ import {
 import type { Room } from '../rooms';
 
 const log = childLogger('realtime:game-over');
+
+/** Thrown inside persistGameOverOnce so the shared 4-attempt ceiling can give up cleanly. */
+export const TOURNAMENT_MISSING_WINNER_ERROR = 'tournament_missing_winner_user_id';
+export const TOURNAMENT_APPLY_FAILED_ERROR = 'tournament_apply_failed';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -106,6 +111,9 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
   const winnerUserId =
     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+
+  // Scheduled tournament: applyMatchResult must succeed or throw (retry / give-up).
+  // Never mark success when the bracket was not advanced.
   if (winnerUserId) {
     const applied = await applyTournamentGameOverFromRoom(io, room, {
       winnerUserId,
@@ -114,15 +122,18 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     });
     if (applied) return;
   }
+
   if (room.scheduledTournamentMatchId) {
     if (!winnerUserId) {
       log.warn({
         roomCode: room.code,
         matchId: room.scheduledTournamentMatchId,
       }, 'missing winner user id');
+      throw new Error(TOURNAMENT_MISSING_WINNER_ERROR);
     }
-    return;
+    throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
+
   const tournamentMatchByRoom = await findTournamentMatchByRoom(room.code).catch(() => null);
   if (tournamentMatchByRoom) {
     if (!winnerUserId) {
@@ -130,8 +141,9 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
         roomCode: room.code,
         matchId: tournamentMatchByRoom.id,
       }, 'missing winner user id');
+      throw new Error(TOURNAMENT_MISSING_WINNER_ERROR);
     }
-    return;
+    throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
 
   if (getPendingFritzMatchContext(room)) {
@@ -392,6 +404,13 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
 function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string, err: unknown): void {
   const sequence = room.state?.sequence ?? null;
   const errorMessage = err instanceof Error ? err.message : String(err);
+  const isTournament =
+    Boolean(room.scheduledTournamentMatchId) ||
+    errorMessage === TOURNAMENT_MISSING_WINNER_ERROR ||
+    errorMessage === TOURNAMENT_APPLY_FAILED_ERROR;
+  const message = isTournament
+    ? TOURNAMENT_RESULT_PERSIST_FAILED_MESSAGE
+    : MATCH_RESULT_PERSIST_FAILED_MESSAGE;
   emitMpAuthorityFunnel('private_game_over_persist_failed', {
     roomCode: room.code,
     failureCode: 'room_persistence_failed',
@@ -399,8 +418,10 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
     extra: {
       sourceMatchId,
       matchId: room.matchId,
+      scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
       attempts: GAME_OVER_PERSIST_MAX_ATTEMPTS,
       error: errorMessage,
+      kind: isTournament ? 'tournament_apply' : 'private_match',
     },
   });
   io.to(room.code).emit('match:result_persist_failed', {
@@ -408,7 +429,7 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
     matchId: room.matchId,
     sourceMatchId,
     sequence,
-    message: MATCH_RESULT_PERSIST_FAILED_MESSAGE,
+    message,
   });
   log.warn(
     {
@@ -417,6 +438,7 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
       sourceMatchId,
       sequence,
       error: errorMessage,
+      kind: isTournament ? 'tournament_apply' : 'private_match',
     },
     'game-over persist gave up after retries',
   );
