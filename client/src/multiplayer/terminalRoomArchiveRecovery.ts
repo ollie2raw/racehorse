@@ -1,122 +1,78 @@
-export type RecoveredTerminalMatchNotice = {
-  context: 'multiplayer';
-  title: string;
-  detail: string;
+export type PrivateMatchSeat = {
+  seatId: string;
+  userId: string | null;
+  username: string;
 };
 
-export type TerminalArchiveRecoveryResult =
-  | { status: 'found'; notice: RecoveredTerminalMatchNotice }
-  | { status: 'absent' }
-  | { status: 'unauthorized' }
-  | { status: 'temporarily_unavailable'; error?: string };
-
-type ArchivedRoomParticipant = {
-  id: string;
-  username?: string | null;
-  userId?: string | null;
+export type PrivateMatchRanking = {
+  eligible: boolean;
+  applied: boolean;
+  skipReason: string | null;
+  message: string | null;
+  ratingBefore: number | null;
+  ratingAfter: number | null;
+  ratingDelta: number | null;
 };
 
-type ArchivedRoomLog = {
+export type PrivateMatchResultPayload = {
   matchId: string;
   roomCode: string;
-  status: 'completed' | 'abandoned';
-  participants?: ArchivedRoomParticipant[];
-  summary?: {
-    winnerId?: string | null;
-    scores?: Record<string, number>;
-  } | null;
+  terminalStatus: 'completed' | 'abandoned';
+  archivedAt: string;
+  you: PrivateMatchSeat;
+  opponent: PrivateMatchSeat;
+  outcome: 'win' | 'loss' | 'draw';
+  yourScore: number;
+  opponentScore: number;
+  ranking: PrivateMatchRanking;
 };
 
-type ArchivedRoomLogResponse = {
+export type RecoveredPrivateMatchUi =
+  | { kind: 'result'; result: PrivateMatchResultPayload }
+  | { kind: 'unauthorized'; roomCode: string }
+  | { kind: 'forbidden'; roomCode: string }
+  | { kind: 'absent'; roomCode: string }
+  | { kind: 'syncing'; roomCode: string };
+
+type PrivateMatchResultResponse = {
   ok?: boolean;
-  log?: ArchivedRoomLog;
+  result?: PrivateMatchResultPayload;
 };
 
-function participantNameBySeat(log: ArchivedRoomLog): Map<string, string> {
-  const names = new Map<string, string>();
-  for (const participant of log.participants ?? []) {
-    names.set(participant.id, participant.username?.trim() || 'Player');
-  }
-  return names;
+function isPrivateMatchResultPayload(value: unknown): value is PrivateMatchResultPayload {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<PrivateMatchResultPayload>;
+  return (
+    typeof row.matchId === 'string' &&
+    typeof row.roomCode === 'string' &&
+    (row.outcome === 'win' || row.outcome === 'loss' || row.outcome === 'draw') &&
+    typeof row.yourScore === 'number' &&
+    typeof row.opponentScore === 'number' &&
+    Boolean(row.you && row.opponent && row.ranking)
+  );
 }
 
-function formatScoreline(log: ArchivedRoomLog): string | null {
-  const scores = log.summary?.scores;
-  if (!scores || typeof scores !== 'object') return null;
-  const names = participantNameBySeat(log);
-  const entries = Object.entries(scores).filter(([, score]) => Number.isFinite(score));
-  if (entries.length === 0) return null;
-  return entries
-    .map(([seatId, score]) => `${names.get(seatId) ?? 'Player'} ${score}`)
-    .join(' - ');
-}
-
-export function buildRecoveredTerminalMatchNotice(
-  log: ArchivedRoomLog,
-): RecoveredTerminalMatchNotice {
-  const roomCode = log.roomCode.trim().toUpperCase();
-  const scoreline = formatScoreline(log);
-  if (log.status === 'completed') {
-    return {
-      context: 'multiplayer',
-      title: 'Match completed',
-      detail: scoreline
-        ? `Your saved room ${roomCode} finished while you were away. Final score: ${scoreline}.`
-        : `Your saved room ${roomCode} finished while you were away.`,
-    };
-  }
-
-  return {
-    context: 'multiplayer',
-    title: 'Match ended',
-    detail: scoreline
-      ? `Your saved room ${roomCode} was abandoned while you were away. Last recorded score: ${scoreline}.`
-      : `Your saved room ${roomCode} was abandoned while you were away.`,
-  };
-}
-
-export function buildTerminalArchiveFallbackNotice(
-  status: Exclude<TerminalArchiveRecoveryResult['status'], 'found'>,
-  roomCode: string,
-): RecoveredTerminalMatchNotice {
-  const code = roomCode.trim().toUpperCase();
-  if (status === 'unauthorized') {
-    return {
-      context: 'multiplayer',
-      title: 'Sign in to recover result',
-      detail: `Your saved room ${code} has ended, but result recovery needs a fresh sign-in. Return home, sign in, then retry Multiplayer.`,
-    };
-  }
-  if (status === 'temporarily_unavailable') {
-    return {
-      context: 'multiplayer',
-      title: 'Result still syncing',
-      detail: `Your saved room ${code} has ended, but the archived result is temporarily unavailable. Return home and retry Multiplayer in a moment.`,
-    };
-  }
-  return {
-    context: 'multiplayer',
-    title: 'Match ended',
-    detail: `Your saved room ${code} has ended, but no archived result was found.`,
-  };
-}
-
-export async function recoverTerminalMatchArchive(params: {
+export async function recoverPrivateMatchResult(params: {
   serverUrl: string;
   roomCode: string;
+  matchId?: string | null;
   authToken: string | null;
   timeoutMs?: number;
-}): Promise<TerminalArchiveRecoveryResult> {
+}): Promise<RecoveredPrivateMatchUi> {
   const roomCode = params.roomCode.trim().toUpperCase();
-  if (!params.serverUrl || !roomCode) return { status: 'absent' };
-  if (!params.authToken) return { status: 'unauthorized' };
+  if (!params.serverUrl || !roomCode) return { kind: 'absent', roomCode };
+  if (!params.authToken) return { kind: 'unauthorized', roomCode };
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), params.timeoutMs ?? 8000);
+  const matchId = params.matchId?.trim() ?? '';
+  const query = matchId
+    ? `matchId=${encodeURIComponent(matchId)}`
+    : `roomCode=${encodeURIComponent(roomCode)}`;
 
   try {
     const response = await fetch(
-      `${params.serverUrl.replace(/\/$/, '')}/api/room-events/by-room/${encodeURIComponent(roomCode)}`,
+      `${params.serverUrl.replace(/\/$/, '')}/api/private-match/result?${query}`,
       {
         headers: {
           Authorization: `Bearer ${params.authToken}`,
@@ -124,31 +80,20 @@ export async function recoverTerminalMatchArchive(params: {
         signal: controller.signal,
       },
     );
-    if (response.status === 404) return { status: 'absent' };
-    if (response.status === 403 || response.status === 401) return { status: 'unauthorized' };
-    if (!response.ok) {
-      return { status: 'temporarily_unavailable', error: `HTTP ${response.status}` };
-    }
+    if (response.status === 401) return { kind: 'unauthorized', roomCode };
+    if (response.status === 403) return { kind: 'forbidden', roomCode };
+    if (response.status === 404) return { kind: 'absent', roomCode };
+    if (response.status === 503) return { kind: 'syncing', roomCode };
+    if (!response.ok) return { kind: 'syncing', roomCode };
 
-    const payload = (await response.json()) as ArchivedRoomLogResponse;
-    return payload.log
-      ? { status: 'found', notice: buildRecoveredTerminalMatchNotice(payload.log) }
-      : { status: 'absent' };
-  } catch (error) {
-    return {
-      status: 'temporarily_unavailable',
-      error: error instanceof Error ? error.message : String(error),
-    };
+    const payload = (await response.json()) as PrivateMatchResultResponse;
+    if (payload.ok === true && isPrivateMatchResultPayload(payload.result)) {
+      return { kind: 'result', result: payload.result };
+    }
+    return { kind: 'absent', roomCode };
+  } catch {
+    return { kind: 'syncing', roomCode };
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-export async function fetchRecoveredTerminalMatchNotice(params: {
-  serverUrl: string;
-  roomCode: string;
-  authToken: string | null;
-}): Promise<RecoveredTerminalMatchNotice | null> {
-  const result = await recoverTerminalMatchArchive(params);
-  return result.status === 'found' ? result.notice : null;
 }

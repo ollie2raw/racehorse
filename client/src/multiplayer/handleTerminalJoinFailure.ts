@@ -2,9 +2,8 @@ import type { RecoveryEvent } from './recoveryMachine';
 import { isTerminalJoinError } from './recoveryMachine';
 import type { RoomAckResponse, RoomTerminalJoinPayload } from './roomTransport';
 import {
-  buildTerminalArchiveFallbackNotice,
-  recoverTerminalMatchArchive,
-  type RecoveredTerminalMatchNotice,
+  recoverPrivateMatchResult,
+  type RecoveredPrivateMatchUi,
 } from './terminalRoomArchiveRecovery';
 
 export function isRecoverableTerminalJoinResponse(resp: RoomAckResponse | null | undefined): boolean {
@@ -23,7 +22,7 @@ export type HandleTerminalJoinFailureParams = {
   lastRoomStorageKey?: string;
   clearSavedRoomOnAttempt?: boolean;
   restoreSavedRoomOnDegraded?: boolean;
-  setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
+  setRecoveredPrivateMatch?: (recovered: RecoveredPrivateMatchUi) => void;
   onNavigateMultiplayer?: () => void;
   dispatchRecovery?: (event: RecoveryEvent) => void;
 };
@@ -63,38 +62,27 @@ export async function handleTerminalJoinFailure(
     window.localStorage.removeItem(params.lastRoomStorageKey);
   }
 
-  const archiveResult = await recoverTerminalMatchArchive({
+  const recovered = await recoverPrivateMatchResult({
     serverUrl: params.serverUrl,
     roomCode,
+    matchId: params.resp.terminal?.matchId,
     authToken: params.authToken,
   });
 
-  const finishTerminalRecovery = (notice: RecoveredTerminalMatchNotice) => {
-    params.setRecoveredTerminalMatchNotice?.(notice);
-    params.onNavigateMultiplayer?.();
-    params.dispatchRecovery?.({
-      type: 'ROOM_JOIN_TERMINAL',
-      error: terminalJoinErrorText(params.resp),
-    });
-  };
-
-  if (archiveResult.status === 'found') {
-    finishTerminalRecovery(archiveResult.notice);
-    return 'handled';
+  if (
+    (recovered.kind === 'syncing' || recovered.kind === 'unauthorized') &&
+    params.restoreSavedRoomOnDegraded &&
+    params.lastRoomStorageKey &&
+    typeof window !== 'undefined'
+  ) {
+    window.localStorage.setItem(params.lastRoomStorageKey, roomCode);
   }
 
-  if (archiveResult.status === 'temporarily_unavailable' || archiveResult.status === 'unauthorized') {
-    if (
-      params.restoreSavedRoomOnDegraded &&
-      params.lastRoomStorageKey &&
-      typeof window !== 'undefined'
-    ) {
-      window.localStorage.setItem(params.lastRoomStorageKey, roomCode);
-    }
-    finishTerminalRecovery(buildTerminalArchiveFallbackNotice(archiveResult.status, roomCode));
-    return 'handled';
-  }
-
-  finishTerminalRecovery(buildTerminalArchiveFallbackNotice('absent', roomCode));
+  params.setRecoveredPrivateMatch?.(recovered);
+  params.onNavigateMultiplayer?.();
+  params.dispatchRecovery?.({
+    type: 'ROOM_JOIN_TERMINAL',
+    error: terminalJoinErrorText(params.resp),
+  });
   return 'handled';
 }

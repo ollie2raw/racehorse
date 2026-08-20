@@ -12,6 +12,8 @@ import type { MultiplayerControllerLobbySnapshot } from './runtime/roomRuntime';
 import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyController';
 import { Button } from '../components/primitives';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import { PrivateMatchResultRecoveryOverlay } from './PrivateMatchResultRecoveryOverlay';
+import type { RecoveredPrivateMatchUi } from './terminalRoomArchiveRecovery';
 import '../components/leaveGameModal.css';
 
 const MatchmakingScreen = React.lazy(() => import('../matchmaking/MatchmakingScreen'));
@@ -132,6 +134,8 @@ export type MultiplayerAbandonedMatchView = {
   abandonCurrentMatch: () => Promise<void>;
   abandonedMatchNotice: AbandonedMatchNotice | null;
   setAbandonedMatchNotice: Dispatch<SetStateAction<AbandonedMatchNotice | null>>;
+  recoveredPrivateMatch: RecoveredPrivateMatchUi | null;
+  setRecoveredPrivateMatch: Dispatch<SetStateAction<RecoveredPrivateMatchUi | null>>;
 };
 
 export type MultiplayerTournamentPassthroughView = {
@@ -280,6 +284,8 @@ export default function MultiplayerModeController({
     abandonCurrentMatch,
     abandonedMatchNotice,
     setAbandonedMatchNotice,
+    recoveredPrivateMatch,
+    setRecoveredPrivateMatch,
   } = abandonedMatchView;
 
   const {
@@ -532,6 +538,16 @@ export default function MultiplayerModeController({
             }}
           />
         </Suspense>
+      ) : null}
+      {recoveredPrivateMatch ? (
+        <PrivateMatchResultRecoveryOverlay
+          recovered={recoveredPrivateMatch}
+          onReturnHome={() => {
+            setAppMode('home');
+            setRecoveredPrivateMatch(null);
+          }}
+          onSignIn={() => onOpenAuthModal()}
+        />
       ) : null}
       {abandonedMatchNotice ? (
         <GameOverlayPortal>

@@ -21,7 +21,7 @@ import type { MultiplayerGameplayRefsRuntime } from './runtime/gameplayRuntime';
 import type { MultiplayerRecoveryCallbacksRuntime } from './runtime/recoveryRuntime';
 import type { MultiplayerRoomSocialRuntime } from './runtime/roomRuntime';
 import type { MultiplayerSessionStateRuntime } from './session/sessionRuntimeTypes';
-import type { RecoveredTerminalMatchNotice } from './terminalRoomArchiveRecovery';
+import type { RecoveredPrivateMatchUi } from './terminalRoomArchiveRecovery';
 import type { RoomOperationEpochRef } from './roomOperationEpoch';
 
 export type UseMultiplayerConnectionHostParamsSource = {
@@ -58,7 +58,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   recoveryDispatchRef?: MutableRefObject<
     (event: RecoveryEvent) => RecoveryMachineSnapshot | null
   >;
-  setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
+  setRecoveredPrivateMatch?: (recovered: RecoveredPrivateMatchUi) => void;
   roomOperationEpochRef: RoomOperationEpochRef;
   applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
@@ -271,7 +271,7 @@ export function useMultiplayerConnectionHostParams(
       uiSetters: connectionUiSetters,
       roomOperationEpochRef: source.roomOperationEpochRef,
       recoveryDispatchRef: source.recoveryDispatchRef,
-      setRecoveredTerminalMatchNotice: source.setRecoveredTerminalMatchNotice,
+      setRecoveredPrivateMatch: source.setRecoveredPrivateMatch,
     }),
     [
       multiplayerConnectionConfig,
@@ -283,7 +283,7 @@ export function useMultiplayerConnectionHostParams(
       source.reconnectRuntime,
       source.recoveryDispatchRef,
       source.roomOperationEpochRef,
-      source.setRecoveredTerminalMatchNotice,
+      source.setRecoveredPrivateMatch,
       source.roomRuntime,
       source.roomSocialRuntime,
       source.socketRuntime,
