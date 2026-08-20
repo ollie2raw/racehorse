@@ -220,6 +220,46 @@ function appendGhostMove(room: Room, playerSeatId: string, entry: GhostMoveLogEn
   room.ghostMoveLogs[playerSeatId] = [...(room.ghostMoveLogs[playerSeatId] ?? []), entry];
 }
 
+type GhostDrawAnimationStep = {
+  tile: Tile;
+  boneyardCount: number;
+  drawerHandCount: number;
+};
+
+function appendGhostDrawSteps(
+  room: Room,
+  playerSeatId: string,
+  params: {
+    handNumber: number;
+    board: GameState['board'];
+    animationSteps: GhostDrawAnimationStep[];
+    handAtStart: Tile[];
+    forcedDraw: boolean;
+  },
+): void {
+  if (params.animationSteps.length === 0) return;
+
+  let handKeys = params.handAtStart.map(normalizeTileKey);
+  const boardSnapshot = serializeGhostBoardState(params.board);
+
+  for (const step of params.animationSteps) {
+    appendGhostMove(room, playerSeatId, {
+      turn: currentGhostTurn(room),
+      hand_number: params.handNumber,
+      actor: 'you',
+      board_state: boardSnapshot,
+      tile_played: null,
+      branch: 'draw',
+      hand_before: [...handKeys],
+      score_delta: 0,
+      forced_draw: params.forcedDraw,
+      drawn_tile: normalizeTileKey(step.tile),
+    });
+    room.ghostTurnIndex += 1;
+    handKeys = [...handKeys, normalizeTileKey(step.tile)];
+  }
+}
+
 function currentGhostTurn(room: Room): number {
   return room.ghostTurnIndex + 1;
 }
@@ -857,6 +897,9 @@ async function actUnlocked(
     }
 
     const previousState = state;
+    const handAtDrawStart = [...(state.players[playerSeatId]?.hand ?? [])];
+    const boardAtDraw = state.board;
+    const drawHandNumber = state.handNumber;
     const result = resolveDrawUntilPlayableAtomically(state, playerSeatId);
     const drawAutoPassExtras = result.passed ? [playerSeatId] : [];
     commitResolvedGameState(room, `act:DRAW:${code}`, result.state, drawAutoPassExtras);
@@ -896,6 +939,13 @@ async function actUnlocked(
         },
       });
     }
+    appendGhostDrawSteps(room, playerSeatId, {
+      handNumber: drawHandNumber,
+      board: boardAtDraw,
+      animationSteps: result.animationSteps,
+      handAtStart: handAtDrawStart,
+      forcedDraw: false,
+    });
     appendResolutionEvents(room, previousState, playerSeatId);
     drawAudit('forced-draw-resolved', {
       roomCode: code,
@@ -942,6 +992,11 @@ async function actUnlocked(
     const handBefore = state.players[playerSeatId]?.hand ?? [];
     const scoreDelta = computePlayScore(simulatePlacement(state.board, move.tile, position), state.config);
     const previousState = state;
+    const playedTileKey = normalizeTileKey(move.tile);
+    const handAfterPlayOnly = handBefore.filter((tile, index) => {
+      if (normalizeTileKey(tile) !== playedTileKey) return true;
+      return handBefore.findIndex((candidate) => normalizeTileKey(candidate) === playedTileKey) !== index;
+    });
     const { state: stateAfterMove, forcedDraw } = applyMove(state, playerSeatId, move);
     appendGhostMove(room, playerSeatId, {
       turn: currentGhostTurn(room),
@@ -980,6 +1035,13 @@ async function actUnlocked(
     );
 
     if (forcedDraw && resolvedForced) {
+      appendGhostDrawSteps(room, playerSeatId, {
+        handNumber: state.handNumber,
+        board: stateAfterMove.board,
+        animationSteps: resolvedForced.animationSteps,
+        handAtStart: handAfterPlayOnly,
+        forcedDraw: true,
+      });
       drawAudit('forced-draw-resolved', {
         roomCode: code,
         playerId: playerSeatId,

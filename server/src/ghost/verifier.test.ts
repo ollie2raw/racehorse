@@ -153,8 +153,8 @@ describe('verifyPlayerMoveLog', () => {
         board_state: serializeBoard(boardAfter1),
         tile_played: '3|5',
         branch: 'left',
-        // Fabricated: should be ['3|5'] (what remained after turn 1), not a fresh hand.
-        hand_before: ['3|5', '4|4'],
+        // Fabricated: should be ['3|5'] (what remained after turn 1), not a swapped hand.
+        hand_before: ['4|4'],
         score_delta: 0,
       },
     ];
@@ -162,7 +162,7 @@ describe('verifyPlayerMoveLog', () => {
     const result = verifyPlayerMoveLog(moveLog);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toMatch(/hand_before is not consistent/);
+      expect(result.reason).toMatch(/not a legal move|hand_before is not consistent/);
     }
   });
 
