@@ -82,6 +82,8 @@ function seedGameOverRoom(roomCode: string) {
     winnerId: 'p1',
     config: room.config,
   } as any;
+  room.matchLogged = true;
+  room.gameOverPersistStatus = 'succeeded';
   return room;
 }
 
@@ -186,6 +188,63 @@ describe('registerRematchPregameHandlers', () => {
     const postRematchBroadcastIdx = order.indexOf('broadcastStateUpdate', rematchStartedIdx);
     expect(rematchStartedIdx).toBeGreaterThanOrEqual(0);
     expect(postRematchBroadcastIdx).toBeGreaterThan(rematchStartedIdx);
+    broadcastSpy.mockRestore();
+  });
+
+  it('blocks rematch while game-over persist is still pending (R1)', async () => {
+    const roomCode = 'RMT_SAVE';
+    const room = seedGameOverRoom(roomCode);
+    room.matchLogged = false;
+    room.gameOverPersistStatus = 'pending';
+    room.activeGameOverPersist = undefined;
+
+    const io = makeIo(roomCode);
+    const { socket: socket1, handlers: handlers1 } = makeSocket('sock-p1', 'p1');
+    const { socket: socket2, handlers: handlers2 } = makeSocket('sock-p2', 'p2');
+    ensureSocketDataSeat(socket1, 'p1');
+    ensureSocketDataSeat(socket2, 'p2');
+    registerRematchPregameHandlers(io, socket1, { handlerDeps });
+    registerRematchPregameHandlers(io, socket2, { handlerDeps });
+
+    await handlers1.get('game:rematch')?.(roomCode, vi.fn());
+    const cb2 = vi.fn();
+    await handlers2.get('game:rematch')?.(roomCode, cb2);
+
+    expect(cb2).toHaveBeenCalledWith({
+      ok: false,
+      error: "Result still saving — rematch isn't available yet.",
+    });
+  });
+
+  it('allows rematch after persist give-up (failed status) so seats are not stuck forever', async () => {
+    const roomCode = 'RMT_FAIL';
+    const room = seedGameOverRoom(roomCode);
+    room.matchLogged = false;
+    room.gameOverPersistStatus = 'failed';
+
+    const order: string[] = [];
+    const io = makeIo(roomCode);
+    io.to = vi.fn(() => ({
+      emit: (event: string) => {
+        order.push(`io.emit:${event}`);
+      },
+    }));
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {
+      order.push('broadcastStateUpdate');
+    });
+
+    const { socket: socket1, handlers: handlers1 } = makeSocket('sock-p1', 'p1');
+    const { socket: socket2, handlers: handlers2 } = makeSocket('sock-p2', 'p2');
+    ensureSocketDataSeat(socket1, 'p1');
+    ensureSocketDataSeat(socket2, 'p2');
+    registerRematchPregameHandlers(io, socket1, { handlerDeps });
+    registerRematchPregameHandlers(io, socket2, { handlerDeps });
+
+    await handlers1.get('game:rematch')?.(roomCode, vi.fn());
+    const cb2 = vi.fn();
+    await handlers2.get('game:rematch')?.(roomCode, cb2);
+
+    expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ ok: true, started: true }));
     broadcastSpy.mockRestore();
   });
 

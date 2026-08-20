@@ -74,8 +74,13 @@ export type Room = {
   ghostTurnIndex: number;
   matchId: string;
   matchLogged: boolean;
-  /** In-flight game-over persist for the current match; await before rematch reset. */
-  activeGameOverPersist?: Promise<void>;
+  /**
+   * In-flight game-over persist for the current match.
+   * Resolves to succeeded|failed after bounded retries (await before rematch).
+   */
+  activeGameOverPersist?: Promise<'succeeded' | 'failed'>;
+  /** Tracks whether durable game-over side effects finished (or gave up). */
+  gameOverPersistStatus?: 'idle' | 'pending' | 'succeeded' | 'failed';
   leadTracker: LeadTracker | null;
   eventLogVersion: 1;
   eventSequence: number;

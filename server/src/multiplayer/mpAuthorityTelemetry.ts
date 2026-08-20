@@ -24,7 +24,9 @@ export type MpAuthorityFunnelEvent =
   | 'private_move_log_verification_failed'
   | 'private_terminal_recovery'
   | 'private_disconnect_auto_act_deferred'
-  | 'private_disconnect_auto_act_paused';
+  | 'private_disconnect_auto_act_paused'
+  | 'private_game_over_persist_failed'
+  | 'private_game_over_persist_succeeded';
 
 export type MpAuthorityFailureCode =
   | 'missing_request_id'
