@@ -303,7 +303,7 @@ export default function NoBrainerLabScreen({
       <MatchLiveLayout
         hudLeft={
           <button type="button" className="rh-match-solo-action-btn rh-back-button" onClick={onBack}>
-            ← Single Player
+            ← LEARN
           </button>
         }
         hudCenter={
@@ -368,8 +368,8 @@ export default function NoBrainerLabScreen({
               type="button"
               className="nbl-board-control-btn"
               onClick={onBack}
-              title="Back to Single Player"
-              aria-label="Back to Single Player"
+              title="Back to Learn"
+              aria-label="Back to Learn"
             >
               <HomeIcon />
             </button>

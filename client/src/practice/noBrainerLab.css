@@ -59,6 +59,15 @@
     0 0 18px rgba(168, 85, 247, 0.08);
 }
 
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-action-btn.rh-back-button {
+  /* Slightly larger than the generic solo HUD back button */
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  border-radius: 16px;
+}
+
 .screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-action-btn:hover {
   border-color: rgba(199, 125, 255, 0.62) !important;
   color: #fff !important;
