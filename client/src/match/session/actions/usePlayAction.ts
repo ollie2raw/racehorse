@@ -183,7 +183,10 @@ export function usePlayAction(
         mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
         if (!resp?.ok) {
           if (resp?.uncertain) {
-            markUncertainAndResync(requestId, resp.error ?? 'Play uncertain — resyncing.');
+            markUncertainAndResync(
+              requestId,
+              resp.error ?? "Move couldn't be saved — try again.",
+            );
           } else {
             setActionError(resp?.error ?? 'Unable to play tile.');
           }

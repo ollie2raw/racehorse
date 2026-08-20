@@ -91,7 +91,10 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
         if (resp?.uncertain) {
-          markUncertainAndResync(requestId, resp.error ?? 'Pass uncertain — resyncing.');
+          markUncertainAndResync(
+            requestId,
+            resp.error ?? "Move couldn't be saved — try again.",
+          );
         } else {
           setActionError(resp?.error ?? 'Unable to pass.');
         }

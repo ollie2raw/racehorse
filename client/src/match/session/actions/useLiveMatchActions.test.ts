@@ -216,7 +216,7 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
     vi.mocked(emitGameAction).mockResolvedValueOnce({
       ok: false,
       uncertain: true,
-      error: 'room_persistence_failed',
+      error: "Move couldn't be saved — try again.",
       sequence: 17,
     });
 
@@ -228,6 +228,6 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
 
     expect(logicalGameplayActionRef.current?.uncertain).toBe(true);
     expect(fetchGameState).toHaveBeenCalledWith('game_action_uncertain');
-    expect(params.showToast).toHaveBeenCalled();
+    expect(params.showToast).toHaveBeenCalledWith("Move couldn't be saved — try again.", 2500);
   });
 });

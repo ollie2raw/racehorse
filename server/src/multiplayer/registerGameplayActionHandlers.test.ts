@@ -335,7 +335,7 @@ describe('registerGameplayActionHandlers', () => {
     expect(cb).toHaveBeenCalledWith({ ok: false, error: 'new_hand_blocked' });
   });
 
-  it('returns an uncertain ack when a gameplay mutation cannot be proven durably committed', async () => {
+  it('rolls back memory and returns uncertain when flush is not durably recoverable', async () => {
     const roomCode = 'ACKUNK';
     createReservedRoom(roomCode);
     const seatId = 'seat-1';
@@ -347,6 +347,8 @@ describe('registerGameplayActionHandlers', () => {
     room.durability.persistedFence = null;
     room.durability.status = 'healthy';
     setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+    const sequenceBefore = room.state.sequence;
+    const passesBefore = room.state.consecutivePasses;
 
     const io = makeIo();
     const { socket, handlers } = makeSocket('sock-1', seatId);
@@ -354,11 +356,15 @@ describe('registerGameplayActionHandlers', () => {
 
     const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
       room.state!.sequence += 1;
+      room.state!.consecutivePasses += 1;
       return { room, forcedDrawAnimation: undefined };
     });
+    const rollbackSpy = vi.spyOn(rooms, 'rollbackRoomGameplayCommit');
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
     vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
       flushedRoomCodes: ['ACKUNK'],
     });
+    vi.spyOn(livePersistence, 'isLiveRoomDurablyRecoverable').mockReturnValue(false);
 
     registerGameplayActionHandlers(io, socket, {
       handlerDeps: {
@@ -376,26 +382,119 @@ describe('registerGameplayActionHandlers', () => {
 
     const payload = { type: 'PASS', requestId: 'uncertain-pass' };
     const ack1 = vi.fn();
-    const ack2 = vi.fn();
     await handlers.get('game:action')?.(roomCode, payload, ack1);
-    await handlers.get('game:action')?.(roomCode, payload, ack2);
 
     expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(rollbackSpy).toHaveBeenCalledTimes(1);
+    expect(broadcastSpy).not.toHaveBeenCalled();
+    expect(room.state.sequence).toBe(sequenceBefore);
+    expect(room.state.consecutivePasses).toBe(passesBefore);
     expect(ack1).toHaveBeenCalledWith(
       expect.objectContaining({
         ok: false,
         uncertain: true,
-        error: expect.stringMatching(/^room_(persistence_failed|snapshot_uncommitted)$/),
+        sequence: sequenceBefore,
+        error: "Move couldn't be saved — try again.",
       }),
     );
-    expect(ack2).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ok: false,
-        uncertain: true,
-        duplicate: true,
-        error: expect.stringMatching(/^room_(persistence_failed|snapshot_uncommitted)$/),
-      }),
+  });
+
+  it('consecutive flush failures: each attempt rolls back; board/turn stay at baseline', async () => {
+    const roomCode = 'ACKDBL';
+    createReservedRoom(roomCode);
+    const seatId = 'seat-1';
+    joinRoom(roomCode, seatId);
+    joinRoom(roomCode, 'seat-2');
+    const room = getRoom(roomCode);
+    room.players = [seatId, 'seat-2'];
+    room.state = mkStartedRoom(roomCode);
+    room.durability.persistedFence = null;
+    room.durability.status = 'healthy';
+    setRoomRoster(roomCode, [{ id: seatId, socketId: 'sock-1', username: 'P1', userId: 'u1' }]);
+    const sequenceBefore = room.state.sequence;
+    const turnBefore = room.state.currentPlayerIndex;
+
+    const io = makeIo();
+    const { socket, handlers } = makeSocket('sock-1', seatId);
+    ensureSocketDataSeat(socket, seatId);
+
+    const actSpy = vi.spyOn(rooms, 'act').mockImplementation(async () => {
+      room.state!.sequence += 1;
+      room.state!.currentPlayerIndex = 1;
+      return { room, forcedDrawAnimation: undefined };
+    });
+    const rollbackSpy = vi.spyOn(rooms, 'rollbackRoomGameplayCommit');
+    const broadcastSpy = vi.spyOn(roomSession, 'broadcastStateUpdate').mockImplementation(() => {});
+    vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: ['ACKDBL'],
+    });
+    const recoverableSpy = vi
+      .spyOn(livePersistence, 'isLiveRoomDurablyRecoverable')
+      .mockReturnValue(false);
+
+    registerGameplayActionHandlers(io, socket, {
+      handlerDeps: {
+        resolveSocketIdentity: async () => ({ username: 'P1', userId: 'u1' }),
+        normalizeUsername: (v) => String(v ?? 'Guest'),
+        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
+        tryHydrateMatchmakingRoomShell: async () => 'skipped',
+        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+        onAfterMatchStarted: async () => undefined,
+        notifyRoomPlayersInGame: () => undefined,
+        persistRoomMatchLog: async () => undefined,
+        maybeFinalizeTournamentMatch: vi.fn(),
+      },
+    });
+
+    const ack1 = vi.fn();
+    const ack2 = vi.fn();
+    // Same requestId (client uncertain-retry) then a fresh id — both must re-act + roll back.
+    await handlers.get('game:action')?.(
+      roomCode,
+      { type: 'PASS', requestId: 'dbl-pass-1' },
+      ack1,
     );
+    await handlers.get('game:action')?.(
+      roomCode,
+      { type: 'PASS', requestId: 'dbl-pass-1' },
+      ack2,
+    );
+    const ack3 = vi.fn();
+    await handlers.get('game:action')?.(
+      roomCode,
+      { type: 'PASS', requestId: 'dbl-pass-2' },
+      ack3,
+    );
+
+    expect(actSpy).toHaveBeenCalledTimes(3);
+    expect(rollbackSpy).toHaveBeenCalledTimes(3);
+    expect(broadcastSpy).not.toHaveBeenCalled();
+    expect(room.state.sequence).toBe(sequenceBefore);
+    expect(room.state.currentPlayerIndex).toBe(turnBefore);
+    for (const ack of [ack1, ack2, ack3]) {
+      expect(ack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ok: false,
+          uncertain: true,
+          sequence: sequenceBefore,
+          error: "Move couldn't be saved — try again.",
+        }),
+      );
+    }
+
+    // Mid-retry recovery: next attempt durably commits once.
+    recoverableSpy.mockReturnValue(true);
+    const ackOk = vi.fn();
+    await handlers.get('game:action')?.(
+      roomCode,
+      { type: 'PASS', requestId: 'dbl-pass-ok' },
+      ackOk,
+    );
+    expect(actSpy).toHaveBeenCalledTimes(4);
+    expect(rollbackSpy).toHaveBeenCalledTimes(3);
+    expect(broadcastSpy).toHaveBeenCalledWith(roomCode);
+    expect(room.state.sequence).toBe(sequenceBefore + 1);
+    expect(ackOk).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
   });
 
   it('game:action MOVE with duplicate requestId mutates only once and replays ack', async () => {
