@@ -48,6 +48,7 @@ const CLIENT_STUCK_CODES = new Set([
   'game_mismatch',
   'hand_mismatch',
   'illegal_action',
+  'post_play_recovery_draw',
   'post_terminal_action',
   'fritz_recovery_failed',
   'fritz_policy_version_mismatch',

@@ -1,4 +1,5 @@
 import type { MoveEntry, TileTuple } from '../game/moveLogger.ts';
+import { isPostPlayRecoveryMoveLogEntry } from './dailyFritzPostPlayRecovery.ts';
 
 function normalizedTileKey(tile: TileTuple): string {
   const low = Math.min(tile[0], tile[1]);
@@ -93,6 +94,11 @@ export function canonicalizeDailyFritzMoveLog(
       && typeof handNumber === 'number'
       && previous?.handNumber === handNumber
       && samePreActionEvidence(previous, entry)
+    ) continue;
+    // Protocol 2: drop draw/pass already absorbed into the preceding play.
+    if (
+      typeof handNumber === 'number'
+      && isPostPlayRecoveryMoveLogEntry(previous, entry)
     ) continue;
     if (key) seenPlacements.add(key);
     canonical.push(entry);

@@ -125,6 +125,24 @@ export function usePlayerNoMoveEffect({
     if (userPlayMoves.length > 0) return;
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
 
+    // Protocol 2: after a play command, applyMove already absorbed any forced
+    // recovery draws while the boneyard was drawable. Mid-presentation setMatch
+    // can temporarily restore a drawable boneyard with empty legal moves —
+    // never re-run drawCoreTile then or the journal gains an illegal post-play
+    // recovery draw. An empty drawable boneyard may still need an explicit pass.
+    const journal = match.officialJournal;
+    if (
+      journal
+      && journal.handNumber === match.handNumber
+      && journal.actions.length > 0
+      && match.boneyard.length > match.deadTiles.length
+    ) {
+      const last = journal.actions[journal.actions.length - 1];
+      if (last?.kind === 'play' && last.actor === 'player') {
+        return;
+      }
+    }
+
     const snapshot = collectPlayerMoveSnapshot(match, userPlayMoves);
     const boneyardBefore = match.boneyard.length;
 

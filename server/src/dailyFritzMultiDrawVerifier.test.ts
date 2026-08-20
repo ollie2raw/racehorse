@@ -7,7 +7,7 @@ import {
   GAME_RULES_VERSION,
   type DailyFritzTranscriptAction,
 } from '@racehorse/game-core';
-import { createOfficialDailyFritzHandState, verifyDailyFritzHand } from './dailyFritzVerifier';
+import { createOfficialDailyFritzHandState, DailyFritzVerificationError, verifyDailyFritzHand } from './dailyFritzVerifier';
 
 describe('Daily Fritz multi-draw transcript verification', () => {
   it('accepts explicit draws and safely reconstructs omitted mandatory draws', () => {
@@ -243,20 +243,27 @@ describe('Daily Fritz multi-draw transcript verification', () => {
       fritzTier: 'elite',
     })).toThrow(/does not complete the hand/i);
 
-    // Protocol 2 must not silently skip obsolete recovery draws.
-    expect(() => verifyDailyFritzHand({
-      transcript: envelope([
-        { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 6 }, position: 'left' },
-        { sequence: 1, actor: 'fritz', kind: 'draw' },
-      ], 2),
-      initialState: open,
-      expectedChallengeId: 'c',
-      expectedAttemptId: 'a',
-      expectedGameNumber: 1,
-      expectedHandIndex: 0,
-      userId: 'u',
-      fritzTier: 'elite',
-    })).toThrow(/not legal|Illegal|official policy|wrong_actor|Draw/i);
+    // Protocol 2 must not silently skip obsolete recovery draws — reject with a
+    // distinct code so incidents are distinguishable from other illegal_action.
+    try {
+      verifyDailyFritzHand({
+        transcript: envelope([
+          { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 6 }, position: 'left' },
+          { sequence: 1, actor: 'fritz', kind: 'draw' },
+        ], 2),
+        initialState: open,
+        expectedChallengeId: 'c',
+        expectedAttemptId: 'a',
+        expectedGameNumber: 1,
+        expectedHandIndex: 0,
+        userId: 'u',
+        fritzTier: 'elite',
+      });
+      expect.fail('expected post_play_recovery_draw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DailyFritzVerificationError);
+      expect((error as DailyFritzVerificationError).code).toBe('post_play_recovery_draw');
+    }
   });
 
   it('skips obsolete post-score draw+pass after absorbed auto-pass advances the turn', () => {
