@@ -114,6 +114,7 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
 
   // Scheduled tournament: applyMatchResult must succeed or throw (retry / give-up).
   // Never mark success when the bracket was not advanced.
+  // Ops repair after give-up: docs/ops/tournament-apply-match-result-repair.md
   if (winnerUserId) {
     const applied = await applyTournamentGameOverFromRoom(io, room, {
       winnerUserId,
