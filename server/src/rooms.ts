@@ -131,6 +131,17 @@ export type ActResult = {
   };
 };
 
+/** In-memory gameplay fields restored after a failed durable commit (disconnect auto-act). */
+export type RoomGameplaySnapshot = {
+  state: GameState;
+  ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
+  ghostTurnIndex: number;
+  eventSequence: number;
+  events: RoomMatchEvent[];
+  pendingAutoPassNotice?: string[];
+  pendingForcedDrawBroadcast?: { playerId: string; count: number };
+};
+
 const rooms = new Map<RoomCode, Room>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
 
@@ -148,6 +159,39 @@ export function resetLiveRoomPersistHookForTests(): void {
 
 function notifyLiveRoomStateCommitted(room: Room): void {
   liveRoomPersistHook?.(room);
+}
+
+export function captureRoomGameplaySnapshot(room: Room): RoomGameplaySnapshot | null {
+  if (!room.state) return null;
+  return {
+    state: structuredClone(room.state) as GameState,
+    ghostMoveLogs: structuredClone(room.ghostMoveLogs),
+    ghostTurnIndex: room.ghostTurnIndex,
+    eventSequence: room.eventSequence,
+    events: structuredClone(room.events),
+    pendingAutoPassNotice: room.pendingAutoPassNotice
+      ? [...room.pendingAutoPassNotice]
+      : undefined,
+    pendingForcedDrawBroadcast: room.pendingForcedDrawBroadcast
+      ? { ...room.pendingForcedDrawBroadcast }
+      : undefined,
+  };
+}
+
+/** Restore pre-act memory and re-notify the live-session persist hook with the rolled-back room. */
+export function rollbackRoomGameplayCommit(room: Room, snapshot: RoomGameplaySnapshot): void {
+  room.state = structuredClone(snapshot.state) as GameState;
+  room.ghostMoveLogs = structuredClone(snapshot.ghostMoveLogs);
+  room.ghostTurnIndex = snapshot.ghostTurnIndex;
+  room.eventSequence = snapshot.eventSequence;
+  room.events = structuredClone(snapshot.events);
+  room.pendingAutoPassNotice = snapshot.pendingAutoPassNotice
+    ? [...snapshot.pendingAutoPassNotice]
+    : undefined;
+  room.pendingForcedDrawBroadcast = snapshot.pendingForcedDrawBroadcast
+    ? { ...snapshot.pendingForcedDrawBroadcast }
+    : undefined;
+  notifyLiveRoomStateCommitted(room);
 }
 
 async function flushCommittedRoomStateOrThrow(room: Room): Promise<void> {

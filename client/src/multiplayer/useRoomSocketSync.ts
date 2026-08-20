@@ -647,6 +647,24 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       scope.ui.showToast('Opponent forfeited.', 3000);
     });
 
+    const onPlayerDisconnectStall = wrapSocketHandler(
+      'player:disconnect_stall',
+      (payload: { playerId?: string; phase?: 'retry' | 'paused'; message?: string }) => {
+        if (!payload?.playerId || payload.playerId === scope.dom.youRef.current) return;
+        scope.ui.setOpponentDisconnected(true);
+        const message =
+          typeof payload.message === 'string' && payload.message.trim().length > 0
+            ? payload.message
+            : payload.phase === 'paused'
+              ? "We're having technical issues saving this match. The game is paused — hang tight."
+              : "Opponent still disconnected. Auto-move couldn't be saved — waiting for server recovery…";
+        scope.ui.setOpponentDisconnectMessage(message);
+        if (payload.phase === 'paused') {
+          scope.ui.showToast(message, 4500);
+        }
+      },
+    );
+
     const unregisterNormalized = registerNormalizedSocketRouter({
       stateUpdate: handleStateUpdate,
     });
@@ -663,6 +681,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECTED, asRawHandler(onPlayerDisconnected)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECTED, asRawHandler(onPlayerReconnected)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECT_TIMEOUT, asRawHandler(onPlayerReconnectTimeout)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECT_STALL, asRawHandler(onPlayerDisconnectStall)),
     ];
 
     return () => {

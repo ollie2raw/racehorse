@@ -1,16 +1,42 @@
 import type { Server, Socket } from 'socket.io';
-import { act, getRoom } from '../rooms';
+import {
+  act,
+  captureRoomGameplaySnapshot,
+  getRoom,
+  rollbackRoomGameplayCommit,
+  type RoomGameplaySnapshot,
+} from '../rooms';
 import { canDraw, getLegalMoves } from '../game/engine';
 import { childLogger } from '../logger';
 import type { RoomPlayer } from './roomSession';
+import { evaluateRoomDurabilityOperation } from './roomDurabilityPolicy';
+import {
+  flushScheduledLiveRoomPersistence,
+  getLiveRoomDurabilityState,
+  isLiveRoomDurablyRecoverable,
+} from './roomLivePersistence';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 
 const log = childLogger('disconnect-grace');
 
 export const DISCONNECT_GRACE_MS = 30_000;
+/** Retry spacing after a durability-blocked or flush-failed auto-act. */
+export const DISCONNECT_DURABILITY_RETRY_MS = 10_000;
+/** Max durability retries after the initial grace expiry (6 × 10s = 60s). Then pause. */
+export const DISCONNECT_DURABILITY_MAX_RETRIES = 6;
+
+/** Seat B banner while durability retries are still scheduled (Path 1 and Path 2). */
+export const DISCONNECT_STALL_RETRY_MESSAGE =
+  "Opponent still disconnected. Auto-move couldn't be saved — waiting for server recovery…";
+
+/** Seat B banner after retry ceiling — match paused, no forfeit, no more auto-act timers. */
+export const DISCONNECT_STALL_PAUSED_MESSAGE =
+  "We're having technical issues saving this match. The game is paused — hang tight.";
 
 type GraceEntry = {
   timer: ReturnType<typeof setTimeout>;
   playerId: string;
+  durabilityRetryCount: number;
 };
 
 const graceTimersByRoomSeat = new Map<string, GraceEntry>();
@@ -88,6 +114,112 @@ export function resetDisconnectGraceForTests(): void {
   resolveSeatSocket = () => null;
 }
 
+function emitDisconnectStall(
+  io: Server,
+  roomCode: string,
+  playerSeatId: string,
+  phase: 'retry' | 'paused',
+  message: string,
+): void {
+  io.to(roomCode).emit('player:disconnect_stall', {
+    playerId: playerSeatId,
+    phase,
+    message,
+  });
+}
+
+function scheduleDisconnectGraceTimer(
+  roomCode: string,
+  playerSeatId: string,
+  io: Server,
+  broadcast: (roomCode: string) => void,
+  delayMs: number,
+  durabilityRetryCount: number,
+): void {
+  const code = normalizeRoomCode(roomCode);
+  clearDisconnectGraceForSeat(code, playerSeatId);
+  const timer = setTimeout(() => {
+    void handleDisconnectGraceExpired(code, playerSeatId, io, broadcast, durabilityRetryCount);
+  }, delayMs);
+  graceTimersByRoomSeat.set(graceKey(code, playerSeatId), {
+    timer,
+    playerId: playerSeatId,
+    durabilityRetryCount,
+  });
+}
+
+function handleDurabilityStall(
+  roomCode: string,
+  disconnectedPlayerSeatId: string,
+  io: Server,
+  broadcast: (roomCode: string) => void,
+  durabilityRetryCount: number,
+  failureCode: 'room_persistence_failed' | 'room_degraded' | 'room_failed',
+  extra?: Record<string, unknown>,
+): void {
+  const nextRetry = durabilityRetryCount + 1;
+  if (nextRetry > DISCONNECT_DURABILITY_MAX_RETRIES) {
+    emitMpAuthorityFunnel('private_disconnect_auto_act_paused', {
+      roomCode,
+      seatId: disconnectedPlayerSeatId,
+      failureCode,
+      extra: {
+        durabilityRetryCount,
+        ...extra,
+      },
+    });
+    emitDisconnectStall(
+      io,
+      roomCode,
+      disconnectedPlayerSeatId,
+      'paused',
+      DISCONNECT_STALL_PAUSED_MESSAGE,
+    );
+    log.warn(
+      { roomCode, disconnectedPlayerSeatId, durabilityRetryCount, failureCode, ...extra },
+      'disconnect auto-act paused after durability retry ceiling',
+    );
+    return;
+  }
+
+  emitMpAuthorityFunnel('private_disconnect_auto_act_deferred', {
+    roomCode,
+    seatId: disconnectedPlayerSeatId,
+    failureCode,
+    extra: {
+      durabilityRetryCount: nextRetry,
+      maxRetries: DISCONNECT_DURABILITY_MAX_RETRIES,
+      retryMs: DISCONNECT_DURABILITY_RETRY_MS,
+      ...extra,
+    },
+  });
+  emitDisconnectStall(
+    io,
+    roomCode,
+    disconnectedPlayerSeatId,
+    'retry',
+    DISCONNECT_STALL_RETRY_MESSAGE,
+  );
+  scheduleDisconnectGraceTimer(
+    roomCode,
+    disconnectedPlayerSeatId,
+    io,
+    broadcast,
+    DISCONNECT_DURABILITY_RETRY_MS,
+    nextRetry,
+  );
+  log.warn(
+    {
+      roomCode,
+      disconnectedPlayerSeatId,
+      durabilityRetryCount: nextRetry,
+      failureCode,
+      ...extra,
+    },
+    'disconnect auto-act deferred; scheduled durability retry',
+  );
+}
+
 export function onActivePlayerSocketDisconnect(
   roomCode: string,
   playerSeatId: string,
@@ -103,18 +235,12 @@ export function onActivePlayerSocketDisconnect(
   if (!room.state || room.state.gameOver || room.state.handOver) return;
   if (!room.players.includes(playerSeatId)) return;
 
-  clearDisconnectGraceForSeat(roomCode, playerSeatId);
-
   io.to(roomCode).emit('player:disconnected', {
     playerId: playerSeatId,
     graceMs: DISCONNECT_GRACE_MS,
   });
 
-  const timer = setTimeout(() => {
-    void handleDisconnectGraceExpired(roomCode, playerSeatId, io, broadcast);
-  }, DISCONNECT_GRACE_MS);
-
-  graceTimersByRoomSeat.set(graceKey(roomCode, playerSeatId), { timer, playerId: playerSeatId });
+  scheduleDisconnectGraceTimer(roomCode, playerSeatId, io, broadcast, DISCONNECT_GRACE_MS, 0);
 }
 
 export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatId: string): void {
@@ -135,6 +261,7 @@ async function handleDisconnectGraceExpired(
   disconnectedPlayerSeatId: string,
   io: Server,
   broadcast: (roomCode: string) => void,
+  durabilityRetryCount: number,
 ): Promise<void> {
   const code = normalizeRoomCode(roomCode);
   graceTimersByRoomSeat.delete(graceKey(code, disconnectedPlayerSeatId));
@@ -151,16 +278,62 @@ async function handleDisconnectGraceExpired(
       : false;
     if (stillConnected) return;
 
+    const durabilityDecision = evaluateRoomDurabilityOperation(room, 'gameplay_action');
+    if (!durabilityDecision.allowed) {
+      handleDurabilityStall(
+        code,
+        disconnectedPlayerSeatId,
+        io,
+        broadcast,
+        durabilityRetryCount,
+        durabilityDecision.error === 'room_degraded' ? 'room_degraded' : 'room_persistence_failed',
+        { phase: 'pre_act', reason: durabilityDecision.reason },
+      );
+      return;
+    }
+
     const legalMoves = getLegalMoves(room.state, disconnectedPlayerSeatId);
     const canPass = legalMoves.some((move) => move.type === 'pass');
     const canDrawNow = canDraw(room.state, disconnectedPlayerSeatId);
+
+    const snapshot: RoomGameplaySnapshot | null = captureRoomGameplaySnapshot(room);
+    if (!snapshot) return;
 
     if (canPass) {
       await act(code, disconnectedPlayerSeatId, { type: 'PASS' }, io, broadcast);
     } else if (canDrawNow) {
       await act(code, disconnectedPlayerSeatId, { type: 'DRAW' }, io, broadcast);
     } else {
-      log.warn({ roomCode: code, disconnectedPlayerSeatId, legalMoveTypes: legalMoves.map((m) => m.type) }, 'no legal auto-action for disconnected turn');
+      log.warn(
+        {
+          roomCode: code,
+          disconnectedPlayerSeatId,
+          legalMoveTypes: legalMoves.map((m) => m.type),
+        },
+        'no legal auto-action for disconnected turn',
+      );
+      return;
+    }
+
+    await flushScheduledLiveRoomPersistence(code);
+    const durability = getLiveRoomDurabilityState(room);
+    const committed = isLiveRoomDurablyRecoverable(room);
+    if (!committed) {
+      rollbackRoomGameplayCommit(room, snapshot);
+      handleDurabilityStall(
+        code,
+        disconnectedPlayerSeatId,
+        io,
+        broadcast,
+        durabilityRetryCount,
+        durability.status === 'degraded' ? 'room_degraded' : 'room_persistence_failed',
+        {
+          phase: 'post_flush',
+          durabilityStatus: durability.status,
+          sequence: room.state?.sequence ?? null,
+        },
+      );
+      return;
     }
 
     if (!room.disconnectExpiries) {
@@ -200,5 +373,24 @@ async function handleDisconnectGraceExpired(
     broadcast(code);
   } catch (error) {
     log.error({ err: error, roomCode: code, disconnectedPlayerSeatId }, 'grace expiry failed');
+    try {
+      handleDurabilityStall(
+        code,
+        disconnectedPlayerSeatId,
+        io,
+        broadcast,
+        durabilityRetryCount,
+        'room_persistence_failed',
+        {
+          phase: 'exception',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    } catch (stallError) {
+      log.error(
+        { err: stallError, roomCode: code, disconnectedPlayerSeatId },
+        'disconnect stall emit failed after grace expiry error',
+      );
+    }
   }
 }

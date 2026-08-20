@@ -3,10 +3,16 @@ import type { GameState } from '../game/types';
 import * as engine from '../game/engine';
 import * as rooms from '../rooms';
 import { createReservedRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
+import { createHydratedRoomDurabilityState, captureRoomDurabilityFence } from './roomDurability';
+import * as livePersistence from './roomLivePersistence';
 import { initRoomSession, resetRoomSessionStoresForTests, clearRoomMetadata } from './roomSession';
 import {
   configureDisconnectGraceSeatResolver,
+  DISCONNECT_DURABILITY_MAX_RETRIES,
+  DISCONNECT_DURABILITY_RETRY_MS,
   DISCONNECT_GRACE_MS,
+  DISCONNECT_STALL_PAUSED_MESSAGE,
+  DISCONNECT_STALL_RETRY_MESSAGE,
   getActiveDisconnectGracePlayerId,
   hasActiveDisconnectGrace,
   hasActiveDisconnectGraceForSeat,
@@ -54,6 +60,7 @@ function seedLiveRoom(roomCode: string, currentPlayerIndex: number) {
   room.players = ['seat-a', 'seat-b'];
   room.state = mkGameState(currentPlayerIndex);
   room.disconnectExpiries = {};
+  room.durability = createHydratedRoomDurabilityState(room, captureRoomDurabilityFence(room));
   return room;
 }
 
@@ -82,17 +89,31 @@ describe('disconnectGrace', () => {
   let actSpy: ReturnType<typeof vi.spyOn>;
   let getLegalMovesSpy: ReturnType<typeof vi.spyOn>;
   let canDrawSpy: ReturnType<typeof vi.spyOn>;
+  let flushSpy: ReturnType<typeof vi.spyOn>;
+  let recoverableSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     resetRoomRuntimeForTests();
     resetDisconnectGraceForTests();
-    actSpy = vi.spyOn(rooms, 'act').mockResolvedValue({
-      room: {} as any,
-      forcedDrawAnimation: undefined,
+    resetRoomSessionStoresForTests();
+    rooms.resetLiveRoomPersistHookForTests();
+    actSpy = vi.spyOn(rooms, 'act').mockImplementation(async (code) => {
+      const room = rooms.getRoom(code);
+      if (room.state) {
+        room.state = { ...room.state, sequence: room.state.sequence + 1 };
+      }
+      return {
+        room,
+        forcedDrawAnimation: undefined,
+      };
     });
     getLegalMovesSpy = vi.spyOn(engine, 'getLegalMoves').mockReturnValue([{ type: 'pass' } as any]);
     canDrawSpy = vi.spyOn(engine, 'canDraw').mockReturnValue(false);
+    flushSpy = vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: ['TEST'],
+    } as any);
+    recoverableSpy = vi.spyOn(livePersistence, 'isLiveRoomDurablyRecoverable').mockReturnValue(true);
     configureDisconnectGraceSeatResolver(() => null);
   });
 
@@ -144,6 +165,8 @@ describe('disconnectGrace', () => {
       io,
       broadcast,
     );
+    expect(flushSpy).toHaveBeenCalled();
+    expect(broadcast).toHaveBeenCalledWith('GRACE3');
     expect(hasActiveDisconnectGrace('GRACE3')).toBe(false);
   });
 
@@ -241,22 +264,17 @@ describe('disconnectGrace', () => {
     const { io, roomEmit } = makeIo(false);
     initRoomSession(io, sessionDeps);
 
-    // 1. Current player disconnects
     onActivePlayerSocketDisconnect(roomCode, 'seat-a', io, vi.fn());
     expect(hasActiveDisconnectGrace(roomCode)).toBe(true);
 
-    // 2. First timer expires, auto-pass/draw behavior occurs
     await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
     expect(actSpy).toHaveBeenCalledTimes(1);
     expect(room.disconnectExpiries?.['seat-a']).toBe(1);
     expect(hasActiveDisconnectGrace(roomCode)).toBe(false);
 
-    // 3. Player remains disconnected, and it becomes their turn again
-    // We simulate another disconnect event for the active player
     onActivePlayerSocketDisconnect(roomCode, 'seat-a', io, vi.fn());
     expect(hasActiveDisconnectGrace(roomCode)).toBe(true);
 
-    // 4. Second timer expires, forfeit path executes
     await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
     await vi.waitFor(() => {
       expect(room.disconnectExpiries?.['seat-a']).toBe(2);
@@ -265,6 +283,7 @@ describe('disconnectGrace', () => {
     }, { timeout: 1000, interval: 20 });
 
     resetRoomSessionStoresForTests();
+    rooms.resetLiveRoomPersistHookForTests();
   });
 
   it('handles reconnect after first expiry but before room cleanup', async () => {
@@ -273,13 +292,10 @@ describe('disconnectGrace', () => {
 
     const { io } = makeIo(false);
 
-    // Disconnect
     onActivePlayerSocketDisconnect(roomCode, 'seat-a', io, vi.fn());
-    // Advance to expire first timer
     await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
     expect(room.disconnectExpiries?.['seat-a']).toBe(1);
 
-    // Reconnect
     onPlayerSocketRejoined(roomCode, io, 'seat-a');
     expect(room.disconnectExpiries?.['seat-a']).toBe(0);
     expect(hasActiveDisconnectGrace(roomCode)).toBe(false);
@@ -296,5 +312,81 @@ describe('disconnectGrace', () => {
     clearRoomMetadata(roomCode);
 
     expect(hasActiveDisconnectGrace(roomCode)).toBe(false);
+  });
+
+  it('rolls back auto-act and emits stall retry when flush is not durably recoverable', async () => {
+    const room = seedLiveRoom('GRACE_FLUSH_FAIL', 0);
+    const sequenceBefore = room.state!.sequence;
+    const broadcast = vi.fn();
+    const rollbackSpy = vi.spyOn(rooms, 'rollbackRoomGameplayCommit');
+    recoverableSpy.mockReturnValue(false);
+    const { io, roomEmit } = makeIo(false);
+
+    onActivePlayerSocketDisconnect('GRACE_FLUSH_FAIL', 'seat-a', io, broadcast);
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
+
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    expect(rollbackSpy).toHaveBeenCalled();
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(room.disconnectExpiries?.['seat-a'] ?? 0).toBe(0);
+    expect(roomEmit).toHaveBeenCalledWith('player:disconnect_stall', {
+      playerId: 'seat-a',
+      phase: 'retry',
+      message: DISCONNECT_STALL_RETRY_MESSAGE,
+    });
+    expect(hasActiveDisconnectGrace('GRACE_FLUSH_FAIL')).toBe(true);
+    expect(room.state!.sequence).toBe(sequenceBefore);
+  });
+
+  it('skips act and emits stall when durability already blocks gameplay', async () => {
+    const room = seedLiveRoom('GRACE_PRE_FAIL', 0);
+    room.durability = {
+      ...room.durability,
+      status: 'failed',
+    };
+    const broadcast = vi.fn();
+    const { io, roomEmit } = makeIo(false);
+
+    onActivePlayerSocketDisconnect('GRACE_PRE_FAIL', 'seat-a', io, broadcast);
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
+
+    expect(actSpy).not.toHaveBeenCalled();
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(roomEmit).toHaveBeenCalledWith('player:disconnect_stall', {
+      playerId: 'seat-a',
+      phase: 'retry',
+      message: DISCONNECT_STALL_RETRY_MESSAGE,
+    });
+    expect(hasActiveDisconnectGrace('GRACE_PRE_FAIL')).toBe(true);
+  });
+
+  it('pauses after durability retry ceiling with no further timers or forfeit', async () => {
+    const room = seedLiveRoom('GRACE_CEILING', 0);
+    room.durability = {
+      ...room.durability,
+      status: 'failed',
+    };
+    const broadcast = vi.fn();
+    const { io, roomEmit } = makeIo(false);
+
+    onActivePlayerSocketDisconnect('GRACE_CEILING', 'seat-a', io, broadcast);
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS);
+
+    for (let i = 0; i < DISCONNECT_DURABILITY_MAX_RETRIES; i += 1) {
+      await vi.advanceTimersByTimeAsync(DISCONNECT_DURABILITY_RETRY_MS);
+    }
+
+    expect(actSpy).not.toHaveBeenCalled();
+    expect(room.abandonedAt).toBeUndefined();
+    expect(room.disconnectExpiries?.['seat-a'] ?? 0).toBe(0);
+    expect(roomEmit).toHaveBeenCalledWith('player:disconnect_stall', {
+      playerId: 'seat-a',
+      phase: 'paused',
+      message: DISCONNECT_STALL_PAUSED_MESSAGE,
+    });
+    expect(hasActiveDisconnectGrace('GRACE_CEILING')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(DISCONNECT_DURABILITY_RETRY_MS * 3);
+    expect(actSpy).not.toHaveBeenCalled();
   });
 });
