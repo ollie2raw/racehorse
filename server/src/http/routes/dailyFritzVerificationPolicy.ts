@@ -174,7 +174,7 @@ export function buildRecordedDailyFritzAttemptResult(input: {
   previousResult: Record<string, unknown> | null;
   setResult: object;
   hasTranscript: boolean;
-  /** Advance-first path: game is recorded before async verification finishes. */
+  /** @deprecated Advance-first pending path removed; kept for call-site compatibility. */
   verificationPending?: boolean;
 }): Record<string, unknown> {
   const previous = input.previousResult ?? {};
