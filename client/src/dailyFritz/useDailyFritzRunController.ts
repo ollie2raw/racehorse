@@ -24,6 +24,7 @@ import {
   resolveTodayNextAction,
   normalizeStartResponse,
   resolveDailyFritzCurrentGameNumber,
+  resolveBetweenGamesOverlayFromStart,
 } from './dailyFritzScreenHelpers';
 import type {
   DailyFritzGameCompletionPayload,
@@ -272,7 +273,16 @@ export function useDailyFritzRunController({
       }
       return;
     }
+    const betweenGames = resolveBetweenGamesOverlayFromStart(normalized);
     openEmbeddedRun(normalized);
+    if (betweenGames) {
+      setSetOverlay({
+        kind: 'between',
+        completedGame: betweenGames.completedGame,
+        setResult: betweenGames.setResult,
+        nextGameNumber: betweenGames.nextGameNumber,
+      });
+    }
   }, [buildCompletedGame, openEmbeddedRun, submitSetCompletion]);
 
   const beginRun = useCallback(async () => {
@@ -324,7 +334,14 @@ export function useDailyFritzRunController({
     }
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
+      const advancingFromBetweenOverlay = setOverlay?.kind === 'between';
       setSetOverlay(null);
+      if (advancingFromBetweenOverlay) {
+        // /start still reports between_games until the next hand is played.
+        // The player already saw the interstitial; open the next game.
+        openEmbeddedRun(normalizeStartResponse(started, fallbackSetResult));
+        return;
+      }
       await handleStartResponse(started, fallbackSetResult);
     } catch (err) {
       setHubError(friendlyDailyFritzInitError(err));
@@ -332,7 +349,7 @@ export function useDailyFritzRunController({
       startActionInFlightRef.current = false;
       setStartActionPending(false);
     }
-  }, [handleStartResponse, setOverlay, setHubError, today]);
+  }, [handleStartResponse, openEmbeddedRun, setOverlay, setHubError, today]);
 
   useEffect(() => {
     if (resolveTodayNextAction(today) !== 'finalize_set' || activeRun) return;
