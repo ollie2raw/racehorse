@@ -21,6 +21,13 @@ import {
   upsertDailyFritzRun,
 } from '../stores/dailyFritzStore';
 import { listDailyFritzEvents, listDailyFritzPersistedMetrics, recordDailyFritzEvent } from '../stores/dailyFritzEventStore';
+import {
+  buildDailyFritzHealthDeltas,
+  formatDailyFritzRunDatePacific,
+  listDailyFritzHealthSummary,
+  previousDailyFritzRunDate,
+} from '../stores/dailyFritzHealthSummary';
+import { evaluateDailyFritzHealthStatus } from './dailyFritzHealthPolicy';
 import { getDailyFritzMetricRates, getDailyFritzMetrics, incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { buildDailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
 import {
@@ -111,6 +118,44 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
     rates: getDailyFritzMetricRates(),
     persisted_metrics: persistedMetrics,
   });
+  });
+
+  app.get('/api/daily-fritz/health', async (req, res) => {
+    const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+    if (!isAdminSecret(suppliedAdminSecret)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const requestedRunDate = typeof req.query.run_date === 'string' ? req.query.run_date.trim() : '';
+    const runDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedRunDate)
+      ? requestedRunDate
+      : formatDailyFritzRunDatePacific();
+    const comparedTo = previousDailyFritzRunDate(runDate);
+    try {
+      const todaySummary = await listDailyFritzHealthSummary(runDate);
+      const yesterdaySummary = await listDailyFritzHealthSummary(comparedTo);
+      const deltas = buildDailyFritzHealthDeltas(todaySummary.metrics, yesterdaySummary.metrics);
+      const status = evaluateDailyFritzHealthStatus(
+        todaySummary.metrics,
+        yesterdaySummary.metrics,
+        deltas,
+      );
+      res.json({
+        ok: true,
+        run_date: runDate,
+        compared_to: comparedTo,
+        status,
+        today: todaySummary.metrics,
+        yesterday: yesterdaySummary.metrics,
+        deltas,
+        top_failures: todaySummary.topFailures,
+      });
+    } catch (error) {
+      capture500(error, { route: 'health' });
+      res.status(500).json({
+        error: prodSafeError(error, 'Daily Fritz health summary is unavailable.'),
+      });
+    }
   });
 
   app.get('/api/daily-fritz/events/:attemptId', async (req, res) => {

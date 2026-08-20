@@ -434,6 +434,7 @@ app.use('/api/daily-fritz/generate', adminLimit);
 app.use('/api/daily-fritz/invalidate', adminLimit);
 app.use('/api/daily-fritz/reset-attempt', adminLimit);
 app.use('/api/daily-fritz/metrics', adminLimit);
+app.use('/api/daily-fritz/health', adminLimit);
 app.use('/api/daily-fritz/events', adminLimit);
 app.use('/api/ranking/process', adminLimit);
 app.use('/league/run-forfeits', adminLimit);

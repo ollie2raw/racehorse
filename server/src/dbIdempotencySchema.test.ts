@@ -285,6 +285,14 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('idx_daily_fritz_events_user_retention');
   });
 
+  it('allows checkpoint_saved in daily_fritz_events event taxonomy', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-20_daily_fritz_events_checkpoint_saved.sql',
+    ));
+    expect(sql).toContain("'checkpoint_saved'");
+    expect(sql).toContain('daily_fritz_events_event_type_check');
+  });
+
   it('ships Fritz Challenge canonical funnel and failure metrics', () => {
     const sql = compactSql(readRepoFile(
       'supabase/migrations/2026-08-02_fritz_challenge_canonical_telemetry.sql',

@@ -115,7 +115,7 @@ test.describe('browser routing', () => {
     '/tournament',
   ]) {
     test(`the shared logo returns ${path} to the current homepage without a reload`, async ({ page }) => {
-      await page.goto(path, { waitUntil: 'networkidle' });
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
       const logo = page.getByRole('button', { name: 'Racehorse home' });
       await expect(logo).toBeVisible({ timeout: 15_000 });
 

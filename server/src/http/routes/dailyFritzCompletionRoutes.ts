@@ -79,6 +79,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
     }
     if (attempt.status === 'completed') {
       incrementDailyFritzMetric('retry_request');
+      const replayVerificationStatus = getDailyFritzVerificationStatus(attempt.result);
       await recordDailyFritzEventBestEffort({
         attemptId,
         runDate: attempt.runDate,
@@ -86,7 +87,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
         requestId: diagnostics.requestId,
         eventType: 'attempt_completed',
         idempotencyKey: `${attemptId}:attempt_completed:replay:${diagnostics.requestId}`,
-        payload: { replayed: true },
+        payload: { replayed: true, verification_status: replayVerificationStatus },
       });
       const leaderboard = await buildDailyFritzLeaderboard(runDate);
       const isVerified = getDailyFritzVerificationStatus(attempt.result) === 'verified';
@@ -117,6 +118,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
     // every other game produced a complete authority record.
     const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
       && hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
+    const completionVerificationStatus = isVerified ? 'verified' : 'legacy_unverified';
     if (!canFinalizeDailyFritzAttempt(attempt.result, setResult)) {
       res.status(409).json({ error: 'Daily Fritz verification is incomplete.' });
       return;
@@ -191,6 +193,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
           eventType: 'attempt_completed',
           payload: {
             verified: isVerified,
+            verification_status: completionVerificationStatus,
             finalScore: attempt.finalScore,
             opponentScore: attempt.opponentScore,
             setOutcome: `${attempt.finalScore}-${attempt.opponentScore}`,
@@ -228,6 +231,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
       idempotencyKey: `${attemptId}:attempt_completed:${serverReceipt}`,
       payload: {
         verified: isVerified,
+        verification_status: completionVerificationStatus,
         finalScore: attempt.finalScore,
         opponentScore: attempt.opponentScore,
         movesUsed: attempt.movesUsed,

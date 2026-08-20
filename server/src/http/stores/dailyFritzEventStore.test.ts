@@ -112,6 +112,21 @@ describe('Daily Fritz event store', () => {
     expect(secondBody).toBe(firstBody);
   });
 
+  it('writes checkpoint_saved events for operational analytics', async () => {
+    vi.mocked(supabaseFetch).mockResolvedValue(undefined);
+    await recordDailyFritzEvent({
+      attemptId: 'attempt-1',
+      runDate: '2026-07-31',
+      userId: 'user-1',
+      eventType: 'checkpoint_saved',
+      idempotencyKey: 'attempt-1:checkpoint:12',
+      payload: { checkpointRevision: 12, handIndex: 2 },
+    });
+    const body = JSON.parse(String(vi.mocked(supabaseFetch).mock.calls[0]?.[1]?.body))[0];
+    expect(body.event_type).toBe('checkpoint_saved');
+    expect(body.idempotency_key).toBe('attempt-1:checkpoint:12');
+  });
+
   it('writes canonical dimensions only after the authority schema is enabled', async () => {
     vi.mocked(supabaseFetch).mockResolvedValue(undefined);
     process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = 'true';

@@ -48,7 +48,8 @@ export type AppMode =
   | 'leaderboard'
   | 'profile'
   | 'feed'
-  | 'live';
+  | 'live'
+  | 'dailyFritzHealthAdmin';
 
 /** Shell chrome: auth-modal wrapper, fallback host, layout class, invite overlay. */
 export type AppRoutesShellProps = {

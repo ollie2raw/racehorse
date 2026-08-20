@@ -40,6 +40,7 @@ const STATIC_PATHS: Record<string, AppRouteResolution> = {
   '/multiplayer': { mode: 'multiplayer', multiplayerView: 'quick' },
   '/multiplayer/private': { mode: 'multiplayer', multiplayerView: 'private' },
   '/social': { mode: 'feed' },
+  '/admin/daily-fritz-health': { mode: 'dailyFritzHealthAdmin' },
 };
 
 function normalizePathname(pathname: string): string {
@@ -116,6 +117,7 @@ export function buildAppPath(state: AppPathState): string {
     guidedMatchAnnotator: '/learn/guided-annotator',
     feed: '/social',
     leaderboard: '/social',
+    dailyFritzHealthAdmin: '/admin/daily-fritz-health',
   };
 
   // Active Fritz, Ghost, and Journey trial matches intentionally retain the
