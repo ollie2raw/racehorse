@@ -223,7 +223,11 @@ const DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES = new Set([
   'missing_fritz_state_digest',
   'stale_revision',
   'command_slot_conflict',
+  'missing_game_receipts',
 ]);
+
+export const DAILY_FRITZ_MISSING_GAME_RECEIPTS_MESSAGE =
+  'Earlier Daily Fritz games are missing verification receipts. Resume from an earlier game or contact support.';
 
 export function isRecoverableDailyFritzAuthorityCode(code: string | null | undefined): boolean {
   return Boolean(code && DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES.has(code));
@@ -263,6 +267,13 @@ function throwDailyFritzAuthorityError<T>(result: ApiResult<T>): T {
       result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
         ? result.errorData.authoritative_state as Record<string, unknown>
         : null,
+    );
+  }
+  if (result.error === DAILY_FRITZ_MISSING_GAME_RECEIPTS_MESSAGE && result.status === 409) {
+    throw new DailyFritzAuthorityRecoveryError(
+      result.error,
+      result.status,
+      'missing_game_receipts',
     );
   }
   return throwApiResult(result);

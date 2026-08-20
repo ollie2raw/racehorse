@@ -291,6 +291,36 @@ describe('record-game advance-first with async verification', () => {
     expect(persistedAttempt.currentHandIndex).toBe(0);
   });
 
+  it('does not reject game 2 record-game when game 1 already has an authority receipt', async () => {
+    persistedAttempt = buildAttempt({
+      result: {
+        ...(buildAttempt().result ?? {}),
+        authority: {
+          version: 1,
+          hands: [],
+          games: [{
+            verificationVersion: 2,
+            gameNumber: 1,
+            playerScore: 40,
+            fritzScore: 60,
+            handDigests: ['a'.repeat(64)],
+            resultDigest: 'b'.repeat(64),
+          }],
+        },
+      },
+    });
+    getAttemptByIdMock.mockImplementation(async () => ({ ...persistedAttempt }));
+    getAttemptMock.mockImplementation(async () => ({ ...persistedAttempt }));
+
+    const response = await request('POST', '/api/daily-fritz/record-game', {
+      body: recordGameBody(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.verification_pending).toBe(true);
+  });
+
   it('runDailyFritzRecordGameVerification is exported for deterministic async tests', async () => {
     expect(typeof runDailyFritzRecordGameVerification).toBe('function');
   });

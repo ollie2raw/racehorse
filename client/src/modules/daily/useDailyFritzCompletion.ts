@@ -47,6 +47,8 @@ type UseDailyFritzCompletionResult = {
   submitSucceededRef: React.MutableRefObject<boolean>;
 };
 
+const MAX_AUTO_GAME_COMPLETE_ATTEMPTS = 3;
+
 export function useDailyFritzCompletion({
   enabled,
   dailyFritzPackage,
@@ -70,10 +72,21 @@ export function useDailyFritzCompletion({
   const completeKeyRef = useRef('');
   const gameCompleteKeyRef = useRef('');
   const gameCompleteInFlightRef = useRef(false);
+  const gameCompleteAttemptCountsRef = useRef<Record<string, number>>({});
+  const latestMoveLogRef = useRef<readonly MoveEntry[]>(moveLog);
+  const latestJournalRef = useRef(match.officialJournal ?? null);
   const submitInFlightRef = useRef(false);
   const submitSucceededRef = useRef(false);
   const autoSubmitBlockedRef = useRef(false);
   const [submitRetryNonce, setSubmitRetryNonce] = useState(0);
+
+  useEffect(() => {
+    latestMoveLogRef.current = moveLog;
+  }, [moveLog]);
+
+  useEffect(() => {
+    latestJournalRef.current = match.officialJournal ?? null;
+  }, [match.officialJournal]);
 
   useEffect(() => {
     if (!enabled || !onDailyFritzGameComplete) return;
@@ -99,6 +112,13 @@ export function useDailyFritzCompletion({
       movesUsed,
     ].join(':');
     if (gameCompleteKeyRef.current === key || gameCompleteInFlightRef.current) return;
+    const priorAttempts = gameCompleteAttemptCountsRef.current[key] ?? 0;
+    if (priorAttempts >= MAX_AUTO_GAME_COMPLETE_ATTEMPTS) {
+      gameCompleteKeyRef.current = key;
+      return;
+    }
+    gameCompleteAttemptCountsRef.current[key] = priorAttempts + 1;
+    gameCompleteKeyRef.current = key;
     gameCompleteInFlightRef.current = true;
     const payload = {
       winner: match.winnerId,
@@ -107,16 +127,11 @@ export function useDailyFritzCompletion({
       movesUsed,
       handsPlayed: match.handNumber,
       currentHandIndex: dailyFritzHandIndex,
-      moveLog: JSON.parse(JSON.stringify(moveLog)) as MoveEntry[],
-      journal: match.officialJournal ?? null,
+      moveLog: JSON.parse(JSON.stringify(latestMoveLogRef.current)) as MoveEntry[],
+      journal: latestJournalRef.current,
     };
     void Promise.resolve(onDailyFritzGameComplete(payload))
-      .then(() => {
-        gameCompleteKeyRef.current = key;
-      })
-      .catch(() => {
-        // Leave key empty so the effect can retry after overlay/manual recovery.
-      })
+      .catch(() => {})
       .finally(() => {
         gameCompleteInFlightRef.current = false;
       });
@@ -128,11 +143,9 @@ export function useDailyFritzCompletion({
     enabled,
     match.gameOver,
     match.handNumber,
-    match.officialJournal,
     match.players.bot.score,
     match.players.you.score,
     match.winnerId,
-    moveLog,
     movesUsed,
     onDailyFritzGameComplete,
   ]);

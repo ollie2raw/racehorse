@@ -73,6 +73,7 @@ export function useDailyFritzRunController({
   const [embeddedMatchKey, setEmbeddedMatchKey] = useState<string | null>(null);
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
+  const recordGameAttemptStateRef = useRef<{ key: string; attempts: number } | null>(null);
 
   const activeRunRef = useRef<DailyFritzStartResponse | null>(activeRun);
   const recordGameInFlightRef = useRef(false);
@@ -363,8 +364,23 @@ export function useDailyFritzRunController({
     const priorSet = normalizeSetResult(run.set_result);
     if (priorSet?.setWinner) return;
     if (recordGameInFlightRef.current) return;
-    recordGameInFlightRef.current = true;
     const gameNumber = getNextGameNumberFromSetResult(priorSet);
+    const attemptKey = `${run.attempt_id}:${gameNumber}:${game.currentHandIndex}`;
+    const priorAttemptState = recordGameAttemptStateRef.current;
+    const nextAttempts = priorAttemptState?.key === attemptKey ? priorAttemptState.attempts + 1 : 1;
+    recordGameAttemptStateRef.current = { key: attemptKey, attempts: nextAttempts };
+    if (nextAttempts > 3) {
+      const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
+      setSetOverlay({
+        kind: 'record-error',
+        completedGame: fallbackCompletedGame,
+        message: `Game ${gameNumber} is finished, but the result has not been saved yet.`,
+        error: 'Daily Fritz stopped retrying this save automatically. Reload the authoritative state before trying again.',
+        game,
+      });
+      throw new Error('Daily Fritz stopped retrying record-game after 3 attempts.');
+    }
+    recordGameInFlightRef.current = true;
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
     pendingRecordGameRef.current = { game, gameNumber, fallbackCompletedGame };
     setHubError(null);
@@ -428,6 +444,7 @@ export function useDailyFritzRunController({
       });
 
       const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
+      recordGameAttemptStateRef.current = null;
       const recordedRun = {
         ...run,
         authority_revision: recorded.authority_revision ?? run.authority_revision,

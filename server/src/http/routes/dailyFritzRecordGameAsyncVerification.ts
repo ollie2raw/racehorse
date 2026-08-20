@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import * as Sentry from '@sentry/node';
 import type { DailyFritzSetGameNumber } from '../../dailyFritz';
 import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
 import {
@@ -7,9 +8,9 @@ import {
 import {
   getDailyFritzAttemptById,
   upsertDailyFritzAttempt,
+  type DailyFritzAttemptRecord,
   type DailyFritzRunRecord,
 } from '../stores/dailyFritzStore';
-import { commitDailyFritzAttemptCommand } from '../stores/dailyFritzCommandStore';
 import { readAuthorityLedger } from './dailyFritzVerificationPolicy';
 import type { DailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
 import {
@@ -27,6 +28,7 @@ import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { capture500, log } from './dailyFritzRouteErrors';
 import { DAILY_FRITZ_VERIFIER_VERSION } from '@racehorse/game-core';
 import type { parseTranscriptForRequest } from './dailyFritzVerificationGlue';
+import { supabaseFetch } from '../../supabaseUtils';
 
 /** Test hook: artificial delay before async verification runs. */
 let recordGameVerificationDelayMsForTests = 0;
@@ -168,52 +170,11 @@ export async function runDailyFritzRecordGameVerification(
 
     const transactionalGame = Boolean(input.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED);
     if (transactionalGame) {
-      const authorityGame = readAuthorityLedger(attempt.result).games.find(
-        (game) => game.gameNumber === input.gameNumber,
-      );
-      if (!authorityGame) {
-        await upsertDailyFritzAttempt(attempt);
-        return;
-      }
-      const command = await commitDailyFritzAttemptCommand<Record<string, unknown>>({
-        userId: input.userId,
-        attemptId: attempt.id,
-        operationId: `game:${input.gameNumber}:verify`,
-        commandType: 'record_verified_game',
-        expectedRevision: attempt.revision,
-        next: {
-          status: 'started',
-          currentGameNumber: attempt.currentGameNumber,
-          currentHandIndex: attempt.currentHandIndex,
-          result: attempt.result ?? {},
-        },
-        gameReceipt: {
-          ...authorityGame,
-          pointDiff: authorityGame.playerScore - authorityGame.fritzScore,
-          playerWon: authorityGame.playerScore > authorityGame.fritzScore,
-          actionCount: verified.result.actionCount,
-          handsPlayed: readAuthorityLedger(attempt.result).hands.filter(
-            (hand) => hand.gameNumber === input.gameNumber,
-          ).length,
-        },
-        handReceipt: verified.result,
-        outbox: {
-          eventType: 'hand_verified',
-          payload: {
-            gameNumber: input.gameNumber,
-            handIndex: input.handIndex,
-            transcriptDigest: verified.result.transcriptDigest,
-            async: true,
-          },
-        },
+      await persistAsyncVerifiedGameBackfill({
+        attempt,
+        input,
+        verifiedHand: verified.result,
       });
-      if (command.outcome !== 'committed') {
-        log.warn({
-          attemptId: input.attemptId,
-          gameNumber: input.gameNumber,
-          code: command.errorCode,
-        }, '[daily-fritz-record-game] async transactional verify commit failed');
-      }
       return;
     }
 
@@ -237,6 +198,136 @@ export async function runDailyFritzRecordGameVerification(
         async: true,
       },
     });
+  });
+}
+
+async function persistAsyncVerifiedGameBackfill(input: {
+  attempt: DailyFritzAttemptRecord;
+  input: DailyFritzRecordGameAsyncVerificationInput;
+  verifiedHand: VerifiedDailyFritzHandRecord;
+}): Promise<void> {
+  const { attempt, input: runInput, verifiedHand } = input;
+  const authorityGame = readAuthorityLedger(attempt.result).games.find(
+    (game) => game.gameNumber === runInput.gameNumber,
+  );
+  if (!authorityGame) {
+    const error = new Error('Async Daily Fritz verification produced no game receipt to backfill.');
+    Sentry.captureException(error, {
+      tags: {
+        daily_fritz_alert: 'verification_infrastructure_error',
+        verifier_code: 'async_game_receipt_missing',
+      },
+      extra: {
+        attemptId: runInput.attemptId,
+        gameNumber: runInput.gameNumber,
+        handIndex: runInput.handIndex,
+      },
+    });
+    throw error;
+  }
+
+  // Advance-first record-game has already moved the authoritative attempt
+  // cursor to the next game, so replaying the transactional game command here
+  // is invalid by construction. Persist the immutable receipts directly, then
+  // write the backfilled authority ledger onto the attempt row.
+  await persistVerifiedHandReceipt({
+    attemptId: attempt.id,
+    operationId: `game:${runInput.gameNumber}:verify`,
+    receipt: verifiedHand,
+  });
+  await persistVerifiedGameReceipt({
+    attemptId: attempt.id,
+    operationId: `game:${runInput.gameNumber}:verify`,
+    receipt: {
+      ...authorityGame,
+      pointDiff: authorityGame.playerScore - authorityGame.fritzScore,
+      playerWon: authorityGame.playerScore > authorityGame.fritzScore,
+      actionCount: verifiedHand.actionCount,
+      handsPlayed: readAuthorityLedger(attempt.result).hands.filter(
+        (hand) => hand.gameNumber === runInput.gameNumber,
+      ).length,
+    },
+  });
+  await upsertDailyFritzAttempt(attempt);
+  incrementDailyFritzMetric('hand_verified');
+  await recordDailyFritzEventBestEffort({
+    attemptId: runInput.attemptId,
+    runDate: runInput.runDate,
+    userId: runInput.userId,
+    requestId: runInput.requestId,
+    eventType: 'hand_verified',
+    gameNumber: runInput.gameNumber,
+    handIndex: runInput.handIndex,
+    transcriptDigest: verifiedHand.transcriptDigest,
+    idempotencyKey: `${runInput.attemptId}:hand_verified:async:${runInput.gameNumber}:${runInput.handIndex}:${verifiedHand.transcriptDigest}`,
+    payload: {
+      actionCount: verifiedHand.actionCount,
+      winner: verifiedHand.winner,
+      playerScoreAfter: verifiedHand.playerScoreAfter,
+      fritzScoreAfter: verifiedHand.fritzScoreAfter,
+      async: true,
+    },
+  });
+}
+
+async function persistVerifiedHandReceipt(input: {
+  attemptId: string;
+  operationId: string;
+  receipt: VerifiedDailyFritzHandRecord;
+}): Promise<void> {
+  await supabaseFetch('/rest/v1/daily_fritz_verified_hands?on_conflict=attempt_id,game_number,hand_index', {
+    method: 'POST',
+    headers: {
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify([{
+      attempt_id: input.attemptId,
+      game_number: input.receipt.gameNumber,
+      hand_index: input.receipt.handIndex,
+      operation_id: input.operationId,
+      transcript_digest: input.receipt.transcriptDigest,
+      action_count: input.receipt.actionCount,
+      player_score_after: input.receipt.playerScoreAfter,
+      fritz_score_after: input.receipt.fritzScoreAfter,
+      winner: input.receipt.winner,
+      verifier_version: input.receipt.verificationVersion,
+      receipt: input.receipt,
+    }]),
+  });
+}
+
+async function persistVerifiedGameReceipt(input: {
+  attemptId: string;
+  operationId: string;
+  receipt: {
+    gameNumber: DailyFritzSetGameNumber;
+    playerScore: number;
+    fritzScore: number;
+    pointDiff: number;
+    playerWon: boolean;
+    actionCount: number;
+    handsPlayed: number;
+    resultDigest: string;
+  };
+}): Promise<void> {
+  await supabaseFetch('/rest/v1/daily_fritz_verified_games?on_conflict=attempt_id,game_number', {
+    method: 'POST',
+    headers: {
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify([{
+      attempt_id: input.attemptId,
+      game_number: input.receipt.gameNumber,
+      operation_id: input.operationId,
+      player_score: input.receipt.playerScore,
+      fritz_score: input.receipt.fritzScore,
+      point_diff: input.receipt.pointDiff,
+      player_won: input.receipt.playerWon,
+      action_count: input.receipt.actionCount,
+      hands_played: input.receipt.handsPlayed,
+      result_digest: input.receipt.resultDigest,
+      receipt: input.receipt,
+    }]),
   });
 }
 
