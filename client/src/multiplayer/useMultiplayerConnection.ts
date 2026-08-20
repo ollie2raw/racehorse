@@ -176,7 +176,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         });
       }
     },
-    [dispatchRecovery],
+    [dispatchRecovery, setRecoveredTerminalMatchNotice],
   );
 
   const executeRecoveryResync = useCallback(
