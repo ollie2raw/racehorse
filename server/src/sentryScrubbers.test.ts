@@ -6,12 +6,14 @@ describe('scrubSensitiveFields', () => {
     const scrubbed = scrubSensitiveFields({
       attempt_id: 'attempt-1',
       access_token: 'secret-jwt',
-      nested: { accessToken: 'nested-secret', gameNumber: 1 },
+      admin_key: 'admin-secret',
+      nested: { accessToken: 'nested-secret', adminKey: 'nested-admin', gameNumber: 1 },
     }) as Record<string, unknown>;
 
     expect(scrubbed.attempt_id).toBe('attempt-1');
     expect(scrubbed.access_token).toBe('[Filtered]');
-    expect(scrubbed.nested).toEqual({ accessToken: '[Filtered]', gameNumber: 1 });
+    expect(scrubbed.admin_key).toBe('[Filtered]');
+    expect(scrubbed.nested).toEqual({ accessToken: '[Filtered]', adminKey: '[Filtered]', gameNumber: 1 });
   });
 
   it('scrubs JSON string request bodies', () => {
@@ -58,5 +60,22 @@ describe('scrubSentryEventSensitiveData', () => {
     expect(event.request?.headers?.['content-type']).toBe('application/json');
     expect((event.request?.data as Record<string, unknown>).attempt_id).toBe('attempt-1');
     expect((event.request?.data as Record<string, unknown>).access_token).toBe('[Filtered]');
+  });
+
+  it('scrubs admin secrets from headers and query strings', () => {
+    const event = scrubSentryEventSensitiveData({
+      message: 'health failed',
+      request: {
+        url: 'https://racehorse.onrender.com/api/daily-fritz/health',
+        method: 'GET',
+        query_string: 'run_date=2026-08-19&admin_key=super-secret',
+        headers: {
+          'x-admin-secret': 'super-secret',
+        },
+      },
+    });
+
+    expect(event.request?.headers?.['x-admin-secret']).toBe('[Filtered]');
+    expect(event.request?.query_string).toBe('run_date=2026-08-19&admin_key=[Filtered]');
   });
 });

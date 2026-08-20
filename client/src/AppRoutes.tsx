@@ -34,6 +34,7 @@ import {
 } from './routes/socialRoutes';
 import { TournamentRoute } from './routes/tournamentRoutes';
 import { MultiplayerRoute } from './routes/multiplayerRoute';
+import DailyFritzHealthAdminScreen from './admin/DailyFritzHealthAdminScreen';
 
 export default function AppRoutes({
   shell,
@@ -167,6 +168,10 @@ export default function AppRoutes({
     return (
       <TournamentRoute shell={shell} navigation={navigation} auth={auth} tournament={tournamentProps} />
     );
+  }
+
+  if (appMode === 'dailyFritzHealthAdmin') {
+    return <DailyFritzHealthAdminScreen />;
   }
 
   if (appMode === 'multiplayer') {

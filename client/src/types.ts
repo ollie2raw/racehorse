@@ -102,4 +102,5 @@ export type AppMode =
   | 'leaderboard'
   | 'profile'
   | 'feed'
-  | 'live';
+  | 'live'
+  | 'dailyFritzHealthAdmin';

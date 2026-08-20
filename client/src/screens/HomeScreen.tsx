@@ -32,7 +32,8 @@ type AppMode =
   | 'leaderboard'
   | 'profile'
   | 'feed'
-  | 'live';
+  | 'live'
+  | 'dailyFritzHealthAdmin';
 
 // These reference CSS custom property values from tokens.css — keep in sync if tokens change.
 const TOKEN = {
