@@ -21,6 +21,7 @@ import {
   type NoBrainerPracticeState,
 } from './noBrainerLogic';
 import { getNoBrainerSolvedCount, markNoBrainerHandSolved } from './noBrainerLabProgress';
+import { NoBrainerIntroModal } from './NoBrainerIntroModal';
 import { ZoomInIcon, ZoomOutIcon } from '../components';
 import './noBrainerLab.css';
 
@@ -83,7 +84,12 @@ export default function NoBrainerLabScreen({
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [solvedCount, setSolvedCount] = useState<number | null>(() => getNoBrainerSolvedCount(userId));
+  const [introOpen, setIntroOpen] = useState(true);
   const comboTotalLabel = NO_BRAINER_COMBO_COUNT.toLocaleString();
+
+  const dismissIntro = useCallback(() => {
+    setIntroOpen(false);
+  }, []);
 
   useEffect(() => {
     setSolvedCount(getNoBrainerSolvedCount(userId));
@@ -164,10 +170,10 @@ export default function NoBrainerLabScreen({
   }, [dataset, record]);
 
   useEffect(() => {
-    if (canStart && !record) {
+    if (canStart && !record && !introOpen) {
       startHand();
     }
-  }, [canStart, record, startHand]);
+  }, [canStart, record, startHand, introOpen]);
 
   const onPositionClick = (position: PlacementPosition) => {
     if (!practiceState || !selectedTile || practiceState.status !== 'playing') return;
@@ -232,44 +238,50 @@ export default function NoBrainerLabScreen({
     }
   }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);
 
-  if (!dataset && !error) {
-    return (
-      <div className="nbl-loading-screen">
-        <div className="nbl-loading-card">Loading The Lab…</div>
-      </div>
-    );
-  }
-
-  if (error && !record) {
-    return (
-      <div className="nbl-loading-screen">
-        <div className="nbl-loading-card">
-          <p>{error}</p>
-          <p className="nbl-loading-card__hint">
-            To regenerate validated hands: npm --prefix ../server run nobrainer:validate
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Button variant="secondary" size="sm" onClick={() => setReloadTick((n) => n + 1)}>
-              Retry
-            </Button>
-            <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack}>
-              ← Back
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (!record || !practiceState) {
+    let loadingLabel: string | null = null;
+    if (!dataset && !error) {
+      loadingLabel = 'Loading The Lab…';
+    } else if (!introOpen && canStart) {
+      loadingLabel = 'Dealing your hand…';
+    } else if (!introOpen) {
+      loadingLabel = 'No hand available.';
+    }
+
     return (
-      <div className="nbl-loading-screen">
-        <div className="nbl-loading-card">No hand available.</div>
-      </div>
+      <>
+        <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} />
+        {error && !record ? (
+          <div className="nbl-loading-screen">
+            <div className="nbl-loading-card">
+              <p>{error}</p>
+              <p className="nbl-loading-card__hint">
+                To regenerate validated hands: npm --prefix ../server run nobrainer:validate
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <Button variant="secondary" size="sm" onClick={() => setReloadTick((n) => n + 1)}>
+                  Retry
+                </Button>
+                <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack}>
+                  ← Back
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : loadingLabel ? (
+          <div className="nbl-loading-screen">
+            <div className="nbl-loading-card">{loadingLabel}</div>
+          </div>
+        ) : (
+          <div className="nbl-loading-screen nbl-loading-screen--intro" aria-hidden="true" />
+        )}
+      </>
     );
   }
 
   return (
+    <>
+      <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} />
     <div
       ref={rootRef}
       className="practice-lab practice-lab-screen screen game-screen walnut-live rh-match-live rh-match-solo-hud"
@@ -487,5 +499,6 @@ export default function NoBrainerLabScreen({
         </aside>
       ) : null}
     </div>
+    </>
   );
 }
