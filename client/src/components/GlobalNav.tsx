@@ -190,12 +190,12 @@ export function GlobalNav({
           background: 'linear-gradient(180deg, rgba(2, 4, 10, 0.22) 0%, rgba(2, 4, 10, 0.08) 48%, rgba(2, 4, 10, 0) 100%)',
         }}
       />
-      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 ${compactChrome ? 'desk:px-7' : 'desk:px-9'}`}>
+      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 desk:grid desk:grid-cols-[auto_minmax(0,1fr)_auto] desk:items-center ${compactChrome ? 'desk:px-7 desk:gap-4' : 'desk:px-9 desk:gap-6'}`}>
         {/* Left: Brand & Identity */}
         <button
           type="button"
           aria-label="Racehorse home"
-          className="rh-nav-brand flex min-w-0 shrink cursor-pointer items-center border-0 bg-transparent p-0 text-inherit"
+          className="rh-nav-brand flex min-w-0 shrink cursor-pointer items-center border-0 bg-transparent p-0 text-inherit desk:justify-self-start"
           onClick={() => onNavigate?.('home')}
         >
           <BrandLogo
@@ -221,7 +221,7 @@ export function GlobalNav({
         </button>
 
         {/* Center Content Logic (The Switch) */}
-        <div className={`rh-nav-center-desktop absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center desk:flex ${compactChrome ? 'gap-6' : 'gap-8'}`}>
+        <div className={`rh-nav-center-desktop hidden min-w-0 items-center justify-center justify-self-center desk:flex desk:w-full ${compactChrome ? 'gap-6' : 'gap-8'}`}>
           {isHome ? (
             <div 
               className="uppercase"
@@ -270,7 +270,7 @@ export function GlobalNav({
         </div>
 
         {/* Right Side: Player Statistics */}
-        <div className="rh-nav-stats flex min-w-0 shrink-0 items-center justify-end">
+        <div className="rh-nav-stats flex min-w-0 shrink-0 items-center justify-end desk:justify-self-end">
           {/* Rating */}
           <div className="rh-nav-stat-block flex items-center gap-3 px-5 py-2.5">
             <svg className="rh-nav-stat-icon" width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
