@@ -67,6 +67,7 @@ const TERMINAL_INTEGRITY = new Set([
   'operation_id_reused',
   'transcript_digest_mismatch',
   'illegal_action',
+  'post_play_recovery_draw',
 ]);
 
 export function isDailyFritzEventType(value: unknown): value is DailyFritzEventType {

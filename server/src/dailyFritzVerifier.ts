@@ -299,6 +299,20 @@ export function verifyDailyFritzHand(input: {
         'wrong_actor',
       );
     }
+    // Protocol 2 must not silently skip obsolete post-play recovery draws
+    // (protocol 1 still does above). Reject with a distinct code before policy
+    // comparison so Sentry can distinguish this class from other failures
+    // without a transcript reconstruction dig (aunt G2H6 / 2026-08-20).
+    if (
+      !allowLegacyRecoverySkip
+      && lastPlayActor === action.actor
+      && action.kind === 'draw'
+    ) {
+      throw new DailyFritzVerificationError(
+        `Transcript action ${action.sequence} (${action.actor} draw) is a post-play recovery draw that applyMove already embeds.`,
+        'post_play_recovery_draw',
+      );
+    }
     // Draws are deterministic and mandatory whenever `canDraw` is true. Some
     // clients can commit the resulting rack state before the presentation layer
     // appends every draw event. Reconstruct only those omitted forced draws

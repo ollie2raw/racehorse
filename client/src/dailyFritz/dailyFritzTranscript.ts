@@ -12,6 +12,7 @@ import {
 } from '@racehorse/game-core';
 import type { MoveEntry } from '../game/moveLogger.ts';
 import { canonicalizeDailyFritzMoveLog } from './dailyFritzMoveEvidence.ts';
+import { stripPostPlayRecoveryTranscriptActions } from './dailyFritzPostPlayRecovery.ts';
 
 type TranscriptActor = DailyFritzTranscriptAction['actor'];
 
@@ -146,6 +147,10 @@ export function buildDailyFritzTranscript(input: {
     ? input.fritzPolicyVersion
     : FRITZ_POLICY_VERSION;
 
+  // Journal is the preferred evidence, but a presentation-layer race can still
+  // append a spurious draw after a play whose applyMove already absorbed the
+  // recovery chain. Strip those before sealing/submit (protocol-2 contract).
+  const rawActions = journalActions ?? actions;
   const transcript: DailyFritzTranscript = {
     protocolVersion: input.protocolVersion ?? DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
     rulesVersion: GAME_RULES_VERSION,
@@ -157,7 +162,7 @@ export function buildDailyFritzTranscript(input: {
     attemptId: input.attemptId,
     gameNumber: input.gameNumber,
     handIndex: input.handIndex,
-    actions: journalActions ?? actions,
+    actions: stripPostPlayRecoveryTranscriptActions(rawActions),
   };
 
   // A journalled transcript is already exactly what the engine applied; sealing
