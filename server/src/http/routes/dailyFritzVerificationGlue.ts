@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { parseDailyFritzTranscript } from '@racehorse/game-core';
+import { parseDailyFritzTranscript, type DailyFritzTranscript } from '@racehorse/game-core';
 import type { Response } from 'express';
 import {
   getDailyFritzSeed,
@@ -10,6 +10,7 @@ import { buildDailyFritzChallengeId } from '../../dailyFritzIdentity';
 import {
   DailyFritzVerificationError,
   createOfficialDailyFritzHandState,
+  digestDailyFritzTranscript,
   verifyDailyFritzHand,
   type VerifiedDailyFritzHandRecord,
 } from '../../dailyFritzVerifier';
@@ -117,6 +118,43 @@ export async function recordDailyFritzEventBestEffort(event: DailyFritzEventInpu
       error: error instanceof Error ? error.message : String(error),
     }, '[daily-fritz-event] persistence failed');
   }
+}
+
+/**
+ * Observability-only: digest + full transcript for reconstruction after
+ * verification_failed / advance_unverified / async-schedule. Transcripts are
+ * already capped at DAILY_FRITZ_MAX_TRANSCRIPT_BYTES at parse time.
+ */
+export type DailyFritzTranscriptEvidence = {
+  transcriptDigest: string;
+  transcript: DailyFritzTranscript;
+  actionCount: number;
+};
+
+export function buildDailyFritzTranscriptEvidence(
+  transcript: DailyFritzTranscript,
+): DailyFritzTranscriptEvidence {
+  return {
+    transcriptDigest: digestDailyFritzTranscript(transcript),
+    transcript,
+    actionCount: transcript.actions.length,
+  };
+}
+
+export function dailyFritzTranscriptEvidenceFields(
+  transcript: DailyFritzTranscript | null | undefined,
+): Pick<DailyFritzEventInput, 'transcriptDigest' | 'payload'> {
+  if (!transcript) {
+    return { transcriptDigest: null, payload: {} };
+  }
+  const evidence = buildDailyFritzTranscriptEvidence(transcript);
+  return {
+    transcriptDigest: evidence.transcriptDigest,
+    payload: {
+      transcript: evidence.transcript,
+      action_count: evidence.actionCount,
+    },
+  };
 }
 
 export type DailyFritzActiveGameProgress = { gameNumber: DailyFritzSetGameNumber; you: number; fritz: number };
@@ -328,6 +366,8 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
   verifierCode: string;
   operation: 'next-hand' | 'record-game';
   message: string;
+  /** Observability only — does not affect advance / ranking behavior. */
+  transcript?: DailyFritzTranscript | null;
 }): Promise<void> {
   incrementDailyFritzMetric('verification_bypassed', input.verifierCode);
   log.error({
@@ -339,6 +379,7 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
     verifierCode: input.verifierCode,
     message: input.message,
   }, '[daily-fritz] advancing without verification receipt — run is now unranked');
+  const evidence = dailyFritzTranscriptEvidenceFields(input.transcript ?? null);
   await recordDailyFritzEventBestEffort({
     attemptId: input.attemptId,
     runDate: input.runDate,
@@ -348,11 +389,13 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
     verifierCode: input.verifierCode,
     gameNumber: input.gameNumber,
     handIndex: input.handIndex,
+    transcriptDigest: evidence.transcriptDigest,
     idempotencyKey: `${input.attemptId}:verification_bypassed:${input.operation}:${input.gameNumber}:${input.handIndex}`,
     payload: {
       operation: input.operation,
       outcome: 'advance_unverified',
       message: input.message,
+      ...evidence.payload,
     },
   });
   const infrastructureFailure = DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES.has(input.verifierCode);
@@ -374,9 +417,47 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
         gameNumber: input.gameNumber,
         handIndex: input.handIndex,
         message: input.message,
+        transcriptDigest: evidence.transcriptDigest,
       },
     });
   }
+}
+
+/**
+ * Observability only: durable transcript archive before fire-and-forget async
+ * verification. Does not gate advance or finalize.
+ */
+export async function recordDailyFritzAsyncVerificationScheduled(input: {
+  attemptId: string;
+  runDate: string;
+  userId: string;
+  requestId: string;
+  gameNumber: DailyFritzSetGameNumber;
+  handIndex: number;
+  transcript: DailyFritzTranscript;
+  expectedPlayerScore: number;
+  expectedFritzScore: number;
+}): Promise<void> {
+  const evidence = buildDailyFritzTranscriptEvidence(input.transcript);
+  await recordDailyFritzEventBestEffort({
+    attemptId: input.attemptId,
+    runDate: input.runDate,
+    userId: input.userId,
+    requestId: input.requestId,
+    eventType: 'async_verification_scheduled',
+    gameNumber: input.gameNumber,
+    handIndex: input.handIndex,
+    transcriptDigest: evidence.transcriptDigest,
+    idempotencyKey: `${input.attemptId}:async_verification_scheduled:${input.gameNumber}:${input.handIndex}:${evidence.transcriptDigest}`,
+    payload: {
+      operation: 'record-game',
+      outcome: 'async_verification_scheduled',
+      expected_player_score: input.expectedPlayerScore,
+      expected_fritz_score: input.expectedFritzScore,
+      transcript: evidence.transcript,
+      action_count: evidence.actionCount,
+    },
+  });
 }
 
 export function verifyAttemptHand(input: {

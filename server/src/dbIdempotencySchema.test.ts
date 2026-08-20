@@ -293,6 +293,14 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('daily_fritz_events_event_type_check');
   });
 
+  it('allows async_verification_scheduled in daily_fritz_events event taxonomy', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-20_daily_fritz_events_async_verification_scheduled.sql',
+    ));
+    expect(sql).toContain("'async_verification_scheduled'");
+    expect(sql).toContain('daily_fritz_events_event_type_check');
+  });
+
   it('ships Fritz Challenge canonical funnel and failure metrics', () => {
     const sql = compactSql(readRepoFile(
       'supabase/migrations/2026-08-02_fritz_challenge_canonical_telemetry.sql',
