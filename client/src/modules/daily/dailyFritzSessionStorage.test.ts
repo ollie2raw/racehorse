@@ -2,14 +2,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { createDailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
+import type { DailyFritzAuthorityCursor } from './dailyFritzMatchSession.ts';
 import {
-  buildDailyFritzStorageKey,
+  buildDailyFritzPersistedSnapshot,
+  buildDailyFritzMatchSessionFromLegacyFields,
+  persistDailyFritzSnapshot,
+  parseDailyFritzPersistedSnapshot,
+  reconcileDailyFritzResume,
+  serializeDailyFritzCheckpointForServer,
+  DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION,
+  DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION,
   DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+  buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
   discardDailyFritzSnapshotBeforeReload,
-  parseDailyFritzPersistedSnapshot,
-  persistDailyFritzSnapshot,
-  reconcileDailyFritzResume,
   type DailyFritzPersistedSnapshot,
   type DailyFritzResumeRejection,
 } from './dailyFritzSessionStorage.ts';
@@ -18,21 +24,36 @@ const now = new Date('2026-07-12T20:00:00.000Z');
 const RUN_FP = 'abc123fingerprint00000000000000';
 const AUTHORITY_REVISION = 7;
 function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFritzPersistedSnapshot {
-  const match = createBotMatch(60, 7);
-  match.handNumber = 3;
-  match.players.you.score = 35;
-  match.players.bot.score = 20;
-  return {
-    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+  const baseMatch = createBotMatch(60, 7);
+  const gameNumber = overrides.gameNumber ?? 1;
+  const currentHandIndex = overrides.currentHandIndex ?? 2;
+  const authorityRevision = overrides.authorityRevision ?? AUTHORITY_REVISION;
+  const match = overrides.match ?? baseMatch;
+  if (!overrides.match) {
+    match.handNumber = currentHandIndex + 1;
+    match.players.you.score = 35;
+    match.players.bot.score = 20;
+  }
+  const session = overrides.session ?? buildDailyFritzMatchSessionFromLegacyFields({
+    gameNumber,
+    currentHandIndex,
+    authorityRevision,
+    match,
+  });
+  const {
+    session: _session,
+    gameNumber: _gameNumber,
+    currentHandIndex: _currentHandIndex,
+    authorityRevision: _authorityRevision,
+    match: _match,
+    ...restOverrides
+  } = overrides;
+  return buildDailyFritzPersistedSnapshot(session, {
     challenge: createDailyFritzChallengeIdentity('2026-07-12'),
     classification: 'official',
     attemptId: 'attempt-1',
     runFingerprint: RUN_FP,
-    gameNumber: 1,
-    currentHandIndex: 2,
-    authorityRevision: AUTHORITY_REVISION,
     lifecyclePhase: 'active_hand',
-    match,
     handResult: null,
     movesUsed: 4,
     moveLog: [],
@@ -41,7 +62,16 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
     startedAt: '2026-07-12T18:00:00.000Z',
     lastTransitionAt: '2026-07-12T18:01:00.000Z',
     checkpointRevision: 2,
-    ...overrides,
+    ...restOverrides,
+  });
+}
+
+function legacySchema9Wire(overrides: Partial<DailyFritzPersistedSnapshot> = {}): Record<string, unknown> {
+  const normalized = snapshot(overrides);
+  const { session: _session, ...rest } = normalized;
+  return {
+    ...rest,
+    schemaVersion: DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION,
   };
 }
 
@@ -141,7 +171,7 @@ describe('Daily Fritz v3 session persistence', () => {
     expect(parsed?.transcriptProtocolVersion).toBe(2);
   });
 
-  describe.each([
+  it.each([
     {
       name: 'resume before next-hand request is sent',
       local: { gameNumber: 1, currentHandIndex: 2, authorityRevision: 7, matchHandNumber: 3 },
@@ -229,24 +259,75 @@ describe('Daily Fritz v3 session persistence', () => {
       reason: 'revision_mismatch' as DailyFritzResumeRejection,
     },
   ])('$name', ({ local, server, accepted, reason }) => {
-    it('reconciles to one coherent authority cursor', () => {
-      const value = snapshot({
-        gameNumber: local.gameNumber,
-        currentHandIndex: local.currentHandIndex,
-        authorityRevision: local.authorityRevision,
-        match: {
-          ...snapshot().match,
-          handNumber: local.matchHandNumber,
-        },
-      });
-      const result = reconcileDailyFritzResume(value, {
-        attemptId: 'attempt-1',
-        challengeId: createDailyFritzChallengeIdentity('2026-07-12').challengeId,
-        runFingerprint: RUN_FP,
-        cursor: server,
-      });
-      expect(result.accepted).toBe(accepted);
-      if (!accepted && !result.accepted) expect(result.reason).toBe(reason);
+    const value = snapshot({
+      gameNumber: local.gameNumber,
+      currentHandIndex: local.currentHandIndex,
+      authorityRevision: local.authorityRevision,
+      match: {
+        ...snapshot().match,
+        handNumber: local.matchHandNumber,
+      },
+    });
+    const result = reconcileDailyFritzResume(value, {
+      attemptId: 'attempt-1',
+      challengeId: createDailyFritzChallengeIdentity('2026-07-12').challengeId,
+      runFingerprint: RUN_FP,
+      cursor: server as DailyFritzAuthorityCursor,
+    });
+    expect(result.accepted).toBe(accepted);
+    if (!accepted && !result.accepted) expect(result.reason).toBe(reason);
+  });
+
+  describe('schema 10 checkpoint migration', () => {
+    it('round-trips schema 10 through persist and parse with session as canonical blob', () => {
+      const key = buildDailyFritzStorageKey('attempt-1', 1);
+      const original = snapshot({ checkpointRevision: 6 });
+      expect(original.schemaVersion).toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
+      expect(original.session.cursor.handIndex).toBe(2);
+      expect(persistDailyFritzSnapshot(key, original)).toBe(true);
+
+      const parsed = parseDailyFritzPersistedSnapshot(JSON.parse(localStorage.getItem(key)!), now);
+      expect(parsed?.schemaVersion).toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
+      expect(parsed?.session.cursor).toEqual(original.session.cursor);
+      expect(parsed?.session.match.handNumber).toBe(original.session.match.handNumber);
+      expect(parsed?.currentHandIndex).toBe(original.session.cursor.handIndex);
+      expect(parsed?.match.handNumber).toBe(original.session.match.handNumber);
+    });
+
+    it('upgrades legacy schema 9 wire payloads in memory without data loss', () => {
+      const legacyWire = legacySchema9Wire({ checkpointRevision: 8 });
+      expect(legacyWire).not.toHaveProperty('session');
+      expect(legacyWire.schemaVersion).toBe(DAILY_FRITZ_LEGACY_SESSION_SCHEMA_VERSION);
+
+      const parsed = parseDailyFritzPersistedSnapshot(legacyWire, now);
+      expect(parsed?.schemaVersion).toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
+      expect(parsed?.session.cursor.handIndex).toBe(2);
+      expect(parsed?.session.cursor.revision).toBe(AUTHORITY_REVISION);
+      expect(parsed?.session.match.players.you.score).toBe(35);
+      expect(parsed?.currentHandIndex).toBe(2);
+      expect(parsed?.authorityRevision).toBe(AUTHORITY_REVISION);
+    });
+
+    it('serializes schema 10 snapshots to schema 9 server wire without session', () => {
+      const normalized = snapshot();
+      const serverWire = serializeDailyFritzCheckpointForServer(normalized);
+      expect(serverWire.schemaVersion).toBe(DAILY_FRITZ_SERVER_CHECKPOINT_SCHEMA_VERSION);
+      expect(serverWire).not.toHaveProperty('session');
+      expect(serverWire.currentHandIndex).toBe(normalized.session.cursor.handIndex);
+      expect(serverWire.authorityRevision).toBe(normalized.session.cursor.revision);
+    });
+
+    it('rejects corrupt schema 10 checkpoints when session and denormalized cursor diverge', () => {
+      const corrupt = {
+        ...snapshot(),
+        currentHandIndex: 99,
+      };
+      expect(parseDailyFritzPersistedSnapshot(corrupt, now)).toBeNull();
+    });
+
+    it('rejects malformed schema 10 checkpoints missing session', () => {
+      const { session: _session, ...withoutSession } = snapshot();
+      expect(parseDailyFritzPersistedSnapshot(withoutSession, now)).toBeNull();
     });
   });
 

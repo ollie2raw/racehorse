@@ -5,9 +5,10 @@ import { createDailyFritzChallengeIdentity } from './dailyFritzChallengeIdentity
 import { resolveDailyFritzSession } from './resolveDailyFritzSession';
 import type { DailyFritzStartResponse } from './api';
 import {
+  buildDailyFritzPersistedSnapshot,
+  buildDailyFritzMatchSessionFromLegacyFields,
   buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
-  DAILY_FRITZ_SESSION_SCHEMA_VERSION,
   persistDailyFritzSnapshot,
   type DailyFritzPersistedSnapshot,
 } from '../modules/daily/dailyFritzSessionStorage';
@@ -21,17 +22,26 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
   match.handNumber = 3;
   match.players.you.score = 35;
   match.players.bot.score = 20;
-  return {
-    schemaVersion: DAILY_FRITZ_SESSION_SCHEMA_VERSION,
+  const session = buildDailyFritzMatchSessionFromLegacyFields({
+    gameNumber: overrides.gameNumber ?? 1,
+    currentHandIndex: overrides.currentHandIndex ?? 2,
+    authorityRevision: overrides.authorityRevision ?? AUTHORITY_REVISION,
+    match: overrides.match ?? match,
+  });
+  const {
+    session: _session,
+    gameNumber: _gameNumber,
+    currentHandIndex: _currentHandIndex,
+    authorityRevision: _authorityRevision,
+    match: _match,
+    ...restOverrides
+  } = overrides;
+  return buildDailyFritzPersistedSnapshot(session, {
     challenge: createDailyFritzChallengeIdentity('2026-07-12'),
     classification: 'official',
     attemptId: 'attempt-1',
     runFingerprint: RUN_FP,
-    gameNumber: 1,
-    currentHandIndex: 2,
-    authorityRevision: AUTHORITY_REVISION,
     lifecyclePhase: 'active_hand',
-    match,
     handResult: null,
     movesUsed: 4,
     moveLog: [],
@@ -40,8 +50,8 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
     startedAt: '2026-07-12T18:00:00.000Z',
     lastTransitionAt: '2026-07-12T18:01:00.000Z',
     checkpointRevision: 2,
-    ...overrides,
-  };
+    ...restOverrides,
+  });
 }
 
 function makeStartResponse(

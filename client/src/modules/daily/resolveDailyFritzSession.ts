@@ -16,6 +16,9 @@ export function buildDailyFritzAuthorityCursor(
   dailyFritzPackage: DailyFritzStartResponse,
   persistedSnapshot: DailyFritzPersistedSnapshot | null,
 ): DailyFritzAuthorityCursor {
+  if (persistedSnapshot?.session) {
+    return persistedSnapshot.session.cursor;
+  }
   const gameNumber = (dailyFritzPackage.current_game_number ?? 1) as DailyFritzAuthorityCursor['gameNumber'];
   const handIndex = typeof persistedSnapshot?.currentHandIndex === 'number'
     ? persistedSnapshot.currentHandIndex
@@ -30,6 +33,9 @@ function resolveDailyFritzMatch(
   input: ResolveDailyFritzSessionInput,
 ): BotMatchState {
   const { dailyFritzPackage, winningScore, persistedSnapshot, preGameDrawEligible } = input;
+  if (persistedSnapshot?.session?.match) {
+    return persistedSnapshot.session.match;
+  }
   if (persistedSnapshot?.match) {
     return persistedSnapshot.match;
   }

@@ -29,6 +29,32 @@ function startPackage(overrides: Partial<DailyFritzStartResponse> = {}): DailyFr
 }
 
 describe('resolveDailyFritzMatchSession', () => {
+  it('prefers persisted session cursor and match when resolving bootstrap state', () => {
+    const match = createBotMatch(60, 7);
+    match.handNumber = 3;
+    const session = {
+      cursor: { gameNumber: 1 as const, handIndex: 2, revision: 7 },
+      match,
+    };
+    const persisted = {
+      session,
+      currentHandIndex: 2,
+      authorityRevision: 7,
+      match,
+    } as DailyFritzPersistedSnapshot;
+
+    const resolved = resolveDailyFritzMatchSession({
+      dailyFritzPackage: startPackage(),
+      winningScore: 60,
+      persistedSnapshot: persisted,
+      preGameDrawEligible: false,
+    });
+
+    expect(resolved.cursor).toBe(session.cursor);
+    expect(resolved.match).toBe(match);
+    expect(isCoherentDailyFritzSession(resolved)).toBe(true);
+  });
+
   it('binds persisted snapshot cursor and match together', () => {
     const match = createBotMatch(60, 7);
     match.handNumber = 3;
