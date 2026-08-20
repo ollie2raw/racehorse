@@ -52,6 +52,8 @@ export type GhostMoveLogEntry = {
   hand_before: string[];
   score_delta: number;
   forced_draw?: boolean;
+  /** Tile drawn on branch `draw`; used to reconstruct hand continuity in verifyPlayerMoveLog. */
+  drawn_tile?: string | null;
 };
 
 export type GhostCompositeCandidate = {
@@ -173,6 +175,7 @@ function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
           : [],
         score_delta: Number(rec.score_delta ?? 0),
         forced_draw: Boolean(rec.forced_draw),
+        drawn_tile: rec.drawn_tile == null ? null : String(rec.drawn_tile),
       };
     })
     .filter((entry) => entry.turn > 0 && entry.board_state);

@@ -118,7 +118,7 @@ describe('hand-state tamper backstop', () => {
     const moveLog = room.ghostMoveLogs['seat-1'] ?? [];
     expect(moveLog.length).toBeGreaterThanOrEqual(2);
 
-    const verification = verifyPlayerMoveLog(moveLog);
+    const verification = verifyPlayerMoveLog(moveLog, { strictHandContinuity: true });
 
     expect(verification.ok).toBe(false);
     if (!verification.ok) {
