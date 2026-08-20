@@ -7,10 +7,11 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   maxWidth?: number;
+  panelClassName?: string;
   children?: React.ReactNode;
 }
 
-export function Modal({ open, onClose, title, maxWidth = 480, children }: ModalProps) {
+export function Modal({ open, onClose, title, maxWidth = 480, panelClassName, children }: ModalProps) {
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -32,7 +33,7 @@ export function Modal({ open, onClose, title, maxWidth = 480, children }: ModalP
     >
       <GlassCard
         lifted
-        className="rh-modal-panel"
+        className={`rh-modal-panel${panelClassName ? ` ${panelClassName}` : ''}`}
         style={{ maxWidth }}
         role="dialog"
         aria-modal="true"

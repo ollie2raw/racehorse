@@ -973,47 +973,130 @@
   }
 }
 
-/* ── Intro modal (shared Modal shell, Lab purple accent) ── */
+/* ── Intro modal — academy-style layout, Lab purple accent ── */
+
+/* Hide the Modal's own title text; keep the X close button */
+.nbl-intro-modal-panel .rh-modal-title {
+  display: none;
+}
 
 .nbl-intro-modal {
-  position: relative;
-  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 2.8vh, 26px);
+  padding-top: 8px;
 }
 
-.nbl-intro-modal::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 48px;
-  height: 2px;
-  background: linear-gradient(90deg, #c77dff 0%, rgba(168, 85, 247, 0.35) 100%);
-  box-shadow: 0 0 14px rgba(168, 85, 247, 0.45);
-}
-
-.nbl-intro-modal__body {
-  margin: 0 0 16px;
-  color: rgba(242, 238, 232, 0.88);
-  font-size: 15px;
-  line-height: 1.55;
-}
-
-.nbl-intro-modal__tagline {
-  margin: 0 0 22px;
+/* Header block */
+.nbl-intro-modal__kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(0.8rem, 1.2vh, 0.9rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: #c77dff;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.45;
-  letter-spacing: 0.01em;
 }
 
+.nbl-intro-modal__kicker::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c77dff;
+  flex-shrink: 0;
+}
+
+.nbl-intro-modal__title {
+  margin: 0 0 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.9rem, 4vw, 2.7rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 0 36px rgba(199, 125, 255, 0.12), 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.nbl-intro-modal__lede {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.8vh, 1.28rem);
+  font-weight: 600;
+  line-height: 1.38;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* Beats / bullet list */
+.nbl-intro-modal__beats {
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.8vh, 18px);
+  padding: clamp(16px, 2.4vh, 24px) clamp(14px, 1.8vw, 20px);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  border-radius: 12px;
+  background: rgba(168, 85, 247, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 24px rgba(168, 85, 247, 0.08);
+}
+
+.nbl-intro-modal__beats li {
+  position: relative;
+  padding-left: 20px;
+  font-size: clamp(1rem, 1.8vh, 1.2rem);
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.nbl-intro-modal__beats li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.58em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c77dff;
+}
+
+/* Takeaway callout */
+.nbl-intro-modal__takeaway {
+  display: grid;
+  gap: 6px;
+}
+
+.nbl-intro-modal__takeaway-label {
+  display: block;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(231, 182, 74, 0.85);
+}
+
+.nbl-intro-modal__takeaway-text {
+  margin: 0;
+  font-size: clamp(1.1rem, 2vh, 1.35rem);
+  font-weight: 800;
+  line-height: 1.3;
+  color: #fff;
+}
+
+/* CTA row */
 .nbl-intro-modal__actions {
   display: flex;
   justify-content: flex-end;
 }
 
-.nbl-intro-modal__actions .rh-btn--tier-master {
-  min-width: 168px;
+.nbl-intro-modal__actions .rh-btn {
+  min-width: 180px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 8px 22px rgba(0, 0, 0, 0.28),
