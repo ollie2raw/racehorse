@@ -7,8 +7,6 @@ import {
   DAILY_FRITZ_SESSION_SCHEMA_VERSION,
   discardDailyFritzSnapshot,
   discardDailyFritzSnapshotBeforeReload,
-  loadPersistedDailyFritzMatch,
-  loadDailyFritzResumeSnapshot,
   parseDailyFritzPersistedSnapshot,
   persistDailyFritzSnapshot,
   reconcileDailyFritzResume,
@@ -49,67 +47,14 @@ function snapshot(overrides: Partial<DailyFritzPersistedSnapshot> = {}): DailyFr
 
 describe('Daily Fritz v3 session persistence', () => {
   beforeEach(() => window.localStorage.clear());
-  it('round-trips a valid active hand without resetting cumulative scores', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const value = snapshot();
-    expect(persistDailyFritzSnapshot(key, value)).toBe(true);
-    const loaded = loadPersistedDailyFritzMatch(key, 'attempt-1', 2, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION, 1);
-    expect(loaded?.match.players.you.score).toBe(35);
-    expect(loaded?.match.players.bot.score).toBe(20);
-  });
-  it('rejects a local checkpoint that does not match the server hand index', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const value = snapshot({ currentHandIndex: 4 });
-    expect(persistDailyFritzSnapshot(key, value)).toBe(true);
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 0, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION, 1)).toBeNull();
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 4, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION, 1)).toBeNull();
-  });
-  it('rejects a checkpoint when the server run fingerprint changes', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 2, '2026-07-12', now, 'different-fingerprint', undefined, undefined, AUTHORITY_REVISION, 1)).toBeNull();
-  });
-  it('rejects a checkpoint pinned to a different Fritz policy deployment', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    expect(persistDailyFritzSnapshot(key, snapshot({
-      fritzPolicyVersion: 1,
-      fritzPolicyContract: 'fritz-policy-v1-seeded-top-score',
-    }))).toBe(true);
-    expect(loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      2,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      2,
-      'fritz-policy-v2-deterministic-canonical-ties',
-      AUTHORITY_REVISION,
-      1,
-    )).toBeNull();
-  });
-  it('rejects an unversioned legacy checkpoint when the attempt is policy-pinned', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
-    expect(loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      2,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      2,
-      'fritz-policy-v2-deterministic-canonical-ties',
-      AUTHORITY_REVISION,
-      1,
-    )).toBeNull();
-  });
+
   it('rejects malformed, stale-date, version-mismatched, and impossible phase payloads', () => {
     expect(parseDailyFritzPersistedSnapshot({}, now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({ challenge: createDailyFritzChallengeIdentity('2026-07-11') }), now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot({ ...snapshot(), schemaVersion: 6 }, now)).toBeNull();
     expect(parseDailyFritzPersistedSnapshot(snapshot({ lifecyclePhase: 'hand_transition' }), now)).toBeNull();
   });
+
   it('retains coherent hand-transition and terminal evidence at the exact authority cursor', () => {
     const transitionMatch = createBotMatch(60, 7);
     transitionMatch.handNumber = 3;
@@ -125,87 +70,20 @@ describe('Daily Fritz v3 session persistence', () => {
     };
     expect(parseDailyFritzPersistedSnapshot(snapshot({ match: transitionMatch, lifecyclePhase: 'hand_transition', handResult }), now)?.lifecyclePhase).toBe('hand_transition');
     const completedMatch = { ...transitionMatch, handOver: false, gameOver: true };
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    persistDailyFritzSnapshot(key, snapshot({ match: completedMatch, lifecyclePhase: 'completed' }));
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 2, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION, 1)?.lifecyclePhase).toBe('completed');
+    expect(parseDailyFritzPersistedSnapshot(snapshot({ match: completedMatch, lifecyclePhase: 'completed' }), now)?.lifecyclePhase).toBe('completed');
   });
-  it('resumes mid-hand with the exact server hand index and preserved board/boneyard', () => {
-    const midHand = createBotMatch(60, 7);
-    midHand.players.you.score = 18;
-    midHand.players.bot.score = 12;
-    midHand.boneyard = midHand.boneyard.slice(0, 5);
-    midHand.handNumber = 3;
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    expect(persistDailyFritzSnapshot(key, snapshot({
-      currentHandIndex: 2,
-      lifecyclePhase: 'active_hand',
-      match: midHand,
-      movesUsed: 11,
-    }))).toBe(true);
-    const loaded = loadPersistedDailyFritzMatch(key, 'attempt-1', 2, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION, 1);
-    expect(loaded?.currentHandIndex).toBe(2);
-    expect(loaded?.match.players.you.score).toBe(18);
-    expect(loaded?.match.players.bot.score).toBe(12);
-    expect(loaded?.match.boneyard).toHaveLength(5);
-    expect(loaded?.match.handNumber).toBe(3);
-    expect(loadPersistedDailyFritzMatch(key, 'attempt-1', 3, '2026-07-12', now, RUN_FP, undefined, undefined, AUTHORITY_REVISION + 1, 1)).toBeNull();
-  });
+
   it('prevents an older revision or timestamp from overwriting newer state', () => {
     const key = buildDailyFritzStorageKey('attempt-1', 1);
     expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 5 }))).toBe(true);
     expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 4, lastTransitionAt: '2026-07-12T18:02:00.000Z' }))).toBe(false);
     expect(JSON.parse(localStorage.getItem(key)!).checkpointRevision).toBe(5);
   });
-  it('resume after next-hand request committed but response was lost discards the rejected terminal checkpoint before saving the authoritative hand', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const terminalMatch = snapshot().match;
-    terminalMatch.handOver = true;
-    expect(persistDailyFritzSnapshot(key, snapshot({
-      currentHandIndex: 2,
-      authorityRevision: AUTHORITY_REVISION,
-      lifecyclePhase: 'hand_transition',
-      match: terminalMatch,
-      handResult: {
-        winner: 'you',
-        reason: 'domino',
-        pointsAwarded: 10,
-        loserPips: 10,
-        calcText: '10 points',
-        yourRemainingTiles: [],
-        botRemainingTiles: [{ low: 1, high: 2 }],
-      },
-      checkpointRevision: 19,
-    }))).toBe(true);
 
-    expect(loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      3,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      undefined,
-      undefined,
-      AUTHORITY_REVISION + 1,
-      1,
-    )).toBeNull();
-    expect(window.localStorage.getItem(key)).toBeNull();
-
-    const authoritativeHand = snapshot({
-      currentHandIndex: 3,
-      authorityRevision: AUTHORITY_REVISION + 1,
-      match: { ...snapshot().match, handNumber: 4 },
-      checkpointRevision: 1,
-    });
-    expect(persistDailyFritzSnapshot(key, authoritativeHand)).toBe(true);
-    expect(JSON.parse(window.localStorage.getItem(key)!).checkpointRevision).toBe(1);
-  });
   it('discards a checkpoint re-persisted before an authority reload', () => {
     const key = buildDailyFritzStorageKey('attempt-1', 1);
     expect(persistDailyFritzSnapshot(key, snapshot())).toBe(true);
     discardDailyFritzSnapshot(key);
-    // The mounted persistence effect can recreate the rejected checkpoint
-    // between the 409 response and the player's recovery click.
     expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 3 }))).toBe(true);
     let checkpointAtReload: string | null = 'not-checked';
 
@@ -215,84 +93,7 @@ describe('Daily Fritz v3 session persistence', () => {
 
     expect(checkpointAtReload).toBeNull();
   });
-  it('removes and replaces a checkpoint from the unsafe draw-presentation schema', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    window.localStorage.setItem(key, JSON.stringify({
-      ...snapshot(),
-      schemaVersion: 6,
-      checkpointRevision: 99,
-    }));
 
-    expect(loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      2,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      undefined,
-      undefined,
-      AUTHORITY_REVISION,
-      1,
-    )).toBeNull();
-    expect(window.localStorage.getItem(key)).toBeNull();
-
-    expect(persistDailyFritzSnapshot(key, snapshot({ checkpointRevision: 1 }))).toBe(true);
-    expect(JSON.parse(window.localStorage.getItem(key)!).schemaVersion)
-      .toBe(DAILY_FRITZ_SESSION_SCHEMA_VERSION);
-  });
-  it('migrates a coherent schema-8 hand onto the server authority revision', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const legacy = snapshot({ checkpointRevision: 6 });
-    const { authorityRevision: _authorityRevision, checkpointRevision, ...schema8 } = legacy;
-    window.localStorage.setItem(key, JSON.stringify({
-      ...schema8,
-      schemaVersion: 8,
-      revision: checkpointRevision,
-    }));
-
-    const loaded = loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      2,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      undefined,
-      undefined,
-      AUTHORITY_REVISION,
-      1,
-    );
-
-    expect(loaded?.authorityRevision).toBe(AUTHORITY_REVISION);
-    expect(loaded?.checkpointRevision).toBe(6);
-    const migrated = JSON.parse(window.localStorage.getItem(key)!);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.revision).toBeUndefined();
-  });
-  it('rejects a schema-8 checkpoint that relabeled the previous match with the new hand index', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const torn = snapshot({ currentHandIndex: 3, checkpointRevision: 6 });
-    const { authorityRevision: _authorityRevision, checkpointRevision, ...schema8 } = torn;
-    window.localStorage.setItem(key, JSON.stringify({
-      ...schema8,
-      schemaVersion: 8,
-      revision: checkpointRevision,
-    }));
-
-    expect(loadPersistedDailyFritzMatch(
-      key,
-      'attempt-1',
-      3,
-      '2026-07-12',
-      now,
-      RUN_FP,
-      undefined,
-      undefined,
-      AUTHORITY_REVISION,
-      1,
-    )).toBeNull();
-  });
   it('repairs duplicate physical-tile evidence before a saved hand resumes', () => {
     const duplicatePlacement = {
       moveNumber: 1,
@@ -448,6 +249,7 @@ describe('Daily Fritz v3 session persistence', () => {
       if (!accepted && !result.accepted) expect(result.reason).toBe(reason);
     });
   });
+
   it.each([
     { low: -1, high: 2 },
     { low: 1, high: -1 },
@@ -460,36 +262,5 @@ describe('Daily Fritz v3 session persistence', () => {
     const value = snapshot();
     value.match.players.you.hand = [tile as never];
     expect(parseDailyFritzPersistedSnapshot(value, now)).toBeNull();
-  });
-
-  it('falls back to the server resume checkpoint when local storage is empty', () => {
-    const key = buildDailyFritzStorageKey('attempt-1', 1);
-    const serverSnapshot = snapshot({ checkpointRevision: 5 });
-    const loaded = loadDailyFritzResumeSnapshot(key, {
-      ok: true,
-      attempt_id: 'attempt-1',
-      verified_match_id: 'verified-1',
-      authority_revision: AUTHORITY_REVISION,
-      run_date: '2026-07-12',
-      run_fingerprint: RUN_FP,
-      current_hand_index: 2,
-      current_game_number: 1,
-      set_result: null,
-      fritz_tier: 'standard',
-      deal_size: 7,
-      winning_score: 100,
-      first_hand: {
-        player_tiles: [],
-        fritz_tiles: [],
-        boneyard: [],
-        locked: [],
-      },
-      draw_winner: 'you',
-      draw_player_tile: { low: 1, high: 2 },
-      draw_fritz_tile: { low: 2, high: 3 },
-      resume_checkpoint: serverSnapshot as unknown as Record<string, unknown>,
-    }, now);
-    expect(loaded?.checkpointRevision).toBe(5);
-    expect(window.localStorage.getItem(key)).not.toBeNull();
   });
 });

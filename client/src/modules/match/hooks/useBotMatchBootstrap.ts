@@ -5,10 +5,12 @@ import { fairnessLog } from '../runtime/fairnessLog.ts';
 import { FRITZ_TIERS } from '../../fritz/fritzConfig.ts';
 import type { BotMatchScreenProps } from '../types.ts';
 import { botMatchDebugLog } from '../runtime/botMatchDebug.ts';
+import { resolveDailyFritzStorageKey } from '../../daily/index.ts';
+import { resolveDailyFritzSession } from '../../../dailyFritz/resolveDailyFritzSession.ts';
 import {
-  loadDailyFritzResumeSnapshot,
-  resolveDailyFritzStorageKey,
-} from '../../daily/index.ts';
+  discardDailyFritzSnapshot,
+  persistDailyFritzSnapshot,
+} from '../../daily/dailyFritzSessionStorage.ts';
 import {
   isDailyFritzScriptedDrawReady,
   isPersistedDailyFritzPlayableResume,
@@ -64,10 +66,15 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   } = guidedBoot;
 
   const dailyFritzStorageKey = resolveDailyFritzStorageKey(mode, dailyFritzPackage);
-  const initialPersistedDailyFritzMatch = loadDailyFritzResumeSnapshot(
-    dailyFritzStorageKey,
-    dailyFritzPackage,
-  );
+  const initialPersistedDailyFritzMatch = dailyFritzPackage
+    ? resolveDailyFritzSession(dailyFritzPackage)
+    : null;
+  if (initialPersistedDailyFritzMatch && dailyFritzStorageKey) {
+    // Seed the local write buffer from server authority; stale local checkpoints must not
+    // influence resume or block future monotonic writes after a hard refresh.
+    discardDailyFritzSnapshot(dailyFritzStorageKey);
+    persistDailyFritzSnapshot(dailyFritzStorageKey, initialPersistedDailyFritzMatch);
+  }
   const resumablePersistedDailyFritzMatch =
     initialPersistedDailyFritzMatch?.match &&
     isPersistedDailyFritzPlayableResume(initialPersistedDailyFritzMatch.match)
