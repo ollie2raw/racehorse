@@ -7,6 +7,7 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
+import { MatchTerminalJoinError } from './matchTerminalJoin';
 import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
 
 const log = childLogger('multiplayer:join');
@@ -73,6 +74,13 @@ export function registerRoomJoinHandlers(
         scheduledTournamentMatchId: attached.room.scheduledTournamentMatchId ?? null,
       });
     } catch (err: unknown) {
+      if (err instanceof MatchTerminalJoinError) {
+        log.info(
+          `[room:join] TERMINAL: code=${roomCode} matchId=${err.terminal.matchId} status=${err.terminal.status}`,
+        );
+        cb?.({ ok: false, error: err.code, terminal: err.terminal });
+        return;
+      }
       const message = err instanceof Error ? err.message : 'unknown error';
       log.info(`[room:join] ERROR: ${message}`);
       if (message === 'Room not found.') {

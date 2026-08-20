@@ -13,9 +13,16 @@ export type SocketEmitter = {
   emit: (event: string, ...args: unknown[]) => void;
 };
 
+export type RoomTerminalJoinPayload = {
+  status: 'completed' | 'abandoned';
+  matchId: string;
+  recoverable: true;
+};
+
 export type RoomAckResponse = {
   ok?: boolean;
   error?: string;
+  terminal?: RoomTerminalJoinPayload;
   sequence?: number;
   forcedDraw?: { drewCount?: number };
   started?: boolean;

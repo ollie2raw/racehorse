@@ -52,6 +52,8 @@ function testBackoffCurve(): void {
 function testTerminalJoinErrors(): void {
   assertEqual(isTerminalJoinError('Room abandoned'), true, 'abandoned');
   assertEqual(isTerminalJoinError('match_completed'), true, 'match_completed');
+  assertEqual(isTerminalJoinError('match_terminal'), true, 'match_terminal');
+  assertEqual(isTerminalJoinError('snapshot_terminal'), true, 'snapshot_terminal');
   assertEqual(isTerminalJoinError('Room not found'), true, 'not found');
   assertEqual(isTerminalJoinError('timeout'), false, 'timeout transient');
 }

@@ -9,6 +9,8 @@ import {
 } from './roomSession';
 import { createRoomSocketAttach } from './roomSocketAttach';
 import * as livePersistence from './roomLivePersistence';
+import * as matchTerminalJoin from './matchTerminalJoin';
+import { MatchTerminalJoinError } from './matchTerminalJoin';
 
 function makeSocket(socketId: string) {
   const socket = {
@@ -42,6 +44,62 @@ describe('createRoomSocketAttach', () => {
       ...handlerDeps,
       onGameOver: () => null,
     });
+  });
+
+  it('returns match_terminal when live room is gone but archive exists', async () => {
+    const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+    const socket = makeSocket('sock-archive');
+    vi.spyOn(livePersistence, 'ensureRoomHydrated').mockResolvedValue({ kind: 'not_found' });
+    vi.spyOn(matchTerminalJoin, 'resolveArchivedTerminalJoin').mockResolvedValue(
+      new MatchTerminalJoinError({
+        status: 'completed',
+        matchId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        recoverable: true,
+      }),
+    );
+
+    const { attachSocketToTrackedRoom } = createRoomSocketAttach({ io, socket, handlerDeps });
+
+    await expect(
+      attachSocketToTrackedRoom({
+        roomCode: 'ARCHV1',
+        username: 'Guest',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: true,
+      }),
+    ).rejects.toBeInstanceOf(MatchTerminalJoinError);
+  });
+
+  it('maps snapshot_terminal hydration to match_terminal when archive exists', async () => {
+    const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+    const socket = makeSocket('sock-term');
+    vi.spyOn(livePersistence, 'ensureRoomHydrated').mockResolvedValue({
+      kind: 'snapshot_stale',
+      error: 'snapshot_terminal',
+    });
+    const throwSpy = vi
+      .spyOn(matchTerminalJoin, 'throwArchivedTerminalJoinOrError')
+      .mockRejectedValue(
+        new MatchTerminalJoinError({
+          status: 'abandoned',
+          matchId: 'bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee',
+          recoverable: true,
+        }),
+      );
+
+    const { attachSocketToTrackedRoom } = createRoomSocketAttach({ io, socket, handlerDeps });
+
+    await expect(
+      attachSocketToTrackedRoom({
+        roomCode: 'ARCHV2',
+        username: 'Guest',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      }),
+    ).rejects.toBeInstanceOf(MatchTerminalJoinError);
+    expect(throwSpy).toHaveBeenCalledWith('ARCHV2', 'snapshot_terminal');
   });
 
   it('stashes leaveTrackedRoom on socket.__leaveTrackedRoom', async () => {
