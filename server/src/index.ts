@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { config } from './config';
+import { sentryBeforeSend } from './sentryScrubbers';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -7,6 +8,7 @@ Sentry.init({
   environment: config.nodeEnv,
   release: config.renderGitCommit ?? config.packageVersion,
   tracesSampleRate: 0.2,
+  beforeSend: sentryBeforeSend,
 });
 import fs from 'node:fs';
 import express from 'express';

@@ -12,6 +12,11 @@ import {
 import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript.ts';
 import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
 import { saveDailyFritzCheckpoint, recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
+import {
+  DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS,
+  flushDailyFritzCheckpointOnUnload,
+} from '../../dailyFritz/dailyFritzCheckpointUnload.ts';
+import { getAuthHeaders } from '../../api/client.ts';
 import { reportDailyFritzOperationalAlert } from '../../dailyFritz/dailyFritzObservability.ts';
 import { dailyFritzTelemetryEventId, getDailyFritzTelemetrySession } from '../../dailyFritz/telemetry.ts';
 
@@ -66,11 +71,29 @@ export function useDailyFritzSessionPersistence({
   const divergenceReportedRef = useRef('');
   const serverSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastServerSyncRevisionRef = useRef(initialCheckpointRevision);
+  const pendingServerSyncSnapshotRef = useRef<DailyFritzPersistedSnapshot | null>(null);
+  const accessTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void getAuthHeaders().then(({ headers }) => {
+      const authorization = headers.Authorization ?? '';
+      const match = authorization.match(/^Bearer\s+(.+)$/i);
+      accessTokenRef.current = match?.[1]?.trim() ?? null;
+    });
+  }, [enabled, attemptId]);
 
   const syncCheckpointToServer = (snapshot: DailyFritzPersistedSnapshot, immediate: boolean) => {
     if (!attemptId || !verifiedMatchId) return;
     if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
+    pendingServerSyncSnapshotRef.current = snapshot;
     const runSync = () => {
+      pendingServerSyncSnapshotRef.current = null;
+      void getAuthHeaders().then(({ headers }) => {
+        const authorization = headers.Authorization ?? '';
+        const match = authorization.match(/^Bearer\s+(.+)$/i);
+        accessTokenRef.current = match?.[1]?.trim() ?? accessTokenRef.current;
+      });
       void saveDailyFritzCheckpoint({
         attemptId,
         verifiedMatchId,
@@ -96,7 +119,27 @@ export function useDailyFritzSessionPersistence({
     serverSyncTimerRef.current = setTimeout(() => {
       serverSyncTimerRef.current = null;
       runSync();
-    }, 1_500);
+    }, DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS);
+  };
+
+  const flushPendingCheckpointOnUnload = () => {
+    if (serverSyncTimerRef.current) {
+      clearTimeout(serverSyncTimerRef.current);
+      serverSyncTimerRef.current = null;
+    }
+    const snapshot = pendingServerSyncSnapshotRef.current;
+    if (!snapshot || !attemptId || !verifiedMatchId) return;
+    if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) {
+      pendingServerSyncSnapshotRef.current = null;
+      return;
+    }
+    pendingServerSyncSnapshotRef.current = null;
+    flushDailyFritzCheckpointOnUnload({
+      attemptId,
+      verifiedMatchId,
+      checkpoint: snapshot as unknown as Record<string, unknown>,
+      accessToken: accessTokenRef.current,
+    });
   };
 
   useEffect(() => {
@@ -265,7 +308,7 @@ export function useDailyFritzSessionPersistence({
 
   useEffect(() => {
     if (!enabled) return;
-    const flush = () => {
+    const flushLocal = () => {
       const pending = storagePendingRef.current;
       if (!pending) return;
       try {
@@ -274,9 +317,17 @@ export function useDailyFritzSessionPersistence({
         // sessionStorage may be unavailable during unload
       }
     };
-    window.addEventListener('pagehide', flush);
-    return () => window.removeEventListener('pagehide', flush);
-  }, [enabled]);
+    const flushAll = () => {
+      flushLocal();
+      flushPendingCheckpointOnUnload();
+    };
+    window.addEventListener('pagehide', flushAll);
+    window.addEventListener('beforeunload', flushAll);
+    return () => {
+      window.removeEventListener('pagehide', flushAll);
+      window.removeEventListener('beforeunload', flushAll);
+    };
+  }, [enabled, attemptId, verifiedMatchId]);
 
   useEffect(() => {
     if (!enabled || !preGameDrawActive || !storageKey) return;
