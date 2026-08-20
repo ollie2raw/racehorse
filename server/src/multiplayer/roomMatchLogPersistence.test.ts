@@ -17,6 +17,8 @@ import {
   queryPersistedRoomMatchLog,
   resetRoomMatchLogPersistenceForTests,
 } from './roomMatchLogPersistence';
+import * as telemetry from './mpAuthorityTelemetry';
+import { flushMpAuthorityEventPersistForTests } from './mpAuthorityEventStore';
 import { getRoomRoster, resetRoomSessionStoresForTests, setRoomRoster } from './roomSession';
 
 const t = (low: number, high: number) => ({ low: Math.min(low, high), high: Math.max(low, high) });
@@ -69,6 +71,7 @@ vi.mock('../supabaseUtils', () => ({
       return row ? [row] : [];
     }
 
+    if (path.includes('/mp_authority_events')) return undefined;
     throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
   }),
 }));
@@ -220,9 +223,11 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
         const row = persistenceStore.liveSessions.get(code);
         return row ? [row] : [];
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     await persistRoomMatchLog(room, 'completed');
 
     const archived = persistenceStore.matchLogs.get(room.matchId);
@@ -238,6 +243,10 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     });
     expect(terminalLiveStatuses).toContain('game_over');
     expect(persistenceStore.liveSessions.has('CLN001')).toBe(false);
+    expect(emit).toHaveBeenCalledWith('private_match_archived', expect.objectContaining({
+      roomCode: 'CLN001',
+      extra: expect.objectContaining({ status: 'completed' }),
+    }));
 
     const loadedArchive = await queryPersistedRoomMatchLog(room.matchId);
     expect(loadedArchive?.status).toBe('completed');
@@ -290,12 +299,17 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
         const row = persistenceStore.liveSessions.get(code);
         return row ? [row] : [];
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     await persistRoomMatchLog(room, 'abandoned');
 
     expect(persistenceStore.matchLogs.get(room.matchId)?.status).toBe('abandoned');
+    expect(emit).toHaveBeenCalledWith('private_match_archived', expect.objectContaining({
+      extra: expect.objectContaining({ status: 'abandoned' }),
+    }));
     expect(terminalLiveStatuses).toContain('abandoned');
     expect(persistenceStore.liveSessions.has('CLN002')).toBe(false);
   });
@@ -326,7 +340,8 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
         );
         return row ? [row] : [];
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
     await persistRoomMatchLog(room, 'completed');
@@ -343,7 +358,8 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
       if (path.includes('/room_match_logs') && (!init?.method || init.method === 'GET')) {
         return [];
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
     const ok = await probeRoomMatchLogsTable();
@@ -359,5 +375,32 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     const ok = await probeRoomMatchLogsTable();
     expect(ok).toBe(false);
     expect(getRoomMatchLogsPersistenceAvailability()).toBe(false);
+  });
+
+  it('archive still completes when mp.authority insert fails', async () => {
+    const room = seedTerminalRoom('CLN004');
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/mp_authority_events')) {
+        throw new Error('mp_authority_events down');
+      }
+      if (path.includes('/room_match_logs') && init?.method === 'POST') {
+        const rows = JSON.parse(String(init.body)) as ArchiveRow[];
+        for (const row of rows) {
+          persistenceStore.matchLogs.set(String(row.match_id), row);
+        }
+        return undefined;
+      }
+      if (path.includes('/room_live_sessions')) return undefined;
+      if (path.includes('/room_match_logs')) {
+        const matchId = decodeURIComponent(path.match(/match_id=eq\.([^&]+)/)?.[1] ?? '');
+        const row = persistenceStore.matchLogs.get(matchId);
+        return row ? [row] : [];
+      }
+      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+    });
+
+    await expect(persistRoomMatchLog(room, 'completed')).resolves.toBeUndefined();
+    await flushMpAuthorityEventPersistForTests();
+    expect(persistenceStore.matchLogs.get(room.matchId)?.status).toBe('completed');
   });
 });

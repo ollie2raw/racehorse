@@ -307,4 +307,20 @@ describe('DB idempotency schema guardrails', () => {
     expect(sql).toContain('create or replace view public.fritz_challenge_funnel_metrics');
     expect(sql).toContain('create or replace view public.fritz_challenge_failure_metrics');
   });
+
+  it('ships durable mp.authority events and Pacific funnel view', () => {
+    const sql = compactSql(readRepoFile(
+      'supabase/migrations/2026-08-20_mp_authority_events.sql',
+    ));
+    expect(sql).toContain('create table if not exists public.mp_authority_events');
+    expect(sql).toContain("'private_terminal_recovery'");
+    expect(sql).toContain("'private_match_archived'");
+    expect(sql).toContain("source_type in ('private', 'quick', 'tournament')");
+    expect(sql).toContain('create or replace view public.mp_authority_funnel_metrics');
+    expect(sql).toContain("(ts at time zone 'america/los_angeles')::date as event_date");
+    expect(sql).toContain('with (security_invoker = true)');
+    expect(sql).toContain('revoke all on public.mp_authority_funnel_metrics from anon, authenticated');
+    expect(sql).toContain('grant select on public.mp_authority_funnel_metrics to service_role');
+    expect(sql).toContain('mp_authority_events_no_client_access');
+  });
 });

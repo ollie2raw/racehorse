@@ -33,7 +33,7 @@ import {
   snapshotGameActionReceiptsForRoom,
   type PersistedGameActionReceipt,
 } from './gameActionIdempotency';
-import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { emitMpAuthorityFunnel, emitMpAuthorityHydrationResult } from './mpAuthorityTelemetry';
 import { loadRoomCommandReceiptsForRoom } from './roomCommandReceiptStore';
 
 const LIVE_PERSIST_DEBOUNCE_MS = 75;
@@ -934,6 +934,20 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
   if (inFlight) return inFlight;
 
   const hydrationPromise = (async (): Promise<ActiveRoomHydrationResult> => {
+    const result = await runLiveRoomHydration(code);
+    emitMpAuthorityHydrationResult(code, result);
+    return result;
+  })().finally(() => {
+    if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
+      inFlightHydrationByRoomCode.delete(code);
+    }
+  });
+
+  inFlightHydrationByRoomCode.set(code, hydrationPromise);
+  return hydrationPromise;
+}
+
+async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationResult> {
     const loaded = await loadLiveRoomSession(code);
     if (loaded.kind === 'not_found') {
       return { kind: 'not_found' };
@@ -998,14 +1012,6 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
         error: error instanceof Error ? error.message : String(error),
       };
     }
-  })().finally(() => {
-    if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
-      inFlightHydrationByRoomCode.delete(code);
-    }
-  });
-
-  inFlightHydrationByRoomCode.set(code, hydrationPromise);
-  return hydrationPromise;
 }
 
 /** Test-only reset for debounce timers and table-availability cache. */

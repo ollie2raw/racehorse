@@ -31,6 +31,7 @@ vi.mock('../supabaseUtils', () => ({
       }
       return undefined;
     }
+    if (path.includes('/mp_authority_events')) return undefined;
     throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
   }),
 }));
@@ -154,7 +155,8 @@ describe('roomLivePersistence flush', () => {
         await persistGate;
         return undefined;
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
     const room = mkRoom({ code: 'HANG1' });
@@ -200,7 +202,8 @@ describe('roomLivePersistence flush', () => {
         }
         return undefined;
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
     const room = mkRoom({ code: 'LATEST1' });
@@ -247,7 +250,8 @@ describe('roomLivePersistence flush', () => {
         }
         return undefined;
       }
-      throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      if (path.includes('/mp_authority_events')) return undefined;
+    throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
     });
 
     const room = mkRoom({ code: 'EVENT1' });

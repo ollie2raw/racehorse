@@ -5,6 +5,7 @@ import {
   type RankedGameRatingRow,
 } from '../../multiplayer/buildPrivateMatchResult';
 import { isRankedGameSourceColumnsEnabled } from '../../ranking/rankedGamePayload';
+import { emitMpAuthorityFunnel } from '../../multiplayer/mpAuthorityTelemetry';
 import { supabaseFetch } from '../../supabaseUtils';
 
 export type PrivateMatchResultRouteDeps = {
@@ -99,6 +100,14 @@ export function registerPrivateMatchResultRoutes(
       }
 
       res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=3600');
+      emitMpAuthorityFunnel('private_terminal_recovery', {
+        roomCode: log.room_code,
+        extra: {
+          source: 'result_ok',
+          matchId: log.match_id,
+          status: log.status,
+        },
+      });
       res.json({ ok: true, result: built.result });
     } catch (error) {
       res.status(500).json({

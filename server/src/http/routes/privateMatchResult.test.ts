@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from 'express';
 import type { PersistedRoomMatchLogRow } from '../../multiplayer/roomMatchLogPersistence';
 import { RANKING_NOT_UPDATED_COPY } from '../../multiplayer/rankingOutcome';
 import { registerPrivateMatchResultRoutes } from './privateMatchResult';
+import * as telemetry from '../../multiplayer/mpAuthorityTelemetry';
 
 type Handler = (req: unknown, res: unknown) => unknown | Promise<unknown>;
 
@@ -100,7 +101,11 @@ function makeHarness(options: {
 }
 
 describe('GET /api/private-match/result', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('returns the product result shape for a participant, without events or state_snapshot', async () => {
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     const request = makeHarness();
     const response = await request({ matchId: MATCH_ID });
 
@@ -131,6 +136,14 @@ describe('GET /api/private-match/result', () => {
     expect(JSON.stringify(response.body)).not.toContain('must-not-leak');
     expect(JSON.stringify(response.body)).not.toContain('state_snapshot');
     expect(JSON.stringify(response.body)).not.toContain('"events"');
+    expect(emit).toHaveBeenCalledWith('private_terminal_recovery', expect.objectContaining({
+      roomCode: 'ROOM1',
+      extra: expect.objectContaining({
+        source: 'result_ok',
+        matchId: MATCH_ID,
+        status: 'completed',
+      }),
+    }));
   });
 
   it('returns 403 when an authenticated user is not a participant', async () => {
@@ -150,11 +163,13 @@ describe('GET /api/private-match/result', () => {
   });
 
   it('returns 404 when no archive exists for the given id', async () => {
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     const request = makeHarness({ log: null });
     await expect(request({ matchId: MATCH_ID })).resolves.toMatchObject({
       status: 404,
       body: { error: 'Match result not found.' },
     });
+    expect(emit).not.toHaveBeenCalled();
   });
 
   it('reports verification-skipped ranking with the neutral copy field', async () => {

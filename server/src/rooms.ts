@@ -31,6 +31,7 @@ import {
 } from './multiplayer/roomDurability';
 import { flushScheduledLiveRoomPersistence, isLiveRoomDurablyRecoverable } from './multiplayer/roomLivePersistence';
 import { assertRoomDurabilityOperationAllowed } from './multiplayer/roomDurabilityPolicy';
+import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './multiplayer/mpAuthorityTelemetry';
 import type { RankingOutcome } from './multiplayer/rankingOutcome';
 import { childLogger } from './logger';
 
@@ -319,6 +320,11 @@ export function createRoom(hostPlayerSeatId: string, config: RoomConfig = {}): R
 
   rooms.set(code, room);
   notifyLiveRoomStateCommitted(room);
+  emitMpAuthorityFunnel('private_lobby_created', {
+    roomCode: code,
+    seatId: hostPlayerSeatId,
+    sourceType: resolveMpAuthoritySourceType(room),
+  });
   return room;
 }
 
