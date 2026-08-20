@@ -94,6 +94,7 @@ function buildPersistedRoomSummary(
         typeof (room.config as Record<string, unknown>)?.winningScore === 'number'
           ? (room.config as Record<string, unknown>).winningScore
           : null,
+      rankingOutcome: room.rankingOutcome ?? null,
     };
   }
 
@@ -112,6 +113,7 @@ function buildPersistedRoomSummary(
     handCounts: Object.fromEntries(
       room.state.playerIds.map((playerId) => [playerId, room.state?.players[playerId]?.hand.length ?? 0]),
     ),
+    rankingOutcome: room.rankingOutcome ?? null,
   };
 }
 
