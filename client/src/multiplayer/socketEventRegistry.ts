@@ -386,6 +386,15 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Opponent reconnect grace expired message',
   },
   {
+    socketEvent: 'player:disconnect_stall',
+    owner: 'connection.presence',
+    registrar: 'multiplayer/useRoomSocketSync.ts',
+    boundedContext: 'connection',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Disconnect auto-act deferred/paused when live-session durability cannot commit',
+  },
+  {
     socketEvent: 'room:match_abandoned',
     owner: 'tournament.session.abandoned',
     registrar: 'tournament/registerTournamentSocketHandlers.ts',
@@ -570,6 +579,7 @@ export const SOCKET_EVENTS = {
   PLAYER_DISCONNECTED: 'player:disconnected',
   PLAYER_RECONNECTED: 'player:reconnected',
   PLAYER_RECONNECT_TIMEOUT: 'player:reconnect_timeout',
+  PLAYER_DISCONNECT_STALL: 'player:disconnect_stall',
   ROOM_MATCH_ABANDONED: 'room:match_abandoned',
 } as const;
 

@@ -22,7 +22,9 @@ export type MpAuthorityFunnelEvent =
   | 'private_durability_degraded'
   | 'private_durability_failed'
   | 'private_move_log_verification_failed'
-  | 'private_terminal_recovery';
+  | 'private_terminal_recovery'
+  | 'private_disconnect_auto_act_deferred'
+  | 'private_disconnect_auto_act_paused';
 
 export type MpAuthorityFailureCode =
   | 'missing_request_id'
