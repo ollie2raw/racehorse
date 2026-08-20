@@ -1,6 +1,6 @@
 import type { Application } from 'express';
 import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
-import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
+import { getAuthenticatedUserId, getAuthenticatedUserIdFromToken } from '../../platform/auth/supabaseAuth';
 import {
   getDailyFritzAttemptById,
   upsertDailyFritzAttempt,
@@ -24,6 +24,8 @@ export function registerDailyFritzCheckpointRoute(app: Application): void {
     const verifiedMatchId =
       typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
     const checkpointInput = req.body?.checkpoint;
+    const bodyAccessToken =
+      typeof req.body?.access_token === 'string' ? req.body.access_token.trim() : '';
     if (!attemptId || !verifiedMatchId || checkpointInput == null) {
       res.status(400).json({
         error: 'attempt_id, verified_match_id, and checkpoint are required.',
@@ -33,7 +35,9 @@ export function registerDailyFritzCheckpointRoute(app: Application): void {
 
     try {
       await withDailyFritzAttemptLock(attemptId, async () => {
-        const authenticatedUserId = await getAuthenticatedUserId(req);
+        const authenticatedUserId =
+          (await getAuthenticatedUserId(req))
+          || (await getAuthenticatedUserIdFromToken(bodyAccessToken || null));
         if (!authenticatedUserId) {
           res.status(401).json({ error: 'Unauthorized' });
           return;
