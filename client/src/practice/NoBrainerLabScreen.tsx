@@ -250,7 +250,7 @@ export default function NoBrainerLabScreen({
 
     return (
       <>
-        <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} />
+        <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} onDismiss={onBack} />
         {error && !record ? (
           <div className="nbl-loading-screen">
             <div className="nbl-loading-card">
@@ -281,7 +281,7 @@ export default function NoBrainerLabScreen({
 
   return (
     <>
-      <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} />
+      <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} onDismiss={onBack} />
     <div
       ref={rootRef}
       className="practice-lab practice-lab-screen screen game-screen walnut-live rh-match-live rh-match-solo-hud"

@@ -94,13 +94,15 @@ describe('NoBrainerLabScreen intro gate', () => {
     expect(screen.getByRole('button', { name: /Show Solution/i })).toBeInTheDocument();
   });
 
-  it('starts the hand when the modal is dismissed with Escape', async () => {
-    render(<NoBrainerLabScreen onBack={vi.fn()} />);
+  it('routes back when the modal is dismissed with Escape', async () => {
+    const onBack = vi.fn();
+    render(<NoBrainerLabScreen onBack={onBack} />);
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Hint/i })).toBeInTheDocument();
+      expect(onBack).toHaveBeenCalledTimes(1);
     });
+    expect(pickNoBrainerHandMock).not.toHaveBeenCalled();
   });
 });

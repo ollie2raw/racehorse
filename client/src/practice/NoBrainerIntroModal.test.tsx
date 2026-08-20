@@ -5,7 +5,7 @@ import { NoBrainerIntroModal } from './NoBrainerIntroModal';
 
 describe('NoBrainerIntroModal', () => {
   it('renders the no-brainer explainer copy', () => {
-    render(<NoBrainerIntroModal open onStart={vi.fn()} />);
+    render(<NoBrainerIntroModal open onStart={vi.fn()} onDismiss={vi.fn()} />);
 
     expect(screen.getByRole('dialog', { name: "What's a no-brainer?" })).toBeInTheDocument();
     expect(screen.getByText(/all 7 of your starting tiles chain together/i)).toBeInTheDocument();
@@ -16,25 +16,25 @@ describe('NoBrainerIntroModal', () => {
 
   it('calls onStart when Start training is clicked', () => {
     const onStart = vi.fn();
-    render(<NoBrainerIntroModal open onStart={onStart} />);
+    render(<NoBrainerIntroModal open onStart={onStart} onDismiss={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /Start training/i }));
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onStart when Escape is pressed', () => {
-    const onStart = vi.fn();
-    render(<NoBrainerIntroModal open onStart={onStart} />);
+  it('calls onDismiss when Escape is pressed', () => {
+    const onDismiss = vi.fn();
+    render(<NoBrainerIntroModal open onStart={vi.fn()} onDismiss={onDismiss} />);
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onStart when the backdrop is clicked', () => {
-    const onStart = vi.fn();
-    render(<NoBrainerIntroModal open onStart={onStart} />);
+  it('calls onDismiss when the backdrop is clicked', () => {
+    const onDismiss = vi.fn();
+    render(<NoBrainerIntroModal open onStart={vi.fn()} onDismiss={onDismiss} />);
 
     fireEvent.click(document.querySelector('.rh-modal-backdrop')!);
-    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

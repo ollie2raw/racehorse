@@ -3,13 +3,14 @@ import { Button, Modal } from '../components/primitives';
 type NoBrainerIntroModalProps = {
   open: boolean;
   onStart: () => void;
+  onDismiss: () => void;
 };
 
-export function NoBrainerIntroModal({ open, onStart }: NoBrainerIntroModalProps) {
+export function NoBrainerIntroModal({ open, onStart, onDismiss }: NoBrainerIntroModalProps) {
   return (
     <Modal
       open={open}
-      onClose={onStart}
+      onClose={onDismiss}
       title="What's a no-brainer?"
       panelClassName="nbl-intro-modal-panel"
       maxWidth={560}
