@@ -3,7 +3,10 @@ import type { ErrorEvent, EventHint } from '@sentry/node';
 const REDACTED = '[Filtered]';
 
 function isSensitiveKey(key: string): boolean {
-  return key === 'access_token' || key === 'accessToken';
+  return key === 'access_token'
+    || key === 'accessToken'
+    || key === 'admin_key'
+    || key === 'adminKey';
 }
 
 /** Recursively redact bearer/session tokens from structured request payloads. */
@@ -41,7 +44,14 @@ export function scrubSentryEventSensitiveData<T extends ErrorEvent>(event: T): T
     const headers = { ...request.headers };
     if (typeof headers.Authorization === 'string') headers.Authorization = REDACTED;
     if (typeof headers.authorization === 'string') headers.authorization = REDACTED;
+    if (typeof headers['x-admin-secret'] === 'string') headers['x-admin-secret'] = REDACTED;
     request.headers = headers;
+  }
+  if (typeof request?.query_string === 'string' && request.query_string.includes('admin_key=')) {
+    request.query_string = request.query_string.replace(
+      /([?&]admin_key=)[^&]*/gi,
+      '$1[Filtered]',
+    );
   }
   return event;
 }

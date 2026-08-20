@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
+
+const ADMIN_KEY_STORAGE = 'racehorse:daily-fritz-admin-key';
 
 type DayMetrics = {
   runDate: string;
@@ -43,45 +45,200 @@ function statusColor(status: HealthResponse['status']): string {
   return '#c92a2a';
 }
 
+function readStoredAdminKey(): string {
+  try {
+    return window.sessionStorage.getItem(ADMIN_KEY_STORAGE)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function persistAdminKey(key: string): void {
+  try {
+    window.sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
+  } catch {
+    /* sessionStorage may be unavailable */
+  }
+}
+
+function clearStoredAdminKey(): void {
+  try {
+    window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+  } catch {
+    /* sessionStorage may be unavailable */
+  }
+}
+
+/** One-time migration: legacy bookmarks may still carry ?admin_key= in the URL. */
+function consumeLegacyUrlAdminKey(): string {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('admin_key')?.trim() ?? '';
+  if (!fromUrl) return '';
+  persistAdminKey(fromUrl);
+  params.delete('admin_key');
+  const nextSearch = params.toString();
+  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', nextUrl);
+  return fromUrl;
+}
+
+function resolveInitialAdminKey(): string {
+  const legacy = consumeLegacyUrlAdminKey();
+  return legacy || readStoredAdminKey();
+}
+
+async function fetchDailyFritzHealth(key: string): Promise<HealthResponse> {
+  const url = new URL(`${resolveGameServerUrl()}/api/daily-fritz/health`);
+  const response = await fetch(url.toString(), {
+    headers: { 'x-admin-secret': key },
+  });
+  const body = await response.json() as HealthResponse;
+  if (!response.ok) {
+    throw new Error(body.error ?? `HTTP ${response.status}`);
+  }
+  return body;
+}
+
 export default function DailyFritzHealthAdminScreen() {
-  const adminKey = useMemo(
-    () => new URLSearchParams(window.location.search).get('admin_key')?.trim() ?? '',
-    [],
-  );
+  const [adminKey, setAdminKey] = useState(resolveInitialAdminKey);
+  const [draftKey, setDraftKey] = useState('');
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!adminKey) {
-      setError('Add ?admin_key=YOUR_ADMIN_SECRET to the URL.');
-      return;
-    }
-    setLoading(true);
-    const url = new URL(`${resolveGameServerUrl()}/api/daily-fritz/health`);
-    url.searchParams.set('admin_key', adminKey);
-    void fetch(url.toString())
-      .then(async (response) => {
-        const body = await response.json() as HealthResponse;
-        if (!response.ok) {
-          throw new Error(body.error ?? `HTTP ${response.status}`);
-        }
-        setHealth(body);
-        setError(null);
-      })
-      .catch((err: unknown) => {
+  const refreshHealth = useCallback((key: string) => {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        setHealth(await fetchDailyFritzHealth(key));
+      } catch (err: unknown) {
         setHealth(null);
         setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!adminKey) return;
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchDailyFritzHealth(adminKey);
+        if (!cancelled) setHealth(data);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setHealth(null);
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [adminKey]);
+
+  const handleUnlock = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = draftKey.trim();
+    if (!trimmed) return;
+    persistAdminKey(trimmed);
+    setAdminKey(trimmed);
+    setDraftKey('');
+  };
+
+  const handleSignOut = () => {
+    clearStoredAdminKey();
+    setAdminKey('');
+    setHealth(null);
+    setError(null);
+    setLoading(false);
+  };
 
   return (
     <div style={{ padding: '24px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#e9ecef', background: '#0b1220', minHeight: '100dvh' }}>
       <h1 style={{ margin: '0 0 8px', fontSize: '20px' }}>Daily Fritz Health</h1>
       <p style={{ margin: '0 0 20px', color: '#9aa5b1' }}>
-        Pacific run_date snapshot vs yesterday. Bookmark with <code>?admin_key=...</code>
+        Pacific run_date snapshot vs yesterday. Admin key stays in this tab&apos;s sessionStorage — not the URL.
       </p>
+
+      {!adminKey && (
+        <form onSubmit={handleUnlock} style={{ marginBottom: '20px', maxWidth: '420px' }}>
+          <label htmlFor="admin-key-input" style={{ display: 'block', marginBottom: '8px', color: '#cbd5e1' }}>
+            Admin secret
+          </label>
+          <input
+            id="admin-key-input"
+            type="password"
+            autoComplete="off"
+            value={draftKey}
+            onChange={(event) => setDraftKey(event.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              marginBottom: '10px',
+              borderRadius: '6px',
+              border: '1px solid #334155',
+              background: '#111827',
+              color: '#e9ecef',
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              padding: '8px 14px',
+              borderRadius: '6px',
+              border: '1px solid #475569',
+              background: '#1e293b',
+              color: '#f8fafc',
+              cursor: 'pointer',
+            }}
+          >
+            Unlock dashboard
+          </button>
+        </form>
+      )}
+
+      {adminKey && (
+        <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => refreshHealth(adminKey)}
+            disabled={loading}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid #475569',
+              background: '#1e293b',
+              color: '#f8fafc',
+              cursor: 'pointer',
+            }}
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid #475569',
+              background: 'transparent',
+              color: '#94a3b8',
+              cursor: 'pointer',
+            }}
+          >
+            Clear key
+          </button>
+        </div>
+      )}
+
       {loading && <p>Loading…</p>}
       {error && <p style={{ color: '#ff6b6b' }}>{error}</p>}
       {health && (
