@@ -33,14 +33,15 @@ export function scrubSensitiveFields(value: unknown): unknown {
 }
 
 export function scrubSentryEventSensitiveData<T extends ErrorEvent>(event: T): T {
-  if (event.request?.data != null) {
-    event.request.data = scrubSensitiveFields(event.request.data) as typeof event.request.data;
+  const request = event.request;
+  if (request?.data != null) {
+    request.data = scrubSensitiveFields(request.data) as typeof request.data;
   }
-  if (event.request?.headers) {
-    const headers = { ...event.request.headers };
+  if (request?.headers) {
+    const headers = { ...request.headers };
     if (typeof headers.Authorization === 'string') headers.Authorization = REDACTED;
     if (typeof headers.authorization === 'string') headers.authorization = REDACTED;
-    event.request.headers = headers;
+    request.headers = headers;
   }
   return event;
 }
