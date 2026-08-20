@@ -3,6 +3,7 @@ import { resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests } from './roomSession';
 import { registerRoomJoinHandlers } from './registerRoomJoinHandlers';
 import { MatchTerminalJoinError } from './matchTerminalJoin';
+import * as telemetry from './mpAuthorityTelemetry';
 
 function makeSocket() {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -86,6 +87,7 @@ describe('registerRoomJoinHandlers', () => {
     });
 
     const cb = vi.fn();
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     await handlers.get('room:join')?.('ARCHV1', cb);
     expect(cb).toHaveBeenCalledWith({
       ok: false,
@@ -96,5 +98,13 @@ describe('registerRoomJoinHandlers', () => {
         recoverable: true,
       },
     });
+    expect(emit).toHaveBeenCalledWith('private_terminal_recovery', expect.objectContaining({
+      roomCode: 'ARCHV1',
+      extra: expect.objectContaining({
+        source: 'join_ack',
+        matchId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        status: 'completed',
+      }),
+    }));
   });
 });

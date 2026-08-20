@@ -6,6 +6,7 @@ import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
 import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
+import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 
 const log = childLogger('matchmaking');
 
@@ -259,7 +260,7 @@ function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
   }
 }
 
-async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Promise<void> {
+export async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Promise<void> {
   if (isForbiddenMatchmakingPlayer(a) || isForbiddenMatchmakingPlayer(b)) {
     log.warn({
       a: { userId: a.userId, username: a.username, isSim: a.isSim },
@@ -279,6 +280,11 @@ async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Prom
     const room = getRoom(code);
     if (room) {
       room.matchmakingMatchId = record.id;
+      emitMpAuthorityFunnel('private_lobby_created', {
+        roomCode: code,
+        sourceType: 'quick',
+        extra: { matchmakingMatchId: record.id },
+      });
     }
 
     const aPayload: MatchFoundPayload = {

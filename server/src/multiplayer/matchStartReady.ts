@@ -1,5 +1,7 @@
 import type { Server } from 'socket.io';
-import { getRoom, initiatePregameDrawOrStart, type Room } from '../rooms';
+import * as rooms from '../rooms';
+import type { Room } from '../rooms';
+import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './mpAuthorityTelemetry';
 
 export type MatchStartDeps = {
   broadcastStateUpdate: (roomCode: string) => void;
@@ -11,7 +13,7 @@ function requiredStartPlayers(room: Room): string[] {
 }
 
 export function markMatchStartReady(roomCode: string, socketId: string): Room {
-  const room = getRoom(roomCode);
+  const room = rooms.getRoom(roomCode);
   room.matchStartReady.add(socketId);
   return room;
 }
@@ -21,7 +23,7 @@ export async function tryStartMatchIfReady(
   io: Server,
   deps: MatchStartDeps,
 ): Promise<{ started: boolean; waitingFor?: string[] }> {
-  const room = getRoom(roomCode);
+  const room = rooms.getRoom(roomCode);
   if (room.state) {
     return { started: false };
   }
@@ -36,8 +38,12 @@ export async function tryStartMatchIfReady(
     return { started: false, waitingFor: missing };
   }
 
-  const startedRoom = await initiatePregameDrawOrStart(roomCode, io);
+  const startedRoom = await rooms.initiatePregameDrawOrStart(roomCode, io);
   room.matchStartReady.clear();
   deps.broadcastStateUpdate(startedRoom.code);
+  emitMpAuthorityFunnel('private_match_started', {
+    roomCode: startedRoom.code,
+    sourceType: resolveMpAuthoritySourceType(startedRoom),
+  });
   return { started: true };
 }

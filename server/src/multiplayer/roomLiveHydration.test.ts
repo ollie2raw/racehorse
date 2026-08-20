@@ -39,6 +39,7 @@ vi.mock('../supabaseUtils', () => ({
     if (path.includes('/room_command_receipts') && (!init?.method || init.method === 'GET')) {
       return [];
     }
+    if (path.includes('/mp_authority_events')) return undefined;
     throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
   }),
 }));
@@ -115,6 +116,7 @@ describe('room live session restart hydration', () => {
     persistenceStore.liveSessions.set('RST001', row);
     expect(peekRoom('RST001')).toBeUndefined();
 
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const hydrated = await livePersistence.ensureRoomHydrated('RST001');
     expect(hydrated.kind).toBe('hydrated');
     if (hydrated.kind !== 'hydrated') return;
@@ -136,6 +138,10 @@ describe('room live session restart hydration', () => {
       },
     });
     expect(isLiveRoomDurablyRecoverable(hydrated.room)).toBe(true);
+    expect(info).toHaveBeenCalledWith(
+      '[mp.authority]',
+      expect.stringContaining('"event":"private_reconnect_hydrated"'),
+    );
   });
 
   it('returns already_in_memory without querying persistence', async () => {
@@ -167,11 +173,20 @@ describe('room live session restart hydration', () => {
     persistenceStore.liveSessions.set('BAD001', row);
     resetRoomRuntimeForTests();
 
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const hydrated = await livePersistence.ensureRoomHydrated('BAD001');
     expect(hydrated).toEqual({
       kind: 'snapshot_invalid',
       error: 'snapshot_missing_game_state',
     });
+    expect(info).toHaveBeenCalledWith(
+      '[mp.authority]',
+      expect.stringContaining('"event":"private_durability_failed"'),
+    );
+    expect(info).toHaveBeenCalledWith(
+      '[mp.authority]',
+      expect.stringContaining('"hydrationKind":"snapshot_invalid"'),
+    );
     expect(peekRoom('BAD001')).toBeUndefined();
   });
 

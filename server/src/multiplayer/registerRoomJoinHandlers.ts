@@ -8,6 +8,7 @@ import {
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
 import { MatchTerminalJoinError } from './matchTerminalJoin';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
 
 const log = childLogger('multiplayer:join');
@@ -78,6 +79,14 @@ export function registerRoomJoinHandlers(
         log.info(
           `[room:join] TERMINAL: code=${roomCode} matchId=${err.terminal.matchId} status=${err.terminal.status}`,
         );
+        emitMpAuthorityFunnel('private_terminal_recovery', {
+          roomCode,
+          extra: {
+            source: 'join_ack',
+            matchId: err.terminal.matchId,
+            status: err.terminal.status,
+          },
+        });
         cb?.({ ok: false, error: err.code, terminal: err.terminal });
         return;
       }

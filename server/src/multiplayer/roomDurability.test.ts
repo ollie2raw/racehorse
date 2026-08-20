@@ -15,6 +15,7 @@ import {
   schedulePersistLiveRoomSession,
   type LiveRosterEntry,
 } from './roomLivePersistence';
+import * as telemetry from './mpAuthorityTelemetry';
 
 const t = (low: number, high: number) => ({ low: Math.min(low, high), high: Math.max(low, high) });
 
@@ -23,7 +24,8 @@ const persistPlan = vi.hoisted(() => ({
 }));
 
 vi.mock('../supabaseUtils', () => ({
-  supabaseFetch: vi.fn(async () => {
+  supabaseFetch: vi.fn(async (path: string) => {
+    if (String(path).includes('mp_authority_events')) return undefined;
     const next = persistPlan.outcomes.shift() ?? 'ok';
     if (next === 'ok') {
       return undefined;
@@ -134,6 +136,7 @@ describe('room durability contract', () => {
   it('marks a failed snapshot write as degraded', async () => {
     persistPlan.outcomes.push('error');
     const room = mkRoom();
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
 
     await expect(persistLiveRoomSessionNow(room, roster)).resolves.toBe(false);
 
@@ -142,12 +145,17 @@ describe('room durability contract', () => {
       consecutiveFailures: 1,
       lastError: 'db_down',
     });
+    expect(emit).toHaveBeenCalledWith('private_durability_degraded', expect.objectContaining({
+      roomCode: room.code,
+      failureCode: 'room_degraded',
+    }));
     expect(isLiveRoomDurablyRecoverable(room)).toBe(false);
   });
 
   it('marks table-unavailable persistence as failed', async () => {
     persistPlan.outcomes.push('missing_table');
     const room = mkRoom();
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
 
     await expect(persistLiveRoomSessionNow(room, roster)).resolves.toBe(false);
 
@@ -155,6 +163,10 @@ describe('room durability contract', () => {
       status: 'failed',
       consecutiveFailures: 1,
     });
+    expect(emit).toHaveBeenCalledWith('private_durability_failed', expect.objectContaining({
+      roomCode: room.code,
+      failureCode: 'room_failed',
+    }));
     expect(isLiveRoomDurablyRecoverable(room)).toBe(false);
   });
 

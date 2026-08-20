@@ -2,6 +2,7 @@ import type { Room } from '../rooms';
 import { getRoomMatchEventSnapshot } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { finalizeAndDeleteLiveRoomSession } from './roomLivePersistence';
+import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './mpAuthorityTelemetry';
 import { getRoomPlayersWithFallback, type PersistedRoomMatchLogStatus } from './roomSession';
 
 const UUID_RE =
@@ -167,6 +168,11 @@ export async function persistRoomMatchLog(
       },
     );
     persistentRoomMatchLogsAvailable = true;
+    emitMpAuthorityFunnel('private_match_archived', {
+      roomCode: room.code,
+      sourceType: resolveMpAuthoritySourceType(room),
+      extra: { status, matchId: room.matchId },
+    });
     await finalizeAndDeleteLiveRoomSession(room, status);
   } catch (error) {
     if (isMissingRoomMatchLogsTable(error)) {

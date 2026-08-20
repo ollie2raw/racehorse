@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { Room } from '../rooms';
+import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './mpAuthorityTelemetry';
 
 export type RoomDurabilityStatus = 'pending' | 'healthy' | 'degraded' | 'failed';
 
@@ -159,6 +160,18 @@ export function markRoomDurabilityPersistFailure(
     lastError: params.error,
     lastAttemptedAtMs: Date.now(),
   };
+  emitMpAuthorityFunnel(
+    params.status === 'failed' ? 'private_durability_failed' : 'private_durability_degraded',
+    {
+      roomCode: room.code,
+      failureCode: params.status === 'failed' ? 'room_failed' : 'room_degraded',
+      sourceType: resolveMpAuthoritySourceType(room),
+      extra: {
+        error: params.error,
+        consecutiveFailures: room.durability.consecutiveFailures,
+      },
+    },
+  );
   return true;
 }
 

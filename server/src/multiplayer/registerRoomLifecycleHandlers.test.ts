@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRoom, resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests } from './roomSession';
 import { registerRoomLifecycleHandlers } from './registerRoomLifecycleHandlers';
+import * as telemetry from './mpAuthorityTelemetry';
 
 function makeSocket(socketId: string) {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -58,6 +59,7 @@ describe('registerRoomLifecycleHandlers', () => {
     });
 
     const ack = vi.fn();
+    const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
     await handlers.get('room:create')?.({}, ack);
 
     expect(leaveExistingSocketRooms).toHaveBeenCalledTimes(1);
@@ -70,6 +72,10 @@ describe('registerRoomLifecycleHandlers', () => {
     );
     const roomCode = ack.mock.calls[0][0].roomCode as string;
     expect(getRoom(roomCode).players).toHaveLength(1);
+    expect(emit).toHaveBeenCalledWith('private_lobby_created', expect.objectContaining({
+      roomCode,
+      sourceType: 'private',
+    }));
   });
 
   it('room:leave rejects missing_code and delegates valid codes to leaveTrackedRoom', async () => {
