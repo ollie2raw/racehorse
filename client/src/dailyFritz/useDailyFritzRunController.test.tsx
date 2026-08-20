@@ -152,6 +152,59 @@ describe('Daily Fritz authoritative resume fallthroughs', () => {
     });
   });
 
+  it('shows the between-games overlay on /start resume instead of dropping into the next game', async () => {
+    const betweenSet = {
+      ...setResult,
+      playerGamesWon: 1,
+      fritzGamesWon: 0,
+      setWinner: undefined,
+      games: [setResult.games[0]!],
+    };
+    const betweenStart = started({
+      next_action: 'between_games',
+      current_game_number: 2,
+      current_hand_index: 0,
+      needs_completion: false,
+      set_result: betweenSet,
+    });
+    apiMocks.startDailyFritz.mockResolvedValue(betweenStart);
+    const { result } = renderHook(() => useDailyFritzRunController({
+      today: today({
+        current_game_number: 2,
+        needs_completion: false,
+        next_action: 'between_games',
+        set_result: betweenSet,
+      }),
+      hubError: null,
+      setHubError: vi.fn(),
+      refreshToday: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    await act(async () => {
+      await result.current.continueSet();
+    });
+
+    expect(result.current.hasEmbeddedMatch).toBe(true);
+    expect(result.current.setOverlay).toMatchObject({
+      kind: 'between',
+      nextGameNumber: 2,
+      completedGame: { gameNumber: 1, playerScore: 60, fritzScore: 40 },
+      setResult: { playerGamesWon: 1, fritzGamesWon: 0 },
+    });
+
+    await act(async () => {
+      await result.current.continueSet();
+    });
+
+    expect(apiMocks.startDailyFritz).toHaveBeenCalledTimes(2);
+    expect(result.current.setOverlay).toBeNull();
+    expect(result.current.hasEmbeddedMatch).toBe(true);
+    expect(result.current.dailyFritzPackageForMatch).toMatchObject({
+      current_game_number: 2,
+      current_hand_index: 0,
+    });
+  });
+
   it('does not replay /start or /complete after /complete committed and /today is already completed', async () => {
     renderHook(() => useDailyFritzRunController({
       today: today({ attempt_status: 'completed', needs_completion: false }),

@@ -321,6 +321,25 @@ export function normalizeStartResponse(
   return normalized;
 }
 
+/**
+ * Reconstruct the live between-games overlay from a /start resume payload.
+ * `/start` already includes next_action, set_result (completed games), and the next game slot.
+ */
+export function resolveBetweenGamesOverlayFromStart(started: DailyFritzStartResponse): {
+  completedGame: DailyFritzSetGameResult;
+  setResult: DailyFritzSetResult;
+  nextGameNumber: DailyFritzSetGameNumber;
+} | null {
+  if (resolveStartNextAction(started) !== 'between_games') return null;
+  const setResult = normalizeSetResult(started.set_result);
+  if (!setResult || setResult.setWinner || setResult.games.length === 0) return null;
+  const completedGame = setResult.games[setResult.games.length - 1];
+  if (!completedGame) return null;
+  const nextGameNumber = resolveDailyFritzCurrentGameNumber(setResult, started.current_game_number);
+  if (nextGameNumber === completedGame.gameNumber) return null;
+  return { completedGame, setResult, nextGameNumber };
+}
+
 export function formatMargin(value: number): string {
   if (!Number.isFinite(value)) return '—';
   return `${value >= 0 ? '+' : ''}${value}`;

@@ -13,6 +13,7 @@ import {
   normalizeSetResult,
   getNextGameNumberFromSetResult,
   resolveTodayNextAction,
+  resolveBetweenGamesOverlayFromStart,
 } from './dailyFritzScreenHelpers';
 
 describe('formatDateLabel', () => {
@@ -167,5 +168,67 @@ describe('resolveTodayNextAction', () => {
       rank: null,
       leaderboard_preview: [],
     })).toBe('view_results');
+  });
+});
+
+describe('resolveBetweenGamesOverlayFromStart', () => {
+  const game1 = {
+    gameNumber: 1 as const,
+    seed: 'g1',
+    playerWon: true,
+    playerScore: 60,
+    fritzScore: 40,
+    pointDiff: 20,
+    completedAt: '2026-08-19T10:00:00.000Z',
+  };
+
+  const startBase = {
+    ok: true as const,
+    attempt_id: 'attempt-1',
+    verified_match_id: 'verified-1',
+    run_date: '2026-08-19',
+    current_hand_index: 0,
+    current_game_number: 2 as const,
+    needs_completion: false,
+    set_result: {
+      version: 2 as const,
+      format: 'best_of_3' as const,
+      playerGamesWon: 1,
+      fritzGamesWon: 0,
+      totalPointDiff: 20,
+      games: [game1],
+    },
+    fritz_tier: 'elite' as const,
+    deal_size: 7 as const,
+    winning_score: 60,
+    first_hand: {
+      player_tiles: [{ low: 0, high: 0 }],
+      fritz_tiles: [{ low: 1, high: 1 }],
+      boneyard: [],
+      locked: [],
+    },
+    draw_winner: 'you' as const,
+    draw_player_tile: { low: 0, high: 1 },
+    draw_fritz_tile: { low: 0, high: 2 },
+  };
+
+  it('reconstructs the last completed game and next game slot from a between_games /start payload', () => {
+    expect(resolveBetweenGamesOverlayFromStart({
+      ...startBase,
+      next_action: 'between_games',
+    })).toEqual({
+      completedGame: game1,
+      setResult: startBase.set_result,
+      nextGameNumber: 2,
+    });
+  });
+
+  it('does not reconstruct an overlay for a mid-hand play_hand resume', () => {
+    expect(resolveBetweenGamesOverlayFromStart({
+      ...startBase,
+      next_action: 'play_hand',
+      current_hand_index: 2,
+      current_game_number: 2,
+    })).toBeNull();
   });
 });
