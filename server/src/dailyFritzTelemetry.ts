@@ -11,6 +11,7 @@ export const DAILY_FRITZ_EVENT_TYPES = [
   'next_hand_replayed',
   'game_started',
   'game_recorded',
+  'async_verification_scheduled',
   'set_continued',
   'attempt_completed',
   'attempt_abandoned',

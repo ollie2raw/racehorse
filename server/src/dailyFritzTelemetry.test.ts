@@ -16,6 +16,10 @@ describe('Daily Fritz telemetry contract', () => {
     expect(isDailyFritzEventType('checkpoint_saved')).toBe(true);
   });
 
+  it('allows async_verification_scheduled in the canonical event taxonomy', () => {
+    expect(isDailyFritzEventType('async_verification_scheduled')).toBe(true);
+  });
+
   it.each([
     ['stale_revision', 'command', 'authoritative_refresh'],
     ['authority_contract_unsupported', 'challenge', 'client_update_required'],

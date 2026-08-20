@@ -38,6 +38,7 @@ import {
   isDailyFritzGameEndingScore,
   recordDailyFritzAdvanceWithoutVerification,
   recordDailyFritzEventBestEffort,
+  dailyFritzTranscriptEvidenceFields,
   rejectModernAttemptWhenAuthorityDisabled,
   respondVerificationError,
   writeActiveGameProgress,
@@ -78,6 +79,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     return;
   }
 
+  let evidenceTranscript: ReturnType<typeof parseTranscriptForRequest> | null = null;
   try {
     await withDailyFritzAttemptLock(attemptId, async () => {
     const authenticatedUserId = await getAuthenticatedUserId(req);
@@ -231,6 +233,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     let parseError: DailyFritzVerificationError | null = null;
     try {
       parsedTranscript = parseTranscriptForRequest(transcriptInput);
+      evidenceTranscript = parsedTranscript;
     } catch (error) {
       if (error instanceof DailyFritzVerificationError && hasLegacyScores) {
         parseError = error;
@@ -364,6 +367,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
             verifierCode: verificationError!.code,
             operation: 'next-hand',
             message: verificationError!.message,
+            transcript: parsedTranscript,
           });
           attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
             gameNumber,
@@ -403,6 +407,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         verifierCode: verificationError!.code,
         operation: 'next-hand',
         message: verificationError!.message,
+        transcript: parsedTranscript,
       });
       attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
         gameNumber,
@@ -487,14 +492,20 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
   } catch (error) {
     if (error instanceof DailyFritzVerificationError) {
       incrementDailyFritzMetric('verification_failed', error.code);
+      const evidence = dailyFritzTranscriptEvidenceFields(evidenceTranscript);
       await recordDailyFritzEventBestEffort({
         attemptId: attemptId || null,
         requestId: diagnostics.requestId,
         eventType: 'verification_failed',
         verifierCode: error.code,
         handIndex: completedHandIndex,
+        transcriptDigest: evidence.transcriptDigest,
         idempotencyKey: `${attemptId || 'unknown'}:verification_failed:${diagnostics.requestId}`,
-        payload: { operation: 'next-hand', message: error.message },
+        payload: {
+          operation: 'next-hand',
+          message: error.message,
+          ...evidence.payload,
+        },
       });
     } else {
       incrementDailyFritzMetric('request_failed');

@@ -42,7 +42,9 @@ import {
   parseTranscriptForRequest,
   readActiveGameProgress,
   isDailyFritzGameEndingScore,
+  recordDailyFritzAsyncVerificationScheduled,
   recordDailyFritzEventBestEffort,
+  dailyFritzTranscriptEvidenceFields,
   rejectModernAttemptWhenAuthorityDisabled,
   respondVerificationError,
   writeActiveGameProgress,
@@ -74,6 +76,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     return;
   }
 
+  let evidenceTranscript: ReturnType<typeof parseTranscriptForRequest> | null = null;
   try {
     await withDailyFritzAttemptLock(attemptId, async () => {
     const authenticatedUserId = await getAuthenticatedUserId(req);
@@ -106,6 +109,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     }
     const publishedAuthority = await loadDailyFritzPublishedAuthority({ attempt, run });
     const parsedTranscript = transcriptInput == null ? null : parseTranscriptForRequest(transcriptInput);
+    if (parsedTranscript) evidenceTranscript = parsedTranscript;
     if (!parsedTranscript && requiresVerifiedDailyFritzEvidence(attempt.result)) {
       res.status(426).json({ error: 'This attempt requires verified game evidence. Update required.' });
       return;
@@ -438,6 +442,21 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
         setWinner: setResult.setWinner ?? null,
       },
     });
+    if (asyncVerificationInput) {
+      // Persist transcript before respond + fire-and-forget verify so a process
+      // restart still leaves reconstructable evidence (observability only).
+      await recordDailyFritzAsyncVerificationScheduled({
+        attemptId,
+        runDate: attempt.runDate,
+        userId: authenticatedUserId,
+        requestId: diagnostics.requestId,
+        gameNumber,
+        handIndex: asyncVerificationInput.handIndex,
+        transcript: asyncVerificationInput.transcript,
+        expectedPlayerScore: asyncVerificationInput.expectedPlayerScore,
+        expectedFritzScore: asyncVerificationInput.expectedFritzScore,
+      });
+    }
     res.json({
       ok: true,
       authority_revision: saved.revision,
@@ -465,13 +484,19 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
   } catch (error) {
     if (error instanceof DailyFritzVerificationError) {
       incrementDailyFritzMetric('verification_failed', error.code);
+      const evidence = dailyFritzTranscriptEvidenceFields(evidenceTranscript);
       await recordDailyFritzEventBestEffort({
         attemptId: attemptId || null,
         requestId: diagnostics.requestId,
         eventType: 'verification_failed',
         verifierCode: error.code,
+        transcriptDigest: evidence.transcriptDigest,
         idempotencyKey: `${attemptId || 'unknown'}:verification_failed:record-game:${diagnostics.requestId}`,
-        payload: { operation: 'record-game', message: error.message },
+        payload: {
+          operation: 'record-game',
+          message: error.message,
+          ...evidence.payload,
+        },
       });
     } else {
       incrementDailyFritzMetric('request_failed');

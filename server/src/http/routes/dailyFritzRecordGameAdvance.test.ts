@@ -50,6 +50,7 @@ vi.mock('../../social/activityWriter', () => ({
   writeDailyFritzGameActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { recordDailyFritzEvent } from '../stores/dailyFritzEventStore';
 import { registerDailyFritzRoutes } from './dailyFritz';
 import { getDailyFritzMetrics, resetDailyFritzMetricsForTests } from './dailyFritzMetrics';
 import {
@@ -57,7 +58,7 @@ import {
   runDailyFritzRecordGameVerification,
   setRecordGameVerificationDelayMsForTests,
 } from './dailyFritzRecordGameAsyncVerification';
-
+import { digestDailyFritzTranscript } from '../../dailyFritzVerifier';
 type Handler = (req: unknown, res: unknown) => unknown | Promise<unknown>;
 
 function makeHarness() {
@@ -243,11 +244,35 @@ describe('record-game advance-first with async verification', () => {
     expect(games[1]).toMatchObject({ gameNumber: 2, playerScore: 60, fritzScore: 34 });
     expect(response.body.next_game_number).toBe(3);
 
+    const scheduled = vi.mocked(recordDailyFritzEvent).mock.calls
+      .map((call) => call[0])
+      .find((event) => event.eventType === 'async_verification_scheduled');
+    expect(scheduled).toMatchObject({
+      eventType: 'async_verification_scheduled',
+      transcriptDigest: digestDailyFritzTranscript(recordGameBody().transcript as never),
+      payload: expect.objectContaining({
+        outcome: 'async_verification_scheduled',
+        transcript: expect.objectContaining({ gameNumber: 2, handIndex: 3 }),
+      }),
+    });
+
     await flushAsyncVerification();
     expect(getDailyFritzMetrics().verification_bypassed.total).toBeGreaterThan(0);
     expect(persistedAttempt.result?.verification_status).toBe('rejected');
     expect(persistedAttempt.result?.games).toHaveLength(2);
     expect((persistedAttempt.result as { games: Array<{ gameNumber: number }> }).games[1].gameNumber).toBe(2);
+
+    const bypassed = vi.mocked(recordDailyFritzEvent).mock.calls
+      .map((call) => call[0])
+      .find((event) => event.eventType === 'verification_failed'
+        && (event.payload as { outcome?: string } | undefined)?.outcome === 'advance_unverified');
+    expect(bypassed).toMatchObject({
+      transcriptDigest: expect.any(String),
+      payload: expect.objectContaining({
+        outcome: 'advance_unverified',
+        transcript: expect.objectContaining({ gameNumber: 2, handIndex: 3 }),
+      }),
+    });
   });
 
   it('returns before a slow async verifier finishes', async () => {

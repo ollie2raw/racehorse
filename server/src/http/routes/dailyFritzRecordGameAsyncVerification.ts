@@ -113,6 +113,7 @@ export async function runDailyFritzRecordGameVerification(
         verifierCode: verification.error.code,
         operation: 'record-game',
         message: verification.error.message,
+        transcript: input.transcript,
       });
       attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
         gameNumber: input.gameNumber,
@@ -143,6 +144,7 @@ export async function runDailyFritzRecordGameVerification(
         message: !terminalComplete
           ? 'Async verification found the terminal hand was not complete.'
           : 'Async verification found recorded scores did not match the transcript.',
+        transcript: input.transcript,
       });
       attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
         gameNumber: input.gameNumber,
