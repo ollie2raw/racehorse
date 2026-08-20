@@ -295,6 +295,10 @@ import {
 } from './http/stores/dailyFritzAuthorityReadiness';
 import { isDailyFritzTransactionalAuthorityEnabled } from './dailyFritzAuthorityFeature';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
+import {
+  queryRankedGameForMatch,
+  registerPrivateMatchResultRoutes,
+} from './http/routes/privateMatchResult';
 import type { BotMatchPendingRow } from './supabaseTypes';
 import {
   listCompletedDailyFritzDatesForUser,
@@ -579,6 +583,14 @@ registerRoomEventsRoutes(app, {
   queryPersistedRoomMatchLog,
   queryLatestPersistedRoomMatchLogByRoomCode,
   isRoomMatchLogsPersistenceAvailable,
+});
+
+registerPrivateMatchResultRoutes(app, {
+  getAuthenticatedUserId,
+  queryPersistedRoomMatchLog,
+  queryLatestPersistedRoomMatchLogByRoomCode,
+  isRoomMatchLogsPersistenceAvailable,
+  queryRankedGameForMatch,
 });
 
 

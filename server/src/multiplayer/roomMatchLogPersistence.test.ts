@@ -129,6 +129,11 @@ function seedTerminalRoom(roomCode = 'CLN001') {
   room.eventLogVersion = 1;
   room.eventSequence = 1;
   room.events = [mkEvent(room)];
+  room.rankingOutcome = {
+    glickoEligible: false,
+    glickoApplied: false,
+    skipReason: 'move_log_verification_failed',
+  };
 
   setRoomRoster(roomCode, [
     {
@@ -224,6 +229,13 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     expect(archived).toBeDefined();
     expect(archived?.status).toBe('completed');
     expect(archived?.room_code).toBe('CLN001');
+    expect(archived?.summary).toMatchObject({
+      rankingOutcome: {
+        glickoEligible: false,
+        glickoApplied: false,
+        skipReason: 'move_log_verification_failed',
+      },
+    });
     expect(terminalLiveStatuses).toContain('game_over');
     expect(persistenceStore.liveSessions.has('CLN001')).toBe(false);
 

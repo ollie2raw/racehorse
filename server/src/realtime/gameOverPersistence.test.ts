@@ -503,8 +503,9 @@ describe('createGameOverPersistScheduler', () => {
     it('verifies both logs before ranked insert and applies Glicko when both pass', async () => {
       verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
       const { profileA, profileB, gameA, gameB } = mockHumanProfilesAndInserts();
+      const input = buildHumanInput();
 
-      await runPersist(buildHumanInput());
+      await runPersist(input);
 
       expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logA, { strictHandContinuity: true });
       expect(verifyPlayerMoveLogMock).toHaveBeenCalledWith(logB, { strictHandContinuity: true });
@@ -521,6 +522,11 @@ describe('createGameOverPersistScheduler', () => {
       expect(completeGhostGameMock).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'user-b', applyGlicko: undefined }),
       );
+      expect(input.room.rankingOutcome).toEqual({
+        glickoEligible: true,
+        glickoApplied: true,
+        skipReason: null,
+      });
     });
 
     it('does not insert ranked_games or apply Glicko when either log fails verification', async () => {
@@ -528,11 +534,17 @@ describe('createGameOverPersistScheduler', () => {
         .mockReturnValueOnce({ ok: true })
         .mockReturnValueOnce({ ok: false, reason: 'fabricated board_state', entryIndex: 0 });
       mockHumanProfilesAndInserts();
+      const input = buildHumanInput();
 
-      await runPersist(buildHumanInput());
+      await runPersist(input);
 
       expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
       expect(processRealtimeMultiplayerGameMock).not.toHaveBeenCalled();
+      expect(input.room.rankingOutcome).toEqual({
+        glickoEligible: false,
+        glickoApplied: false,
+        skipReason: 'move_log_verification_failed',
+      });
       expect(logWarnMock).toHaveBeenCalledWith(
         expect.objectContaining({
           roomCode: 'ROOM1',

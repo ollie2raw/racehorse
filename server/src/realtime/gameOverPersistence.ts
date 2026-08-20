@@ -26,6 +26,13 @@ import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
+import {
+  rankingOutcomeApplied,
+  rankingOutcomeDuplicate,
+  rankingOutcomeEligibleNotApplied,
+  rankingOutcomeNotRanked,
+  rankingOutcomeVerificationSkipped,
+} from '../multiplayer/rankingOutcome';
 
 const log = childLogger('realtime:game-over');
 
@@ -184,6 +191,7 @@ export function createGameOverPersistScheduler(io: Server) {
         const rankedInsertResults = new Map<string, Awaited<ReturnType<typeof insertRankedGameIdempotent>>>();
         const rankedPlayedAt = new Date().toISOString();
         const rankedSourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
+        let realtimeRankingApplied = false;
         log.info({
           roomCode: room.code,
           sourceMatchId,
@@ -299,6 +307,7 @@ export function createGameOverPersistScheduler(io: Server) {
                 playerAGame: playerAInsert.game,
                 playerBGame: playerBInsert.game,
               });
+              realtimeRankingApplied = true;
               log.info({
                 playerA: a.userId,
                 playerB: b.userId,
@@ -329,6 +338,21 @@ export function createGameOverPersistScheduler(io: Server) {
               sourceMatchId,
             }, 'Skipping real-time update — duplicate or missing ranked insert');
           }
+        }
+
+        if (!isHumanVsHuman) {
+          room.rankingOutcome = rankingOutcomeNotRanked();
+        } else if (!humanGlickoEligible) {
+          room.rankingOutcome = rankingOutcomeVerificationSkipped();
+        } else if (realtimeRankingApplied) {
+          room.rankingOutcome = rankingOutcomeApplied();
+        } else if (
+          (a.userId && rankedInsertResults.get(a.userId)?.isNew === false) ||
+          (b.userId && rankedInsertResults.get(b.userId)?.isNew === false)
+        ) {
+          room.rankingOutcome = rankingOutcomeDuplicate();
+        } else {
+          room.rankingOutcome = rankingOutcomeEligibleNotApplied();
         }
 
         const linkedFixtureRows = await supabaseFetch<any[]>(

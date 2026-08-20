@@ -31,6 +31,7 @@ import {
 } from './multiplayer/roomDurability';
 import { flushScheduledLiveRoomPersistence, isLiveRoomDurablyRecoverable } from './multiplayer/roomLivePersistence';
 import { assertRoomDurabilityOperationAllowed } from './multiplayer/roomDurabilityPolicy';
+import type { RankingOutcome } from './multiplayer/rankingOutcome';
 import { childLogger } from './logger';
 
 const log = childLogger('rooms');
@@ -101,6 +102,8 @@ export type Room = {
   /** Active tile pool size when pre-game draw eliminated tiles (default: full double-6 set). */
   activeTileSetSize?: number;
   durability: RoomDurabilityState;
+  /** Written at game-over ranking time; copied into `room_match_logs.summary.rankingOutcome`. */
+  rankingOutcome?: RankingOutcome;
 };
 
 export type DrawAnimationStep = {
