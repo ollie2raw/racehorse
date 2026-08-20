@@ -694,7 +694,64 @@
   padding-bottom: 16px;
   background: rgba(8, 12, 20, 0.96);
   border: 1px solid rgba(231, 182, 74, 0.32);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 28px rgba(231, 182, 74, 0.12);
+}
+
+.dflb-podium-avatar-wrap {
+  display: inline-flex;
+}
+
+.dflb-podium-avatar-wrap.is-champion {
+  position: relative;
+}
+
+.dflb-podium-avatar-wrap.is-champion::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  background: rgba(231, 182, 74, 0.18);
+  filter: blur(10px);
+  animation: dflb-champion-pulse 2.8s ease-in-out infinite;
+}
+
+.dflb-podium-avatar-wrap.is-champion .rh-hub-avatar--ring-gold::before {
+  box-shadow:
+    0 0 18px rgba(245, 185, 55, 0.45),
+    0 0 34px rgba(231, 182, 74, 0.22);
+}
+
+.dflb-row-avatar-wrap.is-champion {
+  position: relative;
+}
+
+.dflb-row-avatar-wrap.is-champion::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  background: rgba(231, 182, 74, 0.16);
+  filter: blur(8px);
+}
+
+@keyframes dflb-champion-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dflb-podium-avatar-wrap.is-champion::before {
+    animation: none;
+  }
 }
 
 .dflb-podium-slot.place-2 {
@@ -715,8 +772,10 @@
   opacity: 1;
   border-style: dashed;
   background: rgba(8, 11, 18, 0.88);
-  border-color: rgba(148, 163, 184, 0.16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-color: rgba(231, 182, 74, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 0 1px rgba(231, 182, 74, 0.06);
 }
 
 .dflb-podium-crown-badge {
@@ -758,9 +817,11 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px dashed rgba(231, 182, 74, 0.28);
   background: rgba(12, 16, 24, 0.95);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 16px rgba(231, 182, 74, 0.08);
 }
 
 .dflb-podium-avatar__glyph {
@@ -768,7 +829,7 @@
   font-size: 20px;
   font-weight: 800;
   line-height: 1;
-  color: rgba(148, 163, 184, 0.55);
+  color: rgba(231, 182, 74, 0.72);
 }
 
 .dflb-podium-empty-hint {
@@ -776,7 +837,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.55);
+  color: rgba(231, 182, 74, 0.72);
 }
 
 .dflb-podium-name {

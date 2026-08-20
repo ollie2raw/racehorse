@@ -2770,6 +2770,15 @@
   color: #95f0ca;
 }
 
+.daily-fritz-avatar.is-champion {
+  border-color: rgba(231, 182, 74, 0.52);
+  background: rgba(231, 182, 74, 0.12);
+  color: #f5d78a;
+  box-shadow:
+    0 0 0 1px rgba(231, 182, 74, 0.18),
+    0 0 22px rgba(231, 182, 74, 0.28);
+}
+
 .daily-fritz-player-name {
   min-width: 0;
   overflow: hidden;

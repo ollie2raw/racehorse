@@ -528,4 +528,183 @@
   .df-result-overlay {
     animation: none;
   }
+
+  .df-result-card--celebration,
+  .df-fritz-reaction-img,
+  .df-result-badge-glow,
+  .df-result-title-glow {
+    animation: none;
+  }
+}
+
+/* Daily Fritz Fritz reaction art (final + interstitial overlays) */
+.df-fritz-reaction {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.df-fritz-reaction-glow {
+  position: absolute;
+  inset: 12% 8%;
+  border-radius: 999px;
+  background: rgba(231, 182, 74, 0.14);
+  filter: blur(18px);
+  opacity: 0.85;
+}
+
+.df-fritz-reaction-img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+  animation: df-fritz-reaction-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.df-fritz-reaction--sm {
+  width: 84px;
+  height: 84px;
+}
+
+.df-fritz-reaction--md {
+  width: 120px;
+  height: 120px;
+}
+
+.df-fritz-reaction--lg {
+  width: 156px;
+  height: 132px;
+  margin: -4px auto 2px;
+}
+
+.df-fritz-reaction--confident .df-fritz-reaction-glow {
+  background: rgba(231, 182, 74, 0.22);
+}
+
+.df-fritz-reaction--neutral .df-fritz-reaction-glow {
+  background: rgba(148, 163, 184, 0.16);
+  opacity: 0.7;
+}
+
+.df-fritz-reaction--neutral .df-fritz-reaction-img {
+  opacity: 0.92;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.38)) saturate(0.88);
+}
+
+.df-fritz-reaction--defeated .df-fritz-reaction-glow {
+  background: rgba(231, 182, 74, 0.12);
+}
+
+.df-fritz-reaction--defeated .df-fritz-reaction-img {
+  transform: scaleX(-1);
+  opacity: 0.82;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.42)) saturate(0.72) brightness(0.92);
+}
+
+@keyframes df-fritz-reaction-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.df-fritz-reaction--defeated .df-fritz-reaction-img {
+  animation-name: df-fritz-reaction-enter-defeated;
+}
+
+@keyframes df-fritz-reaction-enter-defeated {
+  from {
+    opacity: 0;
+    transform: scaleX(-1) translateY(8px) scale(0.94);
+  }
+  to {
+    opacity: 0.82;
+    transform: scaleX(-1) translateY(0) scale(1);
+  }
+}
+
+/* Daily Fritz final result celebration */
+.df-result-card--celebration {
+  position: relative;
+  overflow: hidden;
+}
+
+.df-result-card--celebration::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.df-result-card--celebration.is-victory::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(231, 182, 74, 0.16), transparent 42%),
+    radial-gradient(circle at 82% 18%, rgba(231, 182, 74, 0.1), transparent 36%);
+}
+
+.df-result-card--celebration.is-defeat::before {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 0%, rgba(148, 163, 184, 0.12), transparent 48%);
+}
+
+.df-result-card--celebration.is-victory::after {
+  content: '';
+  position: absolute;
+  inset: 8px 12px auto;
+  height: 1px;
+  background: rgba(231, 182, 74, 0.35);
+  box-shadow: 0 0 18px rgba(231, 182, 74, 0.35);
+  pointer-events: none;
+}
+
+.df-result-fritz {
+  align-self: center;
+}
+
+.df-result-card--celebration.is-victory .df-result-badge-glow,
+.df-result-card--celebration.is-victory .df-result-title-glow {
+  position: relative;
+  animation: df-result-victory-glow 2.4s ease-in-out infinite;
+}
+
+.df-result-card--celebration.is-victory .df-result-title-glow {
+  text-shadow:
+    0 0 24px rgba(231, 182, 74, 0.28),
+    0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.df-result-card--celebration.is-victory .df-result-badge-glow {
+  box-shadow:
+    0 0 0 1px rgba(231, 182, 74, 0.35),
+    0 0 22px rgba(231, 182, 74, 0.35);
+}
+
+.df-result-card--celebration.is-defeat .df-result-title-glow {
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.df-result-card--celebration.is-defeat .df-result-stat.is-defeat {
+  border-color: rgba(240, 160, 168, 0.16);
+}
+
+@keyframes df-result-victory-glow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.08);
+  }
 }

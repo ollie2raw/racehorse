@@ -1,3 +1,7 @@
+import {
+  DailyFritzFritzReaction,
+  dailyFritzMoodFromMarginTone,
+} from './DailyFritzFritzReaction';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 
 export type DailyFritzFinalResultOverlayProps = {
@@ -12,19 +16,29 @@ export function DailyFritzFinalResultOverlay({
   onShare,
 }: DailyFritzFinalResultOverlayProps) {
   const showMargin = Boolean(overlay.marginValue && overlay.marginValue !== '—');
+  const isVictory = overlay.marginTone === 'win';
+  const isDefeat = overlay.marginTone === 'loss';
+  const outcomeClass = isVictory ? 'is-victory' : isDefeat ? 'is-defeat' : 'is-neutral';
+  const fritzMood = dailyFritzMoodFromMarginTone(overlay.marginTone);
 
   return (
     <div className="game-over-overlay df-result-overlay" role="dialog" aria-label="Daily Fritz result">
-      <div className="game-over-card df-result-card" onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`game-over-card df-result-card df-result-card--celebration ${outcomeClass}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="df-result-panel">
+          <DailyFritzFritzReaction mood={fritzMood} size="lg" className="df-result-fritz" />
           <header className="df-result-hero">
             <p className="df-result-eyebrow">Daily Fritz</p>
             {overlay.skunkBadge ? (
-              <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
+              <span className="daily-fritz-skunk-badge df-result-badge-glow" aria-label="Skunk result">
                 {overlay.skunkBadge}
               </span>
             ) : null}
-            <h2 className="df-result-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
+            <h2 className="df-result-title df-result-title-glow" tabIndex={-1} autoFocus>
+              {overlay.headline}
+            </h2>
             <p className="df-result-subtitle">{overlay.subheadline}</p>
           </header>
 

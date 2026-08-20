@@ -172,11 +172,13 @@ function LeaderboardRow({
         <strong className={`dflb-rank-num${topRank ? ` is-${topRank}` : ''}`}>{row.rank}</strong>
       </div>
       <div className="dflb-player">
-        <PlayerInitialsAvatar
-          username={row.username}
-          size="md"
-          ring={topRank === 1 ? 'gold' : topRank === 2 ? 'silver' : topRank === 3 ? 'bronze' : 'none'}
-        />
+        <span className={topRank === 1 ? 'dflb-row-avatar-wrap is-champion' : 'dflb-row-avatar-wrap'}>
+          <PlayerInitialsAvatar
+            username={row.username}
+            size="md"
+            ring={topRank === 1 ? 'gold' : topRank === 2 ? 'silver' : topRank === 3 ? 'bronze' : 'none'}
+          />
+        </span>
         <div className="dflb-player-copy">
           <strong>
             {row.username}
@@ -228,8 +230,8 @@ function PodiumSlot({
         <span className="dflb-podium-avatar dflb-podium-avatar--empty" aria-hidden="true">
           <span className="dflb-podium-avatar__glyph">+</span>
         </span>
-        <span className="dflb-podium-name">—</span>
-        <span className="dflb-podium-empty-hint">Unclaimed</span>
+        <span className="dflb-podium-name">Open slot</span>
+        <span className="dflb-podium-empty-hint">Claim this spot</span>
       </div>
     );
   }
@@ -238,7 +240,9 @@ function PodiumSlot({
     <div className={`dflb-podium-slot place-${rank}${rank === 1 ? ' is-featured' : ''}`}>
       {crownBadge}
       {rankDisplay}
-      <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
+      <span className={rank === 1 ? 'dflb-podium-avatar-wrap is-champion' : 'dflb-podium-avatar-wrap'}>
+        <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
+      </span>
       <span className="dflb-podium-name">{row.username}</span>
       <span className="dflb-podium-score">{row.finalScore}–{row.opponentScore}</span>
       <span className="dflb-podium-margin">{formatMargin(row.pointDiff)}</span>

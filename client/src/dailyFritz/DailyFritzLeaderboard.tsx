@@ -164,7 +164,10 @@ export default function DailyFritzLeaderboard({
                   <strong className={`daily-fritz-rank-value rank-${row.rank <= 3 ? row.rank : 0}`}>#{row.rank}</strong>
                 </div>
                 <div className="daily-fritz-global-player">
-                  <span className={`daily-fritz-avatar ${isCurrentUser ? 'is-current-user' : ''}`} aria-hidden="true">
+                  <span
+                    className={`daily-fritz-avatar ${isCurrentUser ? 'is-current-user' : ''}${row.rank === 1 ? ' is-champion' : ''}`}
+                    aria-hidden="true"
+                  >
                     {initials}
                   </span>
                   <div className="daily-fritz-global-player-copy">
