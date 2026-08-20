@@ -21,17 +21,33 @@ describe('handleTerminalJoinFailure', () => {
     expect(isRecoverableTerminalJoinResponse(resp)).toBe(true);
   });
 
-  it('fetches archive and surfaces abandonedMatchNotice for match_terminal', async () => {
-    vi.spyOn(terminalRoomArchiveRecovery, 'recoverTerminalMatchArchive').mockResolvedValue({
-      status: 'found',
-      notice: {
-        context: 'multiplayer',
-        title: 'Match completed',
-        detail: 'Final score available.',
+  it('fetches the result endpoint and surfaces recovered private match UI', async () => {
+    const recovered = {
+      kind: 'result' as const,
+      result: {
+        matchId: '11111111-1111-4111-8111-111111111111',
+        roomCode: 'ROOM7',
+        terminalStatus: 'completed' as const,
+        archivedAt: '2026-08-19T00:10:00.000Z',
+        you: { seatId: 'seat-a', userId: 'a', username: 'You' },
+        opponent: { seatId: 'seat-b', userId: 'b', username: 'Opp' },
+        outcome: 'win' as const,
+        yourScore: 60,
+        opponentScore: 40,
+        ranking: {
+          eligible: true,
+          applied: true,
+          skipReason: null,
+          message: null,
+          ratingBefore: 1500,
+          ratingAfter: 1512,
+          ratingDelta: 12,
+        },
       },
-    });
+    };
+    vi.spyOn(terminalRoomArchiveRecovery, 'recoverPrivateMatchResult').mockResolvedValue(recovered);
 
-    const setRecoveredTerminalMatchNotice = vi.fn();
+    const setRecoveredPrivateMatch = vi.fn();
     const dispatchRecovery = vi.fn();
 
     const result = await handleTerminalJoinFailure({
@@ -47,21 +63,25 @@ describe('handleTerminalJoinFailure', () => {
       roomCode: 'ROOM7',
       serverUrl: 'http://localhost:3001',
       authToken: 'token',
-      setRecoveredTerminalMatchNotice,
+      setRecoveredPrivateMatch,
       dispatchRecovery,
     });
 
     expect(result).toBe('handled');
-    expect(setRecoveredTerminalMatchNotice).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Match completed' }),
+    expect(terminalRoomArchiveRecovery.recoverPrivateMatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomCode: 'ROOM7',
+        matchId: '11111111-1111-4111-8111-111111111111',
+      }),
     );
+    expect(setRecoveredPrivateMatch).toHaveBeenCalledWith(recovered);
     expect(dispatchRecovery).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'ROOM_JOIN_TERMINAL' }),
     );
   });
 
   it('returns not_terminal for transient join failures', async () => {
-    const fetchSpy = vi.spyOn(terminalRoomArchiveRecovery, 'recoverTerminalMatchArchive');
+    const fetchSpy = vi.spyOn(terminalRoomArchiveRecovery, 'recoverPrivateMatchResult');
 
     const result = await handleTerminalJoinFailure({
       resp: { ok: false, error: 'room_degraded' },

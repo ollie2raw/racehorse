@@ -188,6 +188,8 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
         abandonCurrentMatch: source.abandonCurrentMatch,
         abandonedMatchNotice: source.abandonedMatchNotice,
         setAbandonedMatchNotice: source.setAbandonedMatchNotice,
+        recoveredPrivateMatch: source.recoveredPrivateMatch,
+        setRecoveredPrivateMatch: source.setRecoveredPrivateMatch,
       },
       tournamentPassthroughView: {
         tournamentMatch: source.tournamentMatch,
@@ -275,6 +277,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       source.showLeaveConfirm,
       source.abandonCurrentMatch,
       source.abandonedMatchNotice,
+      source.recoveredPrivateMatch,
       source.tournamentMatch,
       source.tournamentMyLabel,
       source.tournamentOpponentLabel,

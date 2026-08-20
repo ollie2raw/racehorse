@@ -14,6 +14,7 @@ import type { GameState } from './types';
 import { useBotGamePreferences } from './bot/useBotGamePreferences';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+import type { RecoveredPrivateMatchUi } from './multiplayer/terminalRoomArchiveRecovery';
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 import { useMultiplayerConnectionHostParams } from './multiplayer/useMultiplayerConnectionHostParams';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recoveryMachine';
@@ -172,6 +173,7 @@ export default function App() {
     detail: string;
     tournamentId?: string | null;
   } | null>(null);
+  const [recoveredPrivateMatch, setRecoveredPrivateMatch] = useState<RecoveredPrivateMatchUi | null>(null);
 
   const {
     ghostProfile,
@@ -646,7 +648,7 @@ export default function App() {
     resyncInFlightRef,
     recoveryDispatchRef,
     roomOperationEpochRef,
-    setRecoveredTerminalMatchNotice: setAbandonedMatchNotice,
+    setRecoveredPrivateMatch,
     applyJoinedRoomResponse,
     fetchGameState,
     resetClientGameSession,
@@ -939,6 +941,8 @@ export default function App() {
     abandonCurrentMatch,
     abandonedMatchNotice,
     setAbandonedMatchNotice,
+    recoveredPrivateMatch,
+    setRecoveredPrivateMatch,
     tournamentMatch,
     consumedTournamentGameOverMatchIds,
     tournamentMyLabel,

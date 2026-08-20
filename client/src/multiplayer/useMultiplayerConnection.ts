@@ -41,7 +41,7 @@ import {
   selectJoinedRoomCode,
   selectMatchStarted,
 } from './session/sessionStateMachine';
-import type { RecoveredTerminalMatchNotice } from './terminalRoomArchiveRecovery';
+import type { RecoveredPrivateMatchUi } from './terminalRoomArchiveRecovery';
 import { handleTerminalJoinFailure } from './handleTerminalJoinFailure';
 import {
   beginRoomOperation,
@@ -53,7 +53,7 @@ type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> 
 
 export type UseMultiplayerConnectionParams = MultiplayerConnectionScopeSource & {
   recoveryDispatchRef?: MutableRefObject<(event: RecoveryEvent) => RecoveryMachineSnapshot | null>;
-  setRecoveredTerminalMatchNotice?: (notice: RecoveredTerminalMatchNotice) => void;
+  setRecoveredPrivateMatch?: (recovered: RecoveredPrivateMatchUi) => void;
 };
 
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
@@ -62,7 +62,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     scopeRef.current = createMultiplayerConnectionScope(params);
   });
   const { connectionState, config } = params;
-  const setRecoveredTerminalMatchNotice = params.setRecoveredTerminalMatchNotice;
+  const setRecoveredPrivateMatch = params.setRecoveredPrivateMatch;
 
   const recoveryMachineRef = useRef<RecoveryMachine | null>(null);
   const establishSocketRef = useRef<() => void>(() => {});
@@ -155,7 +155,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           roomCode,
           serverUrl: scope.config.serverUrl,
           authToken: scope.auth.authAccessTokenRef.current,
-          setRecoveredTerminalMatchNotice,
+          setRecoveredPrivateMatch,
           onNavigateMultiplayer: () => scope.navigation.setAppMode('multiplayer'),
           dispatchRecovery,
         });
@@ -176,7 +176,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         });
       }
     },
-    [dispatchRecovery, setRecoveredTerminalMatchNotice],
+    [dispatchRecovery, setRecoveredPrivateMatch],
   );
 
   const executeRecoveryResync = useCallback(
@@ -343,7 +343,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             lastRoomStorageKey: scope.config.lastRoomStorageKey,
             clearSavedRoomOnAttempt: true,
             restoreSavedRoomOnDegraded: true,
-            setRecoveredTerminalMatchNotice,
+            setRecoveredPrivateMatch,
             onNavigateMultiplayer: () => scope.navigation.setAppMode('multiplayer'),
             dispatchRecovery,
           });
@@ -367,7 +367,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         scope.config.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
       }
     },
-    [dispatchRecovery, setRecoveredTerminalMatchNotice],
+    [dispatchRecovery, setRecoveredPrivateMatch],
   );
 
   useEffect(() => {
