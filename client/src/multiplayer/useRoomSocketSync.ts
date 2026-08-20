@@ -665,6 +665,17 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       },
     );
 
+    const onMatchResultPersistFailed = wrapSocketHandler(
+      'match:result_persist_failed',
+      (payload: { message?: string }) => {
+        const message =
+          typeof payload?.message === 'string' && payload.message.trim().length > 0
+            ? payload.message
+            : "Match finished, but the result couldn't be saved. Ratings may not update.";
+        scope.ui.showToast(message, 5000);
+      },
+    );
+
     const unregisterNormalized = registerNormalizedSocketRouter({
       stateUpdate: handleStateUpdate,
     });
@@ -682,6 +693,10 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECTED, asRawHandler(onPlayerReconnected)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECT_TIMEOUT, asRawHandler(onPlayerReconnectTimeout)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECT_STALL, asRawHandler(onPlayerDisconnectStall)),
+      registerRawSocketEventHandler(
+        SOCKET_EVENTS.MATCH_RESULT_PERSIST_FAILED,
+        asRawHandler(onMatchResultPersistFailed),
+      ),
     ];
 
     return () => {

@@ -14,6 +14,7 @@ import {
 import { comparePregameDrawTiles } from './preGameDraw';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
+import { MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
 
 export type RegisterRematchPregameHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -65,12 +66,36 @@ export function registerRematchPregameHandlers(
         return cb?.({ ok: true, started: false });
       }
 
+      // R1: wait for durable game-over persist before starting a new match.
+      // Await before clearing rematchReady so a "still saving" rejection keeps both seats ready.
+      const persistOutcome = await waitForActiveGameOverPersist(room.code);
+      const liveRoom = getRoom(roomCode);
+      if (liveRoom.gameOverPersistStatus === 'pending') {
+        return cb?.({
+          ok: false,
+          error: MATCH_RESULT_STILL_SAVING_MESSAGE,
+        });
+      }
+      if (
+        persistOutcome === 'none' &&
+        !liveRoom.matchLogged &&
+        liveRoom.state?.gameOver &&
+        (liveRoom.gameOverPersistStatus ?? 'idle') === 'idle'
+      ) {
+        return cb?.({
+          ok: false,
+          error: MATCH_RESULT_STILL_SAVING_MESSAGE,
+        });
+      }
+      // succeeded | failed: rematch allowed (failed = give-up ceiling, not forever-blocked).
+
       room.rematchReady.clear();
-      await waitForActiveGameOverPersist(room.code);
 
       await withRoomGameplayLock(roomCode, async () => {
         const lockedRoom = getRoom(roomCode);
         lockedRoom.matchLogged = false;
+        lockedRoom.gameOverPersistStatus = 'idle';
+        lockedRoom.activeGameOverPersist = undefined;
         lockedRoom.leadTracker = {
           aId: lockedRoom.players[0],
           bId: lockedRoom.players[1],

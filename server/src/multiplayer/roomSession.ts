@@ -105,7 +105,7 @@ export type RoomSessionHandlerDeps = {
 };
 
 export type RoomSessionDeps = RoomSessionHandlerDeps & {
-  onGameOver: (input: GameOverPersistInput) => (() => Promise<void>) | null;
+  onGameOver: (input: GameOverPersistInput) => (() => Promise<'succeeded' | 'failed'>) | null;
   finalizeTournamentMatch?: (room: Room) => void;
 };
 
@@ -671,23 +671,31 @@ export function getHandCounts(state: GameState): Record<string, number> {
   );
 }
 
-export function waitForActiveGameOverPersist(roomCode: string): Promise<void> {
+export async function waitForActiveGameOverPersist(
+  roomCode: string,
+): Promise<'succeeded' | 'failed' | 'none'> {
   try {
     const room = getRoom(roomCode);
     const pending = room.activeGameOverPersist;
     if (pending) {
-      return pending;
+      return await pending;
+    }
+    if (room.matchLogged || room.gameOverPersistStatus === 'succeeded') {
+      return 'succeeded';
+    }
+    if (room.gameOverPersistStatus === 'failed') {
+      return 'failed';
     }
   } catch {
     // room gone — nothing to wait for
   }
-  return Promise.resolve();
+  return 'none';
 }
 
 export function broadcastStateUpdate(roomCode: string): void {
   const io = requireIo();
   const deps = requireDeps();
-  let scheduleDeferredMatchPersist: null | (() => Promise<void>) = null;
+  let scheduleDeferredMatchPersist: null | (() => Promise<'succeeded' | 'failed'>) = null;
 
   const room = getRoom(roomCode);
   if (!room.state) return;
@@ -716,32 +724,39 @@ export function broadcastStateUpdate(roomCode: string): void {
   }
 
   if (room.state.gameOver && !isTournamentRoom && !room.matchLogged) {
-    const pids = room.state.playerIds;
-    if (Array.isArray(pids) && pids.length === 2) {
-      room.matchLogged = true;
+    const status = room.gameOverPersistStatus ?? 'idle';
+    // Do not re-schedule while pending, after success, or after give-up.
+    if (status === 'idle') {
+      const pids = room.state.playerIds;
+      if (Array.isArray(pids) && pids.length === 2) {
+        const roster = getRoomRoster(room.code);
+        const byId = new Map(roster.map((p) => [p.id, p]));
+        const aId = pids[0];
+        const bId = pids[1];
+        const a = byId.get(aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
+        const b = byId.get(bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
+        const scoreA = room.state.players[aId]?.score ?? 0;
+        const scoreB = room.state.players[bId]?.score ?? 0;
+        const winnerSeatId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
 
-      const roster = getRoomRoster(room.code);
-      const byId = new Map(roster.map((p) => [p.id, p]));
-      const aId = pids[0];
-      const bId = pids[1];
-      const a = byId.get(aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
-      const b = byId.get(bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
-      const scoreA = room.state.players[aId]?.score ?? 0;
-      const scoreB = room.state.players[bId]?.score ?? 0;
-      const winnerSeatId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
-
-      scheduleDeferredMatchPersist = deps.onGameOver({
-        room,
-        sourceMatchId: room.matchId,
-        cfg,
-        aId,
-        bId,
-        a,
-        b,
-        scoreA,
-        scoreB,
-        winnerSeatId,
-      });
+        room.gameOverPersistStatus = 'pending';
+        scheduleDeferredMatchPersist = deps.onGameOver({
+          room,
+          sourceMatchId: room.matchId,
+          cfg,
+          aId,
+          bId,
+          a,
+          b,
+          scoreA,
+          scoreB,
+          winnerSeatId,
+        });
+        if (!scheduleDeferredMatchPersist) {
+          room.matchLogged = true;
+          room.gameOverPersistStatus = 'succeeded';
+        }
+      }
     }
   }
 

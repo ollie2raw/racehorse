@@ -395,6 +395,15 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Disconnect auto-act deferred/paused when live-session durability cannot commit',
   },
   {
+    socketEvent: 'match:result_persist_failed',
+    owner: 'match.result',
+    registrar: 'multiplayer/useRoomSocketSync.ts',
+    boundedContext: 'gameplay',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Game-over rating/result persistence gave up after bounded retries',
+  },
+  {
     socketEvent: 'room:match_abandoned',
     owner: 'tournament.session.abandoned',
     registrar: 'tournament/registerTournamentSocketHandlers.ts',
@@ -580,6 +589,7 @@ export const SOCKET_EVENTS = {
   PLAYER_RECONNECTED: 'player:reconnected',
   PLAYER_RECONNECT_TIMEOUT: 'player:reconnect_timeout',
   PLAYER_DISCONNECT_STALL: 'player:disconnect_stall',
+  MATCH_RESULT_PERSIST_FAILED: 'match:result_persist_failed',
   ROOM_MATCH_ABANDONED: 'room:match_abandoned',
 } as const;
 

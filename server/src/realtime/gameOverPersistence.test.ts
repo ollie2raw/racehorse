@@ -107,7 +107,10 @@ vi.mock('../multiplayer/mpAuthorityTelemetry', () => ({
 
 import { createGameOverPersistScheduler } from './gameOverPersistence';
 
-const io = {} as Server;
+const roomEmit = vi.fn();
+const io = {
+  to: vi.fn(() => ({ emit: roomEmit })),
+} as unknown as Server;
 const schedule = createGameOverPersistScheduler(io);
 
 function buildInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<Room> } = {}): GameOverPersistInput {
@@ -159,14 +162,15 @@ function buildInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<
   };
 }
 
-async function runPersist(input: GameOverPersistInput): Promise<void> {
+async function runPersist(input: GameOverPersistInput): Promise<'succeeded' | 'failed'> {
   const runner = schedule(input);
-  await runner();
+  return runner();
 }
 
 describe('createGameOverPersistScheduler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    roomEmit.mockClear();
     applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
     findTournamentMatchByRoomMock.mockResolvedValue(null);
     getPendingFritzMatchContextMock.mockReturnValue(null);
@@ -179,6 +183,63 @@ describe('createGameOverPersistScheduler', () => {
     verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
     processRealtimeMultiplayerGameMock.mockResolvedValue({ playerA: { delta: 1 }, playerB: { delta: -1 } });
     recordLeagueLiveResultMock.mockResolvedValue(undefined);
+  });
+
+  it('sets matchLogged only after a successful persist attempt', async () => {
+    const input = buildInput();
+    expect(input.room.matchLogged).toBe(false);
+    const outcome = await runPersist(input);
+    expect(outcome).toBe('succeeded');
+    expect(input.room.matchLogged).toBe(true);
+    expect(input.room.gameOverPersistStatus).toBe('succeeded');
+  });
+
+  it('retries appendMatch failures then gives up without latching matchLogged', async () => {
+    vi.useFakeTimers();
+    appendMatchMock.mockRejectedValue(new Error('db_down'));
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
+    expect(outcome).toBe('failed');
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(appendMatchMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(roomEmit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        matchId: input.room.matchId,
+        message: expect.stringContaining("couldn't be saved"),
+      }),
+    );
+    expect(emitMpAuthorityFunnelMock).toHaveBeenCalledWith(
+      'private_game_over_persist_failed',
+      expect.objectContaining({
+        roomCode: 'ROOM1',
+        extra: expect.objectContaining({ matchId: input.room.matchId }),
+      }),
+    );
+    vi.useRealTimers();
+  });
+
+  it('recovers mid-retry: fails then succeeds — latches matchLogged once', async () => {
+    vi.useFakeTimers();
+    appendMatchMock
+      .mockRejectedValueOnce(new Error('blip'))
+      .mockResolvedValue(undefined);
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    const outcome = await pending;
+    expect(outcome).toBe('succeeded');
+    expect(input.room.matchLogged).toBe(true);
+    expect(input.room.gameOverPersistStatus).toBe('succeeded');
+    expect(appendMatchMock).toHaveBeenCalledTimes(2);
+    expect(roomEmit).not.toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.anything(),
+    );
+    vi.useRealTimers();
   });
 
   it('short-circuits when applyTournamentGameOverFromRoom returns true', async () => {
@@ -377,13 +438,18 @@ describe('createGameOverPersistScheduler', () => {
     );
   });
 
-  it('swallows awaited errors with outer log.warn and does not propagate', async () => {
+  it('retries then returns failed without latching matchLogged when appendMatch keeps failing', async () => {
+    vi.useFakeTimers();
     const boom = new Error('append failed');
     appendMatchMock.mockRejectedValue(boom);
-
-    await expect(runPersist(buildInput())).resolves.toBeUndefined();
-
-    expect(logWarnMock).toHaveBeenCalledWith({ err: boom }, 'ranking/match logging failed');
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toBe('failed');
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(logWarnMock).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   describe('live in-room Fritz completion — the category-1 side door', () => {
