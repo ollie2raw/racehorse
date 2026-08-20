@@ -5,11 +5,13 @@ import { createBotMatch } from '../match/runtime/botEngine.ts';
 import { useDailyFritzSessionPersistence } from './useDailyFritzSessionPersistence.ts';
 import { DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS } from '../../dailyFritz/dailyFritzCheckpointUnload.ts';
 
-const saveDailyFritzCheckpoint = vi.fn(async () => ({ ok: true, checkpoint_revision: 99 }));
-const flushDailyFritzCheckpointOnUnload = vi.fn(() => true);
+const { saveDailyFritzCheckpointMock, flushDailyFritzCheckpointOnUnloadMock } = vi.hoisted(() => ({
+  saveDailyFritzCheckpointMock: vi.fn(async () => ({ ok: true, checkpoint_revision: 99 })),
+  flushDailyFritzCheckpointOnUnloadMock: vi.fn(() => true),
+}));
 
 vi.mock('../../dailyFritz/api.ts', () => ({
-  saveDailyFritzCheckpoint: (...args: unknown[]) => saveDailyFritzCheckpoint(...args),
+  saveDailyFritzCheckpoint: saveDailyFritzCheckpointMock,
   recordDailyFritzTelemetry: vi.fn(async () => undefined),
 }));
 
@@ -19,7 +21,7 @@ vi.mock('../../dailyFritz/dailyFritzCheckpointUnload.ts', async () => {
   );
   return {
     ...actual,
-    flushDailyFritzCheckpointOnUnload: (...args: unknown[]) => flushDailyFritzCheckpointOnUnload(...args),
+    flushDailyFritzCheckpointOnUnload: flushDailyFritzCheckpointOnUnloadMock,
   };
 });
 
@@ -167,8 +169,8 @@ describe('useDailyFritzSessionPersistence', () => {
       { initialProps: { moveLog: base.moveLog } },
     );
 
-    expect(saveDailyFritzCheckpoint).not.toHaveBeenCalled();
-    expect(flushDailyFritzCheckpointOnUnload).not.toHaveBeenCalled();
+    expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
+    expect(flushDailyFritzCheckpointOnUnloadMock).not.toHaveBeenCalled();
 
     rerender({
       moveLog: [
@@ -184,7 +186,7 @@ describe('useDailyFritzSessionPersistence', () => {
     act(() => {
       vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS - 100);
     });
-    expect(saveDailyFritzCheckpoint).not.toHaveBeenCalled();
+    expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
 
     await act(async () => {
       await Promise.resolve();
@@ -194,8 +196,8 @@ describe('useDailyFritzSessionPersistence', () => {
       window.dispatchEvent(new Event('pagehide'));
     });
 
-    expect(flushDailyFritzCheckpointOnUnload).toHaveBeenCalledTimes(1);
-    expect(flushDailyFritzCheckpointOnUnload).toHaveBeenCalledWith(
+    expect(flushDailyFritzCheckpointOnUnloadMock).toHaveBeenCalledTimes(1);
+    expect(flushDailyFritzCheckpointOnUnloadMock).toHaveBeenCalledWith(
       expect.objectContaining({
         attemptId: 'attempt-1',
         verifiedMatchId: 'verified-1',
@@ -207,6 +209,6 @@ describe('useDailyFritzSessionPersistence', () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(saveDailyFritzCheckpoint).not.toHaveBeenCalled();
+    expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
   });
 });

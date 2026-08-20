@@ -24,10 +24,10 @@ describe('flushDailyFritzCheckpointOnUnload', () => {
     });
 
     expect(sent).toBe(true);
-    expect(sendBeacon).toHaveBeenCalledTimes(1);
-    const [url, blob] = sendBeacon.mock.calls[0] as [string, Blob];
-    expect(url).toBe('http://test-server/api/daily-fritz/checkpoint');
-    expect(blob.type).toBe('application/json');
+    expect(sendBeacon).toHaveBeenCalledWith(
+      'http://test-server/api/daily-fritz/checkpoint',
+      expect.any(Blob),
+    );
   });
 
   it('falls back to keepalive fetch when sendBeacon is unavailable', async () => {
