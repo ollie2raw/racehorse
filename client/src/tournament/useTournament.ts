@@ -163,6 +163,10 @@ export function useTournament({ userId }: Args) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
+  // `refresh` reads load state to decide whether to show the initial spinner, but it
+  // also *sets* it. Reading through a ref keeps `refresh` referentially stable, so the
+  // effect below fires once per mount instead of re-firing when the flag flips.
+  const hasLoadedRef = useRef(false);
   const boundaryRefreshInFlightRef = useRef(false);
   const hubSocketDelegatesRef = useRef<TournamentHubSocketDelegates>({
     onRegistrationOpen: () => undefined,
@@ -206,7 +210,10 @@ export function useTournament({ userId }: Args) {
 
   const refresh = useCallback(async (): Promise<boolean> => {
     const cleanUserId = userId?.trim() || null;
-    if (!hasLoaded) {
+    // Capture once at entry: the success path flips the ref before `finally` runs,
+    // and both the spinner-on and spinner-off decisions must see the same value.
+    const wasLoaded = hasLoadedRef.current;
+    if (!wasLoaded) {
       setIsLoading(true);
     }
     try {
@@ -244,19 +251,19 @@ export function useTournament({ userId }: Args) {
       applyAssignedMatch(me?.assignedMatch ?? null);
       applyCountdown(me?.countdown ?? null);
       setError(null);
+      hasLoadedRef.current = true;
       setHasLoaded((prev) => (prev ? prev : true));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tournaments');
       return false;
     } finally {
-      if (!hasLoaded) {
+      if (!wasLoaded) {
         setIsLoading(false);
       }
     }
   }, [
     userId,
-    hasLoaded,
     applyUpcoming,
     applyRegistrations,
     applyRecoveryMatch,
