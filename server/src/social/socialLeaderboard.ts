@@ -52,7 +52,17 @@ type WeeklyRow = {
 const WEEKLY_TTL_MS = 60_000;
 let weeklyCache: { expiresAt: number; rows: WeeklyRow[] } | null = null;
 
-/** Exposed for tests, and the hook to call from a match write if that lands. */
+/**
+ * Exposed for tests only.
+ *
+ * Deliberately *not* wired to the match-write path. Write-through invalidation
+ * would defeat this cache precisely when it matters: under heavy match volume —
+ * the only regime where re-reading 10,000 rows per request actually hurts —
+ * every write would clear it, leaving it cold almost always. A fixed TTL bounds
+ * how often the expensive read runs regardless of write rate, which is the
+ * property a leaderboard cache should have. The cost is a board up to
+ * WEEKLY_TTL_MS behind on a seven-day win rollup, which is immaterial.
+ */
 export function invalidateWeeklyLeaderboard(): void {
   weeklyCache = null;
 }
