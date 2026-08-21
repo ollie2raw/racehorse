@@ -100,7 +100,19 @@ export function canNeverStrandDailyFritzVerification(input: {
  */
 export function writeUnverifiedDailyFritzHand(
   result: Record<string, unknown> | null,
-  input: { gameNumber: DailyFritzSetGameNumber; handIndex: number; verifierCode: string },
+  input: {
+    gameNumber: DailyFritzSetGameNumber;
+    handIndex: number;
+    verifierCode: string;
+    /**
+     * Scores after this hand, as reported. NOT authoritative — the attempt is
+     * already `rejected` — but they keep the hand-start chain continuous for
+     * every later hand. Without them, one unverified hand made every
+     * subsequent hand fail with missing_hand_start_progress.
+     */
+    playerScoreAfter?: number;
+    fritzScoreAfter?: number;
+  },
 ): Record<string, unknown> {
   const previous = result ?? {};
   const existing = Array.isArray(previous.unverified_hands) ? previous.unverified_hands : [];
@@ -114,9 +126,50 @@ export function writeUnverifiedDailyFritzHand(
         hand_index: input.handIndex,
         verifier_code: input.verifierCode,
         recorded_at: new Date().toISOString(),
+        ...(Number.isFinite(input.playerScoreAfter) && Number.isFinite(input.fritzScoreAfter)
+          ? { player_score_after: input.playerScoreAfter, fritz_score_after: input.fritzScoreAfter }
+          : {}),
       },
     ],
   };
+}
+
+/**
+ * A hand recorded as advanced-without-receipt. Deliberately NOT in the
+ * authority ledger: `readAuthorityLedger().hands` is typed as verified
+ * records, and anything reading it must keep treating every entry as
+ * authoritative. This is the parallel, explicitly-unverified record.
+ */
+export type UnverifiedDailyFritzHandRecord = {
+  gameNumber: number;
+  handIndex: number;
+  verifierCode: string;
+  playerScoreAfter: number | null;
+  fritzScoreAfter: number | null;
+};
+
+export function findUnverifiedHand(
+  result: Record<string, unknown> | null,
+  gameNumber: DailyFritzSetGameNumber,
+  handIndex: number,
+): UnverifiedDailyFritzHandRecord | null {
+  const rows = result?.unverified_hands;
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const rec = row as Record<string, unknown>;
+    if (Number(rec.game_number) !== gameNumber || Number(rec.hand_index) !== handIndex) continue;
+    const you = Number(rec.player_score_after);
+    const fritz = Number(rec.fritz_score_after);
+    return {
+      gameNumber,
+      handIndex,
+      verifierCode: String(rec.verifier_code ?? 'unknown'),
+      playerScoreAfter: Number.isFinite(you) ? Math.round(you) : null,
+      fritzScoreAfter: Number.isFinite(fritz) ? Math.round(fritz) : null,
+    };
+  }
+  return null;
 }
 
 export async function recordDailyFritzEventBestEffort(event: DailyFritzEventInput): Promise<void> {
@@ -280,8 +333,13 @@ export const DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES = new Set([
  * source of truth; `active_game` is UI/progress bookkeeping and can be wiped
  * (e.g. by `buildRecordedDailyFritzAttemptResult`).
  *
- * Requires a contiguous verified chain for this game: hands 0..N-1 must all
- * be present before hand N can replay. No fallback to an earlier hand.
+ * Requires a contiguous chain for this game: hands 0..N-1 must all be
+ * accounted for before hand N can replay. A hand counts as accounted for if
+ * it is verified, or if it is explicitly recorded as advanced-without-receipt
+ * — the attempt is already `rejected` in that case, so refusing later hands
+ * buys no integrity and only strands the player.
+ *
+ * A prior hand that is neither is a genuine gap and still fails closed.
  */
 export function resolveHandStartScoresForVerification(input: {
   result: Record<string, unknown> | null;
@@ -294,20 +352,35 @@ export function resolveHandStartScoresForVerification(input: {
   }
 
   for (let priorIndex = 0; priorIndex < handIndex; priorIndex += 1) {
-    if (!findVerifiedHand(result, gameNumber, priorIndex)) {
-      throwMissingHandStartProgress({
-        gameNumber,
-        handIndex,
-        missingPriorHandIndex: priorIndex,
-      });
+    if (findVerifiedHand(result, gameNumber, priorIndex)) continue;
+    const unverified = findUnverifiedHand(result, gameNumber, priorIndex);
+    // Recorded but score-less (pre-existing rows, or a writer that had no
+    // scores to hand over) cannot seed the chain, so treat it as a real gap.
+    if (unverified && unverified.playerScoreAfter != null && unverified.fritzScoreAfter != null) {
+      continue;
     }
+    throwMissingHandStartProgress({
+      gameNumber,
+      handIndex,
+      missingPriorHandIndex: priorIndex,
+    });
   }
 
-  const immediatePrior = findVerifiedHand(result, gameNumber, handIndex - 1)!;
+  const immediatePrior = findVerifiedHand(result, gameNumber, handIndex - 1);
+  if (immediatePrior) {
+    return {
+      gameNumber,
+      you: immediatePrior.playerScoreAfter,
+      fritz: immediatePrior.fritzScoreAfter,
+    };
+  }
+
+  // Loop above guarantees this exists with finite scores.
+  const priorUnverified = findUnverifiedHand(result, gameNumber, handIndex - 1)!;
   return {
     gameNumber,
-    you: immediatePrior.playerScoreAfter,
-    fritz: immediatePrior.fritzScoreAfter,
+    you: priorUnverified.playerScoreAfter!,
+    fritz: priorUnverified.fritzScoreAfter!,
   };
 }
 
