@@ -15,6 +15,7 @@
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { readE2eDevAuth } from '../auth/e2eDevAuth';
+import { recordApiRequest } from '../debug/requestAudit';
 
 export type ApiResult<T> = {
   data: T | null;
@@ -94,6 +95,9 @@ async function apiFetch<T>(
   // Merge caller's signal with a 15-second timeout so no request hangs forever
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  // DEV-only request audit; no-op unless localStorage.REQUEST_AUDIT === '1'.
+  // Recorded on attempt 1 only so a 401 refresh-retry doesn't read as a duplicate.
+  if (attempt === 1) recordApiRequest(init.method ?? 'GET', url);
   const callerSignal = init.signal as AbortSignal | undefined;
   if (callerSignal) {
     callerSignal.addEventListener('abort', () => timeoutController.abort(), { once: true });
