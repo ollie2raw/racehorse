@@ -19,12 +19,15 @@ vi.mock('../api/client', () => ({
 }));
 
 import { fetchRivals } from './socialApi';
+import { clearCachedSession } from '../auth/sessionToken';
 
 let testCounter = 0;
 
 beforeEach(() => {
   testCounter += 1;
   currentUserId = `user-${testCounter}`;
+  // The session cache is module-level and only auth events invalidate it.
+  clearCachedSession();
   apiGet.mockReset();
   apiGet.mockResolvedValue({
     data: { ok: true, rivals: [{ userId: 'r1', username: 'Maya', gamesPlayed: 4, winsAgainst: 2, lossesAgainst: 2, rating: 810 }] },
@@ -65,8 +68,10 @@ describe('fetchRivals caching', () => {
     const first = await fetchRivals();
     expect(first.rivals[0]?.username).toBe('Maya');
 
-    // A different signed-in identity must miss the cache and refetch.
+    // A different signed-in identity must miss the cache and refetch. In the app
+    // the SIGNED_OUT/SIGNED_IN event resets the session cache; do the same here.
     currentUserId = 'someone-else';
+    clearCachedSession();
     apiGet.mockResolvedValue({
       data: { ok: true, rivals: [{ userId: 'r2', username: 'Rob', gamesPlayed: 1, winsAgainst: 1, lossesAgainst: 0, rating: 900 }] },
       error: null,

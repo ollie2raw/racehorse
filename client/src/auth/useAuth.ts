@@ -2,6 +2,7 @@ import React, { createContext, useContext, useCallback, useEffect, useState } fr
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { formatAuthErrorMessage } from './authErrors';
+import { clearCachedSession, setCachedSession } from './sessionToken';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
@@ -411,6 +412,8 @@ function useAuthInternal() {
         session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session'],
       ) => {
         if (!active) return;
+        if (session?.access_token) setCachedSession(session.access_token, session.user?.id ?? null);
+        else clearCachedSession();
         setAccessToken(session?.access_token ?? null);
         await syncSession('INITIAL_BOOTSTRAP', session?.user ?? null);
         if (session?.user && hasPasswordRecoveryPendingMarker()) {
@@ -471,6 +474,10 @@ function useAuthInternal() {
       try {
         if (session?.user) signedInObserved = true;
         else if (event === 'SIGNED_OUT') signedInObserved = false;
+        // Keep the module-level session cache authoritative: every request
+        // reads from it instead of calling getSession() again.
+        if (session?.access_token) setCachedSession(session.access_token, session.user?.id ?? null);
+        else clearCachedSession();
         setAccessToken(session?.access_token ?? null);
         await syncSession(event, session?.user ?? null);
       } finally {
@@ -649,7 +656,10 @@ function useAuthInternal() {
     let errorMessage: string | null = null;
     let usedTimeoutFallback = false;
 
-    // Optimistically reset local auth UI immediately.
+    // Optimistically reset local auth UI immediately. Drop the cached session
+    // in the same breath: signOut has a timeout fallback, and until the
+    // SIGNED_OUT event lands a stale token would still be attached to requests.
+    clearCachedSession();
     setProfile(null);
     setUser(null);
 

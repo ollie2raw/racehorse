@@ -1,10 +1,20 @@
 import { apiGet } from '../api/client';
 import { supabase } from '../lib/supabase';
+import { getCachedSession } from '../auth/sessionToken';
 
 async function authCacheScope(): Promise<string> {
   if (!supabase) return 'anon';
-  const { data } = await supabase.auth.getSession();
-  return data.session?.user?.id ?? 'anon';
+  const client = supabase;
+  // Same in-memory session the request headers use — this ran a second
+  // getSession() per cached call purely to build a cache key.
+  const { userId } = await getCachedSession(async () => {
+    const { data } = await client.auth.getSession();
+    return {
+      token: data.session?.access_token ?? null,
+      userId: data.session?.user?.id ?? null,
+    };
+  });
+  return userId ?? 'anon';
 }
 
 /** Throws on HTTP/auth failure — caught by exported loaders that return `{ error }`. */

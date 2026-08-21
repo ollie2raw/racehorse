@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { readE2eDevAuth } from '../auth/e2eDevAuth';
 import { recordApiRequest } from '../debug/requestAudit';
+import { clearCachedSession, getCachedSession, setCachedSession } from '../auth/sessionToken';
 
 export type ApiResult<T> = {
   data: T | null;
@@ -52,9 +53,17 @@ export async function getAuthHeaders(options?: {
     return { headers, hasToken: false };
   }
 
+  const client = supabase;
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
+    // Served from the in-memory session when auth has already reported one;
+    // only the first read before any auth event falls through to getSession().
+    const { token } = await getCachedSession(async () => {
+      const { data } = await client.auth.getSession();
+      return {
+        token: data.session?.access_token ?? null,
+        userId: data.session?.user?.id ?? null,
+      };
+    });
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
       return { headers, hasToken: true };
@@ -74,8 +83,13 @@ async function refreshSession(): Promise<string | null> {
   if (!supabase) return null;
   try {
     const { data } = await supabase.auth.refreshSession();
-    return data.session?.access_token ?? null;
+    const token = data.session?.access_token ?? null;
+    // A refresh invalidates whatever token the cache is holding.
+    if (token) setCachedSession(token, data.session?.user?.id ?? null);
+    else clearCachedSession();
+    return token;
   } catch {
+    clearCachedSession();
     return null;
   }
 }
