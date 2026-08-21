@@ -7,6 +7,7 @@ import {
   type LadderHubViewModel,
 } from './DailyPuzzleLadderHubView';
 import { buildLadderSlotRows } from './ladderSlotRowViewModel';
+import { AuthProvider } from '../auth/useAuth';
 import type { DailyPuzzleSlot } from './types';
 
 const hubSlots: DailyPuzzleSlot[] = [
@@ -133,8 +134,7 @@ describe('DailyPuzzleLadderHubView', () => {
         overlays={<div data-testid="overlays-stub" />}
         viewModel={makeViewModel()}
         actions={makeActions()}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     expect(container.querySelector('.dpl-ladder-hub')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Daily Ladder', level: 1 })).toBeTruthy();
@@ -151,8 +151,7 @@ describe('DailyPuzzleLadderHubView', () => {
         overlays={null}
         viewModel={makeViewModel()}
         actions={actions}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     fireEvent.click(screen.getByRole('button', { name: /Start Daily Ladder/i }));
     fireEvent.click(screen.getByRole('button', { name: /Back to home/i }));
@@ -176,8 +175,7 @@ describe('DailyPuzzleLadderHubView', () => {
           hubLadderShareText: 'Share me',
         })}
         actions={actions}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     fireEvent.click(screen.getByRole('button', { name: /Practice Mode/i }));
     fireEvent.click(screen.getByRole('button', { name: 'View Leaderboard →' }));
@@ -210,8 +208,7 @@ describe('DailyPuzzleLadderHubView', () => {
           shareDone: true,
         })}
         actions={makeActions()}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to start today’s ladder.');
     expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();

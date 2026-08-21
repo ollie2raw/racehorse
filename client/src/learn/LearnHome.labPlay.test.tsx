@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LearnHome from './LearnHome';
+import { AuthProvider } from '../auth/useAuth';
 
 vi.mock('../screens/RacehorseHomeArt.css', () => ({}));
 vi.mock('../screens/SinglePlayerModes.css', () => ({}));
@@ -24,8 +25,7 @@ describe('LearnHome — The Lab Play flow', () => {
       <LearnHome
         onBack={vi.fn()}
         onNavigate={onNavigate}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     const labCard = screen.getByRole('heading', { name: 'The Lab' }).closest('section');
     expect(labCard).toBeTruthy();
@@ -39,8 +39,7 @@ describe('LearnHome — The Lab Play flow', () => {
       <LearnHome
         onBack={vi.fn()}
         onNavigate={onNavigate}
-      />,
-    );
+      />, { wrapper: AuthProvider });
 
     fireEvent.click(screen.getByRole('heading', { name: 'The Lab' }));
     expect(onNavigate).toHaveBeenCalledWith('noBrainer');

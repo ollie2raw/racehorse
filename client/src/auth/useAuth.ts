@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { formatAuthErrorMessage } from './authErrors';
@@ -195,7 +195,7 @@ function consumeEmailVerificationPending(email: string | null | undefined): bool
   }
 }
 
-export function useAuth() {
+function useAuthInternal() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -819,4 +819,21 @@ export function useAuth() {
     refreshAuthProfile,
     applyProfilePatch,
   };
+}
+
+export type AuthContextType = ReturnType<typeof useAuthInternal>;
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const value = useAuthInternal();
+  return React.createElement(AuthContext.Provider, { value }, children);
+}
+
+export function useAuth(): AuthContextType {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 }
