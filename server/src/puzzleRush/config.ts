@@ -107,10 +107,10 @@ export type PuzzleRushConfig = {
 };
 
 export const PUZZLE_RUSH_CONFIG: PuzzleRushConfig = {
-  version: 2,
+  version: 3,
 
   clock: {
-    baseSeconds: 90,
+    baseSeconds: 120,
     maxSeconds: 300,
     minBonusSeconds: 1,
     maxBonusSeconds: 5,

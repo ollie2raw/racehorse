@@ -114,7 +114,7 @@ export function PuzzleRushScreen({ onBack, muted = false, onNavigate }: PuzzleRu
         streakDays: today?.streakDays ?? 0,
         playedToday: today?.playedToday ?? false,
         stages: FALLBACK_STAGES,
-        baseSeconds: 90,
+        baseSeconds: 120,
         startPending: phase === 'starting',
         error,
       }}
