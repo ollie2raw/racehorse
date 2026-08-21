@@ -261,3 +261,103 @@
     padding-bottom: 0;
   }
 }
+
+/* Tab type. Lives here, not inline, so the narrow-desktop bands below can
+ * shrink it — sized against the nav's other display type (wordmark 900,
+ * date 800) so the tabs read as secondary chrome, not primary nav. */
+.rh-nav-tab {
+  font-size: 20px;
+}
+
+.rh-nav--compact .rh-nav-tab {
+  font-size: 18px;
+}
+
+/* ── Narrow desktop: 769px–1279px ───────────────────────────────────
+ *
+ * The desktop nav is a 3-column grid, `minmax(0,1fr) auto minmax(0,1fr)`,
+ * which centers the tabs by forcing both side columns to equal width. The
+ * brand needs ~220px and the stats ~327px, so below 1280px the symmetry
+ * sizes both columns under what the stats require. `.rh-nav-stats` cannot
+ * shrink (fixed icons, values, avatar) and `justify-self: end` pins its
+ * right edge, so the overflow spilled leftward across the center column and
+ * swallowed the tab hit targets — at 769px stats ran 434→745 while the tabs
+ * ended at 654.
+ *
+ * Below 1280px there is not enough room for symmetric columns, so use the
+ * flex row the phone layer already uses: items sit in sequence and cannot
+ * overlap. Spacing is then tightened until the row genuinely fits, because
+ * a row that merely stops overlapping while running off-screen is not fixed.
+ *
+ * The `.rh-global-nav` prefixes are load-bearing: Tailwind's px-5/pl-5/gap-4
+ * utilities carry the same specificity as a bare class here and are emitted
+ * later, so an unprefixed rule silently loses.
+ */
+@media (min-width: 769px) and (max-width: 1279px) and (min-height: 600px) {
+  .rh-global-nav .rh-nav-inner {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .rh-global-nav .rh-nav-center-desktop {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .rh-global-nav .rh-nav-brand {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .rh-global-nav .rh-nav-center-desktop > div {
+    gap: 18px;
+  }
+
+  .rh-global-nav .rh-nav-stat-block {
+    padding: 10px 8px;
+    gap: 8px;
+  }
+
+  .rh-global-nav .rh-nav-user-block {
+    padding-left: 8px;
+    gap: 10px;
+  }
+}
+
+/* Below 1024px the tabs and stats alone need the whole row: the wordmark
+ * yields to the logo mark, and the tabs drop to their secondary size. */
+@media (min-width: 769px) and (max-width: 1023px) and (min-height: 600px) {
+  .rh-global-nav .rh-nav-inner {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .rh-nav-wordmark {
+    display: none;
+  }
+
+  /* Never let the row's deficit collapse the logo itself. */
+  .rh-global-nav .rh-nav-brand {
+    flex: 0 0 auto;
+  }
+
+  .rh-global-nav .rh-nav-center-desktop > div {
+    gap: 10px;
+  }
+
+  .rh-nav-tab,
+  .rh-nav--compact .rh-nav-tab {
+    font-size: 14px;
+  }
+
+  .rh-global-nav .rh-nav-stat-block {
+    padding: 8px 6px;
+    gap: 6px;
+  }
+
+  .rh-global-nav .rh-nav-user-block {
+    padding-left: 6px;
+    gap: 8px;
+  }
+}
