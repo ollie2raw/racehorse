@@ -168,7 +168,7 @@ export function GlobalNav({
   return (
     <>
     <nav 
-      className={`rh-global-nav relative shrink-0 w-full z-50 h-[56px] ${compactChrome ? 'desk:h-[66px]' : 'desk:h-[78px]'}`}
+      className={`rh-global-nav relative shrink-0 w-full z-50 h-[56px] ${compactChrome ? 'rh-nav--compact desk:h-[66px]' : 'desk:h-[78px]'}`}
       style={{
         boxSizing: 'border-box',
         overflow: 'visible',
@@ -253,12 +253,11 @@ export function GlobalNav({
                   <button
                     key={tab.label}
                     onClick={() => onNavigate?.(tab.mode)}
-                    className="relative py-2 transition-all"
+                    className="rh-nav-tab relative py-2 transition-all"
                     style={{
-                      // Sized against the nav's other display type (the
-                      // wordmark is 900, the date 800) — at 600/17px the tabs
-                      // read as secondary chrome rather than primary nav.
-                      fontSize: compactChrome ? '18px' : '20px',
+                      // font-size lives in rh-mobile-chrome.css (.rh-nav-tab):
+                      // an inline value cannot be narrowed by a media query,
+                      // and the tabs must shrink on a narrow desktop row.
                       fontWeight: 700,
                       letterSpacing: '0.01em',
                       color: textColor,
