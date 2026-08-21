@@ -22,7 +22,17 @@ html {
 body {
   height: 100%;
   min-height: 100dvh;
+  /*
+   * The platform's base face is the brand face, not the OS font.
+   *
+   * This used to start at `system-ui`, so every element that did not set
+   * `var(--font-body)` itself inherited Helvetica/San Francisco on macOS and
+   * Segoe UI on Windows — the nav, headings and cards rendered in Outfit while
+   * the text between them quietly did not. The system stack stays on as a
+   * fallback for the moment before the webfont loads.
+   */
   font-family:
+    var(--font-body),
     system-ui,
     -apple-system,
     BlinkMacSystemFont,

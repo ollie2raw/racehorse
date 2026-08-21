@@ -11,9 +11,15 @@
   --wl-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.34);
 }
 
-body {
-  font-family: 'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif;
-}
+/*
+ * No `body` font override here.
+ *
+ * A bare `body` selector in a feature stylesheet re-set the whole app's base
+ * face to Avenir Next wherever this file was loaded — which is every live
+ * match surface. It also split the product by OS: Avenir Next ships with
+ * macOS, so Mac saw one font and Windows fell through to Trebuchet MS. The
+ * base face belongs to index.css, and it is the brand face.
+ */
 
 .walnut-live {
   position: relative;

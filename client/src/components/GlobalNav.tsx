@@ -213,7 +213,13 @@ export function GlobalNav({
             className="rh-nav-wordmark uppercase text-white"
             style={{
               fontWeight: 900,
-              fontFamily: "'Montserrat', sans-serif",
+              // Outfit, matching BrandLogo — the wordmark on the loading screen
+              // and every other branded surface. This asked for 'Montserrat',
+              // which the app never loads (index.html fetches only Barlow
+              // Condensed and Outfit), so the nav silently fell back to the
+              // browser's generic sans-serif while the rest of the platform
+              // rendered the real brand face.
+              fontFamily: "'Outfit', system-ui, sans-serif",
             }}
           >
             RACEHORSE
