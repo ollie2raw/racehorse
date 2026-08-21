@@ -1,6 +1,6 @@
 import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
-import { getFriendIds, requireAuth } from './socialAuth';
+import { friendIdsFromRows, getFriendRows, requireAuth } from './socialAuth';
 import { getPresenceBatch } from './presence';
 
 export function registerSocialFriendsRoutes(socialRouter: Router): void {
@@ -40,21 +40,21 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
     const userId = await requireAuth(req, res);
     if (!userId) return;
     try {
-      const friendIds = await getFriendIds(userId);
+      // One friends read, not two: this handler used to call getFriendIds and
+      // then re-run the same query just to also select `id`.
+      const rows = await getFriendRows(userId);
+      const friendIds = friendIdsFromRows(userId, rows);
       if (!friendIds.length) { res.json({ ok: true, friends: [] }); return; }
 
-      const enc = encodeURIComponent(userId);
-      const rows = await supabaseFetch<Array<{ id: string; user_id: string; friend_user_id: string }>>(
-        `/rest/v1/friends?or=(user_id.eq.${enc},friend_user_id.eq.${enc})` +
-        `&status=eq.accepted&select=id,user_id,friend_user_id`,
-      );
-
       const profileFilter = friendIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
-      const profiles = await supabaseFetch<Array<{ id: string; username: string }>>(
-        `/rest/v1/profiles?or=(${profileFilter})&select=id,username`,
-      );
+      // Independent reads — no reason to await them in series.
+      const [profiles, presenceMap] = await Promise.all([
+        supabaseFetch<Array<{ id: string; username: string }>>(
+          `/rest/v1/profiles?or=(${profileFilter})&select=id,username`,
+        ),
+        getPresenceBatch(friendIds).catch(() => new Map<string, { status: string; current_mode: string | null }>()),
+      ]);
       const profileMap = new Map(profiles.map((p) => [p.id, p.username]));
-      const presenceMap = await getPresenceBatch(friendIds).catch(() => new Map<string, { status: string; current_mode: string | null }>());
 
       const friends = friendIds.map((fId) => {
         const row = rows.find((r) => r.user_id === fId || r.friend_user_id === fId);

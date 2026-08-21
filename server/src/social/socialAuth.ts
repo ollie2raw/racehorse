@@ -19,13 +19,27 @@ export async function requireAuth(req: Request, res: Response): Promise<string |
   }
 }
 
-export async function getFriendIds(userId: string): Promise<string[]> {
+export type AcceptedFriendRow = { id: string; user_id: string; friend_user_id: string };
+
+/**
+ * Accepted friendship rows for a user, in full. Callers that need the row `id`
+ * as well as the other party's id should use this and derive the ids with
+ * `friendIdsFromRows`, rather than querying `friends` a second time.
+ */
+export async function getFriendRows(userId: string): Promise<AcceptedFriendRow[]> {
   const enc = encodeURIComponent(userId);
-  const rows = await supabaseFetch<Array<{ user_id: string; friend_user_id: string }>>(
+  return supabaseFetch<AcceptedFriendRow[]>(
     `/rest/v1/friends` +
     `?or=(user_id.eq.${enc},friend_user_id.eq.${enc})` +
     `&status=eq.accepted` +
-    `&select=user_id,friend_user_id`,
+    `&select=id,user_id,friend_user_id`,
   );
+}
+
+export function friendIdsFromRows(userId: string, rows: AcceptedFriendRow[]): string[] {
   return rows.map((r) => (r.user_id === userId ? r.friend_user_id : r.user_id));
+}
+
+export async function getFriendIds(userId: string): Promise<string[]> {
+  return friendIdsFromRows(userId, await getFriendRows(userId));
 }
