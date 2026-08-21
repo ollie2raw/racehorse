@@ -101,7 +101,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
     kind: user ? 'authenticated' : 'guest',
     userId: user?.id ?? null,
     displayName: profile?.username ?? user?.email?.split('@')[0] ?? null,
-  }), [profile?.username, user, user?.email]);
+  }), [profile?.username, user]);
   const [model, setModel] = useState(() => createInitialModel(identity, tournament));
 
   useEffect(() => {
@@ -282,6 +282,9 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
           });
         });
     } else {
+      // Mirrors the tournament status straight from props; there is nothing to
+      // await, so the update is intentionally synchronous.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setModel((current) => {
         const updated = {
           ...current,

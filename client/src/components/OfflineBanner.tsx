@@ -33,7 +33,7 @@ export function OfflineBanner({ online }: { online: boolean }) {
         boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       }}
     >
-      <span>You're offline — reconnect to continue playing.</span>
+      <span>You&apos;re offline — reconnect to continue playing.</span>
       <button
         type="button"
         onClick={() => setDismissed(true)}
