@@ -1,7 +1,7 @@
 import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { friendIdsFromRows, getFriendRows, requireAuth } from './socialAuth';
-import { getPresenceBatch } from './presence';
+import { getPresenceBatch } from './presenceRegistry';
 
 export function registerSocialFriendsRoutes(socialRouter: Router): void {
   socialRouter.get('/friends/requests', async (req, res) => {
@@ -47,13 +47,12 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       if (!friendIds.length) { res.json({ ok: true, friends: [] }); return; }
 
       const profileFilter = friendIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
-      // Independent reads — no reason to await them in series.
-      const [profiles, presenceMap] = await Promise.all([
-        supabaseFetch<Array<{ id: string; username: string }>>(
-          `/rest/v1/profiles?or=(${profileFilter})&select=id,username`,
-        ),
-        getPresenceBatch(friendIds).catch(() => new Map<string, { status: string; current_mode: string | null }>()),
-      ]);
+      const profiles = await supabaseFetch<Array<{ id: string; username: string }>>(
+        `/rest/v1/profiles?or=(${profileFilter})&select=id,username`,
+      );
+      // Synchronous: presence is an in-memory lookup, not a query. This handler
+      // is now down to two Supabase round-trips from the original four.
+      const presenceMap = getPresenceBatch(friendIds);
       const profileMap = new Map(profiles.map((p) => [p.id, p.username]));
 
       const friends = friendIds.map((fId) => {

@@ -37,12 +37,12 @@ import { computeWeeklyAwards } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
+import { socketsByUserId as presenceSocketsByUserId, setActivity } from './social/presenceRegistry';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import {
   emitPresenceUpdateToFriends,
   registerPresenceHandlers,
 } from './social/registerPresenceHandlers';
-import { upsertPresence } from './social/presence';
 import {
   writeMatchActivity,
   writePuzzleActivity,
@@ -513,7 +513,9 @@ io.use((socket, next) => {
   next();
 });
 
-const socketsByUserId = new Map<string, Set<string>>();
+// Presence lives in social/presenceRegistry so the HTTP routes and the socket
+// handlers answer from one structure instead of two that can disagree.
+const socketsByUserId = presenceSocketsByUserId;
 
 app.get('/api/health', (_req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -694,7 +696,7 @@ function notifyRoomPlayersInGame(roomCode: string): void {
     const pSocket = io.sockets.sockets.get(connectionId);
     const playerId = normalizeUserId(pSocket?.data?.userId);
     if (playerId) {
-      void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
+      setActivity(playerId, 'in_game', roomCode);
       emitPresenceUpdateToFriends({ io, socketsByUserId }, playerId, 'in_game');
     }
   }

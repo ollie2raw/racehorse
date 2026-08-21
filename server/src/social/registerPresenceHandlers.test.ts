@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server, Socket } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
-import * as presence from './presence';
+import {
+  addSocket,
+  isOnline,
+  resetPresenceRegistry,
+  socketsByUserId as registrySockets,
+} from './presenceRegistry';
 import {
   createRemoveSocketPresence,
   emitPresenceUpdateToFriends,
@@ -10,10 +15,6 @@ import {
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(),
-}));
-
-vi.mock('./presence', () => ({
-  upsertPresence: vi.fn().mockResolvedValue(undefined),
 }));
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
@@ -26,12 +27,12 @@ const isUuidLike = (value: string | null | undefined): boolean =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
   );
 
+const normalizeUserId = (value: unknown) =>
+  typeof value === 'string' && value.trim() ? value.trim() : null;
+
 type HandlerMap = Record<string, (...args: unknown[]) => unknown>;
 
-function createSocketStub(overrides: {
-  id?: string;
-  data?: Record<string, unknown>;
-} = {}): Socket {
+function createSocketStub(overrides: { id?: string; data?: Record<string, unknown> } = {}): Socket {
   return {
     id: overrides.id ?? 'sock-1',
     data: overrides.data ?? {},
@@ -48,47 +49,62 @@ function captureHandlers(socket: Socket): HandlerMap {
   return handlers;
 }
 
+/** Collects every presence:update emitted, with the socket it went to. */
+function createIo() {
+  const emitted: Array<{ socketId: string; event: string; payload: unknown }> = [];
+  const io = {
+    to: vi.fn((socketId: string) => ({
+      emit: (event: string, payload: unknown) => { emitted.push({ socketId, event, payload }); },
+    })),
+  } as unknown as Server;
+  return { io, emitted };
+}
+
+beforeEach(() => {
+  resetPresenceRegistry();
+  vi.mocked(supabaseFetch).mockReset();
+  vi.mocked(supabaseFetch).mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetPresenceRegistry();
+});
+
 describe('createRemoveSocketPresence', () => {
-  const normalizeUserId = (value: unknown) =>
-    typeof value === 'string' && value.trim() ? value.trim() : null;
+  it('reports the last socket leaving, not every socket leaving', () => {
+    addSocket(USER_A, 'sock-1');
+    addSocket(USER_A, 'sock-2');
 
-  it('removes socket id and deletes map entry when last socket for user disconnects', () => {
-    const socketsByUserId = new Map<string, Set<string>>([[USER_A, new Set(['sock-1', 'sock-2'])]]);
-    const socket = createSocketStub({ id: 'sock-1', data: { userId: USER_A } });
-    const remove = createRemoveSocketPresence(socket, socketsByUserId, normalizeUserId);
+    const first = createRemoveSocketPresence(
+      createSocketStub({ id: 'sock-1', data: { userId: USER_A } }),
+      registrySockets,
+      normalizeUserId,
+    );
+    expect(first()).toBe(false);
+    expect(isOnline(USER_A)).toBe(true);
 
-    remove();
-
-    expect(socketsByUserId.get(USER_A)?.has('sock-1')).toBe(false);
-    expect(socketsByUserId.get(USER_A)?.has('sock-2')).toBe(true);
-
-    const socket2 = createSocketStub({ id: 'sock-2', data: { userId: USER_A } });
-    createRemoveSocketPresence(socket2, socketsByUserId, normalizeUserId)();
-
-    expect(socketsByUserId.has(USER_A)).toBe(false);
+    const second = createRemoveSocketPresence(
+      createSocketStub({ id: 'sock-2', data: { userId: USER_A } }),
+      registrySockets,
+      normalizeUserId,
+    );
+    expect(second()).toBe(true);
+    expect(isOnline(USER_A)).toBe(false);
   });
 });
 
 describe('registerPresenceHandlers', () => {
-  const normalizeUserId = (value: unknown) =>
-    typeof value === 'string' && value.trim() ? value.trim() : null;
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('presence:identify registers socket and upserts online presence on success', async () => {
-    const socketsByUserId = new Map<string, Set<string>>();
+  it('presence:identify registers the socket and announces the user online', async () => {
     const socket = createSocketStub({ id: 'sock-a' });
     const handlers = captureHandlers(socket);
     const cb = vi.fn();
-    const resolveSocketIdentity = vi.fn().mockResolvedValue({ username: 'Alice', userId: USER_A });
-    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+    const { io } = createIo();
 
     registerPresenceHandlers(socket, {
       io,
-      socketsByUserId,
-      resolveSocketIdentity,
+      socketsByUserId: registrySockets,
+      resolveSocketIdentity: vi.fn().mockResolvedValue({ username: 'Alice', userId: USER_A }),
       normalizeUserId,
       isUuidLike,
     });
@@ -97,20 +113,43 @@ describe('registerPresenceHandlers', () => {
 
     expect(cb).toHaveBeenCalledWith({ ok: true });
     expect(socket.data.userId).toBe(USER_A);
-    expect(socketsByUserId.get(USER_A)?.has('sock-a')).toBe(true);
-    expect(presence.upsertPresence).toHaveBeenCalledWith(USER_A, 'online');
+    expect(isOnline(USER_A)).toBe(true);
+  });
+
+  it('re-identifying an already-online user does not re-announce them', async () => {
+    const { io } = createIo();
+    const identify = async (socketId: string) => {
+      const socket = createSocketStub({ id: socketId });
+      const handlers = captureHandlers(socket);
+      registerPresenceHandlers(socket, {
+        io,
+        socketsByUserId: registrySockets,
+        resolveSocketIdentity: vi.fn().mockResolvedValue({ username: 'Alice', userId: USER_A }),
+        normalizeUserId,
+        isUuidLike,
+      });
+      await handlers['presence:identify']({}, vi.fn());
+    };
+
+    await identify('sock-a');
+    const afterFirst = vi.mocked(supabaseFetch).mock.calls.length;
+
+    // Reconnect / token rotation: same user, second socket.
+    await identify('sock-b');
+
+    // The friends lookup that backs the broadcast did not run again.
+    expect(vi.mocked(supabaseFetch).mock.calls.length).toBe(afterFirst);
   });
 
   it('presence:identify returns ok:false when identity has no userId', async () => {
-    const socketsByUserId = new Map<string, Set<string>>();
     const socket = createSocketStub();
     const handlers = captureHandlers(socket);
     const cb = vi.fn();
-    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+    const { io } = createIo();
 
     registerPresenceHandlers(socket, {
       io,
-      socketsByUserId,
+      socketsByUserId: registrySockets,
       resolveSocketIdentity: vi.fn().mockResolvedValue({ username: 'Guest', userId: null }),
       normalizeUserId,
       isUuidLike,
@@ -119,19 +158,18 @@ describe('registerPresenceHandlers', () => {
     await handlers['presence:identify']({}, cb);
 
     expect(cb).toHaveBeenCalledWith({ ok: false });
-    expect(socketsByUserId.size).toBe(0);
+    expect(registrySockets.size).toBe(0);
   });
 
   it('presence:identify returns ok:false when resolveSocketIdentity throws', async () => {
-    const socketsByUserId = new Map<string, Set<string>>();
     const socket = createSocketStub();
     const handlers = captureHandlers(socket);
     const cb = vi.fn();
-    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+    const { io } = createIo();
 
     registerPresenceHandlers(socket, {
       io,
-      socketsByUserId,
+      socketsByUserId: registrySockets,
       resolveSocketIdentity: vi.fn().mockRejectedValue(new Error('auth_failed')),
       normalizeUserId,
       isUuidLike,
@@ -143,18 +181,16 @@ describe('registerPresenceHandlers', () => {
   });
 
   it('presence:online returns only user ids with connected sockets', () => {
-    const socketsByUserId = new Map<string, Set<string>>([
-      [USER_A, new Set(['sock-a'])],
-      [USER_B, new Set(['sock-b'])],
-    ]);
+    addSocket(USER_A, 'sock-a');
+    addSocket(USER_B, 'sock-b');
     const socket = createSocketStub();
     const handlers = captureHandlers(socket);
     const cb = vi.fn();
-    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+    const { io } = createIo();
 
     registerPresenceHandlers(socket, {
       io,
-      socketsByUserId,
+      socketsByUserId: registrySockets,
       resolveSocketIdentity: vi.fn(),
       normalizeUserId,
       isUuidLike,
@@ -165,53 +201,81 @@ describe('registerPresenceHandlers', () => {
     expect(cb).toHaveBeenCalledWith({ ok: true, onlineUserIds: [USER_A] });
   });
 
-  it('handlePresenceDisconnect removes socket and upserts offline for uuid users', () => {
-    const socketsByUserId = new Map<string, Set<string>>([[USER_A, new Set(['sock-a'])]]);
-    const socket = createSocketStub({ id: 'sock-a', data: { userId: USER_A } });
-    const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
-    vi.mocked(supabaseFetch).mockResolvedValue([]);
+  it('does NOT mark a user offline while another of their tabs is still connected', async () => {
+    // Two tabs for the same user.
+    addSocket(USER_A, 'sock-a');
+    addSocket(USER_A, 'sock-b');
+    // USER_B is a friend with a live socket, so any broadcast would reach them.
+    addSocket(USER_B, 'sock-friend');
+    vi.mocked(supabaseFetch).mockResolvedValue([{ user_id: USER_A, friend_user_id: USER_B }]);
 
-    const { handlePresenceDisconnect } = registerPresenceHandlers(socket, {
-      io,
-      socketsByUserId,
-      resolveSocketIdentity: vi.fn(),
-      normalizeUserId,
-      isUuidLike,
-    });
+    const { io, emitted } = createIo();
+    const { handlePresenceDisconnect } = registerPresenceHandlers(
+      createSocketStub({ id: 'sock-a', data: { userId: USER_A } }),
+      {
+        io,
+        socketsByUserId: registrySockets,
+        resolveSocketIdentity: vi.fn(),
+        normalizeUserId,
+        isUuidLike,
+      },
+    );
 
     handlePresenceDisconnect();
+    await Promise.resolve();
+    await Promise.resolve();
 
-    expect(socketsByUserId.has(USER_A)).toBe(false);
-    expect(presence.upsertPresence).toHaveBeenCalledWith(USER_A, 'offline');
+    expect(isOnline(USER_A)).toBe(true);
+    expect(emitted.filter((e) => e.event === 'presence:update')).toHaveLength(0);
+  });
+
+  it('marks a user offline once their last socket disconnects', async () => {
+    addSocket(USER_A, 'sock-a');
+    addSocket(USER_B, 'sock-friend');
+    vi.mocked(supabaseFetch).mockResolvedValue([{ user_id: USER_A, friend_user_id: USER_B }]);
+
+    const { io, emitted } = createIo();
+    const { handlePresenceDisconnect } = registerPresenceHandlers(
+      createSocketStub({ id: 'sock-a', data: { userId: USER_A } }),
+      {
+        io,
+        socketsByUserId: registrySockets,
+        resolveSocketIdentity: vi.fn(),
+        normalizeUserId,
+        isUuidLike,
+      },
+    );
+
+    handlePresenceDisconnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(isOnline(USER_A)).toBe(false);
+    expect(emitted).toContainEqual({
+      socketId: 'sock-friend',
+      event: 'presence:update',
+      payload: { userId: USER_A, status: 'offline' },
+    });
   });
 });
 
 describe('emitPresenceUpdateToFriends', () => {
-  beforeEach(() => {
-    vi.mocked(supabaseFetch).mockReset();
-  });
-
   it('emits presence:update only to connected friend sockets', async () => {
-    const friendEmit = vi.fn();
-    const io = {
-      to: vi.fn((socketId: string) => ({
-        emit: socketId === 'sock-friend' ? friendEmit : vi.fn(),
-      })),
-    } as unknown as Server;
-    const socketsByUserId = new Map<string, Set<string>>([[USER_B, new Set(['sock-friend'])]]);
+    addSocket(USER_B, 'sock-friend');
+    const { io, emitted } = createIo();
 
     vi.mocked(supabaseFetch).mockResolvedValue([
       { user_id: USER_A, friend_user_id: USER_B },
       { user_id: USER_A, friend_user_id: USER_C },
     ]);
 
-    emitPresenceUpdateToFriends({ io, socketsByUserId }, USER_A, 'online');
+    emitPresenceUpdateToFriends({ io, socketsByUserId: registrySockets }, USER_A, 'online');
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(friendEmit).toHaveBeenCalledWith('presence:update', { userId: USER_A, status: 'online' });
-    expect(io.to).toHaveBeenCalledTimes(1);
-    expect(io.to).toHaveBeenCalledWith('sock-friend');
+    expect(emitted).toEqual([
+      { socketId: 'sock-friend', event: 'presence:update', payload: { userId: USER_A, status: 'online' } },
+    ]);
     expect(supabaseFetch).toHaveBeenCalledWith(
       `/rest/v1/friends?or=(user_id.eq.${encodeURIComponent(USER_A)},friend_user_id.eq.${encodeURIComponent(USER_A)})&status=eq.accepted&select=user_id,friend_user_id`,
     );

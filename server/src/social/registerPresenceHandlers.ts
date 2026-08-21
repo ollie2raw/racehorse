@@ -2,7 +2,7 @@ import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import type { AckFn, RoomJoinConfig } from '../multiplayer/roomSession';
 import { supabaseFetch } from '../supabaseUtils';
-import { upsertPresence } from './presence';
+import { addSocket, isOnline, removeSocket } from './presenceRegistry';
 
 const log = childLogger('presence');
 
@@ -41,18 +41,19 @@ export function emitPresenceUpdateToFriends(
   })();
 }
 
+/**
+ * Detach this socket from its user. Returns true only when it was that user's
+ * last socket — the one case where they actually went offline.
+ */
 export function createRemoveSocketPresence(
   socket: Socket,
-  socketsByUserId: Map<string, Set<string>>,
+  _socketsByUserId: Map<string, Set<string>>,
   normalizeUserId: PresenceHandlerDeps['normalizeUserId'],
-): () => void {
+): () => boolean {
   return () => {
     const userId = normalizeUserId(socket.data?.userId);
-    if (!userId) return;
-    const set = socketsByUserId.get(userId);
-    if (!set) return;
-    set.delete(socket.id);
-    if (set.size === 0) socketsByUserId.delete(userId);
+    if (!userId) return false;
+    return removeSocket(userId, socket.id);
   };
 }
 
@@ -60,7 +61,7 @@ export function registerPresenceHandlers(
   socket: Socket,
   deps: PresenceHandlerDeps,
 ): {
-  removeSocketPresence: () => void;
+  removeSocketPresence: () => boolean;
   handlePresenceDisconnect: () => void;
 } {
   const removeSocketPresence = createRemoveSocketPresence(
@@ -75,15 +76,18 @@ export function registerPresenceHandlers(
       try {
         const { username, userId } = await deps.resolveSocketIdentity(payload ?? {});
         if (!userId) return cb?.({ ok: false });
-        log.info({ userId }, 'presence identify received');
+        // Re-identify is routine: it fires on every reconnect and on every
+        // access-token rotation. Only announce a transition the friends list
+        // has not already been told about.
+        const wasOnline = isOnline(userId);
         removeSocketPresence();
         socket.data.userId = userId;
         socket.data.username = username;
-        const existing = deps.socketsByUserId.get(userId) ?? new Set<string>();
-        existing.add(socket.id);
-        deps.socketsByUserId.set(userId, existing);
-        void upsertPresence(userId, 'online').catch(() => {});
-        emitPresenceUpdateToFriends(deps, userId, 'online');
+        addSocket(userId, socket.id);
+        if (!wasOnline) {
+          log.info({ userId }, 'presence identify received');
+          emitPresenceUpdateToFriends(deps, userId, 'online');
+        }
         cb?.({ ok: true });
       } catch {
         cb?.({ ok: false });
@@ -97,7 +101,7 @@ export function registerPresenceHandlers(
           .map((id) => deps.normalizeUserId(id))
           .filter((id): id is string => Boolean(id))
       : [];
-    const onlineUserIds = userIds.filter((id) => (deps.socketsByUserId.get(id)?.size ?? 0) > 0);
+    const onlineUserIds = userIds.filter((id) => isOnline(id));
     log.info({
       requested: userIds.length,
       online: onlineUserIds.length,
@@ -107,10 +111,12 @@ export function registerPresenceHandlers(
   });
 
   const handlePresenceDisconnect = () => {
-    removeSocketPresence();
     const userId = deps.normalizeUserId(socket.data?.userId);
-    if (deps.isUuidLike(userId)) {
-      void upsertPresence(userId as string, 'offline').catch(() => {});
+    // removeSocketPresence reports whether this was the user's last socket.
+    // Announcing offline unconditionally marked a player offline whenever any
+    // one of their tabs closed, while they were still connected in another.
+    const wentOffline = removeSocketPresence();
+    if (wentOffline && deps.isUuidLike(userId)) {
       emitPresenceUpdateToFriends(deps, userId as string, 'offline');
     }
   };
