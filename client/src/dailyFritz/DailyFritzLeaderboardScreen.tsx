@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
@@ -37,6 +37,11 @@ const SPARSE_ROW_THRESHOLD = 8;
 interface DailyFritzLeaderboardScreenProps {
   user: User | null;
   runDate: string;
+  /**
+   * The /api/daily-fritz/today response the route already fetched to resolve
+   * `runDate`. Seeds state so this screen doesn't request it a second time.
+   */
+  initialToday?: DailyFritzTodayResponse | null;
   currentUsername?: string | null;
   glickoRating?: number | null;
   onBack: () => void;
@@ -304,6 +309,7 @@ function InsightStat({
 export default function DailyFritzLeaderboardScreen({
   user,
   runDate,
+  initialToday = null,
   currentUsername = null,
   glickoRating = null,
   onBack,
@@ -315,7 +321,11 @@ export default function DailyFritzLeaderboardScreen({
   const [filter, setFilter] = useState<LeaderboardFilter>('global');
   const [friendUsernames, setFriendUsernames] = useState<Set<string>>(new Set());
   const [countdownTick, setCountdownTick] = useState(0);
-  const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
+  const [today, setToday] = useState<DailyFritzTodayResponse | null>(initialToday ?? null);
+  // Identity the seeded response is valid for; consumed once, then refetches resume.
+  const seededKeyRef = useRef<string | null>(
+    initialToday && user?.id ? `${user.id}:${runDate}` : null,
+  );
   const [resultOverlayOpen, setResultOverlayOpen] = useState(false);
   const [shareDone, setShareDone] = useState(false);
 
@@ -383,6 +393,13 @@ export default function DailyFritzLeaderboardScreen({
   useEffect(() => {
     if (!user?.id) {
       setToday(null);
+      return;
+    }
+    const key = `${user.id}:${runDate}`;
+    if (seededKeyRef.current === key) {
+      // The route fetched this exact response moments ago. Consume the seed so a
+      // later runDate/user change still refetches.
+      seededKeyRef.current = null;
       return;
     }
     let cancelled = false;
