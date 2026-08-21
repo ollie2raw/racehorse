@@ -3,6 +3,7 @@ import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { formatAuthErrorMessage } from './authErrors';
 import { getAuthEmailRedirectTo } from './authRedirect';
+import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 import { readE2eDevAuth } from './e2eDevAuth';
 
@@ -559,12 +560,22 @@ export function useAuth() {
             const {
               data: { session },
             } = await withTimeout(supabase.auth.getSession(), 3000);
+            const fallback = evaluateAuthTimeoutSessionFallback({
+              session,
+              attemptedEmail: email,
+              flow: 'sign_up',
+            });
+            if (!fallback.ok) {
+              // Unrelated / missing session: real timeout. Do not clear that session.
+              return { error: fallback.error };
+            }
             if (session?.user) {
               void hydrateProfile(session.user);
               return { error: null };
             }
+            return { error: AUTH_TIMEOUT_FALLBACK_ERROR };
           } catch {
-            // ignore
+            // ignore probe failures; fall through to timeout error
           }
         }
         return { error: err instanceof Error ? err.message : 'Unable to sign up.' };
@@ -602,12 +613,22 @@ export function useAuth() {
             const {
               data: { session },
             } = await withTimeout(supabase.auth.getSession(), 3000);
+            const fallback = evaluateAuthTimeoutSessionFallback({
+              session,
+              attemptedEmail: email,
+              flow: 'sign_in',
+            });
+            if (!fallback.ok) {
+              // Unrelated / missing session: real timeout. Do not clear that session.
+              return { error: fallback.error };
+            }
             if (session?.user) {
               void hydrateProfile(session.user);
               return { error: null };
             }
+            return { error: AUTH_TIMEOUT_FALLBACK_ERROR };
           } catch {
-            // ignore
+            // ignore probe failures; fall through to timeout error
           }
         }
         return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
