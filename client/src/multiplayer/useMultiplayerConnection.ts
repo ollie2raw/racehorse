@@ -439,20 +439,23 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       timeout: 20000,
     });
 
-    const pingSocket = s as SocketWithPing;
-    pingSocket.__mpPingTimer = setInterval(() => {
-      if (!s.connected) return;
-      const sentAt = performance.now();
-      s.emit('mp:ping', sentAt, () => {
-        if (
-          import.meta.env.DEV &&
-          typeof window !== 'undefined' &&
-          window.localStorage.getItem('mp_debug') === '1'
-        ) {
+    // Latency probe. Its only consumer is the DEV `mp_debug` console readout, so
+    // outside that it was a 5s emit + server round-trip on every connected tab,
+    // on every screen, that nothing read. Only arm it when someone is looking.
+    const mpPingEnabled =
+      import.meta.env.DEV &&
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem('mp_debug') === '1';
+    if (mpPingEnabled) {
+      const pingSocket = s as SocketWithPing;
+      pingSocket.__mpPingTimer = setInterval(() => {
+        if (!s.connected) return;
+        const sentAt = performance.now();
+        s.emit('mp:ping', sentAt, () => {
           console.info('[mp-ping]', `${Math.round(performance.now() - sentAt)}ms`);
-        }
-      });
-    }, 5000);
+        });
+      }, 5000);
+    }
 
     scope.ui.setSocket(s);
     if (import.meta.env.DEV && typeof window !== 'undefined') {

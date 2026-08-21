@@ -31,6 +31,8 @@ function matchmakingDebugEnabled(): boolean {
 
 let serviceSingleton: QueueService | null = null;
 let onlineBroadcastTimer: ReturnType<typeof setInterval> | null = null;
+/** Last counts actually broadcast, so the tick can skip unchanged fan-outs. */
+let lastBroadcastCounts: { online: number; queued: number } | null = null;
 
 /**
  * Tracks userIds currently in-flight through the async fetchPlayerRating call.
@@ -242,7 +244,21 @@ function getOrCreateService(io: Server): QueueService {
 
   if (!onlineBroadcastTimer) {
     onlineBroadcastTimer = setInterval(() => {
-      io.emit('queue:online', { online: getOnlineCount(io), queued: serviceSingleton!.size() });
+      const online = getOnlineCount(io);
+      const queued = serviceSingleton!.size();
+      // io.emit reaches every connected socket on every screen, not just the
+      // matchmaking ones. The counts are unchanged most ticks, so only fan out
+      // when they actually move. Clients that connect between changes get their
+      // initial values from the `queue:online` request/ack path instead.
+      if (
+        lastBroadcastCounts
+        && lastBroadcastCounts.online === online
+        && lastBroadcastCounts.queued === queued
+      ) {
+        return;
+      }
+      lastBroadcastCounts = { online, queued };
+      io.emit('queue:online', { online, queued });
     }, ONLINE_BROADCAST_INTERVAL_MS);
   }
 
@@ -418,6 +434,7 @@ export function resetMatchmakingRuntimeForTests(): void {
   if (onlineBroadcastTimer) {
     clearInterval(onlineBroadcastTimer);
     onlineBroadcastTimer = null;
+    lastBroadcastCounts = null;
   }
   pendingJoins.clear();
   resetMatchedPairsForTests();
