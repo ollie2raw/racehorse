@@ -25,17 +25,21 @@ describe('resolveDailyFritzCompletedHandNextHandFailure', () => {
     }
   });
 
-  it('shows a calm Continue message before the fallback threshold', () => {
+  it('retries silently before the fallback threshold, showing nothing', () => {
     const decision = resolveDailyFritzCompletedHandNextHandFailure({
       verifierCode: 'illegal_action',
       status: 400,
       failureAttempt: 1,
     });
-    expect(decision.kind).toBe('continue');
-    if (decision.kind === 'continue') {
-      expect(decision.message).not.toMatch(/Couldn't verify/i);
-      expect(decision.message).not.toMatch(/Reload the hand/i);
+    // Previously a 'continue' decision carrying "the next deal is loading
+    // automatically" — copy that promised an automatic retry the caller never
+    // scheduled, so it sat next to the Retry button that did the real work.
+    expect(decision.kind).toBe('retry');
+    if (decision.kind === 'retry') {
+      expect(decision.delayMs).toBeGreaterThan(0);
     }
+    // A first failure must carry no player-facing text at all.
+    expect(decision).not.toHaveProperty('message');
   });
 
   it('never leaves any verifier code stuck on Continue forever', () => {

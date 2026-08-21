@@ -547,11 +547,18 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
               return;
             }
-            setHandAdvanceError(recovery.kind === 'continue'
-              ? recovery.message
-              : formatDailyFritzNextHandUserMessage(errMsg));
+            if (recovery.kind === 'retry') {
+              // Silent: no error surface, no manual affordance. A late
+              // verification receipt is not the player's problem, and the
+              // ladder escalates to unverified_fallback on the next failure.
+              prefetchCoordinator.clear();
+              completedHandEvidenceRef.current = null;
+              advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
+              return;
+            }
+            setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
             logDailyFritzHandBreadcrumb('manual-advance-shown', {
-              reason: recovery.kind === 'continue' ? recovery.reason : 'nonretryable',
+              reason: 'nonretryable',
               source,
               failureAttempt,
               status,
