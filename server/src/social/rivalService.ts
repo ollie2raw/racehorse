@@ -66,20 +66,5 @@ export async function getAutoRivals(userId: string): Promise<RivalEntry[]> {
     };
   });
 
-  // Cache computed rivals to the rivals table (upsert on conflict).
-  void Promise.all(rivals.map((r) =>
-    Promise.resolve(
-      supabaseFetch('/rest/v1/rivals', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({
-          user_id: userId,
-          rival_id: r.userId,
-          h2h_record: { wins: r.winsAgainst, losses: r.lossesAgainst, games: r.gamesPlayed },
-        }),
-      }),
-    ).catch(() => {}),
-  ));
-
   return rivals;
 }
