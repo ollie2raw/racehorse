@@ -1,4 +1,5 @@
 import { getDailyPuzzleDisplayTitle } from './presentation';
+import { DAILY_PUZZLE_SLOT_COUNT } from './types';
 import type { LadderSlotBreakdownChip } from './ladderSlotRowViewModel';
 import type {
   DailyPuzzleCompleteResponse,
@@ -52,6 +53,8 @@ export type DailyPuzzleLadderOverlaysProps = {
   finalLadderShareText: string;
   shareDone: boolean;
   actions: DailyPuzzleLadderOverlayActions;
+  /** Length of the ladder this day published (3 today, 5 on archived days). */
+  publishedSlotCount?: number;
 };
 
 export function DailyPuzzleLadderOverlays({
@@ -60,7 +63,9 @@ export function DailyPuzzleLadderOverlays({
   finalLadderShareText,
   shareDone,
   actions,
+  publishedSlotCount = DAILY_PUZZLE_SLOT_COUNT,
 }: DailyPuzzleLadderOverlaysProps) {
+  const finalSlotIndex = publishedSlotCount;
   const { submitPending, finalizePending, slotOverlay, practiceOverlay, finalOverlay } = flags;
 
   return (
@@ -174,7 +179,7 @@ export function DailyPuzzleLadderOverlays({
             </div>
             <footer
               className={`rh-result__actions dpl-ladder-result__actions${
-                practiceOverlay.slotIndex < 5 ? ' dpl-ladder-result__actions--triple' : ''
+                practiceOverlay.slotIndex < finalSlotIndex ? ' dpl-ladder-result__actions--triple' : ''
               }`}
             >
               <button
@@ -184,7 +189,7 @@ export function DailyPuzzleLadderOverlays({
               >
                 Replay
               </button>
-              {practiceOverlay.slotIndex < 5 ? (
+              {practiceOverlay.slotIndex < finalSlotIndex ? (
                 <button
                   type="button"
                   className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
@@ -201,7 +206,7 @@ export function DailyPuzzleLadderOverlays({
                   Back to Ladder
                 </button>
               )}
-              {practiceOverlay.slotIndex < 5 ? (
+              {practiceOverlay.slotIndex < finalSlotIndex ? (
                 <button
                   type="button"
                   className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
@@ -231,10 +236,10 @@ export function DailyPuzzleLadderOverlays({
             <div className="rh-result__summary">
               <div>
                 <span className="rh-result__summary-label">Completed</span>
-                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/5</span>
+                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/{publishedSlotCount}</span>
               </div>
               <div>
-                <span className="rh-result__summary-label">Puzzle 5</span>
+                <span className="rh-result__summary-label">{getDailyPuzzleDisplayTitle(finalSlotIndex)}</span>
                 <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
               </div>
               <div>

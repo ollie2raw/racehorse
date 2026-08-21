@@ -3,7 +3,23 @@ import {
   type DailyPuzzleStepPresentation,
 } from './presentation';
 import type { DailyPuzzleSlot, DailyPuzzleSlotResult } from './types';
-import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlotIndex } from './types';
+import {
+  DAILY_PUZZLE_SLOT_COUNT,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
+  type DailyPuzzleSlotIndex,
+} from './types';
+
+/**
+ * Slot indexes to render for a given day: the current three-slot ladder, widened
+ * when the data itself comes from one of the archived five-slot days.
+ */
+function ladderSlotIndices(observedIndexes: number[]): DailyPuzzleSlotIndex[] {
+  const widest = Math.min(
+    MAX_DAILY_PUZZLE_SLOT_COUNT,
+    Math.max(DAILY_PUZZLE_SLOT_COUNT, ...observedIndexes, 0),
+  );
+  return Array.from({ length: widest }, (_, index) => (index + 1) as DailyPuzzleSlotIndex);
+}
 
 export type LadderSlotBreakdownChip = {
   slotIndex: DailyPuzzleSlotIndex;
@@ -28,7 +44,7 @@ export type LadderSlotRowViewModel = {
 export function buildLadderSlotBreakdown(
   completedSlots: DailyPuzzleSlotResult[],
 ): LadderSlotBreakdownChip[] {
-  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
+  return ladderSlotIndices(completedSlots.map((entry) => entry.slotIndex)).map((slotIndex) => {
     const result = completedSlots.find((entry) => entry.slotIndex === slotIndex);
     const step = getDailyPuzzleStepPresentation(slotIndex);
     return {
@@ -46,7 +62,10 @@ export function buildLadderSlotRows(params: {
   nextSlotIndex: DailyPuzzleSlotIndex | null;
 }): LadderSlotRowViewModel[] {
   const { hubSlots, completedSlots, attemptStatus, nextSlotIndex } = params;
-  return DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
+  return ladderSlotIndices([
+    ...hubSlots.map((entry) => entry.slotIndex),
+    ...completedSlots.map((entry) => entry.slotIndex),
+  ]).map((slotIndex) => {
     const slot = hubSlots.find((s) => s.slotIndex === slotIndex);
     const slotResult = completedSlots.find((e) => e.slotIndex === slotIndex);
     const isCompleteRun = attemptStatus === 'completed';

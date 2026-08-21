@@ -64,7 +64,7 @@ describe('dailyPuzzleLadderReadiness', () => {
     );
     expect(readiness.ready).toBe(false);
     expect(readiness.publishedSlotCount).toBe(2);
-    expect(readiness.missingSlotIndexes).toEqual([2, 4, 5]);
+    expect(readiness.missingSlotIndexes).toEqual([2]);
     expect(readiness.shouldAlert).toBe(true);
     expect(readiness.alertReason).toContain('missing: 2');
   });

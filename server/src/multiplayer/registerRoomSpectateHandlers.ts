@@ -11,10 +11,11 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
+import type { LeaveExistingSocketRoomsFn } from './registerRoomLifecycleHandlers';
 
 export type RegisterRoomSpectateHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
-  leaveExistingSocketRooms: () => void;
+  leaveExistingSocketRooms: LeaveExistingSocketRoomsFn;
 };
 
 export function registerRoomSpectateHandlers(
@@ -34,7 +35,9 @@ export function registerRoomSpectateHandlers(
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      leaveExistingSocketRooms();
+      // S2: spectating is a viewing intent, not a leave. Detach from the old
+      // room's broadcasts, but never forfeit a match this socket is mid-playing.
+      await leaveExistingSocketRooms({ preserveLiveSeats: true });
 
       let room: Room | null = null;
       try {

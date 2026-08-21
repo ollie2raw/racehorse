@@ -3,6 +3,26 @@
 Date: 2026-05-31  
 Scope: Read-only audit of current Daily Puzzle Ladder loop (no logic changes)
 
+> **Update 2026-08-20 — mostly accurate again, with two carve-outs.**
+>
+> Between 2026-08-06 (`a4f9693`) and 2026-08-20 the ladder published **five**
+> slots, so every "3 slots" statement below was wrong for that window. The
+> ladder is back to three slots (`DAILY_PUZZLE_SLOT_COUNT = 3`) and those
+> statements hold again for new days. Still needs work:
+>
+> 1. **Archive days are not covered here.** Days published between 2026-08-06
+>    and 2026-08-20 have five slots, and attempts bound to those set versions
+>    resolve, submit, and finalize at *five*, not three. The count-based gates
+>    take the attempt's own ladder length; `MAX_DAILY_PUZZLE_SLOT_COUNT = 5` is
+>    the upper bound, and the database check constraints remain `between 1 and 5`.
+> 2. **§4 is stale on file layout** (unrelated to slot count): the endpoints
+>    listed as "All in `server/src/index.ts`" now live in
+>    `server/src/http/routes/dailyPuzzle.ts` with storage in
+>    `server/src/http/stores/dailyPuzzleStore.ts`.
+>
+> `master_chain_score` is the final rung of the attempt's own ladder — slot 3 on
+> new days, slot 5 on the archived five-slot days.
+
 ## 1) Main Files Involved
 
 - Client

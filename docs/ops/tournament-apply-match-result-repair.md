@@ -1,6 +1,8 @@
 # Ops: repair a stuck tournament match after applyMatchResult give-up
 
-**When:** Players saw game-over (and may have toasted *tournament result couldn't be saved*), but the bracket never advanced. Funnel: `private_game_over_persist_failed` with `extra.kind = "tournament_apply"`.
+**When (game-over path):** Players saw game-over (and may have toasted *tournament result couldn't be saved*), but the bracket never advanced. Funnel: `private_game_over_persist_failed` with `extra.kind = "tournament_apply"`.
+
+**When (forfeit path, G2):** A player left/forfeited, seats may have seen *Forfeit recorded, but the tournament result couldn't be saved…*, and the live room has `tournamentForfeitApplyStatus = 'failed'` with **`abandonedAt` still unset**. Funnel: same event with `extra.kind = "tournament_forfeit_apply"`. The bracket did **not** advance; do not treat the room as successfully abandoned.
 
 **Player refresh does not fix this.** Persist is latched `failed` in that room process; repair is ops-side.
 
@@ -16,7 +18,7 @@ where id = '<matchId>';   -- from toast / funnel / room.scheduledTournamentMatch
 -- Already fixed: status = 'completed' AND winner_id set → stop (apply is idempotent)
 ```
 
-Winner/loser user ids are `player1_id` / `player2_id` on that row. Scores: use the finished room scores if you still have them; otherwise reconstruct from player report + server logs.
+Winner/loser user ids are `player1_id` / `player2_id` on that row. Scores: use the finished room scores if you still have them; otherwise reconstruct from player report + server logs. For a forfeit give-up, winner is the non-forfeiting seat; `winnerSource` on repair should be `'forfeit'`.
 
 ## Safe fix (preferred): re-run `applyMatchResult`
 
@@ -30,11 +32,16 @@ await applyMatchResult(io, {
   winnerId: '<winner auth user uuid>',
   player1Score: <number>,  // seat/player1 score on the match row orientation
   player2Score: <number>,
-  winnerSource: 'game_over',
+  winnerSource: 'game_over', // or 'forfeit' when repairing a forfeit give-up
+  // optional for forfeit repair:
+  // statusReason: 'player1_forfeit' | 'player2_forfeit',
+  // forfeitUserId: '<loser auth user uuid>',
 });
 ```
 
 That will: mark the match completed, eliminate the loser registration, emit `tournament:match_completed`, fill the next-round slot (`waiting`/`ready`), and if final, complete the tournament.
+
+After a forfeit-path repair, the in-memory room (if still alive) may still show `tournamentForfeitApplyStatus = 'failed'` until process/room cleanup — bracket truth is the DB row + engine emissions.
 
 ## SQL-only (last resort)
 

@@ -183,7 +183,9 @@ describe('DailyPuzzleLadderHubView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View Leaderboard →' }));
     fireEvent.click(screen.getByRole('button', { name: 'Share Result' }));
     fireEvent.click(screen.getByRole('button', { name: 'Puzzle 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Puzzle 2' }));
+    // Slot 2's stored title is now the canonical step identity, so the row
+    // renders 'Tactical Setup' rather than the Puzzle N fallback.
+    fireEvent.click(screen.getByRole('button', { name: 'Tactical Setup' }));
 
     expect(actions.onOpenLeaderboard).toHaveBeenCalledTimes(1);
     expect(actions.onShareResult).toHaveBeenCalledWith('Share me');

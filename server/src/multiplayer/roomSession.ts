@@ -32,6 +32,7 @@ import { publishMultiplayerSpectatorSnapshotIfEnabled } from '../spectator/spect
 import type {
   LegacyMatchmakingRoomShellHydrationResult,
   MatchmakingRoomShellHydrationResult,
+  MatchmakingSocketSyncResult,
 } from '../matchmaking/roomShellHydration';
 
 function drawAuditUpdateEmitted(roomCode: string, reason: string): void {
@@ -92,12 +93,21 @@ export type RoomSessionHandlerDeps = {
   normalizeUserId: (value: unknown) => string | null;
   tryHydrateMatchmakingRoomShell: (
     roomCode: string,
+    /** Identity of the socket asking to seat; checked against the match's players (M4). */
+    requesterUserId?: string | null,
   ) => Promise<MatchmakingRoomShellHydrationResult | LegacyMatchmakingRoomShellHydrationResult>;
   waitUntilMatchmakingRoomSocketsReady: (
     io: Server,
     roomCode: string,
     engineSeatSocketIds: string[],
-  ) => Promise<void>;
+    resolveSeatSocketIds?: () => string[],
+  ) => Promise<MatchmakingSocketSyncResult | void>;
+  /**
+   * M6: abort a matchmaking match that must not be dealt (socket-sync timeout).
+   * Optional so non-matchmaking test harnesses need not supply it; when absent
+   * the match is simply not started.
+   */
+  abortMatchmakingMatchOnStartFailure?: (roomCode: string, reason: string) => void;
   onAfterMatchStarted: (room: Room) => Promise<void>;
   notifyRoomPlayersInGame: (roomCode: string) => void;
   maybeFinalizeTournamentMatch?: (room: Room) => void;

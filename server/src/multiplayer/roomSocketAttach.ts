@@ -18,6 +18,7 @@ import {
   throwArchivedTerminalJoinOrError,
 } from './matchTerminalJoin';
 import { normalizeMatchmakingRoomShellHydrationResult } from '../matchmaking/roomShellHydration';
+import { clearMatchedPair } from '../matchmaking/matchedPairRegistry';
 import { onPlayerSocketRejoined } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
 import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
@@ -48,7 +49,10 @@ import {
   type RoomPlayer,
   type RoomSessionHandlerDeps,
 } from './roomSession';
-import type { LeaveTrackedRoomFn } from './registerRoomLifecycleHandlers';
+import type {
+  LeaveExistingSocketRoomsFn,
+  LeaveTrackedRoomFn,
+} from './registerRoomLifecycleHandlers';
 
 const log = childLogger('multiplayer:socket-attach');
 
@@ -86,9 +90,26 @@ export type RoomSocketAttachContext = {
 
 export type RoomSocketAttachFns = {
   leaveTrackedRoom: LeaveTrackedRoomFn;
-  leaveExistingSocketRooms: () => void;
+  leaveExistingSocketRooms: LeaveExistingSocketRoomsFn;
   attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn;
 };
+
+/**
+ * The seat is in a match that is actually running — i.e. leaving without
+ * preserving it forfeits a live game. Shared by the forfeit decision and by the
+ * spectate seat guard so the two can never drift apart.
+ */
+function isLiveSeat(room: Room, playerSeatId: string | null | undefined): playerSeatId is string {
+  return Boolean(
+    playerSeatId &&
+      room.players.includes(playerSeatId) &&
+      room.state != null &&
+      !room.state.gameOver &&
+      !room.abandonedAt &&
+      room.tournamentForfeitApplyStatus !== 'pending' &&
+      room.tournamentForfeitApplyStatus !== 'failed',
+  );
+}
 
 export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocketAttachFns {
   const { io, socket, handlerDeps } = ctx;
@@ -120,13 +141,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     const wasPlayer = playerSeatId ? room.players.includes(playerSeatId) : false;
     clearSocketRematchReady(code, socket.id);
 
-    const shouldForfeit =
-      !preserveSeat &&
-      wasPlayer &&
-      playerSeatId &&
-      room.state != null &&
-      !room.state.gameOver &&
-      !room.abandonedAt;
+    const shouldForfeit = !preserveSeat && isLiveSeat(room, playerSeatId);
 
     if (shouldForfeit) {
       const rosterCached = getRoomRoster(code);
@@ -188,18 +203,41 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
 
   (socket as Socket & { __leaveTrackedRoom: typeof leaveTrackedRoom }).__leaveTrackedRoom = leaveTrackedRoom;
 
-  const leaveExistingSocketRooms = () => {
-    const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);
-    previousRooms.forEach((roomId) => {
-      void leaveTrackedRoom(roomId);
-    });
-    socket.data.roomId = undefined;
+  /** True when this socket currently occupies a seat in a running match in `code`. */
+  const socketHoldsLiveSeat = (code: string): boolean => {
+    let room: Room;
+    try {
+      room = getRoom(code);
+    } catch {
+      return false;
+    }
+    return isLiveSeat(room, getSeatIdForSocket(code, socket.id));
+  };
+
+  const leaveExistingSocketRooms: LeaveExistingSocketRoomsFn = async (options = {}) => {
+    const keep = options.exceptRoomCode?.trim().toUpperCase();
+    const previousRooms = [...socket.rooms].filter(
+      (roomId) => roomId !== socket.id && roomId.trim().toUpperCase() !== keep,
+    );
+    // Sequential + awaited (P4): each old room's forfeit/roster teardown must
+    // finish before the caller attaches anywhere new.
+    for (const roomId of previousRooms) {
+      const preserveSeat = Boolean(options.preserveLiveSeats) && socketHoldsLiveSeat(roomId);
+      await leaveTrackedRoom(roomId, { preserveSeat });
+    }
+    const currentRoomId =
+      typeof socket.data.roomId === 'string' ? socket.data.roomId.trim().toUpperCase() : undefined;
+    if (!keep || currentRoomId !== keep) {
+      socket.data.roomId = undefined;
+    }
   };
 
   const attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn = async (params) => {
     const { roomCode, username, userId, via, hydrateMatchmakingRoom } = params;
     clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-    leaveExistingSocketRooms();
+    // Re-attaching to the room this socket already occupies is a reconnect —
+    // leaving it first would forfeit the very match being rejoined.
+    await leaveExistingSocketRooms({ exceptRoomCode: roomCode });
 
     const hydrated = await ensureRoomHydrated(roomCode);
     if (hydrated.kind === 'hydrated' && hydrated.restoredRoster.length > 0) {
@@ -232,12 +270,21 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       hydrateMatchmakingRoom &&
       !peekRoom(roomCode)
         ? normalizeMatchmakingRoomShellHydrationResult(
-            await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode),
+            await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode, userId ?? null),
             roomCode,
           )
         : { kind: 'skipped' as const };
     if (shellHydrationResult.kind === 'persistence_unavailable') {
       throw new Error('room_persistence_unavailable');
+    }
+    if (shellHydrationResult.kind === 'forbidden') {
+      // M4: hydrating an MM shell seats you into a live ranked match — only the
+      // two players the match was created for may do it.
+      log.info(
+        { roomCode, userId: userId ?? null, via },
+        'join rejected: not a matchmaking participant',
+      );
+      throw new Error('not_match_participant');
     }
     if (hydrated.kind === 'shell_only' && shellHydrationResult.kind !== 'shell_only') {
       throw new Error('room_shell_only');
@@ -263,6 +310,27 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
       if (archivedTerminal) throw archivedTerminal;
       throw new Error('match_abandoned');
+    }
+    // M4: same ACL for an MM shell that is already in memory. Without this the
+    // hydrate check would only hold until a legitimate participant restored the
+    // shell, after which a stranger could take the still-empty second seat.
+    const matchmakingParticipants = existingRoom.matchmakingParticipantUserIds;
+    if (
+      matchmakingParticipants &&
+      matchmakingParticipants.length > 0 &&
+      (!userId || !matchmakingParticipants.includes(userId))
+    ) {
+      log.info(
+        { roomCode, userId: userId ?? null, via },
+        'join rejected: not a matchmaking participant',
+      );
+      throw new Error('not_match_participant');
+    }
+    if (existingRoom.tournamentForfeitApplyStatus === 'pending') {
+      throw new Error('tournament_forfeit_pending');
+    }
+    if (existingRoom.tournamentForfeitApplyStatus === 'failed') {
+      throw new Error('tournament_forfeit_failed');
     }
     if (existingRoom.state?.gameOver) {
       const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
@@ -365,53 +433,46 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       ? roster.find((player) => player.userId === userId)?.id ?? null
       : null;
     if (!migratedByUserId) {
-      try {
-        const reconnectCandidate = pruneReconnectSeats(roomCode).find((seat) =>
-          identityMatchesReconnectSeat(seat, {
-            username,
-            userId,
-          }),
-        );
-        assertRoomDurabilityOperationAllowed(
-          existingRoom,
-          reconnectCandidate ? 'reconnect_existing_player' : 'join_new_player',
-          {
-            attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
-          },
-        );
-        joinedPlayerSeatId = allocatePlayerSeatId();
-        room = joinRoom(roomCode, joinedPlayerSeatId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'unknown error';
-        if (!message.toLowerCase().includes('room is full')) {
-          throw err;
-        }
-        const seats = pruneReconnectSeats(roomCode);
-        const match = seats.find((seat) =>
-          identityMatchesReconnectSeat(seat, {
-            username,
-            userId,
-          }),
-        );
-        if (!match) throw err;
+      // Reclaim a reconnect hold for this identity first — whether or not the
+      // room is currently full. Allocating a fresh seat when a hold exists
+      // (common solo-host reconnect while waiting for a friend) forks a zombie
+      // seat and falsely fills the room.
+      const reconnectCandidate = pruneReconnectSeats(roomCode).find((seat) =>
+        identityMatchesReconnectSeat(seat, {
+          username,
+          userId,
+        }),
+      );
+      if (reconnectCandidate) {
         assertRoomDurabilityOperationAllowed(existingRoom, 'reconnect_existing_player', {
           attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
         });
-        joinedPlayerSeatId = match.seatId;
-        migrateRoomSeat(roomCode, match.seatId, socket.id);
-        releaseReconnectSeat(roomCode, match.seatId);
-        const rosterIdx = roster.findIndex((player) => player.id === match.seatId);
+        joinedPlayerSeatId = reconnectCandidate.seatId;
+        migrateRoomSeat(roomCode, reconnectCandidate.seatId, socket.id);
+        releaseReconnectSeat(roomCode, reconnectCandidate.seatId);
+        const rosterIdx = roster.findIndex((player) => player.id === reconnectCandidate.seatId);
         if (rosterIdx >= 0) {
-          roster[rosterIdx] = { ...roster[rosterIdx], socketId: socket.id, username, userId };
+          roster[rosterIdx] = {
+            ...roster[rosterIdx],
+            socketId: socket.id,
+            username,
+            userId,
+          };
         } else {
           roster.push({
-            id: match.seatId,
+            id: reconnectCandidate.seatId,
             socketId: socket.id,
             username,
             userId,
           });
         }
         room = getRoom(roomCode);
+      } else {
+        assertRoomDurabilityOperationAllowed(existingRoom, 'join_new_player', {
+          attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
+        });
+        joinedPlayerSeatId = allocatePlayerSeatId();
+        room = joinRoom(roomCode, joinedPlayerSeatId);
       }
     }
     if (!room) throw new Error('Room not found.');
@@ -450,17 +511,47 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     if (room.matchmakingMatchId && !room.state) {
       markMatchStartReady(room.code, joinedPlayerSeatId);
 
-      const mmSeatSockets = getEngineSeatSocketIds(room.code, [...room.players]);
+      const mmRoomCode = room.code;
+      const mmSeatSockets = getEngineSeatSocketIds(mmRoomCode, [...room.players]);
       if (mmSeatSockets.length >= 2) {
+        let syncFailed = false;
         try {
-          await handlerDeps.waitUntilMatchmakingRoomSocketsReady(io, room.code, mmSeatSockets);
-          const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
-          if (startResult.started) {
-            room = getRoom(room.code);
-            log.info({ roomCode: room.code, socketId: socket.id, via }, 'matchmaking auto-started');
+          const sync = await handlerDeps.waitUntilMatchmakingRoomSocketsReady(
+            io,
+            mmRoomCode,
+            mmSeatSockets,
+            // Re-resolved each poll: a client that reconnects inside the window
+            // comes back on a new socket id and must still count as synced.
+            () => getEngineSeatSocketIds(mmRoomCode, [...(peekRoom(mmRoomCode)?.players ?? [])]),
+          );
+          if (sync === 'timeout') {
+            // M6: never deal into a seat whose socket has not synced — that
+            // player would be live in a game their client never received.
+            syncFailed = true;
+          } else {
+            const startResult = await tryStartMatchIfReady(mmRoomCode, io, buildMatchStartDeps(io));
+            if (startResult.started) {
+              room = getRoom(mmRoomCode);
+              clearMatchedPair(mmRoomCode);
+              log.info({ roomCode: mmRoomCode, socketId: socket.id, via }, 'matchmaking auto-started');
+            }
           }
         } catch (startErr) {
           log.warn({ err: startErr, via }, 'matchmaking auto-start failed');
+        }
+        if (syncFailed) {
+          // Reuses the M1/M2 abort path: teardown + requeue both players. The
+          // M3 lock never ran, so there is no half-dealt state to unwind.
+          log.warn(
+            { roomCode: mmRoomCode, socketId: socket.id, via },
+            'matchmaking start aborted: socket sync timed out',
+          );
+          handlerDeps.abortMatchmakingMatchOnStartFailure?.(mmRoomCode, 'match_sync_failed');
+          socket.leave(mmRoomCode);
+          if (socket.data.roomId === mmRoomCode) {
+            socket.data.roomId = undefined;
+          }
+          throw new Error('match_sync_failed');
         }
       }
     }

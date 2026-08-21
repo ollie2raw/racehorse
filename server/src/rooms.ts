@@ -87,6 +87,12 @@ export type Room = {
   events: RoomMatchEvent[];
   /** Set when room was created via matchmaking queue; used to update matchmaking_matches on game-end. */
   matchmakingMatchId?: string;
+  /**
+   * Matchmaking seat ACL (M4): the userIds of the two players this quick match
+   * was created for. Present only on matchmaking rooms; when present, only
+   * these identities may attach to the room shell.
+   */
+  matchmakingParticipantUserIds?: string[];
   /** Set when the room is a scheduled-tournament match; used to advance the bracket on game-end. */
   scheduledTournamentMatchId?: string;
   /** Parent tournament id (denormalized for cheap lookups during game-over). */
@@ -98,6 +104,12 @@ export type Room = {
   abandonedByUserId?: string | null;
   abandonedWinnerUserId?: string | null;
   abandonedReason?: 'forfeit' | 'abandon';
+  /**
+   * Tournament forfeit → applyMatchResult durability (G2).
+   * `abandonedAt` is latched only after apply succeeds. pending/failed block
+   * gameplay without pretending the bracket advanced.
+   */
+  tournamentForfeitApplyStatus?: 'idle' | 'pending' | 'succeeded' | 'failed';
   /** One-shot metadata for the next `state:update` after resolving forced-draw steps (cleared after emit). */
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
   /** One-shot: socket ids that auto-passed this resolution (cleared after `state:update`). */
@@ -136,21 +148,56 @@ export type ActResult = {
   };
 };
 
-/** In-memory gameplay fields restored after a failed durable commit (disconnect auto-act). */
-export type RoomGameplaySnapshot = {
-  state: GameState;
+/**
+ * Full room memory restored after a failed durable commit (game:action + hand lifecycle).
+ * `state` may be null (e.g. pre-startGame lobby).
+ */
+export type RoomLifecycleSnapshot = {
+  state: GameState | null;
   ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
   ghostTurnIndex: number;
   eventSequence: number;
   events: RoomMatchEvent[];
   pendingAutoPassNotice?: string[];
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
+  asyncStateVersion: number;
+  nextHandReady: string[];
+  rematchReady: string[];
+  matchStartReady: string[];
+  lastHandEndedNotifiedHand: number | null;
+  lastHandEndedAtMs: number | null;
+  lastBroadcastScores: Record<string, number>;
+  preGameDraw: ServerPregameDrawState | null;
+  activeTileSetSize?: number;
 };
+
+/** In-memory gameplay fields restored after a failed durable commit (disconnect auto-act / game:action). */
+export type RoomGameplaySnapshot = RoomLifecycleSnapshot & { state: GameState };
 
 const rooms = new Map<RoomCode, Room>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
 
 let liveRoomPersistHook: ((room: Room) => void) | null = null;
+
+/** Actor-facing copy when hand lifecycle mutates memory but cannot be proven durable. */
+export const HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE =
+  "Hand update couldn't be saved — try again.";
+
+/** Thrown after rollback when flush is ambiguous / not durably recoverable. */
+export class RoomLifecyclePersistUncertainError extends Error {
+  readonly uncertain = true as const;
+
+  constructor(message: string = HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE) {
+    super(message);
+    this.name = 'RoomLifecyclePersistUncertainError';
+  }
+}
+
+export function isRoomLifecyclePersistUncertainError(
+  err: unknown,
+): err is RoomLifecyclePersistUncertainError {
+  return err instanceof RoomLifecyclePersistUncertainError;
+}
 
 /** Registered from `initRoomSession` to avoid a static import cycle with live persistence. */
 export function registerLiveRoomPersistHook(hook: (room: Room) => void): void {
@@ -166,10 +213,9 @@ function notifyLiveRoomStateCommitted(room: Room): void {
   liveRoomPersistHook?.(room);
 }
 
-export function captureRoomGameplaySnapshot(room: Room): RoomGameplaySnapshot | null {
-  if (!room.state) return null;
+export function captureRoomLifecycleSnapshot(room: Room): RoomLifecycleSnapshot {
   return {
-    state: structuredClone(room.state) as GameState,
+    state: room.state ? (structuredClone(room.state) as GameState) : null,
     ghostMoveLogs: structuredClone(room.ghostMoveLogs),
     ghostTurnIndex: room.ghostTurnIndex,
     eventSequence: room.eventSequence,
@@ -180,12 +226,35 @@ export function captureRoomGameplaySnapshot(room: Room): RoomGameplaySnapshot | 
     pendingForcedDrawBroadcast: room.pendingForcedDrawBroadcast
       ? { ...room.pendingForcedDrawBroadcast }
       : undefined,
+    asyncStateVersion: room.asyncStateVersion,
+    nextHandReady: [...room.nextHandReady],
+    rematchReady: [...room.rematchReady],
+    matchStartReady: [...room.matchStartReady],
+    lastHandEndedNotifiedHand: room.lastHandEndedNotifiedHand,
+    lastHandEndedAtMs: room.lastHandEndedAtMs,
+    lastBroadcastScores: { ...room.lastBroadcastScores },
+    preGameDraw: room.preGameDraw
+      ? (structuredClone(room.preGameDraw) as ServerPregameDrawState)
+      : null,
+    activeTileSetSize: room.activeTileSetSize,
   };
 }
 
-/** Restore pre-act memory and re-notify the live-session persist hook with the rolled-back room. */
-export function rollbackRoomGameplayCommit(room: Room, snapshot: RoomGameplaySnapshot): void {
-  room.state = structuredClone(snapshot.state) as GameState;
+export function captureRoomGameplaySnapshot(room: Room): RoomGameplaySnapshot | null {
+  if (!room.state) return null;
+  return captureRoomLifecycleSnapshot(room) as RoomGameplaySnapshot;
+}
+
+/** Restore pre-mutation memory and re-notify the live-session persist hook. */
+export function rollbackRoomLifecycleCommit(
+  room: Room,
+  snapshot: RoomLifecycleSnapshot,
+): void {
+  if (room.preGameDrawTimer) {
+    clearTimeout(room.preGameDrawTimer);
+    room.preGameDrawTimer = null;
+  }
+  room.state = snapshot.state ? (structuredClone(snapshot.state) as GameState) : null;
   room.ghostMoveLogs = structuredClone(snapshot.ghostMoveLogs);
   room.ghostTurnIndex = snapshot.ghostTurnIndex;
   room.eventSequence = snapshot.eventSequence;
@@ -196,20 +265,42 @@ export function rollbackRoomGameplayCommit(room: Room, snapshot: RoomGameplaySna
   room.pendingForcedDrawBroadcast = snapshot.pendingForcedDrawBroadcast
     ? { ...snapshot.pendingForcedDrawBroadcast }
     : undefined;
+  room.asyncStateVersion = snapshot.asyncStateVersion;
+  room.nextHandReady = new Set(snapshot.nextHandReady);
+  room.rematchReady = new Set(snapshot.rematchReady);
+  room.matchStartReady = new Set(snapshot.matchStartReady);
+  room.lastHandEndedNotifiedHand = snapshot.lastHandEndedNotifiedHand;
+  room.lastHandEndedAtMs = snapshot.lastHandEndedAtMs;
+  room.lastBroadcastScores = { ...snapshot.lastBroadcastScores };
+  room.preGameDraw = snapshot.preGameDraw
+    ? (structuredClone(snapshot.preGameDraw) as ServerPregameDrawState)
+    : null;
+  if (snapshot.activeTileSetSize !== undefined) {
+    room.activeTileSetSize = snapshot.activeTileSetSize;
+  } else {
+    delete room.activeTileSetSize;
+  }
   notifyLiveRoomStateCommitted(room);
 }
 
-async function flushCommittedRoomStateOrThrow(room: Room): Promise<void> {
-  const result = await flushScheduledLiveRoomPersistence(room.code);
+/** Restore pre-act memory and re-notify the live-session persist hook with the rolled-back room. */
+export function rollbackRoomGameplayCommit(room: Room, snapshot: RoomGameplaySnapshot): void {
+  rollbackRoomLifecycleCommit(room, snapshot);
+}
+
+/**
+ * After in-memory mutation: schedule persist, flush, and roll back + throw uncertain
+ * when durability cannot be proven (same contract as game:action).
+ */
+async function commitLifecycleAfterMutate(
+  room: Room,
+  snapshot: RoomLifecycleSnapshot,
+): Promise<void> {
+  notifyLiveRoomStateCommitted(room);
+  await flushScheduledLiveRoomPersistence(room.code);
   if (!isLiveRoomDurablyRecoverable(room)) {
-    throw new Error(
-      room.durability.status === 'failed' || room.durability.status === 'degraded'
-        ? 'room_persistence_failed'
-        : 'room_snapshot_uncommitted',
-    );
-  }
-  if (result.flushedRoomCodes.length > 0) {
-    return;
+    rollbackRoomLifecycleCommit(room, snapshot);
+    throw new RoomLifecyclePersistUncertainError();
   }
 }
 const MIN_HAND_OVER_MS = 2500;
@@ -427,7 +518,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
 export function joinRoom(code: string, playerSeatId: string): Room {
   const room = rooms.get(code);
   if (!room) throw new Error('Room not found.');
-  if (room.abandonedAt) throw new Error('match_abandoned');
+  assertRoomNotAbandonedOrForfeitBlocked(room);
 
   if (!room.players.includes(playerSeatId)) {
     if (room.players.length >= 2) {
@@ -449,6 +540,24 @@ export function getRoom(code: string): Room {
   const room = peekRoom(code);
   if (!room) throw new Error('Room not found.');
   return room;
+}
+
+/** True while tournament forfeit apply is in flight or gave up without latching abandonedAt. */
+export function isTournamentForfeitApplyBlocking(room: Room): boolean {
+  const status = room.tournamentForfeitApplyStatus;
+  return status === 'pending' || status === 'failed';
+}
+
+function assertRoomNotAbandonedOrForfeitBlocked(room: Room): void {
+  if (room.abandonedAt) {
+    throw new Error('match_abandoned');
+  }
+  if (room.tournamentForfeitApplyStatus === 'pending') {
+    throw new Error('tournament_forfeit_pending');
+  }
+  if (room.tournamentForfeitApplyStatus === 'failed') {
+    throw new Error('tournament_forfeit_failed');
+  }
 }
 
 /** In-process stats for ops/debug endpoints (lost on process restart). */
@@ -605,116 +714,152 @@ export function createPreGameDrawShellMatch(players: string[], config?: Partial<
   };
 }
 
-export async function initiatePregameDrawOrStart(
+export async function initiatePregameDrawOrStartUnlocked(
   code: string,
   io: Server,
   options: { allowRestart?: boolean } = {},
 ): Promise<Room> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'match_start');
+  // Coalesce concurrent starts: second waiter after the first committed must not re-deal.
+  if (room.state && !options.allowRestart) {
+    return room;
+  }
   if (!isPregameDrawEligible(room)) {
-    return startGame(code, io, options);
+    return startGameUnlocked(code, io, options);
   }
 
-  if (room.preGameDrawTimer) {
-    clearTimeout(room.preGameDrawTimer);
-    room.preGameDrawTimer = null;
+  const snapshot = captureRoomLifecycleSnapshot(room);
+  try {
+    if (room.preGameDrawTimer) {
+      clearTimeout(room.preGameDrawTimer);
+      room.preGameDrawTimer = null;
+    }
+
+    room.preGameDraw = initMultiplayerPregameDraw(room.players);
+    room.state = createPreGameDrawShellMatch(room.players, room.config);
+    room.matchStartReady.clear();
+    room.rematchReady.clear();
+    room.nextHandReady.clear();
+
+    await commitLifecycleAfterMutate(room, snapshot);
+    return room;
+  } catch (err) {
+    if (!isRoomLifecyclePersistUncertainError(err)) {
+      rollbackRoomLifecycleCommit(room, snapshot);
+    }
+    throw err;
   }
-
-  room.preGameDraw = initMultiplayerPregameDraw(room.players);
-  room.state = createPreGameDrawShellMatch(room.players, room.config);
-  room.matchStartReady.clear();
-  room.rematchReady.clear();
-  room.nextHandReady.clear();
-
-  notifyLiveRoomStateCommitted(room);
-  await flushCommittedRoomStateOrThrow(room);
-  return room;
 }
 
-export async function startGame(
+/**
+ * Match start / pregame entry. Serialized per room via the gameplay lock so
+ * concurrent ready/start signals cannot double-deal (M3).
+ */
+export async function initiatePregameDrawOrStart(
+  code: string,
+  io: Server,
+  options: { allowRestart?: boolean } = {},
+): Promise<Room> {
+  return withRoomGameplayLock(code, () => initiatePregameDrawOrStartUnlocked(code, io, options));
+}
+
+export async function startGameUnlocked(
   code: string,
   io: Server,
   options: { allowRestart?: boolean; customDeck?: Tile[]; startingPlayerId?: string } = {},
 ): Promise<Room> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'match_start');
-  if (room.abandonedAt) {
-    throw new Error('match_abandoned');
-  }
+  assertRoomNotAbandonedOrForfeitBlocked(room);
 
   if (room.players.length !== 2) {
     throw new Error('Need exactly 2 players to start.');
   }
 
+  // Coalesce concurrent starts into a no-op once the first commit won.
   if (room.state && !options.allowRestart) {
-    throw new Error('Game is already in progress.');
+    return room;
   }
 
-  room.preGameDraw = null;
-  if (room.preGameDrawTimer) {
-    clearTimeout(room.preGameDrawTimer);
-    room.preGameDrawTimer = null;
-  }
-
-  // Clear any stale async sequences from a previous game so they cannot
-  // corrupt the new game's state via dangling Promise closures.
-  if (nextHandStartsByRoom.has(code)) {
-    if (process.env.NODE_ENV !== 'production') {
-      log.info(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
+  const snapshot = captureRoomLifecycleSnapshot(room);
+  try {
+    room.preGameDraw = null;
+    if (room.preGameDrawTimer) {
+      clearTimeout(room.preGameDrawTimer);
+      room.preGameDrawTimer = null;
     }
-    nextHandStartsByRoom.delete(code);
-  }
 
-  // Create fresh game state (either first start or restart after stale state)
-  room.asyncStateVersion += 1;
-  const state0 = createInitialState(room.players, room.config);
-  const state1 = startNewHand(state0, options.customDeck, options.startingPlayerId);
-  room.state = state1;
-  if (options.customDeck) {
-    room.activeTileSetSize = options.customDeck.length;
+    // Clear any stale async sequences from a previous game so they cannot
+    // corrupt the new game's state via dangling Promise closures.
+    if (nextHandStartsByRoom.has(code)) {
+      if (process.env.NODE_ENV !== 'production') {
+        log.info(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
+      }
+      nextHandStartsByRoom.delete(code);
+    }
+
+    // Create fresh game state (either first start or restart after stale state)
+    room.asyncStateVersion += 1;
+    const state0 = createInitialState(room.players, room.config);
+    const state1 = startNewHand(state0, options.customDeck, options.startingPlayerId);
+    room.state = state1;
+    if (options.customDeck) {
+      room.activeTileSetSize = options.customDeck.length;
+    }
+    const expectedTileCount = room.activeTileSetSize;
+    assertTileCountInvariant(room.state, `startGame:${code}`, expectedTileCount);
+    assertValidGameState(room.state, `startGame:${code}`, expectedTileCount);
+    room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
+    room.ghostTurnIndex = 0;
+    if (room.events.some((event) => event.type === 'match_started')) {
+      resetRoomEventLog(room);
+    }
+    appendRoomEvent(room, {
+      type: 'match_started',
+      payload: {
+        players: [...room.players],
+        winningScore: room.state.config.winningScore,
+      },
+    });
+    appendRoomEvent(room, {
+      type: 'hand_started',
+      payload: {
+        handNumber: room.state.handNumber,
+        currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
+      },
+    });
+    room.nextHandReady.clear();
+    room.rematchReady.clear();
+    room.matchStartReady.clear();
+    room.lastHandEndedNotifiedHand = null;
+    room.lastHandEndedAtMs = null;
+    room.lastBroadcastScores = Object.fromEntries(
+      room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
+    );
+    await commitLifecycleAfterMutate(room, snapshot);
+    return room;
+  } catch (err) {
+    if (!isRoomLifecyclePersistUncertainError(err)) {
+      rollbackRoomLifecycleCommit(room, snapshot);
+    }
+    throw err;
   }
-  const expectedTileCount = room.activeTileSetSize;
-  assertTileCountInvariant(room.state, `startGame:${code}`, expectedTileCount);
-  assertValidGameState(room.state, `startGame:${code}`, expectedTileCount);
-  room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
-  room.ghostTurnIndex = 0;
-  if (room.events.some((event) => event.type === 'match_started')) {
-    resetRoomEventLog(room);
-  }
-  appendRoomEvent(room, {
-    type: 'match_started',
-    payload: {
-      players: [...room.players],
-      winningScore: room.state.config.winningScore,
-    },
-  });
-  appendRoomEvent(room, {
-    type: 'hand_started',
-    payload: {
-      handNumber: room.state.handNumber,
-      currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
-    },
-  });
-  room.nextHandReady.clear();
-  room.rematchReady.clear();
-  room.matchStartReady.clear();
-  room.lastHandEndedNotifiedHand = null;
-  room.lastHandEndedAtMs = null;
-  room.lastBroadcastScores = Object.fromEntries(
-    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
-  );
-  notifyLiveRoomStateCommitted(room);
-  await flushCommittedRoomStateOrThrow(room);
-  return room;
+}
+
+/** Locked public start — use `startGameUnlocked` when already holding the gameplay lock. */
+export async function startGame(
+  code: string,
+  io: Server,
+  options: { allowRestart?: boolean; customDeck?: Tile[]; startingPlayerId?: string } = {},
+): Promise<Room> {
+  return withRoomGameplayLock(code, () => startGameUnlocked(code, io, options));
 }
 
 export async function nextHand(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'new_hand');
-  if (room.abandonedAt) {
-    throw new Error('match_abandoned');
-  }
+  assertRoomNotAbandonedOrForfeitBlocked(room);
   if (!room.state) throw new Error('Game not started.');
 
   if (!room.state.handOver) {
@@ -725,34 +870,41 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
     throw new Error('Game is over. Cannot start a new hand.');
   }
 
-  // Start new hand
-  room.preGameDraw = null;
-  if (room.preGameDrawTimer) {
-    clearTimeout(room.preGameDrawTimer);
-    room.preGameDrawTimer = null;
+  const snapshot = captureRoomLifecycleSnapshot(room);
+  try {
+    // Start new hand
+    room.preGameDraw = null;
+    if (room.preGameDrawTimer) {
+      clearTimeout(room.preGameDrawTimer);
+      room.preGameDrawTimer = null;
+    }
+    room.asyncStateVersion += 1;
+    const state1 = startNewHand(room.state);
+    room.state = state1;
+    assertTileCountInvariant(room.state, `nextHand:${code}`);
+    assertValidGameState(room.state, `nextHand:${code}`);
+    room.ghostTurnIndex = 0;
+    appendRoomEvent(room, {
+      type: 'hand_started',
+      payload: {
+        handNumber: room.state.handNumber,
+        currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
+      },
+    });
+    room.nextHandReady.clear();
+    room.lastHandEndedNotifiedHand = null;
+    room.lastHandEndedAtMs = null;
+    room.lastBroadcastScores = Object.fromEntries(
+      room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
+    );
+    await commitLifecycleAfterMutate(room, snapshot);
+    return room;
+  } catch (err) {
+    if (!isRoomLifecyclePersistUncertainError(err)) {
+      rollbackRoomLifecycleCommit(room, snapshot);
+    }
+    throw err;
   }
-  room.asyncStateVersion += 1;
-  const state1 = startNewHand(room.state);
-  room.state = state1;
-  assertTileCountInvariant(room.state, `nextHand:${code}`);
-  assertValidGameState(room.state, `nextHand:${code}`);
-  room.ghostTurnIndex = 0;
-  appendRoomEvent(room, {
-    type: 'hand_started',
-    payload: {
-      handNumber: room.state.handNumber,
-      currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
-    },
-  });
-  room.nextHandReady.clear();
-  room.lastHandEndedNotifiedHand = null;
-  room.lastHandEndedAtMs = null;
-  room.lastBroadcastScores = Object.fromEntries(
-    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
-  );
-  notifyLiveRoomStateCommitted(room);
-  await flushCommittedRoomStateOrThrow(room);
-  return room;
 }
 
 export async function readyForNextHand(
@@ -765,7 +917,13 @@ export async function readyForNextHand(
   type MarkPhaseResult =
     | { kind: 'return'; value: { started: boolean; room: Room; ignored?: boolean; waitMs?: number } }
     | { kind: 'coalesce'; room: Room; existingStart: Promise<Room>; readyHandNumber: number }
-    | { kind: 'scheduled'; room: Room; waitMs: number };
+    | {
+        kind: 'scheduled';
+        room: Room;
+        waitMs: number;
+        advance: Promise<Room>;
+        readyHandNumber: number;
+      };
 
   const markPhase = await withRoomGameplayLock(code, async (): Promise<MarkPhaseResult> => {
     const room = getRoom(code);
@@ -791,23 +949,52 @@ export async function readyForNextHand(
       return { kind: 'coalesce', room, existingStart, readyHandNumber };
     }
 
-    if (room.nextHandReady.has(playerSeatId)) {
-      return { kind: 'return', value: { started: false, room, ignored: true } };
-    }
+    const alreadyReady = room.nextHandReady.has(playerSeatId);
+    if (alreadyReady) {
+      // Duplicate mark while waiting — ignore. Exception: everyone is already
+      // ready but no advance is in flight (nextHand rolled back after uncertain
+      // flush) — fall through and re-schedule so a client retry can recover.
+      if (
+        room.nextHandReady.size < room.players.length ||
+        nextHandStartsByRoom.has(code)
+      ) {
+        return { kind: 'return', value: { started: false, room, ignored: true } };
+      }
+    } else {
+      const snapshot = captureRoomLifecycleSnapshot(room);
+      room.nextHandReady.add(playerSeatId);
+      appendRoomEvent(room, {
+        type: 'hand_ready',
+        payload: {
+          playerSeatId,
+          readyCount: room.nextHandReady.size,
+          requiredCount: room.players.length,
+          handNumber: room.state.handNumber,
+        },
+      });
 
-    room.nextHandReady.add(playerSeatId);
-    appendRoomEvent(room, {
-      type: 'hand_ready',
-      payload: {
-        playerSeatId,
-        readyCount: room.nextHandReady.size,
-        requiredCount: room.players.length,
-        handNumber: room.state.handNumber,
-      },
-    });
+      if (room.nextHandReady.size < room.players.length) {
+        try {
+          await commitLifecycleAfterMutate(room, snapshot);
+        } catch (err) {
+          if (!isRoomLifecyclePersistUncertainError(err)) {
+            rollbackRoomLifecycleCommit(room, snapshot);
+          }
+          throw err;
+        }
+        return { kind: 'return', value: { started: false, room } };
+      }
 
-    if (room.nextHandReady.size < room.players.length) {
-      return { kind: 'return', value: { started: false, room } };
+      // Both ready: persist the ready marks first so a later nextHand rollback
+      // can restore readiness (do not clear nextHandReady before nextHand).
+      try {
+        await commitLifecycleAfterMutate(room, snapshot);
+      } catch (err) {
+        if (!isRoomLifecyclePersistUncertainError(err)) {
+          rollbackRoomLifecycleCommit(room, snapshot);
+        }
+        throw err;
+      }
     }
 
     const waitMs = Math.max(
@@ -834,7 +1021,6 @@ export async function readyForNextHand(
           return fresh;
         }
 
-        fresh.nextHandReady.clear();
         const startedRoom = await nextHand(code, io);
         onStateReady?.(startedRoom.code);
         return startedRoom;
@@ -842,17 +1028,17 @@ export async function readyForNextHand(
     })();
 
     nextHandStartsByRoom.set(code, advance);
+    // Swallow rejection on this detached chain — awaiters (scheduled/coalesce)
+    // surface RoomLifecyclePersistUncertainError to the socket ack.
     void advance
-      .catch((err: unknown) => {
-        log.error({ err, roomCode: code }, 'scheduled next hand failed');
-      })
+      .catch(() => undefined)
       .finally(() => {
         if (nextHandStartsByRoom.get(code) === advance) {
           nextHandStartsByRoom.delete(code);
         }
       });
 
-    return { kind: 'scheduled', room, waitMs };
+    return { kind: 'scheduled', room, waitMs, advance, readyHandNumber };
   });
 
   if (markPhase.kind === 'return') {
@@ -873,7 +1059,17 @@ export async function readyForNextHand(
     };
   }
 
-  return { started: false, room: markPhase.room, waitMs: markPhase.waitMs };
+  const currentRoom = await markPhase.advance;
+  const currentState = currentRoom.state;
+  return {
+    started: Boolean(
+      currentState &&
+        currentState.handNumber !== markPhase.readyHandNumber &&
+        !currentState.handOver,
+    ),
+    room: currentRoom,
+    waitMs: markPhase.waitMs,
+  };
 }
 
 // Single-sourced from @racehorse/game-core's dtoContracts module — the client
@@ -917,9 +1113,7 @@ async function actUnlocked(
 ): Promise<ActResult> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'gameplay_action');
-  if (room.abandonedAt) {
-    throw new Error('match_abandoned');
-  }
+  assertRoomNotAbandonedOrForfeitBlocked(room);
   if (!room.state) throw new Error('Game not started.');
 
   let state = room.state;

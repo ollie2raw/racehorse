@@ -2,8 +2,7 @@ import { computeBestPossiblePuzzleScore } from './generatePuzzles';
 import {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
   type DailyPuzzleSlotIndex,
 } from '@racehorse/game-core';
 
@@ -14,8 +13,7 @@ export type { DailyPuzzleSlotIndex };
 export {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
 };
 
 export interface DailyPuzzleSlot {
@@ -279,43 +277,18 @@ function hasPlayableLadderData(slot: DailyPuzzleSlot): boolean {
   );
 }
 
-function slotsMatchIndices(
-  sorted: DailyPuzzleSlot[],
-  indices: readonly DailyPuzzleSlotIndex[],
-): boolean {
+/** Slots numbered 1..n with no gaps, for any n the ladder has ever published. */
+function isContiguousLadderRun(sorted: DailyPuzzleSlot[]): boolean {
   return (
-    sorted.length === indices.length &&
-    indices.every((slotIndex, index) => sorted[index]?.slotIndex === slotIndex)
+    sorted.length >= 1 &&
+    sorted.length <= MAX_DAILY_PUZZLE_SLOT_COUNT &&
+    sorted.every((slot, index) => slot.slotIndex === index + 1)
   );
-}
-
-const LADDER_INDEX_CANDIDATES = [
-  DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
-] as const;
-
-function pickLadderFromSortedSlots(
-  sorted: DailyPuzzleSlot[],
-  options: { requirePublishedMeta: boolean },
-): DailyPuzzleSlot[] | null {
-  for (const indices of LADDER_INDEX_CANDIDATES) {
-    if (!slotsMatchIndices(sorted, indices)) continue;
-    if (sorted.some((slot) => !slot.published)) continue;
-    if (options.requirePublishedMeta) {
-      if (!sorted.every((slot) => slot.slotMaxPoints > 0 && (slot.bestPossibleScore ?? 0) > 0 && hasPlayableLadderData(slot))) {
-        continue;
-      }
-    } else if (!sorted.every(hasPlayableLadderData)) {
-      continue;
-    }
-    return sorted;
-  }
-  return null;
 }
 
 export function findReadyDailyPuzzleLadderSlots(slots: DailyPuzzleSlot[]): DailyPuzzleSlot[] | null {
   if (slots.length < DAILY_PUZZLE_SLOT_COUNT) return null;
-  
+
   const byVersion: Record<number, DailyPuzzleSlot[]> = {};
   for (const slot of slots) {
     if (!byVersion[slot.setVersion]) byVersion[slot.setVersion] = [];
@@ -326,9 +299,13 @@ export function findReadyDailyPuzzleLadderSlots(slots: DailyPuzzleSlot[]): Daily
 
   for (const version of versions) {
     const versionSlots = byVersion[version];
-    if (versionSlots.length !== DAILY_PUZZLE_SLOT_COUNT) continue;
-    
-    const sorted = sortDailyPuzzleSlots(versionSlots);
+    if (versionSlots.length < DAILY_PUZZLE_SLOT_COUNT) continue;
+
+    // Today's ladder is the first DAILY_PUZZLE_SLOT_COUNT slots of the version.
+    // Taking a prefix (rather than requiring an exact length) is what lets a day
+    // that was already published at the old five-slot length keep serving, as a
+    // three-slot ladder, instead of becoming permanently unready.
+    const sorted = sortDailyPuzzleSlots(versionSlots).slice(0, DAILY_PUZZLE_SLOT_COUNT);
     if (sorted.some((slot) => !slot.published)) continue;
     if (!DAILY_PUZZLE_SLOT_INDICES.every((slotIndex, index) => sorted[index]?.slotIndex === slotIndex)) continue;
     if (sorted.every((slot) => slot.slotMaxPoints > 0 && (slot.bestPossibleScore ?? 0) > 0)) {
@@ -344,44 +321,51 @@ export function isDailyPuzzleLadderReady(slots: DailyPuzzleSlot[]): boolean {
 }
 
 /**
- * Returns the five ladder slots for an attempt's setVersion, or null if incomplete.
+ * Returns the ladder slots for an attempt's setVersion, or null if incomplete.
  * Does not require full "readiness" metadata (best_possible_score); boards must be present.
+ *
+ * Bound to the length that set actually published, not to the current ladder
+ * length: an attempt on one of the archived five-slot days still resolves all
+ * five of its slots for review and finalize.
  */
 export function findLadderSlotsForAttemptSet(
   slots: DailyPuzzleSlot[],
 ): DailyPuzzleSlot[] | null {
   if (slots.length < DAILY_PUZZLE_SLOT_COUNT) return null;
   const sorted = sortDailyPuzzleSlots(slots);
-  if (!DAILY_PUZZLE_SLOT_INDICES.every((slotIndex, index) => sorted[index]?.slotIndex === slotIndex)) {
-    return null;
-  }
-  const hasPlayableData = (slot: DailyPuzzleSlot) =>
-    Boolean(slot.startingBoard) &&
-    Array.isArray(slot.startingHand) &&
-    slot.startingHand.length > 0;
-  if (!sorted.every(hasPlayableData)) return null;
+  if (!isContiguousLadderRun(sorted)) return null;
+  if (!sorted.every(hasPlayableLadderData)) return null;
   return sorted;
 }
 
 /** Stricter readiness for publishing / today endpoint display. */
 export function isDailyPuzzleLadderReadyForVersion(slots: DailyPuzzleSlot[]): boolean {
-  if (slots.length !== DAILY_PUZZLE_SLOT_COUNT) return false;
-  return slots.every(
-    (slot) =>
-      slot.published &&
-      slot.slotMaxPoints > 0 &&
-      (slot.bestPossibleScore ?? 0) > 0 &&
-      Boolean(slot.startingBoard) &&
-      Array.isArray(slot.startingHand) &&
-      slot.startingHand.length > 0,
-  );
+  if (slots.length < DAILY_PUZZLE_SLOT_COUNT) return false;
+  return sortDailyPuzzleSlots(slots)
+    .slice(0, DAILY_PUZZLE_SLOT_COUNT)
+    .every(
+      (slot) =>
+        slot.published &&
+        slot.slotMaxPoints > 0 &&
+        (slot.bestPossibleScore ?? 0) > 0 &&
+        hasPlayableLadderData(slot),
+    );
 }
 
+/**
+ * `publishedSlotCount` is the length of the ladder *this attempt* is bound to.
+ * It must be honoured rather than compared against the global constant, or a
+ * five-slot archive attempt would finalize after three submissions (and, before
+ * the ladder shrank, a three-slot day could never finalize at all).
+ */
 export function isDailyPuzzleAttemptFinalizeReady(
   attempt: Pick<DailyPuzzleAttempt, 'status' | 'result'>,
   publishedSlotCount: number = DAILY_PUZZLE_SLOT_COUNT,
 ): boolean {
-  return attempt.status === 'started' && attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
+  const required = Number.isFinite(publishedSlotCount)
+    ? Math.min(MAX_DAILY_PUZZLE_SLOT_COUNT, Math.max(1, Math.round(publishedSlotCount)))
+    : DAILY_PUZZLE_SLOT_COUNT;
+  return attempt.status === 'started' && attempt.result.slots.length >= required;
 }
 
 export function resolveActiveSlotForAttempt(
@@ -391,11 +375,12 @@ export function resolveActiveSlotForAttempt(
   const ladder = findLadderSlotsForAttemptSet(versionSlots);
   if (!ladder) return null;
   if (attempt.status === 'completed') {
-    const reviewIndex = Math.min(Math.max(attempt.result.slots.length, 1), DAILY_PUZZLE_SLOT_COUNT) as DailyPuzzleSlotIndex;
+    const reviewIndex = Math.min(Math.max(attempt.result.slots.length, 1), ladder.length) as DailyPuzzleSlotIndex;
     return ladder.find((slot) => slot.slotIndex === reviewIndex) ?? ladder[ladder.length - 1];
   }
   const submitted = new Set(attempt.result.slots.map((slot) => slot.slotIndex));
-  const nextIndex = DAILY_PUZZLE_SLOT_INDICES.find((index) => !submitted.has(index)) ?? attempt.currentSlotIndex;
+  const nextIndex = ladder.find((slot) => !submitted.has(slot.slotIndex))?.slotIndex
+    ?? attempt.currentSlotIndex;
   return ladder.find((slot) => slot.slotIndex === nextIndex) ?? ladder[0];
 }
 
@@ -448,16 +433,21 @@ export function normalizeDailyPuzzleAttempt(
   const rawPersistedPuzzlesCompleted = Number.isFinite(row.puzzles_completed)
     ? Math.max(0, Math.round(row.puzzles_completed ?? 0))
     : 0;
-  const usesFiveSlotLadder =
-    orderedSlotResults.some((slot) => slot.slotIndex > LEGACY_DAILY_PUZZLE_SLOT_COUNT)
-    || rowSlotIndex > LEGACY_DAILY_PUZZLE_SLOT_COUNT
-    || rawPersistedPuzzlesCompleted > LEGACY_DAILY_PUZZLE_SLOT_COUNT;
-  const ladderSlotCount = usesFiveSlotLadder
-    ? DAILY_PUZZLE_SLOT_COUNT
-    : LEGACY_DAILY_PUZZLE_SLOT_COUNT;
-  const ladderIndices = usesFiveSlotLadder
-    ? DAILY_PUZZLE_SLOT_INDICES
-    : LEGACY_DAILY_PUZZLE_SLOT_INDICES;
+  // Derive this attempt's ladder length from its own rows rather than from the
+  // current published count. Only two lengths have ever been published, so any
+  // evidence of a rung past the current ladder means this attempt belongs to one
+  // of the archived five-slot days and must keep reporting five.
+  const usesArchivedWideLadder =
+    orderedSlotResults.some((slot) => slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT)
+    || rowSlotIndex > DAILY_PUZZLE_SLOT_COUNT
+    || rawPersistedPuzzlesCompleted > DAILY_PUZZLE_SLOT_COUNT;
+  const ladderSlotCount = usesArchivedWideLadder
+    ? MAX_DAILY_PUZZLE_SLOT_COUNT
+    : DAILY_PUZZLE_SLOT_COUNT;
+  const ladderIndices = Array.from(
+    { length: ladderSlotCount },
+    (_, index) => (index + 1) as DailyPuzzleSlotIndex,
+  );
   const persistedPuzzlesCompleted = Math.min(ladderSlotCount, rawPersistedPuzzlesCompleted);
   const puzzlesCompleted = orderedSlotResults.length > 0
     ? Math.min(ladderSlotCount, orderedSlotResults.length)
@@ -465,9 +455,9 @@ export function normalizeDailyPuzzleAttempt(
   const totalScore = orderedSlotResults.length > 0
     ? orderedSlotResults.reduce((sum, slot) => sum + slot.awardedPoints, 0)
     : Number.isFinite(row.total_score) ? Math.max(0, Math.round(row.total_score ?? 0)) : 0;
-  const masterSlotIndex = usesFiveSlotLadder
-    ? DAILY_PUZZLE_SLOT_COUNT
-    : LEGACY_DAILY_PUZZLE_SLOT_COUNT;
+  // Final rung of *this* attempt's ladder: slot 3 on new days, slot 5 on the
+  // archived five-slot days.
+  const masterSlotIndex = ladderSlotCount;
   const masterChainScore = orderedSlotResults.find((slot) => slot.slotIndex === masterSlotIndex)?.awardedPoints
     ?? (Number.isFinite(row.master_chain_score) ? Math.max(0, Math.round(row.master_chain_score ?? 0)) : 0);
   const submittedSlotIndexes = new Set(orderedSlotResults.map((slot) => slot.slotIndex));

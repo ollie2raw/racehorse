@@ -57,8 +57,19 @@ export function registerRoomAbandonHandlers(
 
     try {
       const room = getRoom(roomCode);
-      if (room.abandonedAt || room.state?.gameOver) {
-        const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
+      if (
+        room.abandonedAt ||
+        room.state?.gameOver ||
+        room.tournamentForfeitApplyStatus === 'pending' ||
+        room.tournamentForfeitApplyStatus === 'failed'
+      ) {
+        const error = room.abandonedAt
+          ? 'match_abandoned'
+          : room.tournamentForfeitApplyStatus === 'pending'
+            ? 'tournament_forfeit_pending'
+            : room.tournamentForfeitApplyStatus === 'failed'
+              ? 'tournament_forfeit_failed'
+              : 'match_completed';
         log.info({
           roomCode,
           userId: authenticatedUserId,
@@ -87,7 +98,17 @@ export function registerRoomAbandonHandlers(
 
       const result = await applyActiveMatchForfeit(io, socket, roomCode, abandoningPlayer, 'manual');
       if (!result) {
-        const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
+        // Re-read after the await: `applyActiveMatchForfeit` is exactly what
+        // latches abandonedAt / tournamentForfeitApplyStatus, so the narrowing
+        // from the pre-await guard above no longer describes the room.
+        const afterApply = getRoom(roomCode);
+        const error = afterApply.abandonedAt
+          ? 'match_abandoned'
+          : afterApply.tournamentForfeitApplyStatus === 'failed'
+            ? 'tournament_forfeit_failed'
+            : afterApply.tournamentForfeitApplyStatus === 'pending'
+              ? 'tournament_forfeit_pending'
+              : 'match_completed';
         log.info({
           roomCode,
           userId: authenticatedUserId,

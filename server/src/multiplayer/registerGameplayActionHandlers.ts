@@ -3,6 +3,8 @@ import {
   act,
   captureRoomGameplaySnapshot,
   getRoom,
+  HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE,
+  isRoomLifecyclePersistUncertainError,
   readyForNextHand,
   rollbackRoomGameplayCommit,
 } from '../rooms';
@@ -28,9 +30,38 @@ import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 /** Actor-facing copy when a move mutates memory but cannot be proven durable (then rolled back). */
 export const GAME_ACTION_PERSIST_RETRY_MESSAGE = "Move couldn't be saved — try again.";
 
+export { HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE };
+
 export type RegisterGameplayActionHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
 };
+
+function parseHandReadyArgs(arg2: unknown, arg3: unknown): {
+  handNumber: number | undefined;
+  requestId: string | null;
+  cb: AckFn | undefined;
+} {
+  if (typeof arg2 === 'function') {
+    return { handNumber: undefined, requestId: null, cb: arg2 as AckFn };
+  }
+  if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {
+    const payload = arg2 as { handNumber?: unknown; requestId?: unknown };
+    const handNumber =
+      typeof payload.handNumber === 'number' && Number.isFinite(payload.handNumber)
+        ? payload.handNumber
+        : undefined;
+    return {
+      handNumber,
+      requestId: normalizeGameActionRequestId(payload.requestId),
+      cb: typeof arg3 === 'function' ? (arg3 as AckFn) : undefined,
+    };
+  }
+  return {
+    handNumber: typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined,
+    requestId: null,
+    cb: typeof arg3 === 'function' ? (arg3 as AckFn) : undefined,
+  };
+}
 
 export function registerGameplayActionHandlers(
   io: Server,
@@ -170,27 +201,61 @@ export function registerGameplayActionHandlers(
 
   socket.on('hand:ready', async (code, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code).trim().toUpperCase();
-    const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
-    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
+    const { handNumber, requestId, cb } = parseHandReadyArgs(arg2, arg3);
     try {
       const room = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(room, 'new_hand');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
-      const result = await readyForNextHand(roomCode, playerSeatId, io, handNumber, (code) => {
-        broadcastStateUpdate(code);
-      });
-      if (result.started) {
-        broadcastStateUpdate(result.room.code);
-        setImmediate(() => handlerDeps.maybeFinalizeTournamentMatch?.(result.room));
+
+      const execute = async () => {
+        try {
+          const result = await readyForNextHand(roomCode, playerSeatId, io, handNumber, (code) => {
+            broadcastStateUpdate(code);
+          });
+          if (result.started) {
+            broadcastStateUpdate(result.room.code);
+            setImmediate(() => handlerDeps.maybeFinalizeTournamentMatch?.(result.room));
+          }
+          return {
+            ok: !result.ignored,
+            started: result.started,
+            ignored: Boolean(result.ignored),
+            handNumber: result.room.state?.handNumber ?? null,
+            waitMs: result.waitMs ?? 0,
+            error: result.ignored ? 'stale_or_duplicate_hand_ready' : undefined,
+            sequence: result.room.state?.sequence ?? null,
+          };
+        } catch (err: unknown) {
+          if (isRoomLifecyclePersistUncertainError(err)) {
+            const current = getRoom(roomCode);
+            return {
+              ok: false,
+              error: HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE,
+              uncertain: true,
+              started: false,
+              handNumber: current.state?.handNumber ?? null,
+              sequence: current.state?.sequence ?? null,
+            };
+          }
+          throw err;
+        }
+      };
+
+      const ack = requestId
+        ? await withGameActionIdempotency(roomCode, playerSeatId, requestId, execute)
+        : await execute();
+
+      if (requestId && ack.uncertain) {
+        emitMpAuthorityFunnel('private_action_uncertain', {
+          roomCode,
+          seatId: playerSeatId,
+          requestId,
+          sequence: ack.sequence ?? null,
+          failureCode: 'room_persistence_failed',
+        });
       }
-      cb?.({
-        ok: !result.ignored,
-        started: result.started,
-        ignored: Boolean(result.ignored),
-        handNumber: result.room.state?.handNumber ?? null,
-        waitMs: result.waitMs ?? 0,
-        error: result.ignored ? 'stale_or_duplicate_hand_ready' : undefined,
-      });
+
+      cb?.(ack);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       cb?.({ ok: false, error: message });

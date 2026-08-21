@@ -13,6 +13,7 @@ import {
   calculateDailyPuzzleAwardedPoints,
   calculateServerAuthoritativeElapsedSeconds,
   DAILY_PUZZLE_SLOT_COUNT,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
   findLadderSlotsForAttemptSet,
   findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleAttemptFinalizeReady,
@@ -78,8 +79,20 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         });
       }
     }
+    let attemptSlots: DailyPuzzleSlot[] | undefined;
+    if (attempt) {
+      const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
+      const bound = findLadderSlotsForAttemptSet(versionSlots);
+      if (bound) attemptSlots = bound;
+    }
+    // Finalize against the ladder this attempt is actually bound to, falling
+    // back to today's published ladder. An attempt started on one of the
+    // archived five-slot days still needs five submissions.
     const finalizeReady = attempt
-      ? isDailyPuzzleAttemptFinalizeReady(attempt, ladderSlots?.length ?? DAILY_PUZZLE_SLOT_COUNT)
+      ? isDailyPuzzleAttemptFinalizeReady(
+          attempt,
+          attemptSlots?.length ?? ladderSlots?.length ?? DAILY_PUZZLE_SLOT_COUNT,
+        )
       : false;
     const nextAvailableSlotIndex = attempt
       ? attempt.status === 'completed' || finalizeReady
@@ -88,12 +101,6 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       : ready
         ? 1
         : null;
-    let attemptSlots: DailyPuzzleSlot[] | undefined;
-    if (attempt) {
-      const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
-      const bound = findLadderSlotsForAttemptSet(versionSlots);
-      if (bound) attemptSlots = bound;
-    }
     res.json({
       ok: true,
       runDate,
@@ -157,8 +164,9 @@ export function registerDailyPuzzleRoutes(app: Application): void {
     }
     const ladderSlots = findLadderSlotsForAttemptSet(versionSlots);
     const finalizeReady = isDailyPuzzleAttemptFinalizeReady(attempt, ladderSlots?.length);
+    const attemptSlotCount = ladderSlots?.length ?? DAILY_PUZZLE_SLOT_COUNT;
     const nextAvailableSlotIndex = attempt.status === 'completed'
-      ? (Math.min(Math.max(attempt.result.slots.length, 1), DAILY_PUZZLE_SLOT_COUNT) as DailyPuzzleSlotIndex)
+      ? (Math.min(Math.max(attempt.result.slots.length, 1), attemptSlotCount) as DailyPuzzleSlotIndex)
       : finalizeReady
         ? null
         : attempt.currentSlotIndex;
@@ -224,13 +232,16 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       res.status(409).json({ error: 'Daily Puzzle attempt is already completed.' });
       return;
     }
-    const slotIndex = slotIndexRaw >= 1 && slotIndexRaw <= DAILY_PUZZLE_SLOT_COUNT
+    const slotIndex = slotIndexRaw >= 1 && slotIndexRaw <= MAX_DAILY_PUZZLE_SLOT_COUNT
       ? slotIndexRaw as DailyPuzzleSlotIndex
       : 1;
     const existing = attempt.result.slots.find((slot) => slot.slotIndex === slotIndex);
     if (existing) {
       const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
-      const ladderCompleted = attempt.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
+      // This attempt's own ladder length, not the current published one.
+      const replaySlotCount =
+        findLadderSlotsForAttemptSet(versionSlots)?.length ?? DAILY_PUZZLE_SLOT_COUNT;
+      const ladderCompleted = attempt.result.slots.length >= replaySlotCount;
       const nextSlot = ladderCompleted
         ? null
         : versionSlots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
@@ -303,14 +314,18 @@ export function registerDailyPuzzleRoutes(app: Application): void {
         clientMovesUsed: Number.isFinite(clientMovesUsed) ? Math.max(0, Math.round(clientMovesUsed)) : null,
       },
     });
-    const nextCurrentSlotIndex = Math.min(DAILY_PUZZLE_SLOT_COUNT, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
+    // Everything below is measured against the ladder this attempt is bound to.
+    // `masterChainScore` is therefore the final rung's score: slot 3 on new
+    // days, slot 5 for an attempt still running on an archived five-slot day.
+    const attemptSlotCount = ladderSlots.length;
+    const nextCurrentSlotIndex = Math.min(attemptSlotCount, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
     const nextAttempt: DailyPuzzleAttempt = {
       ...attempt,
       currentSlotIndex: nextCurrentSlotIndex,
-      puzzlesCompleted: Math.min(DAILY_PUZZLE_SLOT_COUNT, attempt.puzzlesCompleted + 1),
+      puzzlesCompleted: Math.min(attemptSlotCount, attempt.puzzlesCompleted + 1),
       totalScore: attempt.totalScore + slotResult.awardedPoints,
       masterChainScore:
-        slot.slotIndex === DAILY_PUZZLE_SLOT_COUNT ? slotResult.awardedPoints : attempt.masterChainScore,
+        slot.slotIndex === attemptSlotCount ? slotResult.awardedPoints : attempt.masterChainScore,
       updatedAt: new Date().toISOString(),
       result: {
         ...attempt.result,
@@ -318,7 +333,7 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       },
     };
     const saved = await persistDailyPuzzleAttempt(nextAttempt);
-    const ladderCompleted = saved.result.slots.length >= DAILY_PUZZLE_SLOT_COUNT;
+    const ladderCompleted = saved.result.slots.length >= attemptSlotCount;
     const nextSlot = ladderCompleted
       ? null
       : versionSlots.find((entry) => entry.slotIndex === saved.currentSlotIndex) ?? null;
@@ -363,7 +378,12 @@ export function registerDailyPuzzleRoutes(app: Application): void {
       res.status(400).json({ error: 'Daily Puzzle run date does not match this attempt.' });
       return;
     }
-    if (attempt.result.slots.length < DAILY_PUZZLE_SLOT_COUNT) {
+    // Complete against this attempt's own ladder length, so an archived
+    // five-slot attempt still needs five and a new one needs three.
+    const completionVersionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
+    const requiredSlotCount =
+      findLadderSlotsForAttemptSet(completionVersionSlots)?.length ?? DAILY_PUZZLE_SLOT_COUNT;
+    if (attempt.result.slots.length < requiredSlotCount) {
       res.status(409).json({ error: 'Daily Puzzle ladder is not complete yet.' });
       return;
     }

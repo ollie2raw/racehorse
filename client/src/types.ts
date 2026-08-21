@@ -90,6 +90,7 @@ export type AppMode =
   | 'dailyPuzzleLeaderboard'
   | 'dailyFritz'
   | 'dailyFritzLeaderboard'
+  | 'puzzleRush'
   | 'learn'
   | 'guidedMatchRecorder'
   | 'guidedMatchAnnotator'

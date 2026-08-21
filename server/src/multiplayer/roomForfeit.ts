@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
-import { getRoom } from '../rooms';
+import { getRoom, type Room } from '../rooms';
 import { fetchMatchById } from '../scheduledTournament/persistence';
 import { applyMatchResult } from '../scheduledTournament/engine';
 import { recordMatchEnd } from '../matchmaking/persistence';
@@ -15,6 +15,12 @@ import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempoten
 import { supabaseFetch } from '../supabaseUtils';
 import type { ProfileRow } from '../supabaseTypes';
 import { childLogger } from '../logger';
+import {
+  GAME_OVER_PERSIST_MAX_ATTEMPTS,
+  GAME_OVER_PERSIST_RETRY_DELAYS_MS,
+  TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE,
+} from './gameOverPersistPolicy';
+import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 
 const log = childLogger('room-forfeit');
 
@@ -24,9 +30,52 @@ export type ForfeitLeavingPlayer = {
   userId: string | null;
 };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function emitTournamentForfeitApplyFailed(
+  io: Server,
+  room: Room,
+  err: unknown,
+): void {
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  emitMpAuthorityFunnel('private_game_over_persist_failed', {
+    roomCode: room.code,
+    failureCode: 'room_persistence_failed',
+    sequence: room.state?.sequence ?? null,
+    extra: {
+      matchId: room.matchId,
+      scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
+      attempts: GAME_OVER_PERSIST_MAX_ATTEMPTS,
+      error: errorMessage,
+      kind: 'tournament_forfeit_apply',
+    },
+  });
+  io.to(room.code).emit('match:result_persist_failed', {
+    roomCode: room.code,
+    matchId: room.matchId,
+    sourceMatchId: room.matchId,
+    sequence: room.state?.sequence ?? null,
+    message: TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE,
+  });
+  log.warn(
+    {
+      roomCode: room.code,
+      matchId: room.matchId,
+      scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
+      error: errorMessage,
+    },
+    'tournament forfeit apply gave up after retries',
+  );
+}
+
 /**
- * Marks a match as forfeited. No-op when already abandoned or game over.
+ * Marks a match as forfeited. No-op when already abandoned, game over, or a
+ * tournament forfeit apply is already pending/failed.
  * Does not remove the seat — leaveTrackedRoom does that after forfeit.
+ *
+ * Tournament (G2): `abandonedAt` is latched only after durable applyMatchResult.
  */
 export async function applyActiveMatchForfeit(
   io: Server,
@@ -39,6 +88,12 @@ export async function applyActiveMatchForfeit(
   const room = getRoom(roomCode);
 
   if (room.abandonedAt || room.state?.gameOver) {
+    return null;
+  }
+  if (
+    room.tournamentForfeitApplyStatus === 'pending' ||
+    room.tournamentForfeitApplyStatus === 'failed'
+  ) {
     return null;
   }
 
@@ -56,16 +111,26 @@ export async function applyActiveMatchForfeit(
       : null;
 
   const nowIso = new Date().toISOString();
-  room.abandonedAt = nowIso;
-  room.abandonedByUserId = authenticatedUserId;
-  room.abandonedReason = 'forfeit';
-
   let winnerUserId = opponentPlayer?.userId ?? null;
+
   if (room.scheduledTournamentMatchId) {
-    const match = await fetchMatchById(room.scheduledTournamentMatchId);
-    if (!match || !match.player1_id || !match.player2_id) {
-      throw new Error('match_not_found');
+    room.tournamentForfeitApplyStatus = 'pending';
+
+    let match;
+    try {
+      match = await fetchMatchById(room.scheduledTournamentMatchId);
+    } catch (err) {
+      room.tournamentForfeitApplyStatus = 'failed';
+      emitTournamentForfeitApplyFailed(io, room, err);
+      return null;
     }
+
+    if (!match || !match.player1_id || !match.player2_id) {
+      room.tournamentForfeitApplyStatus = 'failed';
+      emitTournamentForfeitApplyFailed(io, room, new Error('match_not_found'));
+      return null;
+    }
+
     winnerUserId =
       match.player1_id === authenticatedUserId ? match.player2_id : match.player1_id;
     const winTarget =
@@ -74,19 +139,67 @@ export async function applyActiveMatchForfeit(
         : 30;
     const statusReason =
       match.player1_id === authenticatedUserId ? 'player1_forfeit' : 'player2_forfeit';
-    await applyMatchResult(io, {
-      matchId: match.id,
-      winnerId: winnerUserId,
-      player1Score: match.player1_id === winnerUserId ? winTarget : 0,
-      player2Score: match.player2_id === winnerUserId ? winTarget : 0,
-      winnerSource: 'forfeit',
-      statusReason,
-      forfeitUserId: authenticatedUserId,
-    });
+
+    let lastError: unknown = null;
+    let applied = false;
+    for (let attempt = 0; attempt < GAME_OVER_PERSIST_MAX_ATTEMPTS; attempt += 1) {
+      const delayMs = GAME_OVER_PERSIST_RETRY_DELAYS_MS[attempt] ?? 0;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+      try {
+        await applyMatchResult(io, {
+          matchId: match.id,
+          winnerId: winnerUserId,
+          player1Score: match.player1_id === winnerUserId ? winTarget : 0,
+          player2Score: match.player2_id === winnerUserId ? winTarget : 0,
+          winnerSource: 'forfeit',
+          statusReason,
+          forfeitUserId: authenticatedUserId,
+        });
+        applied = true;
+        break;
+      } catch (err) {
+        lastError = err;
+        log.warn(
+          {
+            err,
+            roomCode: room.code,
+            matchId: match.id,
+            attempt: attempt + 1,
+            maxAttempts: GAME_OVER_PERSIST_MAX_ATTEMPTS,
+          },
+          'tournament forfeit apply attempt failed',
+        );
+      }
+    }
+
+    if (!applied) {
+      room.tournamentForfeitApplyStatus = 'failed';
+      // Intentionally leave abandonedAt unset — bracket did not advance.
+      emitTournamentForfeitApplyFailed(io, room, lastError ?? new Error('tournament_apply_failed'));
+      return null;
+    }
+
+    // Durable apply succeeded — now latch local abandon state.
+    room.abandonedAt = nowIso;
+    room.abandonedByUserId = authenticatedUserId;
+    room.abandonedReason = 'forfeit';
+    room.tournamentForfeitApplyStatus = 'succeeded';
     log.info(
-      { matchId: match.id, tournamentId: match.tournament_id, loserId: authenticatedUserId, winnerId: winnerUserId },
+      {
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        loserId: authenticatedUserId,
+        winnerId: winnerUserId,
+      },
       'tournament forfeit applied',
     );
+  } else {
+    // Private / matchmaking: latch abandon immediately (unchanged).
+    room.abandonedAt = nowIso;
+    room.abandonedByUserId = authenticatedUserId;
+    room.abandonedReason = 'forfeit';
   }
 
   // Calculate forfeit scores and run Glicko-2 updates for ranked multiplayer games

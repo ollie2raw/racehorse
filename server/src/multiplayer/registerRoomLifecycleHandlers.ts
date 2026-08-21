@@ -22,9 +22,26 @@ export type LeaveTrackedRoomFn = (
   options?: { preserveSeat?: boolean },
 ) => Promise<void>;
 
+/**
+ * Detach this socket from every room it is currently in.
+ *
+ * Async and must be awaited (P4): the old room's forfeit is part of leaving,
+ * and letting a new attach run while that is still in flight races the two
+ * rooms' state against each other.
+ *
+ * `preserveLiveSeats` (S2): keep the seat in any room where this socket is
+ * mid-match. Used by spectate, which is a viewing intent, not a leave.
+ *
+ * `exceptRoomCode`: skip this room entirely. Attaching to a room the socket is
+ * already in is a reconnect, not a leave-then-rejoin.
+ */
+export type LeaveExistingSocketRoomsFn = (
+  options?: { preserveLiveSeats?: boolean; exceptRoomCode?: string },
+) => Promise<void>;
+
 export type RegisterRoomLifecycleHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
-  leaveExistingSocketRooms: () => void;
+  leaveExistingSocketRooms: LeaveExistingSocketRoomsFn;
   leaveTrackedRoom: LeaveTrackedRoomFn;
 };
 
@@ -49,7 +66,7 @@ export function registerRoomLifecycleHandlers(
     try {
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      leaveExistingSocketRooms();
+      await leaveExistingSocketRooms();
       const playerSeatId = allocatePlayerSeatId();
       const room = createRoom(playerSeatId, sanitizePrivateRoomConfig(roomConfig));
       socket.join(room.code);

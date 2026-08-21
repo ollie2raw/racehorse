@@ -22,6 +22,7 @@ export type StatsRouteDeps = {
   listCompletedDailyFritzDatesForUser: (userId: string) => Promise<string[]>;
   listCompletedDailyPuzzleLadderDatesForUser: (userId: string) => Promise<string[]>;
   listCompletedLegacyDailyPuzzleDatesForUser: (userId: string) => Promise<string[]>;
+  listCompletedPuzzleRushDatesForUser: (userId: string) => Promise<string[]>;
   recordUserMatch: typeof RecordUserMatchFn;
 };
 
@@ -37,6 +38,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
     listCompletedDailyFritzDatesForUser,
     listCompletedDailyPuzzleLadderDatesForUser,
     listCompletedLegacyDailyPuzzleDatesForUser,
+    listCompletedPuzzleRushDatesForUser,
     recordUserMatch,
   } = deps;
 
@@ -67,13 +69,19 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
         return;
       }
 
-      const [fritzDates, ladderPuzzleDates, legacyPuzzleDates] = await Promise.all([
+      const [fritzDates, ladderPuzzleDates, legacyPuzzleDates, rushDates] = await Promise.all([
         listCompletedDailyFritzDatesForUser(authenticatedUserId),
         listCompletedDailyPuzzleLadderDatesForUser(authenticatedUserId),
         listCompletedLegacyDailyPuzzleDatesForUser(authenticatedUserId),
+        listCompletedPuzzleRushDatesForUser(authenticatedUserId),
       ]);
 
-      const puzzleDates = Array.from(new Set([...ladderPuzzleDates, ...legacyPuzzleDates]));
+      // Three sources unioned: frozen ladder history, frozen pre-ladder
+      // history, and Rush going forward. Purely additive — a streak in flight
+      // when Rush shipped continues across the boundary without a gap.
+      const puzzleDates = Array.from(
+        new Set([...ladderPuzzleDates, ...legacyPuzzleDates, ...rushDates]),
+      );
       const completionMap = createHomeDailyCompletionMap(fritzDates, puzzleDates);
 
       res.json({

@@ -1,6 +1,10 @@
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent, resetRoomEventLog } from '../roomEvents';
-import { getRoom, initiatePregameDrawOrStart, startGame } from '../rooms';
+import {
+  getRoom,
+  initiatePregameDrawOrStartUnlocked,
+  startGameUnlocked,
+} from '../rooms';
 import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import { withRoomGameplayLock } from './roomGameplayLock';
 import {
@@ -119,7 +123,8 @@ export function registerRematchPregameHandlers(
             players: [...lockedRoom.players],
           },
         });
-        await initiatePregameDrawOrStart(lockedRoom.code, io, { allowRestart: true });
+        // Already holding gameplay lock — unlocked start avoids deadlock (M3).
+        await initiatePregameDrawOrStartUnlocked(lockedRoom.code, io, { allowRestart: true });
       });
 
       const roomAfterRematch = getRoom(roomCode);
@@ -244,8 +249,8 @@ export function registerRematchPregameHandlers(
                   }
                   finalRoom.preGameDraw = null;
 
-                  // Deal hand 1 and start gameplay!
-                  await startGame(roomCode, io, {
+                  // Already holding gameplay lock — unlocked start avoids deadlock (M3).
+                  await startGameUnlocked(roomCode, io, {
                     customDeck: fullDeck,
                     startingPlayerId: winnerSeatId,
                     allowRestart: true,

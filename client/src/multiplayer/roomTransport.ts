@@ -77,6 +77,14 @@ export type GameRematchAck = {
   started?: boolean;
 };
 
+/** Idempotency key for hand lifecycle / match-start emits (pairs with server withGameActionIdempotency). */
+export function createRoomCommandRequestId(kind: 'game-start' | 'hand-ready'): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${kind}-${crypto.randomUUID()}`;
+  }
+  return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function isMpDebugEnabled(): boolean {
   return typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
 }
@@ -157,7 +165,9 @@ export function emitRoomAbandonMatch(
 }
 
 export function emitGameStart(socket: SocketEmitter, roomCode: string): Promise<RoomAckResponse> {
-  return emitWithAck<RoomAckResponse>(socket, 'game:start', roomCode);
+  return emitWithAck<RoomAckResponse>(socket, 'game:start', roomCode, {
+    requestId: createRoomCommandRequestId('game-start'),
+  });
 }
 
 export function emitGameAction(
@@ -173,7 +183,10 @@ export function emitHandReady(
   roomCode: string,
   handNumber: number | undefined,
 ): Promise<RoomAckResponse> {
-  return emitWithAck<RoomAckResponse>(socket, 'hand:ready', roomCode, handNumber);
+  return emitWithAck<RoomAckResponse>(socket, 'hand:ready', roomCode, {
+    handNumber,
+    requestId: createRoomCommandRequestId('hand-ready'),
+  });
 }
 
 export function emitGameRematch(

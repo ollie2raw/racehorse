@@ -74,11 +74,15 @@ export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
 export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
 
 /** Published ladder length for new days. */
-export const DAILY_PUZZLE_SLOT_COUNT = 5 as const;
-export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3, 4, 5] as const;
-/** Older archive days published a three-slot ladder. */
-export const LEGACY_DAILY_PUZZLE_SLOT_COUNT = 3 as const;
-export const LEGACY_DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3] as const;
+export const DAILY_PUZZLE_SLOT_COUNT = 3 as const;
+export const DAILY_PUZZLE_SLOT_INDICES = [1, 2, 3] as const;
+/**
+ * Widest ladder ever published (the Aug 2026 five-slot days). Archive days and
+ * attempts bound to those set versions still resolve at their own length, so
+ * slot indexes stay valid up to this bound — matching the database check
+ * constraints, which remain `between 1 and 5`.
+ */
+export const MAX_DAILY_PUZZLE_SLOT_COUNT = 5 as const;
 export type DailyPuzzleSlotIndex = 1 | 2 | 3 | 4 | 5;
 
 export interface DailyPuzzleSlot {

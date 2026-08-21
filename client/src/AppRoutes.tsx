@@ -13,6 +13,7 @@ import {
   GhostSetupRoute,
   GhostMatchRoute,
   SinglePlayerHubRoute,
+  PuzzleRushRoute,
   JourneyRoute,
 } from './routes/soloPlayRoutes';
 import {
@@ -156,6 +157,10 @@ export default function AppRoutes({
 
   if (appMode === 'singlePlayerHub') {
     return <SinglePlayerHubRoute shell={shell} navigation={navigation} auth={auth} />;
+  }
+
+  if (appMode === 'puzzleRush') {
+    return <PuzzleRushRoute shell={shell} navigation={navigation} />;
   }
 
   if (appMode === 'journey' && JOURNEY_MODE_VISIBLE) {

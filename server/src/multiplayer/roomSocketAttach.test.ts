@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createReservedRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
+import { createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import {
+  getRoomRoster,
   initRoomSession,
   resetRoomSessionStoresForTests,
+  reserveReconnectSeat,
   setRoomRoster,
   getSeatIdForSocket,
   resolveActorSeatId,
@@ -366,5 +368,177 @@ describe('createRoomSocketAttach', () => {
     expect(() => resolveActorSeatId(roomCode, oldSocket)).toThrow(
       'Player seat not found for socket.',
     );
+  });
+
+  describe('guest reconnect seat reclaim (P1 — reclaim before allocate)', () => {
+    it('solo guest host reconnects while room not full: reclaims original seat, no second seat allocated', async () => {
+      const roomCode = 'GUESTR1';
+      createReservedRoom(roomCode);
+      joinRoom(roomCode, 'seat-host');
+      setRoomRoster(roomCode, [
+        { id: 'seat-host', socketId: '', username: 'Alice', userId: null },
+      ]);
+      reserveReconnectSeat(roomCode, {
+        seatId: 'seat-host',
+        oldSocketId: 'sock-old',
+        username: 'Alice',
+        userId: null,
+      });
+
+      const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+      const socket = makeSocket('sock-rejoin');
+      const { attachSocketToTrackedRoom } = createRoomSocketAttach({
+        io,
+        socket,
+        handlerDeps: {
+          ...handlerDeps,
+          resolveSocketIdentity: async () => ({ username: 'Alice', userId: null }),
+        },
+      });
+
+      const result = await attachSocketToTrackedRoom({
+        roomCode,
+        username: 'Alice',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      });
+
+      expect(result.joinedPlayerSeatId).toBe('seat-host');
+      expect(getRoom(roomCode).players).toEqual(['seat-host']);
+      expect(getRoomRoster(roomCode).map((p) => p.id)).toEqual(['seat-host']);
+      expect(getSeatIdForSocket(roomCode, 'sock-rejoin')).toBe('seat-host');
+    });
+
+    it('guest reconnect when room is full still reclaims held seat (unchanged full-room reclaim)', async () => {
+      const roomCode = 'GUESTR2';
+      createReservedRoom(roomCode);
+      joinRoom(roomCode, 'seat-host');
+      joinRoom(roomCode, 'seat-guest');
+      setRoomRoster(roomCode, [
+        { id: 'seat-host', socketId: '', username: 'Alice', userId: null },
+        { id: 'seat-guest', socketId: 'sock-friend', username: 'Bob', userId: null },
+      ]);
+      reserveReconnectSeat(roomCode, {
+        seatId: 'seat-host',
+        oldSocketId: 'sock-old',
+        username: 'Alice',
+        userId: null,
+      });
+
+      const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+      const socket = makeSocket('sock-rejoin');
+      const { attachSocketToTrackedRoom } = createRoomSocketAttach({
+        io,
+        socket,
+        handlerDeps: {
+          ...handlerDeps,
+          resolveSocketIdentity: async () => ({ username: 'Alice', userId: null }),
+        },
+      });
+
+      const result = await attachSocketToTrackedRoom({
+        roomCode,
+        username: 'Alice',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      });
+
+      expect(result.joinedPlayerSeatId).toBe('seat-host');
+      expect(getRoom(roomCode).players).toEqual(['seat-host', 'seat-guest']);
+      expect(getRoomRoster(roomCode).map((p) => p.id).sort()).toEqual(['seat-guest', 'seat-host']);
+    });
+
+    it('falls through to fresh allocate when no valid reconnect hold exists', async () => {
+      const roomCode = 'GUESTR3';
+      createReservedRoom(roomCode);
+      // Empty reserved room — no hold reserved for this joiner.
+
+      const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+      const socket = makeSocket('sock-fresh');
+      const { attachSocketToTrackedRoom } = createRoomSocketAttach({
+        io,
+        socket,
+        handlerDeps: {
+          ...handlerDeps,
+          resolveSocketIdentity: async () => ({ username: 'Alice', userId: null }),
+        },
+      });
+
+      const result = await attachSocketToTrackedRoom({
+        roomCode,
+        username: 'Alice',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      });
+
+      expect(result.joinedPlayerSeatId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(result.joinedPlayerSeatId).not.toBe('seat-host');
+      expect(getRoom(roomCode).players).toEqual([result.joinedPlayerSeatId]);
+      expect(getRoomRoster(roomCode)).toHaveLength(1);
+    });
+
+    it('after host reclaim mid-wait, friend can join — exactly two real seats', async () => {
+      const roomCode = 'GUESTR4';
+      createReservedRoom(roomCode);
+      joinRoom(roomCode, 'seat-host');
+      setRoomRoster(roomCode, [
+        { id: 'seat-host', socketId: '', username: 'Alice', userId: null },
+      ]);
+      reserveReconnectSeat(roomCode, {
+        seatId: 'seat-host',
+        oldSocketId: 'sock-old',
+        username: 'Alice',
+        userId: null,
+      });
+
+      const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+
+      const hostSocket = makeSocket('sock-host');
+      const { attachSocketToTrackedRoom: attachHost } = createRoomSocketAttach({
+        io,
+        socket: hostSocket,
+        handlerDeps: {
+          ...handlerDeps,
+          resolveSocketIdentity: async () => ({ username: 'Alice', userId: null }),
+        },
+      });
+      const hostResult = await attachHost({
+        roomCode,
+        username: 'Alice',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      });
+      expect(hostResult.joinedPlayerSeatId).toBe('seat-host');
+      expect(getRoom(roomCode).players).toEqual(['seat-host']);
+
+      const friendSocket = makeSocket('sock-friend');
+      const { attachSocketToTrackedRoom: attachFriend } = createRoomSocketAttach({
+        io,
+        socket: friendSocket,
+        handlerDeps: {
+          ...handlerDeps,
+          resolveSocketIdentity: async () => ({ username: 'Bob', userId: null }),
+        },
+      });
+      const friendResult = await attachFriend({
+        roomCode,
+        username: 'Bob',
+        userId: null,
+        via: 'room:join',
+        hydrateMatchmakingRoom: false,
+      });
+
+      expect(friendResult.joinedPlayerSeatId).not.toBe('seat-host');
+      expect(getRoom(roomCode).players).toHaveLength(2);
+      expect(getRoom(roomCode).players).toContain('seat-host');
+      expect(getRoom(roomCode).players).toContain(friendResult.joinedPlayerSeatId);
+      expect(getRoomRoster(roomCode)).toHaveLength(2);
+    });
   });
 });

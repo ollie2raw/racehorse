@@ -14,6 +14,10 @@ export const MATCH_RESULT_PERSIST_FAILED_MESSAGE =
 export const TOURNAMENT_RESULT_PERSIST_FAILED_MESSAGE =
   "Match finished, but the tournament result couldn't be saved. The bracket may not advance — hang tight or contact support.";
 
+/** Tournament forfeit when applyMatchResult exhausts the same retry ceiling (G2). */
+export const TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE =
+  "Forfeit recorded, but the tournament result couldn't be saved. The bracket may not advance — hang tight or contact support.";
+
 /** Rematch ack while persist is still in flight / retrying (R1). */
 export const MATCH_RESULT_STILL_SAVING_MESSAGE =
   "Result still saving — rematch isn't available yet.";

@@ -18,6 +18,7 @@ import {
 import { markJourneyNodeCompleted } from '../journey/journeyStorage';
 
 const SinglePlayerHubScreen = React.lazy(() => import('../screens/SinglePlayerHubScreen'));
+const PuzzleRushScreen = React.lazy(() => import('../puzzleRush/PuzzleRushScreen'));
 const RacehorseJourneyScreen = React.lazy(() => import('../journey/RacehorseJourneyScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('../practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('../bot/BotMatchScreen'));
@@ -508,6 +509,28 @@ export function SinglePlayerHubRoute({
           onOpenAccount={handleOpenAccountModal}
         />
       </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
+
+export function PuzzleRushRoute({
+  shell,
+  navigation,
+}: {
+  shell: AppRoutesShellProps;
+  navigation: AppRoutesNavigationProps;
+}) {
+  const { withAuthModals, appRootClassName } = shell;
+  const { setAppMode } = navigation;
+  return withAuthModals(
+    <div className={appRootClassName}>
+      <ErrorBoundary context="puzzle-rush">
+        <Suspense fallback={<ScreenLoader label="Loading Puzzle Rush…" />}>
+          {/* Daily Puzzle *is* Rush now, so back returns Home — the ladder
+              screen behind 'daily' is no longer a reachable destination. */}
+          <PuzzleRushScreen onBack={() => setAppMode('home')} onNavigate={setAppMode} />
+        </Suspense>
       </ErrorBoundary>
     </div>
   );

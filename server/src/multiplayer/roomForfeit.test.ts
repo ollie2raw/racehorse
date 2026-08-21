@@ -10,6 +10,10 @@ import { processRealtimeMultiplayerGame } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 
+const applyMatchResultMock = vi.fn();
+const fetchMatchByIdMock = vi.fn();
+const emitMpAuthorityFunnelMock = vi.fn();
+
 vi.mock('../ranking/periodService', () => ({
   processRealtimeMultiplayerGame: vi.fn(async () => ({
     playerA: { delta: -10 },
@@ -33,6 +37,18 @@ vi.mock('../supabaseUtils', () => ({
     }
     return [];
   }),
+}));
+
+vi.mock('../scheduledTournament/persistence', () => ({
+  fetchMatchById: (...args: unknown[]) => fetchMatchByIdMock(...args),
+}));
+
+vi.mock('../scheduledTournament/engine', () => ({
+  applyMatchResult: (...args: unknown[]) => applyMatchResultMock(...args),
+}));
+
+vi.mock('./mpAuthorityTelemetry', () => ({
+  emitMpAuthorityFunnel: (...args: unknown[]) => emitMpAuthorityFunnelMock(...args),
 }));
 
 const persistRoomMatchLogMock = vi.fn(async () => undefined);
@@ -250,5 +266,204 @@ describe('applyActiveMatchForfeit', () => {
         opponentScore: 10,
       })
     );
+  });
+});
+
+
+describe('tournament forfeit apply durability (G2)', () => {
+  beforeEach(() => {
+    resetLiveRoomPersistenceForTests();
+    setLiveRoomPersistenceShuttingDown(true);
+    resetRoomRuntimeForTests();
+    persistRoomMatchLogMock.mockClear();
+    applyMatchResultMock.mockReset();
+    fetchMatchByIdMock.mockReset();
+    emitMpAuthorityFunnelMock.mockClear();
+
+    initRoomSession({} as any, {
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: 'u1' }),
+      normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
+      normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      persistRoomMatchLog: persistRoomMatchLogMock,
+      onGameOver: () => null,
+    });
+  });
+
+  afterEach(() => {
+    resetLiveRoomPersistenceForTests();
+    vi.useRealTimers();
+  });
+
+  function seedTournamentRoom(roomCode: string) {
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+    ]);
+    const room = getRoom(roomCode);
+    room.scheduledTournamentId = 'tour-1';
+    room.scheduledTournamentMatchId = 'match-1';
+    room.config = { ...room.config, winningScore: 30 };
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 30 },
+      playerIds: ['p1', 'p2'],
+      players: {
+        p1: { id: 'p1', hand: [], score: 5 },
+        p2: { id: 'p2', hand: [], score: 10 },
+      },
+      sequence: 4,
+      gameOver: false,
+    } as any;
+    fetchMatchByIdMock.mockResolvedValue({
+      id: 'match-1',
+      tournament_id: 'tour-1',
+      player1_id: 'u1',
+      player2_id: 'u2',
+    });
+    return room;
+  }
+
+  it('forfeit + applyMatchResult succeeds → abandonedAt set, abandon emit, opponent winner', async () => {
+    const room = seedTournamentRoom('TFOR1');
+    applyMatchResultMock.mockResolvedValue(undefined);
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const result = await applyActiveMatchForfeit(io, socket, 'TFOR1', {
+      id: 'p1',
+      username: 'P1',
+      userId: 'u1',
+    });
+
+    expect(result).toEqual({ winnerUserId: 'u2' });
+    expect(applyMatchResultMock).toHaveBeenCalledTimes(1);
+    expect(applyMatchResultMock).toHaveBeenCalledWith(
+      io,
+      expect.objectContaining({
+        matchId: 'match-1',
+        winnerId: 'u2',
+        winnerSource: 'forfeit',
+        forfeitUserId: 'u1',
+      }),
+    );
+    expect(room.abandonedAt).toEqual(expect.any(String));
+    expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
+    expect(room.abandonedWinnerUserId).toBe('u2');
+    expect(io.__emit).toHaveBeenCalledWith(
+      'room:match_abandoned',
+      expect.objectContaining({
+        winnerId: 'u2',
+        isTournament: true,
+        scheduledTournamentMatchId: 'match-1',
+      }),
+    );
+    expect(persistRoomMatchLogMock).toHaveBeenCalledWith(expect.anything(), 'abandoned');
+  });
+
+  it('forfeit + apply fails then succeeds on retry — no abandonedAt until success', async () => {
+    vi.useFakeTimers();
+    const room = seedTournamentRoom('TFOR2');
+    applyMatchResultMock
+      .mockRejectedValueOnce(new Error('db_blip'))
+      .mockResolvedValue(undefined);
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const pending = applyActiveMatchForfeit(io, socket, 'TFOR2', {
+      id: 'p1',
+      username: 'P1',
+      userId: 'u1',
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(room.tournamentForfeitApplyStatus).toBe('pending');
+    expect(room.abandonedAt).toBeUndefined();
+    expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());
+
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual({ winnerUserId: 'u2' });
+    expect(applyMatchResultMock).toHaveBeenCalledTimes(2);
+    expect(room.abandonedAt).toEqual(expect.any(String));
+    expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
+    expect(io.__emit).toHaveBeenCalledWith(
+      'room:match_abandoned',
+      expect.objectContaining({ winnerId: 'u2' }),
+    );
+  });
+
+  it('forfeit + apply exhausts retries → terminal failed, not abandoned, no abandon emit', async () => {
+    vi.useFakeTimers();
+    const room = seedTournamentRoom('TFOR3');
+    applyMatchResultMock.mockRejectedValue(new Error('db_down'));
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const pending = applyActiveMatchForfeit(io, socket, 'TFOR3', {
+      id: 'p1',
+      username: 'P1',
+      userId: 'u1',
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toBeNull();
+    expect(applyMatchResultMock.mock.calls.length).toBe(4);
+    expect(room.abandonedAt).toBeUndefined();
+    expect(room.tournamentForfeitApplyStatus).toBe('failed');
+    expect(persistRoomMatchLogMock).not.toHaveBeenCalled();
+    expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());
+    expect(io.__emit).toHaveBeenCalledWith(
+      'match:result_persist_failed',
+      expect.objectContaining({
+        message: expect.stringContaining('tournament result'),
+      }),
+    );
+    expect(emitMpAuthorityFunnelMock).toHaveBeenCalledWith(
+      'private_game_over_persist_failed',
+      expect.objectContaining({
+        roomCode: 'TFOR3',
+        extra: expect.objectContaining({ kind: 'tournament_forfeit_apply' }),
+      }),
+    );
+  });
+
+  it('while pending/retrying, abandonedAt stays unset and match_abandoned is not emitted', async () => {
+    vi.useFakeTimers();
+    const room = seedTournamentRoom('TFOR4');
+    let resolveApply!: () => void;
+    applyMatchResultMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveApply = resolve;
+        }),
+    );
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const pending = applyActiveMatchForfeit(io, socket, 'TFOR4', {
+      id: 'p1',
+      username: 'P1',
+      userId: 'u1',
+    });
+
+    await Promise.resolve();
+    expect(room.tournamentForfeitApplyStatus).toBe('pending');
+    expect(room.abandonedAt).toBeUndefined();
+    expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());
+
+    resolveApply();
+    await vi.runAllTimersAsync();
+    await pending;
+
+    expect(room.abandonedAt).toEqual(expect.any(String));
+    expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
   });
 });

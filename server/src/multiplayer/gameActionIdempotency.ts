@@ -14,6 +14,12 @@ export type GameActionAck = {
   error?: string;
   duplicate?: boolean;
   uncertain?: boolean;
+  /** hand:ready / game:start lifecycle fields */
+  started?: boolean;
+  ignored?: boolean;
+  handNumber?: number | null;
+  waitMs?: number;
+  waitingFor?: string[];
 };
 
 export type PersistedGameActionReceipt = {
@@ -116,6 +122,10 @@ function storeCachedAck(
       sequence: ack.sequence ?? null,
       ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
       ...(ack.error ? { error: ack.error } : {}),
+      ...(typeof ack.started === 'boolean' ? { started: ack.started } : {}),
+      ...(typeof ack.ignored === 'boolean' ? { ignored: ack.ignored } : {}),
+      ...(ack.handNumber !== undefined ? { handNumber: ack.handNumber } : {}),
+      ...(typeof ack.waitMs === 'number' ? { waitMs: ack.waitMs } : {}),
     },
     expiresAt: Date.now() + ACTION_IDEMPOTENCY_TTL_MS,
   });

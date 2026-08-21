@@ -29,7 +29,7 @@ function player(overrides: Partial<QueuedPlayer>): QueuedPlayer {
     userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     username: 'A',
     rating: 800,
-    joinedAt: Date.now(),
+    joinedAtMs: Date.now(),
     isSim: false,
     ...overrides,
   };

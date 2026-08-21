@@ -70,7 +70,11 @@ export function handleRoomPlayerDisconnect(
   if (roomCode) {
     try {
       const room = getRoom(roomCode);
-      if (room.abandonedAt) {
+      if (
+        room.abandonedAt ||
+        room.tournamentForfeitApplyStatus === 'pending' ||
+        room.tournamentForfeitApplyStatus === 'failed'
+      ) {
         wasActiveRoomPlayer = false;
       } else {
       const playerSeatId = getSeatIdForSocket(roomCode, socket.id);

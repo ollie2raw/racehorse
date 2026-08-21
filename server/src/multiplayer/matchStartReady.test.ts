@@ -11,7 +11,7 @@ describe('tryStartMatchIfReady authority funnel', () => {
 
   it('emits private_match_started only when the match actually starts', async () => {
     const emit = vi.spyOn(telemetry, 'emitMpAuthorityFunnel');
-    vi.spyOn(rooms, 'initiatePregameDrawOrStart').mockImplementation(async (code) => rooms.getRoom(code));
+    vi.spyOn(rooms, 'initiatePregameDrawOrStartUnlocked').mockImplementation(async (code) => rooms.getRoom(code));
 
     createReservedRoom('STRT0');
     joinRoom('STRT0', 'seat-a');

@@ -140,11 +140,12 @@ import {
   type Room,
 } from './rooms';
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
-import { registerMatchmakingHandlers } from './matchmaking';
+import { abortMatchmakingMatchAndRequeue, registerMatchmakingHandlers } from './matchmaking';
 import {
   tryHydrateMatchmakingRoomShell,
   waitUntilMatchmakingRoomSocketsReady,
 } from './matchmaking/roomShellHydration';
+import { startMatchmakingReservationSweeper } from './matchmaking/reservedRoomCleanup';
 import {
   bootstrapScheduledTournamentInfrastructure,
   initScheduledTournaments,
@@ -284,6 +285,7 @@ import { registerGhostRoutes } from './http/routes/ghost';
 import { registerLeagueRoutes } from './http/routes/league';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerDailyPuzzleRoutes } from './http/routes/dailyPuzzle';
+import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
 import {
   getDailyFritzEventsPersistenceAvailability,
@@ -304,6 +306,7 @@ import {
   listCompletedDailyFritzDatesForUser,
   listCompletedDailyPuzzleLadderDatesForUser,
   listCompletedLegacyDailyPuzzleDatesForUser,
+  listCompletedPuzzleRushDatesForUser,
 } from './http/stores/homeCompletionDates';
 
 /** Production custom domain — always allowed even when CLIENT_URL still points at Vercel. */
@@ -528,6 +531,7 @@ registerStatsRoutes(app, {
   listCompletedDailyFritzDatesForUser,
   listCompletedDailyPuzzleLadderDatesForUser,
   listCompletedLegacyDailyPuzzleDatesForUser,
+  listCompletedPuzzleRushDatesForUser,
   recordUserMatch,
 });
 
@@ -576,6 +580,7 @@ registerBotMatchesRoutes(app, {
 });
 
 registerDailyPuzzleRoutes(app);
+registerPuzzleRushRoutes(app);
 registerDailyFritzRoutes(app);
 
 registerRoomEventsRoutes(app, {
@@ -710,6 +715,9 @@ initRoomSession(io, {
   normalizeUserId,
   tryHydrateMatchmakingRoomShell,
   waitUntilMatchmakingRoomSocketsReady,
+  abortMatchmakingMatchOnStartFailure: (roomCode, reason) => {
+    abortMatchmakingMatchAndRequeue(roomCode, reason);
+  },
   onAfterMatchStarted,
   notifyRoomPlayersInGame,
   maybeFinalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
@@ -919,6 +927,7 @@ server.listen(PORT, () => {
       void fetch(pingUrl).catch((err) => log.warn({ err }, 'ping failed'));
     }, 10 * 60 * 1000);
   }
+  startMatchmakingReservationSweeper();
   startRankingCron();
   scheduleDailyFritzWarmup();
   scheduleDailyPuzzleLadderWarmup();

@@ -254,7 +254,7 @@ function PodiumSlot({
       <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
       <span className="dflb-podium-name">{row.username}</span>
       <span className="dflb-podium-score">{row.totalScore} pts</span>
-      <span className="dflb-podium-margin">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT} · M5 {row.masterChainScore}</span>
+      <span className="dflb-podium-margin">{row.puzzlesCompleted}/{DAILY_PUZZLE_SLOT_COUNT} · M{DAILY_PUZZLE_SLOT_COUNT} {row.masterChainScore}</span>
     </div>
   );
 }

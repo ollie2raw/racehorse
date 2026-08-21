@@ -1,5 +1,6 @@
 import './loadEnv';
 import {
+  DAILY_PUZZLE_SLOT_COUNT,
   isDailyPuzzleLadderReady,
   normalizeDailyPuzzleSlot,
   sortDailyPuzzleSlots,
@@ -32,7 +33,7 @@ export type DailyPuzzleGenerationRejectionReason =
   | 'attempt_limit';
 
 export type LadderSlotGenerationProfile = {
-  slotIndex: 1 | 2 | 3 | 4 | 5;
+  slotIndex: 1 | 2 | 3;
   tier: 'quick_line' | 'tactical_setup' | 'master_chain';
   slotTitle: string;
   slotMaxPoints: number;
@@ -41,48 +42,39 @@ export type LadderSlotGenerationProfile = {
   preferredPuzzleTypes: ('one_turn_high_score' | 'setup_and_strike')[];
 };
 
+/**
+ * Three-slot progressive ladder.
+ *
+ * Slot 1 keeps the short opener hand of the five-slot era *and* its easier
+ * best-score band — the opener complaint was about difficulty, not length, so
+ * the pre-August `[25, 50]` floor is deliberately not restored. Slot 2 is the
+ * pre-August tactical rung. Slot 3 is the master chain, unchanged in every
+ * version of this ladder.
+ */
 export const DAILY_PUZZLE_LADDER_PROFILES: LadderSlotGenerationProfile[] = [
   {
     slotIndex: 1,
     tier: 'quick_line',
     slotTitle: 'Quick Hit',
-    slotMaxPoints: 100,
+    slotMaxPoints: 150,
     targetHandSizeRange: [3, 4],
     targetBestScoreRange: [5, 25],
     preferredPuzzleTypes: ['one_turn_high_score'],
   },
   {
     slotIndex: 2,
-    tier: 'quick_line',
-    slotTitle: 'Build',
-    slotMaxPoints: 150,
-    targetHandSizeRange: [4, 5],
-    targetBestScoreRange: [10, 35],
-    preferredPuzzleTypes: ['one_turn_high_score'],
-  },
-  {
-    slotIndex: 3,
     tier: 'tactical_setup',
-    slotTitle: 'Read',
-    slotMaxPoints: 200,
-    targetHandSizeRange: [5, 6],
-    targetBestScoreRange: [15, 50],
-    preferredPuzzleTypes: ['one_turn_high_score'],
-  },
-  {
-    slotIndex: 4,
-    tier: 'tactical_setup',
-    slotTitle: 'Pressure',
+    slotTitle: 'Tactical Setup',
     slotMaxPoints: 250,
-    targetHandSizeRange: [6, 7],
-    targetBestScoreRange: [20, 65],
+    targetHandSizeRange: [5, 6],
+    targetBestScoreRange: [35, 75],
     preferredPuzzleTypes: ['setup_and_strike', 'one_turn_high_score'],
   },
   {
-    slotIndex: 5,
+    slotIndex: 3,
     tier: 'master_chain',
     slotTitle: 'Master Chain',
-    slotMaxPoints: 300,
+    slotMaxPoints: 400,
     targetHandSizeRange: [8, 10],
     targetBestScoreRange: [30, 120],
     preferredPuzzleTypes: ['one_turn_high_score'],
@@ -519,7 +511,7 @@ export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
     slots: slots.map((slot) => {
       const missing: string[] = [];
       if (!slot.published) missing.push('published');
-      if (slot.slotIndex < 1 || slot.slotIndex > 5) missing.push('slot_index');
+      if (slot.slotIndex < 1 || slot.slotIndex > DAILY_PUZZLE_SLOT_COUNT) missing.push('slot_index');
       if (slot.slotMaxPoints <= 0) missing.push('slot_max_points');
       if ((slot.bestPossibleScore ?? 0) <= 0) missing.push('best_possible_score');
       if (!slot.startingBoard) missing.push('starting_board');
@@ -540,7 +532,8 @@ export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
 }
 
 /**
- * Idempotently writes five published `daily_puzzles` rows for the Pacific calendar date.
+ * Idempotently writes the published `daily_puzzles` rows (one per ladder slot)
+ * for the Pacific calendar date.
  * Used by CLI, server startup/schedule, and lazy `/api/daily-puzzle/today` when missing.
  */
 export async function ensureDailyPuzzleLadderForDate(

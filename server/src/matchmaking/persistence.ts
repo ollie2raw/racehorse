@@ -1,12 +1,32 @@
 import { randomUUID } from 'crypto';
 import { supabaseFetch } from '../supabaseUtils';
+import {
+  GAME_OVER_PERSIST_MAX_ATTEMPTS,
+  GAME_OVER_PERSIST_RETRY_DELAYS_MS,
+} from '../multiplayer/gameOverPersistPolicy';
 import type { MatchmakingMatchRecord, QueuedPlayer } from './types';
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Thrown when matchmaking_matches insert cannot be proven after bounded retries (M2). */
+export class MatchStartPersistError extends Error {
+  readonly cause: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'MatchStartPersistError';
+    this.cause = cause;
+  }
+}
 
 /**
  * Insert a new `in_progress` row into matchmaking_matches.
  * Returns the locally-constructed record (with the generated id) so callers
- * can attach it to the in-memory room. Persistence failures are swallowed
- * with a console.warn — the match itself still plays.
+ * can attach it to the in-memory room.
+ *
+ * Sim matches stay local-only (synthetic userIds). Human matches retry with
+ * the same bounded attempt/delay ceiling as game-over persist, then throw —
+ * callers must not emit queue:matched or keep an orphan room (M1/M2).
  */
 export async function recordMatchStart(params: {
   roomCode: string;
@@ -36,26 +56,37 @@ export async function recordMatchStart(params: {
 
   if (isSim) return record;
 
-  try {
-    await supabaseFetch('/rest/v1/matchmaking_matches', {
-      method: 'POST',
-      body: JSON.stringify({
-        id,
-        room_code: params.roomCode,
-        player_a_id: params.a.userId,
-        player_b_id: params.b.userId,
-        player_a_rating: params.a.rating,
-        player_b_rating: params.b.rating,
-        status: 'in_progress',
-        is_sim: false,
-        started_at: startedAt,
-      }),
-    });
-  } catch (err) {
-    console.warn('[matchmaking] recordMatchStart failed', err instanceof Error ? err.message : err);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < GAME_OVER_PERSIST_MAX_ATTEMPTS; attempt++) {
+    const delayMs = GAME_OVER_PERSIST_RETRY_DELAYS_MS[attempt] ?? 0;
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+    try {
+      await supabaseFetch('/rest/v1/matchmaking_matches', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          room_code: params.roomCode,
+          player_a_id: params.a.userId,
+          player_b_id: params.b.userId,
+          player_a_rating: params.a.rating,
+          player_b_rating: params.b.rating,
+          status: 'in_progress',
+          is_sim: false,
+          started_at: startedAt,
+        }),
+      });
+      return record;
+    } catch (err) {
+      lastErr = err;
+    }
   }
 
-  return record;
+  throw new MatchStartPersistError(
+    'matchmaking_match_start_persist_failed',
+    lastErr,
+  );
 }
 
 /**

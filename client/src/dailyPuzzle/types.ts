@@ -2,8 +2,7 @@ import type { BoardState, Tile } from '../types';
 import {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
   type DailyPuzzleLeaderboardEntry,
   type DailyPuzzleSlotIndex,
 } from '@racehorse/game-core';
@@ -11,8 +10,7 @@ import {
 export {
   DAILY_PUZZLE_SLOT_COUNT,
   DAILY_PUZZLE_SLOT_INDICES,
-  LEGACY_DAILY_PUZZLE_SLOT_COUNT,
-  LEGACY_DAILY_PUZZLE_SLOT_INDICES,
+  MAX_DAILY_PUZZLE_SLOT_COUNT,
   type DailyPuzzleSlotIndex,
 };
 

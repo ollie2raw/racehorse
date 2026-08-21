@@ -1,10 +1,16 @@
+import { MAX_DAILY_PUZZLE_SLOT_COUNT } from './types';
+
 export interface DailyPuzzleStepPresentation {
   title: string;
   subtitle: string;
   shortLabel: string;
 }
 
-const LEGACY_SUBTITLES = ['Warm-up', 'Challenge', 'Final', 'Final stretch', 'Finale'] as const;
+/**
+ * Fallback subtitles by index. Indexes 4-5 only appear on the archived
+ * five-slot days, which still render from their stored slot titles.
+ */
+const LEGACY_SUBTITLES = ['Warm-up', 'Challenge', 'Finale', 'Final stretch', 'Finale'] as const;
 
 function getDailyClimbStep(slotIndex: number): DailyPuzzleStepPresentation {
   if (slotIndex === 1) {
@@ -16,12 +22,12 @@ function getDailyClimbStep(slotIndex: number): DailyPuzzleStepPresentation {
   }
   if (slotIndex === 2) {
     return {
-      title: 'Build',
-      subtitle: 'Momentum',
+      title: 'Tactical Setup',
+      subtitle: 'Tactical test',
       shortLabel: 'P2',
     };
   }
-  if (slotIndex === 3) return { title: 'Read', subtitle: 'Tactical test', shortLabel: 'P3' };
+  if (slotIndex === 3) return { title: 'Master Chain', subtitle: 'Finale', shortLabel: 'P3' };
   if (slotIndex === 4) return { title: 'Pressure', subtitle: 'Final stretch', shortLabel: 'P4' };
   return { title: 'Master Chain', subtitle: 'Finale', shortLabel: 'P5' };
 }
@@ -33,7 +39,7 @@ export function getDailyPuzzleStepPresentation(
   const climbStep = getDailyClimbStep(slotIndex);
   const storedTitle = publishedSlotTitle?.trim();
   if (!storedTitle || storedTitle === climbStep.title) return climbStep;
-  const normalizedIndex = Math.max(1, Math.min(5, Math.round(slotIndex)));
+  const normalizedIndex = Math.max(1, Math.min(MAX_DAILY_PUZZLE_SLOT_COUNT, Math.round(slotIndex)));
   return {
     title: `Puzzle ${normalizedIndex}`,
     subtitle: LEGACY_SUBTITLES[normalizedIndex - 1],
@@ -42,7 +48,7 @@ export function getDailyPuzzleStepPresentation(
 }
 
 export function getDailyPuzzleDisplayTitle(slotIndex: number, fallback?: string | null): string {
-  if (slotIndex >= 1 && slotIndex <= 5) {
+  if (slotIndex >= 1 && slotIndex <= MAX_DAILY_PUZZLE_SLOT_COUNT) {
     return getDailyPuzzleStepPresentation(slotIndex, fallback).title;
   }
   const safeFallback = fallback?.trim();

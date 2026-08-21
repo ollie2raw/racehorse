@@ -190,7 +190,7 @@ export function GlobalNav({
           background: 'linear-gradient(180deg, rgba(2, 4, 10, 0.22) 0%, rgba(2, 4, 10, 0.08) 48%, rgba(2, 4, 10, 0) 100%)',
         }}
       />
-      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 desk:grid desk:grid-cols-[auto_minmax(0,1fr)_auto] desk:items-center ${compactChrome ? 'desk:px-7 desk:gap-4' : 'desk:px-9 desk:gap-6'}`}>
+      <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 desk:grid desk:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] desk:items-center ${compactChrome ? 'desk:px-7 desk:gap-4' : 'desk:px-9 desk:gap-6'}`}>
         {/* Left: Brand & Identity */}
         <button
           type="button"
@@ -249,10 +249,14 @@ export function GlobalNav({
                     onClick={() => onNavigate?.(tab.mode)}
                     className="relative py-2 transition-all"
                     style={{
-                      fontSize: compactChrome ? '16px' : '17px',
-                      fontWeight: 600,
+                      // Sized against the nav's other display type (the
+                      // wordmark is 900, the date 800) — at 600/17px the tabs
+                      // read as secondary chrome rather than primary nav.
+                      fontSize: compactChrome ? '18px' : '20px',
+                      fontWeight: 700,
+                      letterSpacing: '0.01em',
                       color: textColor,
-                      opacity: isActive ? 1 : 0.7,
+                      opacity: isActive ? 1 : 0.82,
                     }}
                   >
                     {tab.label}

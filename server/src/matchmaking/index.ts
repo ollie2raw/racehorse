@@ -1,11 +1,18 @@
 import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
-import { createReservedRoom, getRoom } from '../rooms';
+import * as rooms from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
 import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
+import { clearMatchmakingReservation, markMatchmakingReservation } from './reservedRoomCleanup';
+import {
+  clearMatchedPair,
+  getMatchedPair,
+  recordMatchedPair,
+  resetMatchedPairsForTests,
+} from './matchedPairRegistry';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 
 const log = childLogger('matchmaking');
@@ -260,6 +267,82 @@ function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
   }
 }
 
+/**
+ * Shared M1/M2 failure path: tear down any partial reserved room and put both
+ * humans back in the queue. Used for create/setup throws and recordMatchStart
+ * exhaustion alike — never leave an orphan room or silent dequeue.
+ *
+ * Does not call `tick()` immediately: a persist outage would otherwise
+ * rematch the same pair in a tight void-handleMatched loop. The normal
+ * queue interval will pair them again once they are requeued.
+ */
+function abortHandleMatchedAndRequeue(
+  roomCode: string | null,
+  a: QueuedPlayer,
+  b: QueuedPlayer,
+  err: unknown,
+): void {
+  log.warn(
+    {
+      roomCode,
+      err: err instanceof Error ? err.message : err,
+      aUserId: a.userId,
+      bUserId: b.userId,
+    },
+    'handleMatched failed — tearing down partial room and requeueing',
+  );
+  if (roomCode) {
+    // Drop the M5 tracking entry first: once we delete the room here, the
+    // sweeper must never act on this code again (a later match could reuse it).
+    clearMatchmakingReservation(roomCode);
+    clearMatchedPair(roomCode);
+    if (rooms.peekRoom(roomCode)) {
+      rooms.deleteRoom(roomCode);
+    }
+  }
+  tryRequeueHumanAfterAbortedMatch(a);
+  tryRequeueHumanAfterAbortedMatch(b);
+}
+
+export type MatchmakingMatchAbortOutcome =
+  | 'requeued'
+  | 'already_started'
+  | 'no_pair_recorded';
+
+/**
+ * M6: abort a matchmaking match that was created but must not be dealt —
+ * currently the socket-sync timeout, where starting would drop a player into a
+ * game their client never synced to.
+ *
+ * This is the M1/M2 abort path, not a second one: same teardown, same requeue,
+ * same "no immediate tick()" rule. The only extra guards are the two states M1
+ * cannot be in by construction — a match that already dealt, and a room whose
+ * queue entries are gone (a shell hydrated after restart, where the players are
+ * not in the queue and the match row is already `in_progress`).
+ */
+export function abortMatchmakingMatchAndRequeue(
+  roomCode: string,
+  reason: string,
+): MatchmakingMatchAbortOutcome {
+  const room = rooms.peekRoom(roomCode);
+  if (room?.state) {
+    // The M3 start lock already dealt this room; requeueing now would pull two
+    // players out of a live game.
+    log.warn({ roomCode, reason }, 'matchmaking abort ignored: match already started');
+    return 'already_started';
+  }
+  const pair = getMatchedPair(roomCode);
+  if (!pair) {
+    // Nothing to requeue (hydrated shell, or the pair was already consumed).
+    // Leave the room to the normal lifecycle / M5 reservation sweep rather than
+    // inventing a second teardown rule here.
+    log.warn({ roomCode, reason }, 'matchmaking abort: no queued pair recorded for room');
+    return 'no_pair_recorded';
+  }
+  abortHandleMatchedAndRequeue(roomCode, pair[0], pair[1], new Error(reason));
+  return 'requeued';
+}
+
 export async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Promise<void> {
   if (isForbiddenMatchmakingPlayer(a) || isForbiddenMatchmakingPlayer(b)) {
     log.warn({
@@ -272,14 +355,24 @@ export async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer
     return;
   }
 
-  const code = makeRoomCode();
-  createReservedRoom(code, { winningScore: 60 });
-
+  let code: string | null = null;
   try {
+    code = makeRoomCode();
+    rooms.createReservedRoom(code, { winningScore: 60 });
+    // M5: from this instant the room is an empty reservation — track it so it
+    // cannot leak if neither player ever seats.
+    markMatchmakingReservation(code);
+
+    // Throws after bounded retries when the matchmaking_matches row cannot be written (M2).
     const record = await recordMatchStart({ roomCode: code, a, b });
-    const room = getRoom(code);
+    const room = rooms.getRoom(code);
     if (room) {
       room.matchmakingMatchId = record.id;
+      // M4: only these two identities may attach to this quick-match shell.
+      room.matchmakingParticipantUserIds = [a.userId, b.userId];
+      // M6: keep the queue entries until the match actually deals, so a later
+      // start failure can requeue these two at their real ratings.
+      recordMatchedPair(code, a, b);
       emitMpAuthorityFunnel('private_lobby_created', {
         roomCode: code,
         sourceType: 'quick',
@@ -312,6 +405,30 @@ export async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer
     // the game state actually exists. Nothing to do here for sim cases —
     // handleMatched only prepares the room + DB record.
   } catch (err) {
-    log.warn({ err: err instanceof Error ? err.message : err }, 'handleMatched failed');
+    abortHandleMatchedAndRequeue(code, a, b, err);
   }
+}
+
+/** Test-only: stop queue singleton / online broadcast between vitest cases. */
+export function resetMatchmakingRuntimeForTests(): void {
+  if (serviceSingleton) {
+    serviceSingleton.stop();
+    serviceSingleton = null;
+  }
+  if (onlineBroadcastTimer) {
+    clearInterval(onlineBroadcastTimer);
+    onlineBroadcastTimer = null;
+  }
+  pendingJoins.clear();
+  resetMatchedPairsForTests();
+}
+
+/** Test-only: queue singleton after `registerMatchmakingHandlers` / `ensureMatchmakingServiceForTests`. */
+export function getMatchmakingQueueServiceForTests(): QueueService | null {
+  return serviceSingleton;
+}
+
+/** Test-only: boot the queue singleton without needing a full socket session. */
+export function ensureMatchmakingServiceForTests(io: Server): QueueService {
+  return getOrCreateService(io);
 }

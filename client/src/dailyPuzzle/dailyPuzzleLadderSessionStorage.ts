@@ -1,6 +1,6 @@
 import type { BotMatchState } from '../bot/botEngine';
 import type { PlayStatus } from './dailyPuzzleScreenTypes';
-import type { DailyPuzzleSlotIndex } from './types';
+import { MAX_DAILY_PUZZLE_SLOT_COUNT, type DailyPuzzleSlotIndex } from './types';
 
 const SESSION_KEY_PREFIX = 'racehorse:daily-puzzle-ladder:v1:';
 
@@ -38,10 +38,19 @@ function isValidRuntimeState(value: unknown): value is BotMatchState {
     && typeof value.gameOver === 'boolean';
 }
 
+/**
+ * Accepts any slot index the ladder has ever published, so a resume snapshot
+ * written on one of the archived five-slot days is still restorable.
+ */
+function isPersistableSlotIndex(value: unknown): boolean {
+  const slotIndex = Number(value);
+  return Number.isInteger(slotIndex) && slotIndex >= 1 && slotIndex <= MAX_DAILY_PUZZLE_SLOT_COUNT;
+}
+
 function parseSnapshot(value: unknown): DailyPuzzleLadderSessionSnapshot | null {
   if (!isObject(value) || value.version !== 1 || typeof value.attemptId !== 'string'
     || typeof value.runDate !== 'string' || typeof value.slotId !== 'string'
-    || ![1, 2, 3, 4, 5].includes(Number(value.slotIndex)) || !isValidRuntimeState(value.runtimeState)
+    || !isPersistableSlotIndex(value.slotIndex) || !isValidRuntimeState(value.runtimeState)
     || !['IN_PROGRESS', 'SOLVED', 'FAILED'].includes(String(value.status))
     || !Number.isInteger(Number(value.movesUsed)) || Number(value.movesUsed) < 0
     || (value.finalScore !== null && !Number.isFinite(value.finalScore))
