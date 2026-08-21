@@ -414,6 +414,8 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
             gameNumber,
             handIndex: completedHandIndex,
             verifierCode: verificationError!.code,
+            playerScoreAfter: progressScores.you,
+            fritzScoreAfter: progressScores.fritz,
           });
         }
         attempt.result = writeActiveGameProgress(attempt.result, {
@@ -454,6 +456,8 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         gameNumber,
         handIndex: completedHandIndex,
         verifierCode: verificationError!.code,
+        playerScoreAfter: progressScores.you,
+        fritzScoreAfter: progressScores.fritz,
       });
     }
     attempt.result = writeActiveGameProgress(attempt.result, {
