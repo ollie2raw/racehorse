@@ -1,8 +1,56 @@
+import { createHash } from 'crypto';
 import type express from 'express';
 import { config } from '../../config';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
 const AUTHENTICATED_USER_ID_TTL_MS = 60_000;
+/**
+ * Hard ceiling on cached tokens. Entries carried a TTL but were never evicted,
+ * so the map grew by one entry per token the process ever saw — and tokens
+ * rotate, so it grew without bound for the lifetime of the process.
+ */
+const AUTHENTICATED_USER_ID_MAX_ENTRIES = 1_000;
+
+/** Concurrent requests carrying the same token share one upstream validation. */
+const authenticatedUserIdInFlight = new Map<string, Promise<string | null>>();
+
+/**
+ * Tokens are keyed by digest rather than stored verbatim: the cache outlives
+ * the request that carried the token, and there is no reason to keep bearer
+ * credentials in a long-lived map.
+ */
+function tokenCacheKey(token: string): string {
+  return createHash('sha256').update(token).digest('base64url');
+}
+
+/** Drop expired entries, then oldest-first until back under the ceiling. */
+function pruneAuthenticatedUserIdCache(now: number): void {
+  for (const [key, entry] of authenticatedUserIdCache) {
+    if (entry.expiresAt <= now) authenticatedUserIdCache.delete(key);
+  }
+  while (authenticatedUserIdCache.size > AUTHENTICATED_USER_ID_MAX_ENTRIES) {
+    const oldest = authenticatedUserIdCache.keys().next().value;
+    if (oldest === undefined) break;
+    authenticatedUserIdCache.delete(oldest);
+  }
+}
+
+function rememberAuthenticatedUserId(key: string, userId: string | null, ttlMs: number): void {
+  const now = Date.now();
+  authenticatedUserIdCache.set(key, { userId, expiresAt: now + ttlMs });
+  pruneAuthenticatedUserIdCache(now);
+}
+
+/** Test-only: drop all cached token validations. */
+export function resetAuthenticatedUserIdCache(): void {
+  authenticatedUserIdCache.clear();
+  authenticatedUserIdInFlight.clear();
+}
+
+/** Test-only: current number of cached token validations. */
+export function authenticatedUserIdCacheSize(): number {
+  return authenticatedUserIdCache.size;
+}
 
 export function getUserIdFromAuthHeaderSync(req: express.Request): string | null {
   const authHeader = typeof req.headers.authorization === 'string'
@@ -37,9 +85,22 @@ export async function getAuthenticatedUserId(req: express.Request): Promise<stri
 
 export async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
-  const cached = authenticatedUserIdCache.get(token);
+  const key = tokenCacheKey(token);
+  const cached = authenticatedUserIdCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.userId;
 
+  // A cold cache plus a burst of parallel requests — a page load fans out to
+  // roughly nine — would otherwise validate the same token nine times.
+  const pending = authenticatedUserIdInFlight.get(key);
+  if (pending) return pending;
+
+  const validation = validateTokenUpstream(token, key)
+    .finally(() => { authenticatedUserIdInFlight.delete(key); });
+  authenticatedUserIdInFlight.set(key, validation);
+  return validation;
+}
+
+async function validateTokenUpstream(token: string, key: string): Promise<string | null> {
   const supabaseUrl = config.supabaseUrl;
   const serviceKey = config.supabaseServiceKey;
   if (!supabaseUrl || !serviceKey) {
@@ -68,12 +129,12 @@ export async function getAuthenticatedUserIdFromToken(token: string | null): Pro
     clearTimeout(authTimeout);
   }
   if (!response.ok) {
-    authenticatedUserIdCache.set(token, { userId: null, expiresAt: Date.now() + 10_000 });
+    rememberAuthenticatedUserId(key, null, 10_000);
     return null;
   }
 
   const user = (await response.json()) as { id?: unknown };
   const userId = typeof user.id === 'string' ? user.id : null;
-  authenticatedUserIdCache.set(token, { userId, expiresAt: Date.now() + AUTHENTICATED_USER_ID_TTL_MS });
+  rememberAuthenticatedUserId(key, userId, AUTHENTICATED_USER_ID_TTL_MS);
   return userId;
 }

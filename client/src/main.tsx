@@ -23,6 +23,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
+import { AuthProvider } from './auth/useAuth';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
@@ -78,7 +79,9 @@ async function bootstrap() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     </StrictMode>,
   );

@@ -109,10 +109,33 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
     let cancelled = false;
     const controller = new AbortController();
     const startedAt = Date.now();
-    const next = createInitialModel(identity, tournament);
-    setModel(next);
 
-    const commit = <T,>(section: keyof Pick<HomeCommandCenterModel, 'tournament' | 'journey' | 'stats'>, data: T) => {
+    // Carry previously loaded data over as `stale` so a refresh doesn't flash the
+    // whole screen back to skeletons. Only ever for the *same* identity: on a
+    // logout or a user switch the old data belongs to someone else and must go.
+    setModel((current) => {
+      const next = createInitialModel(identity, tournament);
+      const sameIdentity =
+        current.identity.userId === identity.userId && current.identity.kind === identity.kind;
+      if (!sameIdentity) return next;
+      return {
+        ...next,
+        daily: {
+          summary: current.daily.summary.data ? { ...current.daily.summary, stale: true } : next.daily.summary,
+          fritz: current.daily.fritz.data ? { ...current.daily.fritz, stale: true } : next.daily.fritz,
+          puzzle: current.daily.puzzle.data ? { ...current.daily.puzzle, stale: true } : next.daily.puzzle,
+        },
+        social: {
+          presence: current.social.presence.data ? { ...current.social.presence, stale: true } : next.social.presence,
+          activity: current.social.activity.data ? { ...current.social.activity, stale: true } : next.social.activity,
+          rivals: current.social.rivals.data ? { ...current.social.rivals, stale: true } : next.social.rivals,
+        },
+        journey: current.journey.data ? { ...current.journey, stale: true } : next.journey,
+        stats: current.stats.data ? { ...current.stats, stale: true } : next.stats,
+      };
+    });
+
+    const commit = <T,>(section: keyof Pick<HomeCommandCenterModel, 'journey' | 'stats'>, data: T) => {
       if (cancelled || controller.signal.aborted) return;
       setModel((current) => {
         const updated = {
@@ -124,7 +147,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
         return updated;
       });
     };
-    const fail = (section: keyof Pick<HomeCommandCenterModel, 'tournament' | 'journey' | 'stats'>, error: unknown) => {
+    const fail = (section: keyof Pick<HomeCommandCenterModel, 'journey' | 'stats'>, error: unknown) => {
       if (cancelled || controller.signal.aborted) return;
       setModel((current) => {
         const previous = current[section];
@@ -197,6 +220,28 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
           ]
         : []),
       loadJourney().then((data) => commit('journey', data)).catch((error) => fail('journey', error)),
+    ]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    authLoading,
+    identity.kind,
+    identity.userId,
+  ]);
+
+  // Synchronize tournament properties when they update, without triggering network refetches.
+  useEffect(() => {
+    let cancelled = false;
+    const tournamentStatus = tournament.error
+      ? 'error'
+      : tournament.isLoading && !tournament.hasLoaded
+      ? 'loading'
+      : 'ready';
+
+    if (tournamentStatus === 'ready') {
       loadTournament({
         upcoming: tournament.upcoming,
         registrations: tournament.registrations,
@@ -213,17 +258,48 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
               readyDeadlineAt: tournament.recoveryMatch.readyDeadlineAt,
             }
           : null,
-      }).then((data) => commit('tournament', data)).catch((error) => fail('tournament', error)),
-    ]);
+      })
+        .then((data) => {
+          if (cancelled) return;
+          setModel((current) => {
+            const updated = {
+              ...current,
+              tournament: { data, status: 'ready' as const, stale: false, error: null, fetchedAt: Date.now() },
+            } as HomeCommandCenterModel;
+            updated.sourceStatus = sourceStatus(updated);
+            return updated;
+          });
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setModel((current) => {
+            const updated = {
+              ...current,
+              tournament: { ...current.tournament, status: 'error' as const, error: errorMessage(error) },
+            } as HomeCommandCenterModel;
+            updated.sourceStatus = sourceStatus(updated);
+            return updated;
+          });
+        });
+    } else {
+      setModel((current) => {
+        const updated = {
+          ...current,
+          tournament: {
+            ...current.tournament,
+            status: tournamentStatus as 'error' | 'loading',
+            error: tournament.error ? errorMessage(tournament.error) : null,
+          },
+        } as HomeCommandCenterModel;
+        updated.sourceStatus = sourceStatus(updated);
+        return updated;
+      });
+    }
 
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [
-    authLoading,
-    identity.kind,
-    identity.userId,
     tournament.activeTournamentId,
     tournament.error,
     tournament.hasLoaded,

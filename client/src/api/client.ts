@@ -15,6 +15,8 @@
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { readE2eDevAuth } from '../auth/e2eDevAuth';
+import { recordApiRequest } from '../debug/requestAudit';
+import { clearCachedSession, getCachedSession, setCachedSession } from '../auth/sessionToken';
 
 export type ApiResult<T> = {
   data: T | null;
@@ -51,9 +53,17 @@ export async function getAuthHeaders(options?: {
     return { headers, hasToken: false };
   }
 
+  const client = supabase;
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
+    // Served from the in-memory session when auth has already reported one;
+    // only the first read before any auth event falls through to getSession().
+    const { token } = await getCachedSession(async () => {
+      const { data } = await client.auth.getSession();
+      return {
+        token: data.session?.access_token ?? null,
+        userId: data.session?.user?.id ?? null,
+      };
+    });
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
       return { headers, hasToken: true };
@@ -73,8 +83,13 @@ async function refreshSession(): Promise<string | null> {
   if (!supabase) return null;
   try {
     const { data } = await supabase.auth.refreshSession();
-    return data.session?.access_token ?? null;
+    const token = data.session?.access_token ?? null;
+    // A refresh invalidates whatever token the cache is holding.
+    if (token) setCachedSession(token, data.session?.user?.id ?? null);
+    else clearCachedSession();
+    return token;
   } catch {
+    clearCachedSession();
     return null;
   }
 }
@@ -94,6 +109,9 @@ async function apiFetch<T>(
   // Merge caller's signal with a 15-second timeout so no request hangs forever
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  // DEV-only request audit; no-op unless localStorage.REQUEST_AUDIT === '1'.
+  // Recorded on attempt 1 only so a 401 refresh-retry doesn't read as a duplicate.
+  if (attempt === 1) recordApiRequest(init.method ?? 'GET', url);
   const callerSignal = init.signal as AbortSignal | undefined;
   if (callerSignal) {
     callerSignal.addEventListener('abort', () => timeoutController.abort(), { once: true });

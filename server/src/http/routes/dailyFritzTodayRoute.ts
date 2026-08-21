@@ -245,6 +245,9 @@ export function registerDailyFritzTodayRoutes(app: Application): void {
       rank: ownRank,
       leaderboard_preview: [],
     };
+    // Short private window: the payload is per-user and changes only when the
+    // player acts, so a burst of concurrent loads collapses to one origin hit.
+    setPrivateShortCache(res, 30);
     mark('serializeResponse', serializeStartedAt, {
       runDate,
       payloadKeys: Object.keys(payload).length,

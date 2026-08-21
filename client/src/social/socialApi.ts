@@ -1,10 +1,20 @@
 import { apiGet } from '../api/client';
 import { supabase } from '../lib/supabase';
+import { getCachedSession } from '../auth/sessionToken';
 
 async function authCacheScope(): Promise<string> {
   if (!supabase) return 'anon';
-  const { data } = await supabase.auth.getSession();
-  return data.session?.user?.id ?? 'anon';
+  const client = supabase;
+  // Same in-memory session the request headers use — this ran a second
+  // getSession() per cached call purely to build a cache key.
+  const { userId } = await getCachedSession(async () => {
+    const { data } = await client.auth.getSession();
+    return {
+      token: data.session?.access_token ?? null,
+      userId: data.session?.user?.id ?? null,
+    };
+  });
+  return userId ?? 'anon';
 }
 
 /** Throws on HTTP/auth failure — caught by exported loaders that return `{ error }`. */
@@ -27,6 +37,7 @@ const globalLeaderboardCache = new Map<
   CacheEntry<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }>
 >();
 const publicProfileCache = new Map<string, CacheEntry<{ profile: PublicProfile | null; error: string | null }>>();
+const rivalsCache = new Map<string, CacheEntry<{ rivals: RivalEntry[]; error: string | null }>>();
 
 const friendsWithPresenceInFlight = new Map<string, Promise<{ friends: FriendWithPresence[]; error: string | null }>>();
 const activityFeedInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
@@ -36,12 +47,15 @@ const globalLeaderboardInFlight = new Map<
   Promise<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }>
 >();
 const publicProfileInFlight = new Map<string, Promise<{ profile: PublicProfile | null; error: string | null }>>();
+const rivalsInFlight = new Map<string, Promise<{ rivals: RivalEntry[]; error: string | null }>>();
 
 const FRIENDS_WITH_PRESENCE_TTL_MS = 15_000;
 const ACTIVITY_FEED_TTL_MS = 15_000;
 const USER_ACTIVITY_TTL_MS = 30_000;
 const GLOBAL_LEADERBOARD_TTL_MS = 30_000;
 const PUBLIC_PROFILE_TTL_MS = 5 * 60_000;
+// Rivals is a 90-day head-to-head rollup — it barely moves within a session.
+const RIVALS_TTL_MS = 60_000;
 
 function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
   const entry = cache.get(key);
@@ -306,12 +320,21 @@ export async function fetchModeLeaderboard(mode: string): Promise<{ leaderboard:
 }
 
 export async function fetchRivals(): Promise<{ rivals: RivalEntry[]; error: string | null }> {
-  try {
-    const data = await apiFetch<{ ok: boolean; rivals: RivalEntry[] }>('/api/social/rivals');
-    return { rivals: data.rivals, error: null };
-  } catch (err) {
-    return { rivals: [], error: err instanceof Error ? err.message : 'Failed to load rivals.' };
-  }
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: rivalsCache,
+    inFlight: rivalsInFlight,
+    cacheKey: `rivals:${cacheScope}`,
+    ttlMs: RIVALS_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<{ ok: boolean; rivals: RivalEntry[] }>('/api/social/rivals');
+        return { rivals: data.rivals, error: null };
+      } catch (err) {
+        return { rivals: [], error: err instanceof Error ? err.message : 'Failed to load rivals.' };
+      }
+    },
+  });
 }
 
 export async function fetchUserActivity(userId: string): Promise<{ feed: FeedItem[]; error: string | null }> {

@@ -602,6 +602,7 @@ export async function upsertDailyFritzAttempt(record: DailyFritzAttemptRecord): 
   );
   const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
   if (!saved) throw new Error('Failed to persist daily Fritz attempt.');
+  invalidateDailyFritzLeaderboard(saved.runDate);
   return saved;
 }
 
@@ -624,6 +625,7 @@ export async function createDailyFritzAttempt(runDate: string, userId: string): 
   );
   const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
   if (!saved) throw new Error('Failed to create daily Fritz attempt.');
+  invalidateDailyFritzLeaderboard(saved.runDate);
   return saved;
 }
 
@@ -668,9 +670,40 @@ export async function fetchProfileNames(userIds: string[]): Promise<Map<string, 
   return out;
 }
 
+interface LeaderboardCacheEntry {
+  expiresAt: number;
+  data: Array<DailyFritzLeaderboardEntry & { rank: number; userId: string }>;
+}
+
+const leaderboardCache = new Map<string, LeaderboardCacheEntry>();
+const LEADERBOARD_TTL_MS = 30_000;
+
+/**
+ * Drop a run date's cached leaderboard. Called on every attempt write so a
+ * player who just finished sees their own rank immediately rather than waiting
+ * out the TTL. The TTL then only covers races between concurrent readers.
+ */
+export function invalidateDailyFritzLeaderboard(runDate: string): void {
+  leaderboardCache.delete(runDate);
+}
+
+/** Keep the map from growing one permanent entry per calendar day. */
+function pruneLeaderboardCache(now: number): void {
+  for (const [key, entry] of leaderboardCache) {
+    if (entry.expiresAt <= now) leaderboardCache.delete(key);
+  }
+}
+
 export async function buildDailyFritzLeaderboard(
   runDate: string,
 ): Promise<Array<DailyFritzLeaderboardEntry & { rank: number; userId: string }>> {
+  const now = Date.now();
+  const cached = leaderboardCache.get(runDate);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+  pruneLeaderboardCache(now);
+
   const attempts = await listDailyFritzAttemptsForDate(runDate);
   const names = await fetchProfileNames(attempts.map((attempt) => attempt.userId));
   const sorted = sortDailyFritzLeaderboard(
@@ -724,7 +757,12 @@ export async function buildDailyFritzLeaderboard(
       })
       .filter((attempt): attempt is DailyFritzLeaderboardEntry & { userId: string } => Boolean(attempt)),
   );
-  return sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
+  const result = sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
+  leaderboardCache.set(runDate, {
+    expiresAt: Date.now() + LEADERBOARD_TTL_MS,
+    data: result,
+  });
+  return result;
 }
 
 export function isDailyFritzAttemptLeaderboardEligible(
@@ -735,10 +773,19 @@ export function isDailyFritzAttemptLeaderboardEligible(
     && attempt.result?.verification_status === 'verified'
     && (protocol === 1 || protocol === 2);
 }
+/**
+ * Upper bound on a reported streak. Long enough that no realistic player is
+ * truncated, short enough that the query stays small.
+ */
+const DAILY_FRITZ_STREAK_SCAN_LIMIT = 90;
+
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   if (isDailyFritzMemoryStoreEnabled()) return 0;
+  // A streak is a run of consecutive days ending today, so only the most recent
+  // rows can ever contribute — the first gap terminates the count. 365 rows were
+  // fetched per /today request to compute one integer.
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
-    `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=365`,
+    `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=${DAILY_FRITZ_STREAK_SCAN_LIMIT}`,
     { method: 'GET' },
   );
   const dates = Array.from(

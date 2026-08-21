@@ -1,6 +1,6 @@
 import type { Application, Request } from 'express';
 import type { Server } from 'socket.io';
-import { setPublicShortCache } from './cacheControl';
+import { setPrivateShortCache, setPublicShortCache } from './cacheControl';
 import type { HomeDailyCompletionMap, HomeDailySummaryPayload } from '../../homeDailySummary';
 import type { recordUserMatch as RecordUserMatchFn } from '../../stats/recordUserMatch';
 
@@ -84,6 +84,9 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
       );
       const completionMap = createHomeDailyCompletionMap(fritzDates, puzzleDates);
 
+      // Completion history changes at most once per finished run, so a repeat
+      // home visit inside the window shouldn't re-run four Supabase reads.
+      setPrivateShortCache(res, 60);
       res.json({
         ok: true,
         ...buildHomeDailySummary(today, completionMap, new Date()),

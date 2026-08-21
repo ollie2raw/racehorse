@@ -2,7 +2,7 @@ import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 import { requireAuth } from './socialAuth';
-import { getPresenceBatch } from './presence';
+import { getPresence } from './presenceRegistry';
 
 export function registerSocialProfileRoutes(socialRouter: Router): void {
   socialRouter.get('/:username', async (req, res) => {
@@ -137,8 +137,8 @@ export function registerSocialProfileRoutes(socialRouter: Router): void {
       const fritz_wins = fritzRows.filter((r) => r.won).length;
       const fritz_losses = fritzRows.filter((r) => !r.won).length;
 
-      const presenceMap = await getPresenceBatch([targetId]).catch(() => new Map<string, { status: string; current_mode: string | null }>());
-      const presence = presenceMap.get(targetId) ?? { status: 'offline', current_mode: null };
+      // In-memory lookup; no query, so nothing to await or guard against.
+      const presence = getPresence(targetId);
 
       res.json({
         ok: true,
