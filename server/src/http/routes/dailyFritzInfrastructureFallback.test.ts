@@ -239,11 +239,16 @@ describe('Daily Fritz infrastructure verify failures on /next-hand', () => {
   });
 
   it('client policy requests unverified_fallback after the first infra 409', () => {
-    expect(resolveDailyFritzCompletedHandNextHandFailure({
+    // The first attempt retries SILENTLY: no player-facing message, and the
+    // retry is actually scheduled. It previously returned a 'continue'
+    // decision whose copy promised an automatic advance that never happened.
+    const first = resolveDailyFritzCompletedHandNextHandFailure({
       verifierCode: 'missing_hand_start_progress',
       status: 409,
       failureAttempt: 1,
-    }).kind).toBe('continue');
+    });
+    expect(first.kind).toBe('retry');
+    expect(first).not.toHaveProperty('message');
     expect(resolveDailyFritzCompletedHandNextHandFailure({
       verifierCode: 'missing_hand_start_progress',
       status: 409,
