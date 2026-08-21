@@ -29,12 +29,15 @@ import './puzzleRush.css';
  * player), **All-time** is every completed run's personal best.
  */
 
+// `id`, not `value` — that is the key FilterPills reads. The old shape was
+// forced through with an `as unknown as` cast, which compiled while handing
+// the component options it could not key off.
 const FILTER_OPTIONS = [
-  { value: 'today', label: 'Today' },
-  { value: 'allTime', label: 'All-time best' },
+  { id: 'today', label: 'Today' },
+  { id: 'allTime', label: 'All-time best' },
 ] as const;
 
-type Filter = (typeof FILTER_OPTIONS)[number]['value'];
+type Filter = (typeof FILTER_OPTIONS)[number]['id'];
 
 function RankIcon({ rank }: { rank: 1 | 2 | 3 }) {
   if (rank === 1) {
@@ -161,7 +164,7 @@ export function PuzzleRushLeaderboardScreen({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('today');
-  const [resetSeconds, setResetSeconds] = useState(() => secondsUntilNextPacificMidnight());
+  const [resetSeconds, setResetSeconds] = useState(() => secondsUntilNextPacificMidnight(new Date()));
 
   useEffect(() => {
     let cancelled = false;
@@ -183,7 +186,7 @@ export function PuzzleRushLeaderboardScreen({
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => setResetSeconds(secondsUntilNextPacificMidnight()), 1000);
+    const id = window.setInterval(() => setResetSeconds(secondsUntilNextPacificMidnight(new Date())), 1000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -247,9 +250,9 @@ export function PuzzleRushLeaderboardScreen({
             </div>
             <div className="dflb-command__bar">
               <FilterPills
-                options={FILTER_OPTIONS as unknown as Array<{ value: string; label: string }>}
+                options={[...FILTER_OPTIONS]}
                 value={filter}
-                onChange={(next) => setFilter(next as Filter)}
+                onChange={setFilter}
                 ariaLabel="Leaderboard filters"
               />
             </div>

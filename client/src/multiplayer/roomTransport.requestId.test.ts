@@ -8,8 +8,10 @@ describe('roomTransport requestId for hand lifecycle emits (A1 client follow-up)
   });
 
   it('emitGameStart includes a requestId payload', async () => {
-    const emit = vi.fn((_event: string, _code: string, _payload: unknown, cb: (r: unknown) => void) => {
-      cb({ ok: true });
+    // Typed as SocketEmitter's own variadic signature; a narrower one does not
+    // satisfy the parameter and broke `tsc -b`.
+    const emit = vi.fn((_event: string, ...args: unknown[]) => {
+      (args[args.length - 1] as (r: unknown) => void)({ ok: true });
     });
     const socket = { emit };
     await emitGameStart(socket, 'ABCD');
@@ -22,11 +24,9 @@ describe('roomTransport requestId for hand lifecycle emits (A1 client follow-up)
   });
 
   it('emitHandReady includes handNumber + requestId payload', async () => {
-    const emit = vi.fn(
-      (_event: string, _code: string, _payload: unknown, cb: (r: unknown) => void) => {
-        cb({ ok: true });
-      },
-    );
+    const emit = vi.fn((_event: string, ...args: unknown[]) => {
+      (args[args.length - 1] as (r: unknown) => void)({ ok: true });
+    });
     const socket = { emit };
     await emitHandReady(socket, 'ABCD', 3);
     expect(emit).toHaveBeenCalledWith(

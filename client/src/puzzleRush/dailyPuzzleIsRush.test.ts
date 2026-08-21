@@ -6,16 +6,16 @@
  * reachable door left. A render test would assert the button's label; these
  * assert its destination.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const read = (relative: string) => readFileSync(resolve(__dirname, '..', relative), 'utf8');
-
-const homeSource = read('screens/HomeScreen.tsx');
-const hubSource = read('dailyPuzzle/DailyPuzzleLadderHubView.tsx');
-const soloRoutesSource = read('routes/soloPlayRoutes.tsx');
-const singlePlayerHubSource = read('screens/SinglePlayerHubScreen.tsx');
+// Vite `?raw` imports rather than node:fs. The app project has no node types
+// (`types: ["vite/client", "vitest/globals"]`), so `readFileSync`/`__dirname`
+// broke `tsc -b` and therefore the production build. `?raw` is typed by
+// vite/client and resolves through the same bundler the app uses.
+import homeSource from '../screens/HomeScreen.tsx?raw';
+import hubSource from '../dailyPuzzle/DailyPuzzleLadderHubView.tsx?raw';
+import soloRoutesSource from '../routes/soloPlayRoutes.tsx?raw';
+import singlePlayerHubSource from '../screens/SinglePlayerHubScreen.tsx?raw';
 
 /** The Daily Puzzle card's JSX, isolated from the rest of Home. */
 function dailyPuzzleCard(): string {

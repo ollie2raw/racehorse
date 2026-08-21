@@ -130,6 +130,21 @@ export interface PuzzleRushTodayResponse {
   officialRunComplete: boolean;
 }
 
+/**
+ * One board row. Mirrors the server's `PuzzleRushLeaderboardEntry`
+ * (server/src/puzzleRush/types.ts) — the shape `buildPuzzleRushLeaderboard`
+ * and `buildDailyPuzzleRushLeaderboard` emit.
+ */
+export interface PuzzleRushLeaderboardEntry {
+  rank: number;
+  userId: string;
+  username: string;
+  totalScore: number;
+  puzzlesSolved: number;
+  runId: string;
+  achievedAt: string | null;
+}
+
 export interface PuzzleRushLeaderboardResponse {
   ok: true;
   runDate: string;

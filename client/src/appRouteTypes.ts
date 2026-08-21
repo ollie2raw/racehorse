@@ -24,32 +24,18 @@ export const JOURNEY_MODE_VISIBLE = true;
  */
 export const POST_GAME_REVIEW_VISIBLE = false;
 
-export type AppMode =
-  | 'home'
-  | 'multiplayer'
-  | 'noBrainer'
-  | 'botSetup'
-  | 'bot'
-  | 'ghostSetup'
-  | 'ghost'
-  | 'daily'
-  | 'dailyPuzzleLeaderboard'
-  | 'dailyFritz'
-  | 'dailyFritzLeaderboard'
-  | 'learn'
-  | 'guidedMatchRecorder'
-  | 'guidedMatchAnnotator'
-  | 'friends'
-  | 'stats'
-  | 'ratingHistory'
-  | 'singlePlayerHub'
-  | 'journey'
-  | 'tournament'
-  | 'leaderboard'
-  | 'profile'
-  | 'feed'
-  | 'live'
-  | 'dailyFritzHealthAdmin';
+/**
+ * One AppMode, defined in `./types`.
+ *
+ * This module used to carry a second, hand-maintained copy of the union. The
+ * two drifted the moment a mode was added to only one of them — `puzzleRush`
+ * did exactly that, and because the copies are structurally different types,
+ * every `setAppMode` prop crossing the boundary failed to typecheck. Re-export
+ * so there is nothing to keep in sync.
+ */
+import type { AppMode } from './types';
+
+export type { AppMode };
 
 /** Shell chrome: auth-modal wrapper, fallback host, layout class, invite overlay. */
 export type AppRoutesShellProps = {
