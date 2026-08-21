@@ -5,6 +5,10 @@
 
 /* Page shell — mirrors Play vs Fritz: one viewport band under GlobalNav */
 .df-page {
+  /* Accent for the shared PVF hub chrome below. Daily Fritz keeps gold;
+     screens that borrow the same chrome under a different brand (Puzzle Rush
+     is Daily Puzzle's blue) override this one variable on their page root. */
+  --df-pvf-accent: var(--tier-elite);
   position: relative;
   isolation: isolate;
   flex: 1 1 0;
@@ -4959,7 +4963,7 @@
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--tier-elite);
+  color: var(--df-pvf-accent);
   margin-bottom: 4px;
 }
 
@@ -4967,7 +4971,7 @@
   content: '';
   width: 6px;
   height: 6px;
-  background: var(--tier-elite);
+  background: var(--df-pvf-accent);
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -5072,7 +5076,7 @@
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: var(--tier-elite);
+  color: var(--df-pvf-accent);
   text-shadow: var(--rh-overlay-text-shadow-heading);
 }
 
@@ -5102,7 +5106,7 @@
 }
 
 .df-pvf-card-badge-title {
-  color: var(--tier-elite);
+  color: var(--df-pvf-accent);
 }
 
 .df-pvf-card-badge-desc {
@@ -5145,9 +5149,9 @@
 }
 
 .df-pvf-overview-card--active {
-  border: 2px solid var(--tier-elite);
-  background: color-mix(in srgb, var(--tier-elite) 7%, rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 0 18px color-mix(in srgb, var(--tier-elite) 7%, transparent);
+  border: 2px solid var(--df-pvf-accent);
+  background: color-mix(in srgb, var(--df-pvf-accent) 7%, rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--df-pvf-accent) 7%, transparent);
 }
 
 .df-pvf-overview-icon {
@@ -5158,10 +5162,10 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--tier-elite) 52%, transparent);
-  background: color-mix(in srgb, var(--tier-elite) 10%, transparent);
-  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
-  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-elite) 28%, transparent);
+  border: 2px solid color-mix(in srgb, var(--df-pvf-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--df-pvf-accent) 10%, transparent);
+  color: color-mix(in srgb, var(--df-pvf-accent) 88%, var(--text-primary));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--df-pvf-accent) 28%, transparent);
 }
 
 .df-pvf-overview-body {
@@ -5211,12 +5215,12 @@
 }
 
 .df-game-card--active {
-  border: 2px solid var(--tier-elite);
-  background: color-mix(in srgb, var(--tier-elite) 9%, rgba(255, 255, 255, 0.03));
+  border: 2px solid var(--df-pvf-accent);
+  background: color-mix(in srgb, var(--df-pvf-accent) 9%, rgba(255, 255, 255, 0.03));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--tier-elite) 22%, transparent),
-    0 0 22px color-mix(in srgb, var(--tier-elite) 14%, transparent),
-    inset 0 0 18px color-mix(in srgb, var(--tier-elite) 8%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--df-pvf-accent) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--df-pvf-accent) 14%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--df-pvf-accent) 8%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5269,8 +5273,8 @@
 }
 
 .df-game-card--active .df-pvf-progress-index {
-  border-color: var(--tier-elite);
-  color: color-mix(in srgb, var(--tier-elite) 92%, var(--text-primary));
+  border-color: var(--df-pvf-accent);
+  color: color-mix(in srgb, var(--df-pvf-accent) 92%, var(--text-primary));
 }
 
 .df-game-card--won .df-pvf-progress-index {
@@ -5328,7 +5332,7 @@
 }
 
 .df-game-card--active .df-pvf-progress-status {
-  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  color: color-mix(in srgb, var(--df-pvf-accent) 88%, var(--text-primary));
 }
 
 .df-game-card--won .df-pvf-progress-status {
@@ -5377,7 +5381,7 @@
 }
 
 .df-game-card--active .df-pvf-progress-meta {
-  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-primary));
+  color: color-mix(in srgb, var(--df-pvf-accent) 72%, var(--text-primary));
 }
 
 .df-game-card--won .df-pvf-progress-meta {
@@ -5442,7 +5446,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  color: color-mix(in srgb, var(--df-pvf-accent) 88%, var(--text-primary));
 }
 
 .df-pvf-summary-value {
@@ -5451,6 +5455,18 @@
   font-weight: 700;
   line-height: 1.25;
   color: var(--text-primary);
+  /*
+   * Reserve two value lines (2 × the 1.25 line-height above) in every item.
+   *
+   * Daily Fritz's stakes value wraps to two lines and Puzzle Rush's values
+   * never do, which is the only reason the two hubs' summary strips ended up
+   * different heights. Flooring the value box makes the strip one height for
+   * both, and centring keeps a single line optically placed against its key
+   * exactly where a wrapped pair sits.
+   */
+  min-height: 2.5em;
+  display: flex;
+  align-items: center;
 }
 
 .df-pvf-summary-key {
@@ -5476,14 +5492,15 @@
   min-height: 48px;
   border: none;
   border-radius: var(--pvf-radius-sm);
-  color: var(--text-on-elite);
+  /* Ink pairs with the accent: dark on gold, light on a blue accent. */
+  color: var(--df-pvf-accent-ink, var(--text-on-elite));
   font-family: 'Outfit', sans-serif;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.01em;
-  background: var(--tier-elite);
+  background: var(--df-pvf-accent);
   box-shadow:
-    0 0 32px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    0 0 32px color-mix(in srgb, var(--df-pvf-accent) 16%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
   transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -5492,7 +5509,7 @@
   filter: brightness(1.1);
   transform: translateY(-1px);
   box-shadow:
-    0 0 40px color-mix(in srgb, var(--tier-elite) 22%, transparent),
+    0 0 40px color-mix(in srgb, var(--df-pvf-accent) 22%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -5531,31 +5548,20 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  color: color-mix(in srgb, var(--df-pvf-accent) 88%, var(--text-primary));
   transition: color 120ms ease, opacity 120ms ease;
 }
 
 .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:hover {
-  color: var(--tier-elite);
+  color: var(--df-pvf-accent);
   background: transparent;
   transform: none;
   opacity: 1;
 }
 
 .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tier-elite) 55%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--df-pvf-accent) 55%, transparent);
   outline-offset: 3px;
-}
-
-.df-pvf-trust-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-dim));
-  text-align: right;
 }
 
 @media (max-width: 1280px) {
@@ -5598,6 +5604,12 @@
     flex-direction: column;
   }
 
+  /* Stacked, each item is its own row and the values have the full width, so
+     the two-line floor above would only add dead space to every row. */
+  .df-pvf-summary-value {
+    min-height: 0;
+  }
+
   .df-pvf-summary-divider {
     width: auto;
     height: 1px;
@@ -5606,10 +5618,6 @@
   .df-pvf-footer {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .df-pvf-trust-line {
-    text-align: left;
   }
 }
 

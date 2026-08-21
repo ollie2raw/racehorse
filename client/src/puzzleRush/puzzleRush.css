@@ -1,0 +1,683 @@
+/* Puzzle Rush — run chrome only. The board itself reuses match-live styles. */
+
+.puzzle-rush-intro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-obsidian);
+}
+
+.pr-intro__card {
+  width: min(560px, 100%);
+  padding: 32px;
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+}
+
+.pr-intro__title {
+  font-family: var(--font-display);
+  font-size: 44px;
+  letter-spacing: -0.045em;
+  color: var(--tier-standard);
+}
+
+.pr-intro__desc {
+  margin-top: 12px;
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pr-intro__error,
+.pr-results__error,
+.pr-results__flag {
+  margin-top: 16px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: #ff8f8f;
+}
+
+.pr-intro__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* Two actions, sized to the panel: replay is the primary move, the hub is
+   the way out. Both use the Button primitive. */
+.pr-results__actions {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.pr-results__actions .rh-btn { width: 100%; }
+
+.pr-btn {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pr-btn:hover { transform: translateY(-1px); }
+.pr-btn:active { transform: scale(0.97); }
+.pr-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.pr-btn--primary {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: var(--tier-standard);
+  color: var(--tier-standard);
+}
+
+/* ── Clock ─────────────────────────────────────────────── */
+
+.pr-clock {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-clock--low { color: #ff8f8f; }
+
+.pr-clock-bonus {
+  margin-left: 8px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--tier-rookie);
+  animation: pr-bonus-rise 900ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes pr-bonus-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  40%  { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ── Stage progress ────────────────────────────────────── */
+
+.pr-stage-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(640px, 92%);
+  margin: 0 auto 10px;
+}
+
+.pr-stage-progress__bar {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+}
+
+.pr-stage-segment {
+  position: relative;
+  flex: 1;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pr-stage-segment--active { border-color: rgba(255, 255, 255, 0.24); }
+
+.pr-stage-segment__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(59, 130, 246, 0.35);
+  transition: width 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pr-stage-segment[data-stage='building'] .pr-stage-segment__fill { background: rgba(231, 182, 74, 0.35); }
+.pr-stage-segment[data-stage='master'] .pr-stage-segment__fill { background: rgba(168, 85, 247, 0.38); }
+
+.pr-stage-segment__label {
+  position: relative;
+  display: block;
+  padding: 4px 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pr-stage-segment--active .pr-stage-segment__label { color: rgba(255, 255, 255, 0.95); }
+
+.pr-stage-progress__position {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+
+/* ── Stage transition beat ─────────────────────────────── */
+
+.pr-stage-transition {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  /* Never blocks play: the clock is running underneath. */
+  pointer-events: none;
+}
+
+.pr-stage-transition__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 44px;
+  border-radius: var(--radius-card);
+  background: rgba(10, 16, 28, 0.82);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  animation: pr-stage-beat 1400ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.pr-stage-transition[data-stage='building'] .pr-stage-transition__card { border-color: var(--tier-elite); }
+.pr-stage-transition[data-stage='master'] .pr-stage-transition__card { border-color: var(--tier-master); }
+
+.pr-stage-transition__eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-stage-transition__label {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pr-stage-transition__meta {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@keyframes pr-stage-beat {
+  from { opacity: 0; transform: scale(0.94); }
+  18%  { opacity: 1; transform: scale(1); }
+  74%  { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.02); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-stage-transition__card,
+  .pr-clock-bonus { animation-duration: 1ms; animation-iteration-count: 1; }
+}
+
+/* ── Results ───────────────────────────────────────────── */
+
+.puzzle-rush-results-screen {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-obsidian);
+  overflow: hidden;
+}
+
+.puzzle-rush-results-screen > .pr-results {
+  position: relative;
+  z-index: 1;
+}
+
+.pr-results {
+  width: min(560px, 100%);
+  padding: 32px;
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  /* Lifted off the atmospheric ground rather than sitting flat on it. */
+  box-shadow: 0 var(--hud-lift) 60px rgba(0, 0, 0, 0.55);
+}
+
+.pr-results__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pr-results__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-results__eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tier-standard);
+  flex-shrink: 0;
+}
+
+.pr-results__score { display: flex; align-items: baseline; gap: 8px; }
+
+.pr-results__score-value {
+  font-family: var(--font-display);
+  font-size: 76px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  /* Rush is Daily Puzzle's blue, not Fritz's gold. */
+  color: var(--tier-standard);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 42px color-mix(in srgb, var(--tier-standard) 28%, transparent);
+}
+
+/* ── Run facts ── */
+
+.pr-results__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.pr-results__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pr-results__tile-value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-results__tile-key {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-results__section-label {
+  margin-top: 24px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-results__score-suffix,
+.pr-results__solved {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pr-results__mismatch,
+.pr-results__note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pr-results__stages {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.pr-results__stage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pr-results__stage-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pr-results__stage-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pr-results__stage-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-results__stage-total { color: rgba(255, 255, 255, 0.35); }
+
+.pr-results__stage-meter {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.pr-results__stage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  /* Per-stage colour matches the in-run HUD meter. */
+  background: var(--tier-standard);
+}
+
+.pr-results__stage-row[data-stage='building'] .pr-results__stage-fill { background: var(--tier-elite); }
+.pr-results__stage-row[data-stage='master'] .pr-results__stage-fill { background: var(--tier-master); }
+
+/* ── Hub: stage preview strip ───────────────────────────── */
+/* Three stage tiles rather than the ladder's five slot cards; the card
+   treatment itself comes from df-pvf-progress-card in dailyFritz.css. */
+
+
+/* ── Leaderboard ───────────────────────────────────────── */
+
+.pr-leaderboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-obsidian);
+}
+
+.pr-leaderboard__panel {
+  width: min(620px, 100%);
+  padding: 32px;
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+}
+
+.pr-leaderboard__title {
+  font-family: var(--font-display);
+  font-size: 40px;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pr-leaderboard__tabs { display: flex; gap: 8px; margin: 18px 0 14px; }
+
+.pr-leaderboard__tab {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.pr-leaderboard__tab.is-active {
+  border-color: var(--tier-standard);
+  color: var(--tier-standard);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.pr-leaderboard__rows { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.pr-leaderboard__row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-body);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pr-leaderboard__rank { font-family: var(--font-display); color: rgba(255, 255, 255, 0.35); }
+.pr-leaderboard__solved { font-size: 13px; color: rgba(255, 255, 255, 0.35); }
+.pr-leaderboard__score { font-family: var(--font-display); font-size: 20px; color: var(--tier-elite); }
+
+.pr-leaderboard__empty,
+.pr-leaderboard__you {
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/*
+ * Run identity: the daily puzzle boards play in blue, not match gold.
+ *
+ * Only the *play affordances* move — placement zones, the playable/selected
+ * tile ring and underline, the landing pulse. The board's brass chrome
+ * (corner pills, rack, frame) stays as it is, so this reads as the same table
+ * with a different accent rather than a different skin. Same lever the No
+ * Brainer Lab uses for its purple.
+ */
+/* Selector matches the theme's own root specificity (it declares the gold
+   default on the same five classes) and adds one more, so blue wins. */
+.screen.game-screen.walnut-live.rh-match-live.puzzle-rush-root:not(.learn-lesson-screen) {
+  --rh-play-accent-rgb: var(--tier-standard-rgb);
+  --rh-hand-playable-accent: var(--tier-standard);
+}
+
+/* ── In-HUD stage meter (replaces the old bottom strip) ── */
+
+.pr-hud-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* The single run chip: score | divider | stage meter. */
+.pr-hud-run {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  background: rgba(10, 16, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.pr-hud-run__score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pr-hud-run__score-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-hud-run__score-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-hud-run__divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+/* Chrome-free now that it sits inside .pr-hud-run. */
+.pr-hud-stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 190px;
+}
+
+.pr-hud-stage__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pr-hud-stage__name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tier-standard);
+}
+
+.pr-hud-stage[data-stage='building'] .pr-hud-stage__name { color: var(--tier-elite); }
+.pr-hud-stage[data-stage='master'] .pr-hud-stage__name { color: var(--tier-master); }
+
+.pr-hud-stage__count {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-hud-stage__count-total {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pr-hud-stage__meter { display: flex; gap: 3px; height: 6px; }
+
+.pr-hud-stage__seg {
+  position: relative;
+  flex-basis: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.09);
+  transition: opacity 160ms cubic-bezier(0.2, 0, 0, 1);
+  opacity: 0.55;
+}
+
+.pr-hud-stage__seg.is-active,
+.pr-hud-stage__seg.is-past { opacity: 1; }
+
+.pr-hud-stage__seg-fill {
+  display: block;
+  height: 100%;
+  background: var(--tier-standard);
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pr-hud-stage__seg[data-stage='building'] .pr-hud-stage__seg-fill { background: var(--tier-elite); }
+.pr-hud-stage__seg[data-stage='master'] .pr-hud-stage__seg-fill { background: var(--tier-master); }
+
+.pr-hud-stage__position {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+@media (max-width: 900px) {
+  .pr-hud-run { gap: 10px; padding: 6px 12px; }
+  .pr-hud-run__score-value { font-size: 22px; }
+  .pr-hud-stage { min-width: 148px; }
+  .pr-hud-stage__position { display: none; }
+}
+
+/* ── Leaderboard: Fritz's dflb-* chrome, Rush's five columns ── */
+/* Fritz's grid is 7 columns (result/set/margin/time/games). Rush shows
+   rank / player / score / solved / time, so only the template changes —
+   every other dflb-* rule is inherited as-is. */
+
+.pr-leaderboard-page .dflb-table-head.pr-lb-row,
+.pr-leaderboard-page .dflb-row.pr-lb-row {
+  grid-template-columns: 72px minmax(150px, 1.4fr) 92px 80px minmax(90px, 0.8fr);
+}
+
+.pr-leaderboard-page .pr-lb-score {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--tier-elite);
+}
+
+@media (max-width: 900px) {
+  .pr-leaderboard-page .dflb-table-head.pr-lb-row,
+  .pr-leaderboard-page .dflb-row.pr-lb-row {
+    grid-template-columns: 56px minmax(110px, 1fr) 72px 60px;
+  }
+  .pr-leaderboard-page .dflb-finished { display: none; }
+}

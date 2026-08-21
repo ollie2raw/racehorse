@@ -164,7 +164,7 @@
 
 .screen.game-screen.walnut-live.rh-match-live .placement-zone.active,
 .screen.game-screen.walnut-live.rh-match-live .placement-zone.highlighted {
-  border-color: rgba(231, 182, 74, 0.55) !important;
-  background: rgba(231, 182, 74, 0.1) !important;
-  box-shadow: 0 0 20px rgba(231, 182, 74, 0.18) !important;
+  border-color: rgba(var(--rh-play-accent-rgb, var(--tier-elite-rgb)), 0.55) !important;
+  background: rgba(var(--rh-play-accent-rgb, var(--tier-elite-rgb)), 0.1) !important;
+  box-shadow: 0 0 20px rgba(var(--rh-play-accent-rgb, var(--tier-elite-rgb)), 0.18) !important;
 }

@@ -15,6 +15,11 @@
   --tier-elite:    #E7B64A;   /* gold   — prestige, achievement, mastery */
   --tier-master:   #AF5CFE;   /* purple — elite competition, premium    */
 
+  /* Channel triples for the same two tiers, for rules that need rgba() with a
+     runtime alpha. Keep in step with the hex values above. */
+  --tier-standard-rgb: 60, 131, 247;
+  --tier-elite-rgb:    231, 182, 74;
+
   /* ── Extended accent palette ────────────────────── */
   --accent-blue:   #0ea5e9;
   --accent-teal:   #2dd4bf;

@@ -20,6 +20,7 @@ type AppMode =
   | 'dailyPuzzleLeaderboard'
   | 'dailyFritz'
   | 'dailyFritzLeaderboard'
+  | 'puzzleRush'
   | 'learn'
   | 'guidedMatchRecorder'
   | 'guidedMatchAnnotator'
@@ -290,8 +291,8 @@ export default function RacehorseHomeScreen({
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
-                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
-                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Five daily puzzles. One shared challenge.'}</p>
+                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzles</h2>
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Beat the clock. Solve as many as you can.'}</p>
                   {puzzleCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Puzzle result summary">
                       <span className="home-daily-result-badge" role="status">{puzzleResultCopy.badge}</span>
@@ -308,7 +309,7 @@ export default function RacehorseHomeScreen({
                   </div>}
                   <Button
                     variant="tier-standard"
-                    onClick={() => navigate('daily')}
+                    onClick={() => navigate('puzzleRush')}
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
@@ -341,7 +342,7 @@ export default function RacehorseHomeScreen({
                     <TabIcon icon={tab.icon} color={tab.color} size={26} />
                   </span>
                   <span
-                    className="relative z-10 text-[17px] font-semibold tracking-[-0.01em]"
+                    className="relative z-10 text-[19px] font-bold tracking-[-0.01em]"
                     style={{ color: tab.color }}
                   >
                     {tab.label}

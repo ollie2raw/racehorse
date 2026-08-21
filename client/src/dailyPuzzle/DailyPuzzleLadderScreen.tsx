@@ -21,7 +21,7 @@ import type {
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import { DAILY_PUZZLE_SLOT_COUNT, LEGACY_DAILY_PUZZLE_SLOT_COUNT } from './types';
+import { DAILY_PUZZLE_SLOT_COUNT, MAX_DAILY_PUZZLE_SLOT_COUNT } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
@@ -121,9 +121,11 @@ export default function DailyPuzzleLadderScreen({
   );
   const heroSrc = useDeferredAsset('daily-puzzle-ladder-hero', loadHeroAsset);
   const hubSlots = today.attemptSlots ?? today.slots;
+  // Whatever this day actually published: three for new days, five on the
+  // archived five-slot days.
   const publishedSlotCount =
-    hubSlots.length === LEGACY_DAILY_PUZZLE_SLOT_COUNT
-      ? LEGACY_DAILY_PUZZLE_SLOT_COUNT
+    hubSlots.length >= 1 && hubSlots.length <= MAX_DAILY_PUZZLE_SLOT_COUNT
+      ? hubSlots.length
       : DAILY_PUZZLE_SLOT_COUNT;
 
   const finalizeReady = useMemo(
@@ -432,6 +434,7 @@ export default function DailyPuzzleLadderScreen({
       currentSlotBreakdown={currentSlotBreakdown}
       finalLadderShareText={finalLadderShareText}
       shareDone={shareDone}
+      publishedSlotCount={publishedSlotCount}
       actions={{
         exitPlayToHub,
         onSlotNext: (nextSlot) => {
@@ -579,7 +582,7 @@ export default function DailyPuzzleLadderScreen({
           hudCenter={
             <div className="wl-center-status" data-ui="turn-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
-                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 5</span>
+                      <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / {publishedSlotCount}</span>
             </div>
           }
           hudRight={
@@ -600,6 +603,7 @@ export default function DailyPuzzleLadderScreen({
               lastPlayedTile={lastPlayedTile}
               onPositionClick={onPositionClick}
               tileSize={84}
+              showZoomTray={false}
             />
           }
           handDock={

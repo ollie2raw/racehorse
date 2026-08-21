@@ -135,6 +135,7 @@ export function DailyPuzzleLegacyInPlayView({
                 lastPlayedTile={lastPlayedTile}
                 onPositionClick={actions.onPositionClick}
                 tileSize={84}
+                showZoomTray={false}
               />
               {solvableWarning && (
                 <div className="daily-puzzle-warning-banner">

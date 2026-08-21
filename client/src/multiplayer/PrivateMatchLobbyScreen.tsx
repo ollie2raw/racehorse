@@ -128,7 +128,7 @@ export default function PrivateMatchLobbyScreen({
                 <h1 className="pvf-title">Private Match</h1>
                 <p className="pvf-subtitle mp-hub-subtitle">
                   <span className="mp-hub-subtitle-line">
-                    Invite-only 1v1 dominos. Host a room, share code or link, and your guest may join
+                    Invite only 1v1 dominos. Host a room, share code or link, and your guest may join
                   </span>
                   <span className="mp-hub-subtitle-line">anytime. Start when ready.</span>
                 </p>

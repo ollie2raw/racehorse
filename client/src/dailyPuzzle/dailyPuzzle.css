@@ -1,5 +1,18 @@
 @import '../styles/_pvf-layout.css';
 
+/*
+ * Run identity: the daily puzzle board plays in blue, not match gold.
+ *
+ * Only the *play affordances* move — placement zones, the playable/selected
+ * tile ring and underline, the landing pulse; the board's brass chrome stays.
+ * The selector matches the live-match theme's own root specificity (it sets
+ * the gold default on the same five classes) and adds one more so blue wins.
+ */
+.screen.game-screen.walnut-live.rh-match-live.daily-puzzle-root:not(.learn-lesson-screen) {
+  --rh-play-accent-rgb: var(--tier-standard-rgb);
+  --rh-hand-playable-accent: var(--tier-standard);
+}
+
 .daily-puzzle-screen .daily-puzzle-hud-note {
   position: absolute;
   top: 12px;

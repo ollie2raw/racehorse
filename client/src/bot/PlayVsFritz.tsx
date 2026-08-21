@@ -238,7 +238,7 @@ export default function PlayVsFritz({
                 <div className="pvf-card-eyebrow">YOUR OPPONENT</div>
                 <h2 className="pvf-card-name">Fritz</h2>
                 <p className="pvf-card-description">
-                  Fritz is a world-class dominoes bot built to challenge and sharpen your strategy.
+                  Fritz is a world class dominoes bot built to challenge and sharpen your strategy.
                   Pick a difficulty, choose your format, and test your skills.
                 </p>
               </div>
