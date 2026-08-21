@@ -39,6 +39,13 @@ describe('M3 concurrent match start lock', () => {
       persistRoomMatchLog: async () => undefined,
       onGameOver: () => null,
     });
+    // This suite is about the start lock, not durability. Stub the persistence
+    // seam so the cases exercise locking alone and do not need live Supabase
+    // credentials; case 2 re-spies these to simulate a failed flush.
+    vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({
+      flushedRoomCodes: [],
+    });
+    vi.spyOn(livePersistence, 'isLiveRoomDurablyRecoverable').mockReturnValue(true);
   });
 
   it('1) two concurrent start signals → exactly one deal; second coalesces', async () => {
