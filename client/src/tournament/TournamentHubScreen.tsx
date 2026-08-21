@@ -116,6 +116,9 @@ const TournamentCardStatus = memo(function TournamentCardStatus({
     tickWhileRegistrationOpen ||
     (tickWhileStartSoon && now < startSoonAtMs);
   void needsStatusTick;
+  // now is not read here: statusFor() calls Date.now() internally, so this
+  // dep is what advances the card to "Starting Soon". Dropping it pins status.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const status = useMemo(() => statusFor(tournament), [tournament, now]);
 
   return <span className={`th-card__status ${status.cls}`}>{status.label}</span>;

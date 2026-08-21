@@ -338,6 +338,9 @@ export default function DailyPuzzleLadderLeaderboardScreen({
 
   const resetLabel = useMemo(
     () => formatCountdownHms(secondsUntilNextPacificMidnight(new Date())),
+    // countdownTick is not read here: it is the 1s interval that re-runs this
+    // memo so the impure new Date() is re-read. Dropping it freezes the label.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [countdownTick],
   );
 
@@ -476,7 +479,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   <span className="rh-hub-tag dflb-eyebrow dflb-eyebrow--ladder">Daily Puzzle Ladder</span>
                   <h1 className="dflb-command__title">Leaderboard</h1>
                   <p className="dflb-command__sub">
-                    Global ranking · Climb five puzzles for today's ladder total.
+                    Global ranking · Climb five puzzles for today&apos;s ladder total.
                   </p>
                 </div>
                 <div className="dflb-command__aside">

@@ -336,6 +336,9 @@ export default function DailyFritzLeaderboardScreen({
 
   const resetLabel = useMemo(
     () => formatCountdownHms(secondsUntilNextPacificMidnight(new Date())),
+    // countdownTick is not read here: it is the 1s interval that re-runs this
+    // memo so the impure new Date() is re-read. Dropping it freezes the label.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [countdownTick],
   );
 
