@@ -2,6 +2,99 @@ import type { Response } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds } from './socialAuth';
 
+/**
+ * Online win counts for a set of users, in one round-trip.
+ *
+ * This replaced a per-user loop that issued one request each and read `.length`
+ * off the full row set — for a 20-friend board, 21 requests against a table
+ * with no index on winner_user_id.
+ *
+ * Still reads one row per win rather than a count: PostgREST cannot GROUP BY
+ * without an RPC, and `Prefer: count=exact` yields a single total rather than a
+ * count per user. Only the grouping column is selected, so the payload is as
+ * small as a row-returning query can be. If match volume grows enough for this
+ * to matter, the next step is a `count_online_wins(user_ids uuid[])` RPC.
+ */
+async function countOnlineWinsByUser(userIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>(userIds.map((id) => [id, 0]));
+  if (!userIds.length) return counts;
+  const inClause = userIds.map((id) => `"${id}"`).join(',');
+  try {
+    const rows = await supabaseFetch<Array<{ winner_user_id: string | null }>>(
+      `/rest/v1/matches?winner_user_id=in.(${encodeURIComponent(inClause)})` +
+      '&mode=eq.online&select=winner_user_id',
+    );
+    for (const row of rows) {
+      if (!row.winner_user_id) continue;
+      const current = counts.get(row.winner_user_id);
+      if (current !== undefined) counts.set(row.winner_user_id, current + 1);
+    }
+  } catch {
+    // Match history unavailable — report zeroes rather than failing the board.
+  }
+  return counts;
+}
+
+type WeeklyRow = {
+  userId: string;
+  username: string;
+  glicko_rating: number;
+  provisional: boolean;
+  wins_this_week: number;
+  rank: number;
+};
+
+/**
+ * The weekly board is identical for every caller — only `is_self` varies — so
+ * the aggregate is built once and stamped per request. Without this, every
+ * visitor re-read up to 10,000 match rows and re-tallied them.
+ */
+const WEEKLY_TTL_MS = 60_000;
+let weeklyCache: { expiresAt: number; rows: WeeklyRow[] } | null = null;
+
+/** Exposed for tests, and the hook to call from a match write if that lands. */
+export function invalidateWeeklyLeaderboard(): void {
+  weeklyCache = null;
+}
+
+async function buildWeeklyLeaderboard(): Promise<WeeklyRow[]> {
+  const now = Date.now();
+  if (weeklyCache && weeklyCache.expiresAt > now) return weeklyCache.rows;
+
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const matches = await supabaseFetch<Array<{ winner_user_id: string | null; loser_user_id: string | null }>>(
+    `/rest/v1/matches?mode=eq.online&created_at=gte.${encodeURIComponent(weekAgo)}` +
+    '&select=winner_user_id,loser_user_id&limit=10000',
+  );
+  const winCounts = new Map<string, number>();
+  for (const m of matches) {
+    if (m.winner_user_id) winCounts.set(m.winner_user_id, (winCounts.get(m.winner_user_id) ?? 0) + 1);
+  }
+  if (!winCounts.size) {
+    weeklyCache = { expiresAt: now + WEEKLY_TTL_MS, rows: [] };
+    return [];
+  }
+
+  const topIds = [...winCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 100).map(([id]) => id);
+  const profileFilter = topIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
+  const profiles = await supabaseFetch<Array<{ id: string; username: string; glicko_rating: number; provisional: boolean }>>(
+    `/rest/v1/profiles?or=(${profileFilter})&select=id,username,glicko_rating,provisional`,
+  );
+  const rows: WeeklyRow[] = profiles
+    .map((p) => ({
+      userId: p.id,
+      username: p.username,
+      glicko_rating: Number(p.glicko_rating ?? 800),
+      provisional: Boolean(p.provisional),
+      wins_this_week: winCounts.get(p.id) ?? 0,
+    }))
+    .sort((a, b) => b.wins_this_week - a.wins_this_week)
+    .map((p, i) => ({ ...p, rank: i + 1 }));
+
+  weeklyCache = { expiresAt: now + WEEKLY_TTL_MS, rows };
+  return rows;
+}
+
 export async function respondLeaderboardGlobal(userId: string, res: Response): Promise<void> {
   try {
     const profiles = await supabaseFetch<Array<{
@@ -55,15 +148,7 @@ export async function respondLeaderboardFriends(userId: string, res: Response): 
       `/rest/v1/profiles?or=(${inFilter})&order=glicko_rating.desc` +
       `&select=id,username,glicko_rating,ranked_games_played,provisional`,
     );
-    const winCountMap = new Map<string, number>();
-    await Promise.all(allIds.map(async (id) => {
-      try {
-        const wins = await supabaseFetch<Array<{ id: string }>>(
-          `/rest/v1/matches?winner_user_id=eq.${encodeURIComponent(id)}&mode=eq.online&select=id`,
-        );
-        winCountMap.set(id, wins.length);
-      } catch { winCountMap.set(id, 0); }
-    }));
+    const winCountMap = await countOnlineWinsByUser(allIds);
     res.json({
       ok: true,
       leaderboard: profiles.map((p, index) => {
@@ -85,32 +170,10 @@ export async function respondLeaderboardFriends(userId: string, res: Response): 
 
 export async function respondLeaderboardWeekly(userId: string, res: Response): Promise<void> {
   try {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const matches = await supabaseFetch<Array<{ winner_user_id: string | null; loser_user_id: string | null }>>(
-      `/rest/v1/matches?mode=eq.online&created_at=gte.${encodeURIComponent(weekAgo)}` +
-      `&select=winner_user_id,loser_user_id&limit=10000`,
-    );
-    const winCounts = new Map<string, number>();
-    for (const m of matches) {
-      if (m.winner_user_id) winCounts.set(m.winner_user_id, (winCounts.get(m.winner_user_id) ?? 0) + 1);
-    }
-    if (!winCounts.size) { res.json({ ok: true, leaderboard: [], self: null }); return; }
-    const topIds = [...winCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 100).map(([id]) => id);
-    const profileFilter = topIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
-    const profiles = await supabaseFetch<Array<{ id: string; username: string; glicko_rating: number; provisional: boolean }>>(
-      `/rest/v1/profiles?or=(${profileFilter})&select=id,username,glicko_rating,provisional`,
-    );
-    const sorted = profiles
-      .map((p) => ({
-        userId: p.id, username: p.username,
-        glicko_rating: Number(p.glicko_rating ?? 800),
-        provisional: Boolean(p.provisional),
-        wins_this_week: winCounts.get(p.id) ?? 0, is_self: p.id === userId,
-      }))
-      .sort((a, b) => b.wins_this_week - a.wins_this_week)
-      .map((p, i) => ({ ...p, rank: i + 1 }));
-    const self = sorted.find((r) => r.is_self) ?? null;
-    res.json({ ok: true, leaderboard: sorted, self });
+    const rows = await buildWeeklyLeaderboard();
+    const leaderboard = rows.map((row) => ({ ...row, is_self: row.userId === userId }));
+    const self = leaderboard.find((r) => r.is_self) ?? null;
+    res.json({ ok: true, leaderboard, self });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
   }
