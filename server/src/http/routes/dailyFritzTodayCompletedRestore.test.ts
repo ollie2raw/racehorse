@@ -65,6 +65,7 @@ function makeHarness() {
       status(code: number) { status = code; return res; },
       json(value: unknown) { body = value; return res; },
       setHeader() { return res; },
+      set() { return res; },
       once() { return res; },
     };
     await handler({ headers: {}, params: {}, query, body: {}, method, path, get() { return undefined; } }, res);
