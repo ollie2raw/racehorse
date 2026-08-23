@@ -32,7 +32,12 @@ export function RushResultsView({
   onBack: () => void;
 }) {
   const serverScore = completion?.run.totalScore ?? completion?.authoritativeScore ?? null;
-  const solved = completion?.run.puzzlesSolved ?? results.filter((r) => r.solved).length;
+  // Only the server can count solves: a solve is now a share of the puzzle's
+  // best_possible_score, and the client is deliberately never told that number.
+  // With no completion there is nothing honest to show, so show nothing — the
+  // client's own per-puzzle `solved` flag is the old "scored anything" rule and
+  // would read high exactly when the real figure is missing.
+  const solved = completion?.run.puzzlesSolved ?? null;
   const invalidated = Boolean(completion?.invalidated) || completion?.run.status === 'invalidated';
   // The in-run number is a raw board score and the server's is a points total,
   // so they are not the same measure and normally differ — that is not worth
@@ -57,7 +62,7 @@ export function RushResultsView({
           <span className="pr-results__score-suffix">PTS</span>
         </div>
         <span className="pr-results__solved">
-          {solved} puzzle{solved === 1 ? '' : 's'} solved
+          {solved === null ? 'Solves unavailable' : `${solved} puzzle${solved === 1 ? '' : 's'} solved`}
         </span>
       </header>
 
@@ -65,7 +70,7 @@ export function RushResultsView({
           holds — no invented stats. */}
       <div className="pr-results__tiles">
         <div className="pr-results__tile">
-          <span className="pr-results__tile-value">{solved}</span>
+          <span className="pr-results__tile-value">{solved ?? '—'}</span>
           <span className="pr-results__tile-key">Solved</span>
         </div>
         <div className="pr-results__tile">

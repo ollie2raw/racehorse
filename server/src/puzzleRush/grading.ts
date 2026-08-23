@@ -62,6 +62,33 @@ export function calculateRushAwardedPoints(params: {
   return base + (perfect ? config.scoring.perfectBonusPoints : 0);
 }
 
+/**
+ * Whether a replayed line counts as a *solve*.
+ *
+ * Deliberately stricter than the daily ladder's `rawScore > 0`, which rush used
+ * until 2026-08-23: in a timed mode, "played one legal tile and moved on" would
+ * otherwise post the same 15-solve headline as a run that actually found the
+ * lines, and `puzzles_solved` is the leaderboard's tiebreaker.
+ *
+ * This is a *count* gate, not a scoring gate. `calculateRushAwardedPoints` and
+ * `calculateRushBonusSeconds` stay continuous in the same ratio, so a near-miss
+ * still earns its partial credit and its banked seconds.
+ *
+ * A line at or beyond the recorded best always solves: at least one pool row
+ * has a stored `best_possible_score` below what its board actually allows, and
+ * out-scoring the record must never read as a miss.
+ */
+export function isRushSolve(params: {
+  rawScore: number;
+  bestPossibleScore: number;
+  config?: PuzzleRushConfig;
+}): boolean {
+  const config = params.config ?? PUZZLE_RUSH_CONFIG;
+  if (!Number.isFinite(params.bestPossibleScore) || params.bestPossibleScore <= 0) return false;
+  if (!Number.isFinite(params.rawScore) || params.rawScore <= 0) return false;
+  return params.rawScore / params.bestPossibleScore >= config.scoring.solveRatioThreshold;
+}
+
 /** Seconds banked by a solve. A zero-score puzzle banks nothing. */
 export function calculateRushBonusSeconds(params: {
   rawScore: number;
@@ -154,7 +181,13 @@ export function gradeRun(params: {
         ...base,
         rawScore: validation.rawScore,
         awardedPoints,
-        solved: validation.solved,
+        // Not `validation.solved` — that is the ladder's `rawScore > 0` rule,
+        // shared with the daily ladder and deliberately left alone.
+        solved: isRushSolve({
+          rawScore: validation.rawScore,
+          bestPossibleScore: entry.bestPossibleScore,
+          config,
+        }),
         perfect: validation.perfect,
         movesUsed: validation.movesUsed,
         bonusSeconds: calculateRushBonusSeconds({
