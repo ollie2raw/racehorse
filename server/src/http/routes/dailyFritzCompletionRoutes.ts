@@ -9,7 +9,6 @@ import {
 import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
 import {
   DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-  canFinalizeDailyFritzAttempt,
   getDailyFritzVerificationStatus,
   hasCompleteDailyFritzGameAuthority,
   readAuthorityLedger,
@@ -119,10 +118,8 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
     const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
       && hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
     const completionVerificationStatus = isVerified ? 'verified' : 'legacy_unverified';
-    if (!canFinalizeDailyFritzAttempt(attempt.result, setResult)) {
-      res.status(409).json({ error: 'Daily Fritz verification is incomplete.' });
-      return;
-    }
+    // A completed set always finalizes. Verification state is recorded on the
+    // attempt for observability, but it never blocks a player from finishing.
     const { finalScore, opponentScore } = getDailyFritzPublishedSetScore(setResult);
     const won = setResult.setWinner === 'player';
     const movesUsed = ledger.hands.reduce((sum, hand) => sum + hand.actionCount, 0);

@@ -769,9 +769,10 @@ export function isDailyFritzAttemptLeaderboardEligible(
   attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
 ): boolean {
   const protocol = Number(attempt.result?.verification_protocol_version);
-  return attempt.status === 'completed'
-    && attempt.result?.verification_status === 'verified'
-    && (protocol === 1 || protocol === 2);
+  // Verification state deliberately does not affect eligibility. Gating the
+  // leaderboard on a verifier receipt meant a single mismatched hand silently
+  // erased a completed run; a finished set now ranks on its own merits.
+  return attempt.status === 'completed' && (protocol === 1 || protocol === 2);
 }
 /**
  * Upper bound on a reported streak. Long enough that no realistic player is

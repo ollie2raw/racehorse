@@ -3,7 +3,14 @@ import { getCurrentDailyFritzGameNumber } from '../stores/dailyFritzStore';
 
 export const DAILY_FRITZ_CHECKPOINT_SCHEMA_VERSION = 9;
 
-export type DailyFritzServerCheckpointPhase = 'active_hand' | 'hand_transition';
+/**
+ * Must stay in sync with the client's phases in
+ * `client/src/modules/daily/useDailyFritzSessionPersistence.ts`. It emitted
+ * 'completed' at game over while this list held only two values, so every
+ * game-ending checkpoint 400'd as malformed and no resume point was ever
+ * stored — which is why a failed save had nothing to fall back to.
+ */
+export type DailyFritzServerCheckpointPhase = 'active_hand' | 'hand_transition' | 'completed';
 
 export type DailyFritzServerCheckpoint = {
   schemaVersion: typeof DAILY_FRITZ_CHECKPOINT_SCHEMA_VERSION;
@@ -110,7 +117,7 @@ export function parseDailyFritzServerCheckpoint(value: unknown): DailyFritzServe
   if (!nonNegativeInteger(value.authorityRevision) || !nonNegativeInteger(value.checkpointRevision)) return null;
   if (!validIso(value.startedAt) || !validIso(value.lastTransitionAt)) return null;
   if (Date.parse(String(value.lastTransitionAt)) < Date.parse(String(value.startedAt))) return null;
-  if (!['active_hand', 'hand_transition'].includes(String(value.lifecyclePhase))) return null;
+  if (!['active_hand', 'hand_transition', 'completed'].includes(String(value.lifecyclePhase))) return null;
   if (!validMatch(value.match) || !validHandResult(value.handResult)) return null;
   if (!nonNegativeInteger(value.movesUsed) || !Array.isArray(value.moveLog)) return null;
   const phase = value.lifecyclePhase as DailyFritzServerCheckpointPhase;
@@ -119,6 +126,9 @@ export function parseDailyFritzServerCheckpoint(value: unknown): DailyFritzServe
   if (phase === 'hand_transition' && (match.handOver !== true || match.gameOver === true || value.handResult === null)) {
     return null;
   }
+  // 'completed' is the terminal checkpoint: the game is over, so the two
+  // in-play phases above cannot describe it.
+  if (phase === 'completed' && match.gameOver !== true) return null;
   if (Number(match.handNumber) !== Number(value.currentHandIndex) + 1) return null;
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
