@@ -454,6 +454,12 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
   message: string;
   /** Observability only — does not affect advance / ranking behavior. */
   transcript?: DailyFritzTranscript | null;
+  /**
+   * Structured divergence evidence from DailyFritzVerificationError, present
+   * for state-mismatch codes. Diagnostic payload only: it is logged, alerted
+   * and archived, and nothing branches on it.
+   */
+  diagnostics?: Record<string, unknown>;
 }): Promise<void> {
   incrementDailyFritzMetric('verification_bypassed', input.verifierCode);
   log.error({
@@ -464,6 +470,7 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
     handIndex: input.handIndex,
     verifierCode: input.verifierCode,
     message: input.message,
+    ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
   }, '[daily-fritz] advancing without verification receipt — run is now unranked');
   const evidence = dailyFritzTranscriptEvidenceFields(input.transcript ?? null);
   await recordDailyFritzEventBestEffort({
@@ -482,6 +489,7 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
       outcome: 'advance_unverified',
       message: input.message,
       ...evidence.payload,
+      ...(input.diagnostics ? { mismatch_diagnostics: input.diagnostics } : {}),
     },
   });
   const infrastructureFailure = DAILY_FRITZ_INFRASTRUCTURE_VERIFIER_CODES.has(input.verifierCode);
@@ -504,6 +512,7 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
         handIndex: input.handIndex,
         message: input.message,
         transcriptDigest: evidence.transcriptDigest,
+        ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
       },
     });
   }

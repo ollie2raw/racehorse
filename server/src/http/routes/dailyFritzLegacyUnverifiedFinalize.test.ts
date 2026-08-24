@@ -269,9 +269,9 @@ describe('Daily Fritz legacy_unverified finalize after rejected terminal hand', 
 
     const saved = store.current();
     expect(saved.status).toBe('completed');
-    // Policy change (2026-08-24): verification state no longer affects
-    // eligibility. The run is still labelled legacy_unverified above for
-    // observability, but a completed set ranks regardless.
-    expect(isDailyFritzAttemptLeaderboardEligible(saved)).toBe(true);
+    // The run saves and completes normally — that is the point of this test,
+    // and nothing about verification may block it. It is only withheld from
+    // the public ranked board, which is what "completes unranked" means.
+    expect(isDailyFritzAttemptLeaderboardEligible(saved)).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
 import { createHash } from 'crypto';
 import {
   DAILY_FRITZ_VERIFIER_VERSION,
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   DEFAULT_CONFIG,
   applyGameCommand,
   canDraw,
+  canonicalizeDailyFritzAuthorityState,
   chooseOfficialFritzDecisionForVersion,
   getDailyFritzAuthorityStateDigest,
   getFritzPolicyContract,
@@ -40,7 +42,17 @@ export type VerifiedDailyFritzHandRecord = {
 };
 
 export class DailyFritzVerificationError extends Error {
-  constructor(message: string, readonly code: string) {
+  /**
+   * Structured evidence for divergence codes whose message alone is not
+   * actionable — notably fritz_state_mismatch, whose two digests say that
+   * something differed but never what. Diagnostic payload only: nothing may
+   * branch on it, and it is absent for codes that already name their cause.
+   */
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly diagnostics?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'DailyFritzVerificationError';
   }
@@ -48,6 +60,52 @@ export class DailyFritzVerificationError extends Error {
 
 function cloneTiles(tiles: readonly Tile[]): Tile[] {
   return tiles.map((tile) => ({ low: tile.low, high: tile.high }));
+}
+
+/**
+ * Capture the server's digest pre-image at the moment of a state divergence.
+ *
+ * The client transmits only `preStateDigest`, never its own state, so a
+ * two-sided field-by-field diff is impossible here without changing the wire
+ * format. What this gives instead is the exact canonical structure the server
+ * hashed — board, per-side hands and scores, boneyard, turn cursor, sequence —
+ * so the next occurrence can be diffed against a client-side recomputation of
+ * `canonicalizeDailyFritzAuthorityState` rather than reconstructed by hand.
+ *
+ * Tile counts are summarised alongside the tiles themselves because a
+ * count mismatch (a missed forced draw) is the most common divergence and is
+ * worth reading straight off the log line.
+ */
+function buildDailyFritzStateMismatchDiagnostics(input: {
+  state: GameState;
+  clientStateDigest: string;
+  serverStateDigest: string;
+  actionSequence: number;
+  actor: string;
+  actionKind: string;
+}): Record<string, unknown> {
+  const serverState = JSON.parse(
+    canonicalizeDailyFritzAuthorityState(input.state),
+  ) as Record<string, unknown>;
+  const players = Array.isArray(serverState.players)
+    ? serverState.players as Array<{ hand: string[]; score: number }>
+    : [];
+  return {
+    digestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    clientStateDigest: input.clientStateDigest,
+    serverStateDigest: input.serverStateDigest,
+    actionSequence: input.actionSequence,
+    actor: input.actor,
+    actionKind: input.actionKind,
+    serverState,
+    serverTileCounts: {
+      hands: players.map((player) => player.hand.length),
+      scores: players.map((player) => player.score),
+      boneyard: Array.isArray(serverState.boneyard) ? serverState.boneyard.length : null,
+      deadTiles: Array.isArray(serverState.deadTiles) ? serverState.deadTiles.length : null,
+      board: Array.isArray(serverState.board) ? serverState.board.length : null,
+    },
+  };
 }
 
 export function createOfficialDailyFritzHandState(input: {
@@ -337,6 +395,14 @@ export function verifyDailyFritzHand(input: {
         throw new DailyFritzVerificationError(
           `Fritz state diverged before action ${action.sequence} (client ${action.preStateDigest}, server ${authorityStateDigest}).`,
           'fritz_state_mismatch',
+          buildDailyFritzStateMismatchDiagnostics({
+            state,
+            clientStateDigest: action.preStateDigest,
+            serverStateDigest: authorityStateDigest,
+            actionSequence: action.sequence,
+            actor: action.actor,
+            actionKind: action.kind,
+          }),
         );
       }
       const decision = chooseOfficialFritzDecisionForVersion({

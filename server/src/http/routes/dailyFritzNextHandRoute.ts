@@ -404,6 +404,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
             operation: 'next-hand',
             message: verificationError!.message,
             transcript: parsedTranscript,
+            diagnostics: verificationError!.diagnostics,
           });
           attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
             gameNumber,
@@ -446,6 +447,7 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         operation: 'next-hand',
         message: verificationError!.message,
         transcript: parsedTranscript,
+        diagnostics: verificationError!.diagnostics,
       });
       attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
         gameNumber,
