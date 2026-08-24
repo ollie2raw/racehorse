@@ -17,10 +17,8 @@ import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
 import {
   buildRecordedDailyFritzAttemptResult,
   classifyDailyFritzGameRecordingPosition,
-  hasPriorDailyFritzGameAuthority,
   isIdenticalDailyFritzGameReplay,
   readAuthorityLedger,
-  requiresVerifiedDailyFritzEvidence,
 } from './dailyFritzVerificationPolicy';
 import { clearDailyFritzActiveCheckpoint } from './dailyFritzCheckpointPolicy';
 import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
@@ -113,10 +111,9 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     const publishedAuthority = await loadDailyFritzPublishedAuthority({ attempt, run });
     const parsedTranscript = transcriptInput == null ? null : parseTranscriptForRequest(transcriptInput);
     if (parsedTranscript) evidenceTranscript = parsedTranscript;
-    if (!parsedTranscript && requiresVerifiedDailyFritzEvidence(attempt.result)) {
-      res.status(426).json({ error: 'This attempt requires verified game evidence. Update required.' });
-      return;
-    }
+    // Verification does not gate saving. A game the player already finished is
+    // saved whether or not evidence came with it; a missing transcript is
+    // recorded as unverified, never refused.
 
     const currentSetResult = normalizeDailyFritzSetResult(attempt.result) ?? {
       version: 2,
@@ -126,15 +123,10 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       totalPointDiff: 0,
       games: [],
     };
-    if (
-      requiresVerifiedDailyFritzEvidence(attempt.result)
-      && !hasPriorDailyFritzGameAuthority(attempt.result, currentSetResult)
-    ) {
-      res.status(409).json({
-        error: 'Earlier Daily Fritz games are missing verification receipts. Resume from an earlier game or contact support.',
-      });
-      return;
-    }
+    // No prior-receipt gate. This is what trapped four players between
+    // 2026-08-19 and 2026-08-24: one hand failing verification left its game
+    // without a receipt, and every later game then 409'd forever, with no way
+    // back because the earlier game could never be re-verified.
     const recordingPosition = classifyDailyFritzGameRecordingPosition(currentSetResult, gameNumber);
     if (recordingPosition.kind === 'replay') {
       const existing = recordingPosition.existing;

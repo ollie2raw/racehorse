@@ -11,9 +11,6 @@ import {
   digestDailyFritzTranscript,
 } from '../../dailyFritzVerifier';
 import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
-import {
-  requiresVerifiedDailyFritzEvidence,
-} from './dailyFritzVerificationPolicy';
 import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
 import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { loadDailyFritzPublishedAuthority, resolveDailyFritzPublishedGameAuthority } from './dailyFritzPublishedAuthority';
@@ -192,10 +189,8 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
     };
 
     if (transcriptInput == null) {
-      if (requiresVerifiedDailyFritzEvidence(attempt.result)) {
-        res.status(426).json({ error: 'This attempt requires verified hand evidence. Update required.' });
-        return;
-      }
+      // A hand without evidence advances anyway. It is marked unverified
+      // below, but the player is never stopped mid-set over it.
       if (attempt.currentHandIndex === completedHandIndex + 1) {
         incrementDailyFritzMetric('next_hand_replayed');
         incrementDailyFritzMetric('retry_request');
