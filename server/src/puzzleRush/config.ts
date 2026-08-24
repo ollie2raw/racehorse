@@ -80,6 +80,19 @@ export type PuzzleRushConfig = {
     curveExponent: number;
     /** Flat bonus added when a solve matches best_possible_score exactly. */
     perfectBonusPoints: number;
+    /**
+     * Share of `best_possible_score` a line must reach to count as a *solve*.
+     *
+     * This gates the solve **count** only — `awardedPoints` and banked seconds
+     * stay continuous in the score ratio either side of it. Set from the pool
+     * measured 2026-08-23: achievable scores are dense, not clustered (master
+     * puzzles average ~37 distinct reachable totals and the second-best line
+     * sits at ~0.97 of the best), so there is no natural gap to sit in and this
+     * is a difficulty dial rather than a structural boundary. At 0.8 roughly
+     * 5% of random legal master lines clear it, ~12% of tactical, ~24% of
+     * quick_line — the warm-up tier is deliberately the most forgiving.
+     */
+    solveRatioThreshold: number;
   };
 
   antiCheat: {
@@ -107,7 +120,7 @@ export type PuzzleRushConfig = {
 };
 
 export const PUZZLE_RUSH_CONFIG: PuzzleRushConfig = {
-  version: 3,
+  version: 4,
 
   clock: {
     baseSeconds: 120,
@@ -171,6 +184,7 @@ export const PUZZLE_RUSH_CONFIG: PuzzleRushConfig = {
   scoring: {
     curveExponent: 1.5,
     perfectBonusPoints: 25,
+    solveRatioThreshold: 0.8,
   },
 
   antiCheat: {

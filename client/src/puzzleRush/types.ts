@@ -116,6 +116,14 @@ export interface RushPuzzleResult {
   /** Board score for this puzzle. The client's only honest scoring signal. */
   rawScore: number;
   bonusSeconds: number;
+  /**
+   * Optimistic "scored anything" flag, for in-run feel only.
+   *
+   * NOT the run's solve count. A solve is a share of the puzzle's
+   * `best_possible_score` (see `isRushSolve` on the server), and the client is
+   * deliberately never told that number, so it cannot compute one. The results
+   * screen reads the server's `puzzlesSolved` and shows nothing without it.
+   */
   solved: boolean;
   /** The line as played, forwarded verbatim for the server's replay. */
   submittedLine: Array<Record<string, unknown>>;

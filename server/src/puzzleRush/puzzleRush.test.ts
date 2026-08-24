@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createHighScorePuzzle, computeBestPossiblePuzzleScore } from '../generatePuzzles';
-import { getLegalMoves } from '../game/engine';
+import { applyMove, getLegalMoves } from '../game/engine';
 import { DEFAULT_CONFIG, type BoardState, type GameState, type PlayMove, type Tile } from '../game/types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,10 +20,12 @@ import {
   stageForOrdinal,
 } from './config';
 import { deriveDifficultyScore, selectRunPuzzles, summarizeSelectionFallbacks } from './difficulty';
+import { validateDailyPuzzleSubmission } from '../dailyPuzzleSubmissionValidation';
 import {
   calculateRushAwardedPoints,
   calculateRushBonusSeconds,
   gradeRun,
+  isRushSolve,
   type ReportedPuzzle,
 } from './grading';
 import { buildPuzzleRushLeaderboard, findPersonalBestRun } from './leaderboard';
@@ -92,6 +94,65 @@ function bestSingleMoveLine(board: unknown, hand: Tile[]): Array<Record<string, 
   const moves = getLegalMoves(state, 'you').filter((move): move is PlayMove => move.type === 'play');
   if (moves.length === 0) return [];
   return [{ tile: moves[0].tile, position: moves[0].position }];
+}
+
+/**
+ * The highest-scoring single first move, as a submitted line.
+ *
+ * `bestSingleMoveLine` takes whatever move the engine lists first, which is
+ * frequently a zero-scoring one — fine for replay tests, useless for testing a
+ * threshold, where the line has to score *something* to be a near-miss rather
+ * than a miss.
+ */
+function scoringSingleMoveLine(board: unknown, hand: Tile[]): Array<Record<string, unknown>> {
+  const state: GameState = {
+    config: { ...DEFAULT_CONFIG, tilesPerPlayer: Math.max(1, hand.length), deadTileCount: 0, winningScore: 999 },
+    playerIds: ['you', 'bot'],
+    players: { you: { id: 'you', hand, score: 0 }, bot: { id: 'bot', hand: [], score: 0 } },
+    board: board as BoardState,
+    boneyard: [],
+    deadTiles: [],
+    currentPlayerIndex: 0,
+    handNumber: 1,
+    handOpen: true,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    consecutivePasses: 0,
+    sequence: 0,
+  } as GameState;
+  const moves = getLegalMoves(state, 'you').filter((move): move is PlayMove => move.type === 'play');
+  let best: { move: PlayMove; score: number } | null = null;
+  for (const move of moves) {
+    const score = applyMove(state, 'you', move).state.players.you.score;
+    if (!best || score > best.score) best = { move, score };
+  }
+  if (!best || best.score <= 0) throw new Error('no scoring first move for this puzzle');
+  return [{ tile: best.move.tile, position: best.move.position }];
+}
+
+/**
+ * A real puzzle paired with a scoring first move.
+ *
+ * Not every generated puzzle has one — plenty of boards open with only
+ * zero-scoring placements — so walk seeds until one does rather than letting a
+ * threshold test fail on puzzle generation.
+ */
+function makeScoringPuzzle(seed: string): {
+  board: unknown;
+  hand: Tile[];
+  bestPossibleScore: number;
+  line: Array<Record<string, unknown>>;
+} {
+  for (let attempt = 1; attempt <= 25; attempt++) {
+    const { board, hand, bestPossibleScore } = makeRealPuzzle(`${seed}:${attempt}`);
+    try {
+      return { board, hand, bestPossibleScore, line: scoringSingleMoveLine(board, hand) };
+    } catch {
+      /* no scoring opener on this board; try the next seed */
+    }
+  }
+  throw new Error(`Could not find a scoring first move for seed ${seed}`);
 }
 
 function run(overrides: Partial<PuzzleRushRun> & { id: string; userId: string }): PuzzleRushRun {
@@ -503,6 +564,49 @@ describe('rush scoring', () => {
   });
 });
 
+// ─── the solve threshold ─────────────────────────────────────────────────
+
+describe('rush solve threshold', () => {
+  const threshold = PUZZLE_RUSH_CONFIG.scoring.solveRatioThreshold;
+
+  it('counts a solve only at or above the configured share of the best line', () => {
+    const atThreshold = Math.ceil(threshold * 100);
+    expect(isRushSolve({ rawScore: 100, bestPossibleScore: 100 })).toBe(true);
+    expect(isRushSolve({ rawScore: atThreshold, bestPossibleScore: 100 })).toBe(true);
+    expect(isRushSolve({ rawScore: atThreshold - 1, bestPossibleScore: 100 })).toBe(false);
+  });
+
+  it('does not count a merely legal line as a solve', () => {
+    // The behaviour this threshold exists for: one tile played, turn over.
+    expect(isRushSolve({ rawScore: 5, bestPossibleScore: 40 })).toBe(false);
+    expect(isRushSolve({ rawScore: 0, bestPossibleScore: 40 })).toBe(false);
+  });
+
+  it('never counts a solve when the best score is unknown', () => {
+    expect(isRushSolve({ rawScore: 50, bestPossibleScore: 0 })).toBe(false);
+    expect(isRushSolve({ rawScore: 50, bestPossibleScore: Number.NaN })).toBe(false);
+  });
+
+  it('a line at or beyond the recorded best always solves', () => {
+    // The pool has at least one row whose stored best_possible_score is below
+    // what the board actually allows; an over-best line must not read as a miss.
+    expect(isRushSolve({ rawScore: 120, bestPossibleScore: 100 })).toBe(true);
+  });
+
+  it('leaves the daily ladder on its own looser rule', () => {
+    // `validateDailyPuzzleSubmission.solved` is shared with the ladder. Rush
+    // tightens its own count in gradeRun; the ladder must not move with it.
+    const { board, hand, bestPossibleScore, line } = makeScoringPuzzle('ladder-boundary');
+    const validation = validateDailyPuzzleSubmission({
+      slot: { startingBoard: board, startingHand: hand, bestPossibleScore } as never,
+      submittedLine: line,
+      elapsedSeconds: 0,
+    });
+    expect(validation.rawScore).toBeGreaterThan(0);
+    expect(validation.solved).toBe(true);
+  });
+});
+
 // ─── grading / anti-cheat ────────────────────────────────────────────────
 
 describe('end-of-run grading', () => {
@@ -544,6 +648,75 @@ describe('end-of-run grading', () => {
     expect(firstPass.puzzles.every((puzzle) => puzzle.gradingError === null)).toBe(true);
     expect(firstPass.puzzlesSolved).toBe(firstPass.puzzles.filter((p) => p.solved).length);
     expect(firstPass.bankedBonusSeconds).toBeGreaterThan(0);
+  });
+
+  it('a run of weak-but-legal lines scores points and solves nothing', () => {
+    // Every line replays legally and earns partial credit, but none reaches the
+    // threshold, so the headline "solved" count stays at zero. This is the
+    // "play one tile, move on" run the loose rule used to call a full clear.
+    const poolById = new Map<string, PuzzlePoolEntry>();
+    const reported: ReportedPuzzle[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { board, hand, bestPossibleScore, line } = makeScoringPuzzle(`weak-${i}`);
+      const id = `pool-weak-${i}`;
+      poolById.set(
+        id,
+        poolEntry({
+          id,
+          startingBoard: board,
+          startingHand: hand,
+          // Ten times the reachable best: any real line lands far below the
+          // threshold, without needing a hand-built losing board.
+          bestPossibleScore: bestPossibleScore * 10,
+        }),
+      );
+      reported.push({
+        ordinal: i + 1,
+        puzzleId: id,
+        submittedLine: line,
+        clientRawScore: 0,
+      });
+    }
+
+    const grade = gradeRun({ reported, poolById, clientReportedScore: 0, runDurationSeconds: 60 });
+
+    expect(grade.valid).toBe(true);
+    expect(grade.puzzles.every((puzzle) => puzzle.gradingError === null)).toBe(true);
+    expect(grade.puzzles.every((puzzle) => puzzle.rawScore > 0)).toBe(true);
+    expect(grade.puzzlesSolved).toBe(0);
+    expect(grade.totalScore).toBeGreaterThan(0);
+  });
+
+  it('a sub-threshold line still earns its points and its banked seconds', () => {
+    // The threshold gates the solve *count* only. It must not become a scoring
+    // gate: partial credit and the clock reward are already continuous in the
+    // score ratio, and a cliff at the threshold would double-punish.
+    const { board, hand, bestPossibleScore, line } = makeScoringPuzzle('sub-threshold');
+    const id = 'pool-sub';
+    const poolById = new Map<string, PuzzlePoolEntry>([
+      [
+        id,
+        poolEntry({ id, startingBoard: board, startingHand: hand, bestPossibleScore: bestPossibleScore * 10 }),
+      ],
+    ]);
+    const grade = gradeRun({
+      reported: [{ ordinal: 1, puzzleId: id, submittedLine: line, clientRawScore: 0 }],
+      poolById,
+      clientReportedScore: 0,
+      runDurationSeconds: 60,
+    });
+
+    const [puzzle] = grade.puzzles;
+    expect(puzzle.solved).toBe(false);
+    expect(puzzle.awardedPoints).toBeGreaterThan(0);
+    expect(puzzle.bonusSeconds).toBeGreaterThan(0);
+    expect(puzzle.awardedPoints).toBe(
+      calculateRushAwardedPoints({
+        rawScore: puzzle.rawScore,
+        bestPossibleScore: bestPossibleScore * 10,
+        maxPoints: stageForOrdinal(1).maxPointsPerPuzzle,
+      }),
+    );
   });
 
   it('a client reporting the true score stays valid', () => {
