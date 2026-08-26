@@ -317,6 +317,7 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
             operation: 'record-game',
             message,
             transcript: parsedTranscript,
+            diagnostics: verification.ok ? undefined : verification.error.diagnostics,
           });
           attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
             gameNumber,

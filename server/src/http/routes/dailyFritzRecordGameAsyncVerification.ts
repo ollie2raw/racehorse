@@ -114,6 +114,7 @@ export async function runDailyFritzRecordGameVerification(
         operation: 'record-game',
         message: verification.error.message,
         transcript: input.transcript,
+        diagnostics: verification.error.diagnostics,
       });
       attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
         gameNumber: input.gameNumber,

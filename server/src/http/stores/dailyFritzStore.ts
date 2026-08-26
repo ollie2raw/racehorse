@@ -19,6 +19,7 @@ import {
   normalizeDailyFritzSetSkunkFields,
 } from '../../dailyFritzSkunk';
 import { supabaseFetch } from '../../supabaseUtils';
+import { getDailyFritzVerificationStatus } from '../routes/dailyFritzVerificationPolicy';
 import { getPacificDateKey } from '../../shared/pacificDate';
 import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
 import {
@@ -769,10 +770,21 @@ export function isDailyFritzAttemptLeaderboardEligible(
   attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
 ): boolean {
   const protocol = Number(attempt.result?.verification_protocol_version);
-  // Verification state deliberately does not affect eligibility. Gating the
-  // leaderboard on a verifier receipt meant a single mismatched hand silently
-  // erased a completed run; a finished set now ranks on its own merits.
-  return attempt.status === 'completed' && (protocol === 1 || protocol === 2);
+  if (attempt.status !== 'completed') return false;
+  if (protocol !== 1 && protocol !== 2) return false;
+  // Soft flag, not a gate. An unverified run is still saved, completed and
+  // shown to its own player (history, personal stats); it is only withheld
+  // from the public ranked board, where an unverified score would sit
+  // alongside verified ones with no way to tell them apart. Nothing on the
+  // play or save path may consult this predicate — see PR #58, which removed
+  // the hard gates that trapped players mid-set.
+  if (getDailyFritzVerificationStatus(attempt.result) !== 'verified') return false;
+  // The ledger, not the label, is the durable fact. Production carries at least
+  // one attempt (2026-08-21) whose unverified_hands is populated while
+  // verification_status reads 'in_progress', so a run that recorded a hand
+  // without a receipt must stay unranked however its status later drifted.
+  const unverifiedHands = attempt.result?.unverified_hands;
+  return !Array.isArray(unverifiedHands) || unverifiedHands.length === 0;
 }
 /**
  * Upper bound on a reported streak. Long enough that no realistic player is

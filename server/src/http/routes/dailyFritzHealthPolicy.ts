@@ -31,6 +31,10 @@ export type DailyFritzDayHealthMetrics = {
   requestFailed: number;
   legacyUnverifiedCompletions: number;
   unrankedCompletionRate: number;
+  /** Protocol-v2 attempts that entered unverified_hands on this run date. */
+  unverifiedHandAttempts: number;
+  /** unverifiedHandAttempts as a share of attemptsStarted. */
+  unverifiedHandAttemptRate: number;
   recoveryStarted: number;
   recoveryFailed: number;
   firstMoveCount: number;
