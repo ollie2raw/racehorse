@@ -125,17 +125,45 @@ create policy "ghost_profiles_update_own"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- Auto-bootstrap a temporary profile row after signup.
+-- Bootstrap the profile row after signup, honouring the submitted username
+-- and falling back to a placeholder handle when none is usable.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  fallback_username text := 'user_' || left(replace(new.id::text, '-', ''), 8);
+  desired_username text;
 begin
-  insert into public.profiles (id, username)
-  values (new.id, 'user_' || left(replace(new.id::text, '-', ''), 8))
-  on conflict (id) do nothing;
+  desired_username := lower(trim(coalesce(
+    nullif(new.raw_user_meta_data ->> 'username', ''),
+    nullif(new.raw_user_meta_data ->> 'preferred_username', ''),
+    ''
+  )));
+
+  -- Same rules the signup form enforces, plus the reserved placeholder
+  -- namespace, which the app treats as "no handle chosen yet".
+  if desired_username !~ '^[a-z0-9_]{3,}$'
+    or desired_username like 'user\_%'
+    or exists (select 1 from public.profiles p where p.username = desired_username)
+  then
+    desired_username := fallback_username;
+  end if;
+
+  begin
+    insert into public.profiles (id, username)
+    values (new.id, desired_username)
+    on conflict (id) do nothing;
+  exception
+    when unique_violation then
+      -- The handle was claimed between the check and the insert.
+      insert into public.profiles (id, username)
+      values (new.id, fallback_username)
+      on conflict (id) do nothing;
+  end;
+
   return new;
 end;
 $$;
