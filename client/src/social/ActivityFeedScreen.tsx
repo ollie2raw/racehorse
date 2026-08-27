@@ -148,8 +148,11 @@ export default function ActivityFeedScreen({
     { rank: number; username: string; rating: number; delta: string }[]
   >([]);
 
+  // Keyed on the id, not the user object: Supabase hands back a fresh User on
+  // every token refresh, and depending on the object refetched each time.
+  const feedUserId = user?.id ?? null;
   useEffect(() => {
-    if (!user) return;
+    if (!feedUserId) return;
     let cancelled = false;
 
     void fetchFriendsWithPresence().then((result) => {
@@ -160,7 +163,7 @@ export default function ActivityFeedScreen({
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [feedUserId]);
 
   const friends = user ? loadedFriends : [];
 

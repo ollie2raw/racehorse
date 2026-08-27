@@ -60,14 +60,23 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
     return Date.now() - dismissedAt < SNOOZE_MS;
   });
 
-  // Fetch ghost profile when auth user changes
+  /**
+   * Fetch the ghost profile when the signed-in USER changes.
+   *
+   * Keyed on the id, not the user object: Supabase returns a fresh User object
+   * on every token refresh and auth-state event, so depending on the object
+   * refetched on each one. Worse, a 401 here makes api/client.ts refresh the
+   * session, which emits another new object and refires this effect — a loop
+   * paced by network latency, not by any timer.
+   */
+  const authUserId = authUser?.id ?? null;
   useEffect(() => {
-    if (!authUser) {
+    if (!authUserId) {
       setGhostProfile(null);
       return;
     }
     let active = true;
-    void fetchGhostProfileSummary(authUser.id)
+    void fetchGhostProfileSummary(authUserId)
       .then((summary) => {
         if (active) setGhostProfile(summary);
       })
@@ -77,7 +86,7 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
     return () => {
       active = false;
     };
-  }, [authUser]);
+  }, [authUserId]);
 
   // Open welcome modal on first visit
   useEffect(() => {
