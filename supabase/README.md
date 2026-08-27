@@ -137,6 +137,24 @@ available to `service_role`; it should not be granted to `anon` or
 `authenticated`. The server's `/ready` endpoint and the admin
 `/api/daily-fritz/metrics` endpoint provide the runtime verification path.
 
+## Signup username persistence (2026-08-26)
+
+`supabase/migrations/2026-08-26_signup_profile_username_from_metadata.sql`
+replaces `public.handle_new_user()` so the username submitted on the signup form
+(carried on `auth.users.raw_user_meta_data`) becomes the profile handle instead
+of the `user_<id-prefix>` placeholder. Databases created from the current
+`supabase/schema.sql` already include it; existing databases must run the
+migration. Profiles bootstrapped before it keep their placeholder handle and
+still use the username prompt.
+
+Verify after applying:
+
+```sql
+select prosrc like '%raw_user_meta_data%' as reads_submitted_username
+from pg_proc
+where proname = 'handle_new_user';
+```
+
 ## Notes
 - If env vars are missing, the app stays in Guest mode and gameplay still works.
 - Auth methods enabled in Supabase should include Email/Password.
