@@ -404,3 +404,62 @@ describe('useAppSessionUi — justVerified toast', () => {
     );
   });
 });
+
+// ── Ghost profile fetch identity ──────────────────────────────────────────────
+
+/**
+ * Supabase hands back a NEW User object on every token refresh and auth-state
+ * event, with the same id. Keying the ghost-profile fetch on that object made
+ * each refresh refire the request; a 401 on the request triggers a refresh in
+ * api/client.ts, which produces another new object, which refires the request —
+ * a self-sustaining loop paced by network latency rather than any timer.
+ */
+describe('useAppSessionUi — ghost profile fetch is keyed on identity, not object', () => {
+  beforeEach(() => {
+    vi.mocked(fetchGhostProfileSummary).mockClear();
+  });
+
+  it('fetches once for a mounted signed-in user', async () => {
+    renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({ authUser: makeUser() as never }),
+    });
+    await waitFor(() => expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not refetch when the same user arrives as a new object', async () => {
+    const { rerender } = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({ authUser: makeUser() as never }),
+    });
+    await waitFor(() => expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1));
+
+    // Same id, fresh object — exactly what a token refresh produces.
+    for (let i = 0; i < 5; i += 1) {
+      rerender(defaultParams({ authUser: makeUser() as never }));
+    }
+
+    await Promise.resolve();
+    expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches when a different user signs in', async () => {
+    const { rerender } = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({ authUser: makeUser() as never }),
+    });
+    await waitFor(() => expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1));
+
+    rerender(defaultParams({ authUser: makeUser({ id: 'user-999' }) as never }));
+    await waitFor(() => expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(fetchGhostProfileSummary).mock.calls[1][0]).toBe('user-999');
+  });
+
+  it('clears the ghost profile on sign-out without fetching again', async () => {
+    const { result, rerender } = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({ authUser: makeUser() as never }),
+    });
+    await waitFor(() => expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1));
+
+    rerender(defaultParams({ authUser: null }));
+    await waitFor(() => expect(result.current.ghostProfile).toBeNull());
+    expect(fetchGhostProfileSummary).toHaveBeenCalledTimes(1);
+  });
+});
