@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -183,7 +184,20 @@ function replaceMeta(html, selector, value) {
 function renderRoute(template, route) {
   const url = `${siteOrigin}${route.path}`;
   const image = `${siteOrigin}${route.image}`;
-  const content = `<main class="prerendered-page" aria-hidden="true"><p>Racehorse Dominoes</p><h1>${escapeHtml(route.heading)}</h1><p>${escapeHtml(route.body)}</p><p><a href="/">Explore Racehorse Dominoes</a></p></main>`;
+  // Every indexable route links to every other, so a crawler reaching any page
+  // can walk the whole site. Not aria-hidden: React replaces this on hydrate,
+  // but until it does this nav is the only way through the site without JS.
+  const links = crawlTargets(routes, route.path)
+    .map((other) => `<li><a href="${other.path}">${escapeHtml(navLabel(other))}</a></li>`)
+    .join('');
+
+  const content =
+    `<main class="prerendered-page">` +
+    `<p>Racehorse Dominoes</p>` +
+    `<h1>${escapeHtml(route.heading)}</h1>` +
+    `<p>${escapeHtml(route.body)}</p>` +
+    `<nav aria-label="Racehorse Dominoes pages"><ul>${links}</ul></nav>` +
+    `</main>`;
 
   let html = template
     .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(route.title)}</title>`)
@@ -219,10 +233,7 @@ for (const route of routes) {
  * all.
  */
 
-/** Routes whose content is per-user or per-match, so not worth indexing. */
-const NOINDEX = new Set(['/players', '/tournament/detail', '/tournament/result', '/multiplayer/private']);
-
-const indexable = routes.filter((route) => !NOINDEX.has(route.path));
+const indexable = routes.filter(isIndexable);
 
 const sitemap = [
   '<?xml version="1.0" encoding="UTF-8"?>',
