@@ -1,7 +1,9 @@
+import { useCallback, useMemo, useState } from 'react';
 import { Button } from '../components/primitives';
 import { AnimatedScore } from '../components/AnimatedScore';
 import type { PuzzleRushCompleteResponse, PuzzleRushStage, RushPuzzleResult } from './types';
 import { stageProgress } from './rushScoring';
+import { buildRushShareText } from './rushShareCard';
 
 /**
  * End-of-run results.
@@ -54,41 +56,105 @@ export function RushResultsView({
     [...stages].reverse().find((stage) => stageProgress(stage, completedOrdinals).done > 0) ?? null;
   const secondsBanked = results.reduce((sum, result) => sum + (result.bonusSeconds || 0), 0);
 
+  const stageRows = useMemo(
+    () =>
+      stages.map((stage) => ({
+        stage,
+        ...stageProgress(stage, completedOrdinals),
+      })),
+    // completedOrdinals is rebuilt each render from `results`; key off that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stages, results],
+  );
+
+  // A run the server rejected, or never scored, has no score worth sharing.
+  const shareable = serverScore !== null && !invalidated && !completeError;
+  const shareText = useMemo(
+    () =>
+      shareable
+        ? buildRushShareText({
+            score: serverScore,
+            solved,
+            stages: stageRows.map(({ stage, done, total }) => ({
+              label: stage.label,
+              done,
+              total,
+            })),
+            secondsBanked,
+            playedAt: completion?.run.endedAt ?? completion?.run.startedAt ?? null,
+          })
+        : '',
+    [shareable, serverScore, solved, stageRows, secondsBanked, completion],
+  );
+
+  const [shareDone, setShareDone] = useState(false);
+  const handleShare = useCallback(() => {
+    if (!shareText) return;
+    const markShared = (): void => {
+      setShareDone(true);
+      window.setTimeout(() => setShareDone(false), 2000);
+    };
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      void navigator
+        .share({ title: 'Puzzle Rush', text: shareText })
+        .then(markShared)
+        .catch(() => {
+          /* user dismissed native share */
+        });
+      return;
+    }
+    void navigator.clipboard.writeText(shareText).then(markShared);
+  }, [shareText]);
+
   return (
     <div className="pr-results" data-ui="rush-results">
       <header className="pr-results__head">
-        <span className="pr-results__eyebrow">Run complete</span>
-        <div className="pr-results__score" data-ui="rush-final-score">
-          {serverScore == null ? (
-            <span className="pr-results__score-value">—</span>
-          ) : (
-            <AnimatedScore value={serverScore} from={0} className="pr-results__score-value" />
-          )}
-          <span className="pr-results__score-suffix">PTS</span>
+        <div className="pr-results__head-copy">
+          <span className="pr-results__eyebrow">Run complete</span>
+          <div className="pr-results__score" data-ui="rush-final-score">
+            {serverScore == null ? (
+              <span className="pr-results__score-value">—</span>
+            ) : (
+              <AnimatedScore value={serverScore} from={0} className="pr-results__score-value" />
+            )}
+            <span className="pr-results__score-suffix">PTS</span>
+          </div>
+          <span className="pr-results__solved">
+            {solved === null
+              ? 'Solves unavailable'
+              : `${solved} puzzle${solved === 1 ? '' : 's'} solved`}
+          </span>
         </div>
-        <span className="pr-results__solved">
-          {solved === null ? 'Solves unavailable' : `${solved} puzzle${solved === 1 ? '' : 's'} solved`}
-        </span>
+        {shareable ? (
+          <button
+            type="button"
+            className="pr-results__share"
+            onClick={handleShare}
+            data-ui="rush-share"
+          >
+            {shareDone ? 'Copied' : 'Share result'}
+          </button>
+        ) : null}
       </header>
 
       {/* Three facts the run earned, all derived from what the client already
           holds — no invented stats. */}
-      <div className="pr-results__tiles">
+      <dl className="pr-results__tiles">
         <div className="pr-results__tile">
-          <span className="pr-results__tile-value">{solved ?? '—'}</span>
-          <span className="pr-results__tile-key">Solved</span>
+          <dd className="pr-results__tile-value">{solved ?? '—'}</dd>
+          <dt className="pr-results__tile-key">Solved</dt>
         </div>
         <div className="pr-results__tile">
-          <span className="pr-results__tile-value">{deepestStage?.label ?? '—'}</span>
-          <span className="pr-results__tile-key">Furthest stage</span>
+          <dd className="pr-results__tile-value">{deepestStage?.label ?? '—'}</dd>
+          <dt className="pr-results__tile-key">Furthest stage</dt>
         </div>
         <div className="pr-results__tile">
-          <span className="pr-results__tile-value">
+          <dd className="pr-results__tile-value">
             {secondsBanked > 0 ? `+${secondsBanked}s` : '—'}
-          </span>
-          <span className="pr-results__tile-key">Time banked</span>
+          </dd>
+          <dt className="pr-results__tile-key">Time banked</dt>
         </div>
-      </div>
+      </dl>
 
       {completeError && (
         <p className="pr-results__error" role="alert" data-ui="rush-complete-error">
@@ -120,8 +186,7 @@ export function RushResultsView({
 
       <div className="pr-results__section-label">Stages</div>
       <ul className="pr-results__stages">
-        {stages.map((stage) => {
-          const { done, total } = stageProgress(stage, completedOrdinals);
+        {stageRows.map(({ stage, done, total }) => {
           const pct = total === 0 ? 0 : Math.round((done / total) * 100);
           return (
             <li key={stage.key} className="pr-results__stage-row" data-stage={stage.key}>
