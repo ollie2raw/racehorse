@@ -404,6 +404,56 @@ describe('results', () => {
     }
   });
 
+  it('offers a share only once the server has scored the run', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const { unmount } = renderSettled(
+      <RushResultsView
+        completion={completion(870)}
+        completeError={null}
+        clientTally={870}
+        results={[result(1), result(2)]}
+        stages={STAGES}
+        reportFailures={0}
+        onPlayAgain={() => {}}
+        onBack={() => {}}
+      />,
+    );
+
+    const share = document.querySelector('[data-ui="rush-share"]') as HTMLButtonElement | null;
+    expect(share).not.toBeNull();
+    await act(async () => {
+      share!.click();
+    });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText.mock.calls[0][0]).toContain('870 pts');
+    unmount();
+  });
+
+  it('withholds the share when the run was flagged or failed to save', () => {
+    for (const props of [
+      { completion: completion(870, { invalidated: true }), completeError: null },
+      { completion: completion(870), completeError: 'Network error.' },
+      { completion: null, completeError: null },
+    ]) {
+      const { unmount } = renderSettled(
+        <RushResultsView
+          completion={props.completion}
+          completeError={props.completeError}
+          clientTally={870}
+          results={[result(1)]}
+          stages={STAGES}
+          reportFailures={0}
+          onPlayAgain={() => {}}
+          onBack={() => {}}
+        />,
+      );
+      expect(document.querySelector('[data-ui="rush-share"]')).toBeNull();
+      unmount();
+    }
+  });
+
   it('discloses an over-claim rather than silently swapping the number', () => {
     render(
       <RushResultsView
