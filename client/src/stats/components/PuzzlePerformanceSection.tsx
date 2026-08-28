@@ -1,7 +1,9 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
+import { AnimatedScore } from '../../components/AnimatedScore';
 
 type Props = { puzzle: PlayerIdentityModel['puzzle'] };
-const value = (number: number | null) => number == null ? '—' : number.toLocaleString();
+const value = (number: number | null) =>
+  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => n.toLocaleString()} />;
 
 export function PuzzlePerformanceSection({ puzzle }: Props) {
   const ready = [puzzle.completions, puzzle.currentStreak, puzzle.bestScoreToday, puzzle.bestScoreEver, puzzle.perfectDays].some((item) => item != null);

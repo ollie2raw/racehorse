@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { User } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyPlayerIdentityModel } from '../identity/playerIdentityNormalization';
@@ -28,7 +28,14 @@ describe('StatsScreen normalized presentation', () => {
   beforeEach(() => { identityState.current = { model: model(), loading: false, error: null }; });
 
   it('renders ranked, Fritz, Ghost, Puzzle, and score semantics from identity fields', () => {
+    // Stat numbers count up from zero, so let the animation land before
+    // asserting on the values that settle.
+    vi.useFakeTimers();
     render(<StatsScreen {...props} />);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    vi.useRealTimers();
     expect(screen.getByRole('heading', { name: 'Performance at the table', level: 1 })).toBeTruthy();
     expect(screen.getByText('87.5')).toBeTruthy();
     expect(screen.getByText('72')).toBeTruthy();

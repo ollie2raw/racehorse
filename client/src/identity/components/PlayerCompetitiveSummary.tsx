@@ -1,8 +1,10 @@
 import type { PlayerIdentityModel } from '../playerIdentityTypes';
+import { AnimatedScore } from '../../components/AnimatedScore';
 
 type Props = { competitive: PlayerIdentityModel['competitive'] };
 
-const value = (number: number | null) => number == null ? '—' : number.toLocaleString();
+const value = (number: number | null) =>
+  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => n.toLocaleString()} />;
 
 export function PlayerCompetitiveSummary({ competitive }: Props) {
   return (

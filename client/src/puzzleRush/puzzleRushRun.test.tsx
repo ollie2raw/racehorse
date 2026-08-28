@@ -311,8 +311,23 @@ describe('results', () => {
     } as PuzzleRushCompleteResponse;
   }
 
+  /**
+   * The headline score counts up from zero, so a synchronous assertion would
+   * catch it mid-climb. Let the animation land, then assert on the value that
+   * actually settles.
+   */
+  function renderSettled(ui: Parameters<typeof render>[0]) {
+    vi.useFakeTimers();
+    const utils = render(ui);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    vi.useRealTimers();
+    return utils;
+  }
+
   it('headlines the server total, not the client tally', () => {
-    render(
+    renderSettled(
       <RushResultsView
         completion={completion(870)}
         completeError={null}
@@ -329,6 +344,64 @@ describe('results', () => {
     expect(scoreNode?.textContent).toContain('870');
     // The client's own number is never the headline.
     expect(scoreNode?.textContent).not.toContain('640');
+  });
+
+  it('counts the final score up rather than hard-cutting to it', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(
+        <RushResultsView
+          completion={completion(870)}
+          completeError={null}
+          clientTally={870}
+          results={[result(1)]}
+          stages={STAGES}
+          reportFailures={0}
+          onPlayAgain={() => {}}
+          onBack={() => {}}
+        />,
+      );
+      const score = () => container.querySelector('[data-ui="rush-final-score"]')?.textContent ?? '';
+      // The run's real total is known at mount, so a raw render would already
+      // read 870 here. Counting up is the only reason it does not.
+      expect(score()).not.toContain('870');
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(score()).toContain('870');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves nothing running when the results screen is dismissed mid-count', () => {
+    vi.useFakeTimers();
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    try {
+      const { unmount } = render(
+        <RushResultsView
+          completion={completion(870)}
+          completeError={null}
+          clientTally={870}
+          results={[result(1)]}
+          stages={STAGES}
+          reportFailures={0}
+          onPlayAgain={() => {}}
+          onBack={() => {}}
+        />,
+      );
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      const before = cancel.mock.calls.length;
+      expect(() => unmount()).not.toThrow();
+      expect(cancel.mock.calls.length).toBeGreaterThan(before);
+      // No orphaned frame may fire after teardown.
+      expect(() => act(() => { vi.advanceTimersByTime(2000); })).not.toThrow();
+    } finally {
+      cancel.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('discloses an over-claim rather than silently swapping the number', () => {
@@ -372,7 +445,7 @@ describe('results', () => {
   });
 
   it('flags an invalidated run', () => {
-    render(
+    renderSettled(
       <RushResultsView
         completion={completion(120, { invalidated: true, invalidatedReason: 'client_score_mismatch' })}
         completeError={null}

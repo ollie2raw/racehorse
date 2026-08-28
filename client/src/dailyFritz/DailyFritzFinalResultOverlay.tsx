@@ -1,4 +1,5 @@
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
+import { AnimatedScore } from '../components/AnimatedScore';
 
 export type DailyFritzFinalResultOverlayProps = {
   overlay: DailyFritzSetOverlayViewModel;
@@ -80,13 +81,21 @@ export function DailyFritzFinalResultOverlay({
               {overlay.shareRating ? (
                 <div className="df-result-meta-pill">
                   <span className="df-result-meta-label">Rating</span>
-                  <span className="df-result-meta-value">{overlay.shareRating}</span>
+                  <AnimatedScore
+                    value={overlay.shareRating}
+                    from={0}
+                    className="df-result-meta-value"
+                  />
                 </div>
               ) : null}
               {overlay.shareStreak ? (
                 <div className="df-result-meta-pill">
                   <span className="df-result-meta-label">Streak</span>
-                  <span className="df-result-meta-value">{overlay.shareStreak}</span>
+                  <AnimatedScore
+                    value={overlay.shareStreak}
+                    from={0}
+                    className="df-result-meta-value"
+                  />
                 </div>
               ) : null}
             </div>

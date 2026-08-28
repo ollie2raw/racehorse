@@ -1,7 +1,9 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
+import { AnimatedScore } from '../../components/AnimatedScore';
 
 type Props = { competitive: PlayerIdentityModel['competitive'] };
-const display = (value: number | null) => value == null ? '—' : value.toLocaleString();
+const display = (value: number | null) =>
+  value == null ? '—' : <AnimatedScore value={value} from={0} format={(n) => n.toLocaleString()} />;
 
 export function RankedPerformanceSection({ competitive }: Props) {
   const record = competitive.wins != null && competitive.losses != null ? `${competitive.wins}W – ${competitive.losses}L` : '—';
