@@ -1,3 +1,4 @@
+import { SITE_DOMAIN } from '../lib/siteUrl';
 export async function shareGhostResultCard(params: {
   playerScore: number;
   ghostScore: number;
@@ -27,7 +28,7 @@ export async function shareGhostResultCard(params: {
       <rect width="100%" height="100%" fill="url(#bg)" />
       <rect x="84" y="72" rx="30" ry="30" width="1032" height="486" fill="url(#card)" stroke="rgba(255,255,255,0.16)" />
       <text x="120" y="138" fill="#f7f6ff" font-size="42" font-family="Arial, sans-serif" font-weight="700">Ghost Mode</text>
-      <text x="120" y="180" fill="#cdd4ea" font-size="24" font-family="Arial, sans-serif">racehorsedoms.vercel.app</text>
+      <text x="120" y="180" fill="#cdd4ea" font-size="24" font-family="Arial, sans-serif">${SITE_DOMAIN}</text>
       <text x="120" y="260" fill="#eef2ff" font-size="28" font-family="Arial, sans-serif">YOU</text>
       <text x="300" y="260" fill="#eef2ff" font-size="34" font-family="Arial, sans-serif" font-weight="700">${params.playerScore} pts</text>
       <rect x="520" y="232" width="420" height="24" rx="12" fill="rgba(255,255,255,0.09)" />

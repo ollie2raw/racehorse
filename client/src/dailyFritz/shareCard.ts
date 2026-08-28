@@ -1,3 +1,4 @@
+import { SITE_DOMAIN } from '../lib/siteUrl';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 
 export function buildShareText(vm: DailyFritzSetOverlayViewModel): string {
@@ -25,7 +26,7 @@ export function buildShareText(vm: DailyFritzSetOverlayViewModel): string {
     gameLines,
     `${margin} margin${rating ? ' · ' + rating : ''}`,
     streak,
-    'racehorsedoms.vercel.app',
+    SITE_DOMAIN,
   ].filter(Boolean);
 
   return lines.join('\n');
