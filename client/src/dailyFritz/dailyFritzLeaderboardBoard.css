@@ -1,0 +1,763 @@
+/*
+ * Daily Fritz leaderboard — tabular board.
+ *
+ * One visual system with the result overlay: margin bars, not chips; hairline
+ * rules, not per-row cards; square corners throughout so crossing from the
+ * modal to the board never changes language.
+ */
+
+.dfl-page {
+  --dfl-line: rgba(255, 255, 255, 0.08);
+  --dfl-line-soft: rgba(255, 255, 255, 0.05);
+  --dfl-ink: rgba(255, 255, 255, 0.95);
+  --dfl-muted: rgba(255, 255, 255, 0.6);
+  --dfl-label: rgba(255, 255, 255, 0.42);
+  /* The board's accent. Daily Fritz is gold; a mode can retint the whole
+     board by redefining just this block (see .pr-board in puzzleRush.css). */
+  --dfl-accent: var(--hub-gold);
+  --dfl-accent-rgb: 231, 182, 74;
+  --dfl-accent-border: rgba(var(--dfl-accent-rgb), 0.42);
+  --dfl-accent-dim: rgba(var(--dfl-accent-rgb), 0.14);
+  --dfl-accent-row: rgba(var(--dfl-accent-rgb), 0.045);
+  --dfl-accent-row-hover: rgba(var(--dfl-accent-rgb), 0.065);
+  --dfl-accent-head: rgba(var(--dfl-accent-rgb), 0.09);
+  --dfl-accent-head-border: rgba(var(--dfl-accent-rgb), 0.22);
+  /* Text sitting on a filled accent button. */
+  --dfl-accent-ink: var(--bg-obsidian);
+  --dfl-win: var(--hub-win);
+  --dfl-loss: var(--hub-loss);
+  --dfl-line-strong: rgba(255, 255, 255, 0.14);
+  --dfl-subtle: rgba(255, 255, 255, 0.72);
+  --dfl-dim: rgba(255, 255, 255, 0.35);
+  --dfl-grid: rgba(255, 255, 255, 0.03);
+  --dfl-glass: rgba(10, 16, 28, 0.6);
+  --dfl-surface: rgba(255, 255, 255, 0.015);
+  --dfl-radius: 3px;
+}
+
+.dfl-inner {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 28px 18px;
+}
+
+.dfl-board {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------------------------------------------------------------- masthead */
+
+.dfl-masthead {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 26px 22px;
+  border: 1px solid var(--dfl-line);
+  border-radius: var(--dfl-radius) var(--dfl-radius) 0 0;
+  background-color: rgba(255, 255, 255, 0.012);
+  background-image:
+    linear-gradient(var(--dfl-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--dfl-grid) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+}
+
+.dfl-eyebrow {
+  display: block;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5vw, 62px);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  color: var(--dfl-ink);
+}
+
+.dfl-title__dot {
+  color: var(--dfl-accent);
+}
+
+.dfl-tagline {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--dfl-muted);
+}
+
+.dfl-masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.dfl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--dfl-line);
+  border-radius: var(--dfl-radius);
+  background: var(--dfl-glass);
+  color: var(--dfl-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.dfl-btn:hover {
+  color: var(--dfl-ink);
+  border-color: var(--dfl-line-strong);
+}
+
+.dfl-btn--accent {
+  border-color: var(--dfl-accent);
+  background: var(--dfl-accent);
+  color: var(--dfl-accent-ink);
+  font-weight: 700;
+}
+
+.dfl-btn--accent:hover {
+  color: var(--dfl-accent-ink);
+  border-color: var(--dfl-accent);
+  filter: brightness(1.07);
+}
+
+/* -------------------------------------------------------------- meta strip */
+
+.dfl-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--dfl-line);
+  border-top: 0;
+  border-radius: 0 0 var(--dfl-radius) var(--dfl-radius);
+  background: var(--dfl-surface);
+}
+
+.dfl-meta__cell {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  height: 34px;
+  padding: 0 18px;
+  border-left: 1px solid var(--dfl-line-soft);
+  min-width: 0;
+}
+
+.dfl-meta__cell:first-child {
+  border-left: 0;
+}
+
+.dfl-meta__label {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-meta__value {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--dfl-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-meta__value.is-accent {
+  color: var(--dfl-accent);
+}
+
+/* ----------------------------------------------------------------- filters */
+
+.dfl-page .rh-hub-filters {
+  flex: 0 0 auto;
+}
+
+.dfl-page .rh-hub-filter {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--dfl-radius);
+  border-color: var(--dfl-line);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* hubShared paints the active pill gold outright, so restate it on the
+   accent token — otherwise a retinted board keeps a gold filter. */
+.dfl-page .rh-hub-filter--active {
+  border-color: var(--dfl-accent-border);
+  background: var(--dfl-accent-dim);
+  color: var(--dfl-accent);
+  box-shadow: none;
+}
+
+.dfl-page .rh-hub-filter:hover {
+  border-color: var(--dfl-accent-border);
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.dfl-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 16px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------- table */
+
+.dfl-table {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--dfl-line);
+  border-radius: var(--dfl-radius);
+  background: var(--dfl-surface);
+  overflow: hidden;
+}
+
+.dfl-row-grid {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 104px 232px 92px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+}
+
+.dfl-thead {
+  height: 34px;
+  border-bottom: 1px solid var(--dfl-line);
+  background: rgba(255, 255, 255, 0.014);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-thead__finished {
+  text-align: right;
+}
+
+.dfl-tbody {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dfl-row {
+  position: relative;
+  min-height: 60px;
+  border-bottom: 1px solid var(--dfl-line-soft);
+  transition: background 140ms ease;
+}
+
+.dfl-row:last-child {
+  border-bottom: 0;
+}
+
+.dfl-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dfl-row--self {
+  background: var(--dfl-accent-row);
+}
+
+.dfl-row--self:hover {
+  background: var(--dfl-accent-row-hover);
+}
+
+.dfl-row--self::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--dfl-accent);
+}
+
+/* rank */
+
+.dfl-rank {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dfl-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-row--self .dfl-rank {
+  color: var(--dfl-accent);
+}
+
+.dfl-rank__crown {
+  display: inline-flex;
+  color: var(--dfl-accent);
+}
+
+/* racer */
+
+.dfl-racer {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.dfl-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--dfl-radius);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.92);
+  text-transform: uppercase;
+}
+
+.dfl-racer__copy {
+  min-width: 0;
+}
+
+.dfl-racer__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dfl-ink);
+}
+
+.dfl-racer__handle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dfl-you {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--dfl-accent-border);
+  border-radius: 2px;
+  background: var(--dfl-accent-dim);
+  color: var(--dfl-accent);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.dfl-racer__story {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--dfl-muted);
+}
+
+.dfl-racer__story.is-skunk {
+  color: var(--dfl-accent);
+}
+
+.dfl-racer__story.is-skunked {
+  color: var(--dfl-loss);
+}
+
+/* set · margin */
+
+.dfl-set {
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-set__games {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--dfl-ink);
+}
+
+.dfl-set__margin {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dfl-muted);
+}
+
+.dfl-set__margin.is-win {
+  color: var(--dfl-win);
+}
+
+.dfl-set__margin.is-loss {
+  color: var(--dfl-loss);
+}
+
+/* three games */
+
+.dfl-games {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dfl-game {
+  min-width: 0;
+}
+
+/*
+ * One bar per game, one colour: green if you took that game, red if Fritz did.
+ * The scores sit directly underneath, so the bar only has to answer "who won".
+ */
+.dfl-game__track {
+  height: 3px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dfl-game__track.is-win {
+  background: var(--dfl-win);
+}
+
+.dfl-game__track.is-loss {
+  background: var(--dfl-loss);
+}
+
+.dfl-game__score {
+  display: block;
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--dfl-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dfl-game__skunk {
+  margin-left: 4px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--dfl-accent);
+}
+
+.dfl-game--empty .dfl-game__score {
+  color: var(--dfl-dim);
+}
+
+/* finished */
+
+.dfl-finished {
+  text-align: right;
+  font-size: 12px;
+  color: var(--dfl-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* board states */
+
+.dfl-state {
+  margin: 0;
+  padding: 30px 22px;
+  font-size: 13px;
+  color: var(--dfl-muted);
+}
+
+.dfl-state--error {
+  color: var(--dfl-loss);
+}
+
+.dfl-state__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--dfl-dim);
+}
+
+/* -------------------------------------------------------------------- rail */
+
+.dfl-rail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dfl-card {
+  flex-shrink: 0;
+  border: 1px solid var(--dfl-line);
+  border-radius: var(--dfl-radius);
+  background: var(--dfl-surface);
+}
+
+.dfl-card__head {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--dfl-line);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-card--accent .dfl-card__head {
+  background: var(--dfl-accent-head);
+  border-bottom-color: var(--dfl-accent-head-border);
+  color: var(--dfl-accent);
+}
+
+/* your position */
+
+.dfl-position {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px 10px;
+}
+
+.dfl-position__rank {
+  font-family: var(--font-display);
+  font-size: 33px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--dfl-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-position__suffix {
+  font-size: 0.5em;
+  letter-spacing: 0.02em;
+}
+
+.dfl-position__of {
+  font-size: 12px;
+  color: var(--dfl-muted);
+}
+
+.dfl-position__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--dfl-line);
+}
+
+.dfl-position__stats > div {
+  padding: 8px 12px 9px;
+  border-left: 1px solid var(--dfl-line-soft);
+  min-width: 0;
+}
+
+.dfl-position__stats > div:first-child {
+  border-left: 0;
+}
+
+.dfl-position__stats dt {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-position__stats dd {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dfl-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-position__stats dd.is-win {
+  color: var(--dfl-win);
+}
+
+.dfl-position__stats dd.is-loss {
+  color: var(--dfl-loss);
+}
+
+.dfl-position__empty {
+  margin: 0;
+  padding: 16px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--dfl-muted);
+}
+
+/* records */
+
+.dfl-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px 10px;
+  border-bottom: 1px solid var(--dfl-line-soft);
+}
+
+.dfl-record:last-child {
+  border-bottom: 0;
+}
+
+.dfl-record__copy {
+  min-width: 0;
+}
+
+.dfl-record__label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dfl-label);
+}
+
+.dfl-record__name {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dfl-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dfl-record__value {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dfl-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.dfl-record__value.is-win {
+  color: var(--dfl-win);
+}
+
+.dfl-record__value.is-accent {
+  color: var(--dfl-accent);
+}
+
+/* ------------------------------------------------------------- responsive */
+
+/*
+ * Below the two-column breakpoint the rail drops under the table, so the page
+ * itself becomes the scroller instead of the table body and the rail.
+ */
+@media (max-width: 1100px) {
+  .dfl-inner {
+    overflow-y: auto;
+  }
+
+  .dfl-board,
+  .dfl-layout {
+    flex: 0 0 auto;
+  }
+
+  .dfl-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .dfl-rail,
+  .dfl-table,
+  .dfl-tbody {
+    overflow: visible;
+  }
+
+  /* The body must size to its rows here; a 0 flex-basis collapses it to
+     nothing once the table is no longer a fixed-height column. */
+  .dfl-tbody {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .dfl-inner {
+    padding: 16px 14px 14px;
+  }
+
+  .dfl-masthead {
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 18px 18px;
+  }
+
+  .dfl-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dfl-meta__cell:nth-child(3) {
+    border-left: 0;
+  }
+
+  .dfl-meta__cell:nth-child(n + 3) {
+    border-top: 1px solid var(--dfl-line-soft);
+  }
+
+  /*
+   * Phones reflow the row onto two lines rather than dropping columns: the
+   * three margin bars are the point of the board, so they stay reachable.
+   */
+  .dfl-row-grid {
+    grid-template-columns: 34px minmax(0, 1fr) 78px;
+    gap: 4px 10px;
+    padding: 0 14px;
+  }
+
+  .dfl-row {
+    padding: 12px 14px;
+    grid-template-areas:
+      "rank racer set"
+      "rank games finished";
+  }
+
+  .dfl-rank { grid-area: rank; align-self: start; }
+  .dfl-racer { grid-area: racer; }
+  .dfl-set { grid-area: set; }
+  .dfl-games { grid-area: games; gap: 6px; }
+  .dfl-finished { grid-area: finished; align-self: end; }
+
+  .dfl-thead {
+    grid-template-areas: none;
+  }
+
+  .dfl-thead__games,
+  .dfl-thead__finished {
+    display: none;
+  }
+
+  .dfl-game__score {
+    font-size: 9.5px;
+  }
+}

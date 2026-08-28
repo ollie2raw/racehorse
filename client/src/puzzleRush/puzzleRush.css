@@ -658,26 +658,79 @@
   .pr-hud-stage__position { display: none; }
 }
 
-/* ── Leaderboard: Fritz's dflb-* chrome, Rush's five columns ── */
-/* Fritz's grid is 7 columns (result/set/margin/time/games). Rush shows
-   rank / player / score / solved / time, so only the template changes —
-   every other dflb-* rule is inherited as-is. */
+/* ── Leaderboard: Fritz's dfl-* board, Rush's columns ── */
+/*
+ * Fritz's grid is rank / racer / set·margin / three games / finished. Rush has
+ * no per-puzzle breakdown, so the games column is dropped and the remaining
+ * four are rank / player / score / solved / finished. Only the template and
+ * the score accent change here; every other dfl-* rule is inherited as-is.
+ */
 
-.pr-leaderboard-page .dflb-table-head.pr-lb-row,
-.pr-leaderboard-page .dflb-row.pr-lb-row {
-  grid-template-columns: 72px minmax(150px, 1.4fr) 92px 80px minmax(90px, 0.8fr);
+/*
+ * Rush is a blue mode — its hub, HUD and Start button all run on
+ * --tier-standard — so the board takes the same accent rather than Fritz's
+ * gold. Retinting the accent block is all it takes; every accented element on
+ * the board reads from it.
+ */
+.pr-board {
+  --dfl-accent: var(--tier-standard);
+  --dfl-accent-rgb: 59, 130, 246;
+  --dfl-accent-ink: var(--bg-obsidian);
 }
 
-.pr-leaderboard-page .pr-lb-score {
+.pr-board .dfl-row-grid {
+  grid-template-columns: 64px minmax(0, 1fr) 104px 88px 92px;
+}
+
+.pr-board .pr-board__score {
+  color: var(--dfl-accent);
+}
+
+/* Rush rows are one line (no story under the name), so they can sit tighter. */
+.pr-board .dfl-row {
+  min-height: 52px;
+}
+
+.pr-board__solved-unit {
+  display: none;
+}
+
+.pr-board .dfl-solved {
   font-family: var(--font-display);
-  font-size: 20px;
-  color: var(--tier-elite);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dfl-ink);
+  font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
-  .pr-leaderboard-page .dflb-table-head.pr-lb-row,
-  .pr-leaderboard-page .dflb-row.pr-lb-row {
-    grid-template-columns: 56px minmax(110px, 1fr) 72px 60px;
+@media (max-width: 860px) {
+  .pr-board .dfl-row-grid {
+    grid-template-columns: 34px minmax(0, 1fr) 78px;
   }
-  .pr-leaderboard-page .dflb-finished { display: none; }
+
+  .pr-board .dfl-row {
+    grid-template-areas:
+      "rank player score"
+      "rank solved finished";
+  }
+
+  .pr-board .dfl-rank { grid-area: rank; }
+  .pr-board .dfl-racer { grid-area: player; }
+  .pr-board .dfl-set { grid-area: score; }
+  .pr-board .dfl-solved { grid-area: solved; font-size: 13px; }
+
+  .pr-board__solved-unit {
+    display: inline;
+    color: var(--dfl-muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* The header is a plain 3-column row here, so the columns that moved onto
+     the second line lose their labels rather than wrapping the header. */
+  .pr-board .pr-board__thead-solved {
+    display: none;
+  }
+  .pr-board .dfl-finished { grid-area: finished; }
 }
