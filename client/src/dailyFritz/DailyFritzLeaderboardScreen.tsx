@@ -340,6 +340,7 @@ export default function DailyFritzLeaderboardScreen({
       shareRating: profileRating,
       shareStreak: today.streak ?? 0,
       canViewLeaderboard: true,
+      verificationStatus: today.verification_status,
       onPrimary: () => setResultOverlayOpen(false),
       onSecondary: () => {
         setResultOverlayOpen(false);

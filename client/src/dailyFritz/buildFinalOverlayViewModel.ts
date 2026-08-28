@@ -1,5 +1,9 @@
-import type { DailyFritzSetGameResult, DailyFritzSetResult } from './api';
-import { formatOrdinalPlace } from './format';
+import type {
+  DailyFritzSetGameResult,
+  DailyFritzSetResult,
+  DailyFritzVerificationStatus,
+} from './api';
+import { formatOrdinal, formatOrdinalPlace } from './format';
 import {
   getDailyFritzPublishedSetScore,
   getGameSkunkChipLabel,
@@ -36,6 +40,11 @@ export type BuildFinalOverlayInput = {
   shareRating?: number;
   shareStreak?: number;
   canViewLeaderboard: boolean;
+  /**
+   * The run's verification state. Omitted by callers that don't know it, which
+   * are treated as ranked so nothing regresses to "Unranked" by accident.
+   */
+  verificationStatus?: DailyFritzVerificationStatus;
   onPrimary: () => void;
   onSecondary: () => void;
 };
@@ -49,6 +58,7 @@ export function buildDailyFritzFinalOverlayViewModel({
   shareRating,
   shareStreak,
   canViewLeaderboard,
+  verificationStatus,
   onPrimary,
   onSecondary,
 }: BuildFinalOverlayInput): DailyFritzSetOverlayViewModel {
@@ -76,10 +86,34 @@ export function buildDailyFritzFinalOverlayViewModel({
     };
   });
 
+  // Only a verified run can be ranked. A caller that doesn't know the status
+  // gets the old behaviour rather than a false "Unranked".
+  const ranked = verificationStatus === undefined || verificationStatus === 'verified';
+  // The daily streak counts consecutive days *completed*, not days won, so a
+  // lost set leaves it standing. Worth saying, because a loss reads like a break.
+  const streakHeld = !setWonPlayer && (shareStreak ?? 0) > 0;
+
+  const note = !ranked
+    ? "The set counted and your streak is intact — it just can't be ranked against players whose runs were verified."
+    : streakHeld
+      ? 'Your streak survives a loss — only a missed day breaks it.'
+      : null;
+
+  // The dossier headline states the outcome; a card that just said "Daily Fritz
+  // Complete" for a win and a loss alike made the reader hunt for the result.
+  const headline = !ranked
+    ? 'Finished, but unranked'
+    : (skunkCopy?.headline ?? (setWonPlayer ? 'Set won' : 'Fritz takes it'));
+
   return {
     kind: 'final',
+    runId: `DF-${runDate}`,
+    provenance: ranked ? `${titleCaseTier(fritzTier)} · Verified` : 'Unranked',
+    ranked,
+    streakHeld,
+    note,
     eyebrow: 'Daily Fritz',
-    headline: skunkCopy?.headline ?? 'Daily Fritz Complete',
+    headline,
     subheadline:
       skunkCopy?.subheadline ??
       (setWonPlayer
@@ -97,7 +131,8 @@ export function buildDailyFritzFinalOverlayViewModel({
     marginValue: margin,
     marginTone,
     resultValue: setWonPlayer ? 'Victory' : 'Defeat',
-    rankValue: formatOrdinalPlace(rank),
+    rankValue: ranked ? formatOrdinalPlace(rank) : null,
+    rankShort: ranked ? formatOrdinal(rank) : null,
     shareDate: formatDateLabel(runDate),
     shareTier: titleCaseTier(fritzTier),
     shareRating,

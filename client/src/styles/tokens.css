@@ -126,6 +126,12 @@
     radial-gradient(circle at 50% 18%, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.10) 58%, rgba(0, 0, 0, 0.46) 100%);
 
   /* ── Typography ──────────────────────────────────── */
+  /* ── Daily Fritz result dossier ─────────────────── */
+  --df-win:   #7ee0a8;   /* muted green — a game taken */
+  --df-loss:  #f0a0a8;   /* muted rose  — a game lost */
+  --df-paper: #f2eee8;   /* warm off-white for display copy */
+  --df-card:  #070a10;   /* dossier ground, one step off obsidian */
+
   --font-display: 'Barlow Condensed', sans-serif;
   --font-body:    'Outfit', sans-serif;
 
