@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs';
+import { HOW_TO_PLAY_ARTICLE } from '../src/learn/howToPlay/howToPlayArticleContent.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -166,6 +167,11 @@ const routes = [
   },
 ];
 
+/** Routes whose prerendered shell carries a full article rather than a lede. */
+const ARTICLES = {
+  '/learn/how-to-play': HOW_TO_PLAY_ARTICLE,
+};
+
 function escapeHtml(value) {
   return value
     .replaceAll('&', '&amp;')
@@ -191,11 +197,27 @@ function renderRoute(template, route) {
     .map((other) => `<li><a href="${other.path}">${escapeHtml(navLabel(other))}</a></li>`)
     .join('');
 
+  // Routes with long-form content serve it in the shell too, so the served
+  // HTML carries the same words the hydrated page shows. Everything else
+  // keeps its short lede.
+  const article = ARTICLES[route.path];
+  const bodyHtml = article
+    ? `<p>${escapeHtml(article.standfirst)}</p>` +
+      article.sections
+        .map(
+          (section) =>
+            `<section id="${section.id}"><h2>${escapeHtml(section.heading)}</h2>` +
+            section.paragraphs.map((text) => `<p>${escapeHtml(text)}</p>`).join('') +
+            `</section>`,
+        )
+        .join('')
+    : `<p>${escapeHtml(route.body)}</p>`;
+
   const content =
     `<main class="prerendered-page">` +
     `<p>Racehorse Dominoes</p>` +
     `<h1>${escapeHtml(route.heading)}</h1>` +
-    `<p>${escapeHtml(route.body)}</p>` +
+    bodyHtml +
     `<nav aria-label="Racehorse Dominoes pages"><ul>${links}</ul></nav>` +
     `</main>`;
 

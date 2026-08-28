@@ -4,6 +4,7 @@ import { AcademyVisuals } from './academy/AcademyVisuals';
 import { LearnActionButton } from './academy/LearnActionButton';
 import { LearnCoachPanel } from './academy/LearnCoachPanel';
 import { LearnShell } from './academy/LearnShell';
+import { HowToPlayArticle } from './howToPlay/HowToPlayArticle';
 import {
   HOW_TO_PLAY_MODULES,
   HOW_TO_PLAY_MODULE_COUNT,
@@ -62,28 +63,34 @@ export default function LearnHowToPlayRacehorse({
   ) : undefined;
 
   return (
-    <LearnShell
-      page={page}
-      modules={HOW_TO_PLAY_MODULES}
-      onGoTo={goTo}
-      onBack={onBack}
-      onPrev={goPrev}
-      onNext={goNext}
-      onNavigate={onNavigate}
-      isFirst={isFirst}
-      coach={
-        <LearnCoachPanel
-          stepLabel={module.stepLabel}
-          title={module.title}
-          lede={module.lede}
-          beats={module.beats}
-          momentumNote={module.runNote}
-          takeaway={module.takeaway}
-          footer={finalFooter}
-          final={module.isFinal}
-        />
-      }
-      stage={<AcademyVisuals visual={module.visual} />}
-    />
+    <>
+      <LearnShell
+        page={page}
+        modules={HOW_TO_PLAY_MODULES}
+        onGoTo={goTo}
+        onBack={onBack}
+        onPrev={goPrev}
+        onNext={goNext}
+        onNavigate={onNavigate}
+        isFirst={isFirst}
+        coach={
+          <LearnCoachPanel
+            stepLabel={module.stepLabel}
+            title={module.title}
+            lede={module.lede}
+            beats={module.beats}
+            momentumNote={module.runNote}
+            takeaway={module.takeaway}
+            footer={finalFooter}
+            final={module.isFinal}
+          />
+        }
+        stage={<AcademyVisuals visual={module.visual} />}
+      />
+      {/* The written rules sit below the interactive tutorial: the same words
+          the prerendered page serves, so a reader and a crawler get one
+          version rather than two. */}
+      <HowToPlayArticle />
+    </>
   );
 }

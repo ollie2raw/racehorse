@@ -1,0 +1,83 @@
+/*
+ * The written rules. A reading surface rather than a game surface: measured
+ * line length, generous leading, and the body face throughout — the display
+ * face is for HUD labels, not for paragraphs someone reads end to end.
+ */
+
+.rh-htp-article {
+  max-width: 68ch;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+  color: rgba(255, 255, 255, 0.86);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.rh-htp-article__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 6vw, 52px);
+  font-weight: 800;
+  line-height: 1.02;
+  color: rgba(255, 255, 255, 0.95);
+  text-wrap: balance;
+}
+
+.rh-htp-article__standfirst {
+  margin: 16px 0 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.rh-htp-article__toc {
+  margin: 32px 0 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-record);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.rh-htp-article__toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.rh-htp-article__toc a {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14.5px;
+  text-decoration: none;
+}
+
+.rh-htp-article__toc a:hover,
+.rh-htp-article__toc a:focus-visible {
+  color: var(--tier-elite);
+  text-decoration: underline;
+}
+
+.rh-htp-article__section {
+  margin-top: 40px;
+  /* Anchors from the contents list must not land under any sticky chrome. */
+  scroll-margin-top: 24px;
+}
+
+.rh-htp-article__section h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-htp-article__section p {
+  margin: 0 0 14px;
+}
+
+.rh-htp-article__section p:last-child {
+  margin-bottom: 0;
+}
