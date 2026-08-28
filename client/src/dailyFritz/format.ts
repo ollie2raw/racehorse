@@ -25,6 +25,12 @@ export function formatCountdownHms(totalSeconds: number): string {
 }
 
 /** Ordinal label for leaderboard-style rank (e.g. "12th Place"). */
+/** "1st", "2nd" — the bare ordinal, for places too tight for "1st Place". */
+export function formatOrdinal(value: number | null): string | null {
+  const place = formatOrdinalPlace(value);
+  return place === null ? null : place.replace(' Place', '');
+}
+
 export function formatOrdinalPlace(value: number | null): string | null {
   if (!value || value <= 0) return null;
   const mod100 = value % 100;

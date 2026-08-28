@@ -1,5 +1,7 @@
-import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import { AnimatedScore } from '../components/AnimatedScore';
+import { buildDossierGameRows } from './dossierGameRows';
+import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
+import './dailyFritzModalDossier.css';
 
 export type DailyFritzFinalResultOverlayProps = {
   overlay: DailyFritzSetOverlayViewModel;
@@ -7,132 +9,125 @@ export type DailyFritzFinalResultOverlayProps = {
   onShare: () => void;
 };
 
+/**
+ * End-of-set result, as a dossier on the run.
+ *
+ * The header stamps which run this is and whether it was verified, because an
+ * unranked finish has to say so plainly rather than quietly showing a blank
+ * rank. Everything below is the same card whatever the outcome: three game
+ * rows, four stats, then the ways out.
+ */
 export function DailyFritzFinalResultOverlay({
   overlay,
   shareDone,
   onShare,
 }: DailyFritzFinalResultOverlayProps) {
-  const showMargin = Boolean(overlay.marginValue && overlay.marginValue !== '—');
+  const rows = buildDossierGameRows(overlay.games);
+  const ranked = overlay.ranked !== false;
+  const marginTone = overlay.marginTone === 'win' ? 'is-win' : overlay.marginTone === 'loss' ? 'is-loss' : '';
 
   return (
     <div className="game-over-overlay df-result-overlay" role="dialog" aria-label="Daily Fritz result">
-      <div className="game-over-card df-result-card" onClick={(event) => event.stopPropagation()}>
-        <div className="df-result-panel">
-          <header className="df-result-hero">
-            <p className="df-result-eyebrow">Daily Fritz</p>
-            {overlay.skunkBadge ? (
-              <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
-                {overlay.skunkBadge}
-              </span>
-            ) : null}
-            <h2 className="df-result-title" tabIndex={-1} autoFocus>{overlay.headline}</h2>
-            <p className="df-result-subtitle">{overlay.subheadline}</p>
+      <div
+        className={`dfd${ranked ? '' : ' dfd--unranked'}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="dfd__strip">
+          <span className="dfd__run">{overlay.runId ?? 'Daily Fritz'}</span>
+          <span className="dfd__provenance">{overlay.provenance ?? ''}</span>
+        </div>
+
+        <div className="dfd__body">
+          <header>
+            <span className="dfd__eyebrow">Set result</span>
+            <h2 className="dfd__headline" tabIndex={-1} autoFocus>
+              {overlay.headline}
+            </h2>
+            <p className="dfd__sub">{overlay.subheadline}</p>
           </header>
 
-          <div className="df-result-stats" aria-label="Set summary">
-            <div className={`df-result-stat${overlay.marginTone === 'win' ? ' is-victory' : overlay.marginTone === 'loss' ? ' is-defeat' : ''}`}>
-              <span className="df-result-stat-label">Result</span>
-              <strong
-                className={`df-result-stat-value${overlay.marginTone === 'win' ? ' is-win' : overlay.marginTone === 'loss' ? ' is-loss' : ''}`}
+          <div className="dfd__games" aria-label="Games in this set">
+            {rows.map((row) => (
+              <div
+                key={row.gameNumber}
+                className={`dfd__game${row.played ? '' : ' dfd__game--empty'}`}
               >
-                {overlay.resultValue ?? '—'}
-              </strong>
-            </div>
-            <div className="df-result-stat">
-              <span className="df-result-stat-label">Set</span>
-              <strong className="df-result-stat-value">{overlay.setScoreValue || '—'}</strong>
-            </div>
-            <div className="df-result-stat">
-              <span className="df-result-stat-label">{overlay.rankValue ? 'Rank' : 'Margin'}</span>
-              <strong
-                className={`df-result-stat-value${!overlay.rankValue && overlay.marginTone === 'win' ? ' is-win' : !overlay.rankValue && overlay.marginTone === 'loss' ? ' is-loss' : ''}`}
-              >
-                {overlay.rankValue ?? overlay.marginValue ?? '—'}
-              </strong>
-            </div>
+                <span className="dfd__game-no">G{row.gameNumber}</span>
+                <span className="dfd__track">
+                  {row.played ? (
+                    <span
+                      className={`dfd__fill dfd__fill--${row.tone}`}
+                      style={{ width: `${row.sharePercent}%` }}
+                    />
+                  ) : null}
+                </span>
+                {row.played && row.tone === 'skunk' ? (
+                  <span className="dfd__game-tag">Skunk</span>
+                ) : null}
+                <span className={`dfd__game-score dfd__game-score--${row.played ? row.tone : 'empty'}`}>
+                  {row.played ? row.score : 'not played'}
+                </span>
+              </div>
+            ))}
           </div>
 
-          {overlay.games.length > 0 ? (
-            <div className="df-result-games" aria-label="Per-game scores">
-              <div className="df-result-games-head">
-                <span className="df-result-games-label">Games</span>
-              </div>
-              <div className="df-result-games-well">
-                {overlay.games.map((game) => (
-                  <div key={game.gameNumber} className="df-result-game-row">
-                    <span>Game {game.gameNumber}</span>
-                    <strong className={game.tone === 'win' ? 'is-win' : 'is-loss'}>
-                      {game.skunkLabel ?? game.value}
-                    </strong>
-                  </div>
-                ))}
-              </div>
+          <dl className="dfd__stats">
+            <div className="dfd__stat">
+              <dt>Rank today</dt>
+              <dd className={ranked ? 'is-accent' : ''}>{overlay.rankShort ?? overlay.rankValue ?? '—'}</dd>
             </div>
-          ) : null}
+            <div className="dfd__stat">
+              <dt>Point margin</dt>
+              <dd className={marginTone}>{overlay.marginValue || '—'}</dd>
+            </div>
+            <div className="dfd__stat">
+              <dt>Rating</dt>
+              <dd>
+                {ranked && overlay.shareRating ? (
+                  <AnimatedScore value={overlay.shareRating} from={0} />
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </div>
+            <div className="dfd__stat">
+              <dt>Streak</dt>
+              <dd>
+                {overlay.shareStreak ? <AnimatedScore value={overlay.shareStreak} from={0} /> : '—'}
+                {overlay.streakHeld ? <span className="dfd__held">held</span> : null}
+              </dd>
+            </div>
+          </dl>
 
-          {showMargin || overlay.shareRating || !!overlay.shareStreak ? (
-            <div className="df-result-meta-row">
-              {showMargin ? (
-                <div className="df-result-meta-pill">
-                  <span className="df-result-meta-label">Margin</span>
-                  <span className="df-result-meta-value">{overlay.marginValue}</span>
-                </div>
-              ) : null}
-              {overlay.shareRating ? (
-                <div className="df-result-meta-pill">
-                  <span className="df-result-meta-label">Rating</span>
-                  <AnimatedScore
-                    value={overlay.shareRating}
-                    from={0}
-                    className="df-result-meta-value"
-                  />
-                </div>
-              ) : null}
-              {overlay.shareStreak ? (
-                <div className="df-result-meta-pill">
-                  <span className="df-result-meta-label">Streak</span>
-                  <AnimatedScore
-                    value={overlay.shareStreak}
-                    from={0}
-                    className="df-result-meta-value"
-                  />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {overlay.note ? <p className="dfd__note">{overlay.note}</p> : null}
 
           {overlay.errorMessage ? (
-            <div className="hand-over-error-zone" role="alert">
-              <span className="hand-over-error-text" title={overlay.errorMessage}>
-                {overlay.errorMessage}
-              </span>
-            </div>
+            <p className="dfd__note" role="alert">
+              {overlay.errorMessage}
+            </p>
           ) : null}
 
-          {overlay.practiceHint ? (
-            <p className="daily-fritz-practice-hint">{overlay.practiceHint}</p>
-          ) : null}
+          {overlay.practiceHint ? <p className="dfd__note">{overlay.practiceHint}</p> : null}
 
-          <div className="df-result-actions">
-            <button
-              type="button"
-              className="df-result-primary"
-              onClick={overlay.onPrimary}
-              disabled={overlay.primaryDisabled}
-            >
-              {overlay.primaryLabel}
-            </button>
-            {overlay.secondaryLabel ? (
-              <button type="button" className="df-result-secondary" onClick={overlay.onSecondary}>
-                {overlay.secondaryLabel}
-              </button>
-            ) : null}
-            {overlay.tertiaryLabel ? (
-              <button type="button" className="df-result-secondary" onClick={overlay.onTertiary}>{overlay.tertiaryLabel}</button>
-            ) : null}
-            <button type="button" className="df-result-share-btn" onClick={onShare}>
+          <div className="dfd__actions">
+            <button type="button" className="dfd__btn dfd__btn--primary" onClick={onShare}>
               {shareDone ? 'Copied' : 'Share Result'}
             </button>
+            <div className="dfd__row">
+              <button
+                type="button"
+                className="dfd__btn"
+                onClick={overlay.onPrimary}
+                disabled={overlay.primaryDisabled}
+              >
+                {overlay.primaryLabel}
+              </button>
+              {overlay.secondaryLabel ? (
+                <button type="button" className="dfd__btn" onClick={overlay.onSecondary}>
+                  {overlay.secondaryLabel}
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

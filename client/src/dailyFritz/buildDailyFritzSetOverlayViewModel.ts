@@ -42,6 +42,17 @@ export type BuildDailyFritzSetOverlayContext = {
   profileGlickoRating?: number | null;
 };
 
+/**
+ * The interstitial's status chip. Says where the set stands, not what just
+ * happened — the headline already carries that.
+ */
+function describeStanding(playerGamesWon: number, fritzGamesWon: number): string {
+  if (playerGamesWon === fritzGamesWon) return `All square ${playerGamesWon}-${fritzGamesWon}`;
+  return playerGamesWon > fritzGamesWon
+    ? `You lead ${playerGamesWon}-${fritzGamesWon}`
+    : `Fritz leads ${fritzGamesWon}-${playerGamesWon}`;
+}
+
 export function buildDailyFritzSetOverlayViewModel(
   setOverlay: DailyFritzOverlayState,
   actions: BuildDailyFritzSetOverlayActions,
@@ -171,6 +182,8 @@ export function buildDailyFritzSetOverlayViewModel(
     return {
       ...base,
       kind: 'between' as const,
+      runId: context.todayRunDate ? `DF-${context.todayRunDate}` : undefined,
+      standing: describeStanding(sr.playerGamesWon, sr.fritzGamesWon),
       eyebrow: skunkCopy?.eyebrow ?? base.eyebrow,
       headline: skunkCopy?.headline ??
         (Number(g.playerScore) > Number(g.fritzScore)

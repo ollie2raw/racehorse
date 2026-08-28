@@ -108,7 +108,7 @@ export function getSkunkOverlayCopy(
   if (completedGame.gameNumber === 1 && setResult.instantSkunk && playerWonGame && setWon) {
     return {
       eyebrow: 'Daily Fritz',
-      headline: 'SKUNK',
+      headline: 'Skunk',
       subheadline: 'You beat Fritz before he reached 30. Set won 2–0.',
       primaryTone: 'success',
     };
@@ -125,7 +125,7 @@ export function getSkunkOverlayCopy(
     const setLine = `${setResult.playerGamesWon}–${setResult.fritzGamesWon}`;
     return {
       eyebrow: 'Daily Fritz',
-      headline: 'SKUNK FINISH',
+      headline: 'Skunk finish',
       subheadline: `You skunked Fritz in game 2. Set won ${setLine}.`,
       primaryTone: 'success',
     };
@@ -142,7 +142,7 @@ export function getSkunkOverlayCopy(
   if (completedGame.gameNumber === 3 && playerWonGame && setWon) {
     return {
       eyebrow: 'Daily Fritz',
-      headline: 'DECIDER SKUNK',
+      headline: 'Decider skunk',
       subheadline: 'You crushed the deciding game before Fritz reached 30.',
       primaryTone: 'success',
     };

@@ -221,7 +221,7 @@ describe('skunk detection and messaging', () => {
       };
       const copy = getSkunkOverlayCopy(setResult, game);
       expect(copy).not.toBeNull();
-      expect(copy!.headline).toBe('SKUNK');
+      expect(copy!.headline).toBe('Skunk');
       expect(copy!.subheadline).toContain('2–0');
       expect(copy!.primaryTone).toBe('success');
     });
