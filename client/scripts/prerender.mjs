@@ -209,4 +209,49 @@ for (const route of routes) {
   await writeFile(outputPath, renderRoute(template, route));
 }
 
+/*
+ * Crawl surface.
+ *
+ * Generated from the same route list rather than kept as static files, so the
+ * sitemap cannot drift from what is actually prerendered. Without these,
+ * Vercel's /(.*) catch-all serves index.html for /robots.txt and /sitemap.xml
+ * with a text/html content type, and search engines cannot crawl the site at
+ * all.
+ */
+
+/** Routes whose content is per-user or per-match, so not worth indexing. */
+const NOINDEX = new Set(['/players', '/tournament/detail', '/tournament/result', '/multiplayer/private']);
+
+const indexable = routes.filter((route) => !NOINDEX.has(route.path));
+
+const sitemap = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+  ...indexable.map((route) => {
+    const loc = `${siteOrigin}${route.path === '/' ? '/' : route.path}`;
+    // Leaderboards turn over daily; the rest are stable content pages.
+    const changefreq = route.path.includes('leaderboard') || route.path.startsWith('/daily') ? 'daily' : 'weekly';
+    const priority = route.path === '/' ? '1.0' : '0.7';
+    return `  <url><loc>${loc}</loc><changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`;
+  }),
+  '</urlset>',
+  '',
+].join('\n');
+
+await writeFile(path.join(distDir, 'sitemap.xml'), sitemap);
+
+const robots = [
+  'User-agent: *',
+  'Allow: /',
+  '',
+  '# Per-user and per-match pages carry no indexable content.',
+  ...[...NOINDEX].map((route) => `Disallow: ${route}`),
+  '',
+  `Sitemap: ${siteOrigin}/sitemap.xml`,
+  '',
+].join('\n');
+
+await writeFile(path.join(distDir, 'robots.txt'), robots);
+
 console.log(`Prerendered ${routes.length} routes for ${siteOrigin}.`);
+console.log(`Wrote sitemap.xml (${indexable.length} urls) and robots.txt.`);
