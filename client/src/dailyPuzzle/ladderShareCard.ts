@@ -1,5 +1,5 @@
+import { buildShareGridRow } from '../lib/shareGrid';
 import { SITE_DOMAIN } from '../lib/siteUrl';
-import { getDailyPuzzleStepPresentation } from './presentation';
 import type { DailyPuzzleAttempt } from './types';
 import { DAILY_PUZZLE_SLOT_INDICES } from './types';
 
@@ -32,10 +32,10 @@ export function buildLadderShareData(params: {
   const slots = params.attempt.result.slots;
   const slotLines = DAILY_PUZZLE_SLOT_INDICES.map((slotIndex) => {
     const result = slots.find((entry) => entry.slotIndex === slotIndex);
-    const step = getDailyPuzzleStepPresentation(slotIndex);
-    if (!result) return `${step.shortLabel} —`;
-    const perfect = result.perfect ? ' PERFECT' : '';
-    return `${step.shortLabel} ${result.awardedPoints}${perfect}`;
+    if (!result) return buildShareGridRow(null, 'none');
+    const tone = result.perfect ? 'skunk' : result.solved ? 'win' : 'loss';
+    const ratio = result.slotMaxPoints > 0 ? result.awardedPoints / result.slotMaxPoints : 0;
+    return buildShareGridRow(ratio, tone);
   });
 
   return {
@@ -58,7 +58,8 @@ export function buildLadderShareText(data: DailyPuzzleLadderShareData): string {
   const lines = [
     `Daily Puzzle Ladder · ${data.shareDate}`,
     rankPart,
-    data.slotLines.join(' · '),
+    // One row per slot: the grid has to stack, not run on.
+    data.slotLines.join('\n'),
     meta,
     SITE_DOMAIN,
   ].filter(Boolean);

@@ -1,3 +1,8 @@
+import { buildShareGridRow, pointsShare } from '../lib/shareGrid';
+import type { DailyFritzSetGameNumber } from './api';
+
+const SET_GAME_NUMBERS: DailyFritzSetGameNumber[] = [1, 2, 3];
+
 import { SITE_DOMAIN } from '../lib/siteUrl';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 
@@ -9,14 +14,16 @@ export function buildShareText(vm: DailyFritzSetOverlayViewModel): string {
   const rating = vm.shareRating ? `${vm.shareRating} rating` : '';
   const streak = vm.shareStreak ? `${vm.shareStreak}-day streak` : '';
 
-  const gameLines = (vm.games ?? [])
-    .map((game) => {
-      const isSkunk = Boolean(game.skunk);
-      const playerScore = game.playerScore;
-      const fritzScore = game.fritzScore;
-      const won = playerScore > fritzScore;
-      const mark = isSkunk ? 'SKUNK' : won ? 'W' : 'L';
-      return `G${game.gameNumber} ${mark} ${playerScore}-${fritzScore}`;
+  // Three rows always, so the block is the same height whether the set went two
+  // games or three — an unplayed decider reads as unplayed, not as absent.
+  const byNumber = new Map((vm.games ?? []).map((game) => [game.gameNumber, game] as const));
+  const gameLines = SET_GAME_NUMBERS
+    .map((gameNumber) => {
+      const game = byNumber.get(gameNumber);
+      if (!game) return buildShareGridRow(null, 'none');
+      const won = game.playerScore > game.fritzScore;
+      const tone = game.skunk && won ? 'skunk' : won ? 'win' : 'loss';
+      return buildShareGridRow(pointsShare(game.playerScore, game.fritzScore), tone);
     })
     .join('\n');
 
