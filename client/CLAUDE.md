@@ -41,7 +41,10 @@ Current tokens:
 --tier-elite:    #E7B64A;      /* Gold   — prestige, achievement, mastery */
 --tier-master:   #A855F7;      /* Purple — elite competition, premium modes */
 
---radius-card:   24px;         /* Standard card corner radius */
+--radius-record:  3px;        /* Records and tables: leaderboards, dossiers */
+--radius-control: 4px;        /* Buttons, chips, inputs */
+--radius-pill:   999px;       /* Avatars, status dots, badges only */
+--radius-card:   24px;        /* Legacy — see the radius rule below */
 --hud-lift:      20px;         /* Standard shadow elevation for lifted panels */
 
 --font-display: 'Barlow Condensed', sans-serif;   /* HUD labels, headers, stats */
@@ -72,6 +75,35 @@ The Racehorse color system is dark, atmospheric, and restrained:
 Accent colors come from the tier system only. Blue for gameplay/interaction, Gold for prestige/achievement, Purple for elite/premium, Green for streaks/success.
 
 **Avoid gradients across the app.** Use matte solid surfaces, crisp borders, subtle shadows, and restrained accent colors—not `linear-gradient` / `radial-gradient` fills on panels, cards, buttons, or page backgrounds. Gradients make the product feel less premium and less aligned with the Play vs Fritz identity. Also avoid bright saturated fills and pure white sections.
+
+### 3b. Corner Radius — By What the Surface Is For
+
+Two shapes are allowed, because the split encodes something real. It is not
+"cards are round" or "cards are square" — it is what the surface is doing.
+
+**Square — `var(--radius-record)`**
+Records and tables: leaderboards, result dossiers, stat grids, anything
+tabular or receipt-like. These are dense, scanned rather than read, and
+carry no imagery. Precision is the point, and hairline rules with sharp
+corners deliver it.
+
+**Rounded — the existing `--pvf-radius-*` scale**
+Hubs and landing surfaces: the Daily Fritz / Puzzle Rush / Ladder hubs, and
+anything media-led. These are spacious, image-led and invitational. Rounded
+corners sit with photography and with the circular icons these screens use;
+square corners fight both and read blocky at low density.
+
+**Controls — `var(--radius-control)`**
+Buttons, chips, inputs, everywhere. The slight rounding is the signal that a
+thing is pressable.
+
+**`var(--radius-pill)`** is for avatars, status dots and badges only.
+
+Don't invent a radius. If a value isn't from one of these, it's wrong. The
+codebase carries a long tail of hardcoded radii (89 distinct values at last
+count) — convert them as you touch the files, and don't add new ones.
+
+---
 
 ### 4. The Glass Surface Pattern
 

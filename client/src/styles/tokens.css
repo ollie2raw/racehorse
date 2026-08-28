@@ -51,6 +51,16 @@
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.60);
 
   /* ── Spatial ─────────────────────────────────────── */
+  /* ── Radius by role ────────────────────────────────
+     --radius-record   records and tables: leaderboards, result dossiers,
+                       stat grids. Square because precision is the point.
+     --radius-control  buttons, chips, inputs. The slight rounding is what
+                       marks a thing as pressable.
+     Rounded hub and landing surfaces keep the existing --pvf-radius-* scale;
+     don't invent a new value for them. */
+  --radius-record:  3px;
+  --radius-control: 4px;
+
   --radius-sm:   8px;
   --radius-md:   14px;
   --radius-lg:   12px;
