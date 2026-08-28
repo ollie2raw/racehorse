@@ -19,7 +19,7 @@
 
   width: min(100%, 420px);
   border: 1px solid rgba(231, 182, 74, 0.22);
-  border-radius: 4px;
+  border-radius: var(--radius-record);
   overflow: hidden;
   background-color: var(--df-card);
   /* A faint plan grid, so the card reads as a record rather than a panel. */

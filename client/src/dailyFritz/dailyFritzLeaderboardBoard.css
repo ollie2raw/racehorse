@@ -32,7 +32,7 @@
   --dfl-grid: rgba(255, 255, 255, 0.03);
   --dfl-glass: rgba(10, 16, 28, 0.6);
   --dfl-surface: rgba(255, 255, 255, 0.015);
-  --dfl-radius: 3px;
+  --dfl-radius: var(--radius-record);
 }
 
 .dfl-inner {
