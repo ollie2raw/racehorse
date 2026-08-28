@@ -1,3 +1,4 @@
+import { buildShareGridRow } from '../lib/shareGrid';
 import { SITE_DOMAIN } from '../lib/siteUrl';
 /**
  * Share text for a finished Puzzle Rush run.
@@ -39,7 +40,11 @@ export function buildRushShareText(input: RushShareInput): string {
   const date = formatShareDate(input.playedAt);
   const stageLines = input.stages
     .filter((stage) => stage.total > 0)
-    .map((stage) => `${stage.label} ${stage.done}/${stage.total}`)
+    .map((stage) =>
+      stage.done === 0
+        ? buildShareGridRow(null, 'none')
+        : buildShareGridRow(stage.done / stage.total, stage.done === stage.total ? 'skunk' : 'win'),
+    )
     .join('\n');
 
   const lines = [

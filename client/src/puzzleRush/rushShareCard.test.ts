@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildRushShareText } from './rushShareCard';
 import { SITE_DOMAIN } from '../lib/siteUrl';
+import { buildShareGridRow } from '../lib/shareGrid';
 
 const STAGES = [
   { label: 'Warm-Up', done: 2, total: 3 },
@@ -18,11 +19,20 @@ describe('buildRushShareText', () => {
       playedAt: '2026-08-27T22:12:00.000Z',
     });
     expect(text).toContain('250 pts · 2 solved');
-    expect(text).toContain('Warm-Up 2/3');
-    expect(text).toContain('Building 0/5');
-    expect(text).toContain('Master 0/7');
+    // Warm-Up is 2 of 3, so a partly-filled row; the two untouched stages read
+    // as unplayed rather than as failures.
+    expect(text).toContain(buildShareGridRow(2 / 3, 'win'));
+    expect(text.split('\n').filter((line) => line.startsWith('⬜'))).toHaveLength(2);
     expect(text).toContain('+2s banked');
     expect(text.endsWith(SITE_DOMAIN)).toBe(true);
+  });
+
+  it('marks a fully cleared stage as exceptional', () => {
+    const text = buildRushShareText({
+      score: 900, solved: 15, secondsBanked: 0,
+      stages: [{ label: 'Warm-Up', done: 3, total: 3 }],
+    });
+    expect(text).toContain(buildShareGridRow(1, 'skunk'));
   });
 
   it('omits the solve count when the server did not report one', () => {
