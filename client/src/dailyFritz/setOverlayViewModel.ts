@@ -29,10 +29,6 @@ export interface DailyFritzSetOverlayViewModel {
   resultValue: string | null;
   rankValue: string | null;
   skunkBadge: string | null;
-  /** Dossier header, left: the run being reported, e.g. "DF-2026-08-26". */
-  runId?: string;
-  /** Dossier header, right: "Elite · Verified", or "Unranked" when unverified. */
-  provenance?: string;
   /** False when the run finished without a verified receipt. */
   ranked?: boolean;
   /** A lost set that still leaves the daily streak intact. */
@@ -41,8 +37,6 @@ export interface DailyFritzSetOverlayViewModel {
   note?: string | null;
   /** Bare ordinal rank for the dossier stat grid, e.g. "1st". */
   rankShort?: string | null;
-  /** Interstitial status chip, e.g. "You lead 1-0". */
-  standing?: string | null;
   shareDate?: string;
   shareTier?: string;
   shareRating?: number;

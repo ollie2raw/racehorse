@@ -107,8 +107,6 @@ export function buildDailyFritzFinalOverlayViewModel({
 
   return {
     kind: 'final',
-    runId: `DF-${runDate}`,
-    provenance: ranked ? `${titleCaseTier(fritzTier)} · Verified` : 'Unranked',
     ranked,
     streakHeld,
     note,

@@ -47,13 +47,6 @@ export const BotDailyFritzSetOverlay: React.FC<BotDailyFritzSetOverlayProps> = (
         aria-label="Daily Fritz set interstitial"
       >
         <div className="dfd dfd--wide" onClick={(event) => event.stopPropagation()}>
-          <div className="dfd__strip">
-            <span className="dfd__run">
-              {overlay.runId ? `${overlay.runId} · Set in progress` : 'Set in progress'}
-            </span>
-            <span className="dfd__provenance">{overlay.standing ?? ''}</span>
-          </div>
-
           <div className="dfd__split">
             <div>
               <span className="dfd__eyebrow">{overlay.gameScoreLabel || 'This game'} · Final</span>

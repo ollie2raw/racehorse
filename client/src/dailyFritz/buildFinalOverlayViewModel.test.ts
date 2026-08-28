@@ -2,9 +2,9 @@
 /**
  * The dossier fields on the final result card.
  *
- * The header's provenance line and the ranked flag come from the run's
- * verification status, not from whether the player won — an unverified win is
- * still unranked, and that has to read honestly on the card.
+ * The ranked flag comes from the run's verification status, not from whether
+ * the player won — an unverified win is still unranked, and the card has to
+ * say so rather than showing a silent blank rank.
  */
 import { describe, it, expect } from 'vitest';
 import { buildDailyFritzFinalOverlayViewModel } from './buildFinalOverlayViewModel';
@@ -34,20 +34,13 @@ function build(over: Record<string, unknown> = {}) {
 }
 
 describe('final overlay dossier fields', () => {
-  it('stamps the run id from the run date', () => {
-    expect(build().runId).toBe('DF-2026-08-26');
-  });
-
-  it('reads verified runs as ranked, with tier and state in the header', () => {
-    const vm = build({ verificationStatus: 'verified' });
-    expect(vm.ranked).toBe(true);
-    expect(vm.provenance).toBe('Elite · Verified');
+  it('reads a verified run as ranked', () => {
+    expect(build({ verificationStatus: 'verified' }).ranked).toBe(true);
   });
 
   it('marks an unverified run unranked even when the set was won', () => {
     const vm = build({ verificationStatus: 'legacy_unverified' });
     expect(vm.ranked).toBe(false);
-    expect(vm.provenance).toBe('Unranked');
     expect(vm.note).toMatch(/verified/i);
   });
 

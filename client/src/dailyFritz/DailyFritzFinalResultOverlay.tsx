@@ -32,11 +32,6 @@ export function DailyFritzFinalResultOverlay({
         className={`dfd${ranked ? '' : ' dfd--unranked'}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="dfd__strip">
-          <span className="dfd__run">{overlay.runId ?? 'Daily Fritz'}</span>
-          <span className="dfd__provenance">{overlay.provenance ?? ''}</span>
-        </div>
-
         <div className="dfd__body">
           <header>
             <span className="dfd__eyebrow">Set result</span>
