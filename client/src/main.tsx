@@ -20,6 +20,7 @@ if (import.meta.env.DEV && !import.meta.env.VITE_SENTRY_DSN) {
 }
 
 import { StrictMode } from 'react';
+import { track } from './lib/analytics';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
@@ -75,6 +76,10 @@ async function bootstrap() {
   // old HashRouter route. Legacy "#/…" bookmarks are then promoted to real paths.
   await consumeSupabaseRecoveryHash();
   migrateLegacyHashRoute();
+
+  // Outside React on purpose: one page load, one session_start. An effect here
+  // would fire twice under StrictMode in development.
+  track('session_start');
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

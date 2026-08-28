@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import { apiGet, apiPost } from '../api/client';
 import { logger } from '../utils/logger';
@@ -657,6 +658,7 @@ export async function getTodayDailyPuzzleLadder(): Promise<DailyPuzzleTodayRespo
 }
 
 export async function startDailyPuzzleLadder(runDate?: string): Promise<DailyPuzzleStartResponse> {
+  track('game_opened', { mode: 'daily_puzzle_ladder' });
   return requestServerJson<DailyPuzzleStartResponse>('/api/daily-puzzle/start', {
     method: 'POST',
     body: runDate ? { runDate } : {},
@@ -676,6 +678,7 @@ export async function completeDailyPuzzleLadder(input: {
   attemptId: string;
   puzzleDate: string;
 }): Promise<DailyPuzzleCompleteResponse> {
+  track('game_completed', { mode: 'daily_puzzle_ladder' });
   return requestServerJson<DailyPuzzleCompleteResponse>('/api/daily-puzzle/complete', {
     method: 'POST',
     body: input,

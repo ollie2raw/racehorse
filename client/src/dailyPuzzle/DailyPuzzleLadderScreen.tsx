@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
@@ -368,6 +369,7 @@ export default function DailyPuzzleLadderScreen({
 
   const handleShareLadderResult = useCallback(
     (text: string) => {
+      track('share_initiated', { mode: 'daily_puzzle_ladder' });
       invokeLadderShareResult(text, () => {
         setShareDone(true);
         window.setTimeout(() => setShareDone(false), 2000);

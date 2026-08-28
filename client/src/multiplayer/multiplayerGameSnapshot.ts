@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { BoardHandle } from '../components';
 import type { GameState, Move, Tile } from '../types';
@@ -224,12 +225,17 @@ export function publishGameSnapshot(next: MultiplayerGameSnapshot): void {
   const gameOver = next.liveGameOver;
   if (gameOver !== lastPublishedGameOver) {
     lastPublishedGameOver = gameOver;
+    // Only the entry into game-over is a completion; the reset back out is not.
+    if (gameOver) track('game_completed', { mode: 'multiplayer' });
     notifyGameOverListeners();
   }
 
   const hasState = next.hasState;
   if (hasState !== lastPublishedHasState) {
     lastPublishedHasState = hasState;
+    // A multiplayer game becomes real when live state first arrives; the
+    // teardown back to no-state is not a second opening.
+    if (hasState) track('game_opened', { mode: 'multiplayer' });
     notifyHasStateListeners();
   }
 }

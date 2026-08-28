@@ -1,3 +1,4 @@
+import { identifyUser, resetAnalytics } from '../lib/analytics';
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -837,7 +838,32 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useAuthInternal();
+  useAnalyticsIdentity(value.user?.id ?? null);
   return React.createElement(AuthContext.Provider, { value }, children);
+}
+
+/**
+ * Links the anonymous person to the account, once per identity.
+ *
+ * Keyed on the id string, never the user object: #61 was an effect that
+ * re-ran on every new object reference for the same signed-in user. The
+ * lastIdentified ref makes a repeated run a no-op even if the effect fires
+ * again, which StrictMode guarantees it will in development.
+ */
+export function useAnalyticsIdentity(userId: string | null): void {
+  const lastIdentified = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (userId === lastIdentified.current) return;
+    if (userId) {
+      identifyUser(userId);
+    } else if (lastIdentified.current !== null) {
+      // Signed out, rather than never signed in: unlink so a shared device
+      // does not fold two people into one person.
+      resetAnalytics();
+    }
+    lastIdentified.current = userId;
+  }, [userId]);
 }
 
 export function useAuth(): AuthContextType {

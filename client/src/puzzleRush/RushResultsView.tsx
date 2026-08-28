@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from '../components/primitives';
 import { AnimatedScore } from '../components/AnimatedScore';
@@ -90,6 +91,7 @@ export function RushResultsView({
   const [shareDone, setShareDone] = useState(false);
   const handleShare = useCallback(() => {
     if (!shareText) return;
+    track('share_initiated', { mode: 'puzzle_rush' });
     const markShared = (): void => {
       setShareDone(true);
       window.setTimeout(() => setShareDone(false), 2000);

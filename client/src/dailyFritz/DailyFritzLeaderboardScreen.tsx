@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { AppMode } from '../types';
@@ -360,6 +361,7 @@ export default function DailyFritzLeaderboardScreen({
 
   const handleShareResult = useCallback(() => {
     if (!resultShareText) return;
+    track('share_initiated', { mode: 'daily_fritz', run_date: runDate });
     const markShared = (): void => {
       setShareDone(true);
       window.setTimeout(() => setShareDone(false), 2000);
@@ -378,7 +380,7 @@ export default function DailyFritzLeaderboardScreen({
     void navigator.clipboard.writeText(resultShareText).then(() => {
       markShared();
     });
-  }, [resultShareText]);
+  }, [resultShareText, runDate]);
 
   useEffect(() => {
     setShareDone(false);
