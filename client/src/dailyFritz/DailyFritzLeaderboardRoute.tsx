@@ -4,6 +4,7 @@ import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
 import { getTodayDailyFritz, type DailyFritzTodayResponse } from './api';
 import DailyFritzLeaderboardScreen from './DailyFritzLeaderboardScreen';
+import { DailyFritzLeaderboardLoading } from './DailyFritzLeaderboardLoading';
 
 interface DailyFritzLeaderboardRouteProps {
   user: User | null;
@@ -64,11 +65,7 @@ export default function DailyFritzLeaderboardRoute({
   }, []);
 
   if (loading || !runDate) {
-    return (
-      <div className="rh-hub-page dflb-page" style={{ display: 'grid', placeItems: 'center' }}>
-        <p style={{ color: 'rgba(148,163,184,0.8)', fontFamily: 'var(--font-body)' }}>Loading leaderboard…</p>
-      </div>
-    );
+    return <DailyFritzLeaderboardLoading onBack={onClose} />;
   }
 
   return (

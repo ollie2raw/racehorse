@@ -761,3 +761,66 @@
     font-size: 9.5px;
   }
 }
+
+/* ── loading skeleton ──────────────────────────────────────────────────────
+ * Shown while the board's data is in flight. Echoes .dfl-row so the wait
+ * previews the shape that is about to arrive rather than a generic spinner.
+ */
+
+.dfl-loading-lockup {
+  max-width: 560px;
+}
+
+.dfl-skeleton {
+  display: flex;
+  flex-direction: column;
+  margin-top: 34px;
+  border-top: 1px solid var(--dfl-line, rgba(255, 255, 255, 0.08));
+}
+
+.dfl-skeleton__row {
+  display: grid;
+  grid-template-columns: 22px 26px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  animation: dfl-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+/* Each placeholder names itself rather than inheriting from a blanket
+   child selector, so no rule has to fight another to size itself. */
+.dfl-skeleton__rank,
+.dfl-skeleton__name,
+.dfl-skeleton__games > span {
+  display: block;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.dfl-skeleton__rank { height: 8px; }
+.dfl-skeleton__name { height: 9px; }
+
+.dfl-skeleton__avatar {
+  display: block;
+  height: 22px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.dfl-skeleton__games {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dfl-skeleton__games > span { height: 3px; }
+
+@keyframes dfl-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfl-skeleton__row { animation: none; opacity: 0.75; }
+}
