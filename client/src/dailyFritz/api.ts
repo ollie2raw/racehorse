@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { apiGet, apiPost, type ApiResult } from '../api/client';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
@@ -477,6 +478,7 @@ export async function getTodayDailyFritz(options?: {
 export async function startDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzStartResponse> {
+  track('game_opened', { mode: 'daily_fritz' });
   const core = await import('@racehorse/game-core');
   const response = throwApiResult(
     await timedApiPost<DailyFritzStartResponse>('/api/daily-fritz/start', {
@@ -791,6 +793,7 @@ export async function completeDailyFritz(input: {
   moveLog: unknown;
   setResult?: DailyFritzSetResult | null;
 }): Promise<DailyFritzCompleteResponse> {
+  track('game_completed', { mode: 'daily_fritz' });
   return throwApiResult(
     await timedApiPost<DailyFritzCompleteResponse>('/api/daily-fritz/complete', {
       attempt_id: input.attemptId,

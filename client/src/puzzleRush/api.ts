@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics';
 import { apiGet, apiPost } from '../api/client';
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import type {
@@ -38,6 +39,7 @@ function hydratePuzzle(puzzle: PuzzleRushPuzzle): PuzzleRushPuzzle {
  * round trip between puzzles would be felt on the clock.
  */
 export async function startPuzzleRush(): Promise<PuzzleRushStartResponse> {
+  track('game_opened', { mode: 'puzzle_rush' });
   const response = await postJson<PuzzleRushStartResponse>('/api/puzzle-rush/start', {});
   return { ...response, puzzles: (response.puzzles ?? []).map(hydratePuzzle) };
 }
@@ -57,6 +59,7 @@ export async function completePuzzleRush(input: {
   runId: string;
   clientReportedScore: number;
 }): Promise<PuzzleRushCompleteResponse> {
+  track('game_completed', { mode: 'puzzle_rush' });
   return postJson<PuzzleRushCompleteResponse>('/api/puzzle-rush/complete', input);
 }
 
