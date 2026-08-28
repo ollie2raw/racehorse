@@ -1,3 +1,4 @@
+import { SITE_DOMAIN } from '../lib/siteUrl';
 import { getDailyPuzzleStepPresentation } from './presentation';
 import type { DailyPuzzleAttempt } from './types';
 import { DAILY_PUZZLE_SLOT_INDICES } from './types';
@@ -59,7 +60,7 @@ export function buildLadderShareText(data: DailyPuzzleLadderShareData): string {
     rankPart,
     data.slotLines.join(' · '),
     meta,
-    'racehorsedoms.vercel.app',
+    SITE_DOMAIN,
   ].filter(Boolean);
 
   return lines.join('\n');
