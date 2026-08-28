@@ -1,4 +1,5 @@
 import { Button } from '../components/primitives';
+import { AnimatedScore } from '../components/AnimatedScore';
 import type { PuzzleRushCompleteResponse, PuzzleRushStage, RushPuzzleResult } from './types';
 import { stageProgress } from './rushScoring';
 
@@ -53,7 +54,11 @@ export function RushResultsView({
       <header className="pr-results__head">
         <span className="pr-results__eyebrow">Run complete</span>
         <div className="pr-results__score" data-ui="rush-final-score">
-          <span className="pr-results__score-value">{serverScore ?? '—'}</span>
+          {serverScore == null ? (
+            <span className="pr-results__score-value">—</span>
+          ) : (
+            <AnimatedScore value={serverScore} from={0} className="pr-results__score-value" />
+          )}
           <span className="pr-results__score-suffix">PTS</span>
         </div>
         <span className="pr-results__solved">

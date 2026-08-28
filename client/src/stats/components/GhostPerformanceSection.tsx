@@ -1,7 +1,9 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
+import { AnimatedScore } from '../../components/AnimatedScore';
 
 type Props = { ghost: PlayerIdentityModel['ghost'] };
-const value = (number: number | null) => number == null ? '—' : number.toLocaleString();
+const value = (number: number | null) =>
+  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => n.toLocaleString()} />;
 
 export function GhostPerformanceSection({ ghost }: Props) {
   const available = [ghost.rating, ghost.gamesPlayed, ghost.wins, ghost.losses, ghost.winRate, ghost.bestWinMargin].some((item) => item != null);
