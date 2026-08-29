@@ -279,6 +279,16 @@ async function ensureGhostProfile(userId: string): Promise<GhostProfileRow> {
   });
 }
 
+/**
+ * How many recent games the composite log is built from.
+ *
+ * `buildCompositeLog` slices to 20 for both `states` and `recentGameStyles`, so
+ * fetching more than this pulls `move_log` blobs (median 86 KB each) that are
+ * parsed, analysed and then discarded. At 30 that was ~860 KB of wasted
+ * Supabase transfer on every profile fetch for an active account.
+ */
+export const GHOST_COMPOSITE_GAME_WINDOW = 20;
+
 async function fetchRecentGhostGames(userId: string, limit = 5): Promise<GhostGameRow[]> {
   return await supabaseFetch<GhostGameRow[]>(
     `/rest/v1/ghost_games?select=id,user_id,played_at,final_score,opponent_score,move_log` +
@@ -716,7 +726,9 @@ function buildCompositeLog(
       return analyzeGameStyle(game);
     })
     .filter((entry): entry is GhostGameStyleSnapshot => Boolean(entry))
-    .slice(0, 20);
+    // Redundant now that the caller fetches exactly this many, kept as the bound
+    // of record so a wider fetch cannot silently widen the style window.
+    .slice(0, GHOST_COMPOSITE_GAME_WINDOW);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -844,8 +856,8 @@ export function capCompositeLogStates(
 
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
-  const styleGames = await fetchRecentGhostGames(userId, 30);
-  const recentGames = styleGames.slice(0, 20);
+  const styleGames = await fetchRecentGhostGames(userId, GHOST_COMPOSITE_GAME_WINDOW);
+  const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames, profile.composite_log) : null;
   const styleProfile = compositeLog
     ? buildStyleProfileFromSnapshots(compositeLog.recentGameStyles)
@@ -896,8 +908,8 @@ async function persistFritzGhostTrainingProfile(params: {
     matchId: params.matchId,
   });
 
-  const styleGames = await fetchRecentGhostGames(params.userId, 30);
-  const recentGames = styleGames.slice(0, 20);
+  const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
+  const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const compositeLog = buildCompositeLog(recentGames, styleGames, params.profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
   // Same fail-closed contract as the profiles.glicko_rating write this
@@ -1056,8 +1068,8 @@ export async function completeGhostGame(params: {
     matchId: params.matchId,
   });
 
-  const styleGames = await fetchRecentGhostGames(params.userId, 30);
-  const recentGames = styleGames.slice(0, 20);
+  const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
+  const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
