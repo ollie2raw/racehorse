@@ -87,6 +87,7 @@
     { "source": "/multiplayer", "destination": "/multiplayer.html" },
     { "source": "/multiplayer/private", "destination": "/multiplayer-private.html" },
     { "source": "/social", "destination": "/social.html" },
+    { "source": "/settings", "destination": "/settings.html" },
     { "source": "/players/:username", "destination": "/players.html" },
     { "source": "/journey", "destination": "/journey.html" },
     { "source": "/learn", "destination": "/learn.html" },
