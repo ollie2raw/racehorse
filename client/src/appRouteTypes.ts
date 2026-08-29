@@ -58,6 +58,8 @@ export type AppRoutesAuthProps = {
   /** Full sign-out, including room-recovery and multiplayer teardown. */
   handleSignOut: () => void;
   handleSaveUsername: (username: string) => Promise<{ error: string | null }>;
+  /** Resolves only on failure — a success signs out and navigates home. */
+  handleDeleteAccount: (confirmation: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   updateEmail: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   isAdmin: boolean;

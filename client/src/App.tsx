@@ -72,6 +72,7 @@ import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
+import { deleteAccount } from './auth/deleteAccount';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -782,6 +783,24 @@ export default function App() {
     [updateUsername, setOnboardingDismissed, setUsernameModalOpen],
   );
 
+  /**
+   * Deletes the account, then signs out and lands on home.
+   *
+   * Only a confirmed deletion tears the session down: signing out on a failed
+   * call would leave the user unable to retry from a page that requires them
+   * to be signed in.
+   */
+  const handleDeleteAccount = useCallback(
+    async (confirmation: string) => {
+      const result = await deleteAccount(confirmation);
+      if (result.error) return result;
+      handleSignOut();
+      setAppMode('home');
+      return result;
+    },
+    [handleSignOut, setAppMode],
+  );
+
   const authModalsLayer = (
     <AuthModalsLayer
       authModalOpen={authModalOpen}
@@ -865,6 +884,7 @@ export default function App() {
       auth: {
         handleSignOut,
         handleSaveUsername,
+        handleDeleteAccount,
         updatePassword,
         updateEmail,
         isAdmin,

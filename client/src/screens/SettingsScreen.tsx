@@ -20,6 +20,8 @@ export interface SettingsScreenProps {
   onSaveUsername?: (username: string) => Promise<SettingsMutationResult>;
   onUpdatePassword?: (password: string) => Promise<SettingsMutationResult>;
   onUpdateEmail?: (email: string) => Promise<SettingsMutationResult>;
+  /** Resolves only on failure — a success unmounts this screen. */
+  onDeleteAccount?: (confirmation: string) => Promise<SettingsMutationResult>;
 }
 
 type Status = { error: string | null; message: string | null };
@@ -171,6 +173,8 @@ function EmailSection({
 }: {
   currentEmail: string | null;
   onUpdateEmail?: (email: string) => Promise<SettingsMutationResult>;
+  /** Resolves only on failure — a success unmounts this screen. */
+  onDeleteAccount?: (confirmation: string) => Promise<SettingsMutationResult>;
 }) {
   const id = useId();
   const [email, setEmail] = useState('');
@@ -202,6 +206,81 @@ function EmailSection({
       >
         {pending ? 'Sending…' : 'Change email'}
       </Button>
+    </GlassCard>
+  );
+}
+
+function DangerZoneSection({
+  username,
+  onDeleteAccount,
+}: {
+  username: string;
+  onDeleteAccount?: (confirmation: string) => Promise<SettingsMutationResult>;
+}) {
+  const id = useId();
+  const [confirming, setConfirming] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+  const { pending, status, run } = useSettingsAction();
+
+  const matches =
+    username.trim().length > 0 &&
+    confirmation.trim().toLowerCase() === username.trim().toLowerCase();
+
+  return (
+    <GlassCard className="rh-settings-section rh-settings-section--danger">
+      <h2 className="rh-settings-section-title">Delete account</h2>
+      <p className="rh-settings-section-note">
+        This erases your profile, your handle, your friends, and your rating history. It cannot be
+        undone, and the handle becomes available for someone else to take.
+      </p>
+
+      {confirming ? (
+        <>
+          <label className="rh-settings-field" htmlFor={id}>
+            <span className="rh-settings-field-label">
+              Type your username ({username}) to confirm
+            </span>
+            <input
+              id={id}
+              type="text"
+              className="rh-settings-input"
+              value={confirmation}
+              autoComplete="off"
+              disabled={pending}
+              onChange={(event) => setConfirmation(event.target.value)}
+            />
+          </label>
+          <StatusLine status={status} />
+          <div className="rh-settings-actions">
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                setConfirming(false);
+                setConfirmation('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              className="rh-settings-danger-button"
+              disabled={!matches || pending}
+              onClick={() => void run(() => onDeleteAccount!(confirmation.trim()))}
+            >
+              {pending ? 'Deleting…' : 'Delete my account'}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          className="rh-settings-danger-button"
+          onClick={() => setConfirming(true)}
+        >
+          Delete account
+        </Button>
+      )}
     </GlassCard>
   );
 }
@@ -253,6 +332,7 @@ export function SettingsScreen({
   onSaveUsername,
   onUpdatePassword,
   onUpdateEmail,
+  onDeleteAccount,
 }: SettingsScreenProps) {
   return (
     <HubViewportPage
@@ -285,6 +365,11 @@ export function SettingsScreen({
                 Sign out
               </Button>
             </GlassCard>
+
+            <DangerZoneSection
+              username={authProfile?.username ?? ''}
+              onDeleteAccount={onDeleteAccount}
+            />
           </>
         ) : (
           <GlassCard className="rh-settings-section">

@@ -38,6 +38,7 @@ import { computeWeeklyAwards } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
+import { accountRouter } from './account/routes';
 import { socketsByUserId as presenceSocketsByUserId, setActivity } from './social/presenceRegistry';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import {
@@ -417,6 +418,14 @@ const dailySubmitLimit = createRateLimitMiddleware(
   getUserIdFromAuthHeaderSync,
 );
 const adminLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:admin');
+// Account deletion is irreversible and per-user. A handful of attempts is a
+// user correcting a typed confirmation; more than that is not a person.
+const accountDeleteLimit = createRateLimitMiddleware(
+  restRateLimiter,
+  { windowMs: 10 * 60_000, max: 10 },
+  'rest:account-delete',
+  getUserIdFromAuthHeaderSync,
+);
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 // Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
 // so a single poller can't exhaust the global restApiLimit for all other /api/* callers.
@@ -461,6 +470,8 @@ app.use('/bot-matches/cleanup-stale', adminLimit);
 app.use('/api', restApiLimit);
 app.use('/league', restApiLimit);
 app.use('/bot-matches', restApiLimit);
+app.use('/api/account', accountDeleteLimit);
+app.use('/api/account', accountRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/profile', socialRouter);
 
