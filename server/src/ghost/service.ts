@@ -775,6 +775,73 @@ export function computeFritzRatingChange(
   return { newRating: playerRating + delta, delta };
 }
 
+/**
+ * Serialized-byte ceiling for `compositeLog.states` in a profile-summary
+ * response.
+ *
+ * `states` is ~99.7% of this payload: each entry carries an ~800-character
+ * `boardState`, repeated verbatim inside `key`, so one state costs ~2.2 KB. The
+ * heaviest live profile holds 1,190 of them — a 2.6 MB response returned on
+ * every app load for every signed-in user, uncompressed.
+ *
+ * The size is not driven by lifetime games — `buildCompositeLog` already reads
+ * only the last 20 — but by how many distinct positions those games visit, so
+ * an active account reaches multi-megabyte responses on its own.
+ */
+export const COMPOSITE_LOG_STATE_BUDGET_BYTES = 256_000;
+
+/** Repeat count for a state — how often this position recurred across games. */
+function compositeStateWeight(state: GhostCompositeState): number {
+  return state.candidates.reduce((sum, candidate) => sum + candidate.count, 0);
+}
+
+/**
+ * Trims `compositeLog.states` to a byte budget, keeping the states most likely
+ * to be matched again.
+ *
+ * The client uses these purely as a lookup: `pickCompositeMove` fingerprints the
+ * live board and takes the bucket that matches, falling back to
+ * `pickStyleWeightedMove` when nothing does. Dropping a state therefore costs at
+ * most one composite match, never correctness — so the states worth keeping are
+ * the ones that recurred most (high candidate count) and earliest (low turn),
+ * since late-game positions are close to unique and essentially never re-match.
+ *
+ * Whole states only: a truncated `boardState` would silently mis-fingerprint.
+ */
+export function capCompositeLogStates(
+  log: GhostCompositeLog | null,
+  budgetBytes: number = COMPOSITE_LOG_STATE_BUDGET_BYTES,
+): GhostCompositeLog | null {
+  if (!log) return null;
+  const states = log.states ?? [];
+  if (JSON.stringify(states).length <= budgetBytes) return log;
+
+  const ranked = [...states].sort((a, b) => {
+    const weightDelta = compositeStateWeight(b) - compositeStateWeight(a);
+    if (weightDelta !== 0) return weightDelta;
+    if (a.turn !== b.turn) return a.turn - b.turn;
+    return a.key.localeCompare(b.key);
+  });
+
+  const kept: GhostCompositeState[] = [];
+  // Opening `[`, closing `]`, and one `,` per entry after the first.
+  let used = 2;
+  for (const state of ranked) {
+    const cost = JSON.stringify(state).length + (kept.length > 0 ? 1 : 0);
+    if (used + cost > budgetBytes) break;
+    used += cost;
+    kept.push(state);
+  }
+
+  // Restore the engine's own ordering so the retained slice reads the same way.
+  kept.sort((a, b) => {
+    if (a.turn !== b.turn) return a.turn - b.turn;
+    return a.boardState.localeCompare(b.boardState);
+  });
+
+  return { ...log, states: kept };
+}
+
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
   const styleGames = await fetchRecentGhostGames(userId, 30);
@@ -790,7 +857,9 @@ export async function getGhostProfileSummary(userId: string): Promise<GhostProfi
     avgScore: computeAverageScore(recentGames),
     recentScores: recentGames.map((game) => Number(game.final_score ?? 0)).reverse(),
     paddingGames: Math.max(0, 5 - recentGames.length),
-    compositeLog,
+    // Capped for the wire only — the full log stays in ghost_profiles, and the
+    // training paths that rebuild it are untouched.
+    compositeLog: capCompositeLogStates(compositeLog),
     styleProfile,
   };
 }
@@ -960,7 +1029,10 @@ export async function completeGhostGame(params: {
       playerScore: Math.round(params.finalScore),
       ghostScore: Math.round(params.opponentScore),
       playerWon: params.finalScore > params.opponentScore,
-      compositeLog: profile.composite_log ?? {
+      // Same cap as the profile fetch: the client writes this straight into the
+      // ghostProfile the bot reads, so an uncapped value here would leave that
+      // object flipping between capped and uncapped after every match.
+      compositeLog: capCompositeLogStates(profile.composite_log) ?? {
         generatedAt: new Date().toISOString(),
         sourceGameIds: [],
         states: [],

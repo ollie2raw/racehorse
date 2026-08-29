@@ -12,6 +12,7 @@ Sentry.init({
 });
 import fs from 'node:fs';
 import express from 'express';
+import compression from 'compression';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
 import { createHash, randomUUID } from 'crypto';
@@ -372,6 +373,16 @@ const corsOptions: CorsOptions = {
 
 const app = express();
 app.use(cors(corsOptions));
+/**
+ * gzip every JSON response above the default 1 KB threshold.
+ *
+ * The API had no compression at all, and it serves some very repetitive JSON —
+ * the ghost composite log compresses by roughly 20x. Socket.IO is attached to
+ * the raw HTTP server below and intercepts /socket.io/ before Express sees it,
+ * so this never touches the realtime transport; the server has no SSE or
+ * streaming routes for it to interfere with either.
+ */
+app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 
 // Security headers — applied to every response from this API server.

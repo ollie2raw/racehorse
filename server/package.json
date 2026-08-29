@@ -32,6 +32,7 @@
   "dependencies": {
     "@racehorse/game-core": "*",
     "@sentry/node": "^10.62.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
@@ -40,6 +41,7 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^5.0.6",
     "@types/node": "^25.2.3",
     "@types/node-cron": "^3.0.11",
