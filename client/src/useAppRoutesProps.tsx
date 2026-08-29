@@ -319,6 +319,9 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
     auth: {
       handleOpenAuthModal,
       handleSignOut,
+      handleSaveUsername: auth.handleSaveUsername,
+      updatePassword: auth.updatePassword,
+      updateEmail: auth.updateEmail,
       isAdmin: auth.isAdmin,
       authUser: auth.authUser,
       authProfile: auth.authProfile,

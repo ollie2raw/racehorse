@@ -107,6 +107,7 @@ export default function App() {
     signUp,
     resetPassword,
     updatePassword,
+    updateEmail,
     passwordRecoveryPending,
     clearPasswordRecoveryPending,
     signOut,
@@ -764,6 +765,23 @@ export default function App() {
     setAuthModalOpen,
   ]);
 
+  /**
+   * Saving a handle also retires the onboarding prompt, wherever the save came
+   * from — the Settings page or the first-run modal.
+   */
+  const handleSaveUsername = useCallback(
+    async (username: string) => {
+      const result = await updateUsername(username);
+      if (!result.error) {
+        window.localStorage.removeItem('username_onboarding_dismissed');
+        setOnboardingDismissed(false);
+        setUsernameModalOpen(false);
+      }
+      return result;
+    },
+    [updateUsername, setOnboardingDismissed, setUsernameModalOpen],
+  );
+
   const authModalsLayer = (
     <AuthModalsLayer
       authModalOpen={authModalOpen}
@@ -781,16 +799,7 @@ export default function App() {
         ((!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen)
       }
       currentUsername={authProfile?.username ?? null}
-      usernameIsProfileEdit={usernameModalOpen}
-      onUsernameSave={async (username) => {
-        const result = await updateUsername(username);
-        if (!result.error) {
-          window.localStorage.removeItem('username_onboarding_dismissed');
-          setOnboardingDismissed(false);
-          setUsernameModalOpen(false);
-        }
-        return result;
-      }}
+      onUsernameSave={handleSaveUsername}
       onUsernameClose={() => {
         window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
         setOnboardingDismissed(true);
@@ -855,6 +864,9 @@ export default function App() {
       navigation: { appMode, setAppMode, appRootRef },
       auth: {
         handleSignOut,
+        handleSaveUsername,
+        updatePassword,
+        updateEmail,
         isAdmin,
         authUser,
         authProfile,

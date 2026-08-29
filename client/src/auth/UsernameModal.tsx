@@ -2,11 +2,15 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 
 import { isTemporaryUsername } from './useAuth';
 import './authModal.css';
 
+/**
+ * First-run handle onboarding, and only that. Editing an existing handle moved
+ * to the Settings page, which is where the rest of account management lives —
+ * the profile-edit mode this used to carry had no way in once the header
+ * button became a menu.
+ */
 interface UsernameModalProps {
   open: boolean;
   currentUsername: string | null;
-  /** True when the user manually opened this from their profile button (vs onboarding). */
-  isProfileEdit?: boolean;
   onSave: (username: string) => Promise<{ error: string | null }>;
   onClose?: () => void;
   onSignOut?: () => void | Promise<void>;
@@ -16,7 +20,6 @@ interface UsernameModalProps {
 export default function UsernameModal({
   open,
   currentUsername,
-  isProfileEdit = false,
   onSave,
   onClose,
   onSignOut,
@@ -38,7 +41,7 @@ export default function UsernameModal({
   if (!open) return null;
 
   const normalizedUsername = username.trim().toLowerCase();
-  const needsPermanentHandle = !isProfileEdit && isTemporaryUsername(normalizedUsername);
+  const needsPermanentHandle = isTemporaryUsername(normalizedUsername);
 
   const submit = async () => {
     setError(null);
@@ -76,11 +79,8 @@ export default function UsernameModal({
     overlayPointerDownOnBackdrop.current = false;
   };
 
-  // Copy branches: profile edit vs first-time handle onboarding
-  const title = isProfileEdit ? 'Your profile' : 'Choose your handle';
-  const subtitle = isProfileEdit
-    ? 'Manage your Racehorse handle and account settings.'
-    : 'This name appears on leaderboards, friends lists, and match results.';
+  const title = 'Choose your handle';
+  const subtitle = 'This name appears on leaderboards, friends lists, and match results.';
 
   return (
     <div
@@ -95,8 +95,7 @@ export default function UsernameModal({
         {/* Head row */}
         <div className="auth-modal-head">
           <p className="auth-modal-label">Profile</p>
-          {/* Only show "Not now" during onboarding, not in profile-edit mode */}
-          {onClose && !isProfileEdit && (
+          {onClose && (
             <button
               type="button"
               className="auth-modal-ghost-btn"
@@ -104,18 +103,6 @@ export default function UsernameModal({
               disabled={saving || signingOut}
             >
               Not now
-            </button>
-          )}
-          {/* Show a close ✕ button in profile-edit mode */}
-          {onClose && isProfileEdit && (
-            <button
-              type="button"
-              className="auth-modal-close"
-              onClick={onClose}
-              disabled={saving || signingOut}
-              aria-label="Close"
-            >
-              ×
             </button>
           )}
         </div>
@@ -138,7 +125,7 @@ export default function UsernameModal({
           />
         </label>
 
-        {!isProfileEdit && isTemporaryUsername(normalizedUsername) && (
+        {isTemporaryUsername(normalizedUsername) && (
           <p className="auth-modal-subtitle">
             Replace the auto-generated name with a permanent handle to continue.
           </p>
