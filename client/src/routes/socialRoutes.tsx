@@ -160,6 +160,7 @@ export function SettingsRoute({
     handleOpenAuthModal,
     handleSignOut,
     handleSaveUsername,
+    handleDeleteAccount,
     updatePassword,
     updateEmail,
   } = auth;
@@ -176,6 +177,7 @@ export function SettingsRoute({
             onSaveUsername={handleSaveUsername}
             onUpdatePassword={updatePassword}
             onUpdateEmail={updateEmail}
+            onDeleteAccount={handleDeleteAccount}
           />
         </Suspense>
       </ErrorBoundary>
