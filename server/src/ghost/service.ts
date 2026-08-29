@@ -181,6 +181,29 @@ function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
     .filter((entry) => entry.turn > 0 && entry.board_state);
 }
 
+/**
+ * The only part of a stored composite log that rebuilding ever reads.
+ *
+ * `buildCompositeLog` uses `previousLog` solely to reuse already-computed style
+ * snapshots by game id; `states` is rebuilt from the games' move logs every
+ * time. Typing the parameter this narrowly is what keeps the sub-field select
+ * below honest — a future read of `previousLog.states` will not compile.
+ */
+export type CompositeStyleSource = Pick<GhostCompositeLog, 'recentGameStyles'>;
+
+/** Projection of ghost_profiles carrying only what the summary path needs. */
+type GhostProfileStyleRow = {
+  user_id: string;
+  ghost_rating: number;
+  games_played: number;
+  recentGameStyles: GhostGameStyleSnapshot[] | null;
+};
+
+/**
+ * Pulls the whole `composite_log` column — 2.6 MB on the heaviest live account.
+ * Reserved for paths that hand the stored log back to the client or rebuild and
+ * persist it. The summary path must use `fetchGhostProfileStyleSource`.
+ */
 async function fetchGhostProfile(userId: string): Promise<GhostProfileRow | null> {
   const rows = await supabaseFetch<GhostProfileRow[]>(
     `/rest/v1/ghost_profiles?select=user_id,ghost_rating,last_updated,composite_log,style_profile,games_played` +
@@ -264,6 +287,44 @@ async function insertGhostGameRow(params: {
     body: JSON.stringify([baseRow]),
   });
   return { isNewGame: true };
+}
+
+/**
+ * Postgres extracts the sub-field server-side, so the 2.59 MB of `states` never
+ * crosses the wire. Measured on the heaviest live profile: 2,636,850 bytes for
+ * the full column against 6,453 for this projection.
+ */
+const GHOST_PROFILE_STYLE_SELECT =
+  'user_id,ghost_rating,games_played,recentGameStyles:composite_log->recentGameStyles';
+
+async function fetchGhostProfileStyleSource(
+  userId: string,
+): Promise<GhostProfileStyleRow | null> {
+  const rows = await supabaseFetch<GhostProfileStyleRow[]>(
+    `/rest/v1/ghost_profiles?select=${GHOST_PROFILE_STYLE_SELECT}` +
+      `&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ?? null;
+}
+
+async function ensureGhostProfileStyleSource(userId: string): Promise<GhostProfileStyleRow> {
+  const existing = await fetchGhostProfileStyleSource(userId);
+  if (existing) return existing;
+  const created = await upsertGhostProfile({
+    user_id: userId,
+    ghost_rating: 800,
+    last_updated: null,
+    composite_log: null,
+    style_profile: null,
+    games_played: 0,
+  });
+  return {
+    user_id: created.user_id,
+    ghost_rating: created.ghost_rating,
+    games_played: created.games_played,
+    recentGameStyles: created.composite_log?.recentGameStyles ?? null,
+  };
 }
 
 async function ensureGhostProfile(userId: string): Promise<GhostProfileRow> {
@@ -649,10 +710,11 @@ function buildStyleProfileFromSnapshots(
   };
 }
 
-function buildCompositeLog(
+/** Exported for the equality proof in ghostProfileSelect.test.ts. */
+export function buildCompositeLog(
   games: GhostGameRow[],
   styleGames: GhostGameRow[],
-  previousLog?: GhostCompositeLog | null,
+  previousLog?: CompositeStyleSource | null,
 ): GhostCompositeLog {
   const states = new Map<
     string,
@@ -855,10 +917,14 @@ export function capCompositeLogStates(
 }
 
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
-  const profile = await ensureGhostProfile(userId);
+  const profile = await ensureGhostProfileStyleSource(userId);
   const styleGames = await fetchRecentGhostGames(userId, GHOST_COMPOSITE_GAME_WINDOW);
   const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
-  const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames, profile.composite_log) : null;
+  const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
+    ? { recentGameStyles: profile.recentGameStyles }
+    : null;
+  const compositeLog =
+    recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames, previousStyles) : null;
   const styleProfile = compositeLog
     ? buildStyleProfileFromSnapshots(compositeLog.recentGameStyles)
     : null;
