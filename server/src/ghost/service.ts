@@ -308,6 +308,21 @@ async function fetchGhostProfileStyleSource(
   return rows[0] ?? null;
 }
 
+/**
+ * The opponent profile on the completion path is read for exactly one field —
+ * `ghost_rating`, to seed the rating calculation. Pulling the row's
+ * `composite_log` alongside it moved up to 2.6 MB per completed match for a
+ * single number.
+ */
+async function fetchGhostProfileRating(userId: string): Promise<{ ghost_rating: number } | null> {
+  const rows = await supabaseFetch<Array<{ ghost_rating: number }>>(
+    `/rest/v1/ghost_profiles?select=ghost_rating` +
+      `&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ?? null;
+}
+
 async function ensureGhostProfileStyleSource(userId: string): Promise<GhostProfileStyleRow> {
   const existing = await fetchGhostProfileStyleSource(userId);
   if (existing) return existing;
@@ -997,7 +1012,10 @@ async function persistFritzGhostTrainingProfile(params: {
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    composite_log: compositeLog,
+    // Stored capped: the summary path rebuilds `states` from move logs anyway,
+    // so the stored copy is a cache, not a source of truth. Capping here stops
+    // the row growing into the multi-megabyte blob every later read pays for.
+    composite_log: capCompositeLogStates(compositeLog),
     style_profile: styleProfile,
     games_played:
       isNewGame && isRatingEligible
@@ -1120,10 +1138,14 @@ export async function completeGhostGame(params: {
     };
   }
 
-  const profile = await ensureGhostProfile(params.userId);
+  // Ghost path: this profile only feeds buildCompositeLog (which reads
+  // recentGameStyles), the rating and the games count — the log returned to the
+  // client below is the rebuilt one, never the stored column. The Fritz branch
+  // above is different and deliberately still reads the full column.
+  const profile = await ensureGhostProfileStyleSource(params.userId);
   const opponentProfile =
     params.opponentUserId && params.opponentUserId !== params.userId
-      ? await fetchGhostProfile(params.opponentUserId)
+      ? await fetchGhostProfileRating(params.opponentUserId)
       : null;
 
   const { isNewGame } = await insertGhostGameRow({
@@ -1136,7 +1158,10 @@ export async function completeGhostGame(params: {
 
   const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
   const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
-  const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
+  const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
+    ? { recentGameStyles: profile.recentGameStyles }
+    : null;
+  const compositeLog = buildCompositeLog(recentGames, styleGames, previousStyles);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
   // Same fail-closed contract as the Fritz branch above: applyGlicko === false
@@ -1159,7 +1184,10 @@ export async function completeGhostGame(params: {
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    composite_log: compositeLog,
+    // Stored capped: the summary path rebuilds `states` from move logs anyway,
+    // so the stored copy is a cache, not a source of truth. Capping here stops
+    // the row growing into the multi-megabyte blob every later read pays for.
+    composite_log: capCompositeLogStates(compositeLog),
     style_profile: styleProfile,
     games_played:
       isNewGame && ratingEligibleAndVerified
