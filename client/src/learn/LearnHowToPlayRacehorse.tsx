@@ -4,10 +4,8 @@ import { AcademyVisuals } from './academy/AcademyVisuals';
 import { LearnActionButton } from './academy/LearnActionButton';
 import { LearnCoachPanel } from './academy/LearnCoachPanel';
 import { LearnShell } from './academy/LearnShell';
-import {
-  HOW_TO_PLAY_MODULES,
-  HOW_TO_PLAY_MODULE_COUNT,
-} from './howToPlay/howToPlayModules';
+import { HowToPlayArticle } from './howToPlay/HowToPlayArticle';
+import { HOW_TO_PLAY_MODULES, HOW_TO_PLAY_MODULE_COUNT } from './howToPlay/howToPlayModules';
 
 export interface LearnHowToPlayRacehorseProps {
   onBack: () => void;
@@ -62,28 +60,44 @@ export default function LearnHowToPlayRacehorse({
   ) : undefined;
 
   return (
-    <LearnShell
-      page={page}
-      modules={HOW_TO_PLAY_MODULES}
-      onGoTo={goTo}
-      onBack={onBack}
-      onPrev={goPrev}
-      onNext={goNext}
-      onNavigate={onNavigate}
-      isFirst={isFirst}
-      coach={
-        <LearnCoachPanel
-          stepLabel={module.stepLabel}
-          title={module.title}
-          lede={module.lede}
-          beats={module.beats}
-          momentumNote={module.runNote}
-          takeaway={module.takeaway}
-          footer={finalFooter}
-          final={module.isFinal}
+    // `.app` is `100dvh; overflow: hidden`, and the lesson shell is built to
+    // fill it exactly. The article cannot be a bare sibling of that — it wins
+    // the flex fight, crushes the shell to zero height and then gets clipped.
+    // One scroll container instead: the lesson keeps a full viewport, the
+    // article lives below it and is reached by scrolling.
+    <div className="rh-htp-page">
+      <div className="rh-htp-page__lesson">
+        <LearnShell
+          page={page}
+          modules={HOW_TO_PLAY_MODULES}
+          onGoTo={goTo}
+          onBack={onBack}
+          onPrev={goPrev}
+          onNext={goNext}
+          onNavigate={onNavigate}
+          isFirst={isFirst}
+          coach={
+            <LearnCoachPanel
+              stepLabel={module.stepLabel}
+              title={module.title}
+              lede={module.lede}
+              beats={module.beats}
+              momentumNote={module.runNote}
+              takeaway={module.takeaway}
+              footer={finalFooter}
+              final={module.isFinal}
+            />
+          }
+          stage={<AcademyVisuals visual={module.visual} />}
         />
-      }
-      stage={<AcademyVisuals visual={module.visual} />}
-    />
+        <a className="rh-htp-page__jump" href="#what-makes-it-different">
+          Read the full written rules
+        </a>
+      </div>
+      {/* The written rules sit below the interactive tutorial: the same words
+          the prerendered page serves, so a reader and a crawler get one
+          version rather than two. */}
+      <HowToPlayArticle />
+    </div>
   );
 }
