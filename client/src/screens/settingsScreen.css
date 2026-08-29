@@ -139,3 +139,33 @@
 .rh-settings-success {
   color: var(--tier-rookie);
 }
+
+/* ── Toggle rows ────────────────────────────────────────────────── */
+
+.rh-settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.rh-settings-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rh-settings-toggle-label {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-settings-toggle.rh-btn {
+  flex-shrink: 0;
+  min-width: 64px;
+}
+

@@ -10,7 +10,7 @@
 
 import { useEffect, useState, type RefObject } from 'react';
 import { logLayoutDebug } from '../match/layoutDebug';
-import { mutePreference } from '../utils/mutePreference';
+import { useMutePreference } from '../utils/useMutePreference';
 
 export type MatchUiChromeLayoutRefs = {
   rootRef: RefObject<HTMLDivElement | null>;
@@ -20,7 +20,7 @@ export type MatchUiChromeLayoutRefs = {
 
 export function useMatchUiChrome(layoutRefs: MatchUiChromeLayoutRefs) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMuted, setIsMuted] = useState<boolean>(() => mutePreference.get());
+  const [isMuted, setIsMuted] = useMutePreference();
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showFullCoachTip, setShowFullCoachTip] = useState(false);
@@ -32,10 +32,6 @@ export function useMatchUiChrome(layoutRefs: MatchUiChromeLayoutRefs) {
       handAreaRef: layoutRefs.handAreaRef,
     });
   }, [showLeaveConfirm, layoutRefs.rootRef, layoutRefs.boardStageRef, layoutRefs.handAreaRef]);
-
-  useEffect(() => {
-    mutePreference.set(isMuted);
-  }, [isMuted]);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));

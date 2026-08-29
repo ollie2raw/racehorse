@@ -22,7 +22,6 @@ type Phase = 'intro' | 'starting' | 'running' | 'error' | 'leaderboard';
 
 export interface PuzzleRushScreenProps {
   onBack: () => void;
-  muted?: boolean;
   onNavigate?: (mode: AppMode) => void;
 }
 
@@ -36,7 +35,7 @@ const FALLBACK_STAGES: PuzzleRushStage[] = [
   { key: 'master', label: 'Master', fromOrdinal: 9, toOrdinal: 15, maxPointsPerPuzzle: 500, puzzleCount: 7 },
 ];
 
-export function PuzzleRushScreen({ onBack, muted = false, onNavigate }: PuzzleRushScreenProps) {
+export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) {
   const [phase, setPhase] = useState<Phase>('intro');
   const [startResponse, setStartResponse] = useState<PuzzleRushStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +89,6 @@ export function PuzzleRushScreen({ onBack, muted = false, onNavigate }: PuzzleRu
       <PuzzleRushActiveRun
         key={startResponse.run.id}
         start={startResponse}
-        muted={muted}
         onBack={() => {
           // Returning to the hub after a run: refresh the stats it shows.
           setStartResponse(null);
@@ -130,12 +128,10 @@ export function PuzzleRushScreen({ onBack, muted = false, onNavigate }: PuzzleRu
 
 function PuzzleRushActiveRun({
   start,
-  muted,
   onBack,
   onPlayAgain,
 }: {
   start: PuzzleRushStartResponse;
-  muted: boolean;
   /** Return to the hub (and refresh its stats). */
   onBack: () => void;
   onPlayAgain: () => void;
@@ -245,7 +241,6 @@ function PuzzleRushActiveRun({
       />
       <RushStageTransition
         stage={transitionStage}
-        muted={muted}
         onDone={() => setTransitionStage(null)}
       />
     </>
