@@ -26,7 +26,6 @@ export type AuthModalsLayerProps = {
   onPasswordRecoveryClose: () => void;
   usernameModalOpen: boolean;
   currentUsername: string | null;
-  usernameIsProfileEdit: boolean;
   onUsernameSave: (username: string) => Promise<{ error: string | null }>;
   onUsernameClose: () => void;
   onUsernameSignOut: () => void | Promise<void>;
@@ -46,7 +45,6 @@ export function AuthModalsLayer({
   onPasswordRecoveryClose,
   usernameModalOpen,
   currentUsername,
-  usernameIsProfileEdit,
   onUsernameSave,
   onUsernameClose,
   onUsernameSignOut,
@@ -71,7 +69,6 @@ export function AuthModalsLayer({
       <UsernameModal
         open={usernameModalOpen}
         currentUsername={currentUsername}
-        isProfileEdit={usernameIsProfileEdit}
         onSave={onUsernameSave}
         onClose={onUsernameClose}
         onSignOut={onUsernameSignOut}

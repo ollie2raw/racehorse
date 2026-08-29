@@ -279,7 +279,7 @@ export function BotSetupRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { setAuthModalOpen, handleSignOut } = auth;
   const { setBotFritzTier, setBotDealSize } = botMatch;
   return withAuthModals(
     <div className={appRootClassName}>
@@ -294,7 +294,7 @@ export function BotSetupRoute({
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
         />
       </Suspense>
       </ErrorBoundary>
@@ -416,7 +416,7 @@ export function GhostSetupRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
   const { setGhostProfile, setGhostOpponentName, setGhostOpponentUserId } = ghost;
   return withAuthModals(
     <div className={appRootClassName}>
@@ -428,7 +428,7 @@ export function GhostSetupRoute({
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
           onStart={(summary, opponentName, opponentUserId) => {
             setGhostProfile(summary);
             setGhostOpponentName(opponentName);

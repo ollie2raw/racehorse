@@ -57,6 +57,9 @@ export type AppRoutesAuthProps = {
   handleOpenAuthModal: () => void;
   /** Full sign-out, including room-recovery and multiplayer teardown. */
   handleSignOut: () => void;
+  handleSaveUsername: (username: string) => Promise<{ error: string | null }>;
+  updatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
+  updateEmail: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   isAdmin: boolean;
   authUser: User | null;
   authProfile: UserProfile | null;

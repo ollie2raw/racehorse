@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { resolvePasswordChange } from './passwordChange';
 import './authModal.css';
 
 const CHANGE_PASSWORD_SUBMIT_TIMEOUT_MS = 16000;
@@ -46,25 +47,26 @@ export default function ChangePasswordModal({
     return () => window.clearTimeout(timeoutId);
   }, [open, success, onClose]);
 
-  const canSubmit = useMemo(() => {
-    if (submitting || success) return false;
-    return password.length >= 6 && confirmPassword.length >= 6;
-  }, [submitting, success, password, confirmPassword]);
+  // Only the in-flight states disable the button. The length and match rules
+  // live in resolvePasswordChange, shared with the Settings page, so both say
+  // the same thing rather than one of them silently refusing to submit.
+  const canSubmit = useMemo(() => !submitting && !success, [submitting, success]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
       if (!canSubmit) return;
 
-      if (password !== confirmPassword) {
-        setError('Passwords do not match.');
+      const resolved = resolvePasswordChange(password, confirmPassword);
+      if ('error' in resolved) {
+        setError(resolved.error);
         return;
       }
 
       setSubmitting(true);
       setError(null);
       try {
-        const result = await onUpdatePassword(password);
+        const result = await onUpdatePassword(resolved.password);
         if (result.error) {
           setError(result.error);
         } else {

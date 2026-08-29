@@ -8,6 +8,7 @@ import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 import { readE2eDevAuth } from './e2eDevAuth';
+import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 
 export interface UserProfile {
   id: string;
@@ -797,6 +798,27 @@ function useAuthInternal() {
     }
   }, [user]);
 
+  const updateEmail = useCallback(async (email: string): Promise<AuthResult> => {
+    if (!supabase) return { error: getSupabaseConfigError() };
+    if (!user) return { error: 'You must be signed in to change your email.' };
+
+    const resolved = resolveEmailChange(email, user.email);
+    if ('error' in resolved) return resolved;
+
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ email: resolved.email }),
+        AUTH_REQUEST_TIMEOUT_MS,
+      );
+      if (error) return { error: formatAuthErrorMessage(error) };
+      // Not a success message: the address on the account is unchanged until
+      // the emailed link is followed. `user.email` deliberately is not patched.
+      return { error: null, message: EMAIL_CHANGE_PENDING_MESSAGE(resolved.email) };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Unable to change your email.' };
+    }
+  }, [user]);
+
   const clearPasswordRecoveryPending = useCallback(() => {
     setPasswordRecoveryPending(false);
     clearPasswordRecoveryPendingMarker();
@@ -825,6 +847,7 @@ function useAuthInternal() {
     updateUsername,
     resetPassword,
     updatePassword,
+    updateEmail,
     passwordRecoveryPending,
     clearPasswordRecoveryPending,
     refreshAuthProfile,

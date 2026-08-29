@@ -26,7 +26,7 @@ export function DailyRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
@@ -38,7 +38,7 @@ export function DailyRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
         />
         </ErrorBoundary>
       </Suspense>
@@ -57,7 +57,7 @@ export function DailyPuzzleLeaderboardRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle Leaderboard…" />}>
@@ -71,7 +71,7 @@ export function DailyPuzzleLeaderboardRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
         />
         </ErrorBoundary>
       </Suspense>
@@ -94,7 +94,7 @@ export function DailyFritzRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, refreshAuthProfile, applyProfilePatch, setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { authUser, authProfile, refreshAuthProfile, applyProfilePatch, setAuthModalOpen, handleSignOut } = auth;
   const { ghostProfile, setGhostProfile } = ghost;
   const { socket } = social;
   return withAuthModals(
@@ -110,7 +110,7 @@ export function DailyFritzRoute({
           onProfileRefresh={refreshAuthProfile}
           onProfilePatch={applyProfilePatch}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
         />
@@ -131,7 +131,7 @@ export function DailyFritzLeaderboardRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, setUsernameModalOpen } = auth;
+  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Daily Fritz Leaderboard…" />}>
@@ -142,7 +142,7 @@ export function DailyFritzLeaderboardRoute({
           onClose={() => setAppMode('dailyFritz')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={() => setUsernameModalOpen(true)}
+          onSignOut={handleSignOut}
         />
         </ErrorBoundary>
       </Suspense>
