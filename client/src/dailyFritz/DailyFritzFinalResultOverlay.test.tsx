@@ -57,3 +57,84 @@ describe('DailyFritzFinalResultOverlay', () => {
     cancel.mockRestore();
   });
 });
+
+/**
+ * The set-result modal routes "Return Home" through `tertiaryLabel`, not
+ * `secondaryLabel` (buildDailyFritzSetOverlayViewModel.ts:270). The dossier
+ * rebuild in #64 only carried primary and secondary over, so that button
+ * silently vanished from the completed-set card while still being present in
+ * the view model. No path ever sets both, so at most two buttons share the row.
+ */
+describe('DailyFritzFinalResultOverlay — action buttons', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const withLabels = (extra: Record<string, unknown>) =>
+    ({ ...overlay, ...extra }) as unknown as DailyFritzSetOverlayViewModel;
+
+  it('renders the tertiary action the completed-set card uses for Return Home', () => {
+    const { getByRole } = render(
+      <DailyFritzFinalResultOverlay
+        overlay={withLabels({
+          primaryLabel: 'View Leaderboard',
+          secondaryLabel: null,
+          tertiaryLabel: 'Return Home',
+          onTertiary: () => {},
+        })}
+        shareDone={false}
+        onShare={() => {}}
+      />,
+    );
+    expect(getByRole('button', { name: 'View Leaderboard' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Return Home' })).toBeTruthy();
+  });
+
+  it('gives it the same treatment as View Leaderboard, not the share button', () => {
+    const { getByRole } = render(
+      <DailyFritzFinalResultOverlay
+        overlay={withLabels({
+          primaryLabel: 'View Leaderboard',
+          secondaryLabel: null,
+          tertiaryLabel: 'Return Home',
+          onTertiary: () => {},
+        })}
+        shareDone={false}
+        onShare={() => {}}
+      />,
+    );
+    const leaderboard = getByRole('button', { name: 'View Leaderboard' });
+    const home = getByRole('button', { name: 'Return Home' });
+    expect(home.className).toBe(leaderboard.className);
+    expect(home.parentElement).toBe(leaderboard.parentElement);
+  });
+
+  it('fires onTertiary when it is pressed', () => {
+    const onTertiary = vi.fn();
+    const { getByRole } = render(
+      <DailyFritzFinalResultOverlay
+        overlay={withLabels({
+          primaryLabel: 'View Leaderboard',
+          secondaryLabel: null,
+          tertiaryLabel: 'Return Home',
+          onTertiary,
+        })}
+        shareDone={false}
+        onShare={() => {}}
+      />,
+    );
+    getByRole('button', { name: 'Return Home' }).click();
+    expect(onTertiary).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders no extra button when there is no tertiary label', () => {
+    const { queryByRole, getByRole } = render(
+      <DailyFritzFinalResultOverlay
+        overlay={withLabels({ primaryLabel: 'Back Home', secondaryLabel: null, tertiaryLabel: null })}
+        shareDone={false}
+        onShare={() => {}}
+      />,
+    );
+    expect(getByRole('button', { name: 'Back Home' })).toBeTruthy();
+    expect(queryByRole('button', { name: 'Return Home' })).toBeNull();
+  });
+});

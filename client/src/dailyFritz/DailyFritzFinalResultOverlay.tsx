@@ -122,6 +122,17 @@ export function DailyFritzFinalResultOverlay({
                   {overlay.secondaryLabel}
                 </button>
               ) : null}
+              {/*
+                The completed-set card routes "Return Home" through tertiaryLabel
+                rather than secondaryLabel, and no path sets both — so this shares
+                the two-column row with the primary action rather than adding a
+                third column.
+              */}
+              {overlay.tertiaryLabel ? (
+                <button type="button" className="dfd__btn" onClick={overlay.onTertiary}>
+                  {overlay.tertiaryLabel}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
