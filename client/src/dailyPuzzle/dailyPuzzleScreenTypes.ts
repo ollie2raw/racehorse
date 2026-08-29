@@ -11,7 +11,7 @@ export interface DailyPuzzleScreenProps {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 export type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';

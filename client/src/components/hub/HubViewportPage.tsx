@@ -11,7 +11,7 @@ interface HubViewportPageProps {
   activeColor?: string;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   className?: string;
 }
 
@@ -22,7 +22,7 @@ export default function HubViewportPage({
   activeColor = 'var(--tier-elite)',
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   className,
 }: HubViewportPageProps) {
   return (
@@ -36,7 +36,7 @@ export default function HubViewportPage({
           solidDarkChrome
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
         />
         <div className="rh-hub-body">{children}</div>
       </div>

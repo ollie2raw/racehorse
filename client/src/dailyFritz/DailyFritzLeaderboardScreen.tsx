@@ -51,7 +51,7 @@ interface DailyFritzLeaderboardScreenProps {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 function formatCompletedAt(value: string): string {

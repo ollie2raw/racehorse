@@ -8,6 +8,8 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — build script module, not part of the app's TS program.
 import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs';
+// @ts-expect-error — build script module, not part of the app's TS program.
+import { PRERENDER_ROUTES } from './prerenderRoutes.mjs';
 
 type Route = { path: string; title: string };
 
@@ -49,5 +51,16 @@ describe('crawl navigation', () => {
     expect(routes.filter(isIndexable as (r: Route) => boolean).map((r) => r.path)).toEqual([
       '/', '/daily-fritz', '/learn/how-to-play',
     ]);
+  });
+
+  it('prerenders /settings but keeps it out of the crawl surface', () => {
+    // Account-specific: it needs a real shell so a direct visit or a reload
+    // resolves, but nothing on it is worth indexing and a crawler following
+    // a link to it would only ever see the signed-out state.
+    const settings = (PRERENDER_ROUTES as Route[]).find((route) => route.path === '/settings');
+    expect(settings).toBeDefined();
+    expect(NOINDEX.has('/settings')).toBe(true);
+    expect(isIndexable(settings as Route)).toBe(false);
+    expect(crawlTargets(PRERENDER_ROUTES as Route[], '/').map((r) => r.path)).not.toContain('/settings');
   });
 });

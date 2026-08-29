@@ -70,10 +70,9 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
   }, []);
 
   const handleOpenAuthModal = useCallback(() => auth.setAuthModalOpen(true), [auth.setAuthModalOpen]);
-  const handleOpenAccountModal = useCallback(
-    () => auth.setUsernameModalOpen(true),
-    [auth.setUsernameModalOpen],
-  );
+  // App.tsx owns sign-out: it tears down room recovery and multiplayer state
+  // alongside the Supabase call.
+  const handleSignOut = auth.handleSignOut;
 
   const multiplayerConnectionBundle = useMemo(
     (): MultiplayerControllerConnectionBundle => ({
@@ -104,9 +103,8 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
         authUser: auth.authUser,
         authProfile: auth.authProfile,
         onOpenAuth: handleOpenAuthModal,
-        onOpenAccount: handleOpenAccountModal,
         onOpenAuthModal: handleOpenAuthModal,
-        onOpenAccountModal: handleOpenAccountModal,
+        onSignOut: handleSignOut,
       },
       matchmakingView: {
         overlayPayload: source.overlayPayload,
@@ -281,7 +279,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       source.navigateAfterTournamentMatch,
       source.currentTournamentContext,
       handleOpenAuthModal,
-      handleOpenAccountModal,
+      handleSignOut,
     ],
   );
 
@@ -320,7 +318,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
     },
     auth: {
       handleOpenAuthModal,
-      handleOpenAccountModal,
+      handleSignOut,
       isAdmin: auth.isAdmin,
       authUser: auth.authUser,
       authProfile: auth.authProfile,

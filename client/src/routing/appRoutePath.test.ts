@@ -12,6 +12,7 @@ describe('app route paths', () => {
     ['/daily-fritz/leaderboard', { mode: 'dailyFritzLeaderboard' }],
     ['/daily/leaderboard', { mode: 'dailyPuzzleLeaderboard' }],
     ['/learn/how-to-play', { mode: 'learn', learnHowToPlay: true }],
+    ['/settings', { mode: 'settings' }],
   ])('resolves %s', (path, expected) => {
     expect(resolveAppRoute(path)).toEqual(expected);
   });
@@ -62,5 +63,18 @@ describe('app route paths', () => {
     };
     expect(buildAppPath({ ...base, mode: 'bot' })).toBe('/');
     expect(buildAppPath({ ...base, mode: 'ghost' })).toBe('/');
+  });
+
+  it('round-trips the settings route', () => {
+    // The nav dropdown pushes this path, so resolve and build must agree or
+    // a reload of /settings would land the user on home.
+    expect(buildAppPath({
+      multiplayerView: 'quick',
+      profileUsername: null,
+      learnHowToPlay: false,
+      tournamentId: null,
+      tournamentView: 'hub',
+      mode: 'settings',
+    })).toBe('/settings');
   });
 });

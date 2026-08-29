@@ -16,7 +16,7 @@ export interface PrivateMatchLobbyScreenProps {
   phase: PrivateMatchLobbyPhase;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onBackHome: () => void;
 
   isConnecting: boolean;

@@ -119,7 +119,7 @@ interface LearnHomeProps {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onStartGuidedGame?: () => void;
   onStartGuidedAuthoring?: () => void;
   onFreezeLesson?: () => void;
@@ -137,7 +137,7 @@ export default function LearnHome({
   onBack,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   onStartGuidedGame,
   onStartGuidedAuthoring: _onStartGuidedAuthoring,
   onFreezeLesson: _onFreezeLesson,
@@ -364,7 +364,7 @@ export default function LearnHome({
               onNavigate?.(mode);
             }}
             onOpenAuth={onOpenAuth}
-            onOpenAccount={onOpenAccount}
+            onSignOut={onSignOut}
           />
 
           <main className="sp-solo-main learn-hub-main relative flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-5 pt-10 home-main">

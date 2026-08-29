@@ -119,7 +119,7 @@ function makeActions(): LadderHubActions {
     onBack: vi.fn(),
     onNavigate: vi.fn(),
     onOpenAuth: vi.fn(),
-    onOpenAccount: vi.fn(),
+    onSignOut: vi.fn(),
     onStartScored: vi.fn(),
     onStartPractice: vi.fn(),
     onOpenLeaderboard: vi.fn(),

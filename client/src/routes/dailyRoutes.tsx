@@ -38,7 +38,7 @@ export function DailyRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
         />
         </ErrorBoundary>
       </Suspense>
@@ -71,7 +71,7 @@ export function DailyPuzzleLeaderboardRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
         />
         </ErrorBoundary>
       </Suspense>
@@ -110,7 +110,7 @@ export function DailyFritzRoute({
           onProfileRefresh={refreshAuthProfile}
           onProfilePatch={applyProfilePatch}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
         />
@@ -142,7 +142,7 @@ export function DailyFritzLeaderboardRoute({
           onClose={() => setAppMode('dailyFritz')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
         />
         </ErrorBoundary>
       </Suspense>

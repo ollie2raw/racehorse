@@ -13,7 +13,7 @@ interface SinglePlayerHubScreenProps {
   onBack: () => void;
   onNavigate: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 type CardConfig = {
@@ -121,7 +121,7 @@ export default function SinglePlayerHubScreen({
   onBack,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: SinglePlayerHubScreenProps) {
   const hubStats = useSinglePlayerHubStats(userId);
   const loadFritzArt = useCallback(
@@ -163,7 +163,7 @@ export default function SinglePlayerHubScreen({
           activeColor="#E7B64A"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
         />
 
         <main className="sp-solo-main relative flex min-h-0 flex-1 flex-col overflow-y-auto px-0 pb-[calc(16px+var(--rh-bottom-tab-offset))] pt-4 home-main desk:overflow-hidden desk:pb-5 desk:pt-10">

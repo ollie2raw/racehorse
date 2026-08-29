@@ -12,6 +12,7 @@
 /** Routes whose content is per-user or per-match, so not worth indexing. */
 export const NOINDEX = new Set([
   '/players',
+  '/settings',
   '/tournament/detail',
   '/tournament/result',
   '/multiplayer/private',

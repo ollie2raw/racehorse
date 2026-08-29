@@ -43,7 +43,7 @@ export type LadderHubActions = {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onStartScored: () => void;
   onStartPractice: (slotIndex: DailyPuzzleSlotIndex) => void;
   onOpenLeaderboard: () => void;
@@ -86,7 +86,7 @@ export function DailyPuzzleLadderHubView({
     onBack,
     onNavigate,
     onOpenAuth,
-    onOpenAccount,
+    onSignOut,
     onStartScored,
     onStartPractice,
     onOpenLeaderboard,
@@ -115,7 +115,7 @@ export function DailyPuzzleLadderHubView({
             currentMode="daily"
             onNavigate={onNavigate}
             onOpenAuth={onOpenAuth}
-            onOpenAccount={onOpenAccount}
+            onSignOut={onSignOut}
             activeColor="var(--tier-standard)"
             compactChrome
           />

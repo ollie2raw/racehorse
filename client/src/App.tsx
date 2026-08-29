@@ -728,6 +728,42 @@ export default function App() {
   });
 
   // ─── Render ───────────────────────────────────────────────
+  /**
+   * Sign-out, owned here because it is more than the Supabase call: room
+   * recovery and multiplayer room state have to be torn down in the same
+   * breath, or a reconnect can resurrect the signed-out user's match. The nav
+   * menu and the profile modal both route through this.
+   */
+  const handleSignOut = useCallback(() => {
+    resetRoomRecoveryState();
+    setSigningOut(true);
+    setAppMode('home');
+    resetMultiplayerRoomState();
+    setError('');
+    shellSetActionError('');
+    try {
+      void signOut().catch(() => {});
+    } catch {
+      // no-op
+    } finally {
+      setSigningOut(false);
+      setUsernameModalOpen(false);
+      setOnboardingDismissed(false);
+      setAuthModalOpen(true);
+    }
+  }, [
+    resetRoomRecoveryState,
+    setSigningOut,
+    setAppMode,
+    resetMultiplayerRoomState,
+    setError,
+    shellSetActionError,
+    signOut,
+    setUsernameModalOpen,
+    setOnboardingDismissed,
+    setAuthModalOpen,
+  ]);
+
   const authModalsLayer = (
     <AuthModalsLayer
       authModalOpen={authModalOpen}
@@ -760,24 +796,7 @@ export default function App() {
         setOnboardingDismissed(true);
         setUsernameModalOpen(false);
       }}
-      onUsernameSignOut={async () => {
-        resetRoomRecoveryState();
-        setSigningOut(true);
-        setAppMode('home');
-        resetMultiplayerRoomState();
-        setError('');
-        shellSetActionError('');
-        try {
-          void signOut().catch(() => {});
-        } catch {
-          // no-op
-        } finally {
-          setSigningOut(false);
-          setUsernameModalOpen(false);
-          setOnboardingDismissed(false);
-          setAuthModalOpen(true);
-        }
-      }}
+      onUsernameSignOut={handleSignOut}
       signingOut={signingOut}
     />
   );
@@ -835,6 +854,7 @@ export default function App() {
     routeBundles: {
       navigation: { appMode, setAppMode, appRootRef },
       auth: {
+        handleSignOut,
         isAdmin,
         authUser,
         authProfile,

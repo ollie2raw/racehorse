@@ -55,7 +55,8 @@ export type AppRoutesNavigationProps = {
 /** Auth, account modals, profile identity, and home HUD labels. */
 export type AppRoutesAuthProps = {
   handleOpenAuthModal: () => void;
-  handleOpenAccountModal: () => void;
+  /** Full sign-out, including room-recovery and multiplayer teardown. */
+  handleSignOut: () => void;
   isAdmin: boolean;
   authUser: User | null;
   authProfile: UserProfile | null;
@@ -182,10 +183,7 @@ export type AppRoutesProps = {
 /** Route-domain bundles constructed at the App host source call site. */
 export type AppRoutesHostRouteBundles = {
   navigation: Pick<AppRoutesNavigationProps, 'appMode' | 'setAppMode'> & Pick<AppRoutesShellProps, 'appRootRef'>;
-  auth: Omit<
-    AppRoutesAuthProps,
-    'handleOpenAuthModal' | 'handleOpenAccountModal'
-  >;
+  auth: Omit<AppRoutesAuthProps, 'handleOpenAuthModal'>;
   learn: Omit<AppRoutesLearnProps, 'showLearnAdminView'>;
   botMatch: AppRoutesBotMatchProps;
   ghost: AppRoutesGhostProps;

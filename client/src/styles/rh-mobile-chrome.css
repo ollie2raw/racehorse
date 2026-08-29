@@ -63,16 +63,6 @@
   gap: 0;
 }
 
-.rh-nav-user-block button:last-child {
-  display: none;
-}
-
-.rh-nav-user-block button:first-child {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-}
 
 /* Hub screens: absolute back + centered title → stacked flow.
    These three have no desktop meaning, and each out-specifies the Tailwind
@@ -200,16 +190,6 @@
     gap: 16px;
   }
 
-  .rh-nav-user-block button:last-child {
-    display: flex;
-  }
-
-  .rh-nav-user-block button:first-child {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-    min-height: 42px;
-  }
 
   /*
    * Desktop nav uses a 3-column grid (brand | tabs | stats). The old absolute

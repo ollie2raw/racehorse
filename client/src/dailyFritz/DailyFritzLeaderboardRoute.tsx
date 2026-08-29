@@ -12,7 +12,7 @@ interface DailyFritzLeaderboardRouteProps {
   onClose: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 function pacificRunDateFallback(): string {
@@ -30,7 +30,7 @@ export default function DailyFritzLeaderboardRoute({
   onClose,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: DailyFritzLeaderboardRouteProps) {
   const [runDate, setRunDate] = useState<string | null>(null);
   // Kept so the screen can seed from this response instead of fetching
@@ -78,7 +78,7 @@ export default function DailyFritzLeaderboardRoute({
       onBack={onClose}
       onNavigate={onNavigate}
       onOpenAuth={onOpenAuth}
-      onOpenAccount={onOpenAccount}
+      onSignOut={onSignOut}
     />
   );
 }

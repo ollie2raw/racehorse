@@ -48,14 +48,14 @@ export function HomeRoute({
 }) {
   const { withAuthModals } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleOpenAccountModal } = auth;
+  const { handleOpenAuthModal, handleSignOut } = auth;
   return withAuthModals(
     <ErrorBoundary context="home">
       <Suspense fallback={<ScreenLoader label="Loading Home…" />}>
         <RacehorseHomeScreen
           setAppMode={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
           tournament={tournamentProps.tournament}
         />
       </Suspense>
@@ -104,7 +104,7 @@ export function LearnRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleOpenAccountModal, isAdmin } = auth;
+  const { handleOpenAuthModal, handleSignOut, isAdmin } = auth;
   const {
     showLearnAdminView,
     canOpenHowToPlayPreview,
@@ -166,7 +166,7 @@ export function LearnRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
           isAdmin={isAdmin}
           showAdminView={Boolean(isAdmin && showLearnAdminView)}
           canOpenHowToPlay={canOpenHowToPlayPreview}
@@ -294,7 +294,7 @@ export function BotSetupRoute({
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
         />
       </Suspense>
       </ErrorBoundary>
@@ -428,7 +428,7 @@ export function GhostSetupRoute({
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
+          onSignOut={() => setUsernameModalOpen(true)}
           onStart={(summary, opponentName, opponentUserId) => {
             setGhostProfile(summary);
             setGhostOpponentName(opponentName);
@@ -496,7 +496,7 @@ export function SinglePlayerHubRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, handleOpenAuthModal, handleOpenAccountModal } = auth;
+  const { authUser, handleOpenAuthModal, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="single-player-hub">
@@ -506,7 +506,7 @@ export function SinglePlayerHubRoute({
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
         />
       </Suspense>
       </ErrorBoundary>
@@ -549,7 +549,7 @@ export function JourneyRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleOpenAccountModal } = auth;
+  const { handleOpenAuthModal, handleSignOut } = auth;
   const { setBotFritzTier, setBotDealSize } = botMatch;
   return withAuthModals(
     <div className={appRootClassName}>
@@ -559,7 +559,7 @@ export function JourneyRoute({
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
           onStartBotTrial={(challenge) => {
             setJourneyActiveChallenge(challenge);
             setBotFritzTier(challenge.fritzTier);

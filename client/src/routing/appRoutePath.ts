@@ -40,6 +40,7 @@ const STATIC_PATHS: Record<string, AppRouteResolution> = {
   '/multiplayer': { mode: 'multiplayer', multiplayerView: 'quick' },
   '/multiplayer/private': { mode: 'multiplayer', multiplayerView: 'private' },
   '/social': { mode: 'feed' },
+  '/settings': { mode: 'settings' },
   '/admin/daily-fritz-health': { mode: 'dailyFritzHealthAdmin' },
 };
 
@@ -117,6 +118,7 @@ export function buildAppPath(state: AppPathState): string {
     guidedMatchAnnotator: '/learn/guided-annotator',
     feed: '/social',
     leaderboard: '/social',
+    settings: '/settings',
     dailyFritzHealthAdmin: '/admin/daily-fritz-health',
   };
 

@@ -25,7 +25,7 @@ export function TournamentRoute({
 }) {
   const { withAuthModals } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleOpenAccountModal, authUser, authProfile } = auth;
+  const { handleOpenAuthModal, handleSignOut, authUser, authProfile } = auth;
   const {
     tournament,
     tournamentSubView,
@@ -78,7 +78,7 @@ export function TournamentRoute({
           }}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
           onAttachAssignedMatch={attachAssignedTournamentMatch}
           attachJoinPhase={tournamentAttachPhase}
           attachJoinError={tournamentAttachError}
@@ -159,7 +159,7 @@ export function TournamentRoute({
         activeTournamentId={tournament.activeTournamentId}
         onNavigate={setAppMode}
         onOpenAuth={handleOpenAuthModal}
-        onOpenAccount={handleOpenAccountModal}
+        onSignOut={handleSignOut}
         onBackHome={() => setAppMode('home')}
         onOpenBracket={(id) => enterTournamentLobby(id)}
         onRegister={async (id) => {

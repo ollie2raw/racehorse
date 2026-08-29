@@ -29,6 +29,7 @@ import {
   RatingHistoryRoute,
   FriendsRoute,
   StatsRoute,
+  SettingsRoute,
   FeedRoute,
   LeaderboardRoute,
   ProfileRoute,
@@ -57,6 +58,10 @@ export default function AppRoutes({
 
   if (appMode === 'home' || (appMode === 'live' && !spectatorModeEnabled)) {
     return <HomeRoute shell={shell} navigation={navigation} auth={auth} tournament={tournamentProps} />;
+  }
+
+  if (appMode === 'settings') {
+    return <SettingsRoute shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'noBrainer') {

@@ -69,7 +69,7 @@ export default function DailyPuzzleScreen({
   onBack,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: DailyPuzzleScreenProps) {
   const stableDailyTitle = (
     <span style={{ color: 'rgba(243, 250, 247, 0.97)', opacity: 1 }}>Today&apos;s Challenge</span>
@@ -635,7 +635,7 @@ export default function DailyPuzzleScreen({
           onBack={onBack}
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
         />
       </Suspense>
     );

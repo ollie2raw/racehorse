@@ -51,7 +51,7 @@ export type PuzzleRushHubActions = {
   onStart: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   /** Omitted entirely when no leaderboard screen exists to link to. */
   onOpenLeaderboard?: () => void;
 };
@@ -91,7 +91,7 @@ export function PuzzleRushHubView({
     error,
     showNav = true,
   } = viewModel;
-  const { onBack, onStart, onNavigate, onOpenAuth, onOpenAccount, onOpenLeaderboard } = actions;
+  const { onBack, onStart, onNavigate, onOpenAuth, onSignOut, onOpenLeaderboard } = actions;
 
   const loadHeroAsset = useCallback(
     () => import('../assets/dailyPuzzle/newnewladderfinal.webp'),
@@ -140,7 +140,7 @@ export function PuzzleRushHubView({
           currentMode="puzzleRush"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
           activeColor="var(--tier-standard)"
           compactChrome
         />

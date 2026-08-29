@@ -22,7 +22,7 @@ export interface TournamentHubScreenProps {
   activeBracketStatus?: ScheduledTournament['status'] | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onBackHome: () => void;
   onOpenBracket: (tournamentId: string) => void;
   onRegister: (tournamentId: string) => void | Promise<void>;
@@ -312,7 +312,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
         currentMode={'tournament' as AppMode}
         onNavigate={props.onNavigate}
         onOpenAuth={props.onOpenAuth}
-        onOpenAccount={props.onOpenAccount}
+        onSignOut={props.onSignOut}
         activeColor="var(--accent-amber)"
       />
       <div className="th-shell">
