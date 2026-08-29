@@ -26,6 +26,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { AuthProvider } from './auth/useAuth';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
+import { markAppLoadSuccessful } from './debug/moduleImportRecovery';
 import { reportWebVitals } from './debug/reportWebVitals';
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
@@ -66,6 +67,11 @@ async function bootstrap() {
   // Outside React on purpose: one page load, one session_start. An effect here
   // would fire twice under StrictMode in development.
   track('session_start');
+
+  // The app is up: release the one-reload-per-tab guard so a stale deploy
+  // weeks from now can still be recovered from. Deferred past render so a
+  // subtree that fails to mount does not count as a successful load.
+  window.setTimeout(markAppLoadSuccessful, 0);
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
