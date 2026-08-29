@@ -1,3 +1,5 @@
+import type { MatchOutcome } from './glicko2';
+
 export type RankedGameSourceType =
   | 'live_room'
   | 'verified_single_player'
@@ -20,6 +22,13 @@ export interface RankedGameInsertInput {
   playedAt: string;
   ratingAfter?: number | null;
   source?: RankedGameSource | null;
+  /**
+   * Authoritative result when the scoreboard does not decide it — a forfeit is
+   * a loss for the player who quit even if they were ahead on points.
+   * Persisted so the deferred rating-period path scores the row the same way
+   * the inline path did. Requires RANKED_GAMES_OUTCOME_COLUMN_ENABLED=true.
+   */
+  outcome?: MatchOutcome | null;
 }
 
 export interface RankedGameInsertPayload {
@@ -34,10 +43,22 @@ export interface RankedGameInsertPayload {
   rating_after?: number | null;
   source_type?: RankedGameSourceType;
   source_match_id?: string;
+  outcome?: MatchOutcome;
 }
 
 export function isRankedGameSourceColumnsEnabled(): boolean {
   return process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED === 'true';
+}
+
+/**
+ * The `outcome` column ships behind a flag so a server running ahead of the
+ * migration does not fail every ranked insert on an unknown column. The inline
+ * rating path passes the outcome in memory regardless, so the forfeit sign is
+ * correct with the flag off; the flag only governs whether the deferred
+ * rating-period path can recover it from the row.
+ */
+export function isRankedGameOutcomeColumnEnabled(): boolean {
+  return process.env.RANKED_GAMES_OUTCOME_COLUMN_ENABLED === 'true';
 }
 
 export function buildRankedGameInsertPayload(input: RankedGameInsertInput): RankedGameInsertPayload {
@@ -54,6 +75,10 @@ export function buildRankedGameInsertPayload(input: RankedGameInsertInput): Rank
 
   if (input.ratingAfter !== undefined) {
     payload.rating_after = input.ratingAfter;
+  }
+
+  if (isRankedGameOutcomeColumnEnabled() && input.outcome) {
+    payload.outcome = input.outcome;
   }
 
   const sourceMatchId = input.source?.sourceMatchId?.trim();

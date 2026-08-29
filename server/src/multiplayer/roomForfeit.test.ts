@@ -113,7 +113,7 @@ describe('applyActiveMatchForfeit', () => {
     expect(io.to).not.toHaveBeenCalled();
   });
 
-  it('does not trigger Glicko updates when max score is < 10', async () => {
+  it('rates a forfeit below 10 points — there is no early-abandonment escape hatch', async () => {
     const roomCode = 'FORF2';
     createReservedRoom(roomCode);
     joinRoom(roomCode, 'p1');
@@ -141,8 +141,12 @@ describe('applyActiveMatchForfeit', () => {
       userId: 'u1',
     });
 
-    expect(processRealtimeMultiplayerGame).not.toHaveBeenCalled();
-    expect(insertRankedGameIdempotent).not.toHaveBeenCalled();
+    expect(insertRankedGameIdempotent).toHaveBeenCalledTimes(2);
+    expect(processRealtimeMultiplayerGame).toHaveBeenCalledTimes(1);
+    // p1 quit while ahead 5-0 and still takes the loss.
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+    );
   });
 
   it('triggers Glicko updates with scale 1.0 on manual forfeit when max score is >= 10', async () => {
@@ -465,5 +469,177 @@ describe('tournament forfeit apply durability (G2)', () => {
 
     expect(room.abandonedAt).toEqual(expect.any(String));
     expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
+  });
+});
+
+describe('forfeit rating outcome is decided by who quit, not by the scoreboard', () => {
+  beforeEach(() => {
+    resetLiveRoomPersistenceForTests();
+    setLiveRoomPersistenceShuttingDown(true);
+    resetRoomRuntimeForTests();
+    vi.mocked(processRealtimeMultiplayerGame).mockClear();
+    vi.mocked(insertRankedGameIdempotent).mockClear();
+
+    initRoomSession({} as any, {
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: 'u1' }),
+      normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
+      normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      persistRoomMatchLog: persistRoomMatchLogMock,
+      onGameOver: () => null,
+    });
+  });
+
+  afterEach(() => {
+    resetLiveRoomPersistenceForTests();
+  });
+
+  async function forfeitWithScores(
+    roomCode: string,
+    abandonerScore: number,
+    opponentScore: number,
+    reason: 'manual' | 'disconnect_timeout' = 'manual',
+  ) {
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+    ]);
+    const room = getRoom(roomCode);
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 60 },
+      playerIds: ['p1', 'p2'],
+      players: {
+        p1: { id: 'p1', hand: [], score: abandonerScore },
+        p2: { id: 'p2', hand: [], score: opponentScore },
+      },
+    } as any;
+
+    const io = makeIo();
+    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    return applyActiveMatchForfeit(
+      io,
+      socket,
+      roomCode,
+      { id: 'p1', username: 'P1', userId: 'u1' },
+      reason,
+    );
+  }
+
+  it('marks the abandoner as the loser when they quit while AHEAD on points', async () => {
+    const result = await forfeitWithScores('FSIGN1', 40, 20);
+
+    // Match history already had this right; the rating write now agrees with it.
+    expect(result).toEqual({ winnerUserId: 'u2' });
+
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerId: 'u1',
+        opponentId: 'u2',
+        playerScore: 40,
+        opponentScore: 20,
+        outcome: 'loss',
+      }),
+    );
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerId: 'u2',
+        opponentId: 'u1',
+        playerScore: 20,
+        opponentScore: 40,
+        outcome: 'win',
+      }),
+    );
+  });
+
+  it('passes the outcomes through to the Glicko update, not just the inserted row', async () => {
+    await forfeitWithScores('FSIGN2', 40, 20);
+
+    expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerAOutcome: 'loss',
+        playerBOutcome: 'win',
+      }),
+    );
+  });
+
+  it('keeps the already-correct result when the abandoner quit while BEHIND', async () => {
+    await forfeitWithScores('FSIGN3', 20, 40);
+
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+    );
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u2', outcome: 'win' }),
+    );
+  });
+
+  it('marks the abandoner as the loser from a level scoreboard', async () => {
+    await forfeitWithScores('FSIGN4', 30, 30);
+
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+    );
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u2', outcome: 'win' }),
+    );
+  });
+
+  it('applies the same sign on a disconnect timeout, at half weight', async () => {
+    await forfeitWithScores('FSIGN5', 55, 5, 'disconnect_timeout');
+
+    expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ratingScale: 0.5,
+        playerAOutcome: 'loss',
+        playerBOutcome: 'win',
+      }),
+    );
+  });
+
+  it('orients the outcome by seat, not by argument order, when seat B abandons', async () => {
+    const roomCode = 'FSIGN6';
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+    ]);
+    const room = getRoom(roomCode);
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 60 },
+      playerIds: ['p1', 'p2'],
+      players: {
+        p1: { id: 'p1', hand: [], score: 10 },
+        p2: { id: 'p2', hand: [], score: 45 },
+      },
+    } as any;
+
+    const io = makeIo();
+    const socket = { id: 'sock-p2', data: { userId: 'u2' } } as any;
+    await applyActiveMatchForfeit(
+      io,
+      socket,
+      roomCode,
+      { id: 'p2', username: 'P2', userId: 'u2' },
+      'manual',
+    );
+
+    // Seat A is p1 (the stayer) — playerA is the seat, not the abandoner.
+    expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerAOutcome: 'win',
+        playerBOutcome: 'loss',
+      }),
+    );
+    expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'u2', outcome: 'loss' }),
+    );
   });
 });

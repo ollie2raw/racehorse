@@ -33,9 +33,33 @@ export interface GlickoOpponent {
   rd: number;
 }
 
+/**
+ * How a rated match actually ended, from the subject player's point of view.
+ *
+ * A match that ends by forfeit does not have a trustworthy score signal: the
+ * abandoning player can be ahead on points at the moment they quit. Callers
+ * that know the real result — forfeits, and anything else where the winner is
+ * decided by something other than the scoreboard — must pass it explicitly.
+ */
+export type MatchOutcome = 'win' | 'loss' | 'draw';
+
 export interface GlickoResult {
   score: number;
   opponentScore: number;
+  /**
+   * Authoritative result. When present it decides the Glicko win/loss term and
+   * the scores are carried for the record only. When absent, the scores decide
+   * it — correct for a match played to its natural conclusion.
+   */
+  outcome?: MatchOutcome;
+}
+
+/** Glicko's `s_j` term: 1 win, 0 loss, 0.5 draw. */
+export function scoreOutcome(result: GlickoResult): number {
+  if (result.outcome) {
+    return result.outcome === 'win' ? 1 : result.outcome === 'loss' ? 0 : 0.5;
+  }
+  return result.score > result.opponentScore ? 1 : result.score < result.opponentScore ? 0 : 0.5;
 }
 
 const SCALE = 173.7178;
@@ -77,7 +101,7 @@ export function computeGlicko2(
     const { mu: mu_j, phi: phi_j } = toGlicko2(game.opponent.rating, game.opponent.rd);
     const gj = g(phi_j);
     const ej = E(mu, mu_j, phi_j);
-    const sj = game.result.score > game.result.opponentScore ? 1 : game.result.score < game.result.opponentScore ? 0 : 0.5;
+    const sj = scoreOutcome(game.result);
 
     vInv += gj * gj * ej * (1 - ej);
     deltaSum += gj * (sj - ej);

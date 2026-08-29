@@ -1,5 +1,5 @@
 
-import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId } from './glicko2';
+import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, type MatchOutcome } from './glicko2';
 import { supabaseFetch } from '../supabaseUtils';
 
 export interface Profile {
@@ -23,6 +23,12 @@ interface RankedGame {
   played_at: string;
   rating_after?: number | null;
   delta?: number | null;
+  /**
+   * Set when the scoreboard does not decide the result (forfeits). Null on
+   * rows written before the column shipped, and on matches played to their
+   * natural conclusion — both correctly fall back to comparing scores.
+   */
+  outcome?: MatchOutcome | null;
 }
 
 interface ProcessRatingPeriodOptions {
@@ -87,12 +93,22 @@ async function getOpponentSnapshot(opponentId: string): Promise<OpponentSnapshot
   };
 }
 
+type CommitOptions = {
+  /** Multiplier on the resulting delta (disconnect forfeits count half). */
+  scale?: number;
+  /**
+   * Overrides the row's own `outcome`. The inline realtime path passes this so
+   * the forfeit sign is right even when the `outcome` column is not enabled yet.
+   */
+  outcome?: MatchOutcome;
+};
+
 async function commitProcessedGame(
   profile: Profile,
   game: RankedGame,
   opponent: OpponentSnapshot,
   processedAt: string,
-  scale?: number,
+  options: CommitOptions = {},
 ): Promise<{
   profile: Profile;
   newRating: number;
@@ -109,12 +125,17 @@ async function commitProcessedGame(
     [
       {
         opponent,
-        result: { score: game.player_score, opponentScore: game.opponent_score },
+        result: {
+          score: game.player_score,
+          opponentScore: game.opponent_score,
+          outcome: options.outcome ?? game.outcome ?? undefined,
+        },
       },
     ],
   );
 
   const newGamesPlayed = profile.ranked_games_played + 1;
+  const { scale } = options;
   let delta = result.newRating - profile.glicko_rating;
   if (scale != null && Number.isFinite(scale)) {
     delta = delta * scale;
@@ -252,6 +273,13 @@ export async function processRealtimeMultiplayerGame(params: {
   playerAGame: RankedGame;
   playerBGame: RankedGame;
   ratingScale?: number;
+  /**
+   * Authoritative results for a match the scoreboard does not decide. Forfeits
+   * pass these so the player who quit is scored as the loser whatever the
+   * points said when they left. Omit for a match played to its conclusion.
+   */
+  playerAOutcome?: MatchOutcome;
+  playerBOutcome?: MatchOutcome;
 }) {
   const processedAt = new Date().toISOString();
 
@@ -264,7 +292,7 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerBProfile.glicko_rd,
       },
       processedAt,
-      params.ratingScale,
+      { scale: params.ratingScale, outcome: params.playerAOutcome },
     ),
     commitProcessedGame(
       params.playerBProfile,
@@ -274,7 +302,7 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerAProfile.glicko_rd,
       },
       processedAt,
-      params.ratingScale,
+      { scale: params.ratingScale, outcome: params.playerBOutcome },
     ),
   ]);
 
