@@ -159,7 +159,7 @@ interface PlayVsFritzProps {
   onStart: (params: { difficulty: FritzTier; dealSize: BotDealSize }) => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 export default function PlayVsFritz({ 
@@ -167,7 +167,7 @@ export default function PlayVsFritz({
   onStart, 
   onNavigate, 
   onOpenAuth, 
-  onOpenAccount 
+  onSignOut 
 }: PlayVsFritzProps) {
   const [difficulty, setDifficulty] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
@@ -199,7 +199,7 @@ export default function PlayVsFritz({
         currentMode="botSetup"
         onNavigate={onNavigate || ((mode) => mode === 'home' ? onBack() : undefined)} 
         onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
+        onSignOut={onSignOut}
         activeColor={dynamicColor}
       />
       

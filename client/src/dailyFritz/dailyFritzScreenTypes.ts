@@ -39,7 +39,7 @@ export interface DailyFritzScreenProps {
   onProfileRefresh?: () => Promise<void> | void;
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
   onOpenAuth: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   socket: Socket | null;

@@ -21,7 +21,7 @@ export default function DailyFritzScreen({
   onProfileRefresh,
   onProfilePatch,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   onBack,
   onNavigate,
   socket,
@@ -209,7 +209,7 @@ export default function DailyFritzScreen({
       onBack={onBack}
       onNavigate={onNavigate}
       onOpenAuth={onOpenAuth}
-      onOpenAccount={onOpenAccount}
+      onSignOut={onSignOut}
       onSetAction={handleSetAction}
       onOpenLeaderboard={openLeaderboard}
     />

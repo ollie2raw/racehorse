@@ -50,9 +50,8 @@ export type MultiplayerAuthView = {
     glicko_rating?: number | null;
   } | null;
   onOpenAuth: () => void;
-  onOpenAccount: () => void;
   onOpenAuthModal: () => void;
-  onOpenAccountModal: () => void;
+  onSignOut: () => void;
 };
 
 export type MultiplayerMatchmakingView = {
@@ -198,7 +197,7 @@ export default function MultiplayerModeController({
   const { socket, isConnected, isConnecting, roomRecoveryState, roomCode } = connectionState;
   const { serverUrl } = config;
 
-  const { authUser, authProfile, onOpenAuth, onOpenAccount, onOpenAuthModal, onOpenAccountModal } = authView;
+  const { authUser, authProfile, onOpenAuth, onOpenAuthModal, onSignOut } = authView;
 
   const { overlayPayload, setOverlayPayload, handleMatchmakingAutoJoin } = matchmakingView;
 
@@ -320,7 +319,7 @@ export default function MultiplayerModeController({
               myWinStreak={privateLobbyHostWinStreak}
               onNavigate={setAppMode}
               onOpenAuth={onOpenAuth}
-              onOpenAccount={onOpenAccount}
+              onSignOut={onSignOut}
               onBackHome={() => setAppMode('home')}
               onOpenPrivateMatch={() => setMpSubView('private')}
               onAutoJoinRoom={handleMatchmakingAutoJoin}
@@ -354,7 +353,7 @@ export default function MultiplayerModeController({
               }
               onNavigate={setAppMode}
               onOpenAuth={onOpenAuthModal}
-              onOpenAccount={onOpenAccountModal}
+              onSignOut={onSignOut}
               onBackHome={() => {
                 if (joinedRoom) {
                   leavePrivateLobbyRoom();

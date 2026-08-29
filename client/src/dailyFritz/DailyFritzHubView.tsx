@@ -22,7 +22,7 @@ export type DailyFritzHubViewProps = {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onSetAction: () => void;
   onOpenLeaderboard: () => void;
 };
@@ -35,7 +35,7 @@ export function DailyFritzHubView({
   onBack,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   onSetAction,
   onOpenLeaderboard,
 }: DailyFritzHubViewProps) {
@@ -74,7 +74,7 @@ export function DailyFritzHubView({
         currentMode="dailyFritz"
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
+        onSignOut={onSignOut}
         activeColor="var(--tier-elite)"
       />
 

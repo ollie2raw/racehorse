@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrandLogo } from './BrandLogo';
+import { Button } from './primitives';
 import { AppBottomTabBar } from './nav/AppBottomTabBar';
 import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
+import './globalNavAccountMenu.css';
 
 /**
  * Each route mounts its own `<GlobalNav />`, so local state resets on navigation.
@@ -29,7 +31,12 @@ const globalNavHudCache: {
 interface GlobalNavProps {
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  /**
+   * Sign-out is the app's, not the nav's. App.tsx resets room recovery and
+   * multiplayer state alongside the Supabase call, and a nav-local
+   * `supabase.auth.signOut()` would skip all of it.
+   */
+  onSignOut?: () => void;
   currentMode?: AppMode;
   activeColor?: string; // Optional dynamic override
   /** Slightly shorter bar + padding for dense hub screens. */
@@ -54,10 +61,17 @@ const TAB_COLORS: Record<string, string> = {
   'Social': '#0ea5e9',        // Cyan
 };
 
+/** `mode` navigates; its absence means sign out. */
+const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode }[] = [
+  { label: 'Profile', mode: 'stats' },
+  { label: 'Settings', mode: 'settings' },
+  { label: 'Sign out' },
+];
+
 export function GlobalNav({
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   currentMode,
   activeColor,
   compactChrome,
@@ -148,6 +162,30 @@ export function GlobalNav({
       : cachedFriendCount !== null
         ? cachedFriendCount
         : null;
+
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Signing out mid-menu leaves the popup anchored to a "Sign In" trigger.
+  useEffect(() => {
+    if (!authUser) setAccountMenuOpen(false);
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   const initials = useMemo(() => {
     const username = authProfile?.username;
@@ -332,35 +370,62 @@ export function GlobalNav({
           <div className="rh-nav-stat-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />
 
           <div className="rh-nav-user-block flex items-center gap-4 pl-5">
-            {/* Avatar */}
-            <button
-              type="button"
-              onClick={() => onNavigate?.('stats')}
-              className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none cursor-pointer transition-opacity hover:opacity-80 active:scale-95 overflow-hidden flex-shrink-0"
-              aria-label="View Stats"
-            >
-              <span 
-                style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tier-elite)', letterSpacing: '-0.02em' }}
+            <div className="rh-nav-account" ref={accountMenuRef}>
+              {/* Avatar + handle + chevron are one control: the chevron has
+                  always implied a menu, and on a phone the avatar is the only
+                  part of it that renders, so it has to be the trigger too. */}
+              <button
+                type="button"
+                onClick={() => (authUser ? setAccountMenuOpen((open) => !open) : onOpenAuth?.())}
+                className="rh-nav-account-trigger"
+                aria-label={authUser ? 'Account menu' : 'Sign in'}
+                aria-haspopup={authUser ? 'menu' : undefined}
+                aria-expanded={authUser ? accountMenuOpen : undefined}
               >
-                {initials}
-              </span>
-            </button>
+                <span className="rh-nav-account-avatar" aria-hidden="true">
+                  <span
+                    style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tier-elite)', letterSpacing: '-0.02em' }}
+                  >
+                    {initials}
+                  </span>
+                </span>
+                <span className="rh-nav-account-name" style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}>
+                  {displayName}
+                </span>
+                <svg
+                  className="rh-nav-account-chevron"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path d="M5 7.5L10 12.5L15 7.5" stroke="var(--text-secondary)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
 
-            {/* Username */}
-            <button
-              type="button"
-              onClick={() => (authUser ? onOpenAccount?.() : onOpenAuth?.())}
-              className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
-            >
-              <div 
-                style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}
-              >
-                {displayName}
-              </div>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5 7.5L10 12.5L15 7.5" stroke="var(--text-secondary)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+              {authUser && accountMenuOpen && (
+                <div className="rh-nav-account-menu" role="menu" aria-label="Account">
+                  {ACCOUNT_MENU_ITEMS.map((item) => (
+                    <Button
+                      key={item.label}
+                      variant="ghost"
+                      size="sm"
+                      role="menuitem"
+                      className="rh-nav-account-menu-item"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        if (item.mode) onNavigate?.(item.mode);
+                        else onSignOut?.();
+                      }}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

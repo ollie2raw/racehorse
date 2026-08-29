@@ -22,7 +22,7 @@ export default function PrivateMatchLobbyScreen({
   phase,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   onBackHome,
   isConnecting,
   serverWaking,
@@ -103,7 +103,7 @@ export default function PrivateMatchLobbyScreen({
         currentMode="multiplayer"
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
+        onSignOut={onSignOut}
         activeColor="var(--tier-standard)"
       />
 

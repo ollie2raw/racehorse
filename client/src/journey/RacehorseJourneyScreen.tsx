@@ -44,7 +44,7 @@ interface RacehorseJourneyScreenProps {
   onNavigate?: (mode: AppMode) => void;
   onStartBotTrial?: (challenge: JourneyActiveChallenge) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 const themeVars = {
@@ -156,7 +156,7 @@ export default function RacehorseJourneyScreen({
   onNavigate,
   onStartBotTrial,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: RacehorseJourneyScreenProps) {
   const {
     activeChapter,
@@ -379,7 +379,7 @@ export default function RacehorseJourneyScreen({
           activeColor="#C9A84C"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
         />
 
         <header className="rh-journey-header relative z-10">

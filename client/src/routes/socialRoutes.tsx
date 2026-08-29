@@ -11,6 +11,7 @@ import { isSpectatorModeEnabled } from '../config/spectatorModeFeature';
 
 const RatingHistoryPage = React.lazy(() => import('../ranking/RatingHistoryPage'));
 const StatsScreen = React.lazy(() => import('../stats/StatsScreen'));
+const SettingsScreen = React.lazy(() => import('../screens/SettingsScreen'));
 const FriendsScreenLobbyBridge = React.lazy(() => import('../multiplayer/FriendsScreenLobbyBridge'));
 const ActivityFeedLobbyBridge = React.lazy(() => import('../multiplayer/ActivityFeedLobbyBridge'));
 const LeaderboardScreen = React.lazy(() => import('../social/LeaderboardScreen'));
@@ -142,6 +143,34 @@ export function StatsRoute({
   );
 }
 
+export function SettingsRoute({
+  shell,
+  navigation,
+  auth,
+}: {
+  shell: AppRoutesShellProps;
+  navigation: AppRoutesNavigationProps;
+  auth: AppRoutesAuthProps;
+}) {
+  const { withAuthModals, appRootClassName } = shell;
+  const { setAppMode } = navigation;
+  const { authUser, handleOpenAuthModal, handleSignOut } = auth;
+  return withAuthModals(
+    <div className={appRootClassName}>
+      <ErrorBoundary context="settings">
+        <Suspense fallback={<ScreenLoader label="Loading Settings…" />}>
+          <SettingsScreen
+            authUser={authUser}
+            onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onSignOut={handleSignOut}
+          />
+        </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
+
 export function FeedRoute({
   shell,
   navigation,
@@ -155,7 +184,7 @@ export function FeedRoute({
 }) {
   const { withAuthModals, appRootClassName, friendInvitePopup } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleOpenAccountModal, authUser } = auth;
+  const { handleOpenAuthModal, handleSignOut, authUser } = auth;
   const {
     socket,
     connect,
@@ -187,7 +216,7 @@ export function FeedRoute({
           onNavigateToFriends={() => setAppMode('friends')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
+          onSignOut={handleSignOut}
         />
       </Suspense>
       </ErrorBoundary>

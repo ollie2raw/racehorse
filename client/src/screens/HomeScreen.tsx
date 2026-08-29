@@ -7,34 +7,9 @@ import { getHomeDailyCardState, getHomeDailyResultCopy } from '../home/homeDaily
 import { HomeStreakStrip } from '../home/components/HomeStreakStrip';
 import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
-
-type AppMode =
-  | 'home'
-  | 'multiplayer'
-  | 'noBrainer'
-  | 'botSetup'
-  | 'bot'
-  | 'ghostSetup'
-  | 'ghost'
-  | 'daily'
-  | 'dailyPuzzleLeaderboard'
-  | 'dailyFritz'
-  | 'dailyFritzLeaderboard'
-  | 'puzzleRush'
-  | 'learn'
-  | 'guidedMatchRecorder'
-  | 'guidedMatchAnnotator'
-  | 'friends'
-  | 'stats'
-  | 'ratingHistory'
-  | 'singlePlayerHub'
-  | 'journey'
-  | 'tournament'
-  | 'leaderboard'
-  | 'profile'
-  | 'feed'
-  | 'live'
-  | 'dailyFritzHealthAdmin';
+// One AppMode, defined in ../types. A local copy here drifted the moment a
+// mode was added elsewhere — which is what `settings` did.
+import type { AppMode } from '../types';
 
 // These reference CSS custom property values from tokens.css — keep in sync if tokens change.
 const TOKEN = {
@@ -172,12 +147,12 @@ function StatusRow({
 export default function RacehorseHomeScreen({
   setAppMode,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
   tournament,
 }: {
   setAppMode?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   tournament: AppRoutesTournamentProps['tournament'];
 }) {
   const navigate = (mode: AppMode) => setAppMode?.(mode);
@@ -240,7 +215,7 @@ export default function RacehorseHomeScreen({
         <GlobalNav
           onNavigate={navigate}
           onOpenAuth={onOpenAuth}
-          onOpenAccount={onOpenAccount}
+          onSignOut={onSignOut}
         />
 
         <main className="relative min-h-0 flex-1 overflow-y-auto px-0 pb-[calc(16px+var(--rh-bottom-tab-offset))] pt-4 home-main desk:overflow-visible desk:pb-5 desk:pt-8">

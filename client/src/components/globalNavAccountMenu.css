@@ -1,0 +1,93 @@
+/* Header account menu — the popup behind the handle + chevron in GlobalNav.
+ *
+ * Mobile-first, matching rh-mobile-chrome.css: the unprefixed rules are the
+ * phone layout, where only the avatar renders and the handle and chevron are
+ * hidden. Desktop restores them in the `desk` query at the end.
+ */
+
+.rh-nav-account {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rh-nav-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.rh-nav-account-trigger:hover {
+  opacity: 0.8;
+}
+
+.rh-nav-account-trigger:active {
+  transform: scale(0.97);
+}
+
+.rh-nav-account-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(200, 146, 42, 0.6);
+  border-radius: var(--radius-pill);
+  background: rgba(74, 45, 24, 0.55);
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Phone: the handle and chevron are hidden, so the avatar is the trigger.
+   This replaces the old `.rh-nav-user-block button:last-child` rule, which
+   addressed the handle by position — a shape the menu changed. */
+.rh-nav-account-name,
+.rh-nav-account-chevron {
+  display: none;
+}
+
+.rh-nav-account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-control);
+  box-shadow: 0 var(--hud-lift) 40px rgba(0, 0, 0, 0.55);
+}
+
+/* Menu rows read as a list, so they lose the pill shape a standalone ghost
+   button carries and gain a full-width left-aligned box. */
+.rh-nav-account-menu-item.rh-btn {
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: var(--radius-record);
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+
+@media (min-width: 769px) and (min-height: 600px) {
+  .rh-nav-account-name,
+  .rh-nav-account-chevron {
+    display: block;
+  }
+
+  .rh-nav-account-avatar {
+    width: 42px;
+    height: 42px;
+  }
+}

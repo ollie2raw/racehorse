@@ -68,7 +68,7 @@ interface GhostSetupScreenProps {
   onStart: (summary: GhostProfileSummary, opponentName: string, opponentUserId: string | null) => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 export default function GhostSetupScreen({
@@ -78,7 +78,7 @@ export default function GhostSetupScreen({
   onStart,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: GhostSetupScreenProps) {
   const [summary, setSummary] = useState<GhostProfileSummary | null>(null);
   const [loading, setLoading] = useState(Boolean(userId));
@@ -262,7 +262,7 @@ export default function GhostSetupScreen({
         currentMode="ghostSetup"
         onNavigate={onNavigate || ((mode) => (mode === 'home' ? onBack() : undefined))}
         onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
+        onSignOut={onSignOut}
         activeColor={GHOST_ACCENT}
       />
 

@@ -66,7 +66,7 @@ interface DailyPuzzleLadderScreenProps {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
@@ -81,7 +81,7 @@ export default function DailyPuzzleLadderScreen({
   onBack,
   onNavigate,
   onOpenAuth,
-  onOpenAccount,
+  onSignOut,
 }: DailyPuzzleLadderScreenProps) {
   const [today, setToday] = useState(initialToday);
   const [attempt, setAttempt] = useState<DailyPuzzleAttempt | null>(initialToday.attempt);
@@ -489,7 +489,7 @@ export default function DailyPuzzleLadderScreen({
         }}
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
+        onSignOut={onSignOut}
       />
     );
   }
@@ -547,7 +547,7 @@ export default function DailyPuzzleLadderScreen({
           onBack,
           onNavigate,
           onOpenAuth,
-          onOpenAccount,
+          onSignOut,
           onStartScored: handleStartScored,
           onStartPractice: handleStartPractice,
           onOpenLeaderboard: () => {

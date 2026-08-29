@@ -46,7 +46,7 @@ export interface TournamentBracketScreenProps {
   onViewResult?: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
+  onSignOut?: () => void;
   onAttachAssignedMatch: (matchId: string) => void;
   attachJoinPhase?: 'idle' | 'pending' | 'failed';
   attachJoinError?: string | null;
@@ -724,7 +724,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         currentMode={'tournament' as AppMode}
         onNavigate={props.onNavigate}
         onOpenAuth={props.onOpenAuth}
-        onOpenAccount={props.onOpenAccount}
+        onSignOut={props.onSignOut}
         activeColor="var(--accent-amber)"
         compactChrome={isWaitingRoom}
       />
