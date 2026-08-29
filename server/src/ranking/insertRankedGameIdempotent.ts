@@ -1,4 +1,5 @@
 import { supabaseFetch } from '../supabaseUtils';
+import type { MatchOutcome } from './glicko2';
 import {
   buildRankedGameInsertPayload,
   isRankedGameSourceColumnsEnabled,
@@ -16,6 +17,7 @@ export type InsertedRankedGameRow = {
   delta?: number | null;
   source_type?: string | null;
   source_match_id?: string | null;
+  outcome?: MatchOutcome | null;
 };
 
 export type InsertRankedGameResult =

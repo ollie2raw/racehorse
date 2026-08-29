@@ -11,6 +11,7 @@ import {
   requireRoomSessionHandlerDeps,
 } from './roomSession';
 import { processRealtimeMultiplayerGame, type RealtimeRatingResult, type Profile } from '../ranking/periodService';
+import type { MatchOutcome } from '../ranking/glicko2';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 import type { ProfileRow } from '../supabaseTypes';
@@ -211,22 +212,29 @@ export async function applyActiveMatchForfeit(
   const b = roster.find((p) => p.id === bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
 
   // Glicko writes on forfeit use the actual room.state scores at the moment of
-  // forfeit — never a synthesized/inflated number. A forfeit at a low score
-  // genuinely produces a small expected-score delta for the winner; if that's
-  // an undesirable product outcome, the fix is a Glicko K-factor/period design
-  // change, not fabricating a score here.
+  // forfeit — never a synthesized/inflated number. The scores are the record of
+  // where the match stood; they do NOT decide the rating result.
   const loserActualScore = room.state?.players[abandoningPlayer.id]?.score ?? 0;
   const winnerActualScore = opponentSeatId ? (room.state?.players[opponentSeatId]?.score ?? 0) : 0;
 
-  const scoreA = abandoningPlayer.id === aId ? loserActualScore : winnerActualScore;
-  const scoreB = abandoningPlayer.id === aId ? winnerActualScore : loserActualScore;
+  const abandonerIsSeatA = abandoningPlayer.id === aId;
+  const scoreA = abandonerIsSeatA ? loserActualScore : winnerActualScore;
+  const scoreB = abandonerIsSeatA ? winnerActualScore : loserActualScore;
 
-  if (
-    isPrivate &&
-    a.userId &&
-    b.userId &&
-    Math.max(loserActualScore, winnerActualScore) >= 10
-  ) {
+  // The player who quit is the loser, whatever the scoreboard said when they
+  // left. Without this the Glicko term falls back to comparing scores, and a
+  // player who abandons while ahead is rated as the winner — disagreeing with
+  // the `winnerUserId` that match history records. Rating and history must tell
+  // the same story.
+  const outcomeA: MatchOutcome = abandonerIsSeatA ? 'loss' : 'win';
+  const outcomeB: MatchOutcome = abandonerIsSeatA ? 'win' : 'loss';
+
+  // Every forfeit is rated. There is deliberately no minimum-score threshold:
+  // one was here before and it meant a player who quit early recorded nothing
+  // at all, which is a free way to dodge a bad deal. A forfeit at 5-0 is a real
+  // loss; Glicko already scales the delta by how expected that result was, so a
+  // short match does not need a separate escape hatch.
+  if (isPrivate && a.userId && b.userId) {
     try {
       const [profilesA, profilesB] = await Promise.all([
         supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${a.userId}`),
@@ -248,6 +256,7 @@ export async function applyActiveMatchForfeit(
             ratingBefore: profileA.glicko_rating ?? 0,
             rdBefore: profileA.glicko_rd ?? 0,
             playedAt: nowIso,
+            outcome: outcomeA,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
           insertRankedGameIdempotent({
@@ -259,6 +268,7 @@ export async function applyActiveMatchForfeit(
             ratingBefore: profileB.glicko_rating ?? 0,
             rdBefore: profileB.glicko_rd ?? 0,
             playedAt: nowIso,
+            outcome: outcomeB,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
         ]);
@@ -271,6 +281,8 @@ export async function applyActiveMatchForfeit(
             playerAGame: insertA.game,
             playerBGame: insertB.game,
             ratingScale,
+            playerAOutcome: outcomeA,
+            playerBOutcome: outcomeB,
           });
 
           log.info(
@@ -280,6 +292,8 @@ export async function applyActiveMatchForfeit(
               winnerId: winnerUserId,
               forfeitReason,
               ratingScale,
+              outcomeA,
+              outcomeB,
               deltaA: ratingResult.playerA.delta,
               deltaB: ratingResult.playerB.delta,
             },

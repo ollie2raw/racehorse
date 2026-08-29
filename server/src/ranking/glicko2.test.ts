@@ -214,3 +214,50 @@ describe('constants', () => {
     expect(DEFAULT_RD).toBeGreaterThan(100);
   });
 });
+
+describe('computeGlicko2 explicit outcome', () => {
+  const evenPlayer = { rating: 1500, rd: 200, vol: DEFAULT_VOL, gamesPlayed: 30 };
+  const evenOpponent = { rating: 1500, rd: 200 };
+
+  it('scores an explicit loss as a loss even when the player led on points', () => {
+    const { newRating } = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 40, opponentScore: 20, outcome: 'loss' } },
+    ]);
+    expect(newRating).toBeLessThan(evenPlayer.rating);
+  });
+
+  it('scores an explicit win as a win even when the player trailed on points', () => {
+    const { newRating } = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 20, opponentScore: 40, outcome: 'win' } },
+    ]);
+    expect(newRating).toBeGreaterThan(evenPlayer.rating);
+  });
+
+  it('is symmetric: an explicit loss costs exactly what the mirrored win pays', () => {
+    const loser = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 40, opponentScore: 20, outcome: 'loss' } },
+    ]);
+    const winner = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 20, opponentScore: 40, outcome: 'win' } },
+    ]);
+    expect(loser.newRating - 1500).toBeCloseTo(1500 - winner.newRating, 6);
+  });
+
+  it('falls back to the score comparison when no outcome is supplied', () => {
+    const withoutOutcome = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 40, opponentScore: 20 } },
+    ]);
+    const withWin = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 40, opponentScore: 20, outcome: 'win' } },
+    ]);
+    expect(withoutOutcome.newRating).toBeGreaterThan(evenPlayer.rating);
+    expect(withoutOutcome.newRating).toBeCloseTo(withWin.newRating, 10);
+  });
+
+  it('treats an explicit draw as a draw regardless of the score gap', () => {
+    const { newRating } = computeGlicko2(evenPlayer, [
+      { opponent: evenOpponent, result: { score: 40, opponentScore: 20, outcome: 'draw' } },
+    ]);
+    expect(newRating).toBeCloseTo(evenPlayer.rating, 6);
+  });
+});
