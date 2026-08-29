@@ -154,16 +154,30 @@ export function SettingsRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, handleOpenAuthModal, handleSignOut } = auth;
+  const {
+    authUser,
+    authProfile,
+    handleOpenAuthModal,
+    handleSignOut,
+    handleSaveUsername,
+    handleDeleteAccount,
+    updatePassword,
+    updateEmail,
+  } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="settings">
         <Suspense fallback={<ScreenLoader label="Loading Settings…" />}>
           <SettingsScreen
             authUser={authUser}
+            authProfile={authProfile}
             onNavigate={setAppMode}
             onOpenAuth={handleOpenAuthModal}
             onSignOut={handleSignOut}
+            onSaveUsername={handleSaveUsername}
+            onUpdatePassword={updatePassword}
+            onUpdateEmail={updateEmail}
+            onDeleteAccount={handleDeleteAccount}
           />
         </Suspense>
       </ErrorBoundary>

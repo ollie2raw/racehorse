@@ -72,6 +72,7 @@ import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
+import { deleteAccount } from './auth/deleteAccount';
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -107,6 +108,7 @@ export default function App() {
     signUp,
     resetPassword,
     updatePassword,
+    updateEmail,
     passwordRecoveryPending,
     clearPasswordRecoveryPending,
     signOut,
@@ -764,6 +766,41 @@ export default function App() {
     setAuthModalOpen,
   ]);
 
+  /**
+   * Saving a handle also retires the onboarding prompt, wherever the save came
+   * from — the Settings page or the first-run modal.
+   */
+  const handleSaveUsername = useCallback(
+    async (username: string) => {
+      const result = await updateUsername(username);
+      if (!result.error) {
+        window.localStorage.removeItem('username_onboarding_dismissed');
+        setOnboardingDismissed(false);
+        setUsernameModalOpen(false);
+      }
+      return result;
+    },
+    [updateUsername, setOnboardingDismissed, setUsernameModalOpen],
+  );
+
+  /**
+   * Deletes the account, then signs out and lands on home.
+   *
+   * Only a confirmed deletion tears the session down: signing out on a failed
+   * call would leave the user unable to retry from a page that requires them
+   * to be signed in.
+   */
+  const handleDeleteAccount = useCallback(
+    async (confirmation: string) => {
+      const result = await deleteAccount(confirmation);
+      if (result.error) return result;
+      handleSignOut();
+      setAppMode('home');
+      return result;
+    },
+    [handleSignOut, setAppMode],
+  );
+
   const authModalsLayer = (
     <AuthModalsLayer
       authModalOpen={authModalOpen}
@@ -781,16 +818,7 @@ export default function App() {
         ((!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen)
       }
       currentUsername={authProfile?.username ?? null}
-      usernameIsProfileEdit={usernameModalOpen}
-      onUsernameSave={async (username) => {
-        const result = await updateUsername(username);
-        if (!result.error) {
-          window.localStorage.removeItem('username_onboarding_dismissed');
-          setOnboardingDismissed(false);
-          setUsernameModalOpen(false);
-        }
-        return result;
-      }}
+      onUsernameSave={handleSaveUsername}
       onUsernameClose={() => {
         window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
         setOnboardingDismissed(true);
@@ -855,6 +883,10 @@ export default function App() {
       navigation: { appMode, setAppMode, appRootRef },
       auth: {
         handleSignOut,
+        handleSaveUsername,
+        handleDeleteAccount,
+        updatePassword,
+        updateEmail,
         isAdmin,
         authUser,
         authProfile,

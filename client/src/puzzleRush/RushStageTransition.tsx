@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { playMatchFoundSound } from '../utils/sound';
+import { useMutePreference } from '../utils/useMutePreference';
 import type { PuzzleRushStage } from './types';
 
 export const STAGE_TRANSITION_MS = 1400;
@@ -16,13 +17,15 @@ export const STAGE_TRANSITION_MS = 1400;
  */
 export function RushStageTransition({
   stage,
-  muted = false,
   onDone,
 }: {
   stage: PuzzleRushStage | null;
-  muted?: boolean;
   onDone?: () => void;
 }) {
+  // Read straight from the shared preference. This used to be a `muted` prop
+  // defaulting to false that no call site ever passed, so Puzzle Rush was the
+  // one mode that played through a mute set anywhere else.
+  const [muted] = useMutePreference();
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 

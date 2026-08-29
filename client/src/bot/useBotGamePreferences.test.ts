@@ -14,13 +14,6 @@ vi.mock('./pvfTierPreference', () => ({
   writeStoredPvfFritzTier: vi.fn(),
 }));
 
-vi.mock('../utils/mutePreference', () => ({
-  mutePreference: {
-    get: vi.fn(() => false),
-    set: vi.fn(),
-  },
-}));
-
 const { useBotGamePreferences } = await import('./useBotGamePreferences');
 const { writeStoredPvfFritzTier } = await import('./pvfTierPreference');
 const { mutePreference } = await import('../utils/mutePreference');
@@ -34,11 +27,11 @@ function defaultParams(overrides: Partial<Params> = {}): Params {
 describe('useBotGamePreferences — initial state', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    vi.mocked(mutePreference.get).mockReturnValue(false);
+    mutePreference.set(false);
   });
 
-  it('isMuted initializes from mutePreference.get()', () => {
-    vi.mocked(mutePreference.get).mockReturnValue(true);
+  it('isMuted initializes from the stored mute preference', () => {
+    mutePreference.set(true);
     const { result } = renderHook((p: Params) => useBotGamePreferences(p), {
       initialProps: defaultParams(),
     });
@@ -81,8 +74,7 @@ describe('useBotGamePreferences — initial state', () => {
 describe('useBotGamePreferences — persistence effects', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    vi.mocked(mutePreference.get).mockReturnValue(false);
-    vi.mocked(mutePreference.set).mockClear();
+    mutePreference.set(false);
     vi.mocked(writeStoredPvfFritzTier).mockClear();
   });
 
@@ -102,17 +94,17 @@ describe('useBotGamePreferences — persistence effects', () => {
     expect(writeStoredPvfFritzTier).toHaveBeenCalledWith(3);
   });
 
-  it('calls mutePreference.set on isMuted change', () => {
+  it('persists the mute preference on change', () => {
     const { result } = renderHook((p: Params) => useBotGamePreferences(p), {
       initialProps: defaultParams(),
     });
     act(() => { result.current.setIsMuted(true); });
-    expect(mutePreference.set).toHaveBeenCalledWith(true);
+    expect(mutePreference.get()).toBe(true);
   });
 });
 
 describe('useBotGamePreferences — isMutedRef sync', () => {
-  beforeEach(() => { vi.mocked(mutePreference.get).mockReturnValue(false); });
+  beforeEach(() => { mutePreference.set(false); });
 
   it('isMutedRef tracks isMuted', () => {
     const { result } = renderHook((p: Params) => useBotGamePreferences(p), {
@@ -125,7 +117,7 @@ describe('useBotGamePreferences — isMutedRef sync', () => {
 });
 
 describe('useBotGamePreferences — botSetup deal-size reset', () => {
-  beforeEach(() => { vi.mocked(mutePreference.get).mockReturnValue(false); });
+  beforeEach(() => { mutePreference.set(false); });
 
   it('resets botDealSize to 7 when appMode becomes botSetup', () => {
     const { result, rerender } = renderHook((p: Params) => useBotGamePreferences(p), {
