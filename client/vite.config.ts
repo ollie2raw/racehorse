@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+// @ts-expect-error — build script module, not part of the app's TS program.
+import { resolveAppVersion } from './scripts/appVersion.mjs';
 
 // Injects <link rel="preload" fetchpriority="high"> for hero images used as
 // CSS backgrounds on the home screen so Lighthouse discovers LCP resources
@@ -46,6 +48,12 @@ export default defineConfig({
     },
   },
   plugins: [react(), preloadHeroImagePlugin()],
+  // Baked in rather than read from the environment at runtime: Vite only
+  // exposes VITE_-prefixed variables, so Vercel's VERCEL_GIT_COMMIT_SHA could
+  // not reach the client and every Sentry event reported release 'unknown'.
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(resolveAppVersion()),
+  },
   test: {
     environment: 'jsdom',
     globals: true,
