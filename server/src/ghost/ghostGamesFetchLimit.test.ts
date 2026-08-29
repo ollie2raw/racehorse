@@ -1,4 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * ghost/service.ts captures SUPABASE_URL / SUPABASE_SERVICE_KEY into module
+ * constants at import time, so setting them in beforeEach is too late — the
+ * import has already run. Locally Vitest loads server/.env and they happen to
+ * be present; CI has no secrets, so the module captured undefined and every
+ * test threw "SUPABASE_URL is required".
+ *
+ * vi.hoisted runs before the imports below, which is the only place this can be
+ * set from inside the test file.
+ */
+vi.hoisted(() => {
+  process.env.SUPABASE_URL ||= 'https://stub.supabase.co';
+  process.env.SUPABASE_SERVICE_KEY ||= 'stub-service-key';
+});
+
 import { getGhostProfileSummary } from './service';
 
 /**
@@ -74,11 +90,6 @@ function stubSupabase(games: ReturnType<typeof game>[], honourLimit = true) {
 const gamesQuery = () => requestedPaths.find((p) => p.includes('/rest/v1/ghost_games')) ?? '';
 
 describe('ghost_games fetch limit', () => {
-  beforeEach(() => {
-    process.env.SUPABASE_URL ??= 'https://stub.supabase.co';
-    process.env.SUPABASE_SERVICE_KEY ??= 'stub-key';
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
