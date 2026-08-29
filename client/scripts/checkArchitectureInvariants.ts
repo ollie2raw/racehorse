@@ -49,6 +49,70 @@ const LOC_CAPS: Array<{ file: string; cap: number }> = [
   { file: 'client/src/AppRoutes.tsx', cap: 500 },
 ];
 
+/**
+ * INV-15 — Guarded floating imports.
+ *
+ * A dynamic import started as a floating promise (`void import(...)`) has
+ * nowhere to report a failure. A failed chunk fetch therefore surfaced as an
+ * unhandled rejection, which the global module-import-recovery handler could
+ * not distinguish from a chunk the UI actually needs — so a telemetry chunk
+ * failing to load could force-reload a working app.
+ *
+ * Deliberately narrow. It looks only at the floating form: an awaited import
+ * is owned by its enclosing try/catch, and `React.lazy` failures reach an
+ * ErrorBoundary, which is the path module-import recovery now runs on.
+ *
+ * Returns the offending `import(...)` expressions, so a failure names them.
+ */
+export function findUnguardedFloatingImports(source: string): string[] {
+  const offenders: string[] = [];
+  const floating = /\bvoid\s+import\s*\(/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = floating.exec(source)) !== null) {
+    const importStart = source.indexOf('import', match.index);
+    const openParen = source.indexOf('(', importStart);
+    const specifierEnd = matchingParen(source, openParen);
+    if (specifierEnd < 0) continue;
+
+    const expression = source.slice(importStart, specifierEnd + 1).replace(/\s+/g, '');
+    const chainEnd = endOfStatement(source, specifierEnd + 1);
+    const chain = source.slice(specifierEnd + 1, chainEnd);
+    if (!/\.catch\s*\(/.test(chain)) offenders.push(expression);
+  }
+
+  return offenders;
+}
+
+/** Index of the `)` closing the `(` at `open`, or -1. */
+function matchingParen(source: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * End of the statement that began at `from`: the first `;` at paren/brace
+ * depth zero. Bounded by the source length so an unterminated statement does
+ * not swallow the rest of the file and borrow a later statement's `.catch`.
+ */
+function endOfStatement(source: string, from: number): number {
+  let depth = 0;
+  for (let i = from; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === '(' || char === '{' || char === '[') depth += 1;
+    else if (char === ')' || char === '}' || char === ']') depth -= 1;
+    else if (char === ';' && depth <= 0) return i;
+  }
+  return source.length;
+}
+
 type CheckResult = {
   id: string;
   name: string;
@@ -918,6 +982,36 @@ function checkLocCaps(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 15. Guarded floating imports
+// ---------------------------------------------------------------------------
+function checkFloatingImports(): void {
+  const errors: string[] = [];
+  const files = walkTsFiles(CLIENT_SRC).filter((f) => !/\.test\.tsx?$/.test(f));
+
+  let flaggedFiles = 0;
+  for (const file of files) {
+    const offenders = findUnguardedFloatingImports(fs.readFileSync(file, 'utf8'));
+    if (offenders.length === 0) continue;
+    flaggedFiles += 1;
+    for (const offender of offenders) {
+      errors.push(
+        `${relativeSrcPath(file)} starts ${offender} as a floating promise with no .catch — ` +
+        `a failed chunk fetch becomes an unhandled rejection (INV-15)`,
+      );
+    }
+  }
+
+  addResult({
+    id: 'INV-15',
+    name: 'Guarded Floating Imports',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { clientFilesScanned: files.length, flaggedFiles },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1033,6 +1127,7 @@ function main(): void {
   checkNoBackupFiles();
   checkDailyFritzScoreTrust();
   checkLocCaps();
+  checkFloatingImports();
 
   printReport(manifest);
 }

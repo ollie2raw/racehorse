@@ -13,6 +13,7 @@ import type {
   UseGuidedMatchRuntimeArgs,
   UseGuidedMatchRuntimeBaseResult,
 } from './useGuidedMatchRuntimeTypes.ts';
+import { reportOptionalChunkFailure } from '../../utils/optionalChunk';
 
 export type { GuidedPlacementResult } from './guidedPlacementHandlers.ts';
 export type { UseGuidedMatchRuntimeArgs, UseGuidedMatchRuntimeBaseResult };
@@ -75,7 +76,8 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
       if (!cancelled) {
         setGuidedMatchFinalDebrief(module.getPublicGuidedMatchFinalDebrief());
       }
-    });
+    })
+      .catch((error) => reportOptionalChunkFailure('learn/guidedMatchLessonLoader', error));
     return () => {
       cancelled = true;
     };

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isSuspiciousDailyFritzScoreAccess } from './checkArchitectureInvariants.ts';
+import {
+  findUnguardedFloatingImports,
+  isSuspiciousDailyFritzScoreAccess,
+} from './checkArchitectureInvariants.ts';
 
 // INV-13 — Daily Fritz Score Trust. This test proves the hard-fail detection
 // path fires on an injected violation (client-supplied score/result read
@@ -45,5 +48,63 @@ describe('INV-13 Daily Fritz Score Trust heuristic', () => {
       }
     `;
     expect(isSuspiciousDailyFritzScoreAccess(unrelated)).toBe(false);
+  });
+});
+
+
+/**
+ * INV-15 — Guarded floating imports.
+ *
+ * A dynamic import kicked off as a floating promise has nowhere to report a
+ * failure, so a failed chunk fetch became an unhandled rejection. That is what
+ * the global module-import-recovery handler saw, and it could not tell a
+ * telemetry chunk from a chunk the UI needs.
+ */
+describe('INV-15 guarded floating imports', () => {
+  it('flags a void import with no catch', () => {
+    const violation = `
+      void import('./statsApi').then(({ fetchWeeklyRecap }) => {
+        setRecap(fetchWeeklyRecap());
+      });
+    `;
+    expect(findUnguardedFloatingImports(violation)).toEqual(["import('./statsApi')"]);
+  });
+
+  it('accepts a void import whose chain ends in a catch', () => {
+    const guarded = `
+      void import('./statsApi')
+        .then(({ fetchWeeklyRecap }) => setRecap(fetchWeeklyRecap()))
+        .catch(() => setRecap(null));
+    `;
+    expect(findUnguardedFloatingImports(guarded)).toEqual([]);
+  });
+
+  it('does not credit one statement with a later statement catch', () => {
+    const violation = `
+      void import('./a').then(useA);
+      void import('./b').then(useB).catch(noop);
+    `;
+    expect(findUnguardedFloatingImports(violation)).toEqual(["import('./a')"]);
+  });
+
+  it('ignores an awaited import, which the enclosing try/catch owns', () => {
+    const awaited = `
+      const mod = await import('web-vitals');
+      mod.onCLS(report);
+    `;
+    expect(findUnguardedFloatingImports(awaited)).toEqual([]);
+  });
+
+  it('ignores React.lazy, whose failures reach an ErrorBoundary', () => {
+    const lazy = `const Screen = React.lazy(() => import('../screens/SettingsScreen'));`;
+    expect(findUnguardedFloatingImports(lazy)).toEqual([]);
+  });
+
+  it('finds every violation in a file, not just the first', () => {
+    const violation = `
+      void import('./a').then(useA);
+      void import('./b').then(useB);
+    `;
+    expect(findUnguardedFloatingImports(violation)).toEqual(["import('./a')", "import('./b')"]);
   });
 });

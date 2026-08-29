@@ -53,6 +53,7 @@ import type {
   MultiplayerShellDelegates,
   MultiplayerGameShellProps,
 } from './multiplayerGameShellTypes';
+import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 
 function MultiplayerGameShellComponent({
   socket,
@@ -750,7 +751,8 @@ function MultiplayerGameShellComponent({
           setAnalyzerOpen(true);
         },
       );
-    });
+    })
+      .catch((error) => reportOptionalChunkFailure('analyzer/moveAnalyzer', error));
   }, [canOpenPostGameReview, multiplayerMoveLog]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;

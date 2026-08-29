@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { TournamentMatchContext } from '../match/session/tournament/tournamentMatchSessionTypes';
 import type { UserProfile } from '../auth/useAuth';
+import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
 
@@ -42,7 +43,8 @@ export function useTournamentDisplayLabels(
           roomOpponentUsername: opponentInRoom?.username ?? null,
         }),
       );
-    });
+    })
+      .catch((error) => reportOptionalChunkFailure('./displayNames', error));
 
     return () => {
       cancelled = true;

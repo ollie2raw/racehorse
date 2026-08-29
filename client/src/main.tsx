@@ -26,6 +26,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { AuthProvider } from './auth/useAuth';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
+import { reportWebVitals } from './debug/reportWebVitals';
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
 import './styles/rh-mobile-chrome.css';
@@ -52,23 +53,8 @@ import './styles/board/index.css';
 
 {installGlobalErrorHandlers();}
 
-// Web Vitals — report to Sentry as measurements so we can track LCP/CLS/INP
-// in the performance dashboard without a separate analytics pipeline.
-async function reportWebVitals() {
-  if (!import.meta.env.PROD) return;
-  const { onCLS, onINP, onLCP, onFCP, onTTFB } = await import('web-vitals');
-  const report = ({ name, value, id }: { name: string; value: number; id: string }) => {
-    Sentry.setMeasurement(name, Math.round(name === 'CLS' ? value * 1000 : value), 'millisecond');
-    // Also send as a custom event so Sentry perf tab picks it up
-    Sentry.addBreadcrumb({ category: 'web-vitals', message: name, data: { value, id }, level: 'info' });
-  };
-  onCLS(report);
-  onINP(report);
-  onLCP(report);
-  onFCP(report);
-  onTTFB(report);
-}
-
+// Web Vitals → Sentry. Its chunk fetch is guarded inside the module: a
+// telemetry chunk failing must never surface as an unhandled rejection.
 void reportWebVitals();
 
 async function bootstrap() {
