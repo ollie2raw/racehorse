@@ -4,7 +4,7 @@ import type { AppMode } from '../appRouteTypes';
 import type { BotDealSize } from './botEngine';
 import type { FritzTier } from './fritzConfig';
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './pvfTierPreference';
-import { mutePreference } from '../utils/mutePreference';
+import { useMutePreference } from '../utils/useMutePreference';
 
 export type UseBotGamePreferencesParams = {
   appMode: AppMode;
@@ -35,7 +35,7 @@ export function useBotGamePreferences(
 ): UseBotGamePreferencesResult {
   const { appMode } = params;
 
-  const [isMuted, setIsMuted] = useState<boolean>(() => mutePreference.get());
+  const [isMuted, setIsMuted] = useMutePreference();
   const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
     if (typeof window === 'undefined') return 7;
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
@@ -59,10 +59,6 @@ export function useBotGamePreferences(
   useEffect(() => {
     writeStoredPvfFritzTier(botFritzTier);
   }, [botFritzTier]);
-
-  useEffect(() => {
-    mutePreference.set(isMuted);
-  }, [isMuted]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;

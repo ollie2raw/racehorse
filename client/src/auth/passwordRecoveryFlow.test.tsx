@@ -11,6 +11,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../multiplayer/FriendInvitePopupBridge', () => ({ FriendInvitePopupBridge: () => null }));
 
+/**
+ * AuthModalsLayer lazy-loads its modals, so the first find in each test waits
+ * on a dynamic import. Under a full parallel run that can exceed
+ * findBy's 1s default — which is a slow import, not a broken modal.
+ */
+const LAZY_IMPORT_TIMEOUT = { timeout: 10_000 };
+
 const { AuthModalsLayer } = await import('../AppOverlays');
 
 const baseProps = {
@@ -39,19 +46,22 @@ const renderLayer = (overrides: Partial<LayerProps>) =>
 describe('recovery-link password flow', () => {
   it('stays closed when no recovery is pending', async () => {
     renderLayer({ passwordRecoveryPending: false });
-    await waitFor(() => expect(screen.queryByText('Set a new password')).toBeNull());
+    // Give the lazy import the same room it gets above, then assert nothing
+    // arrived — otherwise this passes simply because the chunk had not loaded.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText('Set a new password')).toBeNull();
   });
 
   it('opens on the recovery marker alone', async () => {
     renderLayer({ passwordRecoveryPending: true });
-    expect(await screen.findByText('Set a new password')).toBeTruthy();
+    expect(await screen.findByText('Set a new password', undefined, LAZY_IMPORT_TIMEOUT)).toBeTruthy();
   });
 
   it('still submits a new password through the same handler Settings uses', async () => {
     const onUpdatePassword = vi.fn(() => Promise.resolve({ error: null }));
     renderLayer({ passwordRecoveryPending: true, onUpdatePassword });
 
-    const password = await screen.findByLabelText('New password');
+    const password = await screen.findByLabelText('New password', undefined, LAZY_IMPORT_TIMEOUT);
     fireEvent.change(password, { target: { value: 'correct-horse' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), {
       target: { value: 'correct-horse' },
@@ -65,7 +75,7 @@ describe('recovery-link password flow', () => {
     const onUpdatePassword = vi.fn(() => Promise.resolve({ error: null }));
     renderLayer({ passwordRecoveryPending: true, onUpdatePassword });
 
-    const password = await screen.findByLabelText('New password');
+    const password = await screen.findByLabelText('New password', undefined, LAZY_IMPORT_TIMEOUT);
     fireEvent.change(password, { target: { value: 'correct-horse' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), {
       target: { value: 'correct-hoarse' },
@@ -82,7 +92,7 @@ describe('recovery-link password flow', () => {
     const onUpdatePassword = vi.fn(() => Promise.resolve({ error: null }));
     renderLayer({ passwordRecoveryPending: true, onUpdatePassword });
 
-    const password = await screen.findByLabelText('New password');
+    const password = await screen.findByLabelText('New password', undefined, LAZY_IMPORT_TIMEOUT);
     fireEvent.change(password, { target: { value: 'abc' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'abc' } });
     fireEvent.click(screen.getByRole('button', { name: 'Update password' }));

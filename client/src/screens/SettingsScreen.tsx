@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { Button, GlassCard } from '../components/primitives';
 import HubViewportPage from '../components/hub/HubViewportPage';
 import { resolvePasswordChange } from '../auth/passwordChange';
+import { useMutePreference } from '../utils/useMutePreference';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
 import './settingsScreen.css';
@@ -205,6 +206,36 @@ function EmailSection({
   );
 }
 
+function PreferencesSection() {
+  const [isMuted, setIsMuted] = useMutePreference();
+  const soundOn = !isMuted;
+
+  return (
+    <GlassCard className="rh-settings-section">
+      <h2 className="rh-settings-section-title">Preferences</h2>
+      <div className="rh-settings-toggle-row">
+        <span className="rh-settings-toggle-copy">
+          <span className="rh-settings-toggle-label">Sound</span>
+          <span className="rh-settings-section-note">
+            Tile placement, scoring, and end-of-hand audio, in every mode.
+          </span>
+        </span>
+        <Button
+          variant={soundOn ? 'tier-standard' : 'outline'}
+          size="sm"
+          role="switch"
+          aria-checked={soundOn}
+          aria-label="Sound"
+          className="rh-settings-toggle"
+          onClick={() => setIsMuted((prev) => !prev)}
+        >
+          {soundOn ? 'On' : 'Off'}
+        </Button>
+      </div>
+    </GlassCard>
+  );
+}
+
 /**
  * Account and preferences, in one place.
  *
@@ -246,6 +277,8 @@ export function SettingsScreen({
             <EmailSection currentEmail={authUser.email ?? null} onUpdateEmail={onUpdateEmail} />
             <PasswordSection onUpdatePassword={onUpdatePassword} />
 
+            <PreferencesSection />
+
             <GlassCard className="rh-settings-section">
               <h2 className="rh-settings-section-title">Session</h2>
               <Button variant="outline" onClick={() => onSignOut?.()}>
@@ -264,6 +297,10 @@ export function SettingsScreen({
             </Button>
           </GlassCard>
         )}
+
+        {/* Sound is stored on the device, not the account, so it is offered
+            whether or not anyone is signed in. */}
+        {!authUser && <PreferencesSection />}
       </div>
     </HubViewportPage>
   );
