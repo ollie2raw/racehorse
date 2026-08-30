@@ -11,10 +11,17 @@
   align-items: center;
 }
 
+/* Two children — the avatar, then the name+chevron group — mirroring the two
+   buttons this replaced, so the spacing lands where it used to.
+   
+   In rem, not px. The header scales with the root font size, so the Tailwind
+   `gap-4`/`gap-3` the old markup used shrank with it; hardcoded pixels did
+   not. That is what widened the stats block by 14px and pushed the tab row
+   into it at 1366px, on top of the 1280px band that already overlapped. */
 .rh-nav-account-trigger {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 1rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -29,6 +36,13 @@
 
 .rh-nav-account-trigger:active {
   transform: scale(0.97);
+}
+
+.rh-nav-account-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .rh-nav-account-avatar {
@@ -86,8 +100,17 @@
     display: block;
   }
 
-  .rh-nav-account-avatar {
+
+  .rh-nav-account-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.rh-nav-account-avatar {
     width: 42px;
     height: 42px;
   }
 }
+
