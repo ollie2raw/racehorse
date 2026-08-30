@@ -27,7 +27,7 @@ describe('Fritz rating processing', () => {
 
   it('returns a positive non-zero Glicko delta for a win over Fritz Master', async () => {
     mockedSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === '/rest/v1/profiles?id=eq.player-1') {
+      if (path.startsWith('/rest/v1/profiles?id=eq.player-1')) {
         return [
           {
             id: 'player-1',

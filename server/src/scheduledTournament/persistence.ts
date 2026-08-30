@@ -204,12 +204,21 @@ export async function updateRegistrationPlacement(
 
 // ── Matches ──────────────────────────────────────────────────────────────
 
+/**
+ * Backstop for the match read, not a page size callers work around: an
+ * 8-player bracket is 7 matches. The scheduler calls fetchMatches for every
+ * in-progress tournament on a 30-second tick, and the response was previously
+ * bounded only by however many rows a tournament happened to have.
+ */
+export const TOURNAMENT_MATCH_PAGE_LIMIT = 256;
+
 export async function fetchMatches(tournamentId: string): Promise<MatchRow[]> {
   return supabaseFetch<MatchRow[]>(
     `/rest/v1/${TABLES.matches}` +
       `?select=*` +
       `&tournament_id=eq.${encodeURIComponent(tournamentId)}` +
-      `&order=round.asc,match_number.asc`,
+      `&order=round.asc,match_number.asc` +
+      `&limit=${TOURNAMENT_MATCH_PAGE_LIMIT}`,
   );
 }
 
