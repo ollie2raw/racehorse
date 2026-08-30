@@ -1,12 +1,41 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
-import { AnimatedScore } from '../../components/AnimatedScore';
+import { hasModeActivity } from '../statsDerivations';
+import { StatsFigure, StatsFigureGrid, StatsModeCard } from './StatsModeCard';
 
-type Props = { ghost: PlayerIdentityModel['ghost'] };
-const value = (number: number | null) =>
-  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => n.toLocaleString()} />;
+const DASH = '—';
 
-export function GhostPerformanceSection({ ghost }: Props) {
-  const available = [ghost.rating, ghost.gamesPlayed, ghost.wins, ghost.losses, ghost.winRate, ghost.bestWinMargin].some((item) => item != null);
-  if (!available) return null;
-  return <section className="stats-analysis-card stats-analysis-card--ghost" aria-labelledby="stats-ghost-title"><div className="stats-section-heading"><p className="stats-eyebrow stats-eyebrow--purple">Ghost performance</p><h2 id="stats-ghost-title">Practice under pressure</h2></div><div className="stats-fact-grid stats-fact-grid--cards"><span><b>{value(ghost.rating)}</b> rating</span><span><b>{value(ghost.gamesPlayed)}</b> games</span><span><b>{ghost.wins == null || ghost.losses == null ? '—' : `${ghost.wins}W – ${ghost.losses}L`}</b> record</span><span><b>{ghost.winRate == null ? '—' : `${ghost.winRate.toFixed(1)}%`}</b> win rate</span><span><b>{ghost.bestWinMargin == null ? '—' : `${ghost.bestWinMargin} pts`}</b> best win</span></div></section>;
+export function GhostPerformanceSection({ ghost }: { ghost: PlayerIdentityModel['ghost'] }) {
+  const played = hasModeActivity([ghost.gamesPlayed, ghost.wins, ghost.losses, ghost.rating]);
+
+  return (
+    <StatsModeCard
+      accent="purple"
+      eyebrow="Ghost"
+      title="Practice under pressure"
+      empty={played ? null : 'Play a Ghost match to start a record here.'}
+    >
+      <StatsFigureGrid>
+        <StatsFigure
+          tone="accent"
+          value={ghost.rating == null ? DASH : ghost.rating.toLocaleString()}
+          label="rating"
+        />
+        <StatsFigure
+          value={
+            ghost.wins == null || ghost.losses == null ? DASH : `${ghost.wins}W – ${ghost.losses}L`
+          }
+          label="record"
+        />
+        <StatsFigure
+          value={ghost.winRate == null ? DASH : `${ghost.winRate.toFixed(1)}%`}
+          label="win rate"
+        />
+        <StatsFigure
+          value={ghost.bestWinMargin == null ? DASH : `${ghost.bestWinMargin} pts`}
+          label="best win"
+        />
+        <StatsFigure value={ghost.gamesPlayed ?? DASH} label="games" />
+      </StatsFigureGrid>
+    </StatsModeCard>
+  );
 }

@@ -7,7 +7,9 @@ import {
   deriveFritzSummary,
   formatWeekLabel,
   getWeekStart,
+  hasModeActivity,
   isGhostRatingEligible,
+  summarizeRecentForm,
 } from './statsDerivations';
 
 describe('dedupeOnlineMatchRows', () => {
@@ -110,5 +112,53 @@ describe('formatWeekLabel', () => {
   it('renders a Monday-through-Sunday label', () => {
     const weekStart = getWeekStart(new Date('2026-07-05T12:00:00'));
     expect(formatWeekLabel(weekStart)).toMatch(/^Week of /);
+  });
+});
+describe('summarizeRecentForm', () => {
+  it('counts the run and labels it by its length', () => {
+    const form = ['win', 'win', 'loss', 'win', 'win'] as const;
+    expect(summarizeRecentForm([...form])).toEqual({
+      wins: 4,
+      losses: 1,
+      label: '4W – 1L last 5',
+    });
+  });
+
+  it('returns null for a player with no recent games, rather than a 0W – 0L badge', () => {
+    expect(summarizeRecentForm([])).toBeNull();
+  });
+
+  it('caps the run at ten, keeping the most recent', () => {
+    // The model can hand back more than the strip shows; the label has to
+    // describe the games actually drawn, or it contradicts the squares.
+    const twelve = [
+      ...Array<'loss'>(2).fill('loss'),
+      ...Array<'win'>(10).fill('win'),
+    ];
+    expect(summarizeRecentForm(twelve)).toEqual({ wins: 10, losses: 0, label: '10W – 0L last 10' });
+  });
+
+  it('reads oldest-first, so the newest game is the last square', () => {
+    expect(summarizeRecentForm(['loss', 'win'])).toEqual({
+      wins: 1,
+      losses: 1,
+      label: '1W – 1L last 2',
+    });
+  });
+});
+
+describe('hasModeActivity', () => {
+  it('is false when every count is zero or missing', () => {
+    expect(hasModeActivity([0, null, 0])).toBe(false);
+    expect(hasModeActivity([null, null])).toBe(false);
+  });
+
+  it('is true as soon as one count is above zero', () => {
+    expect(hasModeActivity([0, null, 3])).toBe(true);
+  });
+
+  it('treats a negative value as activity, not emptiness', () => {
+    // A negative rating delta still means games were played.
+    expect(hasModeActivity([-12])).toBe(true);
   });
 });

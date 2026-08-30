@@ -1,11 +1,44 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
-import { AnimatedScore } from '../../components/AnimatedScore';
+import { hasModeActivity } from '../statsDerivations';
+import { StatsFigure, StatsFigureGrid, StatsModeCard } from './StatsModeCard';
 
-type Props = { competitive: PlayerIdentityModel['competitive'] };
-const display = (value: number | null) =>
-  value == null ? '—' : <AnimatedScore value={value} from={0} format={(n) => n.toLocaleString()} />;
+const DASH = '—';
 
-export function RankedPerformanceSection({ competitive }: Props) {
-  const record = competitive.wins != null && competitive.losses != null ? `${competitive.wins}W – ${competitive.losses}L` : '—';
-  return <section className="stats-analysis-card" aria-labelledby="stats-ranked-performance-title"><div className="stats-section-heading"><p className="stats-eyebrow">Ranked performance</p><h2 id="stats-ranked-performance-title">The record behind the rating</h2></div><div className="stats-performance-lead"><div><span className="stats-stat-label">WIN RATE</span><strong>{competitive.winRate == null ? '—' : `${competitive.winRate.toFixed(1)}%`}</strong></div><div><span className="stats-stat-label">RECORD</span><b>{record}</b></div></div><div className="stats-fact-grid"><span><b>{display(competitive.currentStreak)}</b> current streak</span><span><b>{display(competitive.bestStreak)}</b> best streak</span><span><b>{display(competitive.rankedGames)}</b> games played</span></div></section>;
+/**
+ * The ranked record. Rating, rank and peak live in the hero above — this is
+ * what produced them.
+ */
+export function RankedPerformanceSection({
+  competitive,
+}: {
+  competitive: PlayerIdentityModel['competitive'];
+}) {
+  const played = hasModeActivity([competitive.rankedGames, competitive.wins, competitive.losses]);
+
+  return (
+    <StatsModeCard
+      accent="gold"
+      eyebrow="Ranked"
+      title="The record behind the rating"
+      empty={played ? null : 'Play a ranked match to start a record here.'}
+    >
+      <StatsFigureGrid>
+        <StatsFigure
+          tone="accent"
+          value={competitive.winRate == null ? DASH : `${competitive.winRate.toFixed(1)}%`}
+          label="win rate"
+        />
+        <StatsFigure
+          value={
+            competitive.wins == null || competitive.losses == null
+              ? DASH
+              : `${competitive.wins}W – ${competitive.losses}L`
+          }
+          label="record"
+        />
+        <StatsFigure value={competitive.currentStreak ?? DASH} label="current streak" />
+        <StatsFigure value={competitive.bestStreak ?? DASH} label="best streak" />
+      </StatsFigureGrid>
+    </StatsModeCard>
+  );
 }
