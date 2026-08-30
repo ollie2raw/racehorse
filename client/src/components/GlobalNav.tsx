@@ -389,6 +389,7 @@ export function GlobalNav({
                     {initials}
                   </span>
                 </span>
+                <span className="rh-nav-account-label">
                 <span className="rh-nav-account-name" style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}>
                   {displayName}
                 </span>
@@ -403,6 +404,7 @@ export function GlobalNav({
                 >
                   <path d="M5 7.5L10 12.5L15 7.5" stroke="var(--text-secondary)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
+                </span>
               </button>
 
               {authUser && accountMenuOpen && (

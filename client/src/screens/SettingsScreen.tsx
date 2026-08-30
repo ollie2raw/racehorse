@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { Button, GlassCard } from '../components/primitives';
-import HubViewportPage from '../components/hub/HubViewportPage';
+import { Button } from '../components/primitives';
+import { GlobalNav } from '../components/GlobalNav';
 import { resolvePasswordChange } from '../auth/passwordChange';
 import { useMutePreference } from '../utils/useMutePreference';
 import type { UserProfile } from '../auth/useAuth';
@@ -60,6 +60,31 @@ function useSettingsAction() {
   return { pending, status, setStatus, run };
 }
 
+/**
+ * One settings panel, in the same shape the how-to-play article uses for its
+ * rules sections: an accent-tinted card, an uppercase eyebrow above the
+ * heading, and a dot tying the heading to the panel's accent.
+ */
+function SettingsSection({
+  eyebrow,
+  title,
+  accent = 'green',
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  accent?: 'green' | 'gold' | 'danger';
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`rh-settings-section rh-settings-section--${accent}`}>
+      <p className="rh-settings-section-eyebrow">{eyebrow}</p>
+      <h2 className="rh-settings-section-title">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
 function StatusLine({ status }: { status: Status }) {
   if (status.error) return <p className="rh-settings-error" role="alert">{status.error}</p>;
   if (status.message) return <p className="rh-settings-success" role="status">{status.message}</p>;
@@ -78,8 +103,7 @@ function UsernameSection({
   const { pending, status, run } = useSettingsAction();
 
   return (
-    <GlassCard className="rh-settings-section">
-      <h2 className="rh-settings-section-title">Handle</h2>
+    <SettingsSection eyebrow="Identity" title="Handle" accent="green">
       <p className="rh-settings-section-note">
         This name appears on leaderboards, friends lists, and match results.
       </p>
@@ -103,7 +127,7 @@ function UsernameSection({
       >
         {pending ? 'Saving…' : 'Save username'}
       </Button>
-    </GlassCard>
+    </SettingsSection>
   );
 }
 
@@ -130,8 +154,7 @@ function PasswordSection({
   }
 
   return (
-    <GlassCard className="rh-settings-section">
-      <h2 className="rh-settings-section-title">Password</h2>
+    <SettingsSection eyebrow="Sign-in" title="Password" accent="green">
       <p className="rh-settings-section-note">
         Change it here while you are signed in. The emailed reset link is for when you cannot.
       </p>
@@ -163,7 +186,7 @@ function PasswordSection({
       <Button variant="primary" disabled={pending} onClick={submit}>
         {pending ? 'Saving…' : 'Update password'}
       </Button>
-    </GlassCard>
+    </SettingsSection>
   );
 }
 
@@ -181,8 +204,7 @@ function EmailSection({
   const { pending, status, run } = useSettingsAction();
 
   return (
-    <GlassCard className="rh-settings-section">
-      <h2 className="rh-settings-section-title">Email</h2>
+    <SettingsSection eyebrow="Sign-in" title="Email" accent="gold">
       <p className="rh-settings-section-note">
         Signed in as <span className="rh-settings-current-email">{currentEmail ?? 'no address on record'}</span>.
       </p>
@@ -206,7 +228,7 @@ function EmailSection({
       >
         {pending ? 'Sending…' : 'Change email'}
       </Button>
-    </GlassCard>
+    </SettingsSection>
   );
 }
 
@@ -227,8 +249,7 @@ function DangerZoneSection({
     confirmation.trim().toLowerCase() === username.trim().toLowerCase();
 
   return (
-    <GlassCard className="rh-settings-section rh-settings-section--danger">
-      <h2 className="rh-settings-section-title">Delete account</h2>
+    <SettingsSection eyebrow="Irreversible" title="Delete account" accent="danger">
       <p className="rh-settings-section-note">
         This erases your profile, your handle, your friends, and your rating history. It cannot be
         undone, and the handle becomes available for someone else to take.
@@ -281,7 +302,7 @@ function DangerZoneSection({
           Delete account
         </Button>
       )}
-    </GlassCard>
+    </SettingsSection>
   );
 }
 
@@ -290,8 +311,7 @@ function PreferencesSection() {
   const soundOn = !isMuted;
 
   return (
-    <GlassCard className="rh-settings-section">
-      <h2 className="rh-settings-section-title">Preferences</h2>
+    <SettingsSection eyebrow="Game" title="Preferences" accent="gold">
       <div className="rh-settings-toggle-row">
         <span className="rh-settings-toggle-copy">
           <span className="rh-settings-toggle-label">Sound</span>
@@ -311,7 +331,7 @@ function PreferencesSection() {
           {soundOn ? 'On' : 'Off'}
         </Button>
       </div>
-    </GlassCard>
+    </SettingsSection>
   );
 }
 
@@ -335,13 +355,24 @@ export function SettingsScreen({
   onDeleteAccount,
 }: SettingsScreenProps) {
   return (
-    <HubViewportPage
-      currentMode="settings"
-      activeColor="var(--tier-standard)"
-      onNavigate={onNavigate}
-      onOpenAuth={onOpenAuth}
-      onSignOut={onSignOut}
-    >
+    /*
+     * Not HubViewportPage. That shell is deliberately viewport-contained —
+     * "long content should scroll inside its panel" — which is right for a hub
+     * of fixed panels and wrong for this, a stack of forms taller than any
+     * viewport. On production it clipped everything below the fold with no way
+     * to reach it. This is the how-to-play pattern instead: one scrollport
+     * under a pinned nav.
+     */
+    <div className="rh-settings-page">
+      <GlobalNav
+        currentMode="settings"
+        activeColor="var(--tier-standard)"
+        solidDarkChrome
+        onNavigate={onNavigate}
+        onOpenAuth={onOpenAuth}
+        onSignOut={onSignOut}
+      />
+      <div className="rh-settings-scroll">
       <div className="rh-settings">
         <header className="rh-settings-head">
           <p className="rh-settings-eyebrow">Account</p>
@@ -359,12 +390,11 @@ export function SettingsScreen({
 
             <PreferencesSection />
 
-            <GlassCard className="rh-settings-section">
-              <h2 className="rh-settings-section-title">Session</h2>
+            <SettingsSection eyebrow="Device" title="Session" accent="green">
               <Button variant="outline" onClick={() => onSignOut?.()}>
                 Sign out
               </Button>
-            </GlassCard>
+            </SettingsSection>
 
             <DangerZoneSection
               username={authProfile?.username ?? ''}
@@ -372,22 +402,22 @@ export function SettingsScreen({
             />
           </>
         ) : (
-          <GlassCard className="rh-settings-section">
-            <h2 className="rh-settings-section-title">Not signed in</h2>
+          <SettingsSection eyebrow="Account" title="Not signed in" accent="green">
             <p className="rh-settings-section-note">
               Sign in to manage your handle, your sign-in details, and your game preferences.
             </p>
             <Button variant="primary" onClick={() => onOpenAuth?.()}>
               Sign in
             </Button>
-          </GlassCard>
+          </SettingsSection>
         )}
 
         {/* Sound is stored on the device, not the account, so it is offered
             whether or not anyone is signed in. */}
         {!authUser && <PreferencesSection />}
       </div>
-    </HubViewportPage>
+      </div>
+    </div>
   );
 }
 

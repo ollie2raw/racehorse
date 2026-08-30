@@ -2,9 +2,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../components/hub/HubViewportPage', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
+// The page renders GlobalNav directly now — it is no longer a hub page, so
+// there is no HubViewportPage between them.
+vi.mock('../components/GlobalNav', () => ({ GlobalNav: () => null }));
 
 const { SettingsScreen } = await import('./SettingsScreen');
 

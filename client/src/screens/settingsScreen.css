@@ -1,31 +1,63 @@
 /* Settings — account and preferences.
  *
- * Mobile-first, matching the hub screens: the unprefixed rules are the phone
- * layout, desktop widens in the `desk` query at the end.
+ * Laid out as a document, not a hub. `HubViewportPage` is deliberately
+ * viewport-contained ("long content should scroll inside its panel"), which is
+ * right for a hub of fixed panels and wrong for a stack of forms taller than
+ * any viewport — on production it clipped everything below the fold with no
+ * way to reach it. This follows `.rh-htp-page` instead: `.app` is
+ * `100dvh; overflow: hidden`, the nav is pinned, and one scrollport underneath
+ * carries the content.
+ *
+ * The section cards mirror `.rh-htp-article__section`, so the two long-form
+ * pages read as the same product. Duplicated rather than imported: each
+ * feature's CSS stays scoped to that feature.
  */
+
+.rh-settings-page {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--bg-obsidian);
+}
+
+.rh-settings-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
 
 .rh-settings {
   width: 100%;
-  max-width: 720px;
+  /* The rules article's measure: long enough to read, short enough not to
+     stretch a form field across a desktop. */
+  max-width: 68ch;
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: var(--space-md) var(--space-sm) 96px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-md);
+  color: var(--text-primary);
+  font-family: var(--font-body);
 }
+
+/* ── Head ───────────────────────────────────────────────────────── */
 
 .rh-settings-head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .rh-settings-eyebrow {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.25em;
+  font-weight: 800;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.35);
 }
@@ -33,51 +65,87 @@
 .rh-settings-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: rgba(255, 255, 255, 0.95);
+  font-size: clamp(34px, 6vw, 52px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  text-shadow: 0 0 36px rgba(160, 200, 255, 0.1);
+  text-wrap: balance;
 }
+
+/* ── Sections ───────────────────────────────────────────────────── */
 
 .rh-settings-section {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
-  padding: 20px;
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--rh-settings-accent) 26%, rgba(255, 255, 255, 0.1));
+  /* Fallback: the --pvf-radius-* scale only loads with the PvF stylesheet,
+     which this route does not pull in. */
+  border-radius: var(--pvf-radius-md, 14px);
+  background: color-mix(in srgb, var(--rh-settings-accent) 5%, rgba(0, 0, 0, 0.22));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 28px color-mix(in srgb, var(--rh-settings-accent) 7%, transparent);
+}
+
+.rh-settings-section--green {
+  --rh-settings-accent: var(--accent-green);
+}
+
+.rh-settings-section--gold {
+  --rh-settings-accent: var(--tier-elite);
+}
+
+.rh-settings-section--danger {
+  --rh-settings-accent: var(--accent-danger);
+}
+
+.rh-settings-section-eyebrow {
+  margin: 0;
+  color: var(--rh-settings-accent);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
 }
 
 .rh-settings-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   margin: 0;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: clamp(25px, 4vw, 30px);
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+/* The kicker dot, tying the heading to its panel accent. */
+.rh-settings-section-title::before {
+  content: '';
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--rh-settings-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--rh-settings-accent) 60%, transparent);
 }
 
 .rh-settings-section-note {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-@media (min-width: 769px) and (min-height: 600px) {
-  .rh-settings {
-    padding: 36px 24px 64px;
-    gap: 20px;
-  }
-
-  .rh-settings-title {
-    font-size: 52px;
-  }
-
-  .rh-settings-section {
-    padding: 24px;
-  }
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  text-wrap: pretty;
 }
 
 /* ── Fields ─────────────────────────────────────────────────────── */
@@ -112,8 +180,8 @@
 
 .rh-settings-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+  border-color: color-mix(in srgb, var(--rh-settings-accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rh-settings-accent) 16%, transparent);
 }
 
 .rh-settings-input:disabled {
@@ -146,7 +214,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-sm);
   width: 100%;
 }
 
@@ -159,7 +227,7 @@
 
 .rh-settings-toggle-label {
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
 }
@@ -170,10 +238,6 @@
 }
 
 /* ── Danger zone ────────────────────────────────────────────────── */
-
-.rh-settings-section--danger {
-  border-color: color-mix(in srgb, var(--accent-danger) 32%, transparent);
-}
 
 .rh-settings-actions {
   display: flex;
@@ -188,4 +252,10 @@
 
 .rh-settings-danger-button.rh-btn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent-danger) 70%, transparent);
+}
+
+@media (min-width: 769px) and (min-height: 600px) {
+  .rh-settings {
+    padding: var(--space-lg) var(--space-md) 96px;
+  }
 }
