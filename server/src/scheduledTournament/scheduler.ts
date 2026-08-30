@@ -58,7 +58,8 @@ export function startTournamentScheduler(io: Server): void {
           await dispatchScheduledStartMatches(io, t.id, undefined, new Date(now));
         }
       }
-      await reconcileExpiredReadyMatches(io, new Date(now));
+      // Hand over the set just read rather than making the engine fetch it again.
+      await reconcileExpiredReadyMatches(io, new Date(now), undefined, inProgress);
     } catch (err) {
       log.warn({ err }, 'scheduler tick failed');
     }

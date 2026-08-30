@@ -886,3 +886,31 @@ describe('ready-match reconciliation', () => {
     expect(Date.parse(store.matches[0].ready_deadline_at!)).toBeGreaterThan(Date.now());
   });
 });
+
+/**
+ * The scheduler tick fetched in-progress tournaments and then called
+ * reconcileExpiredReadyMatches, which fetched exactly the same set again —
+ * 2,880 duplicate queries a day on a 30-second tick, whether or not anyone was
+ * playing.
+ */
+describe('reconcileExpiredReadyMatches — reusing the caller\'s read', () => {
+  it('does not re-query when the caller already has the tournaments', async () => {
+    const fetchTournamentsByStatus = vi.fn(async () => []);
+    const { persistence } = makePersistence(makeTournament({ status: 'in_progress' }), []);
+    const { io } = makeIoMock();
+
+    await reconcileExpiredReadyMatches(io, new Date(), { ...persistence, fetchTournamentsByStatus }, []);
+
+    expect(fetchTournamentsByStatus).not.toHaveBeenCalled();
+  });
+
+  it('still fetches for a caller that passes nothing, so standalone use is unchanged', async () => {
+    const fetchTournamentsByStatus = vi.fn(async () => []);
+    const { persistence } = makePersistence(makeTournament({ status: 'in_progress' }), []);
+    const { io } = makeIoMock();
+
+    await reconcileExpiredReadyMatches(io, new Date(), { ...persistence, fetchTournamentsByStatus });
+
+    expect(fetchTournamentsByStatus).toHaveBeenCalledWith(['in_progress']);
+  });
+});

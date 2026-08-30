@@ -1,6 +1,7 @@
 
 import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, type MatchOutcome } from './glicko2';
 import { supabaseFetch } from '../supabaseUtils';
+import { fetchAllPages } from '../supabasePagination';
 
 export interface Profile {
   id: string;
@@ -13,6 +14,13 @@ export interface Profile {
   peak_rating: number;
   provisional: boolean;
 }
+
+/**
+ * Exactly the columns `Profile` declares. These reads were `select=*`, so they
+ * carried every column the table happens to have, including any added later.
+ */
+const PROFILE_COLUMNS =
+  'id,username,glicko_rating,glicko_rd,glicko_vol,glicko_last_period,ranked_games_played,peak_rating,provisional';
 
 interface RankedGame {
   id: string;
@@ -33,6 +41,12 @@ interface RankedGame {
 
 interface ProcessRatingPeriodOptions {
   applyDecayIfNoGames?: boolean;
+  /**
+   * A profile the caller already read. The decay sweep selects every inactive
+   * profile up front and then called back in for each one individually; that
+   * second read returned bytes it already had.
+   */
+  profile?: Profile;
 }
 
 interface OpponentSnapshot {
@@ -69,7 +83,9 @@ async function normalizeLegacyStartingProfile(profile: Profile): Promise<Profile
 }
 
 async function getProfile(userId: string): Promise<Profile> {
-  const [profile] = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${userId}`);
+  const [profile] = await supabaseFetch<Profile[]>(
+    `/rest/v1/profiles?id=eq.${userId}&select=${PROFILE_COLUMNS}&limit=1`,
+  );
   if (!profile) throw new Error('Player not found');
   return normalizeLegacyStartingProfile(profile);
 }
@@ -184,7 +200,9 @@ export async function processRatingPeriod(
   options: ProcessRatingPeriodOptions = {},
 ) {
   const { applyDecayIfNoGames = false } = options;
-  let profile = await getProfile(userId);
+  let profile = options.profile
+    ? await normalizeLegacyStartingProfile(options.profile)
+    : await getProfile(userId);
   const games = await getPendingGames(userId);
 
   if (games.length === 0) {
@@ -313,8 +331,13 @@ export async function processRealtimeMultiplayerGame(params: {
 }
 
 export async function processAllPendingRatingGames() {
-  const games = await supabaseFetch<Array<{ player_id: string }>>(
-    '/rest/v1/ranked_games?select=player_id&rating_after=is.null',
+  // Paged: this scan had no limit, so one response carried every unprocessed
+  // ranked game and grew with the backlog.
+  const games = await fetchAllPages<{ player_id: string }>((offset, limit) =>
+    supabaseFetch<Array<{ player_id: string }>>(
+      '/rest/v1/ranked_games?select=player_id&rating_after=is.null' +
+        `&order=id.asc&offset=${offset}&limit=${limit}`,
+    ),
   );
   const userIds = [...new Set(games.map((game) => game.player_id))];
 
@@ -336,8 +359,13 @@ export async function processAllPendingRatingGames() {
 export async function decayInactivePlayers() {
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const users = await supabaseFetch<Profile[]>(
-    `/rest/v1/profiles?or=(glicko_last_period.lt.${sevenDaysAgo},glicko_last_period.is.null)`,
+  // Paged, and projected: this was `select=*` with no limit, so a single
+  // response carried every column of every inactive profile.
+  const users = await fetchAllPages<Profile>((offset, limit) =>
+    supabaseFetch<Profile[]>(
+      `/rest/v1/profiles?or=(glicko_last_period.lt.${sevenDaysAgo},glicko_last_period.is.null)` +
+        `&select=${PROFILE_COLUMNS}&order=id.asc&offset=${offset}&limit=${limit}`,
+    ),
   );
 
   let processed = 0;
@@ -345,7 +373,12 @@ export async function decayInactivePlayers() {
 
   for (const user of users) {
     try {
-      const result = await processRatingPeriod(user.id, { applyDecayIfNoGames: true });
+      // Hand over the profile we already read: four sequential round-trips
+      // per user becomes three.
+      const result = await processRatingPeriod(user.id, {
+        applyDecayIfNoGames: true,
+        profile: user,
+      });
       if (result.gamesInPeriod === 0) {
         processed++;
       }

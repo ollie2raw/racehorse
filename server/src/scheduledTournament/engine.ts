@@ -4,6 +4,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
 import { QF_SEED_PAIRS, advanceSlot } from './bracket';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
+import type { ScheduledTournamentRow } from './types';
 import {
   TOURNAMENT_MATCH_READY_WINDOW_MS,
   allHumanPlayersJoined,
@@ -622,10 +623,18 @@ export async function reconcileExpiredReadyMatches(
   io: Server,
   now: Date = new Date(),
   persistence: EnginePersistence = defaultEnginePersistence,
+  /**
+   * In-progress tournaments the caller already read. The scheduler tick
+   * fetches exactly this set immediately before calling here, so without it
+   * the same query runs twice every 30 seconds — 2,880 duplicates a day,
+   * players or no players. Omit it and the standalone read still happens.
+   */
+  inProgressTournaments?: ScheduledTournamentRow[],
 ): Promise<number> {
-  const tournaments = persistence.fetchTournamentsByStatus
-    ? await persistence.fetchTournamentsByStatus(['in_progress'])
-    : [];
+  const tournaments = inProgressTournaments
+    ?? (persistence.fetchTournamentsByStatus
+      ? await persistence.fetchTournamentsByStatus(['in_progress'])
+      : []);
   let resolvedCount = 0;
   for (const tournament of tournaments) {
     const matches = await persistence.fetchMatches(tournament.id);
