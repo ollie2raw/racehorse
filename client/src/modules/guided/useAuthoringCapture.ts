@@ -31,6 +31,7 @@ import type {
   LessonV2Event,
   LessonV2HandStart,
 } from '../../learn/lessonV2.ts';
+import { reportOptionalChunkFailure } from '../../utils/optionalChunk';
 
 type LessonV2Api = typeof import('../../learn/lessonV2.ts');
 type CreateV2EventArgs = Parameters<LessonV2Api['createV2Event']>[0];
@@ -117,7 +118,8 @@ export function useAuthoringCapture({
       setAuthoringV2HandStarts(saved?.handStarts ?? []);
       authoringV2NextEventIndexRef.current = saved?.events.length ?? 0;
       authoringV2CreatedAtRef.current = saved?.createdAt ?? new Date().toISOString();
-    });
+    })
+      .catch((error) => reportOptionalChunkFailure('learn/lessonV2', error));
 
     return () => {
       cancelled = true;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { AppMode } from '../appRouteTypes';
 import { shouldShowPrivateMatchLobby } from './privateLobbyVisibility';
+import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 
 export type UsePrivateLobbyWinStreakParams = {
   appMode: AppMode;
@@ -35,7 +36,8 @@ export function usePrivateLobbyWinStreak(
         if (cancelled) return;
         if (res.error || !res.data) { setWinStreak(null); return; }
         setWinStreak(res.data.currentWinStreak);
-      });
+      })
+      .catch((error) => reportOptionalChunkFailure('stats/statsApi', error));
     return () => { cancelled = true; };
   }, [appMode, authUserId, isConnected, isRecoveringConnection, joinedRoom, hasLiveGameState]);
 

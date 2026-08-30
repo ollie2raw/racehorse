@@ -4,6 +4,7 @@
  */
 
 import type { HandLifecyclePhase, HandLifecycleLogPayload } from '@racehorse/match-protocol';
+import { reportOptionalChunkFailure } from '../../../utils/optionalChunk';
 
 export type { HandLifecyclePhase, HandLifecycleLogPayload };
 
@@ -197,5 +198,6 @@ export function emitHandLifecycleDebugLog(
   if (!import.meta.env.DEV) return;
   void import('../../../devtools/handLifecycleDebug.ts').then((module) => {
     module.emitHandLifecycleDebugLog(payload);
-  });
+  })
+    .catch((error) => reportOptionalChunkFailure('devtools/handLifecycleDebug', error));
 }

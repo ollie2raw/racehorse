@@ -1,4 +1,5 @@
 import React, { Suspense } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { FriendInvitePopupBridge } from './multiplayer/FriendInvitePopupBridge';
 import type { FriendInviteState } from './multiplayer/runtime/friendInviteRuntime';
 
@@ -51,6 +52,11 @@ export function AuthModalsLayer({
   signingOut,
 }: AuthModalsLayerProps) {
   return (
+    // The only React.lazy site with no ErrorBoundary above it: the route
+    // boundaries live inside this layer's children, not around it. Without one
+    // a failed modal chunk takes the whole tree down and, now that recovery
+    // runs from the boundary, would have no way back.
+    <ErrorBoundary context="auth-modals" fallback={null}>
     <Suspense fallback={null}>
       <AuthModal
         open={authModalOpen}
@@ -75,6 +81,7 @@ export function AuthModalsLayer({
         signingOut={signingOut}
       />
     </Suspense>
+    </ErrorBoundary>
   );
 }
 

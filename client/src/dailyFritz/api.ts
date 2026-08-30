@@ -30,6 +30,7 @@ export {
   throwApiResult,
   type DailyFritzMutationFailureKind,
 } from './dailyFritzMutations';
+import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 import {
   createDailyFritzRequestId,
   DAILY_FRITZ_REQUEST_ID_HEADER,
@@ -563,7 +564,8 @@ function dfNextHandIngest(payload: {
   if (!DAILY_FRITZ_NEXT_HAND_DEBUG_INGEST) return;
   void import('../devtools/dailyFritzDebugIngest').then((module) => {
     module.ingestDailyFritzNextHandDebug(payload);
-  });
+  })
+    .catch((error) => reportOptionalChunkFailure('devtools/dailyFritzDebugIngest', error));
 }
 
 /** Production copy for modal; dev keeps the raw message for debugging. */
