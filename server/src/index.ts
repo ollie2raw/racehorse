@@ -120,6 +120,7 @@ import {
   isFritzId,
 } from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
+import { buildApiHealthPayload } from './platform/health/apiHealthPayload';
 import {
   scheduleDailyFritzWarmup,
   scheduleDailyPuzzleLadderWarmup,
@@ -541,7 +542,7 @@ const socketsByUserId = presenceSocketsByUserId;
 
 app.get('/api/health', (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, ts: Date.now() });
+  res.json(buildApiHealthPayload());
 });
 
 registerStatsRoutes(app, {

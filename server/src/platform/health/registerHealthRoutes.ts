@@ -6,6 +6,7 @@ import type { Server } from 'socket.io';
 const log = childLogger('health');
 import { isGracefulShutdownInProgress } from '../gracefulShutdown';
 import { supabaseFetch } from '../../supabaseUtils';
+import { resolveReleaseVersion } from './releaseVersion';
 import {
   assessDailyPuzzleLadderReadiness,
   isPastLadderReadinessGracePt,
@@ -20,16 +21,6 @@ const READY_RECOMMENDED_ENV_VARS = [
   'DAILY_PUZZLE_CRON_SECRET',
   'SERVER_URL',
 ] as const;
-
-function getReleaseVersion(): string {
-  return (
-    process.env.RELEASE_VERSION?.trim() ||
-    process.env.RENDER_GIT_COMMIT?.trim() ||
-    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
-    process.env.npm_package_version?.trim() ||
-    'dev'
-  );
-}
 
 function getEnvPresence(names: readonly string[]): Record<string, boolean> {
   return Object.fromEntries(names.map((name) => [name, Boolean(process.env[name]?.trim())]));
@@ -108,7 +99,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     const { roomCount, gamesInProgress } = getRoomRuntimeStats();
     return {
       ok: true,
-      release: getReleaseVersion(),
+      release: resolveReleaseVersion(),
       nodeEnv: process.env.NODE_ENV ?? 'development',
       pid: process.pid,
       uptimeSeconds: Math.round(process.uptime()),
@@ -121,14 +112,14 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
   app.get('/health', (_, res) => {
     res.json({
       ok: true,
-      release: getReleaseVersion(),
+      release: resolveReleaseVersion(),
       nodeEnv: process.env.NODE_ENV ?? 'development',
       uptimeSeconds: Math.round(process.uptime()),
     });
   });
 
   app.get('/ping', (_, res) => {
-    res.json({ status: 'ok', release: getReleaseVersion() });
+    res.json({ status: 'ok', release: resolveReleaseVersion() });
   });
 
   app.get('/healthz', async (_req, res) => {
@@ -142,7 +133,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     res.status(200).json({
       status: 'ok',
       db: 'ok',
-      release: getReleaseVersion(),
+      release: resolveReleaseVersion(),
       uptimeSeconds: Math.floor(process.uptime()),
     });
   });
