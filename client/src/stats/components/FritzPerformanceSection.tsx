@@ -1,14 +1,79 @@
 import type { PlayerIdentityModel } from '../../identity/playerIdentityTypes';
 import type { FritzTierKey } from '../statsTypes';
+import { hasModeActivity } from '../statsDerivations';
+import { StatsFigure, StatsFigureGrid, StatsModeCard } from './StatsModeCard';
 
-type Props = { fritz: PlayerIdentityModel['fritz'] };
-const labels: Record<FritzTierKey, string> = { rookie: 'Rookie', standard: 'Standard', elite: 'Elite', master: 'Master' };
-const colors: Record<FritzTierKey, string> = { rookie: 'var(--tier-rookie)', standard: 'var(--tier-standard)', elite: 'var(--tier-elite)', master: 'var(--tier-master)' };
-const value = (number: number | null) => number == null ? '—' : number.toLocaleString();
+const DASH = '—';
 
-export function FritzPerformanceSection({ fritz }: Props) {
-  const hasData = [fritz.totalWins, fritz.totalLosses, fritz.winRate, fritz.averageScore, fritz.bestScore].some((item) => item != null) || fritz.difficultyRecords.length > 0;
-  if (!hasData) return null;
-  const records = new Map(fritz.difficultyRecords.map((record) => [record.difficulty.toLowerCase(), record]));
-  return <section className="stats-analysis-card" aria-labelledby="stats-fritz-title"><div className="stats-section-heading"><p className="stats-eyebrow stats-eyebrow--gold">Fritz performance</p><h2 id="stats-fritz-title">Against every difficulty</h2></div><div className="stats-fritz-overview"><div><span className="stats-stat-label">RECORD</span><strong>{fritz.totalWins != null && fritz.totalLosses != null ? `${fritz.totalWins}W – ${fritz.totalLosses}L` : '—'}</strong></div><div><span className="stats-stat-label">WIN RATE</span><b>{fritz.winRate == null ? '—' : `${fritz.winRate.toFixed(1)}%`}</b></div><div><span className="stats-stat-label">AVERAGE SCORE</span><b>{value(fritz.averageScore)}</b></div><div><span className="stats-stat-label">BEST SCORE</span><b>{value(fritz.bestScore)}</b></div></div><div className="stats-tier-list">{(Object.keys(labels) as FritzTierKey[]).map((tier) => { const record = records.get(tier); return <div className="stats-tier-row" key={tier}><span className="stats-tier-name"><i style={{ background: colors[tier] }} aria-hidden="true" />{labels[tier]}</span><span>{record ? `${record.wins}W – ${record.losses}L` : '—'}</span><span>{record ? `${record.games} games` : 'Unavailable'}</span></div>; })}</div></section>;
+const TIERS: Array<{ key: FritzTierKey; label: string; color: string }> = [
+  { key: 'rookie', label: 'Rookie', color: 'var(--tier-rookie)' },
+  { key: 'standard', label: 'Standard', color: 'var(--tier-standard)' },
+  { key: 'elite', label: 'Elite', color: 'var(--tier-elite)' },
+  { key: 'master', label: 'Master', color: 'var(--tier-master)' },
+];
+
+export function FritzPerformanceSection({ fritz }: { fritz: PlayerIdentityModel['fritz'] }) {
+  const played =
+    hasModeActivity([fritz.totalWins, fritz.totalLosses, fritz.bestScore]) ||
+    fritz.difficultyRecords.length > 0;
+  const records = new Map(
+    fritz.difficultyRecords.map((record) => [record.difficulty.toLowerCase(), record]),
+  );
+
+  return (
+    <StatsModeCard
+      accent="green"
+      wide
+      eyebrow="Fritz"
+      title="Against every difficulty"
+      empty={played ? null : 'Play Fritz to start a record here.'}
+    >
+      <StatsFigureGrid>
+        <StatsFigure
+          tone="accent"
+          value={
+            fritz.totalWins == null || fritz.totalLosses == null
+              ? DASH
+              : `${fritz.totalWins}W – ${fritz.totalLosses}L`
+          }
+          label="record"
+        />
+        <StatsFigure
+          value={fritz.winRate == null ? DASH : `${fritz.winRate.toFixed(1)}%`}
+          label="win rate"
+        />
+        <StatsFigure
+          value={fritz.averageScore == null ? DASH : fritz.averageScore.toLocaleString()}
+          label="average score"
+        />
+        <StatsFigure
+          value={fritz.bestScore == null ? DASH : fritz.bestScore.toLocaleString()}
+          label="best score"
+        />
+      </StatsFigureGrid>
+
+      {/* Per-tier is the part that actually says something about a player:
+          a strong rookie record and a losing elite one is a different story
+          from an even split across all four. */}
+      <ul className="rh-stats-tiers">
+        {TIERS.map((tier) => {
+          const record = records.get(tier.key);
+          return (
+            <li key={tier.key} className="rh-stats-tier">
+              <span className="rh-stats-tier-name">
+                <i style={{ background: tier.color }} aria-hidden="true" />
+                {tier.label}
+              </span>
+              <span className="rh-stats-tier-record">
+                {record ? `${record.wins}W – ${record.losses}L` : DASH}
+              </span>
+              <span className="rh-stats-tier-games">
+                {record ? `${record.games} games` : 'not played'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </StatsModeCard>
+  );
 }

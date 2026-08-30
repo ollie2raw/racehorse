@@ -336,3 +336,35 @@ export function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): Stat
     ghostBestWinMarginThisWeek: null,
   };
 }
+/** How many of the most recent results the form strip draws. */
+export const RECENT_FORM_LIMIT = 10;
+
+export type RecentFormSummary = { wins: number; losses: number; label: string };
+
+/**
+ * The last-N record behind the form strip.
+ *
+ * Capped at the same length the strip draws, and counted from the end: the
+ * model may hand back more results than are shown, and a label describing
+ * games that aren't on screen contradicts the squares next to it. Null for a
+ * player with no recent games, so the hero omits the badge rather than
+ * printing "0W – 0L".
+ */
+export function summarizeRecentForm(form: Array<'win' | 'loss'>): RecentFormSummary | null {
+  const recent = form.slice(-RECENT_FORM_LIMIT);
+  if (recent.length === 0) return null;
+  const wins = recent.filter((result) => result === 'win').length;
+  const losses = recent.length - wins;
+  return { wins, losses, label: `${wins}W – ${losses}L last ${recent.length}` };
+}
+
+/**
+ * Whether a mode has anything worth showing.
+ *
+ * A mode nobody has played renders a nudge instead of a grid of zeros — five
+ * `0`s reads as a broken panel rather than an empty one. Any non-zero counts,
+ * including a negative rating delta, since that still means games happened.
+ */
+export function hasModeActivity(counts: Array<number | null | undefined>): boolean {
+  return counts.some((count) => count != null && count !== 0);
+}

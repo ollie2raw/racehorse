@@ -126,7 +126,7 @@ export function StatsRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile } = auth;
+  const { authUser, authProfile, handleOpenAuthModal, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="stats">
@@ -136,6 +136,9 @@ export function StatsRoute({
           user={authUser}
           profile={authProfile}
           onClose={() => setAppMode('home')}
+          onNavigate={setAppMode}
+          onOpenAuth={handleOpenAuthModal}
+          onSignOut={handleSignOut}
         />
       </Suspense>
       </ErrorBoundary>

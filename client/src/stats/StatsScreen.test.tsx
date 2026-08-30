@@ -8,6 +8,8 @@ import StatsScreen from './StatsScreen';
 
 const { identityState } = vi.hoisted(() => ({ identityState: { current: null as { model: PlayerIdentityModel | null; loading: boolean; error: string | null } | null } }));
 vi.mock('../identity/usePlayerIdentityModel', () => ({ usePlayerIdentityModel: () => identityState.current }));
+// The page carries the site nav now rather than its own bare topbar.
+vi.mock('../components/GlobalNav', () => ({ GlobalNav: () => null }));
 
 function model(): PlayerIdentityModel {
   const base = createEmptyPlayerIdentityModel(100);
@@ -36,11 +38,15 @@ describe('StatsScreen normalized presentation', () => {
       vi.advanceTimersByTime(1000);
     });
     vi.useRealTimers();
-    expect(screen.getByRole('heading', { name: 'Performance at the table', level: 1 })).toBeTruthy();
+    // The hero leads with who this is and the rating, not a section title.
+    expect(screen.getByRole('heading', { name: '@Maya', level: 1 })).toBeTruthy();
+    expect(screen.getByText('1,400')).toBeTruthy();
+    expect(screen.getByText('#10')).toBeTruthy();
     expect(screen.getByText('87.5')).toBeTruthy();
-    expect(screen.getByText('72')).toBeTruthy();
     expect(screen.getByText('95')).toBeTruthy();
-    expect(screen.getByText('Ghost performance')).toBeTruthy();
+    expect(screen.getByText('Practice under pressure')).toBeTruthy();
+    // Daily Fritz has a section at last.
+    expect(screen.getByText('The daily set')).toBeTruthy();
   });
 
   it('renders a compact empty Puzzle state without invented zero metrics', () => {
@@ -55,13 +61,15 @@ describe('StatsScreen normalized presentation', () => {
   it('does not expose private Stats to an unsupported public target', () => {
     render(<StatsScreen {...props} targetUserId="other-user" />);
     expect(screen.getByText('Personal Stats are available from the player’s own account.')).toBeTruthy();
-    expect(screen.queryByText('Performance at the table')).toBeNull();
+    expect(screen.queryByRole('heading', { name: '@Maya' })).toBeNull();
   });
 
   it('keeps loading state scoped to the Stats hierarchy', () => {
     identityState.current = { model: null, loading: true, error: null };
     render(<StatsScreen {...props} />);
     expect(screen.getByLabelText('Loading stats')).toBeTruthy();
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true');
+    // No longer a dialog: it is a route page with the site nav above it.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true');
   });
 });

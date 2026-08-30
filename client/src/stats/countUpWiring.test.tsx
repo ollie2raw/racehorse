@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { PlayerCompetitiveSummary } from '../identity/components/PlayerCompetitiveSummary';
-import { PlayerRankedOverview } from '../stats/components/PlayerRankedOverview';
+import { StatsIdentityHero } from '../stats/components/StatsIdentityHero';
 import { RankedPerformanceSection } from '../stats/components/RankedPerformanceSection';
 
 type Competitive = Parameters<typeof PlayerCompetitiveSummary>[0]['competitive'];
@@ -46,12 +46,12 @@ describe('identity surfaces count numbers up', () => {
   });
 
   it('animates the stats rating and keeps thousands separators', () => {
-    const { container } = render(
-      <PlayerRankedOverview competitive={competitive} username="oliver" />,
-    );
+    const { container } = render(<StatsIdentityHero competitive={competitive} username="oliver" />);
     expect(container.textContent).not.toContain('1,420');
     settle();
     expect(container.textContent).toContain('1,420');
+    // Peak is stated, not animated: one number carries the motion, or the
+    // hero reads as a slot machine.
     expect(container.textContent).toContain('1,480');
   });
 
