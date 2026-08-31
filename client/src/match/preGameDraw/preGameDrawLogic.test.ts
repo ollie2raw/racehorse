@@ -9,6 +9,7 @@ import {
   commitTieRedraw,
   applyPlayerPick,
   applyScriptedPlayerPick,
+  findScriptedFritzSlotId,
   applyOpponentPick,
   simulateDrawRound,
   comparePreGameDrawTiles,
@@ -136,6 +137,67 @@ describe('preGameDrawLogic', () => {
       expect(swappedScriptedSlot.revealed).toBe(false);
       expect(swappedScriptedSlot.tile).toEqual(state.tiles.find((s) => s.id === tappedId)!.tile);
       expect(next.tiles.filter((slot) => !slot.outOfPlay)).toHaveLength(28);
+    });
+
+    it('15b. tapping Fritz\u2019s scripted slot flips that slot for the player and displaces Fritz', () => {
+      const state = initPreGameDraw();
+      const scriptedPlayerId = state.tiles[0].id;
+      const fritzId = state.tiles[1].id;
+      const playerTile = state.tiles[0].tile;
+      const fritzTile = state.tiles[1].tile;
+
+      // The player taps the slot Fritz was scripted to flip.
+      const next = applyScriptedPlayerPick(state, fritzId, scriptedPlayerId, fritzId);
+
+      // The tapped slot is the one that flips, and it shows the player's tile.
+      const tapped = next.tiles.find((s) => s.id === fritzId)!;
+      expect(tapped.revealed).toBe(true);
+      expect(tapped.tile).toEqual(playerTile);
+
+      // No other slot flipped.
+      expect(next.tiles.filter((s) => s.revealed)).toHaveLength(1);
+
+      // Fritz's tile is displaced into the scripted player slot, still face-down.
+      const displaced = next.tiles.find((s) => s.id === scriptedPlayerId)!;
+      expect(displaced.revealed).toBe(false);
+      expect(displaced.tile).toEqual(fritzTile);
+      expect(findScriptedFritzSlotId(next, fritzId)).toBe(scriptedPlayerId);
+
+      // Determinism: the player still draws the scripted tile.
+      expect(next.currentRound.you!.tile).toEqual(playerTile);
+      expect(next.tiles.filter((slot) => !slot.outOfPlay)).toHaveLength(28);
+    });
+
+    it('15b-restore. displaced Fritz slot is recoverable from state alone', () => {
+      // The restore path re-resolves Fritz's pick from the persisted draw state
+      // with no memory of which tile was tapped. Deriving the slot from the
+      // board has to give the same answer, or a refresh mid-draw resets the pick.
+      const state = initPreGameDraw();
+      const scriptedPlayerId = state.tiles[0].id;
+      const fritzId = state.tiles[1].id;
+
+      const next = applyScriptedPlayerPick(state, fritzId, scriptedPlayerId, fritzId);
+      const rehydrated = JSON.parse(JSON.stringify(next)) as typeof next;
+
+      expect(findScriptedFritzSlotId(rehydrated, fritzId)).toBe(scriptedPlayerId);
+      const target = rehydrated.tiles.find((s) => s.id === scriptedPlayerId)!;
+      expect(target.revealed).toBe(false);
+      expect(target.outOfPlay).toBe(false);
+    });
+
+    it('15c. leaves Fritz in place when the tap lands anywhere else', () => {
+      const state = initPreGameDraw();
+      const scriptedPlayerId = state.tiles[0].id;
+      const fritzId = state.tiles[1].id;
+      const tappedId = state.tiles[2].id;
+      const fritzTile = state.tiles[1].tile;
+
+      const next = applyScriptedPlayerPick(state, tappedId, scriptedPlayerId, fritzId);
+
+      expect(findScriptedFritzSlotId(next, fritzId)).toBe(fritzId);
+      const fritzSlot = next.tiles.find((s) => s.id === fritzId)!;
+      expect(fritzSlot.revealed).toBe(false);
+      expect(fritzSlot.tile).toEqual(fritzTile);
     });
   });
 

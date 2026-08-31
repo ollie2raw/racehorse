@@ -93,7 +93,6 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
     toggleFullscreen,
     onRequestLeave,
   } = props;
-
   if (preGameDrawActive && preGameDraw.drawState) {
     return (
       <PreGameTileDrawBoard

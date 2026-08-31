@@ -7,6 +7,7 @@ import {
   applyOpponentPick,
   applyPlayerPick,
   applyScriptedPlayerPick,
+  findScriptedFritzSlotId,
   generateDoubleSixSet,
   getPickableTileIds,
   initPreGameDraw,
@@ -212,11 +213,36 @@ function testScriptedPlayerPickRevealsTappedSlotWithScriptedPips(): void {
   );
 }
 
-function testScriptedPlayerPickFritzTapFallsBackToScriptedPlayerSlot(): void {
+/**
+ * Tapping the slot Fritz was scripted to flip used to reveal the scripted
+ * *player* slot instead — a tile the player never touched flipped, and the slot
+ * they did tap was then handed to Fritz. The tap now wins the position and
+ * Fritz is displaced.
+ */
+function testScriptedPlayerPickFritzTapWinsTheTappedSlot(): void {
   const state = initPreGameDraw();
   const after = applyScriptedPlayerPick(state, '0-1', '0-4', '0-1');
-  const playerSlot = after.tiles.find((slot) => slot.id === '0-4')!;
-  assertTrue(playerSlot.revealed, 'scripted player tile reveals at its position');
+
+  const tappedSlot = after.tiles.find((slot) => slot.id === '0-1')!;
+  assertTrue(tappedSlot.revealed, 'the tapped slot is the one that flips');
+  assertEqual(tappedSlot.tile, { low: 0, high: 4 }, 'tapped slot shows the scripted player pips');
+
+  assertEqual(
+    after.tiles.filter((slot) => slot.revealed).length,
+    1,
+    'no slot the player did not tap flips',
+  );
+
+  const displacedFritzSlot = after.tiles.find((slot) => slot.id === '0-4')!;
+  assertTrue(!displacedFritzSlot.revealed, 'displaced Fritz slot stays face-down');
+  assertEqual(displacedFritzSlot.tile, { low: 0, high: 1 }, 'Fritz tile moves into the scripted player slot');
+  assertEqual(
+    findScriptedFritzSlotId(after, '0-1'),
+    '0-4',
+    'Fritz flips from the scripted player slot after being displaced',
+  );
+
+  assertEqual(after.currentRound.you?.tileId, '0-4', 'canonical scripted id still stored');
   assertEqual(after.phase, 'pick-opponent', 'still advances');
 }
 
@@ -224,7 +250,7 @@ function run(): void {
   testInitHasTwentyEightPickableTiles();
   testCanonicalTileIdUsesSmallerPipFirst();
   testScriptedPlayerPickRevealsTappedSlotWithScriptedPips();
-  testScriptedPlayerPickFritzTapFallsBackToScriptedPlayerSlot();
+  testScriptedPlayerPickFritzTapWinsTheTappedSlot();
   testWinnerRemovesBothTilesAndLeavesTwentySixForDeal();
   testResolvedWinnerKeepsBothTilesVisibleOnBoard();
   testTieRedrawRemovesBothAndReopensPicks();

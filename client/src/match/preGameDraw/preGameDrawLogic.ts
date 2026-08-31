@@ -196,9 +196,45 @@ export function applyPlayerPick(state: PreGameDrawState, tileId: string): PreGam
 }
 
 /**
+ * Which scatter slot Fritz flips for his scripted tile.
+ *
+ * `applyScriptedPlayerPick` swaps *pips* between slots while leaving slot ids
+ * (positions) fixed, so a slot id stops being a reliable pointer to the tile it
+ * was named after. When the player taps the very slot Fritz was scripted to
+ * flip, the player's tap wins that position and Fritz's pips are displaced into
+ * the scripted player slot.
+ *
+ * Derived from the board rather than from the tap, so it gives the same answer
+ * when recomputed later — after a remount that restores a persisted draw, for
+ * instance, where the original tap is no longer known. The deck holds one of
+ * each domino, so at most one unrevealed slot can carry these pips.
+ *
+ * Fritz still draws the same tile either way; only its position on the scatter
+ * changes, so the scripted outcome and the remaining deck are untouched.
+ */
+export function findScriptedFritzSlotId(
+  state: PreGameDrawState,
+  scriptedFritzTileId: string,
+): string | null {
+  const slot = state.tiles.find(
+    (entry) =>
+      !entry.revealed &&
+      !entry.outOfPlay &&
+      toPreGameDrawTileId(entry.tile) === scriptedFritzTileId,
+  );
+  return slot ? slot.id : null;
+}
+
+/**
  * Scripted draw (Daily Fritz): player may tap any tile, but the canonical player tile
  * is fixed server-side. Reveal the tapped slot with the scripted pips so the flip
  * matches the user's touch target (not a different tile elsewhere on the scatter).
+ *
+ * This holds even when the player taps the slot Fritz was scripted to flip: the
+ * tap wins the position and Fritz is displaced to the scripted player slot (see
+ * `resolveScriptedFritzSlotId`). Previously that case short-circuited to
+ * `applyPlayerPick(scriptedPlayerTileId)`, which flipped a slot the player never
+ * touched and then handed the tapped slot to Fritz.
  */
 export function applyScriptedPlayerPick(
   state: PreGameDrawState,
@@ -206,10 +242,7 @@ export function applyScriptedPlayerPick(
   scriptedPlayerTileId: string,
   scriptedFritzTileId?: string | null,
 ): PreGameDrawState {
-  if (
-    tappedTileId === scriptedPlayerTileId ||
-    (scriptedFritzTileId != null && tappedTileId === scriptedFritzTileId)
-  ) {
+  if (tappedTileId === scriptedPlayerTileId) {
     return applyPlayerPick(state, scriptedPlayerTileId);
   }
 
@@ -224,6 +257,14 @@ export function applyScriptedPlayerPick(
   }
   if (!scriptedSlot || scriptedSlot.outOfPlay) {
     throw new Error(`Scripted player tile ${scriptedPlayerTileId} is not available`);
+  }
+  if (scriptedFritzTileId != null) {
+    // Fail fast on a stale scripted id rather than letting the mismatch surface
+    // later as a wrong-looking flip.
+    const fritzSlot = findSlot(state, scriptedFritzTileId);
+    if (!fritzSlot || fritzSlot.outOfPlay || fritzSlot.revealed) {
+      throw new Error(`Scripted fritz tile ${scriptedFritzTileId} is not available`);
+    }
   }
 
   const scriptedTile = scriptedSlot.tile;

@@ -12,6 +12,7 @@ import {
   commitTieRedraw,
   initPreGameDraw,
   isTieHoldState,
+  findScriptedFritzSlotId,
   pickRandomOpponentTileId,
   type PreGameDrawPlayer,
   type PreGameDrawRoundPick,
@@ -70,10 +71,17 @@ export interface UsePreGameDrawOptions {
 function resolveScriptedOutcome({
   stateAfterPlayerPick,
   scriptedFritzTileId,
+  fritzSlotId,
   scriptedWinner,
 }: {
   stateAfterPlayerPick: PreGameDrawState;
+  /** Canonical scripted tile identity, recorded on the pick. */
   scriptedFritzTileId: string;
+  /**
+   * Scatter slot Fritz flips. Differs from `scriptedFritzTileId` only when the
+   * player tapped Fritz's scripted slot and displaced him.
+   */
+  fritzSlotId: string;
   scriptedWinner: PreGameDrawPlayer;
 }): PreGameDrawState {
   const youPick = stateAfterPlayerPick.currentRound.you;
@@ -81,14 +89,14 @@ function resolveScriptedOutcome({
     throw new Error('Scripted draw requires a player pick before resolving');
   }
 
-  const botSlot = stateAfterPlayerPick.tiles.find((slot) => slot.id === scriptedFritzTileId);
+  const botSlot = stateAfterPlayerPick.tiles.find((slot) => slot.id === fritzSlotId);
   if (!botSlot || botSlot.outOfPlay || botSlot.revealed) {
     throw new Error('Scripted draw fritz tile id is not pickable');
   }
 
-  // Reveal the scripted Fritz tile.
+  // Reveal the slot holding Fritz's scripted tile.
   const tilesRevealed = stateAfterPlayerPick.tiles.map((slot) =>
-    slot.id === scriptedFritzTileId ? { ...slot, revealed: true } : slot,
+    slot.id === fritzSlotId ? { ...slot, revealed: true } : slot,
   );
 
   const remainingDeck = tilesRevealed
@@ -321,6 +329,11 @@ export function usePreGameDraw({
             afterOpponent = resolveScriptedOutcome({
               stateAfterPlayerPick,
               scriptedFritzTileId,
+              // Derived from the board, not from the tap, so a restored draw
+              // resolves identically to a live one.
+              fritzSlotId:
+                findScriptedFritzSlotId(stateAfterPlayerPick, scriptedFritzTileId)
+                ?? scriptedFritzTileId,
               scriptedWinner,
             });
           } else {
