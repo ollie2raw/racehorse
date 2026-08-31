@@ -117,10 +117,13 @@ function makeHumanVsBotPersistence(): {
     updateMatch: async (id, patch) => {
       if (id === store.match.id) Object.assign(store.match, patch);
     },
-    completeMatchIfNotCompleted: async (id, patch) => {
-      if (id !== store.match.id || store.match.status === 'completed') return false;
-      Object.assign(store.match, patch);
-      return true;
+    // This suite exercises dispatch + attach + log order only; it never
+    // completes or promotes a match through the engine.
+    completeTournamentMatch: async () => {
+      throw new Error('completeTournamentMatch not exercised by tournamentHumanBotFlow.test');
+    },
+    promoteTournamentMatch: async () => {
+      throw new Error('promoteTournamentMatch not exercised by tournamentHumanBotFlow.test');
     },
     updateRegistrationPlacement: vi.fn(),
     updateRegistrationStatus: vi.fn(),

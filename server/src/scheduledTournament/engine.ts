@@ -513,6 +513,17 @@ export async function applyMatchResult(
     return;
   }
 
+  if (result.advance_target_missing) {
+    log.warn({
+      event: 'tournament_advance_target_missing',
+      matchId: match.id,
+      tournamentId: match.tournament_id,
+      round: match.round,
+      matchNumber: match.match_number,
+    }, 'match completed but its next-round row is missing — bracket may be corrupt');
+    return;
+  }
+
   if (result.advanced_to_match_id) {
     log.info({
       fromMatchId: match.id,

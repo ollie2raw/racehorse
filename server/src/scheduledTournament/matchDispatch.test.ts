@@ -86,10 +86,11 @@ function makePersistence(match: MatchRow): { persistence: EnginePersistence; sto
       if (id !== store.match.id) return;
       Object.assign(store.match, patch);
     },
-    completeMatchIfNotCompleted: async (id, patch) => {
-      if (id !== store.match.id || store.match.status === 'completed') return false;
-      Object.assign(store.match, patch);
-      return true;
+    completeTournamentMatch: async () => {
+      throw new Error('completeTournamentMatch not exercised by matchDispatch.test');
+    },
+    promoteTournamentMatch: async () => {
+      throw new Error('promoteTournamentMatch not exercised by matchDispatch.test');
     },
     updateRegistrationPlacement: vi.fn(),
     updateRegistrationStatus: vi.fn(),

@@ -325,8 +325,28 @@ begin
      and match_number = v_tgt_number
    for update;      -- second row lock; order is always (feeder)→(target), no cycle
   if not found then
-    raise exception 'advance_target_missing'
-      using detail = format('r%s m%s', v_tgt_round, v_tgt_number);
+    -- A 7-row bracket always has this target. If it is missing the bracket is
+    -- corrupt — but the completion above is real and durable, so do NOT roll it
+    -- back: return with the flag and let the Node layer log/alert. (Raising here
+    -- would also kill the whole reconciler tick on one bad match.)
+    return jsonb_build_object(
+      'status',               'completed',
+      'winner_id',            p_winner_id,
+      'winner_source',        p_winner_source,
+      'player1_score',        v_p1_score,
+      'player2_score',        v_p2_score,
+      'applied',              true,
+      'conflict',             false,
+      'advance_target_missing', true,
+      'advanced_to_match_id', null,
+      'advanced_to_slot',     null,
+      'advanced_to_status',   null,
+      'tournament_completed',  false,
+      'round_now_complete',    coalesce((
+        select bool_and(status in ('completed','bye')) from scheduled_tournament_matches
+         where tournament_id = v_match.tournament_id and round = v_match.round), false),
+      'placements',            null
+    );
   end if;
 
   if v_tgt_slot = 'player1' then
@@ -365,6 +385,7 @@ begin
     'player2_score',        v_p2_score,
     'conflict',             false,
     'applied',              true,
+    'advance_target_missing', false,
     'advanced_to_match_id', v_tgt_id,
     'advanced_to_slot',     v_tgt_slot,
     'advanced_to_status',   v_tgt_status,

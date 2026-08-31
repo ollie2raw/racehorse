@@ -46,6 +46,7 @@ import {
   dispatchScheduledStartMatches,
 } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
+import { inMemoryMatchRpcForArrayStore, recordMatchResultForTest } from './inMemoryMatchRpc.testkit';
 import type {
   MatchRow,
   RegistrationRow,
@@ -149,12 +150,7 @@ function makePersistence(
       if (!m) return;
       Object.assign(m, patch);
     },
-    completeMatchIfNotCompleted: async (id, patch) => {
-      const m = store.matches.find((x) => x.id === id);
-      if (!m || m.status === 'completed') return false;
-      Object.assign(m, patch);
-      return true;
-    },
+    ...inMemoryMatchRpcForArrayStore(store),
     updateRegistrationStatus: async (_tid, userId, status, seed) => {
       const r = store.regs.find((x) => x.user_id === userId);
       if (!r) return;
@@ -365,7 +361,7 @@ describe('closeRegistrationAndStart', () => {
       (m) => m.round === 1 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
     );
     expect(qf?.status).toBe('ready');
-    await applyMatchResult(io, {
+    await recordMatchResultForTest(io, {
       matchId: qf!.id,
       winnerId: 'u1',
       player1Score: qf!.player1_id === 'u1' ? 30 : 18,
@@ -380,7 +376,7 @@ describe('closeRegistrationAndStart', () => {
     expect(sf?.winner_id).toBeNull();
     expect([sf?.player1_id, sf?.player2_id].some((id) => id?.startsWith('bot:fritz:'))).toBe(true);
 
-    await applyMatchResult(io, {
+    await recordMatchResultForTest(io, {
       matchId: sf!.id,
       winnerId: 'u1',
       player1Score: sf!.player1_id === 'u1' ? 30 : 20,
@@ -533,10 +529,10 @@ describe('full bracket lifecycle (8 players)', () => {
       expect(m.status).toBe('ready');
     }
 
-    await applyMatchResult(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
-    await applyMatchResult(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
-    await applyMatchResult(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
-    await applyMatchResult(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
 
     const sf = store.matches
       .filter((m) => m.round === 2)
@@ -554,7 +550,7 @@ describe('full bracket lifecycle (8 players)', () => {
     expect(final.player2_id).toBeNull();
     expect(final.status).toBe('waiting');
 
-    await applyMatchResult(io, {
+    await recordMatchResultForTest(io, {
       matchId: sf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 25,
     }, persistence);
 
@@ -564,7 +560,7 @@ describe('full bracket lifecycle (8 players)', () => {
 
     expect(store.regs.find((r) => r.user_id === 'u5')?.status).toBe('eliminated');
 
-    await applyMatchResult(io, {
+    await recordMatchResultForTest(io, {
       matchId: sf[1].id, winnerId: 'u6', player1Score: 30, player2Score: 18,
     }, persistence);
 
@@ -583,7 +579,7 @@ describe('full bracket lifecycle (8 players)', () => {
       ),
     ).toHaveLength(2);
 
-    await applyMatchResult(io, {
+    await recordMatchResultForTest(io, {
       matchId: finalReady.id, winnerId: 'u8', player1Score: 30, player2Score: 22,
     }, persistence);
 
@@ -616,19 +612,19 @@ describe('full bracket lifecycle (8 players)', () => {
     await generateBracket(io, 'tour-1', persistence);
 
     const qf = store.matches.filter((m) => m.round === 1).sort((a, b) => a.match_number - b.match_number);
-    await applyMatchResult(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
-    await applyMatchResult(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
-    await applyMatchResult(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
-    await applyMatchResult(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
+    await recordMatchResultForTest(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
     const sf = store.matches.filter((m) => m.round === 2).sort((a, b) => a.match_number - b.match_number);
-    await applyMatchResult(io, { matchId: sf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 25 }, persistence);
-    await applyMatchResult(io, { matchId: sf[1].id, winnerId: 'u6', player1Score: 30, player2Score: 18 }, persistence);
+    await recordMatchResultForTest(io, { matchId: sf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 25 }, persistence);
+    await recordMatchResultForTest(io, { matchId: sf[1].id, winnerId: 'u6', player1Score: 30, player2Score: 18 }, persistence);
     const final = store.matches.find((m) => m.round === 3)!;
-    await applyMatchResult(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
+    await recordMatchResultForTest(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
 
     const before = events.filter((e) => e.event === 'tournament:completed').length;
     // Re-apply the final result — should be a no-op.
-    await applyMatchResult(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
+    await recordMatchResultForTest(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
     const after = events.filter((e) => e.event === 'tournament:completed').length;
 
     expect(before).toBe(1);

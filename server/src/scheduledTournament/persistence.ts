@@ -312,6 +312,8 @@ export type CompleteTournamentMatchResult = {
   advanced_to_match_id: string | null;
   advanced_to_slot: 'player1' | 'player2' | null;
   advanced_to_status: MatchRow['status'] | null;
+  /** true iff the completion landed but the next-round row was missing (corrupt bracket). */
+  advance_target_missing?: boolean;
   tournament_completed: boolean;
   round_now_complete: boolean | null;
   placements: Array<{ user_id: string; placement: number }> | null;
