@@ -30,10 +30,12 @@ focus" line, then the section for the system in progress.
   - Reconciler multi-instance = **singleton via `TOURNAMENT_SCHEDULER_ENABLED`
     boot flag** (§1.4.6, D-7); advisory-lock rejected (PostgREST has no
     holdable session — reason preserved).
-- **Step 4** (refactor): NOT started. First sub-task = **review merged PR #91
-  line-by-line against the ratified invariants + the §1.4 RPC design** (see the
-  ⚠ block below and §1.4.1). Then the RPC + authz + RLS + flag work, each step
-  naming the gap(s) it closes and the test that proves it.
+- **Step 4** (refactor): first sub-task **DONE** — merged PR #91 reviewed
+  line-by-line (§1.5.1). **Zero conflicts.** Everything in #91 is KEEP (1, 6,
+  9), or SUPERSEDED-by-the-RPC/authz-work (2, 3, 4, 5, 7, 8, 10). Nothing needs
+  a fix before Step 4 proceeds. Work list in §1.5.2 — **awaiting human sign-off
+  on the sequencing before any code**. One flagged item: the RLS migration (#9)
+  is merged but **may not have been applied to prod** — no CI migration runner.
 - **Step 5** (tests prove closure): NOT started.
 
 **Infra / liveness — settled 2026-08-31.** T-17 CLOSED (UptimeRobot re-typed
@@ -393,7 +395,7 @@ round agreement.
 
 | ID | Gap | Location | Risk |
 |---|---|---|---|
-| **T-1** | Client can INSERT/UPDATE its own `scheduled_tournament_registrations` row via the anon Supabase client, including `seed`, `status`, `placement`. `seed` decides the double-no-show tiebreak (`selectHigherSeedWinner`); `placement` is read back verbatim by `/api/tournaments/history` and `/:id/result`. | RLS policies `str_insert_self`, `str_update_self` in `2026-05-14_scheduled_tournaments.sql` | Self-assigned tournament placement / seed. Direct integrity breach. *(PR #91 migration addresses; unmerged, pre-audit — Decisions D-1.)* |
+| **T-1** — **CLOSED 2026-08-31** | Client could INSERT/UPDATE its own `scheduled_tournament_registrations` row via the anon Supabase client (`seed`, `status`, `placement`) — `seed` decides the double-no-show tiebreak, `placement` is read back by `/api/tournaments/history` and `/:id/result`. | was: RLS `str_insert_self` / `str_update_self` | **Closed by** the `2026-08-30_tournament_registration_rls_lockdown.sql` migration (merged PR #91), **verified applied to production 2026-08-31**: the human ran the diagnostic — client-writable policies = 0 rows, client INSERT/UPDATE/DELETE grants = 0 rows, `relrowsecurity = true`. All writes are service-role only. |
 | **T-2** | `applyMatchResult` writes `params.winnerId` to `winner_id` with no check that it is a participant. Non-participant winner ⇒ `loserId` computes to `null` ⇒ nobody eliminated ⇒ a stranger advances into the next round as a real entrant. | `engine.ts` `applyMatchResult` (~466–489, `main`) | Corrupt bracket, wrong champion. *(PR #91 adds guard; unmerged.)* |
 | **T-3** | Match completion is a read-then-write (`if (match.status === 'completed') return;`) with no DB-level CAS. Producers 1–3 (§1.1.3) can each pass the read and each run the completion + advancement sequence, second winner overwriting the first, bracket advanced twice. | `engine.ts` `applyMatchResult` (~465–551, `main`) | Double advancement, wrong winner carried forward, loser un-eliminated. *(PR #91's `completeMatchIfNotCompleted` addresses this one window; unmerged.)* |
 | **T-4** | Bracket advancement (`applyMatchResult` steps 1–8, §1.1.4) is multi-statement with no transaction. Crash/overlap between steps leaves: match `completed` but winner never advanced; or next match with one slot filled and stale `status`; or loser eliminated but match not completed. | `engine.ts` `applyMatchResult` | Stuck bracket requiring manual DB repair (`docs/ops/tournament-apply-match-result-repair.md` already exists — evidence this happens). |
@@ -541,7 +543,7 @@ PR #91 merged early (Current focus ⚠). Assessment against D-2 + T-INV-1..10:
 | Inline participant check in `applyMatchResult` (`winner_not_match_participant` throw) | **Duplicated by the RPC.** #91 checks in JS against a pre-CAS `fetchMatchById` read — a TOCTOU gap (the row's `player{1,2}_id` can change between the read and the write via a prior-round advancement; round-gating makes this unlikely but not impossible). The RPC does the same check **inside the transaction against the locked row**, closing the gap. | **Remove** the JS check when the RPC owns completion; the RPC is the single enforcement point for T-INV-2. |
 | Inline participant check in `roomForfeit` (leaver must be a participant) | **Complementary — this is authz, not concurrency.** Correct behaviour, wrong layer (inline, the exact anti-pattern §1.5 targets). Does not fight the RPC. | **Refactor** into the §1.5 shared guard; keep the behaviour. |
 | Inline `room:join` tournament-assignment ACL in `roomSocketAttach` + `isTournamentRoomCode` | **Complementary — authz, not concurrency.** Same as above. | **Refactor** into the §1.5 shared guard; keep the behaviour and the code-shape fallback. |
-| Registrations RLS lockdown migration (`2026-08-30_…`) | **Independent and correct.** Pure RLS; this *is* T-INV-9 / closes Gap T-1. No relationship to the RPC. | **Keep.** Verify it has actually run against production (merged ≠ applied — confirm the deploy ran the migration). |
+| Registrations RLS lockdown migration (`2026-08-30_…`) | **Independent and correct.** Pure RLS; this *is* T-INV-9 / closes Gap T-1. No relationship to the RPC. | **Keep. Verified applied to prod 2026-08-31** (all three diagnostic checks clean: 0 client-writable policies, 0 client write grants, RLS on). Gap T-1 → CLOSED. |
 
 **Answer to "are we carrying two competing concurrency mechanisms?"**
 Not *competing* — `completeMatchIfNotCompleted` and the future RPC both mean
@@ -894,8 +896,52 @@ The RPC design and the infra fix are **orthogonal and both required**:
 
 ## 1.5 Refactor plan
 
-**TODO — after 1.4.** Each step will name the gap(s) it closes and the test
-that proves it.
+### 1.5.1 Step 4 first sub-task — merged PR #91 reviewed line-by-line (2026-08-31)
+
+PR #91 (`fix(tournament): close bracket-advancement holes and lock down
+registration RLS`, merged commit `e4760058`) assessed against T-INV-1..10
+(§1.2), the state machine (§1.4.2), the three-RPC surface (§1.4.3 / D-5), and
+the authz shape (§1.4.5). Every change is one of: **KEEP** (matches the
+ratified design), **SUPERSEDED** (the RPC/authz work replaces it — leave until
+that lands, remove *with* it), or **CONFLICT** (inconsistent with an invariant
+or transition — fix before Step 4 proceeds).
+
+**Result: zero conflicts.** Nothing in #91 needs a fix before Step 4 starts.
+
+| # | Change | Location (current `main`) | Verdict | Step 4 action |
+|---|---|---|---|---|
+| 1 | `MatchPatch` type extracted from `updateMatch`'s inline signature | `persistence.ts:267`, `persistenceInterface.ts` | **KEEP** | none — `updateMatch` / `MatchPatch` still needed for non-completion writes (`room_code`, `ready_at`, `player{1,2}_joined_at`, …) |
+| 2 | `completeMatchIfNotCompleted(matchId, patch)` — app-level CAS (`PATCH ?id=eq.X&status=neq.completed`) | `persistence.ts:295–307` | **SUPERSEDED** | delete in the PR that adds `complete_tournament_match`. Covers only the 5 completion columns — not advancement / elimination / tournament-completion, which the RPC does in the same transaction (T-INV-1/5/10). |
+| 3 | interface: `+ completeMatchIfNotCompleted`, `updateMatch(patch: MatchPatch)` | `persistenceInterface.ts` | **SUPERSEDED** (the method) / **KEEP** (`MatchPatch` usage) | remove `completeMatchIfNotCompleted` from `EnginePersistence` + `defaultEnginePersistence` alongside #2 |
+| 4 | `if (winnerId !== player1_id && winnerId !== player2_id) throw 'winner_not_match_participant'` | `engine.ts` `applyMatchResult` `:495–502` | **SUPERSEDED** | this is T-INV-2, but checked in JS against a *pre-CAS* `fetchMatchById` read — a TOCTOU gap (`player{1,2}_id` can move via prior-round advancement between the read and the write). The RPC does it **inside the transaction against the `FOR UPDATE`-locked row**. Remove the JS check when the RPC owns completion. Not a conflict — strictly more restrictive than the old (no-check) code, same throw shape as the RPC's `RAISE EXCEPTION`. |
+| 5 | CAS completion + `if (!claimed) { log 'result already applied…'; return; }` | `engine.ts` `applyMatchResult` `:510–528` | **SUPERSEDED** | ⚠ the no-op is **silent and winner-agnostic** — it does not distinguish "same winner" (idempotent success) from "different winner" (T-INV-3's `conflict=true` + the D-3 `tournament_match_winner_conflict` structured `warn`). Not a regression (still no double-write), just short of T-INV-3's observability bar. The RPC implements the full same/different branch + the D-3 log. |
+| 6 | `isTournamentRoomCode(code)` — regex on the room-code shape | `matchDispatch.ts:48` | **KEEP** | the authz shape's `{ roomCode }` variant (§1.4.5) uses this exact function for the post-restart fallback |
+| 7 | forfeit participant check — replaces the 2-branch ternary; non-participant leaver → `tournamentForfeitApplyStatus='idle'`, warn, `return null` | `roomForfeit.ts:141–160` | **SUPERSEDED → authz layer** | correct behaviour, wrong layer. Replace the inline block with `authorizeMatchParticipant(userId, { roomCode: room.code })`; keep the "forfeit ignored" outcome. Not a conflict — a non-participant can't trigger transitions T-f/T-g anyway. |
+| 8 | `room:join` tournament ACL — for `via==='room:join'`, resolve the match (by id or room-code shape) and reject if `userId` ∉ `{player1_id, player2_id}` | `roomSocketAttach.ts:367–388` | **SUPERSEDED → authz layer** | consolidate this **and** the attach handler's own participant check into `authorizeMatchParticipant`. Closes Gap T-5 (seat hijack). Not a conflict. |
+| 9 | RLS lockdown migration — drop client-writable policies by cmd+roles, revoke grants, assert end state | `supabase/migrations/2026-08-30_tournament_registration_rls_lockdown.sql` | **KEEP** | this **is** T-INV-9 / closes Gap T-1, and does more than the minimum (name-agnostic, revokes grants, self-asserting). **Open verification:** no migration runner exists in CI (`.github/workflows/` has none) — confirm this migration has actually been applied to the production database (merged ≠ applied). |
+| 10 | test mock plumbing — `completeMatchIfNotCompleted` added to 5 mock persistence objects; no new assertions | `*.test.ts` ×5 | **SUPERSEDED** | removed alongside #2/#3 |
+
+### 1.5.2 Step 4 work list (falls out of 1.5.1 — not started)
+
+1. **The three RPCs** (`complete_tournament_match` / `promote_tournament_match`
+   / `generate_tournament_bracket`) + helpers (§1.4.3). *Same PR* deletes #2,
+   #3(method), #4, and the #10 mocks. Implements T-INV-1..5, T-INV-10, and
+   T-INV-3's conflict branch + the D-3 log line (which #5 does not).
+2. **The authz layer** — `authorizeMatchParticipant()` + `matchAuthzAck` /
+   `matchAuthzHttpStatus` in `tournamentAuth.ts` (§1.4.5). Consolidates #7,
+   #8, and the attach handler's existing check. Keeps #6 (`isTournamentRoomCode`).
+3. **`TOURNAMENT_SCHEDULER_ENABLED`** boot flag (D-7).
+4. **Keep + verify:** #1 (`MatchPatch`), #9 (RLS migration — *confirm it ran in
+   prod*). Consider a DB CHECK/trigger on `scheduled_tournament_registrations`
+   as belt-and-suspenders for T-INV-9 (Step 4/5 scope — flag).
+5. **T-INV-6** already done (PR #94).
+
+Each of 1–3 is its own PR, each naming the gap(s) it closes and the test that
+proves it (Step 5 harness).
+
+### 1.5.3 Full refactor plan
+
+**TODO — sequenced after the human signs off on 1.5.2.**
 
 ## 1.6 Test plan
 
@@ -938,20 +984,14 @@ that proves it.
 - [x] Multi-instance stance for the no-show reconciler chosen — **singleton via `TOURNAMENT_SCHEDULER_ENABLED` boot flag** (Decisions D-7, §1.4.6); advisory-lock / lease-table / RPC-embedded-lock rejected with reasons preserved — PR #95
 - [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` merged as PR #94 (commit on main)
 
-### Step 4 — Refactor (not started; gated on Steps 2–3)
-- [ ] T-1 …
-- [ ] T-2 …
-- [ ] T-3 …
-- [ ] T-4 …
-- [ ] T-5 …
-- [ ] T-6 …
-- [ ] T-7 …
-- [ ] T-8 …
-- [ ] T-9 …
-- [ ] T-10 …
-- [ ] T-11 …
-- [ ] T-12 …
-- [ ] T-13..T-16 (lower priority)
+### Step 4 — Refactor (Steps 1–3 done; sub-tasks not started unless noted)
+- [x] **Merged PR #91 reviewed line-by-line vs the ratified design** — §1.5.1. Zero conflicts; work list in §1.5.2. (2026-08-31)
+- [ ] **PR-A: the three RPCs** + helpers (§1.4.3) — closes gaps **T-2, T-3, T-4, T-7, T-8, T-9**; same PR deletes #91's `completeMatchIfNotCompleted` (#2/#3), the JS participant check (#4), the `if(!claimed)` no-op (#5), and the mock plumbing (#10); adds T-INV-3's conflict branch + the D-3 `tournament_match_winner_conflict` log
+- [ ] **PR-B: the authz layer** `authorizeMatchParticipant()` (§1.4.5) — closes gaps **T-5, T-6**; consolidates #91's #7/#8 + the attach handler's own inline check; keeps #6 (`isTournamentRoomCode`)
+- [ ] **PR-C: `TOURNAMENT_SCHEDULER_ENABLED` flag** (D-7) — closes gap **T-16**
+- [x] #91's RLS migration (#9) **verified applied to prod 2026-08-31** — 3 diagnostic checks clean → gap **T-1 CLOSED**
+- [ ] **T-10** (30s poll latency) — accepted; **T-11** (`fetchActiveAssignedMatchForUser` picks latest) — mitigated by PR-A/PR-B, revisit; **T-12** (two "tournament room" concepts) — clarify while doing PR-A/PR-B; **T-13–T-15** (cosmetic / observability) — lower priority
+- Note: T-INV-6 (feeder gating — an *invariant*, not a §1.3 gap) already enforced — merged PR #94
 - [x] T-17 — **CLOSED** — root cause was a **mis-typed ICMP UptimeRobot monitor** (not a missing pinger). Fixed to HTTP(s) → `/ping` @ 5 min, 100 % uptime verified; `SERVER_URL` set, `GET /ready` confirms `true`, self-ping active as second signal. — D-4, changelog 2026-08-31
 - [ ] T-18, T-19 — **ACCEPTED RISK at current scale** (D-4 / §1.3). Not fixed now; revisit at paid-tier upgrade.
 
@@ -1019,4 +1059,6 @@ registry.
 | 2026-08-31 | **T-INV-6 reword — client-side impact check done** (§1.4.3). `tournament:round_completed` has **no client listener** (dead event). Bracket view, "next match" logic, hub-state "waiting", flow stepper, notifications, post-match nav — all **per-match**, none assume whole-round completion. The engine **already** dispatches human SF/Final on the two-feeder condition (`applyMatchResult` advancement tail); `isPreviousRoundComplete` only gates **bot-only** auto-sim, which the bracket-reveal spoiler logic hides from players anyway. **Reword is safe to ratify** — pending human OK. Authz-layer sub-task still NOT started. |
 | 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. Doc: merged PR #93; code (`isPreviousRoundComplete` → `areFeederMatchesComplete`): merged PR #94. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
 | 2026-08-31 | **Step 3 COMPLETE.** Reconciler multi-instance stance decided — **D-7**: singleton via a boot-time `TOURNAMENT_SCHEDULER_ENABLED` flag (default true), not a lock. `pg_try_advisory_lock` rejected + reason preserved (the server has no direct Postgres connection — PostgREST checks out a different pooled connection per call, so a session advisory lock releases before the tick's next call). Lease table and RPC-embedded xact lock also rejected. §1.4.6 written, T-16 + §1.4.3b→§1.4.6 updated, Step 3 checklist all `[x]`, Current focus flipped to "Steps 1–3 complete, Step 4 opens". **Step 4 begins next: review merged PR #91 against the ratified invariants + the RPC design — not started this session.** |
+| 2026-08-31 | **Step 4 first sub-task DONE — merged PR #91 reviewed line-by-line** (§1.5.1). Every one of its 10 changes classified: **KEEP** (`MatchPatch` extract #1, `isTournamentRoomCode` #6, RLS migration #9), **SUPERSEDED** by the RPC/authz work (#2 `completeMatchIfNotCompleted`, #3 interface entry, #4 JS participant check, #5 CAS no-op, #7 forfeit check → authz, #8 room:join ACL → authz, #10 test mocks). **Zero conflicts** — nothing in #91 needs a fix before Step 4 code starts. Flagged: #5's already-completed no-op is silent + winner-agnostic (short of T-INV-3 conflict-explicit + D-3 log — the RPC closes it); #9's RLS migration is merged but there is **no CI migration runner**, so it may not be applied to prod (human to verify). Work list → §1.5.2 (PR-A RPCs, PR-B authz, PR-C flag). **Awaiting human sign-off on §1.5.2 sequencing before any code.** |
+| 2026-08-31 | Gap **T-1 CLOSED** — human ran the RLS diagnostic against production: 0 client-writable policies, 0 client INSERT/UPDATE/DELETE grants to anon/authenticated, `relrowsecurity = true`. `2026-08-30_tournament_registration_rls_lockdown.sql` (merged in PR #91) is live. Registration `seed`/`status`/`placement` are now service-role-write-only. §1.3 T-1 row + §1.5.2 + Step 4 checklist updated. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
