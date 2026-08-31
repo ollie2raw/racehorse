@@ -697,10 +697,37 @@ structurally enforced** by `complete_tournament_match`'s advancement step
   round-1 has no previous round.
 - **T-INV-6 should be reworded** to "a round-N match enters `ready`/`in_progress`
   only after both its feeder matches are `completed`/`bye`" — needs human
-  re-ratification (small change, flagged in the message, not silently edited).
-- The current code's `isPreviousRoundComplete` (whole-round check in
-  `dispatchScheduledStartMatches` / bot-resolve) is a harmless conservative
-  over-check; can be relaxed to the two-feeder condition or left as-is.
+  re-ratification.
+
+**Client-side impact check for the reword (2026-08-31, before ratification):**
+Does any client code / copy assume the strict whole-round rule?
+
+| Surface | Finding |
+|---|---|
+| `tournament:round_completed` socket event | Server emits it (`emitRoundCompletedIfNeeded`), asserted in `engine.test.ts` — **no client listener anywhere**. Not in `client/.../socketEventRegistry.ts` (which lists `match_updated` / `match_ready` / `match_completed` / `bracket_generated` / `completed`). It is a **dead event**. |
+| Bracket view (`TournamentBracketScreen.tsx`, `tournamentBracketDisplay.ts`) | Renders **per-match** — each cell reads its own `status` / `winner_id` / slot ids. A partially-filled SF ("You vs TBD") is **already a designed, rendered state** (`is-pending` class, `TBD` slot label). Nothing keys off "previous round fully done". |
+| "When is my next match" (`yourReadyMatch`, `activeAssignedMatch`, `canAttach`) | **Per-match** — the client offers the attach banner the instant *your* match is `ready`. No round gate. |
+| `hubState.ts` "waiting" states | All are **pre-tournament-start** (`registered_waiting` = waiting for the event to begin). No between-rounds "waiting for round 1 to finish" state. |
+| `TournamentFlowStepper` ("Register → Lock → Round 1 → Semifinal → Final") | **Static decorative** progression label. Not driven by round completion. |
+| Notifications / toasts | None about round completion. |
+| Post-match navigation (`useTournamentSessionNavigation`) | Sends the player to the **bracket view** to wait; the attach banner appears when *their* SF becomes `ready`. No round gate. |
+
+**And the engine already works on the two-feeder condition for human matches.**
+`applyMatchResult`'s advancement tail sets the target to `ready` and calls
+`dispatchTournamentMatch` the moment **both** its feeders complete
+(`engine.ts` ~525, ~544) — regardless of the other half of round 1.
+`isPreviousRoundComplete` is used in **exactly one place**:
+`canAutoSimulateBotOnlyMatch` — gating **bot-vs-bot** SF/Final auto-simulation.
+That is invisible to players: the bracket-reveal logic
+(`computeBracketRevealThroughRound`) hides non-human match results beyond the
+player's current round anyway.
+
+**Conclusion:** the reword is **safe to ratify**. It documents what the engine
+already does for human matches. Relaxing `isPreviousRoundComplete` to the
+two-feeder condition changes only **bot-only** SF/Final timing (they'd
+auto-resolve a bit sooner) — still invisible to players, no bracket-view
+inconsistency (the "You vs TBD" partial-SF is how it renders today). The dead
+`round_completed` emit can stay or be removed in Step 4; nothing depends on it.
 
 ### 1.4.3b Still TODO after this (next Step 3 sub-tasks — NOT started)
 
@@ -855,4 +882,5 @@ registry.
 | 2026-08-31 | Human confirmed: no existing pinger; setting up a new external uptime monitor on `/ping` @ 5 min (option a). **D-4 RESOLVED** — external monitor, stay on free tier, `/internal/tick` unbuilt. Checked prod `GET /ready`: **`SERVER_URL` is NOT set** in Render (self-ping has been inert all along) — human is setting it as a second signal. `/ready` also shows `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset — noted for a later env-hygiene pass, out of scope here. **T-17 → MITIGATED** (human owes first-hour steady-state verification before CLOSED). **T-18 + T-19 → ACCEPTED RISK** at current scale, revisit at upgrade. Step 3 continuation still paused. |
 | 2026-08-31 | **T-17 → CLOSED.** Actual root cause identified: an UptimeRobot monitor **did** exist but was set to **ICMP Ping type**, which Render never answers → it showed "No Response" / ~6.5 % uptime and kept the instance warm zero percent of the time. (So the earlier "no pinger found" was half-right — the repo had no config *and* the external monitor was non-functional.) Fixed to **HTTP(s) type → `/ping` @ 5 min**; human verified **100 % uptime, no gaps, over the observation window**. Human also set `SERVER_URL=https://racehorse.onrender.com` in Render + redeployed and confirmed `GET /ready` → `recommendedEnv.SERVER_URL: true` (fresh deploy `67fb5dac…`, `uptimeSeconds` reset). **Both mitigations verified.** |
 | 2026-08-31 | T-17 confirmations landed: `SERVER_URL: true` in `GET /ready` post-redeploy; doc caveats about "pending / cache lag" removed. Root cause stands as recorded — a **misconfigured monitor type (ICMP vs HTTP)**, not a missing pinger. No further action on T-17. |
+| 2026-08-31 | **T-INV-6 reword — client-side impact check done** (§1.4.3). `tournament:round_completed` has **no client listener** (dead event). Bracket view, "next match" logic, hub-state "waiting", flow stepper, notifications, post-match nav — all **per-match**, none assume whole-round completion. The engine **already** dispatches human SF/Final on the two-feeder condition (`applyMatchResult` advancement tail); `isPreviousRoundComplete` only gates **bot-only** auto-sim, which the bracket-reveal spoiler logic hides from players anyway. **Reword is safe to ratify** — pending human OK. Authz-layer sub-task still NOT started. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
