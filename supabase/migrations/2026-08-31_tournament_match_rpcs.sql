@@ -168,7 +168,7 @@ begin
       'conflict',             (v_match.winner_id is distinct from p_winner_id),
       'advanced_to_match_id', null,
       'tournament_completed',  (v_match.round = 3),
-      'round_now_complete',    true
+      'round_now_complete',    null   -- not recomputed on an idempotent/conflict return
     );
   end if;
 
@@ -186,10 +186,13 @@ begin
     v_has_human := not (public._tournament_is_bot(v_match.player1_id)
                         and public._tournament_is_bot(v_match.player2_id));
 
-    -- 4 ── a real game-over cannot originate from a human match that never
-    --      started. A fully-bot match auto-resolving from 'ready' is fine.
+    -- 4 ── a real game-over can only come from a match a human actually
+    --      played, i.e. one that reached 'in_progress'. A fully-bot match
+    --      (v_has_human = false) auto-resolves via game_over from 'ready' —
+    --      that is fine. Does not depend on p_status_reason: 'bot_simulated'
+    --      is only ever set for bot-only matches (resolveBotOnlyMatch), so
+    --      v_has_human already distinguishes the two.
     if p_winner_source = 'game_over'
-       and coalesce(p_status_reason, '') <> 'bot_simulated'
        and v_has_human
        and v_match.status <> 'in_progress' then
       raise exception 'game_over_on_non_started_match' using detail = v_match.status;
