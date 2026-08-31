@@ -429,6 +429,56 @@ timeout-prone.
 
 **Not in this plan's refactor scope, but must be decided alongside it** (candidates, for the human): move the scheduler + reconciler to a **Render Cron Job** or external cron hitting a protected endpoint; upgrade the web service to a paid always-on plan; or split a tiny always-on worker dyno from the web dyno. Logged as an open infra decision — see Decisions D-4.
 
+#### T-17 follow-up (2026-08-31): does the scheduler need a tick-triggering HTTP hit?
+
+**No.** Verified from code, not assumed:
+
+- `server.listen(PORT, () => { bootstrapScheduledTournamentInfrastructure(io, app); … })`
+  (`index.ts` ~917) runs at **process boot**, unconditionally, before any
+  socket or HTTP request. It calls `startTournamentScheduler(io)`, which does
+  `void tick()` immediately then `setInterval(tick, 30_000)`.
+- That `setInterval` is a **plain Node timer**. Once the process is running it
+  fires every 30 s **on its own** — no incoming request required. The tick's
+  own logic (`now >= openAt` / `>= closeAt` / `>= startAt`) means it processes
+  anything overdue.
+- So: **any request that keeps the process from spinning down is sufficient.**
+  A generic uptime ping to `/ping` fully restores scheduler + reconciler
+  behaviour — it does **not** need to hit a special catch-up route. The premise
+  "a plain ping keeps it awake but doesn't trigger catch-up" is **false** for
+  this codebase.
+
+**Implication for `/internal/tick`:** not needed for keep-warm. It becomes
+useful only under D-4 options (a)/(b) — moving the scheduler *off* the web
+process to a cron that then needs an endpoint to trigger the tick. **Do not
+build it until D-4 is decided.** (If the pinger is confirmed working and we
+stay on-process, `/internal/tick` is dead weight.)
+
+#### T-17 follow-up (2026-08-31): is there an external pinger already? — CANNOT VERIFY FROM REPO
+
+Checked and found **nothing conclusive in the repository**:
+- No committed uptime/monitor config (`.render/`, UptimeRobot, cron-job.org, etc.).
+- `.github/workflows/smoke-test.yml` hits prod (`/healthz`, `/api/daily-fritz/today`) **but triggers only `on: push: [main]`** — after a deploy, not on a cron. `daily-fritz-authority-soak.yml` is `workflow_dispatch` (manual) only.
+- `/ping`, `/health`, `/healthz` handlers **do not log the request** — no
+  access-log middleware, no User-Agent capture anywhere in `server/src`. So
+  even if we could read Render logs, a plain `/ping` hit would leave no trace
+  beyond Render's own platform request metrics.
+
+**What the human needs to check outside the repo** (agent cannot):
+1. **Render dashboard → Metrics / Logs** — look for a regular inbound request
+   pattern (every ~5 min) on `/ping` or `/`; Render's request log shows path +
+   sometimes UA.
+2. **UptimeRobot / cron-job.org / Pingdom / BetterStack / any monitor account**
+   — is there a monitor pointed at `racehorse.onrender.com`? What URL, what
+   interval?
+3. If a pinger exists: confirm (a) the **max gap between hits never exceeds
+   ~13 min** (Render's idle timeout is 15 min; leave margin), and (b) it hits a
+   **lightweight** endpoint — `/ping` and `/health` are pure `res.json`, safe;
+   `/healthz` does a **Supabase round-trip every hit** and would be wasteful /
+   add DB load if pinged every 5 min. Point any pinger at **`/ping`**.
+
+Until the human reports back, **T-17 stays open** — we do not assume a working
+pinger exists.
+
 ## 1.4 State machine / concurrency design
 
 ### Locked: concurrency mechanism (Decisions D-2)
@@ -729,7 +779,7 @@ registry.
 | D-3 | 2026-08-31 | **T-INV-1..10 RATIFIED as written in §1.2.** Four open sign-off questions resolved: (a) **T-INV-3 conflict policy** — first-recorded outcome wins, later callers silently accept, log-only; *added requirement:* emit one structured `warn` log line (`tournament_match_winner_conflict`) whenever the `conflict=true` branch fires, so a genuine winner disagreement (which should be impossible if T-INV-2 + the state machine are correct) is visible/alertable in production without blocking on it. (b) **T-INV-4 score derivation** — the RPC computes the score pair itself for no-show/forfeit/bot cases rather than trusting the caller; removes the "client lied about the score" class of bugs. (c) **T-INV-7 one-live-match** — ship as a derived/asserted property, not a hard DB constraint; a structural constraint is more engineering than the risk justifies at current scale; escalate to a hard constraint only if `assertBracketConsistent` ever fires in practice (which would also mean Step 3's design missed something). (d) **Render instance count** — pending; treated as 1 by architecture until the human confirms. | The human reviewed the list line-by-line. Recording the *why* for each answer so a cold session does not re-open settled questions. |
 | D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
 | D-2 addendum | 2026-08-31 | **Render confirmed = free tier ($0, 0.1 CPU, 512 MB). Free tier does not support scaling at all.** So the multi-instance question is not "currently 1" but **"structurally 1, not applicable until we move off free tier."** The RPC decision (instance-count agnostic) still stands and is still the right call — it means the eventual paid-tier / multi-worker move needs no rework of the concurrency model. But the in-process funnel alternative is now doubly ruled out. Separately: free-tier spin-down is a real liveness risk — see gaps T-17..T-19 and Decisions D-4. | Human read the Render dashboard. |
-| D-4 | 2026-08-31 | **OPEN — infra decision required, not yet made.** Free-tier spin-down (T-17) stalls the tournament scheduler and no-show reconciler whenever no player is connected. Options: (a) Render Cron Job hitting a protected `/internal/tick` endpoint; (b) external cron (cron-job.org / GitHub Actions) doing the same; (c) upgrade the web service to an always-on paid plan; (d) split an always-on worker process from the web dyno. Also confirm whether `SERVER_URL` is set (gates the existing 10-min self-ping). This must be resolved **before or alongside** the RPC refactor — RPC atomicity does nothing if the process is asleep. | Surfaced during the Step 3 infra check. Left open for the human to decide; not an agent call (billing + deployment topology). |
+| D-4 | 2026-08-31 | **OPEN — infra decision required, not yet made.** Free-tier spin-down (T-17) stalls the tournament scheduler and no-show reconciler whenever no player is connected. **Update (2026-08-31, follow-up):** verified from code that the scheduler's `setInterval` runs independently once the process is alive — so the fix is purely "keep the process from spinning down", **not** "trigger a tick". If an external uptime pinger already exists and never gaps >13 min, **T-17 is effectively closed with no code change** and `/internal/tick` is unnecessary. The human is checking their monitor accounts (UptimeRobot / cron-job.org / Render metrics) — see the two "T-17 follow-up" notes in §1.3. Options if no pinger exists: (a) point an existing/new uptime monitor at `/ping` every 5 min (simplest — no code); (b) Render Cron Job / GitHub Actions `schedule` cron hitting `/ping`; (c) `/internal/tick` + a cron, only if we later move the scheduler off the web process; (d) upgrade to a paid always-on plan; (e) split an always-on worker dyno. Also confirm whether `SERVER_URL` is set (gates the existing 10-min self-ping — redundant-but-harmless once an external pinger is confirmed). Resolve **before or alongside** the RPC refactor. | Surfaced during the Step 3 infra check. Not an agent call (billing + deployment topology + accounts the agent can't see). |
 
 ---
 
@@ -741,3 +791,4 @@ registry.
 | 2026-08-31 | Added the "one step per session" rule to "How to use this document". Locked concurrency mechanism = Postgres RPC (D-2). Rewrote §1.2 as T-INV-1..10, framed as RPC/DB obligations, pending human sign-off. §1.4 now carries the locked decision only (state machine still TODO). |
 | 2026-08-31 | Step 2 RATIFIED (D-3, four sign-off answers logged). T-INV-3 gains a structured-log requirement on the `conflict=true` branch. PR #91 merged early — added the ⚠ note to Current focus and §1.4.1 (assessed: `completeMatchIfNotCompleted` is superseded not conflicting; participant check duplicated; forfeit/room-join checks are authz not concurrency; RLS migration correct and independent). Step 3 started: §1.4.2 = match state machine — states, transitions, per-actor triggers, RPC rejection rules, and the near-simultaneous-caller lock walkthrough. Remaining Step 3 sub-tasks (one-vs-three RPCs, authz layer, reconciler multi-instance) not started. |
 | 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.4 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
+| 2026-08-31 | T-17 follow-up (before building any cron): **(a)** verified from code that `startTournamentScheduler`'s `setInterval` fires independently at 30 s once the process is alive (`bootstrapScheduledTournamentInfrastructure` runs inside `server.listen`) — so a plain uptime ping to `/ping` fully restores catch-up; `/internal/tick` is **not needed** unless D-4 moves the scheduler off the web process. **(b)** searched the repo for an existing external pinger — **no committed config**, `smoke-test.yml` is push-triggered not cron, and health routes don't log requests, so **cannot verify from the repo**. Two "T-17 follow-up" notes added to §1.3 listing exactly what the human must check (Render metrics, UptimeRobot/cron-job.org accounts, max-gap < 13 min, point it at `/ping` not `/healthz`). T-17 stays OPEN pending that check. No `/internal/tick` endpoint added. Step 3 continuation still paused. |
