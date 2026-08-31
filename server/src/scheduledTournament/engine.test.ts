@@ -443,7 +443,7 @@ describe('closeRegistrationAndStart', () => {
     expect(store.matches.filter((m) => m.round === 2).every((m) => m.status !== 'completed')).toBe(true);
   });
 
-  it('does not complete semifinal bot-only matches before quarterfinals finish', async () => {
+  it('gates semifinal bot-only auto-resolution on its two feeders, not the whole round (T-INV-6)', async () => {
     const tournament = makeTournament({
       status: 'in_progress',
       scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
@@ -455,13 +455,25 @@ describe('closeRegistrationAndStart', () => {
     await closeRegistrationAndStart(io, 'tour-1', persistence);
     await dispatchScheduledStartMatches(io, 'tour-1', persistence, new Date('2026-05-15T00:00:01Z'));
 
+    // The one human is seed 1 → QF1 → SF1. QF1 stays a live human match.
     const humanQf = store.matches.find(
       (m) => m.round === 1 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
     );
     expect(humanQf?.status).toBe('ready');
+    expect(humanQf?.match_number).toBe(1);
 
-    const sfMatches = store.matches.filter((m) => m.round === 2);
-    expect(sfMatches.every((m) => m.status !== 'completed')).toBe(true);
+    const sf = store.matches
+      .filter((m) => m.round === 2)
+      .sort((a, b) => a.match_number - b.match_number);
+
+    // SF1 is fed by QF1 (the unresolved human match) — it must NOT auto-resolve,
+    // even though its other feeder QF2 is a finished bot pair.
+    expect(sf[0].status).not.toBe('completed');
+
+    // SF2 is fed by QF3 + QF4, both finished bot pairs — its two feeders are
+    // done, so it auto-resolves now rather than waiting for QF1.
+    expect(sf[1].status).toBe('completed');
+    expect(sf[1].winner_id).toBeTruthy();
   });
 });
 

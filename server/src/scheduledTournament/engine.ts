@@ -147,19 +147,33 @@ function isTournamentPlayable(
   return Date.parse(tournament.scheduled_start) <= now.getTime();
 }
 
-async function isPreviousRoundComplete(
+/**
+ * A round-N match is fed by exactly two round-(N-1) matches: numbers 2M-1 and
+ * 2M, where M is this match's number (SF1 ← QF1+QF2, SF2 ← QF3+QF4, F ← SF1+SF2).
+ *
+ * This is the bracket-exact gate (invariant T-INV-6). It is deliberately NOT
+ * "the whole previous round is done" — SF1 may resolve while QF3/QF4 still play.
+ * For human matches this is already how advancement works (a target reaches
+ * `ready` only once both its slots are filled); this function applies the same
+ * rule to bot-only auto-simulation, where there is no advancement trigger.
+ */
+async function areFeederMatchesComplete(
   tournamentId: string,
   round: 1 | 2 | 3,
+  matchNumber: number,
   persistence: EnginePersistence,
 ): Promise<boolean> {
   if (round <= 1) return true;
+  const feederNumbers = [matchNumber * 2 - 1, matchNumber * 2];
   const matches = await persistence.fetchMatches(tournamentId);
-  const prevRound = matches.filter((m) => m.round === round - 1);
-  if (prevRound.length === 0) return false;
-  return prevRound.every((m) => m.status === 'completed' || m.status === 'bye');
+  const feeders = matches.filter(
+    (m) => m.round === round - 1 && feederNumbers.includes(m.match_number),
+  );
+  if (feeders.length < 2) return false;
+  return feeders.every((m) => m.status === 'completed' || m.status === 'bye');
 }
 
-/** Bot-vs-bot matches only auto-resolve after scheduled_start and when the prior round has finished. */
+/** Bot-vs-bot matches only auto-resolve after scheduled_start and once both feeder matches have finished. */
 async function canAutoSimulateBotOnlyMatch(
   match: MatchRow,
   persistence: EnginePersistence,
@@ -170,7 +184,12 @@ async function canAutoSimulateBotOnlyMatch(
   if (!isTournamentPlayable(tournament, now)) return false;
   if (!match.player1_id || !match.player2_id) return false;
   if (!isBotOnlyMatch(match)) return false;
-  return isPreviousRoundComplete(match.tournament_id, match.round as 1 | 2 | 3, persistence);
+  return areFeederMatchesComplete(
+    match.tournament_id,
+    match.round as 1 | 2 | 3,
+    match.match_number,
+    persistence,
+  );
 }
 
 async function resolveBotOnlyMatch(
