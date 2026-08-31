@@ -166,9 +166,11 @@ begin
       'player1_score',        v_match.player1_score,
       'player2_score',        v_match.player2_score,
       'conflict',             (v_match.winner_id is distinct from p_winner_id),
+      'applied',              false,   -- this call did not write
       'advanced_to_match_id', null,
       'tournament_completed',  (v_match.round = 3),
-      'round_now_complete',    null   -- not recomputed on an idempotent/conflict return
+      'round_now_complete',    null,
+      'placements',           null
     );
   end if;
 
@@ -292,9 +294,17 @@ begin
       'player1_score',        v_p1_score,
       'player2_score',        v_p2_score,
       'conflict',             false,
+      'applied',              true,
       'advanced_to_match_id', null,
       'tournament_completed',  true,
-      'round_now_complete',    coalesce(v_round_done, false)
+      'round_now_complete',    coalesce(v_round_done, false),
+      'placements',           coalesce((
+        select jsonb_agg(jsonb_build_object('user_id', r.user_id, 'placement', r.placement))
+          from scheduled_tournament_registrations r
+         where r.tournament_id = v_match.tournament_id
+           and r.placement is not null
+           and not public._tournament_is_bot(r.user_id::text)
+      ), '[]'::jsonb)
     );
   end if;
 
@@ -354,11 +364,13 @@ begin
     'player1_score',        v_p1_score,
     'player2_score',        v_p2_score,
     'conflict',             false,
+    'applied',              true,
     'advanced_to_match_id', v_tgt_id,
     'advanced_to_slot',     v_tgt_slot,
     'advanced_to_status',   v_tgt_status,
     'tournament_completed',  false,
-    'round_now_complete',    coalesce(v_round_done, false)
+    'round_now_complete',    coalesce(v_round_done, false),
+    'placements',            null
   );
 end;
 $$;

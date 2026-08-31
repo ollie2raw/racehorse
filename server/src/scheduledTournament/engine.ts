@@ -2,7 +2,7 @@ import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
-import { QF_SEED_PAIRS, advanceSlot } from './bracket';
+import { QF_SEED_PAIRS } from './bracket';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { ScheduledTournamentRow } from './types';
 import {
@@ -100,25 +100,6 @@ function emitToUserIds(io: Server, userIds: Array<string | null | undefined>, ev
     if (!userId || !targets.has(userId)) continue;
     sock.emit(event, payload);
   }
-}
-
-async function emitRoundCompletedIfNeeded(
-  io: Server,
-  tournamentId: string,
-  round: 1 | 2 | 3,
-  persistence: EnginePersistence,
-): Promise<void> {
-  const matches = await persistence.fetchMatches(tournamentId);
-  const roundMatches = matches.filter((m) => m.round === round);
-  if (roundMatches.length === 0) return;
-  if (roundMatches.some((m) => m.status !== 'completed')) return;
-  const regs = await persistence.fetchRegistrations(tournamentId);
-  emitToUserIds(
-    io,
-    regs.map((reg) => reg.user_id),
-    'tournament:round_completed',
-    { tournamentId, round },
-  );
 }
 
 async function selectHigherSeedWinner(
@@ -224,6 +205,17 @@ async function resolveBotOnlyMatch(
     matchId: match.id,
     winnerId,
   }, 'auto-resolved bot-vs-bot');
+
+  // `complete_tournament_match` only accepts a match in `ready`/`in_progress`
+  // (state-machine transition T-f). A bot pair may still be `waiting` when a
+  // reconcile/dispatch tick reaches it — promote it first.
+  if (match.status === 'waiting') {
+    await persistence.promoteTournamentMatch(match.id, 'ready', {
+      readyAt: now.toISOString(),
+      actor: 'bot_simulated',
+    });
+  }
+
   await applyMatchResult(io, {
     matchId: match.id,
     winnerId,
@@ -233,44 +225,6 @@ async function resolveBotOnlyMatch(
     statusReason: 'bot_simulated',
   }, persistence);
   return true;
-}
-
-async function persistTournamentPlacements(
-  tournamentId: string,
-  winnerUserId: string,
-  persistence: EnginePersistence,
-): Promise<Array<{ userId: string; placement: number }>> {
-  const [regs, matches] = await Promise.all([
-    persistence.fetchRegistrations(tournamentId),
-    persistence.fetchMatches(tournamentId),
-  ]);
-  const placements = new Map<string, number>();
-  placements.set(winnerUserId, 1);
-
-  for (const match of matches) {
-    if (match.status !== 'completed') continue;
-    const loserId =
-      match.player1_id === match.winner_id
-        ? match.player2_id
-        : match.player2_id === match.winner_id
-          ? match.player1_id
-          : null;
-    if (!loserId) continue;
-    if (isBotUserId(loserId)) continue;
-    if (match.round === 3) placements.set(loserId, 2);
-    else if (match.round === 2) placements.set(loserId, 3);
-    else if (match.round === 1) placements.set(loserId, 5);
-  }
-
-  const placed: Array<{ userId: string; placement: number }> = [];
-  for (const reg of regs) {
-    const placement = placements.get(reg.user_id) ?? null;
-    await persistence.updateRegistrationPlacement(tournamentId, reg.user_id, placement);
-    if (placement != null && !isBotUserId(reg.user_id)) {
-      placed.push({ userId: reg.user_id, placement });
-    }
-  }
-  return placed;
 }
 
 async function writeTournamentCompletionActivity(
@@ -462,9 +416,19 @@ export async function dispatchScheduledStartMatches(
 }
 
 /**
- * Mark a tournament-match completed and propagate the winner forward.
- * Idempotent: re-applying the same winner on an already-completed match
- * is a no-op.
+ * Record a tournament-match result and propagate the winner forward.
+ *
+ * All of the state change — completion, participant + score validation, loser
+ * elimination, bracket advancement, and (for the final) tournament completion —
+ * happens inside ONE Postgres transaction via `complete_tournament_match`,
+ * which locks the match row `FOR UPDATE`. Concurrent producers for the same
+ * match therefore serialise at the DB: the first writes, the rest come back
+ * with `applied: false`. This function is now just: call the RPC, then emit
+ * sockets / dispatch the advanced match from its structured result.
+ *
+ * Idempotent: re-submitting the same winner on a completed match is a no-op.
+ * A *different* winner on a completed match returns `conflict: true`; we accept
+ * the recorded outcome and log it (should be impossible — see T-INV-2 / D-3).
  */
 export async function applyMatchResult(
   io: Server,
@@ -483,138 +447,118 @@ export async function applyMatchResult(
 ): Promise<void> {
   const match = await persistence.fetchMatchById(params.matchId);
   if (!match) throw new Error('Match not found');
-  if (match.status === 'completed') return;
 
-  // The match row is the only authority on who is allowed to win it. Callers
-  // derive `winnerId` from live room seats, and a room seat is not by itself
-  // proof of assignment — so validate against the bracket before this id can
-  // be written as the winner and carried into the next round. Without this a
-  // winner who was never assigned to the match advances as a real entrant and
-  // nobody is marked eliminated (the loser lookup below silently yields null).
-  if (params.winnerId !== match.player1_id && params.winnerId !== match.player2_id) {
-    log.warn({
-      matchId: match.id,
-      tournamentId: match.tournament_id,
-      winnerId: params.winnerId,
-      player1Id: match.player1_id,
-      player2Id: match.player2_id,
-    }, 'rejected result: winner is not a participant of this match');
-    throw new Error('winner_not_match_participant');
-  }
-
-  // Claim the match with a compare-and-set. The `status === 'completed'` check
-  // above is only a read: game over, forfeit-on-leave, and the no-show
-  // reconciler can all pass it for the same match in the same instant, and the
-  // old unconditional PATCH let each of them advance the bracket. Only the
-  // caller whose write actually lands proceeds; the rest return as no-ops.
-  const claimed = await persistence.completeMatchIfNotCompleted(match.id, {
-    status: 'completed',
-    winner_id: params.winnerId,
-    completed_at: new Date().toISOString(),
-    winner_source: params.winnerSource ?? (params.byeWalkover ? null : 'game_over'),
-    status_reason: params.statusReason ?? null,
-    no_show_user_id: params.noShowUserId ?? null,
-    forfeit_user_id: params.forfeitUserId ?? null,
-    player1_score: params.player1Score,
-    player2_score: params.player2Score,
+  const result = await persistence.completeTournamentMatch({
+    matchId: match.id,
+    winnerId: params.winnerId,
+    winnerSource: params.winnerSource ?? (params.byeWalkover ? null : 'game_over'),
+    statusReason: params.statusReason ?? null,
+    reportedPlayer1Score: params.player1Score,
+    reportedPlayer2Score: params.player2Score,
+    noShowUserId: params.noShowUserId ?? null,
+    forfeitUserId: params.forfeitUserId ?? null,
+    byeWalkover: params.byeWalkover ?? false,
+    actor: params.winnerSource ?? (params.byeWalkover ? 'bye_walkover' : 'game_over'),
   });
-  if (!claimed) {
-    log.info({
-      matchId: match.id,
-      tournamentId: match.tournament_id,
-      winnerId: params.winnerId,
-    }, 'result already applied by a concurrent writer');
+
+  if (!result.applied) {
+    if (result.conflict) {
+      // T-INV-3 / Decisions D-3: a genuine winner disagreement between two
+      // producers should be impossible if the participant check and the state
+      // machine are correct. Not fatal — we take the RPC's recorded answer —
+      // but it must be greppable/alertable in production if it ever happens.
+      log.warn({
+        event: 'tournament_match_winner_conflict',
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        recordedWinnerId: result.winner_id,
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+      }, 'tournament_match_winner_conflict');
+    } else {
+      log.info({
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        winnerId: params.winnerId,
+      }, 'result already applied by a concurrent writer');
+    }
     return;
   }
 
-  // Mark loser eliminated (if there was one).
-  const loserId =
-    match.player1_id === params.winnerId ? match.player2_id :
-    match.player2_id === params.winnerId ? match.player1_id : null;
-  if (loserId && !params.byeWalkover) {
-    if (!isBotUserId(loserId)) {
-      await persistence.updateRegistrationStatus(match.tournament_id, loserId, 'eliminated');
-    }
-  }
-
+  // ── this call is the one that completed the match ──
   emitToUserIds(io, [match.player1_id, match.player2_id], 'tournament:match_completed', {
     tournamentId: match.tournament_id,
     matchId: match.id,
     round: match.round,
     roomCode: match.room_code,
-    winnerId: params.winnerId,
-    winnerSource: params.winnerSource ?? (params.byeWalkover ? 'game_over' : 'game_over'),
+    winnerId: result.winner_id,
+    winnerSource: result.winner_source ?? 'game_over',
   });
-  await emitRoundCompletedIfNeeded(io, match.tournament_id, match.round, persistence);
 
-  if (match.round === 3) {
-    // Final — tournament complete.
-    await completeTournament(io, match.tournament_id, params.winnerId, persistence);
+  if (result.round_now_complete) {
+    const regs = await persistence.fetchRegistrations(match.tournament_id);
+    emitToUserIds(io, regs.map((reg) => reg.user_id), 'tournament:round_completed', {
+      tournamentId: match.tournament_id,
+      round: match.round,
+    });
+  }
+
+  if (result.tournament_completed) {
+    await finalizeCompletedTournament(
+      io,
+      match.tournament_id,
+      result.winner_id ?? params.winnerId,
+      result.placements ?? [],
+    );
     return;
   }
 
-  // Advance to next round.
-  const next = advanceSlot(match.round as 1 | 2, match.match_number);
-  const nextMatches = await persistence.fetchMatches(match.tournament_id);
-  const target = nextMatches.find(
-    (m) => m.round === next.nextRound && m.match_number === next.nextMatchNumber,
-  );
-  if (!target) {
-    log.warn({ matchId: match.id }, 'no target match for advancement');
-    return;
-  }
-  const patch =
-    next.slot === 'player1'
-      ? { player1_id: params.winnerId }
-      : { player2_id: params.winnerId };
-
-  // Determine the new status of the target after this advancement.
-  const otherSlotFilled =
-    next.slot === 'player1' ? target.player2_id !== null : target.player1_id !== null;
-  const newStatus: MatchRow['status'] = otherSlotFilled ? 'ready' : 'waiting';
-
-  const targetPlayer1Id = next.slot === 'player1' ? params.winnerId : target.player1_id;
-  const targetPlayer2Id = next.slot === 'player2' ? params.winnerId : target.player2_id;
-  await persistence.updateMatch(target.id, {
-    ...patch,
-    status: newStatus,
-    bot_tier: matchBotTier(next.nextRound, targetPlayer1Id, targetPlayer2Id),
-  });
-  log.info({
-    fromMatchId: match.id,
-    nextMatchId: target.id,
-    slot: next.slot,
-    winnerId: params.winnerId,
-  }, 'winner advanced');
-
-  // Re-fetch and broadcast.
-  const updated = await persistence.fetchMatchById(target.id);
-  io.emit('tournament:match_updated', { tournamentId: match.tournament_id, matchId: target.id });
-  if (updated && updated.status === 'ready') {
-    await dispatchTournamentMatch(io, updated.id, { reason: 'winner_advanced' }, persistence);
-    const refreshed = await persistence.fetchMatchById(updated.id);
-    if (refreshed) {
-      await resolveBotOnlyMatch(io, refreshed, persistence, new Date());
+  if (result.advanced_to_match_id) {
+    log.info({
+      fromMatchId: match.id,
+      nextMatchId: result.advanced_to_match_id,
+      slot: result.advanced_to_slot,
+      winnerId: result.winner_id,
+    }, 'winner advanced');
+    io.emit('tournament:match_updated', {
+      tournamentId: match.tournament_id,
+      matchId: result.advanced_to_match_id,
+    });
+    if (result.advanced_to_status === 'ready') {
+      await dispatchTournamentMatch(
+        io,
+        result.advanced_to_match_id,
+        { reason: 'winner_advanced' },
+        persistence,
+      );
+      const refreshed = await persistence.fetchMatchById(result.advanced_to_match_id);
+      if (refreshed) {
+        await resolveBotOnlyMatch(io, refreshed, persistence, new Date());
+      }
     }
   }
 }
 
-export async function completeTournament(
+/**
+ * After `complete_tournament_match` has finished the round-3 match, the DB
+ * transaction has already written: every placement, the tournament's
+ * `status='completed'` + `winner_id`, and the champion's registration
+ * `status='winner'`. All that's left is the two side effects the RPC can't do:
+ * the social activity feed and the `tournament:completed` broadcast.
+ */
+async function finalizeCompletedTournament(
   io: Server,
   tournamentId: string,
   winnerUserId: string,
-  persistence: EnginePersistence = defaultEnginePersistence,
+  placements: Array<{ user_id: string; placement: number }>,
 ): Promise<void> {
-  const placements = await persistTournamentPlacements(tournamentId, winnerUserId, persistence);
-  await persistence.updateTournamentStatus(tournamentId, 'completed', { winner_id: winnerUserId });
-  if (!isBotUserId(winnerUserId)) {
-    await persistence.updateRegistrationStatus(tournamentId, winnerUserId, 'winner');
-  }
-  await writeTournamentCompletionActivity(tournamentId, placements);
-  log.info({
+  await writeTournamentCompletionActivity(
     tournamentId,
-    winnerId: winnerUserId,
-  }, 'champion');
+    placements
+      .filter((p) => !isBotUserId(p.user_id))
+      .map((p) => ({ userId: p.user_id, placement: p.placement })),
+  );
+  log.info({ tournamentId, winnerId: winnerUserId }, 'champion');
   io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
 }
 

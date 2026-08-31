@@ -279,30 +279,108 @@ export async function updateMatch(matchId: string, patch: MatchPatch): Promise<v
   );
 }
 
+// ── Match state-machine RPCs ─────────────────────────────────────────────
+// Completion + validation + bracket advancement + elimination + (round 3)
+// tournament completion all run in ONE Postgres transaction, guarded by
+// SELECT ... FOR UPDATE on the match row. See
+// supabase/migrations/2026-08-31_tournament_match_rpcs.sql and
+// HARDENING_PLAN.md §1.4.2 / §1.4.3.
+
+export type CompleteTournamentMatchParams = {
+  matchId: string;
+  winnerId: string;
+  winnerSource: 'game_over' | 'no_show' | 'forfeit' | null; // null = bye walkover
+  statusReason?: string | null;
+  reportedPlayer1Score?: number | null;
+  reportedPlayer2Score?: number | null;
+  noShowUserId?: string | null;
+  forfeitUserId?: string | null;
+  byeWalkover?: boolean;
+  actor?: string | null;
+};
+
+export type CompleteTournamentMatchResult = {
+  status: MatchRow['status'];
+  winner_id: string | null;
+  winner_source: MatchRow['winner_source'];
+  player1_score: number | null;
+  player2_score: number | null;
+  /** false only when this call did not write (idempotent replay, or a conflict). */
+  applied: boolean;
+  /** true when an already-completed match was re-submitted with a *different* winner. */
+  conflict: boolean;
+  advanced_to_match_id: string | null;
+  advanced_to_slot: 'player1' | 'player2' | null;
+  advanced_to_status: MatchRow['status'] | null;
+  tournament_completed: boolean;
+  round_now_complete: boolean | null;
+  placements: Array<{ user_id: string; placement: number }> | null;
+};
+
+export type PromoteTournamentMatchResult = {
+  status: MatchRow['status'];
+  ready_at: string | null;
+  ready_deadline_at: string | null;
+  started_at: string | null;
+  room_code: string | null;
+  conflict: boolean;
+};
+
 /**
- * Compare-and-set completion write: applies `patch` only while the row is not
- * already `completed`, and reports whether this caller was the one that landed
- * it.
- *
- * Three producers race for the same match — game over, forfeit-on-leave, and
- * the 30s no-show reconciler — and a plain read-then-write lets two of them
- * both pass a `status !== 'completed'` check and both advance the bracket, with
- * the second overwriting the first winner. The `status=neq.completed` filter
- * moves that decision into Postgres: exactly one PATCH matches a row, and
- * `Prefer: return=representation` (set by default in supabaseFetch) makes the
- * loser's empty result distinguishable from the winner's.
+ * A `RAISE EXCEPTION` inside the function comes back from PostgREST as an HTTP
+ * error whose body carries `{"message":"<code>", ...}`. Re-throw with just that
+ * code so callers (and the game-over retry loop) see a stable string.
  */
-export async function completeMatchIfNotCompleted(
+async function callTournamentRpc<T>(fn: string, body: Record<string, unknown>): Promise<T> {
+  try {
+    return await supabaseFetch<T>(`/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const m = raw.match(/"message":\s*"([^"]+)"/);
+    throw new Error(m ? m[1] : raw);
+  }
+}
+
+export async function completeTournamentMatch(
+  params: CompleteTournamentMatchParams,
+): Promise<CompleteTournamentMatchResult> {
+  return callTournamentRpc<CompleteTournamentMatchResult>('complete_tournament_match', {
+    p_match_id: params.matchId,
+    p_winner_id: params.winnerId,
+    p_winner_source: params.winnerSource,
+    p_status_reason: params.statusReason ?? null,
+    p_reported_p1_score: params.reportedPlayer1Score ?? null,
+    p_reported_p2_score: params.reportedPlayer2Score ?? null,
+    p_no_show_user_id: params.noShowUserId ?? null,
+    p_forfeit_user_id: params.forfeitUserId ?? null,
+    p_bye_walkover: params.byeWalkover ?? false,
+    p_actor: params.actor ?? null,
+  });
+}
+
+export async function promoteTournamentMatch(
   matchId: string,
-  patch: MatchPatch,
-): Promise<boolean> {
-  const rows = await supabaseFetch<MatchRow[] | undefined>(
-    `/rest/v1/${TABLES.matches}` +
-      `?id=eq.${encodeURIComponent(matchId)}` +
-      `&status=neq.completed`,
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  );
-  return Array.isArray(rows) && rows.length > 0;
+  toStatus: 'ready' | 'in_progress',
+  opts: {
+    readyAt?: string;
+    readyDeadlineAt?: string;
+    roomCode?: string;
+    startedAt?: string;
+    actor?: string;
+  } = {},
+): Promise<PromoteTournamentMatchResult> {
+  return callTournamentRpc<PromoteTournamentMatchResult>('promote_tournament_match', {
+    p_match_id: matchId,
+    p_to_status: toStatus,
+    p_ready_at: opts.readyAt ?? null,
+    p_ready_deadline_at: opts.readyDeadlineAt ?? null,
+    p_room_code: opts.roomCode ?? null,
+    p_started_at: opts.startedAt ?? null,
+    p_actor: opts.actor ?? null,
+  });
 }
 
 export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
