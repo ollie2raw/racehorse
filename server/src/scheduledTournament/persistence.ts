@@ -264,20 +264,45 @@ export async function insertMatch(input: {
   return inserted[0];
 }
 
-export async function updateMatch(
-  matchId: string,
-  patch: Partial<Pick<
-    MatchRow,
-    'status' | 'winner_id' | 'room_code' | 'ready_at' | 'ready_deadline_at' |
-    'started_at' | 'completed_at' | 'player1_joined_at' | 'player2_joined_at' |
-    'winner_source' | 'status_reason' | 'forfeit_user_id' | 'no_show_user_id' |
-    'bot_tier' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
-  >>,
-): Promise<void> {
+export type MatchPatch = Partial<Pick<
+  MatchRow,
+  'status' | 'winner_id' | 'room_code' | 'ready_at' | 'ready_deadline_at' |
+  'started_at' | 'completed_at' | 'player1_joined_at' | 'player2_joined_at' |
+  'winner_source' | 'status_reason' | 'forfeit_user_id' | 'no_show_user_id' |
+  'bot_tier' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
+>>;
+
+export async function updateMatch(matchId: string, patch: MatchPatch): Promise<void> {
   await supabaseFetch(
     `/rest/v1/${TABLES.matches}?id=eq.${encodeURIComponent(matchId)}`,
     { method: 'PATCH', body: JSON.stringify(patch) },
   );
+}
+
+/**
+ * Compare-and-set completion write: applies `patch` only while the row is not
+ * already `completed`, and reports whether this caller was the one that landed
+ * it.
+ *
+ * Three producers race for the same match — game over, forfeit-on-leave, and
+ * the 30s no-show reconciler — and a plain read-then-write lets two of them
+ * both pass a `status !== 'completed'` check and both advance the bracket, with
+ * the second overwriting the first winner. The `status=neq.completed` filter
+ * moves that decision into Postgres: exactly one PATCH matches a row, and
+ * `Prefer: return=representation` (set by default in supabaseFetch) makes the
+ * loser's empty result distinguishable from the winner's.
+ */
+export async function completeMatchIfNotCompleted(
+  matchId: string,
+  patch: MatchPatch,
+): Promise<boolean> {
+  const rows = await supabaseFetch<MatchRow[] | undefined>(
+    `/rest/v1/${TABLES.matches}` +
+      `?id=eq.${encodeURIComponent(matchId)}` +
+      `&status=neq.completed`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+  return Array.isArray(rows) && rows.length > 0;
 }
 
 export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{

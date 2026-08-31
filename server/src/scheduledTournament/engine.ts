@@ -466,7 +466,29 @@ export async function applyMatchResult(
   if (!match) throw new Error('Match not found');
   if (match.status === 'completed') return;
 
-  await persistence.updateMatch(match.id, {
+  // The match row is the only authority on who is allowed to win it. Callers
+  // derive `winnerId` from live room seats, and a room seat is not by itself
+  // proof of assignment — so validate against the bracket before this id can
+  // be written as the winner and carried into the next round. Without this a
+  // winner who was never assigned to the match advances as a real entrant and
+  // nobody is marked eliminated (the loser lookup below silently yields null).
+  if (params.winnerId !== match.player1_id && params.winnerId !== match.player2_id) {
+    log.warn({
+      matchId: match.id,
+      tournamentId: match.tournament_id,
+      winnerId: params.winnerId,
+      player1Id: match.player1_id,
+      player2Id: match.player2_id,
+    }, 'rejected result: winner is not a participant of this match');
+    throw new Error('winner_not_match_participant');
+  }
+
+  // Claim the match with a compare-and-set. The `status === 'completed'` check
+  // above is only a read: game over, forfeit-on-leave, and the no-show
+  // reconciler can all pass it for the same match in the same instant, and the
+  // old unconditional PATCH let each of them advance the bracket. Only the
+  // caller whose write actually lands proceeds; the rest return as no-ops.
+  const claimed = await persistence.completeMatchIfNotCompleted(match.id, {
     status: 'completed',
     winner_id: params.winnerId,
     completed_at: new Date().toISOString(),
@@ -477,6 +499,14 @@ export async function applyMatchResult(
     player1_score: params.player1Score,
     player2_score: params.player2Score,
   });
+  if (!claimed) {
+    log.info({
+      matchId: match.id,
+      tournamentId: match.tournament_id,
+      winnerId: params.winnerId,
+    }, 'result already applied by a concurrent writer');
+    return;
+  }
 
   // Mark loser eliminated (if there was one).
   const loserId =

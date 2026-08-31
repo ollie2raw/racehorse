@@ -149,6 +149,12 @@ function makePersistence(
       if (!m) return;
       Object.assign(m, patch);
     },
+    completeMatchIfNotCompleted: async (id, patch) => {
+      const m = store.matches.find((x) => x.id === id);
+      if (!m || m.status === 'completed') return false;
+      Object.assign(m, patch);
+      return true;
+    },
     updateRegistrationStatus: async (_tid, userId, status, seed) => {
       const r = store.regs.find((x) => x.user_id === userId);
       if (!r) return;

@@ -117,6 +117,11 @@ function makeHumanVsBotPersistence(): {
     updateMatch: async (id, patch) => {
       if (id === store.match.id) Object.assign(store.match, patch);
     },
+    completeMatchIfNotCompleted: async (id, patch) => {
+      if (id !== store.match.id || store.match.status === 'completed') return false;
+      Object.assign(store.match, patch);
+      return true;
+    },
     updateRegistrationPlacement: vi.fn(),
     updateRegistrationStatus: vi.fn(),
     updateTournamentStatus: vi.fn(),

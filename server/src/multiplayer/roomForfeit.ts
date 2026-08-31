@@ -132,14 +132,38 @@ export async function applyActiveMatchForfeit(
       return null;
     }
 
-    winnerUserId =
-      match.player1_id === authenticatedUserId ? match.player2_id : match.player1_id;
+    // Who left decides who wins, so an unresolved leaver cannot be allowed to
+    // fall through to a default. The previous two-branch ternary had no "not a
+    // participant" case: a null userId (guest seat, or an identity lost on the
+    // disconnect-timeout path) or anyone who reached this room without being
+    // assigned to the match took the else branch and handed the win to
+    // player1 — forfeiting on behalf of a player who never left.
+    const abandonerIsPlayer1 = match.player1_id === authenticatedUserId;
+    const abandonerIsPlayer2 = match.player2_id === authenticatedUserId;
+    if (!abandonerIsPlayer1 && !abandonerIsPlayer2) {
+      // Not this match's player: leaving forfeits nothing. Leave the row alone
+      // for the real players, or for the no-show reconciler if neither shows.
+      room.tournamentForfeitApplyStatus = 'idle';
+      log.warn(
+        {
+          roomCode: room.code,
+          matchId: match.id,
+          tournamentId: match.tournament_id,
+          leavingUserId: authenticatedUserId,
+          player1Id: match.player1_id,
+          player2Id: match.player2_id,
+        },
+        'tournament forfeit ignored — leaver is not a participant of this match',
+      );
+      return null;
+    }
+
+    winnerUserId = abandonerIsPlayer1 ? match.player2_id : match.player1_id;
     const winTarget =
       typeof room.config.winningScore === 'number' && Number.isFinite(room.config.winningScore)
         ? room.config.winningScore
         : 30;
-    const statusReason =
-      match.player1_id === authenticatedUserId ? 'player1_forfeit' : 'player2_forfeit';
+    const statusReason = abandonerIsPlayer1 ? 'player1_forfeit' : 'player2_forfeit';
 
     let lastError: unknown = null;
     let applied = false;
