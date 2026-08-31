@@ -1,6 +1,7 @@
 import type { Server } from 'socket.io';
 import {
-  completeMatchIfNotCompleted,
+  completeTournamentMatch,
+  promoteTournamentMatch,
   fetchTournamentsByStatus,
   fetchMatchById,
   fetchMatches,
@@ -14,6 +15,9 @@ import {
   updateRegistrationStatus,
   updateTournamentStatus,
   type MatchPatch,
+  type CompleteTournamentMatchParams,
+  type CompleteTournamentMatchResult,
+  type PromoteTournamentMatchResult,
 } from './persistence';
 import { createReservedRoom, getRoom } from '../rooms';
 import type { Config } from '../game/types';
@@ -49,8 +53,24 @@ export interface EnginePersistence {
     botTier?: MatchRow['bot_tier'];
   }): Promise<MatchRow>;
   updateMatch(matchId: string, patch: MatchPatch): Promise<void>;
-  /** Conditional completion write. Resolves true only for the caller that actually completed the row. */
-  completeMatchIfNotCompleted(matchId: string, patch: MatchPatch): Promise<boolean>;
+  /**
+   * Atomic completion + validation + advancement + elimination + (round 3)
+   * tournament completion, in one Postgres transaction. `result.applied` is
+   * false for an idempotent replay or a winner conflict.
+   */
+  completeTournamentMatch(params: CompleteTournamentMatchParams): Promise<CompleteTournamentMatchResult>;
+  /** `waiting`→`ready` or `ready`→`in_progress`, guarded by a row lock. */
+  promoteTournamentMatch(
+    matchId: string,
+    toStatus: 'ready' | 'in_progress',
+    opts?: {
+      readyAt?: string;
+      readyDeadlineAt?: string;
+      roomCode?: string;
+      startedAt?: string;
+      actor?: string;
+    },
+  ): Promise<PromoteTournamentMatchResult>;
   updateRegistrationStatus(
     tournamentId: string,
     userId: string,
@@ -82,7 +102,8 @@ export const defaultEnginePersistence: EnginePersistence = {
   fetchMatchByRoomCode,
   insertMatch,
   updateMatch,
-  completeMatchIfNotCompleted,
+  completeTournamentMatch,
+  promoteTournamentMatch,
   updateRegistrationStatus,
   updateRegistrationPlacement,
   updateTournamentStatus,

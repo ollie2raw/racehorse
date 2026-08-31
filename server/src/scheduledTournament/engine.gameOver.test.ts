@@ -6,6 +6,7 @@ vi.mock('../social/activityWriter', () => ({
 
 import { applyTournamentGameOverFromRoom } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
+import { inMemoryMatchRpcForArrayStore } from './inMemoryMatchRpc.testkit';
 import type { MatchRow, ScheduledTournamentRow } from './types';
 
 function makeIoMock() {
@@ -42,12 +43,7 @@ function makeGameOverPersistence(match: MatchRow): EnginePersistence {
       const row = store.matches.find((m) => m.id === id);
       if (row) Object.assign(row, patch);
     },
-    completeMatchIfNotCompleted: async (id: string, patch: Record<string, unknown>) => {
-      const row = store.matches.find((m) => m.id === id);
-      if (!row || row.status === 'completed') return false;
-      Object.assign(row, patch);
-      return true;
-    },
+    ...inMemoryMatchRpcForArrayStore(store),
     updateRegistrationStatus: async () => {},
     updateTournamentStatus: async () => {},
     insertMatch: async () => {
