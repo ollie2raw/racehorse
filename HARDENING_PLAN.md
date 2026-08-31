@@ -555,7 +555,7 @@ CAS. The participant check is a straightforward **move** (JS → RPC). The
 forfeit / room:join checks are **authz** and move to §1.5, untouched in
 behaviour.
 
-### 1.4.2 Match state machine (Step 3 deliverable — awaiting human sign-off)
+### 1.4.2 Match state machine (Step 3 — ratified, merged PR #93)
 
 #### States
 
@@ -670,7 +670,7 @@ ticks overlapping a slow Supabase read):**
   existing bracket. Closes Gap T-7 (liveness — no more "unique violation →
   stuck in `registration_open`").
 
-### 1.4.3 RPC surface — one vs. three (Step 3 sub-task, 2026-08-31)
+### 1.4.3 RPC surface — three functions (Step 3 — decided D-5, merged PR #93)
 
 **Decision: three functions + shared helpers.** (Decisions D-5.)
 
@@ -742,7 +742,7 @@ auto-resolve a bit sooner) — still invisible to players, no bracket-view
 inconsistency (the "You vs TBD" partial-SF is how it renders today). The dead
 `round_completed` emit can stay or be removed in Step 4; nothing depends on it.
 
-### 1.4.5 Authz layer shape (Step 3 sub-task — 2026-08-31, awaiting human review)
+### 1.4.5 Authz layer shape (Step 3 — decided, merged PR #93)
 
 **Problem.** The audit (§1.1.5) found the *authorization* question — "may this
 user act on this match?" — answered by **inline, duplicated, inconsistent**
