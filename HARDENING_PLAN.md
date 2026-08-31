@@ -12,30 +12,34 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament → Step 3 (state machine design): IN PROGRESS.**
+**Tournament → Steps 1–3 COMPLETE. Step 4 (refactor) opens next — NOT started.**
 
-- Step 1 (current-state audit): COMPLETE — §1.1, §1.3.
-- Step 2 (invariants): **RATIFIED 2026-08-31** (Decisions D-3). T-INV-1..10 in
-  §1.2 are the agreed list. Concurrency mechanism = Postgres transaction
-  function RPC (D-2).
-- Step 2 addendum: **T-INV-6 reworded + re-ratified** (D-6) to feeder-gating;
-  `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as a
-  standalone fix (its own PR).
-- Step 3 (state machine / concurrency design): match state machine (§1.4.2) +
-  RPC surface = three functions (§1.4.3, D-5) done. **Authz layer shape (§1.5)
-  = current sub-task** — signature + one example call site for human review.
-  Remaining after that: reconciler multi-instance (moot on free tier).
-  Still one-step-per-session.
-- **Infra / liveness (2026-08-31): D-4 RESOLVED, T-17 CLOSED.** Render = free
-  tier (0.1 CPU / 512 MB, 15-min idle spin-down). Root cause of the stalls: an
-  UptimeRobot monitor existed but was mis-typed as ICMP (Render ignores it).
-  Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / 1 h.
-  `SERVER_URL` set + redeployed for the internal self-ping as a second signal.
-  **T-18 + T-19 = ACCEPTED RISK** at current scale, revisit at paid-tier
-  upgrade. `/internal/tick` not built (unneeded). Orthogonal to the RPC work
-  (§1.4.4).
-- Step 4 (refactor): not started. First sub-task = review merged PR #91
-  against the ratified invariants + RPC design (§1.4.x).
+- **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
+- **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
+  re-ratified to feeder-gating (D-6, code merged PR #94).
+- **Step 3** (state machine / concurrency design): COMPLETE 2026-08-31. All
+  sub-tasks written, reviewed, and merged (PRs #93 / #95):
+  - Match state machine — states, transitions T-a..T-h, per-actor triggers,
+    RPC rejection rules, near-simultaneous-caller lock walkthrough (§1.4.2)
+  - RPC surface = **three functions** `complete_tournament_match` /
+    `promote_tournament_match` / `generate_tournament_bracket` + helpers
+    (§1.4.3, D-5)
+  - PR #91 assessed against the design (§1.4.1)
+  - Authz layer shape — `authorizeMatchParticipant()` + ack/status mappers in
+    `tournamentAuth.ts` (§1.4.5)
+  - Reconciler multi-instance = **singleton via `TOURNAMENT_SCHEDULER_ENABLED`
+    boot flag** (§1.4.6, D-7); advisory-lock rejected (PostgREST has no
+    holdable session — reason preserved).
+- **Step 4** (refactor): NOT started. First sub-task = **review merged PR #91
+  line-by-line against the ratified invariants + the §1.4 RPC design** (see the
+  ⚠ block below and §1.4.1). Then the RPC + authz + RLS + flag work, each step
+  naming the gap(s) it closes and the test that proves it.
+- **Step 5** (tests prove closure): NOT started.
+
+**Infra / liveness — settled 2026-08-31.** T-17 CLOSED (UptimeRobot re-typed
+ICMP→HTTP on `/ping` @ 5 min + `SERVER_URL` set; both verified). T-18 + T-19 =
+ACCEPTED RISK at current scale, revisit at paid-tier upgrade. D-4 = external
+monitor, free tier. `/internal/tick` not built.
 
 **⚠ UNREVIEWED RISK — PR #91 was merged early, out of sequence.** The human
 merged #91 (`e4760058`) before Step 4's review happened. What is now live on
@@ -414,7 +418,7 @@ round agreement.
 | **T-13** | `emitToUserIds` iterates **all** connected sockets for every emit (O(sockets) per event, several per completion). | `engine.ts` `emitToUserIds` | Fine at current scale; O(n²)-ish under load. |
 | **T-14** | Heavy `log.info` on hot read paths (`fetchActiveAssignedMatchForUser` logs full candidate list every call; `registerTournamentAttachHandlers` logs `'accepted'` twice). | `persistence.ts`, `registerTournamentAttachHandlers.ts` | Log volume / cost. |
 | **T-15** | No metric / alert on invariant violations (double advancement, `winner_id` not a participant, "no target match for advancement" warn). Detection is by reading logs after a player complains. | whole system | No early warning. |
-| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. Note: **structurally moot on Render free tier** (D-2 addendum) — can't scale anyway. Keep for when we upgrade. |
+| **T-16** — **stance decided (D-7), fix deferred to upgrade** | `scheduler.ts` runs the no-show reconciler (and the whole scheduler tick) on a `setInterval` inside every server process. If Render ever runs 2+ instances, each would tick its own reconciler — two instances could pick up *different* stale `ready` matches in the same tick and each "correctly" no-show-resolve them, duplicating reconciliation work + log noise (the per-match RPC row lock protects a single call, not "only one instance should scan"). | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | **Decision D-7:** run the scheduler+reconciler as a **singleton** via a boot-time `TOURNAMENT_SCHEDULER_ENABLED` flag (default `true`). No code fix now beyond adding the flag + a loud comment + a boot log line — **structurally moot on free tier** (1 instance). When multi-instance happens, the flag is `true` on exactly one process (the dedicated worker, D-4 option e) and `false` on the web dynos. |
 
 ### infrastructure / liveness — NOT fixed by the RPC design
 
@@ -551,7 +555,7 @@ CAS. The participant check is a straightforward **move** (JS → RPC). The
 forfeit / room:join checks are **authz** and move to §1.5, untouched in
 behaviour.
 
-### 1.4.2 Match state machine (Step 3 deliverable — awaiting human sign-off)
+### 1.4.2 Match state machine (Step 3 — ratified, merged PR #93)
 
 #### States
 
@@ -666,7 +670,7 @@ ticks overlapping a slow Supabase read):**
   existing bracket. Closes Gap T-7 (liveness — no more "unique violation →
   stuck in `registration_open`").
 
-### 1.4.3 RPC surface — one vs. three (Step 3 sub-task, 2026-08-31)
+### 1.4.3 RPC surface — three functions (Step 3 — decided D-5, merged PR #93)
 
 **Decision: three functions + shared helpers.** (Decisions D-5.)
 
@@ -738,7 +742,7 @@ auto-resolve a bit sooner) — still invisible to players, no bracket-view
 inconsistency (the "You vs TBD" partial-SF is how it renders today). The dead
 `round_completed` emit can stay or be removed in Step 4; nothing depends on it.
 
-### 1.4.5 Authz layer shape (Step 3 sub-task — 2026-08-31, awaiting human review)
+### 1.4.5 Authz layer shape (Step 3 — decided, merged PR #93)
 
 **Problem.** The audit (§1.1.5) found the *authorization* question — "may this
 user act on this match?" — answered by **inline, duplicated, inconsistent**
@@ -817,17 +821,58 @@ own `authorizeRoom…` guard following the identical *shape*
 mappers). If the shape proves identical we lift the type into a shared
 `authz.ts` then — not building a generic framework now.
 
-### 1.4.3b Still TODO after this (next Step 3 sub-tasks — NOT started)
+### 1.4.6 No-show reconciler multi-instance stance (Decisions D-7 — 2026-08-31)
 
-- **No-show reconciler multi-instance** (Gap T-16) — proposed: keep it
-  single-instance-assumed but add `pg_try_advisory_lock` at the top of the tick
-  so 2+ instances can't both scan/reconcile; defer a full lease table. Note:
-  **structurally moot on free tier** (D-2 addendum) — carry for the upgrade.
+**Problem.** `scheduler.ts` runs the reconciler tick on a `setInterval` in
+every server process. The per-match RPC row lock (D-2) protects a single
+`complete_tournament_match` call — it does **not** stop two instances from each
+*scheduling* that call for different stale matches in the same tick. Under 2+
+instances that means duplicated reconciliation work and log noise (each acting
+"correctly" in isolation).
+
+**Rejected — `pg_try_advisory_lock` at the top of the tick.** The server has
+**no direct Postgres connection**: every DB call is `supabaseFetch` → PostgREST
+over HTTP, and each call checks out a *different* pooled connection. A
+session-scoped `pg_try_advisory_lock` is bound to one backend connection and
+releases the moment that HTTP request's connection returns to the pool —
+before the next call in the tick starts. Only `pg_try_advisory_xact_lock`
+works over PostgREST, and only *inside a single RPC*. **Preserved here so a
+cold session does not re-propose it.**
+
+**Rejected — a lease/heartbeat table** (`scheduler_leases(name, holder,
+expires_at)` + a `try_acquire_lease` RPC): real machinery for a problem that
+does not exist at 1 instance, and unnecessary once the flag below is on the
+table.
+
+**Rejected — RPC-embedded `pg_try_advisory_xact_lock`** (move the whole
+scan+resolve into one plpgsql function): unnecessary overlap with the RPC work
+already scoped in §1.4.3; the reconciler's logic doesn't need to be in SQL to
+be single-instance.
+
+**Decision (D-7): run the scheduler + reconciler as a singleton via a
+boot-time flag.** `TOURNAMENT_SCHEDULER_ENABLED`, default `true`.
+`startTournamentScheduler` checks it and no-ops (with a boot log line) when
+false. A loud comment marks it. When multi-instance ever happens, the flag is
+`true` on **exactly one** process — the dedicated scheduler worker (D-4 option
+e) — and `false` on the web dynos. Schedulers are singletons even at large
+scale; you split them to a dedicated worker, not leader-elect them inside N web
+instances. The RPC row locks already make the *completion path*
+instance-agnostic; the scheduler just needs to be told "you're not the leader,
+don't tick."
+
+**Cost now:** one `if` at startup + a comment + a log line. **Structurally
+moot on free tier** (Render runs 1 instance).
+
+**Not in scope for D-7:** the reconciler's actual no-show detection / winner
+selection logic is unchanged; T-17–T-19 are unaffected (already resolved).
+
+### 1.4.7 Deferred design question (not a Step 3 blocker)
+
 - **`abandoned` match state?** — whether a match stranded past the tournament
   active window needs an explicit state rather than being left in
-  `ready`/`in_progress` under a `cancelled` tournament.
+  `ready`/`in_progress` under a `cancelled` tournament. Revisit in Step 4.
 
-### 1.4.4 How the RPC design interacts with the liveness gaps (T-17..T-19)
+### 1.4.8 How the RPC design interacts with the liveness gaps (T-17..T-19)
 
 The RPC design and the infra fix are **orthogonal and both required**:
 
@@ -882,16 +927,16 @@ that proves it.
 - [x] T-INV-1..10 reviewed line-by-line and signed off by the human — Decisions D-3 (2026-08-31)
 - [x] Invariants marked `RATIFIED` — §1.2 status line, Decisions D-3
 
-### Step 3 — State machine / concurrency design (IN PROGRESS)
+### Step 3 — State machine / concurrency design — **COMPLETE 2026-08-31**
 - [x] Concurrency mechanism chosen and logged in Decisions — D-2
 - [x] PR #91 (merged early) assessed against D-2 + invariants — §1.4.1
-- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 (shown to human 2026-08-31)
+- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 — merged PR #93
 - [x] RPC rejection behaviour for invalid transitions specified — §1.4.2
 - [x] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough — §1.4.2
-- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 (shown to human 2026-08-31; also surfaced a T-INV-6 wording fix for re-ratification)
-- [x] Authz-layer shape chosen — `authorizeMatchParticipant()` + ack/status mappers in `tournamentAuth.ts`; signature + `tournament:attach_assigned_match` example call site in §1.4.5 (shown to human 2026-08-31)
-- [ ] Multi-instance stance for the no-show reconciler chosen (note: moot on free tier) ← **last Step 3 sub-task**
-- [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as its own PR
+- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 — merged PR #93
+- [x] Authz-layer shape chosen — `authorizeMatchParticipant()` + ack/status mappers in `tournamentAuth.ts`; signature + `tournament:attach_assigned_match` example call site in §1.4.5 — merged PR #93
+- [x] Multi-instance stance for the no-show reconciler chosen — **singleton via `TOURNAMENT_SCHEDULER_ENABLED` boot flag** (Decisions D-7, §1.4.6); advisory-lock / lease-table / RPC-embedded-lock rejected with reasons preserved — PR #95
+- [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` merged as PR #94 (commit on main)
 
 ### Step 4 — Refactor (not started; gated on Steps 2–3)
 - [ ] T-1 …
@@ -952,6 +997,7 @@ registry.
 | D-3 | 2026-08-31 | **T-INV-1..10 RATIFIED as written in §1.2.** Four open sign-off questions resolved: (a) **T-INV-3 conflict policy** — first-recorded outcome wins, later callers silently accept, log-only; *added requirement:* emit one structured `warn` log line (`tournament_match_winner_conflict`) whenever the `conflict=true` branch fires, so a genuine winner disagreement (which should be impossible if T-INV-2 + the state machine are correct) is visible/alertable in production without blocking on it. (b) **T-INV-4 score derivation** — the RPC computes the score pair itself for no-show/forfeit/bot cases rather than trusting the caller; removes the "client lied about the score" class of bugs. (c) **T-INV-7 one-live-match** — ship as a derived/asserted property, not a hard DB constraint; a structural constraint is more engineering than the risk justifies at current scale; escalate to a hard constraint only if `assertBracketConsistent` ever fires in practice (which would also mean Step 3's design missed something). (d) **Render instance count** — pending; treated as 1 by architecture until the human confirms. | The human reviewed the list line-by-line. Recording the *why* for each answer so a cold session does not re-open settled questions. |
 | D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
 | D-2 addendum | 2026-08-31 | **Render confirmed = free tier ($0, 0.1 CPU, 512 MB). Free tier does not support scaling at all.** So the multi-instance question is not "currently 1" but **"structurally 1, not applicable until we move off free tier."** The RPC decision (instance-count agnostic) still stands and is still the right call — it means the eventual paid-tier / multi-worker move needs no rework of the concurrency model. But the in-process funnel alternative is now doubly ruled out. Separately: free-tier spin-down is a real liveness risk — see gaps T-17..T-19 and Decisions D-4. | Human read the Render dashboard. |
+| D-7 | 2026-08-31 | **No-show reconciler / scheduler multi-instance = a boot-time singleton flag, not a lock.** Add `TOURNAMENT_SCHEDULER_ENABLED` (default `true`); `startTournamentScheduler` no-ops with a boot log line when false. When multi-instance ever happens, it's `true` on exactly one process (the dedicated worker, D-4 option e) and `false` on the web dynos. **`pg_try_advisory_lock` at the top of the tick was rejected** and the reason is preserved so it is not re-proposed: the server has no direct Postgres connection — every DB call is `supabaseFetch` → PostgREST over HTTP on a *different* pooled connection each time, so a session-scoped advisory lock releases the instant the first HTTP call's connection returns to the pool, before the tick's next call. Only `pg_try_advisory_xact_lock` works over PostgREST, and only inside one RPC. A lease/heartbeat table and an RPC-embedded xact lock were also rejected (machinery for a non-problem at 1 instance; unnecessary overlap with the §1.4.3 RPC work). | Schedulers are singletons even at large scale — you split them to a dedicated worker, not leader-elect them across N web instances. The RPC row locks (D-2) already make the completion path instance-agnostic; the scheduler only needs to know it's not the leader. Near-zero cost now (one `if` at startup), structurally moot on free tier. The reconciler's own logic is untouched. |
 | D-6 | 2026-08-31 | **T-INV-6 reworded + re-ratified: "a round-N match enters `ready`/`in_progress` only after *both its feeder matches* (round N−1, match numbers 2M−1 and 2M) are `completed`/`bye`"** — not "the whole previous round". Client-impact check (§1.4.3): `tournament:round_completed` has no client listener; bracket view / "next match" / hub "waiting" / flow stepper / notifications / post-match nav are all per-match; the engine already dispatches human SF/Final on the two-feeder condition. **Also pulled forward from Step 4 (human's explicit direction):** replace `isPreviousRoundComplete` with `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch`; update the one engine test that asserted the strict rule. | The strict rule was an unexamined over-constraint. Only observable effect of relaxing: a fully-bot semifinal/final auto-simulates as soon as its two bot feeders finish instead of waiting for the human's half of the bracket — invisible to players (bracket-reveal spoiler logic hides non-human results beyond the player's current round). |
 | D-5 | 2026-08-31 | **RPC surface = three functions, not one.** `complete_tournament_match` (owns T-INV-1,2,3,4,5,10), `promote_tournament_match(p_to_status)` (`waiting→ready` / `ready→in_progress`), `generate_tournament_bracket` (T-INV-8), plus three non-Node-facing helper functions (`_tournament_is_participant`, `_tournament_canonical_scores`, `_tournament_advance_target`). Rejected: a single `tournament_match_command(match_id, command, args jsonb)` dispatcher. | Three small auditable transactions with explicit per-function lock targets and typed signatures beat one `CASE`-on-action function with a fat `jsonb` arg and runtime shape checks. Bracket *generation* is a different concern from match *state* and gets a different deployable object. Shared logic goes in the helper functions. |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
@@ -965,11 +1011,12 @@ registry.
 | 2026-08-31 | Document created. System 1 (Tournament) Step 1 current-state audit written. Steps 2+ open. Systems 2–4 stubbed. |
 | 2026-08-31 | Added the "one step per session" rule to "How to use this document". Locked concurrency mechanism = Postgres RPC (D-2). Rewrote §1.2 as T-INV-1..10, framed as RPC/DB obligations, pending human sign-off. §1.4 now carries the locked decision only (state machine still TODO). |
 | 2026-08-31 | Step 2 RATIFIED (D-3, four sign-off answers logged). T-INV-3 gains a structured-log requirement on the `conflict=true` branch. PR #91 merged early — added the ⚠ note to Current focus and §1.4.1 (assessed: `completeMatchIfNotCompleted` is superseded not conflicting; participant check duplicated; forfeit/room-join checks are authz not concurrency; RLS migration correct and independent). Step 3 started: §1.4.2 = match state machine — states, transitions, per-actor triggers, RPC rejection rules, and the near-simultaneous-caller lock walkthrough. Remaining Step 3 sub-tasks (one-vs-three RPCs, authz layer, reconciler multi-instance) not started. |
-| 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.4 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
+| 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.8 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
 | 2026-08-31 | T-17 follow-up (before building any cron): **(a)** verified from code that `startTournamentScheduler`'s `setInterval` fires independently at 30 s once the process is alive (`bootstrapScheduledTournamentInfrastructure` runs inside `server.listen`) — so a plain uptime ping to `/ping` fully restores catch-up; `/internal/tick` is **not needed** unless D-4 moves the scheduler off the web process. **(b)** searched the repo for an existing external pinger — **no committed config**, `smoke-test.yml` is push-triggered not cron, and health routes don't log requests, so **cannot verify from the repo**. Two "T-17 follow-up" notes added to §1.3 listing exactly what the human must check (Render metrics, UptimeRobot/cron-job.org accounts, max-gap < 13 min, point it at `/ping` not `/healthz`). T-17 stays OPEN pending that check. No `/internal/tick` endpoint added. Step 3 continuation still paused. |
 | 2026-08-31 | Human confirmed: no existing pinger; setting up a new external uptime monitor on `/ping` @ 5 min (option a). **D-4 RESOLVED** — external monitor, stay on free tier, `/internal/tick` unbuilt. Checked prod `GET /ready`: **`SERVER_URL` is NOT set** in Render (self-ping has been inert all along) — human is setting it as a second signal. `/ready` also shows `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset — noted for a later env-hygiene pass, out of scope here. **T-17 → MITIGATED** (human owes first-hour steady-state verification before CLOSED). **T-18 + T-19 → ACCEPTED RISK** at current scale, revisit at upgrade. Step 3 continuation still paused. |
 | 2026-08-31 | **T-17 → CLOSED.** Actual root cause identified: an UptimeRobot monitor **did** exist but was set to **ICMP Ping type**, which Render never answers → it showed "No Response" / ~6.5 % uptime and kept the instance warm zero percent of the time. (So the earlier "no pinger found" was half-right — the repo had no config *and* the external monitor was non-functional.) Fixed to **HTTP(s) type → `/ping` @ 5 min**; human verified **100 % uptime, no gaps, over the observation window**. Human also set `SERVER_URL=https://racehorse.onrender.com` in Render + redeployed and confirmed `GET /ready` → `recommendedEnv.SERVER_URL: true` (fresh deploy `67fb5dac…`, `uptimeSeconds` reset). **Both mitigations verified.** |
 | 2026-08-31 | T-17 confirmations landed: `SERVER_URL: true` in `GET /ready` post-redeploy; doc caveats about "pending / cache lag" removed. Root cause stands as recorded — a **misconfigured monitor type (ICMP vs HTTP)**, not a missing pinger. No further action on T-17. |
 | 2026-08-31 | **T-INV-6 reword — client-side impact check done** (§1.4.3). `tournament:round_completed` has **no client listener** (dead event). Bracket view, "next match" logic, hub-state "waiting", flow stepper, notifications, post-match nav — all **per-match**, none assume whole-round completion. The engine **already** dispatches human SF/Final on the two-feeder condition (`applyMatchResult` advancement tail); `isPreviousRoundComplete` only gates **bot-only** auto-sim, which the bracket-reveal spoiler logic hides from players anyway. **Reword is safe to ratify** — pending human OK. Authz-layer sub-task still NOT started. |
-| 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
+| 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. Doc: merged PR #93; code (`isPreviousRoundComplete` → `areFeederMatchesComplete`): merged PR #94. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
+| 2026-08-31 | **Step 3 COMPLETE.** Reconciler multi-instance stance decided — **D-7**: singleton via a boot-time `TOURNAMENT_SCHEDULER_ENABLED` flag (default true), not a lock. `pg_try_advisory_lock` rejected + reason preserved (the server has no direct Postgres connection — PostgREST checks out a different pooled connection per call, so a session advisory lock releases before the tick's next call). Lease table and RPC-embedded xact lock also rejected. §1.4.6 written, T-16 + §1.4.3b→§1.4.6 updated, Step 3 checklist all `[x]`, Current focus flipped to "Steps 1–3 complete, Step 4 opens". **Step 4 begins next: review merged PR #91 against the ratified invariants + the RPC design — not started this session.** |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
