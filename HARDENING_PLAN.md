@@ -12,18 +12,45 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament → Step 2 (invariants): DONE in this doc, awaiting human sign-off.**
-T-INV-1..9 have been rewritten as statements the Postgres RPC must enforce
-(§1.2). Concurrency mechanism is decided: a Postgres transaction function
-(Decisions D-2). **Do not start Step 3 (state machine design) until the human
-signs off on the invariant list.**
+**Tournament → Step 3 (state machine design): IN PROGRESS.**
 
 - Step 1 (current-state audit): COMPLETE — §1.1, §1.3.
-- Step 2 (invariants): written, `RATIFIED`-pending-human — §1.2.
-- Step 3 (state machine / concurrency design): NOT STARTED — §1.4 has only the
-  locked concurrency decision, not the state machine.
-- PRs #89/#90/#91 predate this plan (Decisions D-1). #91 review is Step 4's
-  first sub-task, gated on Steps 2–3 sign-off.
+- Step 2 (invariants): **RATIFIED 2026-08-31** (Decisions D-3). T-INV-1..10 in
+  §1.2 are the agreed list. Concurrency mechanism = Postgres transaction
+  function RPC (D-2).
+- Step 2 addendum: **T-INV-6 reworded + re-ratified** (D-6) to feeder-gating;
+  `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as a
+  standalone fix (its own PR).
+- Step 3 (state machine / concurrency design): match state machine (§1.4.2) +
+  RPC surface = three functions (§1.4.3, D-5) done. **Authz layer shape (§1.5)
+  = current sub-task** — signature + one example call site for human review.
+  Remaining after that: reconciler multi-instance (moot on free tier).
+  Still one-step-per-session.
+- **Infra / liveness (2026-08-31): D-4 RESOLVED, T-17 CLOSED.** Render = free
+  tier (0.1 CPU / 512 MB, 15-min idle spin-down). Root cause of the stalls: an
+  UptimeRobot monitor existed but was mis-typed as ICMP (Render ignores it).
+  Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / 1 h.
+  `SERVER_URL` set + redeployed for the internal self-ping as a second signal.
+  **T-18 + T-19 = ACCEPTED RISK** at current scale, revisit at paid-tier
+  upgrade. `/internal/tick` not built (unneeded). Orthogonal to the RPC work
+  (§1.4.4).
+- Step 4 (refactor): not started. First sub-task = review merged PR #91
+  against the ratified invariants + RPC design (§1.4.x).
+
+**⚠ UNREVIEWED RISK — PR #91 was merged early, out of sequence.** The human
+merged #91 (`e4760058`) before Step 4's review happened. What is now live on
+`main`:
+- an **app-level** compare-and-set, `persistence.completeMatchIfNotCompleted`
+  (`?status=neq.completed` conditional PATCH), used by `applyMatchResult`;
+- an inline participant check in `applyMatchResult`
+  (`winner_not_match_participant`);
+- inline participant checks in `roomForfeit` and `roomSocketAttach`
+  (`room:join`);
+- the registrations RLS lockdown migration.
+This CAS has **not** been checked against the now-ratified Postgres-RPC
+decision (D-2) or T-INV-1..10. Assessment of whether it conflicts with /
+duplicates / is superseded by the RPC is in **§1.4.1** (done before Step 3
+state-machine work, per the human's instruction).
 
 ---
 
@@ -223,8 +250,9 @@ lease/lock."* Render currently runs one instance.
 
 ## 1.2 Invariants
 
-Status: **written for human sign-off (Step 2).** Not yet `RATIFIED` — the human
-reviews this list and then it is marked ratified or revised.
+Status: **RATIFIED 2026-08-31** (Decisions D-3). T-INV-1..10 below are the
+agreed invariant set for the tournament system. Changes from here require a new
+dated Decisions-log entry.
 
 **Concurrency mechanism (locked — Decisions D-2):** match completion and bracket
 advancement run inside **one Postgres transaction function (RPC)**, not
@@ -263,6 +291,13 @@ Re-calling the RPC for an already-`completed` match is **not** an error:
   recorded outcome. (Producers 1 and 2 retry up to 4× and producers 1–3 can
   collide — the RPC is the single arbiter and later callers accept its answer.)
 *Enforced by:* the RPC reads the locked row first and branches before any write.
+*Observability (D-3):* whenever the `conflict=true` branch fires, the Node
+caller emits **one structured log line** at `warn` — a fixed, greppable event
+name (e.g. `tournament_match_winner_conflict`) with `{matchId, tournamentId,
+recordedWinnerId, attemptedWinnerId, attemptedSource}`. Not a player-facing
+error; we are not blocking on it. A genuine winner disagreement should be
+impossible if T-INV-2 and the state machine are correct, so this line existing
+in production logs is the signal that something in the design was missed.
 
 **T-INV-4 — Scores are consistent with the outcome.**
 `player1_score` and `player2_score` are both ≥ 0. The winner's score ≥ the
@@ -284,11 +319,16 @@ advances again (follows from T-INV-3).
 before `COMMIT`. The target-slot write is conditional (`WHERE <slot> IS NULL OR <slot> = winner_id`)
 so a repeat is a no-op, not a double-fill.
 
-**T-INV-6 — Round gating.**
-A round-*N* match may only leave `waiting` (to `ready`/`in_progress`) after
-every round-(*N*−1) match of that tournament is `completed` or `bye`.
-*Enforced by:* the promote-to-ready path is also an RPC (or the same one) that
-checks the previous round inside the transaction; `RAISE EXCEPTION` otherwise.
+**T-INV-6 — Feeder gating.** *(reworded + re-ratified 2026-08-31, Decisions D-6.)*
+A round-*N* match enters `ready`/`in_progress` only after **both of its feeder
+matches** (round *N*−1, match numbers `2M−1` and `2M`) are `completed` or `bye`.
+This is bracket-exact — SF1 (fed by QF1+QF2) may start while QF3/QF4 still play.
+*Enforced by:* structurally — `complete_tournament_match`'s advancement step
+sets the target to `ready` only when *both* its slots are filled, which happens
+exactly when both feeders have completed. `promote_tournament_match` needs no
+separate previous-round check. Bot-only auto-simulation uses the same
+two-feeder condition (`areFeederMatchesComplete`, replacing the old
+whole-round `isPreviousRoundComplete`).
 
 **T-INV-7 — One live match per user.**
 A user appears as `player1_id`/`player2_id` in **≤ 1** match with status
@@ -374,7 +414,95 @@ round agreement.
 | **T-13** | `emitToUserIds` iterates **all** connected sockets for every emit (O(sockets) per event, several per completion). | `engine.ts` `emitToUserIds` | Fine at current scale; O(n²)-ish under load. |
 | **T-14** | Heavy `log.info` on hot read paths (`fetchActiveAssignedMatchForUser` logs full candidate list every call; `registerTournamentAttachHandlers` logs `'accepted'` twice). | `persistence.ts`, `registerTournamentAttachHandlers.ts` | Log volume / cost. |
 | **T-15** | No metric / alert on invariant violations (double advancement, `winner_id` not a participant, "no target match for advancement" warn). Detection is by reading logs after a player complains. | whole system | No early warning. |
-| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. |
+| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. Note: **structurally moot on Render free tier** (D-2 addendum) — can't scale anyway. Keep for when we upgrade. |
+
+### infrastructure / liveness — NOT fixed by the RPC design
+
+Added 2026-08-31 after confirming Render = **free tier, 0.1 CPU / 512 MB,
+spins down after 15 min of no inbound HTTP**. These are a **different failure
+class** from the concurrency gaps: the RPC makes writes atomic, but a
+transaction function is irrelevant if **the process is not running to call it**,
+and a cold Supabase connection pool on 0.1 CPU makes even the RPC call slow and
+timeout-prone.
+
+| ID | Gap | Location | Risk |
+|---|---|---|---|
+| **T-17** — **CLOSED 2026-08-31** | **Free-tier spin-down stalled the scheduler and the no-show reconciler.** While the instance was spun down (no player connected, no HTTP), the `scheduler.ts` 30 s `setInterval` did not run — registration/bracket/dispatch/no-show all frozen until an inbound request cold-started a fresh instance, whose boot tick then caught up (status-guarded) but **late**. **Root cause of "no pinger":** an UptimeRobot monitor *did* exist but was configured as **ICMP Ping type**, which Render does not answer — it read "No Response" / ~6.5 % uptime and kept nothing warm. **Fix:** monitor changed to **HTTP(s) type → `https://racehorse.onrender.com/ping`, every 5 min**. Confirmed by the human: **100 % uptime, no gaps, over the following hour.** At 5-min cadence the instance never reaches Render's 15-min idle timeout, so the process stays alive and the 30 s tick runs continuously (verified: the tick needs only a live process, not a triggering request). **Second signal (also verified):** `SERVER_URL=https://racehorse.onrender.com` is set in Render — human confirmed post-redeploy that `GET /ready` → `recommendedEnv.SERVER_URL: true` (fresh deploy `67fb5dac…`, `uptimeSeconds` reset). The internal 10-min self-ping (`index.ts` ~950) is now active as a redundant backup. **Residual (accepted):** a process killed by deploy / crash / OOM stays down until the next ≤ 5-min monitor hit restarts it — bounded and acceptable. | `scheduler.ts`, external UptimeRobot monitor, Render plan | Closed by: (1) UptimeRobot HTTP monitor on `/ping` @ 5 min — 100 % uptime verified over the observation window; (2) `SERVER_URL` set in Render — `/ready` confirms `true` post-redeploy. Both human-configured outside the repo. |
+| **T-18** — **ACCEPTED RISK at current scale (2026-08-31)** | **0.1 CPU / 512 MB is marginal for a socket.io game server.** Timer callbacks drift under event-loop starvation (the 30 s reconciler can run every 40–90 s); GC pauses on 512 MB with 4 concurrent match states + all daily-mode state; **OOM restart** is plausible and drops all in-memory rooms (recovered 2 s post-boot by `recoverTournamentMatches`, with a gap). A **cold Supabase pool right after wake** is exactly when `applyMatchResult`'s 4-retry loop is most likely to exhaust and hit the ops-repair give-up path. | whole server process, Render plan | **Not being fixed now.** Accepted at current (pre-marketing, near-zero concurrent load) scale. **Revisit at upgrade time** — a paid always-on instance with real CPU/RAM removes most of this. The RPC work (§1.4) reduces the blast radius (atomic completion + advancement means a cold-instance retry can't half-write the bracket). |
+| **T-19** — **ACCEPTED RISK at current scale (2026-08-31)** | **Lifecycle transitions fire late on wake, and registration can be un-openable during a sleep window.** If the instance is asleep across `registration_open_at`, players who open the app before it wakes see a tournament that never opened; the boot tick may `openRegistration` + `closeRegistrationAndStart` in the same tick, collapsing the registration window to zero. `isTournamentPastActiveWindow` is 2 h, so a stale tournament isn't cancelled — it dispatches to absent players. | `scheduler.ts` tick | **Not being fixed now.** The 5-min external monitor (T-17 mitigation) largely removes the trigger — the instance shouldn't be asleep across a registration window if it's pinged every 5 min. Residual edge cases (monitor outage, deploy at exactly the wrong minute) accepted at current scale. **Revisit at upgrade time**, likely alongside moving lifecycle transitions into an RPC that reasons about "did we miss the window" explicitly. |
+
+**Evidence this is already biting (not hypothetical):**
+- Commit `b49872ce` — *"Fix post-wake API hangs by bootstrapping tournaments and bounding Supabase … register tournament REST and scheduler at listen time instead of first socket … return safe fallbacks when optional upstream calls stall."* This is a spin-down/wake fix. Post-wake hangs were real.
+- `scheduler.ts` comment: *"Fire one immediate tick so an existing-due tournament catches up at boot"* — written because tournaments were found overdue at boot.
+- The ops-repair doc exists — the give-up path has fired in production.
+- We **cannot** cleanly attribute past stuck brackets to concurrency vs. cold-start from the repo alone. Honest read: **both, and they compound** — a cold instance + cold Supabase pool + 0.1 CPU is when producers overlap *and* when retries exhaust. The RPC fixes the first half; T-17/T-18 are the second half and need an **infra** fix.
+
+**Infra decision — RESOLVED (D-4, 2026-08-31):** external uptime monitor on
+`/ping` every 5 min, stay on free tier for now. `/internal/tick` remains
+unbuilt and unneeded unless a future D-4 revision moves the scheduler off the
+web process.
+
+#### T-17 follow-up (2026-08-31): does the scheduler need a tick-triggering HTTP hit?
+
+**No.** Verified from code, not assumed:
+
+- `server.listen(PORT, () => { bootstrapScheduledTournamentInfrastructure(io, app); … })`
+  (`index.ts` ~917) runs at **process boot**, unconditionally, before any
+  socket or HTTP request. It calls `startTournamentScheduler(io)`, which does
+  `void tick()` immediately then `setInterval(tick, 30_000)`.
+- That `setInterval` is a **plain Node timer**. Once the process is running it
+  fires every 30 s **on its own** — no incoming request required. The tick's
+  own logic (`now >= openAt` / `>= closeAt` / `>= startAt`) means it processes
+  anything overdue.
+- So: **any request that keeps the process from spinning down is sufficient.**
+  A generic uptime ping to `/ping` fully restores scheduler + reconciler
+  behaviour — it does **not** need to hit a special catch-up route. The premise
+  "a plain ping keeps it awake but doesn't trigger catch-up" is **false** for
+  this codebase.
+
+**Implication for `/internal/tick`:** not needed for keep-warm. It becomes
+useful only under D-4 options (a)/(b) — moving the scheduler *off* the web
+process to a cron that then needs an endpoint to trigger the tick. **Do not
+build it until D-4 is decided.** (If the pinger is confirmed working and we
+stay on-process, `/internal/tick` is dead weight.)
+
+#### T-17 follow-up (2026-08-31): is there an external pinger already? — CANNOT VERIFY FROM REPO
+
+Checked and found **nothing conclusive in the repository**:
+- No committed uptime/monitor config (`.render/`, UptimeRobot, cron-job.org, etc.).
+- `.github/workflows/smoke-test.yml` hits prod (`/healthz`, `/api/daily-fritz/today`) **but triggers only `on: push: [main]`** — after a deploy, not on a cron. `daily-fritz-authority-soak.yml` is `workflow_dispatch` (manual) only.
+- `/ping`, `/health`, `/healthz` handlers **do not log the request** — no
+  access-log middleware, no User-Agent capture anywhere in `server/src`. So
+  even if we could read Render logs, a plain `/ping` hit would leave no trace
+  beyond Render's own platform request metrics.
+
+**What the human needs to check outside the repo** (agent cannot):
+1. **Render dashboard → Metrics / Logs** — look for a regular inbound request
+   pattern (every ~5 min) on `/ping` or `/`; Render's request log shows path +
+   sometimes UA.
+2. **UptimeRobot / cron-job.org / Pingdom / BetterStack / any monitor account**
+   — is there a monitor pointed at `racehorse.onrender.com`? What URL, what
+   interval?
+3. If a pinger exists: confirm (a) the **max gap between hits never exceeds
+   ~13 min** (Render's idle timeout is 15 min; leave margin), and (b) it hits a
+   **lightweight** endpoint — `/ping` and `/health` are pure `res.json`, safe;
+   `/healthz` does a **Supabase round-trip every hit** and would be wasteful /
+   add DB load if pinged every 5 min. Point any pinger at **`/ping`**.
+
+**Resolution (2026-08-31): T-17 CLOSED.** There *was* an UptimeRobot monitor —
+but configured as **ICMP Ping type**, which Render never answers, so it showed
+"No Response" / ~6.5 % uptime and kept nothing warm. Re-typed to **HTTP(s) →
+`https://racehorse.onrender.com/ping`, every 5 min**; human verified **100 %
+uptime, no gaps, over 1 h**. `SERVER_URL` was also `false` in prod
+(`GET /ready`) so the internal self-ping had never run; human set
+`SERVER_URL=https://racehorse.onrender.com` + redeployed and confirmed
+`GET /ready` → `SERVER_URL: true` (fresh deploy `67fb5dac…`). Both signals
+verified.
+
+> Side note (out of scope, logged for later): `/ready` also shows
+> `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset in prod. Not
+> part of this system's work; worth a look during System 4 / a general
+> env-hygiene pass.
 
 ## 1.4 State machine / concurrency design
 
@@ -392,24 +520,332 @@ we have not ruled out 2+ server instances, and an in-process funnel would
 silently break under that condition. This decision is what makes horizontal
 scaling safe later without redoing this work.
 
-**Deployment is single-instance today** — confirmed by architecture: `rooms.ts`
-holds all room state in a module-level `Map`, there is no socket.io Redis
-adapter, and `scheduler.ts`/`engine.ts` already carry "single-instance only"
-comments. (Human to confirm the Render dashboard instance count; the
-architecture makes >1 unsafe regardless right now.)
+**Deployment instance count — NEEDS HUMAN CONFIRMATION.** The architecture
+requires exactly 1: `rooms.ts` holds all room state in a module-level `Map`,
+there is no socket.io Redis adapter, and `scheduler.ts`/`engine.ts` carry
+explicit "single-instance only" comments. An agent cannot read the Render
+dashboard. Treat as 1 until the human writes the real number here:
+`Render web service instances = ____ (confirmed by human on ____)`.
 
-### Still TODO in Step 3 (not started — gated on invariant sign-off)
+### 1.4.1 What is live on `main` after PR #91 — does it conflict with the RPC?
 
-- The explicit match state machine: states, valid transitions, which of the 5
-  producers may trigger each, and how the RPC **rejects** (not silently
-  no-ops) an invalid transition.
-- Exactly which row(s) the RPC's `SELECT ... FOR UPDATE` locks and why two
-  near-simultaneous callers for the same match serialize cleanly.
-- Whether "complete match", "promote to ready", and "generate bracket" are one
-  RPC or three.
-- The authz layer shape (§1.5).
-- Multi-instance story for the no-show reconciler (DB lease table vs. assert
-  single-instance at boot).
+PR #91 merged early (Current focus ⚠). Assessment against D-2 + T-INV-1..10:
+
+| #91 change (live on `main`) | Relationship to the RPC | Action in Step 4 |
+|---|---|---|
+| `persistence.completeMatchIfNotCompleted` — `?status=neq.completed` conditional PATCH | **Superseded, not conflicting.** It is a real DB-level compare-and-set, so it correctly closes the *"who claims the match"* race (T-INV-3 first-writer-wins). But it only makes the **5 completion columns** atomic — loser elimination, next-round advancement, target status, and `completeTournament` still run as separate un-transacted PATCHes **after** it. So T-INV-1 is partially met; **T-INV-5 and T-INV-10 (same-transaction advancement / elimination) are not**. The RPC's `SELECT … FOR UPDATE` + single transaction fully subsumes this function. | **Delete** `completeMatchIfNotCompleted` and its `persistenceInterface` entry when the RPC replaces the completion path. |
+| Inline participant check in `applyMatchResult` (`winner_not_match_participant` throw) | **Duplicated by the RPC.** #91 checks in JS against a pre-CAS `fetchMatchById` read — a TOCTOU gap (the row's `player{1,2}_id` can change between the read and the write via a prior-round advancement; round-gating makes this unlikely but not impossible). The RPC does the same check **inside the transaction against the locked row**, closing the gap. | **Remove** the JS check when the RPC owns completion; the RPC is the single enforcement point for T-INV-2. |
+| Inline participant check in `roomForfeit` (leaver must be a participant) | **Complementary — this is authz, not concurrency.** Correct behaviour, wrong layer (inline, the exact anti-pattern §1.5 targets). Does not fight the RPC. | **Refactor** into the §1.5 shared guard; keep the behaviour. |
+| Inline `room:join` tournament-assignment ACL in `roomSocketAttach` + `isTournamentRoomCode` | **Complementary — authz, not concurrency.** Same as above. | **Refactor** into the §1.5 shared guard; keep the behaviour and the code-shape fallback. |
+| Registrations RLS lockdown migration (`2026-08-30_…`) | **Independent and correct.** Pure RLS; this *is* T-INV-9 / closes Gap T-1. No relationship to the RPC. | **Keep.** Verify it has actually run against production (merged ≠ applied — confirm the deploy ran the migration). |
+
+**Answer to "are we carrying two competing concurrency mechanisms?"**
+Not *competing* — `completeMatchIfNotCompleted` and the future RPC both mean
+"first writer wins on the match row", and even during a mixed rollout the CAS
+PATCH and the RPC's `FOR UPDATE` serialize correctly at the DB. But we are
+carrying **one-and-a-partial**: the CAS covers ~1 of the ~5 writes the RPC will
+own. It is an acceptable **interim** (it does stop the common-case
+double-advancement today) — but Step 4 must **delete it in the same PR that
+introduces the RPC**, not leave both. Do not build anything new on top of the
+CAS. The participant check is a straightforward **move** (JS → RPC). The
+forfeit / room:join checks are **authz** and move to §1.5, untouched in
+behaviour.
+
+### 1.4.2 Match state machine (Step 3 deliverable — awaiting human sign-off)
+
+#### States
+
+| State | Meaning | Terminal? |
+|---|---|---|
+| `waiting` | Row exists; one or both player slots may still be empty; not dispatched. | no |
+| `bye` | Created with exactly one player (the other slot `null`). Degenerate — auto-walked-over to `completed` at bracket generation. **With the current bot-fill (`buildOrderedEntrants` pads to 8), byes never occur in production**; the path is kept for `providedEntrants` / bot-fill-disabled. | transitions immediately |
+| `ready` | Both players known; room reserved; `ready_at` + `ready_deadline_at` set; waiting for humans to attach. | no |
+| `in_progress` | All human players attached; the domino game has a live state. | no |
+| `completed` | Outcome recorded: `winner_id`, `winner_source`, scores, `completed_at`. | **yes — T-INV-1** |
+
+No error/terminal-failure state today. A match stuck in `ready`/`in_progress`
+past the tournament active window is left as-is while the *tournament* is
+`cancelled` by the scheduler (Gap — revisit whether the match needs an
+`abandoned` state in Step 4).
+
+#### Transitions, and who may trigger each
+
+Actors: **P1** real game over · **P2** forfeit-on-leave · **P3** no-show
+reconciler · **P4** bot-vs-bot auto-resolve · **P5** bye walkover · **S**
+scheduler (dispatch/promote) · **A** player attach · **G** bracket generator.
+
+| # | Transition | Actor(s) | Writer | Notes |
+|---|---|---|---|---|
+| T-a | ∅ → `waiting` / `bye` | G | `generate_tournament_bracket` RPC | 7 rows in one transaction. QF with a null slot → `bye`; all others → `waiting`. |
+| T-b | `bye` → `completed` | P5 | `complete_tournament_match` RPC | one-shot inside `generate_tournament_bracket`. |
+| T-c | `waiting` → `waiting` (slot fill only) | P1–P5 (advancement tail of a *feeder* match) | `complete_tournament_match` RPC (same txn as the feeder's completion) | writes `player{1,2}_id`; status stays `waiting` because the other slot is still `null`. |
+| T-d | `waiting` → `ready` | S (QF, at/after `scheduled_start`) **or** advancement tail (SF/Final, when the *second* feeder fills the last slot) | `promote_tournament_match` RPC (S) / `complete_tournament_match` RPC (advancement) | Guard: tournament `in_progress`, `now ≥ scheduled_start`, **both feeder matches `completed`/`bye`** (T-INV-6 — structurally enforced by advancement filling both slots), both player ids non-null. The Node dispatch layer then reserves the room + sets `ready_at`/`ready_deadline_at`. |
+| T-e | `ready` → `in_progress` | A (attach) **or** S (reconciler, room already live) | `promote_tournament_match` RPC | Guard: status `ready`, all human players have `joined_at`, room has state. |
+| T-f | `ready` → `completed` | P2 (forfeit before start) · P3 (no-show after `ready_deadline_at`) · P4 (bot-only) | `complete_tournament_match` RPC | Guard: see rejection rules below. |
+| T-g | `in_progress` → `completed` | P1 (game reached `win_target`) · P2 (forfeit mid-game) | `complete_tournament_match` RPC | Guard: see rejection rules below. |
+| T-h | `completed` → `completed` | any of P1–P5 (retry / race loser) | `complete_tournament_match` RPC | **no-op**. Same `winner_id` → idempotent success. Different `winner_id` → `conflict=true`, no write, structured `warn` log (D-3). |
+
+#### How the RPC rejects an invalid transition (does NOT silently no-op)
+
+`complete_tournament_match(p_match_id, p_winner_id, p_winner_source,
+p_reported_p1_score, p_reported_p2_score, p_actor)` — plpgsql, one transaction:
+
+1. `SELECT * ... WHERE id = p_match_id FOR UPDATE` → not found ⇒
+   `RAISE EXCEPTION 'match_not_found'`.
+2. **Already `completed`:** compare `winner_id`.
+   - equal ⇒ `RETURN` recorded row, `conflict=false` (idempotent success).
+   - different ⇒ `RETURN` recorded row, `conflict=true`, **no write**.
+3. **Status is `waiting`** ⇒ `RAISE EXCEPTION 'match_not_playable'` (includes
+   the current status). A producer trying to complete a `waiting` match is a
+   bug and must surface, not vanish.
+4. **`p_winner_source = 'game_over'` and status ≠ `in_progress`** ⇒
+   `RAISE EXCEPTION 'game_over_on_non_started_match'`. A real game-over cannot
+   originate from a match that never started.
+5. **`p_winner_source ∈ ('no_show','forfeit','bot_simulated')` and status ∉
+   (`ready`,`in_progress`)** ⇒ `RAISE EXCEPTION 'invalid_source_for_status'`.
+6. **T-INV-2:** `player1_id`/`player2_id` both non-null and
+   `p_winner_id ∈ (player1_id, player2_id)` ⇒ else
+   `RAISE EXCEPTION 'winner_not_participant'`.
+7. **T-INV-4 score derivation:**
+   - `no_show`/`forfeit`/`bot_simulated` ⇒ RPC sets `(win_target, 0)` oriented
+     to the winner; the caller's reported scores are ignored.
+   - `game_over` ⇒ use `p_reported_*`, but assert both ≥ 0 and winner's ≥
+     loser's ⇒ else `RAISE EXCEPTION 'score_inconsistent'`.
+8. Write completion columns (T-INV-1). Then, in the same transaction:
+   elimination (T-INV-10), advancement (T-INV-5) or final/tournament completion
+   (T-INV-10), each conditional so a repeat is a no-op.
+9. `RETURN (status, winner_id, winner_source, player1_score, player2_score,
+   conflict, advanced_to_match_id, advanced_to_slot)`.
+
+Exceptions from 1/3/4/5/6/7 propagate to Node: retry producers (P1, P2) retry
+up to 4× then give up to the ops-repair path; P3/P4 log and move on. `conflict`
+is the only "expected, non-exceptional, still-notable" outcome — hence the D-3
+log line.
+
+`promote_tournament_match` and `generate_tournament_bracket` follow the same
+shape (lock → validate → `RAISE EXCEPTION` on invalid, never silent).
+
+#### Near-simultaneous callers — which rows lock, and why it serializes
+
+**Two producers, same match (e.g. P1 game-over write lands as P3's no-show
+timer fires):**
+- Both call `complete_tournament_match(match_X, …)`.
+- Each transaction's first statement is `SELECT … WHERE id = match_X FOR
+  UPDATE` — a lock on **exactly one row: `match_X`**.
+- First transaction acquires it, runs steps 3–8 (completion + advancement),
+  `COMMIT`s, releases.
+- Second transaction's `SELECT … FOR UPDATE` was **blocked** on that lock; it
+  now proceeds, reads `match_X` as `completed`, and takes step 2 (idempotent
+  success or `conflict=true`). It performs **no** completion or advancement.
+- Result: exactly one completion, exactly one advancement. T-INV-1/3/5 hold
+  with zero application-level locking.
+
+**Two *different* feeder matches advancing into the same next-round match
+(SF1 fed by QF1 and QF2 finishing together):**
+- QF1's RPC: locks `QF1` (step 1), then at advancement locks `SF1`
+  (`UPDATE … WHERE id = SF1 …`), sets `SF1.player1_id`, sees `player2_id`
+  still `null` ⇒ `SF1.status` stays `waiting`, `COMMIT`.
+- QF2's RPC: locks `QF2`, then blocks on `SF1`'s row lock until QF1 commits;
+  then sets `SF1.player2_id`, sees `player1_id` now filled ⇒ sets
+  `SF1.status = 'ready'`, `COMMIT`.
+- Lock order is always **(own feeder row) → (target row)**, and no two RPCs
+  share an "own feeder row", so the only contended row is the target, taken
+  **second** by both ⇒ **no deadlock**, clean serialization.
+- The advancement `UPDATE` carries `AND (<slot> IS NULL OR <slot> =
+  p_winner_id)` so a retry of QF1's RPC after QF2 committed is a no-op, not a
+  double-write.
+
+**Two `closeRegistrationAndStart` calls for one tournament (two scheduler
+ticks overlapping a slow Supabase read):**
+- `generate_tournament_bracket` takes `pg_advisory_xact_lock(hashtext(p_tournament_id))`
+  as its first statement (there is no pre-existing row to `FOR UPDATE`).
+- One acquires it, inserts the 7 rows + walks over byes, `COMMIT`s (releasing
+  the advisory lock at transaction end).
+- The other blocks, then proceeds; its inserts are `INSERT … ON CONFLICT
+  (tournament_id, round, match_number) DO NOTHING` ⇒ all no-ops; it returns the
+  existing bracket. Closes Gap T-7 (liveness — no more "unique violation →
+  stuck in `registration_open`").
+
+### 1.4.3 RPC surface — one vs. three (Step 3 sub-task, 2026-08-31)
+
+**Decision: three functions + shared helpers.** (Decisions D-5.)
+
+| Function | Owns invariants | Locks | Callers | Signature (shape) |
+|---|---|---|---|---|
+| `complete_tournament_match(p_match_id, p_winner_id, p_winner_source, p_reported_p1, p_reported_p2, p_actor)` | T-INV-1, 2, 3, 4, 5, 10 | `SELECT … WHERE id = p_match_id FOR UPDATE`; then the advancement target row | P1 game-over, P2 forfeit, P3 no-show, P4 bot-resolve, P5 bye | returns `(status, winner_id, winner_source, player1_score, player2_score, conflict bool, advanced_to_match_id, advanced_to_slot)` |
+| `promote_tournament_match(p_match_id, p_to_status, p_actor)` — `p_to_status ∈ ('ready','in_progress')` | (transition validity only — see T-INV-6 note) | `SELECT … WHERE id = p_match_id FOR UPDATE` | S (scheduler: `waiting→ready` for round 1; `ready→in_progress` when room live), A (attach: `ready→in_progress`) | returns `(status, started_at, ready_at, ready_deadline_at, conflict bool)` |
+| `generate_tournament_bracket(p_tournament_id)` | T-INV-8 | `pg_advisory_xact_lock(hashtext(p_tournament_id::text))` + 7× `INSERT … ON CONFLICT DO NOTHING` | G (`closeRegistrationAndStart`) | returns the 7 match rows |
+| **helpers** (plain SQL/plpgsql, same migration, not called from Node): `_tournament_is_participant(match_row, user_id)`, `_tournament_canonical_scores(winner_id, winner_source, win_target, reported_p1, reported_p2)`, `_tournament_advance_target(round, match_number)` (the `advanceSlot` map in SQL) | — | — | — | — |
+
+**Why three, not one `tournament_match_command(p_match_id, p_command, p_args jsonb)`:**
+- Each function is a **small auditable transaction** — "what can complete a
+  match" is readable without wading past promote/generate branches.
+- **Different lock targets** are explicit per function (match row / match row /
+  advisory lock), not buried in a `CASE`.
+- **Different signatures** — `complete` needs winner+scores+source, `promote`
+  needs a target status, `generate` needs only a tournament id. One function
+  means a fat `jsonb` arg with runtime shape validation.
+- **Blast radius** — a bug in bracket *generation* is in a different deployable
+  object from match *completion*.
+- Cost: three migration objects to keep in step; shared logic lives in the
+  three helper functions above rather than being duplicated or inlined.
+- `generate_tournament_bracket` is arguably a different concern entirely
+  (bracket *creation*, not match *state*) — the name is deliberately
+  `generate_…` not `…_match` to signal that.
+
+**T-INV-6 correction — RESOLVED (re-ratified 2026-08-31, Decisions D-6).**
+The original wording ("every round-(N−1) match `completed`/`bye`") was
+**stricter than bracket correctness requires**. A round-N match only needs its
+**two direct feeder matches** complete — SF1 (fed by QF1+QF2) can start while
+QF3/QF4 still play. That two-feeder condition is **already structurally
+enforced** by `complete_tournament_match`'s advancement step (`status = CASE
+WHEN <other slot> filled THEN 'ready' ELSE 'waiting'`).
+- `promote_tournament_match` needs **no** previous-round gate.
+- **T-INV-6 reworded** in §1.2 to the feeder-gating form. Re-ratified.
+- **`isPreviousRoundComplete` replaced by `areFeederMatchesComplete(tournamentId,
+  round, matchNumber)`** in `canAutoSimulateBotOnlyMatch` — pulled forward from
+  Step 4 at the human's explicit direction (D-6). One engine test
+  (`"does not complete semifinal bot-only matches before quarterfinals finish"`)
+  updated to assert the T-INV-6 behaviour instead of the old strict one.
+
+**Client-side impact check for the reword (2026-08-31, before ratification):**
+Does any client code / copy assume the strict whole-round rule?
+
+| Surface | Finding |
+|---|---|
+| `tournament:round_completed` socket event | Server emits it (`emitRoundCompletedIfNeeded`), asserted in `engine.test.ts` — **no client listener anywhere**. Not in `client/.../socketEventRegistry.ts` (which lists `match_updated` / `match_ready` / `match_completed` / `bracket_generated` / `completed`). It is a **dead event**. |
+| Bracket view (`TournamentBracketScreen.tsx`, `tournamentBracketDisplay.ts`) | Renders **per-match** — each cell reads its own `status` / `winner_id` / slot ids. A partially-filled SF ("You vs TBD") is **already a designed, rendered state** (`is-pending` class, `TBD` slot label). Nothing keys off "previous round fully done". |
+| "When is my next match" (`yourReadyMatch`, `activeAssignedMatch`, `canAttach`) | **Per-match** — the client offers the attach banner the instant *your* match is `ready`. No round gate. |
+| `hubState.ts` "waiting" states | All are **pre-tournament-start** (`registered_waiting` = waiting for the event to begin). No between-rounds "waiting for round 1 to finish" state. |
+| `TournamentFlowStepper` ("Register → Lock → Round 1 → Semifinal → Final") | **Static decorative** progression label. Not driven by round completion. |
+| Notifications / toasts | None about round completion. |
+| Post-match navigation (`useTournamentSessionNavigation`) | Sends the player to the **bracket view** to wait; the attach banner appears when *their* SF becomes `ready`. No round gate. |
+
+**And the engine already works on the two-feeder condition for human matches.**
+`applyMatchResult`'s advancement tail sets the target to `ready` and calls
+`dispatchTournamentMatch` the moment **both** its feeders complete
+(`engine.ts` ~525, ~544) — regardless of the other half of round 1.
+`isPreviousRoundComplete` is used in **exactly one place**:
+`canAutoSimulateBotOnlyMatch` — gating **bot-vs-bot** SF/Final auto-simulation.
+That is invisible to players: the bracket-reveal logic
+(`computeBracketRevealThroughRound`) hides non-human match results beyond the
+player's current round anyway.
+
+**Conclusion:** the reword is **safe to ratify**. It documents what the engine
+already does for human matches. Relaxing `isPreviousRoundComplete` to the
+two-feeder condition changes only **bot-only** SF/Final timing (they'd
+auto-resolve a bit sooner) — still invisible to players, no bracket-view
+inconsistency (the "You vs TBD" partial-SF is how it renders today). The dead
+`round_completed` emit can stay or be removed in Step 4; nothing depends on it.
+
+### 1.4.5 Authz layer shape (Step 3 sub-task — 2026-08-31, awaiting human review)
+
+**Problem.** The audit (§1.1.5) found the *authorization* question — "may this
+user act on this match?" — answered by **inline, duplicated, inconsistent**
+checks: `registerTournamentAttachHandlers` has one (correct), `roomForfeit` got
+one from PR #91, `roomSocketAttach`'s tournament branch got one from PR #91,
+`applyMatchResult` got one (moving into the RPC per D-5). Each re-implements
+"fetch the match, null-check, completed-check, `player1_id/player2_id ===
+uid`". The *authentication* question ("who is this?") is already consistent
+(`requireAuthUserId` for REST, `getSocketUserId` for sockets, both in the
+existing `tournamentAuth.ts`).
+
+**Shape.** One authorization function, added to `tournamentAuth.ts` (which
+already owns the auth primitives). It takes the **verified** user id + the
+resource reference, reads the match **fresh** (so a stale client id can't slip
+through), and returns either `{ ok: true, match }` (so the caller doesn't
+re-fetch) or `{ ok: false, code }` with a typed denial. Sibling mappers turn
+`code` into a socket ack or an HTTP status **consistently**.
+
+```ts
+// added to server/src/scheduledTournament/tournamentAuth.ts
+
+export type TournamentAuthzDenial =
+  | 'not_authenticated'   // no verified user id
+  | 'match_not_found'
+  | 'match_completed'     // terminal — nothing to act on
+  | 'not_a_participant';  // authenticated, but not player1/player2 of this match
+
+export type MatchParticipantAuthz =
+  | { ok: true; match: MatchRow }
+  | { ok: false; code: TournamentAuthzDenial };
+
+/**
+ * The single participant gate. Every socket handler / route that acts on a
+ * tournament match (attach, forfeit, join a tournament room, read live state)
+ * calls this first. `ref` is a match id or a room code (the latter uses the
+ * PR #91 code-shape fallback for post-restart rooms). Reads the match fresh.
+ */
+export async function authorizeMatchParticipant(
+  userId: string | null,
+  ref: { matchId: string } | { roomCode: string },
+  opts?: { allowCompleted?: boolean },
+  deps?: { fetchMatchById: typeof fetchMatchById; fetchMatchByRoomCode: typeof fetchMatchByRoomCode },
+): Promise<MatchParticipantAuthz>;
+
+export function matchAuthzAck(code: TournamentAuthzDenial): { ok: false; error: string };   // socket
+export function matchAuthzHttpStatus(code: TournamentAuthzDenial): 401 | 403 | 404 | 409;   // REST
+```
+
+**One example call site** — `registerTournamentAttachHandlers` (`tournament:attach_assigned_match`):
+
+```ts
+socket.on('tournament:attach_assigned_match', async (payload, cb) => {
+  const userId  = getSocketUserId(socket);          // verified identity — unchanged
+  const matchId = parseMatchId(payload);
+  if (!matchId) return cb?.({ ok: false, error: 'missing_matchId' });
+
+  const authz = await authorizeMatchParticipant(userId, { matchId });
+  if (!authz.ok) return cb?.(matchAuthzAck(authz.code));   // ← the whole gate, one line
+
+  const match = authz.match;                        // fresh, participant-verified, no re-fetch
+  // … proceed with dispatch / room attach using `match` …
+});
+```
+
+Those three lines replace, in this handler alone: the `if (!authenticatedUserId)`
+block, the `fetchMatchById` + null check, the
+`match.status === 'completed' || match.completed_at || match.winner_id` block,
+and the `match.player1_id !== uid && match.player2_id !== uid` block — and the
+**same** three lines then replace the divergent hand-rolled versions in
+`roomForfeit` and `roomSocketAttach`.
+
+**Scope note.** This gate is tournament-specific (it knows about
+`scheduled_tournament_matches`). System 2 (multiplayer rooms) will define its
+own `authorizeRoom…` guard following the identical *shape*
+(`(userId, ref, opts) → { ok, resource } | { ok: false, code }` + ack/status
+mappers). If the shape proves identical we lift the type into a shared
+`authz.ts` then — not building a generic framework now.
+
+### 1.4.3b Still TODO after this (next Step 3 sub-tasks — NOT started)
+
+- **No-show reconciler multi-instance** (Gap T-16) — proposed: keep it
+  single-instance-assumed but add `pg_try_advisory_lock` at the top of the tick
+  so 2+ instances can't both scan/reconcile; defer a full lease table. Note:
+  **structurally moot on free tier** (D-2 addendum) — carry for the upgrade.
+- **`abandoned` match state?** — whether a match stranded past the tournament
+  active window needs an explicit state rather than being left in
+  `ready`/`in_progress` under a `cancelled` tournament.
+
+### 1.4.4 How the RPC design interacts with the liveness gaps (T-17..T-19)
+
+The RPC design and the infra fix are **orthogonal and both required**:
+
+- The RPC makes every write **atomic and idempotent** — so when a stalled
+  scheduler finally wakes and fires the boot catch-up tick, calling
+  `complete_tournament_match` / `promote_tournament_match` for a batch of
+  overdue matches is **safe to do all at once**, in any order, with retries.
+  This actually makes T-17's "catch up on wake" *more* robust than the current
+  8-non-atomic-writes version, where a cold-instance batch is exactly when
+  partial writes happen.
+- But the RPC **cannot make a tick fire while the process is asleep.** T-17's
+  core problem — "the timer doesn't run" — is untouched by anything in §1.4.
+  That needs D-4's infra decision.
+- **Sequencing note for Step 4/5:** the concurrency-harness test (§1.6) should
+  additionally simulate "instance was asleep for 20 min, wakes, runs one
+  catch-up tick against 4 overdue matches" and assert `assertBracketConsistent`
+  — that is the real production scenario on free tier, not just two producers
+  racing on a warm box.
 
 ## 1.5 Refactor plan
 
@@ -443,17 +879,19 @@ that proves it.
 ### Step 2 — Invariants
 - [x] Concurrency mechanism decided (Postgres RPC) — Decisions D-2
 - [x] T-INV-1..10 rewritten as obligations of the RPC / DB, not just app code — §1.2
-- [ ] T-INV-1..10 reviewed line-by-line and signed off by the human ← **awaiting**
-- [ ] Invariants marked `RATIFIED` (or edited/added/removed) after sign-off
+- [x] T-INV-1..10 reviewed line-by-line and signed off by the human — Decisions D-3 (2026-08-31)
+- [x] Invariants marked `RATIFIED` — §1.2 status line, Decisions D-3
 
-### Step 3 — State machine / concurrency design (NOT STARTED — gated on Step 2 sign-off)
+### Step 3 — State machine / concurrency design (IN PROGRESS)
 - [x] Concurrency mechanism chosen and logged in Decisions — D-2
-- [ ] Match state machine drawn (states, transitions, trigger authority per producer)
-- [ ] RPC rejection behaviour for invalid transitions specified
-- [ ] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough
-- [ ] One RPC vs. three (complete / promote / generate) decided
-- [ ] Authz-layer shape chosen — signature + one example call site shown to human — §1.5
-- [ ] Multi-instance stance for the no-show reconciler chosen
+- [x] PR #91 (merged early) assessed against D-2 + invariants — §1.4.1
+- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 (shown to human 2026-08-31)
+- [x] RPC rejection behaviour for invalid transitions specified — §1.4.2
+- [x] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough — §1.4.2
+- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 (shown to human 2026-08-31; also surfaced a T-INV-6 wording fix for re-ratification)
+- [x] Authz-layer shape chosen — `authorizeMatchParticipant()` + ack/status mappers in `tournamentAuth.ts`; signature + `tournament:attach_assigned_match` example call site in §1.4.5 (shown to human 2026-08-31)
+- [ ] Multi-instance stance for the no-show reconciler chosen (note: moot on free tier) ← **last Step 3 sub-task**
+- [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as its own PR
 
 ### Step 4 — Refactor (not started; gated on Steps 2–3)
 - [ ] T-1 …
@@ -469,6 +907,8 @@ that proves it.
 - [ ] T-11 …
 - [ ] T-12 …
 - [ ] T-13..T-16 (lower priority)
+- [x] T-17 — **CLOSED** — root cause was a **mis-typed ICMP UptimeRobot monitor** (not a missing pinger). Fixed to HTTP(s) → `/ping` @ 5 min, 100 % uptime verified; `SERVER_URL` set, `GET /ready` confirms `true`, self-ping active as second signal. — D-4, changelog 2026-08-31
+- [ ] T-18, T-19 — **ACCEPTED RISK at current scale** (D-4 / §1.3). Not fixed now; revisit at paid-tier upgrade.
 
 ### Step 5 — Tests prove closure
 - [ ] Concurrency harness (producers 1–3 → one match)
@@ -509,7 +949,12 @@ registry.
 | ID | Date | Decision | Reasoning |
 |---|---|---|---|
 | D-1 | 2026-08-31 | PRs #89, #90, #91 were opened **before** this plan existed. #91 in particular pre-implements fixes for gaps T-1, T-2, T-3, T-5, T-6. They are **not** merged. We will not merge #91 on its own judgement — its approach (a single `completeMatchIfNotCompleted` CAS, inline participant checks, a name-agnostic RLS migration) will be reviewed **against the ratified invariants and the §1.4 design** once those exist, then either adopted, adjusted, or superseded. Until then #91 stays open as a reference implementation, not a decision. | The plan's rule is audit → invariants → design → fix. #91 skipped to "fix". Rather than throw the work away or rubber-stamp it, it becomes an input to Step 3/4. |
+| D-3 | 2026-08-31 | **T-INV-1..10 RATIFIED as written in §1.2.** Four open sign-off questions resolved: (a) **T-INV-3 conflict policy** — first-recorded outcome wins, later callers silently accept, log-only; *added requirement:* emit one structured `warn` log line (`tournament_match_winner_conflict`) whenever the `conflict=true` branch fires, so a genuine winner disagreement (which should be impossible if T-INV-2 + the state machine are correct) is visible/alertable in production without blocking on it. (b) **T-INV-4 score derivation** — the RPC computes the score pair itself for no-show/forfeit/bot cases rather than trusting the caller; removes the "client lied about the score" class of bugs. (c) **T-INV-7 one-live-match** — ship as a derived/asserted property, not a hard DB constraint; a structural constraint is more engineering than the risk justifies at current scale; escalate to a hard constraint only if `assertBracketConsistent` ever fires in practice (which would also mean Step 3's design missed something). (d) **Render instance count** — pending; treated as 1 by architecture until the human confirms. | The human reviewed the list line-by-line. Recording the *why* for each answer so a cold session does not re-open settled questions. |
 | D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
+| D-2 addendum | 2026-08-31 | **Render confirmed = free tier ($0, 0.1 CPU, 512 MB). Free tier does not support scaling at all.** So the multi-instance question is not "currently 1" but **"structurally 1, not applicable until we move off free tier."** The RPC decision (instance-count agnostic) still stands and is still the right call — it means the eventual paid-tier / multi-worker move needs no rework of the concurrency model. But the in-process funnel alternative is now doubly ruled out. Separately: free-tier spin-down is a real liveness risk — see gaps T-17..T-19 and Decisions D-4. | Human read the Render dashboard. |
+| D-6 | 2026-08-31 | **T-INV-6 reworded + re-ratified: "a round-N match enters `ready`/`in_progress` only after *both its feeder matches* (round N−1, match numbers 2M−1 and 2M) are `completed`/`bye`"** — not "the whole previous round". Client-impact check (§1.4.3): `tournament:round_completed` has no client listener; bracket view / "next match" / hub "waiting" / flow stepper / notifications / post-match nav are all per-match; the engine already dispatches human SF/Final on the two-feeder condition. **Also pulled forward from Step 4 (human's explicit direction):** replace `isPreviousRoundComplete` with `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch`; update the one engine test that asserted the strict rule. | The strict rule was an unexamined over-constraint. Only observable effect of relaxing: a fully-bot semifinal/final auto-simulates as soon as its two bot feeders finish instead of waiting for the human's half of the bracket — invisible to players (bracket-reveal spoiler logic hides non-human results beyond the player's current round). |
+| D-5 | 2026-08-31 | **RPC surface = three functions, not one.** `complete_tournament_match` (owns T-INV-1,2,3,4,5,10), `promote_tournament_match(p_to_status)` (`waiting→ready` / `ready→in_progress`), `generate_tournament_bracket` (T-INV-8), plus three non-Node-facing helper functions (`_tournament_is_participant`, `_tournament_canonical_scores`, `_tournament_advance_target`). Rejected: a single `tournament_match_command(match_id, command, args jsonb)` dispatcher. | Three small auditable transactions with explicit per-function lock targets and typed signatures beat one `CASE`-on-action function with a fat `jsonb` arg and runtime shape checks. Bracket *generation* is a different concern from match *state* and gets a different deployable object. Shared logic goes in the helper functions. |
+| D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
 
 ---
 
@@ -519,3 +964,12 @@ registry.
 |---|---|
 | 2026-08-31 | Document created. System 1 (Tournament) Step 1 current-state audit written. Steps 2+ open. Systems 2–4 stubbed. |
 | 2026-08-31 | Added the "one step per session" rule to "How to use this document". Locked concurrency mechanism = Postgres RPC (D-2). Rewrote §1.2 as T-INV-1..10, framed as RPC/DB obligations, pending human sign-off. §1.4 now carries the locked decision only (state machine still TODO). |
+| 2026-08-31 | Step 2 RATIFIED (D-3, four sign-off answers logged). T-INV-3 gains a structured-log requirement on the `conflict=true` branch. PR #91 merged early — added the ⚠ note to Current focus and §1.4.1 (assessed: `completeMatchIfNotCompleted` is superseded not conflicting; participant check duplicated; forfeit/room-join checks are authz not concurrency; RLS migration correct and independent). Step 3 started: §1.4.2 = match state machine — states, transitions, per-actor triggers, RPC rejection rules, and the near-simultaneous-caller lock walkthrough. Remaining Step 3 sub-tasks (one-vs-three RPCs, authz layer, reconciler multi-instance) not started. |
+| 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.4 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
+| 2026-08-31 | T-17 follow-up (before building any cron): **(a)** verified from code that `startTournamentScheduler`'s `setInterval` fires independently at 30 s once the process is alive (`bootstrapScheduledTournamentInfrastructure` runs inside `server.listen`) — so a plain uptime ping to `/ping` fully restores catch-up; `/internal/tick` is **not needed** unless D-4 moves the scheduler off the web process. **(b)** searched the repo for an existing external pinger — **no committed config**, `smoke-test.yml` is push-triggered not cron, and health routes don't log requests, so **cannot verify from the repo**. Two "T-17 follow-up" notes added to §1.3 listing exactly what the human must check (Render metrics, UptimeRobot/cron-job.org accounts, max-gap < 13 min, point it at `/ping` not `/healthz`). T-17 stays OPEN pending that check. No `/internal/tick` endpoint added. Step 3 continuation still paused. |
+| 2026-08-31 | Human confirmed: no existing pinger; setting up a new external uptime monitor on `/ping` @ 5 min (option a). **D-4 RESOLVED** — external monitor, stay on free tier, `/internal/tick` unbuilt. Checked prod `GET /ready`: **`SERVER_URL` is NOT set** in Render (self-ping has been inert all along) — human is setting it as a second signal. `/ready` also shows `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset — noted for a later env-hygiene pass, out of scope here. **T-17 → MITIGATED** (human owes first-hour steady-state verification before CLOSED). **T-18 + T-19 → ACCEPTED RISK** at current scale, revisit at upgrade. Step 3 continuation still paused. |
+| 2026-08-31 | **T-17 → CLOSED.** Actual root cause identified: an UptimeRobot monitor **did** exist but was set to **ICMP Ping type**, which Render never answers → it showed "No Response" / ~6.5 % uptime and kept the instance warm zero percent of the time. (So the earlier "no pinger found" was half-right — the repo had no config *and* the external monitor was non-functional.) Fixed to **HTTP(s) type → `/ping` @ 5 min**; human verified **100 % uptime, no gaps, over the observation window**. Human also set `SERVER_URL=https://racehorse.onrender.com` in Render + redeployed and confirmed `GET /ready` → `recommendedEnv.SERVER_URL: true` (fresh deploy `67fb5dac…`, `uptimeSeconds` reset). **Both mitigations verified.** |
+| 2026-08-31 | T-17 confirmations landed: `SERVER_URL: true` in `GET /ready` post-redeploy; doc caveats about "pending / cache lag" removed. Root cause stands as recorded — a **misconfigured monitor type (ICMP vs HTTP)**, not a missing pinger. No further action on T-17. |
+| 2026-08-31 | **T-INV-6 reword — client-side impact check done** (§1.4.3). `tournament:round_completed` has **no client listener** (dead event). Bracket view, "next match" logic, hub-state "waiting", flow stepper, notifications, post-match nav — all **per-match**, none assume whole-round completion. The engine **already** dispatches human SF/Final on the two-feeder condition (`applyMatchResult` advancement tail); `isPreviousRoundComplete` only gates **bot-only** auto-sim, which the bracket-reveal spoiler logic hides from players anyway. **Reword is safe to ratify** — pending human OK. Authz-layer sub-task still NOT started. |
+| 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
+| 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
