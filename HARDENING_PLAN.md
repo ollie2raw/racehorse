@@ -18,19 +18,19 @@ focus" line, then the section for the system in progress.
 - Step 2 (invariants): **RATIFIED 2026-08-31** (Decisions D-3). T-INV-1..10 in
   §1.2 are the agreed list. Concurrency mechanism = Postgres transaction
   function RPC (D-2).
-- Step 3 (state machine / concurrency design): match state machine drafted
-  (§1.4.2) — **awaiting human review**. Remaining sub-tasks (one-vs-three RPCs,
-  authz layer, reconciler multi-instance) **NOT started** — still paused until
-  the human resumes Step 3.
-- **Infra / liveness (2026-08-31): investigated + D-4 RESOLVED.** Render = free
-  tier (0.1 CPU / 512 MB, 15-min idle spin-down). §1.3 "infrastructure /
-  liveness" tier: **T-17 MITIGATED** (external uptime monitor on `/ping` @ 5 min,
-  human-configured outside the repo; `SERVER_URL` being set for the internal
-  self-ping — confirmed unset in prod via `GET /ready`) — flips to CLOSED once
-  the human confirms first-hour steady-state warmth. **T-18 + T-19 = ACCEPTED
-  RISK** at current scale, revisit at paid-tier upgrade. `/internal/tick` not
-  built (unneeded — the scheduler `setInterval` runs on its own once the
-  process is alive). This failure mode is orthogonal to the RPC work (§1.4.4).
+- Step 3 (state machine / concurrency design): match state machine (§1.4.2) +
+  RPC surface decision (§1.4.3, D-5 = three functions) done — **awaiting human
+  review**. Also flagged: **T-INV-6 needs a small re-wording** (over-strict as
+  ratified — see §1.4.3). Remaining sub-tasks: **authz layer shape** (next),
+  reconciler multi-instance (moot on free tier). Still one-step-per-session.
+- **Infra / liveness (2026-08-31): D-4 RESOLVED, T-17 CLOSED.** Render = free
+  tier (0.1 CPU / 512 MB, 15-min idle spin-down). Root cause of the stalls: an
+  UptimeRobot monitor existed but was mis-typed as ICMP (Render ignores it).
+  Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / 1 h.
+  `SERVER_URL` set + redeployed for the internal self-ping as a second signal.
+  **T-18 + T-19 = ACCEPTED RISK** at current scale, revisit at paid-tier
+  upgrade. `/internal/tick` not built (unneeded). Orthogonal to the RPC work
+  (§1.4.4).
 - Step 4 (refactor): not started. First sub-task = review merged PR #91
   against the ratified invariants + RPC design (§1.4.x).
 
@@ -419,7 +419,7 @@ timeout-prone.
 
 | ID | Gap | Location | Risk |
 |---|---|---|---|
-| **T-17** — **MITIGATED 2026-08-31** (not fully closed) | **Free-tier spin-down stalls the scheduler and the no-show reconciler.** While the instance is spun down (no player connected, no HTTP), the `scheduler.ts` 30 s `setInterval` does not run — registration doesn't open/close, brackets don't generate, matches don't dispatch, no-shows don't resolve — until an inbound request cold-starts a fresh instance, whose boot tick then catches up (status-guarded, so state is catch-up-safe) but **late**. **Mitigation applied (D-4 option a):** the human is configuring an **external uptime monitor hitting `https://racehorse.onrender.com/ping` every 5 min** (UptimeRobot or similar — configured outside the repo, not visible to agents). At a 5-min cadence the instance never reaches Render's 15-min idle timeout, so the process stays alive and the 30 s tick runs continuously (verified: the tick needs only a live process, not a triggering request — §1.3 follow-up). **Second signal:** `SERVER_URL` was confirmed **NOT set** in Render prod (via `GET /ready` → `recommendedEnv.SERVER_URL: false`), so the internal 10-min self-ping (`index.ts` ~950) has been **inert all along**; the human is setting `SERVER_URL=https://racehorse.onrender.com` so it activates as a redundant-but-harmless backup. **Residual risk not covered by either signal:** a process killed by deploy / crash / OOM stays down until the *next* external monitor hit (≤ 5 min) restarts it — much better than "until a user shows up", but not zero. | `scheduler.ts`, `index.ts` self-ping, Render plan, external monitor | **Verification owed by the human:** confirm within the first hour after the monitor goes live that no gap between hits exceeds Render's 15-min idle window, and that steady-state uptime holds. Then T-17 → CLOSED. |
+| **T-17** — **CLOSED 2026-08-31** | **Free-tier spin-down stalled the scheduler and the no-show reconciler.** While the instance was spun down (no player connected, no HTTP), the `scheduler.ts` 30 s `setInterval` did not run — registration/bracket/dispatch/no-show all frozen until an inbound request cold-started a fresh instance, whose boot tick then caught up (status-guarded) but **late**. **Root cause of "no pinger":** an UptimeRobot monitor *did* exist but was configured as **ICMP Ping type**, which Render does not answer — it read "No Response" / ~6.5 % uptime and kept nothing warm. **Fix:** monitor changed to **HTTP(s) type → `https://racehorse.onrender.com/ping`, every 5 min**. Confirmed by the human: **100 % uptime, no gaps, over the following hour.** At 5-min cadence the instance never reaches Render's 15-min idle timeout, so the process stays alive and the 30 s tick runs continuously (verified: the tick needs only a live process, not a triggering request). **Second signal:** human reports `SERVER_URL=https://racehorse.onrender.com` set in Render + redeployed to activate the internal 10-min self-ping — *agent re-check of `GET /ready` still showed `SERVER_URL: false` (likely WebFetch's 15-min cache or deploy propagation lag); human to confirm it flips to `true`.* Primary closure rests on the confirmed HTTP monitor, not the self-ping. **Residual (accepted):** a process killed by deploy / crash / OOM stays down until the next ≤ 5-min monitor hit restarts it — bounded and acceptable. | `scheduler.ts`, external UptimeRobot monitor, Render plan | Closed by: UptimeRobot HTTP monitor on `/ping` @ 5 min (human-configured, outside repo) — 100 % uptime verified over 1 h. |
 | **T-18** — **ACCEPTED RISK at current scale (2026-08-31)** | **0.1 CPU / 512 MB is marginal for a socket.io game server.** Timer callbacks drift under event-loop starvation (the 30 s reconciler can run every 40–90 s); GC pauses on 512 MB with 4 concurrent match states + all daily-mode state; **OOM restart** is plausible and drops all in-memory rooms (recovered 2 s post-boot by `recoverTournamentMatches`, with a gap). A **cold Supabase pool right after wake** is exactly when `applyMatchResult`'s 4-retry loop is most likely to exhaust and hit the ops-repair give-up path. | whole server process, Render plan | **Not being fixed now.** Accepted at current (pre-marketing, near-zero concurrent load) scale. **Revisit at upgrade time** — a paid always-on instance with real CPU/RAM removes most of this. The RPC work (§1.4) reduces the blast radius (atomic completion + advancement means a cold-instance retry can't half-write the bracket). |
 | **T-19** — **ACCEPTED RISK at current scale (2026-08-31)** | **Lifecycle transitions fire late on wake, and registration can be un-openable during a sleep window.** If the instance is asleep across `registration_open_at`, players who open the app before it wakes see a tournament that never opened; the boot tick may `openRegistration` + `closeRegistrationAndStart` in the same tick, collapsing the registration window to zero. `isTournamentPastActiveWindow` is 2 h, so a stale tournament isn't cancelled — it dispatches to absent players. | `scheduler.ts` tick | **Not being fixed now.** The 5-min external monitor (T-17 mitigation) largely removes the trigger — the instance shouldn't be asleep across a registration window if it's pinged every 5 min. Residual edge cases (monitor outage, deploy at exactly the wrong minute) accepted at current scale. **Revisit at upgrade time**, likely alongside moving lifecycle transitions into an RPC that reasons about "did we miss the window" explicitly. |
 
@@ -481,14 +481,15 @@ Checked and found **nothing conclusive in the repository**:
    `/healthz` does a **Supabase round-trip every hit** and would be wasteful /
    add DB load if pinged every 5 min. Point any pinger at **`/ping`**.
 
-**Resolution (2026-08-31):** no existing pinger found or recoverable. The human
-is setting up a **new** external uptime monitor → `https://racehorse.onrender.com/ping`
-every 5 min (configured in UptimeRobot or similar, outside the repo). Also
-confirmed via `GET /ready` that **`SERVER_URL` is NOT set in Render prod**
-(`recommendedEnv.SERVER_URL: false`) — so the internal 10-min self-ping has
-never actually run; the human is setting `SERVER_URL=https://racehorse.onrender.com`
-so it becomes a redundant second signal. T-17 → **MITIGATED** (§1.3 table),
-flips to CLOSED once the human confirms steady-state warmth in the first hour.
+**Resolution (2026-08-31): T-17 CLOSED.** There *was* an UptimeRobot monitor —
+but configured as **ICMP Ping type**, which Render never answers, so it showed
+"No Response" / ~6.5 % uptime and kept nothing warm. Re-typed to **HTTP(s) →
+`https://racehorse.onrender.com/ping`, every 5 min**; human verified **100 %
+uptime, no gaps, over 1 h**. `SERVER_URL` was also `false` in prod
+(`GET /ready`) so the internal self-ping had never run; human set
+`SERVER_URL=https://racehorse.onrender.com` + redeployed as a second signal
+(agent's `/ready` re-check still `false` — WebFetch cache / deploy lag; human
+to confirm). Closure rests on the confirmed HTTP monitor.
 
 > Side note (out of scope, logged for later): `/ready` also shows
 > `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset in prod. Not
@@ -657,17 +658,58 @@ ticks overlapping a slow Supabase read):**
   existing bracket. Closes Gap T-7 (liveness — no more "unique violation →
   stuck in `registration_open`").
 
-### 1.4.3 Still TODO after the state machine (next Step 3 sub-tasks — NOT started)
+### 1.4.3 RPC surface — one vs. three (Step 3 sub-task, 2026-08-31)
 
-- **One RPC vs. three** — leaning three (`complete_tournament_match`,
-  `promote_tournament_match`, `generate_tournament_bracket`): different lock
-  targets, different callers, different failure semantics; a single `CASE`-on-
-  action mega-RPC is harder to test and reason about. *Proposed, not decided.*
+**Decision: three functions + shared helpers.** (Decisions D-5.)
+
+| Function | Owns invariants | Locks | Callers | Signature (shape) |
+|---|---|---|---|---|
+| `complete_tournament_match(p_match_id, p_winner_id, p_winner_source, p_reported_p1, p_reported_p2, p_actor)` | T-INV-1, 2, 3, 4, 5, 10 | `SELECT … WHERE id = p_match_id FOR UPDATE`; then the advancement target row | P1 game-over, P2 forfeit, P3 no-show, P4 bot-resolve, P5 bye | returns `(status, winner_id, winner_source, player1_score, player2_score, conflict bool, advanced_to_match_id, advanced_to_slot)` |
+| `promote_tournament_match(p_match_id, p_to_status, p_actor)` — `p_to_status ∈ ('ready','in_progress')` | (transition validity only — see T-INV-6 note) | `SELECT … WHERE id = p_match_id FOR UPDATE` | S (scheduler: `waiting→ready` for round 1; `ready→in_progress` when room live), A (attach: `ready→in_progress`) | returns `(status, started_at, ready_at, ready_deadline_at, conflict bool)` |
+| `generate_tournament_bracket(p_tournament_id)` | T-INV-8 | `pg_advisory_xact_lock(hashtext(p_tournament_id::text))` + 7× `INSERT … ON CONFLICT DO NOTHING` | G (`closeRegistrationAndStart`) | returns the 7 match rows |
+| **helpers** (plain SQL/plpgsql, same migration, not called from Node): `_tournament_is_participant(match_row, user_id)`, `_tournament_canonical_scores(winner_id, winner_source, win_target, reported_p1, reported_p2)`, `_tournament_advance_target(round, match_number)` (the `advanceSlot` map in SQL) | — | — | — | — |
+
+**Why three, not one `tournament_match_command(p_match_id, p_command, p_args jsonb)`:**
+- Each function is a **small auditable transaction** — "what can complete a
+  match" is readable without wading past promote/generate branches.
+- **Different lock targets** are explicit per function (match row / match row /
+  advisory lock), not buried in a `CASE`.
+- **Different signatures** — `complete` needs winner+scores+source, `promote`
+  needs a target status, `generate` needs only a tournament id. One function
+  means a fat `jsonb` arg with runtime shape validation.
+- **Blast radius** — a bug in bracket *generation* is in a different deployable
+  object from match *completion*.
+- Cost: three migration objects to keep in step; shared logic lives in the
+  three helper functions above rather than being duplicated or inlined.
+- `generate_tournament_bracket` is arguably a different concern entirely
+  (bracket *creation*, not match *state*) — the name is deliberately
+  `generate_…` not `…_match` to signal that.
+
+**T-INV-6 correction (found while designing this):** the invariant as written
+in §1.2 ("every round-(N−1) match `completed`/`bye`") is **stricter than
+bracket correctness requires**. A round-N match only needs its **two direct
+feeder matches** complete — SF1 (fed by QF1+QF2) can legitimately start while
+QF3/QF4 are still playing. And that two-feeder condition is **already
+structurally enforced** by `complete_tournament_match`'s advancement step
+(`status = CASE WHEN <other slot> filled THEN 'ready' ELSE 'waiting'`). So:
+- `promote_tournament_match` does **not** need a previous-round gate — SF/Final
+  reach `ready` only via the completion RPC's conditional advancement, and
+  round-1 has no previous round.
+- **T-INV-6 should be reworded** to "a round-N match enters `ready`/`in_progress`
+  only after both its feeder matches are `completed`/`bye`" — needs human
+  re-ratification (small change, flagged in the message, not silently edited).
+- The current code's `isPreviousRoundComplete` (whole-round check in
+  `dispatchScheduledStartMatches` / bot-resolve) is a harmless conservative
+  over-check; can be relaxed to the two-feeder condition or left as-is.
+
+### 1.4.3b Still TODO after this (next Step 3 sub-tasks — NOT started)
+
 - **The authz layer shape (§1.5)** — signature + one example call site for
-  human review before applying to all 16 gaps.
+  human review before applying to all 16 gaps. ← **next sub-task**
 - **No-show reconciler multi-instance** (Gap T-16) — proposed: keep it
   single-instance-assumed but add `pg_try_advisory_lock` at the top of the tick
-  so 2+ instances can't both scan/reconcile; defer a full lease table. *Proposed.*
+  so 2+ instances can't both scan/reconcile; defer a full lease table. Note:
+  **structurally moot on free tier** (D-2 addendum) — carry for the upgrade.
 - **`abandoned` match state?** — whether a match stranded past the tournament
   active window needs an explicit state rather than being left in
   `ready`/`in_progress` under a `cancelled` tournament.
@@ -730,12 +772,12 @@ that proves it.
 ### Step 3 — State machine / concurrency design (IN PROGRESS)
 - [x] Concurrency mechanism chosen and logged in Decisions — D-2
 - [x] PR #91 (merged early) assessed against D-2 + invariants — §1.4.1
-- [ ] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 ← **showing human now**
-- [ ] RPC rejection behaviour for invalid transitions specified
-- [ ] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough
-- [ ] One RPC vs. three (complete / promote / generate) decided
-- [ ] Authz-layer shape chosen — signature + one example call site shown to human — §1.5
-- [ ] Multi-instance stance for the no-show reconciler chosen
+- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 (shown to human 2026-08-31)
+- [x] RPC rejection behaviour for invalid transitions specified — §1.4.2
+- [x] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough — §1.4.2
+- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 (shown to human 2026-08-31; also surfaced a T-INV-6 wording fix for re-ratification)
+- [ ] Authz-layer shape chosen — signature + one example call site shown to human — §1.5 ← **next sub-task**
+- [ ] Multi-instance stance for the no-show reconciler chosen (note: moot on free tier)
 
 ### Step 4 — Refactor (not started; gated on Steps 2–3)
 - [ ] T-1 …
@@ -751,7 +793,7 @@ that proves it.
 - [ ] T-11 …
 - [ ] T-12 …
 - [ ] T-13..T-16 (lower priority)
-- [~] T-17 — **MITIGATED** — external uptime monitor on `/ping` @ 5 min (D-4, human-configured outside repo) + `SERVER_URL` being set for the internal self-ping. Flips to `[x]` when the human confirms steady-state warmth in the first hour.
+- [x] T-17 — **CLOSED** — UptimeRobot HTTP monitor on `/ping` @ 5 min (root cause was a mis-typed ICMP monitor; fixed to HTTP(s)). 100 % uptime verified over 1 h by the human. `SERVER_URL` set as a second signal (self-ping); `/ready` verification of that pending. — D-4, changelog 2026-08-31
 - [ ] T-18, T-19 — **ACCEPTED RISK at current scale** (D-4 / §1.3). Not fixed now; revisit at paid-tier upgrade.
 
 ### Step 5 — Tests prove closure
@@ -796,7 +838,8 @@ registry.
 | D-3 | 2026-08-31 | **T-INV-1..10 RATIFIED as written in §1.2.** Four open sign-off questions resolved: (a) **T-INV-3 conflict policy** — first-recorded outcome wins, later callers silently accept, log-only; *added requirement:* emit one structured `warn` log line (`tournament_match_winner_conflict`) whenever the `conflict=true` branch fires, so a genuine winner disagreement (which should be impossible if T-INV-2 + the state machine are correct) is visible/alertable in production without blocking on it. (b) **T-INV-4 score derivation** — the RPC computes the score pair itself for no-show/forfeit/bot cases rather than trusting the caller; removes the "client lied about the score" class of bugs. (c) **T-INV-7 one-live-match** — ship as a derived/asserted property, not a hard DB constraint; a structural constraint is more engineering than the risk justifies at current scale; escalate to a hard constraint only if `assertBracketConsistent` ever fires in practice (which would also mean Step 3's design missed something). (d) **Render instance count** — pending; treated as 1 by architecture until the human confirms. | The human reviewed the list line-by-line. Recording the *why* for each answer so a cold session does not re-open settled questions. |
 | D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
 | D-2 addendum | 2026-08-31 | **Render confirmed = free tier ($0, 0.1 CPU, 512 MB). Free tier does not support scaling at all.** So the multi-instance question is not "currently 1" but **"structurally 1, not applicable until we move off free tier."** The RPC decision (instance-count agnostic) still stands and is still the right call — it means the eventual paid-tier / multi-worker move needs no rework of the concurrency model. But the in-process funnel alternative is now doubly ruled out. Separately: free-tier spin-down is a real liveness risk — see gaps T-17..T-19 and Decisions D-4. | Human read the Render dashboard. |
-| D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Verification still owed by the human:** confirm in the first hour post-setup that no inter-hit gap exceeds Render's 15-min idle window (T-17 → CLOSED at that point). | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
+| D-5 | 2026-08-31 | **RPC surface = three functions, not one.** `complete_tournament_match` (owns T-INV-1,2,3,4,5,10), `promote_tournament_match(p_to_status)` (`waiting→ready` / `ready→in_progress`), `generate_tournament_bracket` (T-INV-8), plus three non-Node-facing helper functions (`_tournament_is_participant`, `_tournament_canonical_scores`, `_tournament_advance_target`). Rejected: a single `tournament_match_command(match_id, command, args jsonb)` dispatcher. | Three small auditable transactions with explicit per-function lock targets and typed signatures beat one `CASE`-on-action function with a fat `jsonb` arg and runtime shape checks. Bracket *generation* is a different concern from match *state* and gets a different deployable object. Shared logic goes in the helper functions. |
+| D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over 1 h → **T-17 CLOSED**. `SERVER_URL` set + redeployed for the self-ping second signal (`/ready` confirmation pending). | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
 
 ---
 
@@ -810,3 +853,5 @@ registry.
 | 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.4 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
 | 2026-08-31 | T-17 follow-up (before building any cron): **(a)** verified from code that `startTournamentScheduler`'s `setInterval` fires independently at 30 s once the process is alive (`bootstrapScheduledTournamentInfrastructure` runs inside `server.listen`) — so a plain uptime ping to `/ping` fully restores catch-up; `/internal/tick` is **not needed** unless D-4 moves the scheduler off the web process. **(b)** searched the repo for an existing external pinger — **no committed config**, `smoke-test.yml` is push-triggered not cron, and health routes don't log requests, so **cannot verify from the repo**. Two "T-17 follow-up" notes added to §1.3 listing exactly what the human must check (Render metrics, UptimeRobot/cron-job.org accounts, max-gap < 13 min, point it at `/ping` not `/healthz`). T-17 stays OPEN pending that check. No `/internal/tick` endpoint added. Step 3 continuation still paused. |
 | 2026-08-31 | Human confirmed: no existing pinger; setting up a new external uptime monitor on `/ping` @ 5 min (option a). **D-4 RESOLVED** — external monitor, stay on free tier, `/internal/tick` unbuilt. Checked prod `GET /ready`: **`SERVER_URL` is NOT set** in Render (self-ping has been inert all along) — human is setting it as a second signal. `/ready` also shows `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset — noted for a later env-hygiene pass, out of scope here. **T-17 → MITIGATED** (human owes first-hour steady-state verification before CLOSED). **T-18 + T-19 → ACCEPTED RISK** at current scale, revisit at upgrade. Step 3 continuation still paused. |
+| 2026-08-31 | **T-17 → CLOSED.** Actual root cause identified: an UptimeRobot monitor **did** exist but was set to **ICMP Ping type**, which Render never answers → it showed "No Response" / ~6.5 % uptime and kept the instance warm zero percent of the time. (So the earlier "no pinger found" was half-right — the repo had no config *and* the external monitor was non-functional.) Fixed to **HTTP(s) type → `/ping` @ 5 min**; human verified **100 % uptime, no gaps, over 1 h**. Human also set `SERVER_URL=https://racehorse.onrender.com` in Render + redeployed for the internal self-ping as a second signal — agent's `GET /ready` re-check still returned `SERVER_URL: false` (WebFetch 15-min cache or deploy lag); human to confirm it flips to `true`. Closure rests on the confirmed HTTP monitor. |
+| 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
