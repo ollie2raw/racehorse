@@ -18,7 +18,17 @@ focus" line, then the section for the system in progress.
 - Step 2 (invariants): **RATIFIED 2026-08-31** (Decisions D-3). T-INV-1..10 in
   §1.2 are the agreed list. Concurrency mechanism = Postgres transaction
   function RPC (D-2).
-- Step 3 (state machine / concurrency design): in progress — §1.4.
+- Step 3 (state machine / concurrency design): match state machine drafted
+  (§1.4.2). Remaining sub-tasks (one-vs-three RPCs, authz layer, reconciler
+  multi-instance) **NOT started** — paused for the infra investigation below.
+- **Infra / liveness investigation (2026-08-31): DONE — §1.3 "infrastructure /
+  liveness" tier (T-17..T-19), §1.4.4.** Render is free tier (0.1 CPU / 512 MB,
+  spins down after 15 min idle). This is a **failure mode the RPC design does
+  not touch** — atomicity is irrelevant if the process is asleep. Needs an
+  infra decision (paid tier / external cron / move the scheduler off the web
+  dyno) **before or alongside** the RPC work. Open question for the human:
+  is `SERVER_URL` actually set in the Render env? (the 10-min self-ping is
+  gated on it).
 - Step 4 (refactor): not started. First sub-task = review merged PR #91
   against the ratified invariants + RPC design (§1.4.x).
 
@@ -394,7 +404,30 @@ round agreement.
 | **T-13** | `emitToUserIds` iterates **all** connected sockets for every emit (O(sockets) per event, several per completion). | `engine.ts` `emitToUserIds` | Fine at current scale; O(n²)-ish under load. |
 | **T-14** | Heavy `log.info` on hot read paths (`fetchActiveAssignedMatchForUser` logs full candidate list every call; `registerTournamentAttachHandlers` logs `'accepted'` twice). | `persistence.ts`, `registerTournamentAttachHandlers.ts` | Log volume / cost. |
 | **T-15** | No metric / alert on invariant violations (double advancement, `winner_id` not a participant, "no target match for advancement" warn). Detection is by reading logs after a player complains. | whole system | No early warning. |
-| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. |
+| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. Note: **structurally moot on Render free tier** (D-2 addendum) — can't scale anyway. Keep for when we upgrade. |
+
+### infrastructure / liveness — NOT fixed by the RPC design
+
+Added 2026-08-31 after confirming Render = **free tier, 0.1 CPU / 512 MB,
+spins down after 15 min of no inbound HTTP**. These are a **different failure
+class** from the concurrency gaps: the RPC makes writes atomic, but a
+transaction function is irrelevant if **the process is not running to call it**,
+and a cold Supabase connection pool on 0.1 CPU makes even the RPC call slow and
+timeout-prone.
+
+| ID | Gap | Location | Risk |
+|---|---|---|---|
+| **T-17** | **Free-tier spin-down stalls the scheduler and the no-show reconciler.** Both are process-local `setInterval`s (`scheduler.ts` 30 s tick; the 6 h seed fallback). While the instance is spun down (no player connected, no HTTP), **no tick fires** — registration doesn't open/close, brackets don't generate, matches don't dispatch, no-shows don't resolve — until an inbound request wakes the instance. The boot tick then catches up on overdue work (status guards make it catch-up-safe for *state*), but everything happens **late**, on a cold instance, and only if someone hits the server. The self-ping (`index.ts` ~950, `setInterval(fetch('/ping'), 10 min)`) is the only mitigation and it is **(a) gated on `SERVER_URL` being set — UNCONFIRMED**, and **(b) unable to recover a process that already died** (deploy, crash, OOM): a dead process sends no self-ping, so nothing external wakes it. During an *active* match the socket.io ping/pong (25 s) keeps the instance warm, so the exposed windows are **between tournaments** and **a dispatched match whose players are all offline**. | `scheduler.ts`, `index.ts` self-ping, Render plan | Tournaments start late / silently don't run; no-shows resolve minutes late; a mid-cycle deploy or OOM leaves the bracket frozen until a user pokes the server. |
+| **T-18** | **0.1 CPU / 512 MB is marginal for a socket.io game server.** Timer callbacks drift under event-loop starvation (the 30 s reconciler can run every 40–90 s); GC pauses on 512 MB with 4 concurrent match states + all daily-mode state; **OOM restart** is plausible and drops all in-memory rooms (recovered 2 s post-boot by `recoverTournamentMatches`, with a gap). A **cold Supabase pool right after wake** is exactly when `applyMatchResult`'s 4-retry loop is most likely to exhaust and hit the ops-repair give-up path (`docs/ops/tournament-apply-match-result-repair.md`). | whole server process, Render plan | Amplifies T-4/T-17: the "stuck bracket needing manual DB repair" bug is most likely precisely when the instance is cold. |
+| **T-19** | **Lifecycle transitions fire late on wake, and registration can be un-openable during a sleep window.** If the instance is asleep across `registration_open_at`, players who open the app before it wakes see a tournament that never opened; the boot tick may then `openRegistration` and `closeRegistrationAndStart` in the same tick (instance woke after both times passed), collapsing the registration window to zero. `isTournamentPastActiveWindow` is 2 h, so a stale tournament isn't cancelled — it dispatches to players who long since left. | `scheduler.ts` tick (`now >= openAt` / `>= closeAt` / `>= startAt` comparisons) | Players can't register; empty tournaments dispatch and then no-show-resolve their way to a bot champion. |
+
+**Evidence this is already biting (not hypothetical):**
+- Commit `b49872ce` — *"Fix post-wake API hangs by bootstrapping tournaments and bounding Supabase … register tournament REST and scheduler at listen time instead of first socket … return safe fallbacks when optional upstream calls stall."* This is a spin-down/wake fix. Post-wake hangs were real.
+- `scheduler.ts` comment: *"Fire one immediate tick so an existing-due tournament catches up at boot"* — written because tournaments were found overdue at boot.
+- The ops-repair doc exists — the give-up path has fired in production.
+- We **cannot** cleanly attribute past stuck brackets to concurrency vs. cold-start from the repo alone. Honest read: **both, and they compound** — a cold instance + cold Supabase pool + 0.1 CPU is when producers overlap *and* when retries exhaust. The RPC fixes the first half; T-17/T-18 are the second half and need an **infra** fix.
+
+**Not in this plan's refactor scope, but must be decided alongside it** (candidates, for the human): move the scheduler + reconciler to a **Render Cron Job** or external cron hitting a protected endpoint; upgrade the web service to a paid always-on plan; or split a tiny always-on worker dyno from the web dyno. Logged as an open infra decision — see Decisions D-4.
 
 ## 1.4 State machine / concurrency design
 
@@ -573,6 +606,26 @@ ticks overlapping a slow Supabase read):**
   active window needs an explicit state rather than being left in
   `ready`/`in_progress` under a `cancelled` tournament.
 
+### 1.4.4 How the RPC design interacts with the liveness gaps (T-17..T-19)
+
+The RPC design and the infra fix are **orthogonal and both required**:
+
+- The RPC makes every write **atomic and idempotent** — so when a stalled
+  scheduler finally wakes and fires the boot catch-up tick, calling
+  `complete_tournament_match` / `promote_tournament_match` for a batch of
+  overdue matches is **safe to do all at once**, in any order, with retries.
+  This actually makes T-17's "catch up on wake" *more* robust than the current
+  8-non-atomic-writes version, where a cold-instance batch is exactly when
+  partial writes happen.
+- But the RPC **cannot make a tick fire while the process is asleep.** T-17's
+  core problem — "the timer doesn't run" — is untouched by anything in §1.4.
+  That needs D-4's infra decision.
+- **Sequencing note for Step 4/5:** the concurrency-harness test (§1.6) should
+  additionally simulate "instance was asleep for 20 min, wakes, runs one
+  catch-up tick against 4 overdue matches" and assert `assertBracketConsistent`
+  — that is the real production scenario on free tier, not just two producers
+  racing on a warm box.
+
 ## 1.5 Refactor plan
 
 **TODO — after 1.4.** Each step will name the gap(s) it closes and the test
@@ -632,6 +685,7 @@ that proves it.
 - [ ] T-11 …
 - [ ] T-12 …
 - [ ] T-13..T-16 (lower priority)
+- [ ] T-17..T-19 — infra / liveness — **gated on Decisions D-4** (not a code-only fix)
 
 ### Step 5 — Tests prove closure
 - [ ] Concurrency harness (producers 1–3 → one match)
@@ -674,6 +728,8 @@ registry.
 | D-1 | 2026-08-31 | PRs #89, #90, #91 were opened **before** this plan existed. #91 in particular pre-implements fixes for gaps T-1, T-2, T-3, T-5, T-6. They are **not** merged. We will not merge #91 on its own judgement — its approach (a single `completeMatchIfNotCompleted` CAS, inline participant checks, a name-agnostic RLS migration) will be reviewed **against the ratified invariants and the §1.4 design** once those exist, then either adopted, adjusted, or superseded. Until then #91 stays open as a reference implementation, not a decision. | The plan's rule is audit → invariants → design → fix. #91 skipped to "fix". Rather than throw the work away or rubber-stamp it, it becomes an input to Step 3/4. |
 | D-3 | 2026-08-31 | **T-INV-1..10 RATIFIED as written in §1.2.** Four open sign-off questions resolved: (a) **T-INV-3 conflict policy** — first-recorded outcome wins, later callers silently accept, log-only; *added requirement:* emit one structured `warn` log line (`tournament_match_winner_conflict`) whenever the `conflict=true` branch fires, so a genuine winner disagreement (which should be impossible if T-INV-2 + the state machine are correct) is visible/alertable in production without blocking on it. (b) **T-INV-4 score derivation** — the RPC computes the score pair itself for no-show/forfeit/bot cases rather than trusting the caller; removes the "client lied about the score" class of bugs. (c) **T-INV-7 one-live-match** — ship as a derived/asserted property, not a hard DB constraint; a structural constraint is more engineering than the risk justifies at current scale; escalate to a hard constraint only if `assertBracketConsistent` ever fires in practice (which would also mean Step 3's design missed something). (d) **Render instance count** — pending; treated as 1 by architecture until the human confirms. | The human reviewed the list line-by-line. Recording the *why* for each answer so a cold session does not re-open settled questions. |
 | D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
+| D-2 addendum | 2026-08-31 | **Render confirmed = free tier ($0, 0.1 CPU, 512 MB). Free tier does not support scaling at all.** So the multi-instance question is not "currently 1" but **"structurally 1, not applicable until we move off free tier."** The RPC decision (instance-count agnostic) still stands and is still the right call — it means the eventual paid-tier / multi-worker move needs no rework of the concurrency model. But the in-process funnel alternative is now doubly ruled out. Separately: free-tier spin-down is a real liveness risk — see gaps T-17..T-19 and Decisions D-4. | Human read the Render dashboard. |
+| D-4 | 2026-08-31 | **OPEN — infra decision required, not yet made.** Free-tier spin-down (T-17) stalls the tournament scheduler and no-show reconciler whenever no player is connected. Options: (a) Render Cron Job hitting a protected `/internal/tick` endpoint; (b) external cron (cron-job.org / GitHub Actions) doing the same; (c) upgrade the web service to an always-on paid plan; (d) split an always-on worker process from the web dyno. Also confirm whether `SERVER_URL` is set (gates the existing 10-min self-ping). This must be resolved **before or alongside** the RPC refactor — RPC atomicity does nothing if the process is asleep. | Surfaced during the Step 3 infra check. Left open for the human to decide; not an agent call (billing + deployment topology). |
 
 ---
 
@@ -684,3 +740,4 @@ registry.
 | 2026-08-31 | Document created. System 1 (Tournament) Step 1 current-state audit written. Steps 2+ open. Systems 2–4 stubbed. |
 | 2026-08-31 | Added the "one step per session" rule to "How to use this document". Locked concurrency mechanism = Postgres RPC (D-2). Rewrote §1.2 as T-INV-1..10, framed as RPC/DB obligations, pending human sign-off. §1.4 now carries the locked decision only (state machine still TODO). |
 | 2026-08-31 | Step 2 RATIFIED (D-3, four sign-off answers logged). T-INV-3 gains a structured-log requirement on the `conflict=true` branch. PR #91 merged early — added the ⚠ note to Current focus and §1.4.1 (assessed: `completeMatchIfNotCompleted` is superseded not conflicting; participant check duplicated; forfeit/room-join checks are authz not concurrency; RLS migration correct and independent). Step 3 started: §1.4.2 = match state machine — states, transitions, per-actor triggers, RPC rejection rules, and the near-simultaneous-caller lock walkthrough. Remaining Step 3 sub-tasks (one-vs-three RPCs, authz layer, reconciler multi-instance) not started. |
+| 2026-08-31 | Infra check before continuing Step 3. Render confirmed free tier (0.1 CPU / 512 MB, spins down at 15 min idle) → D-2 addendum (structurally single-instance) + new **D-4** (open infra decision for the scheduler/reconciler liveness). Added §1.3 "infrastructure / liveness" tier: **T-17** (spin-down stalls scheduler + no-show reconciler; self-ping is conditional on `SERVER_URL` and can't revive a dead process), **T-18** (0.1 CPU / 512 MB marginal — timer drift, OOM, cold Supabase pool amplifies the stuck-bracket give-up), **T-19** (late/zero-width registration windows on wake). Evidence cited (commit `b49872ce` "post-wake API hangs", the boot catch-up tick comment, the ops-repair doc). §1.4.4 records that the RPC and the infra fix are orthogonal and both required. Step 3 continuation still paused. |
