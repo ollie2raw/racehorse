@@ -1,5 +1,6 @@
 import type { Server } from 'socket.io';
 import {
+  completeMatchIfNotCompleted,
   fetchTournamentsByStatus,
   fetchMatchById,
   fetchMatches,
@@ -12,6 +13,7 @@ import {
   updateRegistrationPlacement,
   updateRegistrationStatus,
   updateTournamentStatus,
+  type MatchPatch,
 } from './persistence';
 import { createReservedRoom, getRoom } from '../rooms';
 import type { Config } from '../game/types';
@@ -46,15 +48,9 @@ export interface EnginePersistence {
     status: MatchStatus;
     botTier?: MatchRow['bot_tier'];
   }): Promise<MatchRow>;
-  updateMatch(
-    matchId: string,
-    patch: Partial<Pick<MatchRow,
-      'status' | 'winner_id' | 'room_code' | 'ready_at' | 'ready_deadline_at' |
-      'started_at' | 'completed_at' | 'player1_joined_at' | 'player2_joined_at' |
-      'winner_source' | 'status_reason' | 'forfeit_user_id' | 'no_show_user_id' |
-      'bot_tier' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
-    >>,
-  ): Promise<void>;
+  updateMatch(matchId: string, patch: MatchPatch): Promise<void>;
+  /** Conditional completion write. Resolves true only for the caller that actually completed the row. */
+  completeMatchIfNotCompleted(matchId: string, patch: MatchPatch): Promise<boolean>;
   updateRegistrationStatus(
     tournamentId: string,
     userId: string,
@@ -86,6 +82,7 @@ export const defaultEnginePersistence: EnginePersistence = {
   fetchMatchByRoomCode,
   insertMatch,
   updateMatch,
+  completeMatchIfNotCompleted,
   updateRegistrationStatus,
   updateRegistrationPlacement,
   updateTournamentStatus,

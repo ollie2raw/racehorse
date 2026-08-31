@@ -10,6 +10,8 @@ import {
   type Room,
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+import { fetchMatchById, fetchMatchByRoomCode } from '../scheduledTournament/persistence';
+import { isTournamentRoomCode } from '../scheduledTournament/matchDispatch';
 import { ensureRoomHydrated } from './roomLivePersistence';
 import {
   isTerminalHydrationError,
@@ -343,6 +345,45 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       }
       log.info({ roomCode }, 'rejected completed room');
       throw new Error('match_completed');
+    }
+    // Same ACL as the matchmaking one above, for scheduled-tournament rooms.
+    // Their seats belong to exactly the two players the bracket assigned, and
+    // the codes are derivable from the public bracket API
+    // (makeTournamentRoomCode is a pure function of tournament id + round +
+    // match number), so an unassigned client can reach this room by guessing.
+    // tournament:attach_assigned_match enforces assignment before calling us;
+    // room:join does not, and without this check a stranger takes the empty
+    // seat and their user id becomes the winner the bracket advances.
+    //
+    // Deliberately placed after the abandoned/forfeit/game-over checks so a
+    // finished room still reports its terminal state (recovery routing depends
+    // on `match_completed`), and before any seat is allocated or migrated.
+    //
+    // scheduledTournamentMatchId is not part of the persisted room shell, so a
+    // rehydrated room after a restart carries no marker — hence the fallback
+    // lookup by room code, gated on the code shape so ordinary private joins
+    // never pay for it. Both lookups fail closed: a match that cannot be read
+    // refuses the join rather than admitting it.
+    if (via === 'room:join') {
+      const knownTournamentMatchId = existingRoom.scheduledTournamentMatchId ?? null;
+      if (knownTournamentMatchId || isTournamentRoomCode(roomCode)) {
+        const assignedMatch = knownTournamentMatchId
+          ? await fetchMatchById(knownTournamentMatchId).catch(() => null)
+          : await fetchMatchByRoomCode(roomCode).catch(() => null);
+        const isTournamentRoom = Boolean(knownTournamentMatchId || assignedMatch);
+        const isAssignedPlayer = Boolean(
+          userId &&
+            assignedMatch &&
+            (assignedMatch.player1_id === userId || assignedMatch.player2_id === userId),
+        );
+        if (isTournamentRoom && !isAssignedPlayer) {
+          log.info(
+            { roomCode, userId: userId ?? null, via, matchResolved: Boolean(assignedMatch) },
+            'join rejected: not a tournament participant',
+          );
+          throw new Error('not_match_participant');
+        }
+      }
     }
     let room: Room | null = null;
     let roster: RoomPlayer[] = [];
