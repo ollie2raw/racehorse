@@ -1,0 +1,381 @@
+# Racehorse Hardening Plan
+
+A persistent, cross-session plan to bring the tournament and multiplayer systems
+up to a standard comparable to how chess.com or Miniclip (8 Ball Pool) would run
+them — scoped realistically to a solo founder + AI-agent team, pre-marketing.
+
+**This document is the source of truth.** Any agent or person picking this up
+cold should read the "How to use this document" section, then the "Current
+focus" line, then the section for the system in progress.
+
+---
+
+## Current focus
+
+**Tournament → Step 1 (current-state audit): COMPLETE (this section, below).**
+Next: ratify the invariants and design the match/bracket state machine
+*together with the human* before any refactor code is written. No tournament
+refactor has started. PRs #89/#90/#91 exist but predate this plan (see Decisions
+log D-1).
+
+---
+
+## How to use this document
+
+### Sequencing (do not reorder)
+
+Audit-first, one system at a time:
+
+1. **Tournament** ← in progress
+2. **Multiplayer rooms**
+3. **Daily modes** (Daily Fritz / Puzzle Rush / Daily Puzzle Ladder)
+4. **Everything else** (legacy league/tournament, social, ranking, spectator…)
+
+**Do not start refactoring a system until its audit (steps 1–3 below) is written
+down and its invariants are ratified with the human.** We never fix based on
+vibes or memory.
+
+### Per-system structure
+
+Each system section contains, in order:
+
+1. **Current-state map** — every place state is read/written, every authz check
+   (present or missing), every concurrency window, every recovery/reconnect
+   path. Read-only investigation. No fixes.
+2. **Invariants** — the small set of things that must always be true, written
+   explicitly. Marked `RATIFIED` (agreed with human) or `CANDIDATE` (proposed,
+   not yet agreed).
+3. **Gap list** — ranked by risk: `data-corruption` > `player-visible-bug` >
+   `cosmetic`. Each gap tied to a specific file/function, not a vague area.
+4. **State machine / concurrency design** — the explicit model the system should
+   follow: states, transitions, who may trigger each, how races are prevented.
+5. **Refactor plan** — concrete steps to close each gap: funnel mutations
+   through one guarded path, add version/CAS guards, extract authz into one
+   layer.
+6. **Test plan** — the concurrency/chaos tests and invariant assertions that
+   *prove* a gap is closed.
+7. **Checklist** — every item above as a `- [ ]` line, so progress is visible
+   and resumable.
+
+### Rules for this document
+
+- **Every checked-off item must reference the commit/PR or test that closed it.**
+  Format: `- [x] … — closed by <PR #123 / commit abc1234 / test file:name>`.
+- **Nothing is marked done without a passing test for the invariant it
+  protects.** "Looks fixed" is not done.
+- Keep the **Current focus** line at the top accurate at all times.
+- Log every non-obvious decision in the **Decisions log** at the bottom
+  (`D-n`), with the reasoning, so it is not silently reversed later.
+- When a section's investigation reveals the scope was wrong, say so in Current
+  focus and adjust — don't quietly expand.
+
+---
+
+# System 1: Tournament (scheduled-tournament engine)
+
+Scope: `server/src/scheduledTournament/**` and its integration points in
+`server/src/multiplayer/**` and `server/src/realtime/gameOverPersistence.ts`.
+The 8-player single-elimination bracket that runs on a fixed 30-minute cadence.
+
+> Not in scope for this section: the **legacy** round-robin "league" tournament
+> (`server/src/tournament/tournament.ts`, `server/src/legacyTournament/`,
+> `server/src/http/routes/league.ts`). It is a separate socketId-based system.
+> Deferred to System 4. Flagged here only so a future agent does not confuse the
+> two — `types.ts` even carries a comment about it.
+
+## 1.1 Current-state map
+
+### 1.1.1 Data model (Supabase / Postgres)
+
+Three tables (`2026-05-14_scheduled_tournaments.sql` + later migrations):
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `scheduled_tournaments` | `status` (check: upcoming/registration_open/in_progress/completed/cancelled), `scheduled_start` (**unique**), `registration_open_at`, `registration_close_at`, `win_target`, `max_players`, `winner_id` | Status is a plain text column with a CHECK. No `version`/`updated_at`. |
+| `scheduled_tournament_registrations` | `status` (registered/withdrawn/eliminated/active/winner), `seed`, `placement`, **`unique (tournament_id, user_id)`** | `seed` and `placement` are server-authored but see Gap T-1. |
+| `scheduled_tournament_matches` | `round` (1–3), `match_number`, `player1_id`, `player2_id`, `winner_id`, `status` (waiting/ready/in_progress/completed/bye), `room_code`, `ready_at`, `ready_deadline_at`, `started_at`, `completed_at`, `player{1,2}_joined_at`, `player{1,2}_score`, `winner_source`, `status_reason`, `forfeit_user_id`, `no_show_user_id`, `bot_tier`. **`unique (tournament_id, round, match_number)`** | No `version` column. No CHECK that `winner_id ∈ {player1_id, player2_id}`. No partial-unique guaranteeing one active match per user. |
+
+Indexes exist for the hot paths (`idx_stm_ready`, `idx_stm_ready_deadline`,
+`idx_stm_players`, `idx_str_*`).
+
+**RLS:**
+- `scheduled_tournaments`: `st_select_all` (select true). No client write policy → writes are service-role only. OK.
+- `scheduled_tournament_matches`: `stm_select_all` (select true). No client write policy → service-role only. OK.
+- `scheduled_tournament_registrations`: `str_select_all` (select true) **+ `str_insert_self` (`insert with check auth.uid() = user_id`) + `str_update_self` (`update using/with check auth.uid() = user_id`)**. See Gap T-1.
+
+### 1.1.2 All state writes (who writes what, from where)
+
+Every write goes through `persistence.ts` helpers, which are thin wrappers over
+`supabaseFetch` (PostgREST) using the **service-role key**. There are **no
+transactions** — every helper is a single `POST`/`PATCH`/`DELETE`.
+
+| Write helper (`persistence.ts`) | Mutates | Called from |
+|---|---|---|
+| `updateTournamentStatus(id, status, {winner_id?})` | `scheduled_tournaments.status`, `.winner_id` | `engine.generateBracket` (→in_progress), `completeTournament` (→completed), `cancelTournament`, `openRegistration`, `closeRegistrationAndStart` |
+| `insertRegistration(tid, uid)` | new registration row | `routes.ts` POST /register, `socketHandlers.ts` tournament:register |
+| `withdrawRegistration(tid, uid)` | DELETE registration row | `routes.ts` DELETE /register, `socketHandlers.ts` tournament:withdraw |
+| `updateRegistrationStatus(tid, uid, status, seed?)` | `registrations.status`, `.seed` | `engine.generateBracket` (all → active + seed), `applyMatchResult` (loser → eliminated), `completeTournament` (winner → winner) |
+| `updateRegistrationPlacement(tid, uid, placement)` | `registrations.placement` | `engine.persistTournamentPlacements` (on tournament completion) |
+| `insertMatch({...})` | new match row | `engine.generateBracket` only (7 rows: 4 QF + 2 SF + 1 F) |
+| `updateMatch(matchId, patch)` | any of ~18 match columns | **many** — see below |
+
+**`updateMatch` call sites** (this is the crux):
+
+| Caller | Purpose | Guard before write |
+|---|---|---|
+| `engine.applyMatchResult` | mark `completed` + winner + scores; then a **second** `updateMatch` to advance winner into next round | `if (match.status === 'completed') return;` — a **read-then-write** check, not atomic |
+| `engine.reconcileExpiredReadyMatches` | promote `ready`→`in_progress` when room is live; extend `ready_deadline_at`; (then calls `applyMatchResult` for no-show) | `status === 'ready'` read; room existence check |
+| `matchDispatch.dispatchTournamentMatch` | set `room_code`, `ready`, `ready_at`, `ready_deadline_at` | `alreadyReady` read-then-write |
+| `matchDispatch.promoteScheduledMatchToInProgress` | `ready`→`in_progress`, `started_at` | `status === 'completed'/'bye'/'in_progress'` read |
+| `registerTournamentAttachHandlers` (multiplayer) | `player{1,2}_joined_at` on attach | `if (!humanJoinedAt(match, uid))` read |
+| `roomForfeit.applyActiveMatchForfeit` (multiplayer) | calls `applyMatchResult` with `winnerSource:'forfeit'` | see Gap T-4 |
+| `recovery.recoverTournamentMatches` | re-dispatch (→ `dispatchTournamentMatch`) | status/room checks |
+
+### 1.1.3 Producers that can complete the same match (the race)
+
+`applyMatchResult` (directly or via `applyTournamentGameOverFromRoom`) can be
+entered for one match id from **five** independent producers:
+
+1. **Real game over** — `roomSession.broadcastStateUpdate` → `onGameOver`
+   scheduler → `gameOverPersistence.persistGameOverOnce` →
+   `applyTournamentGameOverFromRoom` → `applyMatchResult`. Deferred, retried up
+   to 4×.
+2. **Forfeit on leave** — `multiplayer/roomForfeit.ts` → `applyMatchResult`
+   (`winnerSource:'forfeit'`), retried up to 4×.
+3. **No-show reconciler** — `engine.reconcileExpiredReadyMatches` (scheduler
+   tick, every 30 s) → `applyMatchResult` (`winnerSource:'no_show'`).
+4. **Bot-vs-bot auto-resolve** — `engine.resolveBotOnlyMatch` (from scheduler
+   tick, `dispatchScheduledStartMatches`, `reconcileExpiredReadyMatches`,
+   `applyMatchResult`'s own advancement tail) → `applyMatchResult`.
+5. **Bye walkover** — `engine.generateBracket` → `applyMatchResult`
+   (`byeWalkover:true`). One-shot at bracket generation.
+
+Producers 1–3 can genuinely overlap for the *same* match in the same instant
+(e.g. a player rage-quits at the score screen right as the no-show timer
+fires and the opponent's game-over write lands). Producer 4 recurses through
+`applyMatchResult`'s advancement tail on every completion.
+
+### 1.1.4 Bracket advancement is a multi-statement, non-atomic sequence
+
+`applyMatchResult` (engine.ts ~450–551) performs, with no transaction:
+
+1. `updateMatch(match.id, { status:'completed', winner_id, scores, … })`
+2. `updateRegistrationStatus(loserId, 'eliminated')` (if human loser)
+3. emit `tournament:match_completed` to both players
+4. `emitRoundCompletedIfNeeded` (reads all matches)
+5. if round 3 → `completeTournament` (placements + status + activity + emit) **and return**
+6. else: compute `advanceSlot`, re-fetch all matches, find target, `updateMatch(target.id, { player{1|2}_id: winnerId, status, bot_tier })`
+7. re-fetch target, emit `tournament:match_updated`
+8. if target now `ready` → `dispatchTournamentMatch(target)` → possibly `resolveBotOnlyMatch(target)` (recursion)
+
+A crash or a second overlapping call between any two steps leaves partial state.
+Observed symptom already in logs: `"no target match for advancement"` warn
+(step 6 target missing).
+
+### 1.1.5 Authorization checks (present / missing)
+
+| Path | Identity source | Check present | Gap |
+|---|---|---|---|
+| REST `/api/tournaments/*` | `requireAuthUserId` → validates Bearer token against `/auth/v1/user` | `register`/`unregister` also call `rejectMismatchedPayloadUserId` | reads (`/me`, `/my`, `/history`, `/:id/bracket`, `/:id/result`) — `/me` and `/my` require auth; `/:id/bracket`, `/:id/result`, `/upcoming`, `/:id` are **public** (acceptable — bracket data is public, but bracket includes usernames + ratings) |
+| Socket `tournament:register` / `:withdraw` / `:get_bracket` | `getSocketUserId(socket)` (verified `socket.data.userId`) + `rejectMismatchedPayloadUserId` | present for register/withdraw; `get_bracket` unauthenticated (public) | — |
+| Socket `tournament:attach_assigned_match` | `handlerDeps.normalizeUserId(socket.data.userId)` | **checks `match.player1_id === uid || match.player2_id === uid`** ✔ | none — this path is correctly gated |
+| Socket `room:join` for a tournament room | `socket.data.userId` | **NONE on `main`** — a tournament room code is derivable from the public bracket (`makeTournamentRoomCode` = pure fn of tournament id + round + match number), so an unassigned client can guess it and take the empty seat | **Gap T-3** (PR #91 adds a check; unmerged, pre-audit) |
+| `roomForfeit.applyActiveMatchForfeit` | `handlerDeps.normalizeUserId(abandoningPlayer.userId ?? socket.data.userId)` | **on `main`: none** — `winnerUserId = match.player1_id === uid ? player2 : player1`, so a `null`/guest/non-participant leaver forfeits the match *to player1* | **Gap T-4** (PR #91 adds a check; unmerged, pre-audit) |
+| `applyMatchResult` `params.winnerId` | caller-supplied | **on `main`: none** — `winner_id` is written verbatim; if it is not a participant, the loser lookup yields `null`, nobody is eliminated, and a stranger advances | **Gap T-2** (PR #91 adds a check; unmerged, pre-audit) |
+| Registration rows (direct Supabase write from browser) | anon key + user JWT | RLS `str_insert_self` / `str_update_self` allow the user to INSERT/UPDATE **their own** registration row, including `seed`, `status`, `placement` | **Gap T-1** (PR #91's migration locks this down; unmerged, pre-audit) |
+
+### 1.1.6 Recovery / reconnect paths
+
+| Trigger | Path | What it does |
+|---|---|---|
+| Server boot (+2 s) | `index.bootstrapScheduledTournamentInfrastructure` → `recovery.recoverTournamentMatches` | For each `in_progress` tournament in its active window: re-`dispatchTournamentMatch` for `ready` matches; recreate room for `in_progress` matches whose room is gone |
+| Scheduler tick (30 s) | `scheduler.ts` `tick` → `dispatchScheduledStartMatches` + `reconcileExpiredReadyMatches` | Dispatch waiting matches past `scheduled_start`; promote/extend/no-show-resolve expired `ready` matches; auto-resolve bot-only pairs |
+| Client reconnect | `GET /api/tournaments/me` → `fetchActiveAssignedMatchForUser` | Returns the user's current `ready`/`in_progress` assigned match + room code so the client can re-attach via `tournament:attach_assigned_match` |
+| Room gone on attach | `registerTournamentAttachHandlers` → `dispatchTournamentMatch({reason:'repair'})` | Rehydrates the reserved room from the match row, up to 2 retries in the handler |
+| Game-over match id lost after restart | `applyTournamentGameOverFromRoom` → `findTournamentMatchByRoom(room.code)` | Falls back to resolving the match by `room_code` when `room.scheduledTournamentMatchId` is not in memory |
+| In-memory `scheduledTournamentMatchId` not persisted | `room:join` (PR #91) → `isTournamentRoomCode(code)` shape check → `fetchMatchByRoomCode` | Recognises a tournament room after a restart even though the marker field is gone |
+
+`ready_deadline_at` and `ready_at` are **DB-persisted**, so the no-show timer
+survives restarts (deliberate — see `scheduler.ts` comment). But the reconciler
+loop is **single-instance only** — `scheduler.ts` and `engine.ts` both carry
+explicit comments: *"before multi-instance scale, this must move behind a DB
+lease/lock."* Render currently runs one instance.
+
+### 1.1.7 Idempotency infrastructure that already exists elsewhere (reusable prior art)
+
+- `ranking/insertRankedGameIdempotent.ts` + `2026-06-17_ranked_games_source_idempotency.sql` — `ON CONFLICT (player_id, source_match_id) DO NOTHING`, `Prefer: resolution=ignore-duplicates`, empty response ⇒ duplicate.
+- `2026-08-01_room_command_receipts.sql` — a command-receipt table for idempotent room command handling.
+- PR #91's `completeMatchIfNotCompleted` — a `status=neq.completed` conditional PATCH; the same compare-and-set idea, not yet generalised.
+
+## 1.2 Invariants
+
+Status: **CANDIDATE — not yet ratified.** These are written from the audit as a
+starting point for the design conversation. Do not treat as agreed.
+
+| # | Invariant | Currently enforced by |
+|---|---|---|
+| T-INV-1 | A match row transitions to `completed` **exactly once**; its `winner_id`, `winner_source`, scores, and `completed_at` are set atomically and never change afterward. | Nothing atomic. Read-then-write in `applyMatchResult`. |
+| T-INV-2 | `winner_id` of a non-bye completed match ∈ `{player1_id, player2_id}` and both are non-null. | Nothing (no CHECK, no code guard on `main`). |
+| T-INV-3 | Each completed non-bye match causes **exactly one** advancement write to exactly one slot of exactly one next-round match. | Nothing atomic; `advanceSlot` is pure but the write is not guarded. |
+| T-INV-4 | Round *N* matches only enter `ready`/`in_progress` after every round *N-1* match is `completed` or `bye`. | `isPreviousRoundComplete` (read-only check, advisory). |
+| T-INV-5 | Every non-bye completed match has its human loser's registration set to `eliminated`; the tournament champion's registration is `winner`; all others who played are placed. | Sequential un-guarded `updateRegistrationStatus` calls. |
+| T-INV-6 | A user is assigned to **≤ 1** `ready`/`in_progress` match across all tournaments at any instant. | Nothing (no constraint; `fetchActiveAssignedMatchForUser` picks "latest" when multiple exist — a symptom, not a guard). |
+| T-INV-7 | `registrations.seed` and `.placement` are written **only** by the server (service-role). | RLS `str_update_self` currently permits the client (Gap T-1). |
+| T-INV-8 | A tournament reaches `completed` with `winner_id` = the round-3 match winner, and only from `in_progress`. | `updateTournamentStatus` is an unconditional PATCH. |
+| T-INV-9 | Exactly 7 match rows exist per started tournament (4/2/1), created once. | `unique (tournament_id, round, match_number)` + `generateBracket`'s `existingMatches.length > 0` early return (racy — Gap T-6). |
+
+## 1.3 Gap list (ranked by risk)
+
+### data-corruption
+
+| ID | Gap | Location | Risk |
+|---|---|---|---|
+| **T-1** | Client can INSERT/UPDATE its own `scheduled_tournament_registrations` row via the anon Supabase client, including `seed`, `status`, `placement`. `seed` decides the double-no-show tiebreak (`selectHigherSeedWinner`); `placement` is read back verbatim by `/api/tournaments/history` and `/:id/result`. | RLS policies `str_insert_self`, `str_update_self` in `2026-05-14_scheduled_tournaments.sql` | Self-assigned tournament placement / seed. Direct integrity breach. *(PR #91 migration addresses; unmerged, pre-audit — Decisions D-1.)* |
+| **T-2** | `applyMatchResult` writes `params.winnerId` to `winner_id` with no check that it is a participant. Non-participant winner ⇒ `loserId` computes to `null` ⇒ nobody eliminated ⇒ a stranger advances into the next round as a real entrant. | `engine.ts` `applyMatchResult` (~466–489, `main`) | Corrupt bracket, wrong champion. *(PR #91 adds guard; unmerged.)* |
+| **T-3** | Match completion is a read-then-write (`if (match.status === 'completed') return;`) with no DB-level CAS. Producers 1–3 (§1.1.3) can each pass the read and each run the completion + advancement sequence, second winner overwriting the first, bracket advanced twice. | `engine.ts` `applyMatchResult` (~465–551, `main`) | Double advancement, wrong winner carried forward, loser un-eliminated. *(PR #91's `completeMatchIfNotCompleted` addresses this one window; unmerged.)* |
+| **T-4** | Bracket advancement (`applyMatchResult` steps 1–8, §1.1.4) is multi-statement with no transaction. Crash/overlap between steps leaves: match `completed` but winner never advanced; or next match with one slot filled and stale `status`; or loser eliminated but match not completed. | `engine.ts` `applyMatchResult` | Stuck bracket requiring manual DB repair (`docs/ops/tournament-apply-match-result-repair.md` already exists — evidence this happens). |
+| **T-5** | `room:join` has no tournament-assignment ACL on `main`. Room code is guessable from the public bracket. An unassigned client takes the empty seat; on game over their `userId` becomes `winner_id` and advances. | `multiplayer/roomSocketAttach.ts` (`main`) | Bracket hijack by a non-participant. *(PR #91 adds the ACL; unmerged.)* |
+| **T-6** | `roomForfeit` on `main` has no participant check: `winnerUserId = match.player1_id === uid ? player2 : player1`. A `null`/guest/non-participant leaver forfeits the match **to player1**. | `multiplayer/roomForfeit.ts` (~130, `main`) | A player who never left loses their match. *(PR #91 fixes; unmerged.)* |
+| **T-7** | `generateBracket` idempotency is a read-then-write (`existingMatches.length > 0` early return) before 7 inserts. Two overlapping calls (two scheduler ticks; scheduler + a manual trigger) both pass the check; the `unique` constraint then rejects the duplicate inserts and `closeRegistrationAndStart` throws — tournament stuck in `registration_open`, never starts. | `engine.ts` `generateBracket` (~293–296) | Liveness: tournament fails to start. Integrity is saved by the unique constraint. |
+| **T-8** | `updateRegistrationStatus` (eliminated/active/winner) is last-write-wins with no ordering guard. If a match is re-resolved (T-3/T-4) or the no-show reconciler and a real game-over disagree, a player's status can flip (`eliminated` → `active`, or a loser marked `winner`). | `engine.ts` (multiple call sites) | Wrong "you're still in" / "you won" state shown to players and written to history. |
+
+### player-visible-bug
+
+| ID | Gap | Location | Risk |
+|---|---|---|---|
+| **T-9** | No-show / forfeit / game-over all emit `tournament:match_completed` with `winnerSource` hard-coded to `'game_over'` in one branch regardless of the real source (`applyMatchResult` line ~497: `params.winnerSource ?? (params.byeWalkover ? 'game_over' : 'game_over')`). | `engine.ts` `applyMatchResult` emit block | Client shows "you lost" instead of "opponent didn't show" / "opponent forfeited". |
+| **T-10** | `reconcileExpiredReadyMatches` runs off a 30 s poll. A match can sit `ready` up to ~30 s past `ready_deadline_at` before no-show resolves; two ticks overlapping a slow Supabase call can both enter the loop for the same match. | `scheduler.ts` tick + `engine.reconcileExpiredReadyMatches` | Delayed resolution; compounds T-3. |
+| **T-11** | `fetchActiveAssignedMatchForUser` returns *the latest* of multiple `ready`/`in_progress` matches for a user when there is more than one — masking T-6 rather than preventing it, and can point a reconnecting player at the wrong match. | `persistence.ts` `fetchActiveAssignedMatchForUser` (~377 sort) | Player re-attaches to the wrong game after reconnect. |
+| **T-12** | Two "tournament room" concepts: `cfg.tournamentId` (legacy league) vs `room.scheduledTournamentMatchId` (scheduled). `roomSession.broadcastStateUpdate` gates the game-over persist on `!isTournamentRoom` where `isTournamentRoom = Boolean(cfg.tournamentId)`. Reserved scheduled-tournament rooms are created **without** `cfg.tournamentId`, so they fall through the "private match" branch and are only re-routed to the tournament path *inside* `persistGameOverOnce`. Fragile; a future change to that gate silently breaks tournament result persistence. | `multiplayer/roomSession.ts` (~719, 736) + `matchDispatch.ts` (~139) | Latent: tournament results silently not persisted if the gate logic changes. |
+
+### cosmetic / lower-risk
+
+| ID | Gap | Location | Risk |
+|---|---|---|---|
+| **T-13** | `emitToUserIds` iterates **all** connected sockets for every emit (O(sockets) per event, several per completion). | `engine.ts` `emitToUserIds` | Fine at current scale; O(n²)-ish under load. |
+| **T-14** | Heavy `log.info` on hot read paths (`fetchActiveAssignedMatchForUser` logs full candidate list every call; `registerTournamentAttachHandlers` logs `'accepted'` twice). | `persistence.ts`, `registerTournamentAttachHandlers.ts` | Log volume / cost. |
+| **T-15** | No metric / alert on invariant violations (double advancement, `winner_id` not a participant, "no target match for advancement" warn). Detection is by reading logs after a player complains. | whole system | No early warning. |
+| **T-16** | `scheduler.ts` no-show reconciliation is single-instance with only a code comment as the guard against multi-instance double-resolution. | `scheduler.ts`, `engine.reconcileExpiredReadyMatches` | Blocks horizontal scaling; silent double-resolution if scaled without the lease/lock. |
+
+## 1.4 State machine / concurrency design
+
+**TODO — design with the human after invariants are ratified.** Do not write
+refactor code before this section is filled in and agreed.
+
+Open questions to resolve here:
+- Optimistic concurrency (`version` column + CAS on every match write) vs. a
+  single serialized "match command" entry point vs. a Postgres advisory
+  lock per match id vs. a DB function that does completion+advancement in one
+  transaction. (Decisions D-2 placeholder.)
+- Whether bracket advancement becomes a single Postgres function / RPC
+  (atomic) or stays app-side behind a guard.
+- One `applyMatchCommand(matchId, command)` funnel for all five producers vs.
+  keeping them separate with a shared guard.
+- Where the authz layer lives (a `assertTournamentParticipant` used by every
+  entry point).
+- Multi-instance story: DB lease table for the reconciler, or accept
+  single-instance and assert it at boot.
+
+## 1.5 Refactor plan
+
+**TODO — after 1.4.** Each step will name the gap(s) it closes and the test
+that proves it.
+
+## 1.6 Test plan
+
+**TODO — after 1.4.** Must include:
+- A concurrency harness that fires producers 1–3 (§1.1.3) at one match
+  simultaneously and asserts T-INV-1/2/3.
+- A crash-injection test that kills `applyMatchResult` between each step and
+  asserts recovery restores a consistent bracket.
+- An invariant-assertion helper (`assertBracketConsistent(tournamentId)`) run
+  at the end of every engine test.
+- RLS tests proving the client cannot write `seed`/`placement`/`status`.
+
+## 1.7 Checklist
+
+### Step 1 — Current-state audit
+- [x] Data model + RLS mapped — §1.1.1
+- [x] All state writes catalogued — §1.1.2
+- [x] Completion-race producers enumerated — §1.1.3
+- [x] Bracket-advancement sequence mapped — §1.1.4
+- [x] Authorization checks (present/missing) mapped — §1.1.5
+- [x] Recovery / reconnect paths mapped — §1.1.6
+- [x] Existing idempotency prior art noted — §1.1.7
+- [x] Gap list written and risk-ranked — §1.3
+
+### Step 2 — Invariants
+- [ ] T-INV-1..9 reviewed line-by-line with the human
+- [ ] Invariants marked `RATIFIED` (or edited/added/removed)
+- [ ] Each ratified invariant has a chosen enforcement mechanism noted
+
+### Step 3 — State machine / concurrency design
+- [ ] Match state machine drawn (states, transitions, trigger authority)
+- [ ] Concurrency mechanism chosen and logged in Decisions
+- [ ] Bracket-advancement atomicity approach chosen
+- [ ] Authz-layer shape chosen
+- [ ] Multi-instance stance chosen
+
+### Step 4 — Refactor (not started; gated on Steps 2–3)
+- [ ] T-1 …
+- [ ] T-2 …
+- [ ] T-3 …
+- [ ] T-4 …
+- [ ] T-5 …
+- [ ] T-6 …
+- [ ] T-7 …
+- [ ] T-8 …
+- [ ] T-9 …
+- [ ] T-10 …
+- [ ] T-11 …
+- [ ] T-12 …
+- [ ] T-13..T-16 (lower priority)
+
+### Step 5 — Tests prove closure
+- [ ] Concurrency harness (producers 1–3 → one match)
+- [ ] Crash-injection / recovery test
+- [ ] `assertBracketConsistent` helper wired into engine tests
+- [ ] RLS write-denial tests for registrations
+
+---
+
+# System 2: Multiplayer rooms
+
+**Not started.** Begins after System 1 Steps 1–3 are complete. Scope preview:
+`server/src/multiplayer/**`, `server/src/rooms.ts`, `server/src/realtime/**`,
+room lifecycle / seat allocation / reconnection / abandon / forfeit /
+move-log verification / spectator attach.
+
+---
+
+# System 3: Daily modes
+
+**Not started.** Daily Fritz, Puzzle Rush, Daily Puzzle Ladder — run
+integrity, score authority (server-authored), leaderboard writes, share-result
+verification, the async verification outbox.
+
+---
+
+# System 4: Everything else
+
+**Not started.** Legacy league/tournament (`server/src/tournament/`,
+`legacyTournament/`, `http/routes/league.ts` — decide: keep, wall off, or
+delete), social/activity writer, ranking (Glicko) idempotency, spectator
+registry.
+
+---
+
+# Decisions log
+
+| ID | Date | Decision | Reasoning |
+|---|---|---|---|
+| D-1 | 2026-08-31 | PRs #89, #90, #91 were opened **before** this plan existed. #91 in particular pre-implements fixes for gaps T-1, T-2, T-3, T-5, T-6. They are **not** merged. We will not merge #91 on its own judgement — its approach (a single `completeMatchIfNotCompleted` CAS, inline participant checks, a name-agnostic RLS migration) will be reviewed **against the ratified invariants and the §1.4 design** once those exist, then either adopted, adjusted, or superseded. Until then #91 stays open as a reference implementation, not a decision. | The plan's rule is audit → invariants → design → fix. #91 skipped to "fix". Rather than throw the work away or rubber-stamp it, it becomes an input to Step 3/4. |
+| D-2 | — | *(placeholder)* Concurrency-control mechanism for match writes: optimistic version/CAS vs. serialized command funnel vs. Postgres transaction function vs. advisory lock. To be decided in §1.4. | — |
+
+---
+
+# Changelog
+
+| Date | Change |
+|---|---|
+| 2026-08-31 | Document created. System 1 (Tournament) Step 1 current-state audit written. Steps 2+ open. Systems 2–4 stubbed. |
