@@ -19,12 +19,15 @@ focus" line, then the section for the system in progress.
   §1.2 are the agreed list. Concurrency mechanism = Postgres transaction
   function RPC (D-2).
 - Step 2 addendum: **T-INV-6 reworded + re-ratified** (D-6) to feeder-gating;
-  `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as a
-  standalone fix (its own PR).
-- Step 3 (state machine / concurrency design): match state machine (§1.4.2) +
-  RPC surface = three functions (§1.4.3, D-5) done. **Authz layer shape (§1.5)
-  = current sub-task** — signature + one example call site for human review.
-  Remaining after that: reconciler multi-instance (moot on free tier).
+  `isPreviousRoundComplete` → `areFeederMatchesComplete` — **merged, PR #94**.
+- Step 3 (state machine / concurrency design): match state machine (§1.4.2),
+  RPC surface = three functions (§1.4.3, D-5), and authz layer shape (§1.4.5)
+  all **written + shown to the human**. Doc merged (PR #93).
+  **ONE sub-task left: reconciler multi-instance stance** (§1.4.3b — proposed:
+  `pg_try_advisory_lock` on the tick; structurally moot on free tier).
+  Awaiting human go-ahead to write it up, then Step 3 is complete.
+- Step 4 (refactor) begins after that, first sub-task = review merged PR #91
+  against the ratified invariants + the RPC design.
   Still one-step-per-session.
 - **Infra / liveness (2026-08-31): D-4 RESOLVED, T-17 CLOSED.** Render = free
   tier (0.1 CPU / 512 MB, 15-min idle spin-down). Root cause of the stalls: an
@@ -885,13 +888,13 @@ that proves it.
 ### Step 3 — State machine / concurrency design (IN PROGRESS)
 - [x] Concurrency mechanism chosen and logged in Decisions — D-2
 - [x] PR #91 (merged early) assessed against D-2 + invariants — §1.4.1
-- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 (shown to human 2026-08-31)
+- [x] Match state machine drawn (states, transitions, trigger authority per producer) — §1.4.2 — merged PR #93
 - [x] RPC rejection behaviour for invalid transitions specified — §1.4.2
 - [x] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough — §1.4.2
-- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 (shown to human 2026-08-31; also surfaced a T-INV-6 wording fix for re-ratification)
-- [x] Authz-layer shape chosen — `authorizeMatchParticipant()` + ack/status mappers in `tournamentAuth.ts`; signature + `tournament:attach_assigned_match` example call site in §1.4.5 (shown to human 2026-08-31)
+- [x] One RPC vs. three decided — **three** (`complete` / `promote` / `generate`) + helpers — §1.4.3, Decisions D-5 — merged PR #93
+- [x] Authz-layer shape chosen — `authorizeMatchParticipant()` + ack/status mappers in `tournamentAuth.ts`; signature + `tournament:attach_assigned_match` example call site in §1.4.5 — merged PR #93
 - [ ] Multi-instance stance for the no-show reconciler chosen (note: moot on free tier) ← **last Step 3 sub-task**
-- [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` pulled forward as its own PR
+- [x] T-INV-6 reworded + re-ratified (D-6); `isPreviousRoundComplete` → `areFeederMatchesComplete` merged as PR #94 (commit on main)
 
 ### Step 4 — Refactor (not started; gated on Steps 2–3)
 - [ ] T-1 …
@@ -971,5 +974,5 @@ registry.
 | 2026-08-31 | **T-17 → CLOSED.** Actual root cause identified: an UptimeRobot monitor **did** exist but was set to **ICMP Ping type**, which Render never answers → it showed "No Response" / ~6.5 % uptime and kept the instance warm zero percent of the time. (So the earlier "no pinger found" was half-right — the repo had no config *and* the external monitor was non-functional.) Fixed to **HTTP(s) type → `/ping` @ 5 min**; human verified **100 % uptime, no gaps, over the observation window**. Human also set `SERVER_URL=https://racehorse.onrender.com` in Render + redeployed and confirmed `GET /ready` → `recommendedEnv.SERVER_URL: true` (fresh deploy `67fb5dac…`, `uptimeSeconds` reset). **Both mitigations verified.** |
 | 2026-08-31 | T-17 confirmations landed: `SERVER_URL: true` in `GET /ready` post-redeploy; doc caveats about "pending / cache lag" removed. Root cause stands as recorded — a **misconfigured monitor type (ICMP vs HTTP)**, not a missing pinger. No further action on T-17. |
 | 2026-08-31 | **T-INV-6 reword — client-side impact check done** (§1.4.3). `tournament:round_completed` has **no client listener** (dead event). Bracket view, "next match" logic, hub-state "waiting", flow stepper, notifications, post-match nav — all **per-match**, none assume whole-round completion. The engine **already** dispatches human SF/Final on the two-feeder condition (`applyMatchResult` advancement tail); `isPreviousRoundComplete` only gates **bot-only** auto-sim, which the bracket-reveal spoiler logic hides from players anyway. **Reword is safe to ratify** — pending human OK. Authz-layer sub-task still NOT started. |
-| 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
+| 2026-08-31 | **T-INV-6 RE-RATIFIED (D-6)** to feeder-gating. Doc: merged PR #93; code (`isPreviousRoundComplete` → `areFeederMatchesComplete`): merged PR #94. §1.2 text updated; state-machine T-d guard updated. `isPreviousRoundComplete` → `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch` — **pulled forward from Step 4** at the human's explicit direction, its own PR, one engine test updated. **Step 3 sub-task: authz layer shape** (§1.4.5) — `authorizeMatchParticipant(userId, {matchId}|{roomCode}, opts)` returning `{ok, match} | {ok:false, code}` + `matchAuthzAck` / `matchAuthzHttpStatus` mappers, added to `tournamentAuth.ts`; signature + one call site (`tournament:attach_assigned_match`) shown. Replaces the duplicated inline gates in attach / `roomForfeit` / `roomSocketAttach`. Last Step 3 sub-task (reconciler multi-instance, moot on free tier) not started — stopping for human review. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
