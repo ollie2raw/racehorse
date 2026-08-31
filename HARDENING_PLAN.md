@@ -12,11 +12,18 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament → Step 1 (current-state audit): COMPLETE (this section, below).**
-Next: ratify the invariants and design the match/bracket state machine
-*together with the human* before any refactor code is written. No tournament
-refactor has started. PRs #89/#90/#91 exist but predate this plan (see Decisions
-log D-1).
+**Tournament → Step 2 (invariants): DONE in this doc, awaiting human sign-off.**
+T-INV-1..9 have been rewritten as statements the Postgres RPC must enforce
+(§1.2). Concurrency mechanism is decided: a Postgres transaction function
+(Decisions D-2). **Do not start Step 3 (state machine design) until the human
+signs off on the invariant list.**
+
+- Step 1 (current-state audit): COMPLETE — §1.1, §1.3.
+- Step 2 (invariants): written, `RATIFIED`-pending-human — §1.2.
+- Step 3 (state machine / concurrency design): NOT STARTED — §1.4 has only the
+  locked concurrency decision, not the state machine.
+- PRs #89/#90/#91 predate this plan (Decisions D-1). #91 review is Step 4's
+  first sub-task, gated on Steps 2–3 sign-off.
 
 ---
 
@@ -59,6 +66,13 @@ Each system section contains, in order:
 
 ### Rules for this document
 
+- **One step per session. Stop after each numbered step and wait for the
+  human's explicit go-ahead before starting the next.** This applies even when
+  the next step looks obvious or mechanical. The human needs to actually read
+  and respond between steps — do not chain "Step N" and "Step N+1" in the same
+  session. "Numbered step" means the items under a system's checklist (Step 1
+  audit, Step 2 invariants, Step 3 design, Step 4 refactor, Step 5 tests) and
+  any explicitly numbered sub-task the human hands you.
 - **Every checked-off item must reference the commit/PR or test that closed it.**
   Format: `- [x] … — closed by <PR #123 / commit abc1234 / test file:name>`.
 - **Nothing is marked done without a passing test for the invariant it
@@ -209,20 +223,125 @@ lease/lock."* Render currently runs one instance.
 
 ## 1.2 Invariants
 
-Status: **CANDIDATE — not yet ratified.** These are written from the audit as a
-starting point for the design conversation. Do not treat as agreed.
+Status: **written for human sign-off (Step 2).** Not yet `RATIFIED` — the human
+reviews this list and then it is marked ratified or revised.
 
-| # | Invariant | Currently enforced by |
-|---|---|---|
-| T-INV-1 | A match row transitions to `completed` **exactly once**; its `winner_id`, `winner_source`, scores, and `completed_at` are set atomically and never change afterward. | Nothing atomic. Read-then-write in `applyMatchResult`. |
-| T-INV-2 | `winner_id` of a non-bye completed match ∈ `{player1_id, player2_id}` and both are non-null. | Nothing (no CHECK, no code guard on `main`). |
-| T-INV-3 | Each completed non-bye match causes **exactly one** advancement write to exactly one slot of exactly one next-round match. | Nothing atomic; `advanceSlot` is pure but the write is not guarded. |
-| T-INV-4 | Round *N* matches only enter `ready`/`in_progress` after every round *N-1* match is `completed` or `bye`. | `isPreviousRoundComplete` (read-only check, advisory). |
-| T-INV-5 | Every non-bye completed match has its human loser's registration set to `eliminated`; the tournament champion's registration is `winner`; all others who played are placed. | Sequential un-guarded `updateRegistrationStatus` calls. |
-| T-INV-6 | A user is assigned to **≤ 1** `ready`/`in_progress` match across all tournaments at any instant. | Nothing (no constraint; `fetchActiveAssignedMatchForUser` picks "latest" when multiple exist — a symptom, not a guard). |
-| T-INV-7 | `registrations.seed` and `.placement` are written **only** by the server (service-role). | RLS `str_update_self` currently permits the client (Gap T-1). |
-| T-INV-8 | A tournament reaches `completed` with `winner_id` = the round-3 match winner, and only from `in_progress`. | `updateTournamentStatus` is an unconditional PATCH. |
-| T-INV-9 | Exactly 7 match rows exist per started tournament (4/2/1), created once. | `unique (tournament_id, round, match_number)` + `generateBracket`'s `existingMatches.length > 0` early return (racy — Gap T-6). |
+**Concurrency mechanism (locked — Decisions D-2):** match completion and bracket
+advancement run inside **one Postgres transaction function (RPC)**, not
+application-level version/CAS and not an in-process serialized funnel. The
+invariants below are therefore written as **obligations of that function**: what
+it must read, validate, and write inside a single transaction, and what it must
+reject. "The RPC" below means this function.
+
+Each invariant states: the rule, the mechanism that must enforce it, and (where
+relevant) the RPC behaviour on violation.
+
+### Match lifecycle
+
+**T-INV-1 — Completion is atomic and terminal.**
+A match reaches `completed` at most once. In the same transaction that sets
+`status='completed'`, the RPC also sets `winner_id`, `winner_source`,
+`player1_score`, `player2_score`, `completed_at`, and `status_reason`. After a
+match is `completed`, none of those columns ever change again.
+*Enforced by:* the RPC does all of it in one transaction; a `BEFORE UPDATE`
+trigger (or the RPC's own guard) rejects any write that mutates a row already
+in `completed`. DB CHECK: `completed` rows must have non-null `winner_id`,
+`winner_source`, `completed_at`.
+
+**T-INV-2 — The winner is a real participant.**
+For a non-`bye` match, `player1_id` and `player2_id` are both non-null at
+completion, and `winner_id ∈ {player1_id, player2_id}`.
+*Enforced by:* the RPC validates its `winner_id` argument against the locked
+match row and `RAISE EXCEPTION` (does not write) if it fails. DB CHECK on the
+table as a backstop: `status <> 'completed' OR winner_id IS NULL OR winner_id IN (player1_id, player2_id)`.
+
+**T-INV-3 — Idempotent + conflict-explicit.**
+Re-calling the RPC for an already-`completed` match is **not** an error:
+- same `winner_id` as recorded → success no-op, returns the existing result.
+- different `winner_id` → returns the **recorded** result with a
+  `conflict=true` flag; makes **no** write; the caller logs and surfaces the
+  recorded outcome. (Producers 1 and 2 retry up to 4× and producers 1–3 can
+  collide — the RPC is the single arbiter and later callers accept its answer.)
+*Enforced by:* the RPC reads the locked row first and branches before any write.
+
+**T-INV-4 — Scores are consistent with the outcome.**
+`player1_score` and `player2_score` are both ≥ 0. The winner's score ≥ the
+loser's score. For `no_show` / `forfeit` / `bot_simulated` completions the
+winner's score = the tournament `win_target` and the loser's = 0.
+*Enforced by:* RPC computes the score pair itself from `(winner_id,
+winner_source, win_target, reported_scores)` rather than trusting the caller
+for the derived cases; CHECK constraint for the ≥ 0 part.
+
+### Bracket advancement
+
+**T-INV-5 — Exactly one advancement per completed match.**
+Completing a non-`bye`, non-final match performs **exactly one** write that
+places `winner_id` into **exactly one** slot (`player1_id` or `player2_id`,
+per `advanceSlot`) of **exactly one** next-round match, in the **same
+transaction** as the completion. Re-running the RPC for that match never
+advances again (follows from T-INV-3).
+*Enforced by:* advancement is code inside the RPC, after the completion write,
+before `COMMIT`. The target-slot write is conditional (`WHERE <slot> IS NULL OR <slot> = winner_id`)
+so a repeat is a no-op, not a double-fill.
+
+**T-INV-6 — Round gating.**
+A round-*N* match may only leave `waiting` (to `ready`/`in_progress`) after
+every round-(*N*−1) match of that tournament is `completed` or `bye`.
+*Enforced by:* the promote-to-ready path is also an RPC (or the same one) that
+checks the previous round inside the transaction; `RAISE EXCEPTION` otherwise.
+
+**T-INV-7 — One live match per user.**
+A user appears as `player1_id`/`player2_id` in **≤ 1** match with status
+`ready` or `in_progress` across all tournaments at any instant.
+*Enforced by:* a partial unique index is not directly expressible (two columns,
+two rows) — instead this is a **consequence** of T-INV-5 + T-INV-6 being
+correct, plus an `assertBracketConsistent` check that fails loudly if it is
+ever violated. Revisit in Step 3 whether a helper table or exclusion
+constraint is worth it.
+
+**T-INV-8 — Exactly one bracket, created once.**
+A started tournament has exactly 7 match rows: 4 round-1, 2 round-2, 1 round-3.
+They are created in one atomic operation and never re-created.
+*Enforced by:* bracket generation is an RPC that takes `pg_advisory_xact_lock(tournament_id)`
+(or `INSERT ... ON CONFLICT DO NOTHING` on all 7 followed by a count assertion)
+so two concurrent `closeRegistrationAndStart` calls cannot both generate and
+one cannot half-generate. `unique (tournament_id, round, match_number)` is the
+backstop.
+
+### Registration / tournament lifecycle
+
+**T-INV-9 — Registration integrity fields are server-only.**
+`registrations.seed`, `.placement`, and `.status` are written **only** by the
+service-role backend. The browser (anon key + user JWT) may not INSERT or
+UPDATE any column of `scheduled_tournament_registrations`. Registration and
+withdrawal happen through the server.
+*Enforced by:* RLS — no client INSERT/UPDATE/DELETE policy, and the underlying
+grants revoked (this is Gap T-1 / the migration in PR #91, to be reviewed in
+Step 4).
+
+**T-INV-10 — Elimination / placement follows the bracket.**
+When a match completes: the human loser's registration → `eliminated` (bots
+excluded). When the round-3 match completes: the winner's registration →
+`winner`, the tournament → `completed` with `winner_id` = that match's winner
+(and only from `in_progress`), and every human who played gets a `placement`
+consistent with the round they lost in. These registration/tournament writes
+happen in the **same transaction** as the triggering match completion.
+*Enforced by:* the RPC performs the registration + tournament writes before
+`COMMIT`; a CHECK that `scheduled_tournaments.status='completed'` implies
+non-null `winner_id`; `assertBracketConsistent` verifies placement ↔ elimination
+round agreement.
+
+### Notes for Step 3
+
+- T-INV-1..5, T-INV-10 are all obligations of **one** RPC
+  (`complete_tournament_match`). T-INV-6 and T-INV-8 are obligations of the
+  **promote** and **generate-bracket** RPCs respectively — Step 3 decides
+  whether those are one function or three.
+- T-INV-7 and T-INV-9 are not RPC obligations: T-INV-7 is a derived property to
+  assert, T-INV-9 is pure RLS.
+- Every RPC returns a structured result (`{status, winner_id, winner_source,
+  conflict, advanced_to}`) so the Node layer never re-reads to find out what
+  happened.
 
 ## 1.3 Gap list (ranked by risk)
 
@@ -259,22 +378,38 @@ starting point for the design conversation. Do not treat as agreed.
 
 ## 1.4 State machine / concurrency design
 
-**TODO — design with the human after invariants are ratified.** Do not write
-refactor code before this section is filled in and agreed.
+### Locked: concurrency mechanism (Decisions D-2)
 
-Open questions to resolve here:
-- Optimistic concurrency (`version` column + CAS on every match write) vs. a
-  single serialized "match command" entry point vs. a Postgres advisory
-  lock per match id vs. a DB function that does completion+advancement in one
-  transaction. (Decisions D-2 placeholder.)
-- Whether bracket advancement becomes a single Postgres function / RPC
-  (atomic) or stays app-side behind a guard.
-- One `applyMatchCommand(matchId, command)` funnel for all five producers vs.
-  keeping them separate with a shared guard.
-- Where the authz layer lives (a `assertTournamentParticipant` used by every
-  entry point).
-- Multi-instance story: DB lease table for the reconciler, or accept
-  single-instance and assert it at boot.
+**Match completion and bracket advancement run inside one Postgres transaction
+function (RPC).** Not `version`/CAS, not an in-process serialized funnel.
+
+Rationale: the T-3/T-4 bug is fundamentally "8 non-atomic writes". A single
+plpgsql function that (a) locks the match row, (b) validates the transition,
+(c) writes completion + advancement + registration/tournament changes in one
+transaction closes the race **and** the partial-write problem at once, with no
+application-level locking to get wrong. It is also **instance-count agnostic**:
+we have not ruled out 2+ server instances, and an in-process funnel would
+silently break under that condition. This decision is what makes horizontal
+scaling safe later without redoing this work.
+
+**Deployment is single-instance today** — confirmed by architecture: `rooms.ts`
+holds all room state in a module-level `Map`, there is no socket.io Redis
+adapter, and `scheduler.ts`/`engine.ts` already carry "single-instance only"
+comments. (Human to confirm the Render dashboard instance count; the
+architecture makes >1 unsafe regardless right now.)
+
+### Still TODO in Step 3 (not started — gated on invariant sign-off)
+
+- The explicit match state machine: states, valid transitions, which of the 5
+  producers may trigger each, and how the RPC **rejects** (not silently
+  no-ops) an invalid transition.
+- Exactly which row(s) the RPC's `SELECT ... FOR UPDATE` locks and why two
+  near-simultaneous callers for the same match serialize cleanly.
+- Whether "complete match", "promote to ready", and "generate bracket" are one
+  RPC or three.
+- The authz layer shape (§1.5).
+- Multi-instance story for the no-show reconciler (DB lease table vs. assert
+  single-instance at boot).
 
 ## 1.5 Refactor plan
 
@@ -285,7 +420,8 @@ that proves it.
 
 **TODO — after 1.4.** Must include:
 - A concurrency harness that fires producers 1–3 (§1.1.3) at one match
-  simultaneously and asserts T-INV-1/2/3.
+  simultaneously and asserts T-INV-1 (one completion), T-INV-2 (valid winner),
+  T-INV-3 (idempotent/conflict-explicit), T-INV-5 (one advancement).
 - A crash-injection test that kills `applyMatchResult` between each step and
   asserts recovery restores a consistent bracket.
 - An invariant-assertion helper (`assertBracketConsistent(tournamentId)`) run
@@ -305,16 +441,19 @@ that proves it.
 - [x] Gap list written and risk-ranked — §1.3
 
 ### Step 2 — Invariants
-- [ ] T-INV-1..9 reviewed line-by-line with the human
-- [ ] Invariants marked `RATIFIED` (or edited/added/removed)
-- [ ] Each ratified invariant has a chosen enforcement mechanism noted
+- [x] Concurrency mechanism decided (Postgres RPC) — Decisions D-2
+- [x] T-INV-1..10 rewritten as obligations of the RPC / DB, not just app code — §1.2
+- [ ] T-INV-1..10 reviewed line-by-line and signed off by the human ← **awaiting**
+- [ ] Invariants marked `RATIFIED` (or edited/added/removed) after sign-off
 
-### Step 3 — State machine / concurrency design
-- [ ] Match state machine drawn (states, transitions, trigger authority)
-- [ ] Concurrency mechanism chosen and logged in Decisions
-- [ ] Bracket-advancement atomicity approach chosen
-- [ ] Authz-layer shape chosen
-- [ ] Multi-instance stance chosen
+### Step 3 — State machine / concurrency design (NOT STARTED — gated on Step 2 sign-off)
+- [x] Concurrency mechanism chosen and logged in Decisions — D-2
+- [ ] Match state machine drawn (states, transitions, trigger authority per producer)
+- [ ] RPC rejection behaviour for invalid transitions specified
+- [ ] `SELECT ... FOR UPDATE` lock targets identified + near-simultaneous-caller walkthrough
+- [ ] One RPC vs. three (complete / promote / generate) decided
+- [ ] Authz-layer shape chosen — signature + one example call site shown to human — §1.5
+- [ ] Multi-instance stance for the no-show reconciler chosen
 
 ### Step 4 — Refactor (not started; gated on Steps 2–3)
 - [ ] T-1 …
@@ -370,7 +509,7 @@ registry.
 | ID | Date | Decision | Reasoning |
 |---|---|---|---|
 | D-1 | 2026-08-31 | PRs #89, #90, #91 were opened **before** this plan existed. #91 in particular pre-implements fixes for gaps T-1, T-2, T-3, T-5, T-6. They are **not** merged. We will not merge #91 on its own judgement — its approach (a single `completeMatchIfNotCompleted` CAS, inline participant checks, a name-agnostic RLS migration) will be reviewed **against the ratified invariants and the §1.4 design** once those exist, then either adopted, adjusted, or superseded. Until then #91 stays open as a reference implementation, not a decision. | The plan's rule is audit → invariants → design → fix. #91 skipped to "fix". Rather than throw the work away or rubber-stamp it, it becomes an input to Step 3/4. |
-| D-2 | — | *(placeholder)* Concurrency-control mechanism for match writes: optimistic version/CAS vs. serialized command funnel vs. Postgres transaction function vs. advisory lock. To be decided in §1.4. | — |
+| D-2 | 2026-08-31 | **Concurrency mechanism for match completion + bracket advancement = a Postgres transaction function (RPC).** Not `version`/CAS, not an in-process serialized funnel, not an app-side advisory lock. | The T-3/T-4 bug is fundamentally "8 non-atomic writes." One plpgsql function that locks the match row, validates the transition, and does completion + advancement + registration/tournament writes in a single transaction closes the race and the partial-write problem together, with no application-level locking to get wrong. It is **instance-count agnostic** — we have not ruled out running 2+ server instances, and an in-process funnel would silently break under that condition. This decision is what makes horizontal scaling safe later without redoing the work. Deployment is single-instance today (in-memory `rooms.ts` Map, no socket.io Redis adapter, existing "single-instance only" code comments); human to confirm the Render instance count but the architecture already requires 1. |
 
 ---
 
@@ -379,3 +518,4 @@ registry.
 | Date | Change |
 |---|---|
 | 2026-08-31 | Document created. System 1 (Tournament) Step 1 current-state audit written. Steps 2+ open. Systems 2–4 stubbed. |
+| 2026-08-31 | Added the "one step per session" rule to "How to use this document". Locked concurrency mechanism = Postgres RPC (D-2). Rewrote §1.2 as T-INV-1..10, framed as RPC/DB obligations, pending human sign-off. §1.4 now carries the locked decision only (state machine still TODO). |
