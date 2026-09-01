@@ -65,4 +65,25 @@ describe('startTournamentScheduler stale cleanup', () => {
     expect(mocks.dispatchScheduledStartMatches).not.toHaveBeenCalled();
     stopTournamentScheduler();
   });
+
+  it('does not tick when TOURNAMENT_SCHEDULER_ENABLED=false (D-7 singleton gate)', async () => {
+    process.env.TOURNAMENT_SCHEDULER_ENABLED = 'false';
+    try {
+      const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
+      const io = { emit: vi.fn() } as any;
+
+      startTournamentScheduler(io);
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(mocks.fetchTournamentsByStatus).not.toHaveBeenCalled();
+      expect(mocks.reconcileExpiredReadyMatches).not.toHaveBeenCalled();
+      expect(mocks.cancelTournament).not.toHaveBeenCalled();
+      expect(mocks.supabaseFetch).not.toHaveBeenCalled();
+      stopTournamentScheduler();
+    } finally {
+      delete process.env.TOURNAMENT_SCHEDULER_ENABLED;
+    }
+  });
 });
