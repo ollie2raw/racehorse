@@ -23,6 +23,7 @@ import {
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
+import { isAnyTournamentRoom } from '../multiplayer/roomKind';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
 import {
@@ -115,6 +116,11 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   // Scheduled tournament: applyMatchResult must succeed or throw (retry / give-up).
   // Never mark success when the bracket was not advanced.
   // Ops repair after give-up: docs/ops/tournament-apply-match-result-repair.md
+  //
+  // These branches read `room.scheduledTournamentMatchId` directly (not
+  // `roomKind`) on purpose: they are the *routing* to bracket advancement, and
+  // only the scheduled-tournament system routes here (legacy league is excluded
+  // upstream in roomSession's game-over branch and runs its own finalizer).
   if (winnerUserId) {
     const applied = await applyTournamentGameOverFromRoom(io, room, {
       winnerUserId,
@@ -406,7 +412,10 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
   const sequence = room.state?.sequence ?? null;
   const errorMessage = err instanceof Error ? err.message : String(err);
   const isTournament =
-    Boolean(room.scheduledTournamentMatchId) ||
+    isAnyTournamentRoom(room) ||
+    // room-code fallback: a rehydrated room shell carries no match-id marker,
+    // so `applyTournamentGameOverFromRoom` signals "this was a tournament" via
+    // the error code instead.
     errorMessage === TOURNAMENT_MISSING_WINNER_ERROR ||
     errorMessage === TOURNAMENT_APPLY_FAILED_ERROR;
   const message = isTournament

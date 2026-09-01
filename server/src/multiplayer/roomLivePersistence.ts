@@ -17,6 +17,7 @@ import type { RoomMatchEvent } from '../roomEvents';
 import { supabaseFetch } from '../supabaseUtils';
 import { childLogger } from '../logger';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
+import { roomKind } from './roomKind';
 
 const log = childLogger('room-live-persistence');
 import {
@@ -217,9 +218,18 @@ export function assertUnmaskedGameStateForPersistence(state: GameState): void {
 }
 
 export function inferLiveSessionSourceType(room: Room): RoomLiveSessionSourceType {
-  if (room.scheduledTournamentMatchId) return 'tournament';
-  if (room.matchmakingMatchId) return 'matchmaking';
-  return 'private';
+  switch (roomKind(room)) {
+    case 'scheduled_tournament':
+    case 'legacy_league':
+      // Previously legacy-league rooms fell through to 'private' here — a
+      // latent mismatch with resolveMpAuthoritySourceType. Now consistent.
+      // (ENABLE_LEGACY_TOURNAMENTS is off in prod, so this changes no live data.)
+      return 'tournament';
+    case 'matchmaking':
+      return 'matchmaking';
+    case 'private':
+      return 'private';
+  }
 }
 
 export function inferLiveSessionStatus(room: Room): RoomLiveSessionStatus {

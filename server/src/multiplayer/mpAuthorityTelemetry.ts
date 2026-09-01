@@ -7,6 +7,7 @@ import {
   queueMpAuthorityEventPersist,
   type MpAuthorityEventRecord,
 } from './mpAuthorityEventStore';
+import { roomKind } from './roomKind';
 
 export type MpAuthorityFunnelEvent =
   | 'private_lobby_created'
@@ -54,11 +55,17 @@ type EmitPayload = {
 export function resolveMpAuthoritySourceType(room: {
   matchmakingMatchId?: string | null;
   scheduledTournamentMatchId?: string | null;
-  config?: { tournamentId?: string };
+  config?: { tournamentId?: string | null } | null;
 }): MpAuthoritySourceType {
-  if (room.scheduledTournamentMatchId || room.config?.tournamentId) return 'tournament';
-  if (room.matchmakingMatchId) return 'quick';
-  return 'private';
+  switch (roomKind(room)) {
+    case 'scheduled_tournament':
+    case 'legacy_league':
+      return 'tournament';
+    case 'matchmaking':
+      return 'quick';
+    case 'private':
+      return 'private';
+  }
 }
 
 export function emitMpAuthorityFunnel(

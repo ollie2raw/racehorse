@@ -17,6 +17,7 @@ import {
 } from './roomSession';
 import { comparePregameDrawTiles } from './preGameDraw';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { isAnyTournamentRoom } from './roomKind';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
 import { MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
 
@@ -36,9 +37,12 @@ export function registerRematchPregameHandlers(
     try {
       const room = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(room, 'rematch');
-      const cfg = room.config;
 
-      if (cfg.tournamentId) {
+      // Both tournament systems: a rematch would start a fresh game in a room
+      // whose bracket/league match is already finished, floating free of it.
+      // Previously only the legacy league (`config.tournamentId`) was blocked;
+      // scheduled-tournament rooms slipped through. See HARDENING_PLAN.md T-12.
+      if (isAnyTournamentRoom(room)) {
         return cb?.({ ok: false, error: 'Rematch is unavailable in tournament rooms.' });
       }
       const playerSeatId = resolveActorSeatId(roomCode, socket);
