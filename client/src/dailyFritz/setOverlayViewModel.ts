@@ -38,6 +38,7 @@ export interface DailyFritzSetOverlayViewModel {
   /** Bare ordinal rank for the dossier stat grid, e.g. "1st". */
   rankShort?: string | null;
   shareDate?: string;
+  shareRunDate?: string;
   shareTier?: string;
   shareRating?: number;
   shareStreak?: number;

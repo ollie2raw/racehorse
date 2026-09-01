@@ -75,17 +75,13 @@ export function RushResultsView({
       shareable
         ? buildRushShareText({
             score: serverScore,
-            solved,
-            stages: stageRows.map(({ stage, done, total }) => ({
-              label: stage.label,
-              done,
-              total,
-            })),
+            solved: solved ?? 0,
+            puzzles: results.map((r) => ({ solved: r.solved })),
             secondsBanked,
-            playedAt: completion?.run.endedAt ?? completion?.run.startedAt ?? null,
+            runDate: completion?.run.runDate,
           })
         : '',
-    [shareable, serverScore, solved, stageRows, secondsBanked, completion],
+    [shareable, serverScore, solved, results, secondsBanked, completion],
   );
 
   const [shareDone, setShareDone] = useState(false);

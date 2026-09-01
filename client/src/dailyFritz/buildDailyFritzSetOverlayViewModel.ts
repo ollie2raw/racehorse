@@ -259,6 +259,7 @@ export function buildDailyFritzSetOverlayViewModel(
       resultValue: setWonPlayer ? 'Victory' : 'Defeat',
       rankValue: formatOrdinalPlace(setOverlay.rank),
       shareDate: formatDateLabel(context.activeRunDate ?? context.todayRunDate ?? setOverlay.setResult.run_date ?? ''),
+      shareRunDate: context.activeRunDate ?? context.todayRunDate ?? setOverlay.setResult.run_date,
       shareTier: titleCaseTier(context.activeFritzTier ?? context.todayFritzTier ?? ''),
       shareRating: typeof profileRating === 'number' && Number.isFinite(profileRating) ? Math.round(profileRating) : undefined,
       shareStreak: context.todayStreak ?? 0,
