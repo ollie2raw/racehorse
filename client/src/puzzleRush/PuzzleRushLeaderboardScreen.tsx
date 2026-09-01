@@ -200,18 +200,22 @@ export function PuzzleRushLeaderboardScreen({
     [rows],
   );
 
+  // Only today's official run is shareable, and only what the player actually
+  // posted today — not their all-time best. `selfRow` under the Today filter is
+  // the caller's row on `data.daily`, so it exists iff they have an official
+  // run today.
   const shareText = useMemo(() => {
-    if (filter !== 'today' || !data?.personalBest) return '';
+    if (filter !== 'today' || !selfRow || !data) return '';
     const puzzleNumber = calculatePuzzleNumber(data.runDate);
-    const emojiBoxes = Array(data.personalBest.puzzlesSolved).fill('🟩').join('');
+    const emojiBoxes = Array(selfRow.puzzlesSolved).fill('🟩').join('');
     return [
       `Racehorse Puzzle Rush #${puzzleNumber}`,
       emojiBoxes,
       '',
-      `${data.personalBest.puzzlesSolved} solved`,
+      `${selfRow.puzzlesSolved} solved`,
       SITE_DOMAIN,
     ].filter(Boolean).join('\n');
-  }, [data, filter]);
+  }, [data, filter, selfRow]);
 
   const handleShareResult = useCallback(() => {
     if (!shareText) return;
@@ -259,7 +263,7 @@ export function PuzzleRushLeaderboardScreen({
                     <span aria-hidden>←</span>
                     Puzzle Rush
                   </button>
-                  {filter === 'today' && data?.personalBest ? (
+                  {shareText ? (
                     <button
                       type="button"
                       className="dfl-btn dfl-btn--accent"
