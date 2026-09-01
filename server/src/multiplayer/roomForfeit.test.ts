@@ -443,12 +443,18 @@ describe('tournament forfeit apply durability (G2)', () => {
     vi.useFakeTimers();
     const room = seedTournamentRoom('TFOR4');
     let resolveApply!: () => void;
-    applyMatchResultMock.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveApply = resolve;
-        }),
-    );
+    let signalApplyEntered!: () => void;
+    // Resolves exactly when applyMatchResult is entered — deterministic, no
+    // dependence on how many async hops precede the retry loop.
+    const applyEntered = new Promise<void>((resolve) => {
+      signalApplyEntered = resolve;
+    });
+    applyMatchResultMock.mockImplementation(() => {
+      signalApplyEntered();
+      return new Promise<void>((resolve) => {
+        resolveApply = resolve;
+      });
+    });
 
     const io = makeIo();
     const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
@@ -458,7 +464,8 @@ describe('tournament forfeit apply durability (G2)', () => {
       userId: 'u1',
     });
 
-    await Promise.resolve();
+    await applyEntered;
+    expect(applyMatchResultMock).toHaveBeenCalledTimes(1);
     expect(room.tournamentForfeitApplyStatus).toBe('pending');
     expect(room.abandonedAt).toBeUndefined();
     expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());

@@ -3,6 +3,7 @@ import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { MatchRow } from './types';
+import { isTournamentRoomCode, makeTournamentRoomCode } from './tournamentRoomCode';
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
 
@@ -31,23 +32,9 @@ export type DispatchTournamentMatchOptions = {
   emitIfAlreadyReady?: boolean;
 };
 
-function makeTournamentRoomCode(match: MatchRow): string {
-  const short = match.tournament_id.replace(/-/g, '').slice(0, 6).toUpperCase();
-  return `T${short}R${match.round}M${match.match_number}`;
-}
-
-/**
- * True for codes shaped like {@link makeTournamentRoomCode} output. Kept beside
- * the generator so the two cannot drift.
- *
- * Used by the room:join ACL to decide whether a code is worth a tournament
- * lookup: a restarted server rehydrates a room shell without
- * `scheduledTournamentMatchId` (it is not persisted), so the in-memory field
- * alone cannot be trusted to identify a tournament room.
- */
-export function isTournamentRoomCode(code: string): boolean {
-  return /^T[0-9A-F]{6}R[1-3]M[1-4]$/.test(code.trim().toUpperCase());
-}
+// Room-code generator + recognizer live in a dependency-free leaf module now
+// (the authz layer needs the recognizer without the persistence graph).
+export { isTournamentRoomCode, makeTournamentRoomCode };
 
 export function isBotUserId(userId: string | null | undefined): boolean {
   return typeof userId === 'string' && userId.startsWith('bot:fritz:');

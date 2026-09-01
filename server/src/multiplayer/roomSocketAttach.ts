@@ -10,8 +10,8 @@ import {
   type Room,
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
-import { fetchMatchById, fetchMatchByRoomCode } from '../scheduledTournament/persistence';
 import { isTournamentRoomCode } from '../scheduledTournament/matchDispatch';
+import { authorizeMatchParticipant, type MatchParticipantAuthz } from '../scheduledTournament/tournamentAuth';
 import { ensureRoomHydrated } from './roomLivePersistence';
 import {
   isTerminalHydrationError,
@@ -367,18 +367,28 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     if (via === 'room:join') {
       const knownTournamentMatchId = existingRoom.scheduledTournamentMatchId ?? null;
       if (knownTournamentMatchId || isTournamentRoomCode(roomCode)) {
-        const assignedMatch = knownTournamentMatchId
-          ? await fetchMatchById(knownTournamentMatchId).catch(() => null)
-          : await fetchMatchByRoomCode(roomCode).catch(() => null);
-        const isTournamentRoom = Boolean(knownTournamentMatchId || assignedMatch);
-        const isAssignedPlayer = Boolean(
-          userId &&
-            assignedMatch &&
-            (assignedMatch.player1_id === userId || assignedMatch.player2_id === userId),
-        );
-        if (isTournamentRoom && !isAssignedPlayer) {
+        // A read failure here is treated as "couldn't resolve the match" — same
+        // as #91's `.catch(() => null)`: fail closed when we have a match-id
+        // marker, fall through otherwise.
+        const authz = await authorizeMatchParticipant(
+          userId ?? null,
+          knownTournamentMatchId ? { matchId: knownTournamentMatchId } : { roomCode },
+          { allowCompleted: true },
+        ).catch((): MatchParticipantAuthz => ({ ok: false, code: 'match_not_found' }));
+        // Fail closed when we know this is a tournament room (a match id marker,
+        // or a resolved bracket row). A bare code-shape match with no row is not
+        // a tournament room — let the ordinary private join proceed.
+        //
+        // A regex-shaped code with no backing match row falls through to
+        // "treat as ordinary private room" (unchanged from #91): an intentional
+        // tradeoff accepting the ambiguity between a coincidental code collision
+        // and a stale/deleted tournament match, rather than locking out a real
+        // private room that happens to match the pattern.
+        const codeShapeOnlyMiss =
+          !authz.ok && authz.code === 'match_not_found' && !knownTournamentMatchId;
+        if (!authz.ok && !codeShapeOnlyMiss) {
           log.info(
-            { roomCode, userId: userId ?? null, via, matchResolved: Boolean(assignedMatch) },
+            { roomCode, userId: userId ?? null, via, authzCode: authz.code },
             'join rejected: not a tournament participant',
           );
           throw new Error('not_match_participant');
