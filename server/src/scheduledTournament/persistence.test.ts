@@ -284,6 +284,67 @@ describe('fetchActiveAssignedMatchForUser', () => {
     vi.useRealTimers();
   });
 
+  it('prefers a match the player has already joined over a newer-scheduled one (T-11)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(ACTIVE_TOURNAMENT_NOW);
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const joinedTournamentId = '22222222-2222-4222-8222-222222222222';
+    const newerTournamentId = '33333333-3333-4333-8333-333333333333';
+
+    const baseMatch = {
+      round: 1,
+      match_number: 1,
+      player2_id: 'bot:fritz:x:1',
+      winner_id: null,
+      status: 'ready' as const,
+      ready_at: new Date().toISOString(),
+      ready_deadline_at: new Date(Date.now() + 60_000).toISOString(),
+      started_at: null,
+      completed_at: null,
+      player2_joined_at: new Date().toISOString(),
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: 'standard' as const,
+      player1_score: null,
+      player2_score: null,
+    };
+
+    supabaseFetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('scheduled_tournament_matches')) {
+        return [
+          // Older tournament, but the player has entered this room.
+          { ...baseMatch, id: 'match-joined', tournament_id: joinedTournamentId,
+            player1_id: userId, room_code: 'TJOINR1M1', player1_joined_at: new Date().toISOString() },
+          // Newer tournament, player has not joined.
+          { ...baseMatch, id: 'match-newer', tournament_id: newerTournamentId,
+            player1_id: userId, room_code: 'TNEWR1M1', player1_joined_at: null },
+        ];
+      }
+      if (url.includes(`id=eq.${encodeURIComponent(joinedTournamentId)}`)) {
+        return [{ id: joinedTournamentId, scheduled_start: '2026-05-17T02:00:00.000Z',
+          registration_open_at: '2026-05-17T01:30:00.000Z', registration_close_at: '2026-05-17T01:58:00.000Z',
+          status: 'in_progress', format: 'single_elimination', win_target: 30, max_players: 8,
+          winner_id: null, created_at: '2026-05-17T00:00:00.000Z' }];
+      }
+      if (url.includes(`id=eq.${encodeURIComponent(newerTournamentId)}`)) {
+        return [{ id: newerTournamentId, scheduled_start: '2026-05-17T02:30:00.000Z',
+          registration_open_at: '2026-05-17T02:00:00.000Z', registration_close_at: '2026-05-17T02:28:00.000Z',
+          status: 'in_progress', format: 'single_elimination', win_target: 30, max_players: 8,
+          winner_id: null, created_at: '2026-05-17T00:30:00.000Z' }];
+      }
+      return [];
+    });
+
+    const { fetchActiveAssignedMatchForUser } = await import('./persistence');
+    const result = await fetchActiveAssignedMatchForUser(userId);
+
+    expect(result?.match.id).toBe('match-joined');
+    expect(result?.tournament.id).toBe(joinedTournamentId);
+    vi.useRealTimers();
+  });
+
   it('does not recover matches from tournaments past the active window', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-17T06:00:00.000Z'));

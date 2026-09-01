@@ -479,7 +479,32 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
     return true;
   });
 
+  if (filtered.length > 1) {
+    // A user with 2+ concurrently-active assigned matches is an anomaly, not a
+    // normal state: within one tournament the atomic completion RPC (T-INV-1..5)
+    // guarantees exactly one active match, so this only happens across two
+    // tournaments whose active windows overlap. Warn so it is visible — this is
+    // the kind of anomaly gap T-15 flags as currently having no metric/alert.
+    log.warn({
+      userId,
+      count: filtered.length,
+      matches: filtered.map(({ match, tournament }) => ({
+        tournamentId: tournament.id,
+        matchId: match.id,
+        status: match.status,
+        scheduledStart: tournament.scheduled_start,
+        humanJoined: Boolean(humanJoinedAt(match, userId)),
+      })),
+    }, 'multiple active assigned matches for one user (see HARDENING_PLAN.md T-11 / T-15)');
+  }
+
   filtered.sort((a, b) => {
+    // A room the player has actually entered is the strongest signal of "the
+    // match I'm in right now" — stronger than which tournament is newest.
+    const joinWeight = (entry: { match: MatchRow }) =>
+      humanJoinedAt(entry.match, userId) ? 0 : 1;
+    const joinDiff = joinWeight(a) - joinWeight(b);
+    if (joinDiff !== 0) return joinDiff;
     const scheduledDiff =
       Date.parse(b.tournament.scheduled_start) - Date.parse(a.tournament.scheduled_start);
     if (scheduledDiff !== 0) return scheduledDiff;
