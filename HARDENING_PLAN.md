@@ -12,7 +12,7 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament → Steps 1–4 COMPLETE. Step 5 (tests prove closure) IN PROGRESS — PR-E + PR-F merged; PR-G (local pg16 script) is the last piece.**
+**Tournament (System 1) → Steps 1–5 COMPLETE. The tournament hardening is closed. Next: System 2 (Multiplayer rooms) Step 1 — its own session, awaiting sign-off.**
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
@@ -57,10 +57,14 @@ focus" line, then the section for the system in progress.
     reconciler survives `advance_target_missing`, cold-wake catch-up identical
     across 3 processing orders. **Scope: Node orchestration, NOT DB
     serialization** — that's PR-G.
-  - **PR-G** — local-only pg16 script (real `SELECT … FOR UPDATE`
-    serialization + RLS greenfield apply) + committed RLS diagnostic `.sql`.
-    NOT started.
-  The tournament system is not "closed" until PR-G passes.
+  - **PR-G** — local-only pg16 script — **MERGED PR #106 (2026-09-01)**.
+    `scripts/tournament-db-verify.sh` (hermetic throwaway pg16): greenfield
+    apply of the curated migration chain, two-session `FOR UPDATE`
+    serialization (guards T-3/T-4), RLS registrations diagnostics,
+    `assert_security_posture()` plant-a-violation. Plus
+    `supabase/tests/rls_registrations_lockdown.sql` + `docs/ops/tournament-db-verify.md`.
+    Not CI (no pg service / no migration runner).
+  **The tournament system (System 1) is closed.**
 
 **Infra / liveness — settled 2026-08-31.** T-17 CLOSED (UptimeRobot re-typed
 ICMP→HTTP on `/ping` @ 5 min + `SERVER_URL` set; both verified). T-18 + T-19 =
@@ -1033,16 +1037,22 @@ proves it (Step 5 harness).
     run through **≥2 different processing orders**, asserting identical end
     state via `assertBracketConsistent` (addition #3 — a fixed order only
     proves that order).
-- **PR-G — local-only pg16 script (`scripts/`).** Apply every
-  `supabase/migrations/*.sql` in order to a scratch pg16, then: two `psql`
-  sessions both `SELECT … FOR UPDATE` the same match row and each call
-  `complete_tournament_match` — assert the second blocks then no-ops (the
-  **only** test of Postgres-level serialization; the PR-A verification was run
-  once and thrown away). Then the RLS greenfield check: the
-  `2026-08-30_…rls_lockdown.sql` self-assertion must not have rolled back +
-  re-run its 3 diagnostics. Committed alongside `supabase/tests/rls_registrations_lockdown.sql`
-  (the diagnostics as a runbook artifact) + a `docs/ops/` entry. **Not in CI**
-  — no Postgres service, no migration runner.
+- **PR-G — local-only pg16 script (`scripts/tournament-db-verify.sh`) — DONE, PR #106.**
+  A hermetic throwaway pg16 (own `initdb` in a temp dir, deleted on exit;
+  refuses to run if any env/arg points at a remote or Supabase target). Applies
+  a **curated** tournament migration chain (not all 42 — the full history needs
+  more of Supabase than a shim provides) + `shim.sql` (`auth` schema, `auth.users`,
+  `auth.uid()`, the 3 roles). Then: two `psql` sessions each call
+  `complete_tournament_match` on the same match with **different winners** — B
+  blocks on A's row lock (≥1s, measured), then no-ops (`applied:false` /
+  `conflict:true`); bracket then shows one completion + one advancement. The
+  **only** test of Postgres-level serialization — guards T-3/T-4; the PR-A
+  verification was run once and thrown away. Then the RLS greenfield check (the
+  `2026-08-30` lockdown self-assert must not have rolled back + its 3
+  diagnostics clean) and an `assert_security_posture()` plant-a-violation.
+  Committed with `supabase/tests/rls_registrations_lockdown.sql` and
+  `docs/ops/tournament-db-verify.md`. **Not in CI** — no Postgres service, no
+  migration runner (which is *why* it exists).
 
 ## 1.7 Checklist
 
@@ -1086,10 +1096,10 @@ proves it (Step 5 harness).
 - [x] T-17 — **CLOSED** — root cause was a **mis-typed ICMP UptimeRobot monitor** (not a missing pinger). Fixed to HTTP(s) → `/ping` @ 5 min, 100 % uptime verified; `SERVER_URL` set, `GET /ready` confirms `true`, self-ping active as second signal. — D-4, changelog 2026-08-31
 - [ ] T-18, T-19 — **ACCEPTED RISK at current scale** (D-4 / §1.3). Not fixed now; revisit at paid-tier upgrade.
 
-### Step 5 — Tests prove closure — **IN PROGRESS.** PR-E + PR-F merged; PR-G (local pg16 script) is the last piece.
+### Step 5 — Tests prove closure — **COMPLETE 2026-09-01** (PR-E/F/G merged). System 1 (Tournament) is fully closed.
 - [x] `assertBracketConsistent` helper written + wired into engine tests — **PR #103 / PR-E (2026-09-01)**. `assertBracketConsistent.testkit.ts` — observable consequences of T-INV-1/2/5/6/7/8/10 + the D-3 spurious-conflict-log check. 12 unit tests; wired into `engine.test.ts`'s two full-bracket tests. PR-F and PR-G consume it.
 - [x] **PR-F** — Concurrency + recovery harness — **PR #104 / PR-F (2026-09-01)**. `concurrencyRecoveryHarness.test.ts` — redundant producers 1–3 (same-winner quiet path: 0 conflict logs; conflicting-winner loud path: first wins + one D-3 log per disagreement), "RPC committed / Node crashed before dispatch" → `recoverTournamentMatches` re-dispatches the orphaned `ready` target, reconciler tick survives `advance_target_missing` on one match and still resolves the next, cold-wake catch-up produces an identical bracket end-state across forward / reversed / shuffled processing orders. `vi.mock('../logger')` → real captured log output (not fixtures). **Explicitly proves Node orchestration, not Postgres `FOR UPDATE` serialization — that is PR-G.**
-- [ ] **PR-G** — `scripts/` local-only pg16 script: apply all migrations in order, two-session `SELECT … FOR UPDATE` race (the only test of *Postgres-level* serialization; the PR-A verification was thrown away), RLS greenfield-apply + diagnostics. Plus `supabase/tests/rls_registrations_lockdown.sql` (the 3 diagnostic queries as a committed runbook artifact). No CI (no pg service / no migration runner).
+- [x] **PR-G** — **PR #106 (2026-09-01)**. `scripts/tournament-db-verify.sh` — a hermetic throwaway pg16 instance (its own `initdb`, deleted on exit; aborts if any env/arg points at a remote/Supabase target). Checks: (1) greenfield apply of the curated tournament migration chain (`shim.sql` + 10 files, in order; the 2026-08-30 lockdown self-asserts); (2) two `psql` sessions call `complete_tournament_match()` on one match with different winners — B blocks on A's row lock (>= 1s, measured), then takes the `applied:false`/`conflict:true` branch; bracket then shows one completion + one advancement, loser eliminated once (**the real Postgres-level `FOR UPDATE` proof — guards T-3/T-4**; the PR-A verification that proved this was run once and thrown away); (3) the three RLS registrations diagnostics come back clean on the fresh schema; (4) `assert_security_posture()` returns `hard_fail_count` 0 clean, 1 after a planted `disable row level security` (naming the table), 0 after re-enable. Committed alongside `supabase/tests/rls_registrations_lockdown.sql` (paste-into-SQL-editor artifact) and `docs/ops/tournament-db-verify.md`. Not CI — no Postgres service, no migration runner (which is *why* it exists). Runs green locally, 3× no flake. **Note:** the `FOR UPDATE` check uses fixed sleeps (1.5s head start / 1.0s threshold / 3s hold) — a future flake is a timing-margin issue first, not automatically a lock regression.
 
 ---
 
@@ -1158,4 +1168,5 @@ registry.
 | 2026-09-01 | **Step 4 / PR-D — one room-kind classifier, T-12 CLOSED (PR #102).** `server/src/multiplayer/roomKind.ts` — `roomKind(room) → private \| matchmaking \| scheduled_tournament \| legacy_league` + `isScheduledTournamentRoom` / `isLegacyLeagueRoom` / `isAnyTournamentRoom`. Replaced 4 disagreeing ad-hoc predicates. `roomSession`'s `isTournamentRoom` (= `cfg.tournamentId`) → `isLegacyLeagueRoom(room)`, value-identical, with a **loud comment** on the game-over branch forbidding the widening to `isAnyTournamentRoom` (that branch is the sole path a played-to-completion scheduled-tournament result takes to the bracket). `shouldFinalizeTour` → `isLegacyLeagueRoom`. `resolveMpAuthoritySourceType` / `inferLiveSessionSourceType` reimplemented on `roomKind`. **Verified behavior change (own PR bullet):** `game:rematch` was blocked only for legacy-league rooms; traced that a crafted rematch on a scheduled-tournament room in the post-game-over cleanup window started a fresh game floating free of the (idempotency-protected) bracket — now blocked via `isAnyTournamentRoom`. Tests: `roomKind.test.ts` (precedence + helpers), `roomSession.gameOverRouting.test.ts` (scheduled→onGameOver / legacy→finalizer / private→onGameOver). `tsc` clean, 198 files / 1130 server tests, no new console/lint. **Step 4 COMPLETE.** Only **Step 5** (tests prove closure) remains for the tournament system. |
 | 2026-09-01 | **Step 5 scoped + PR-E merged (PR #103).** Findings from a read-only pass: (1) "producers 1-3" splits into a CI in-memory-port test (proves Node orchestration handles a redundant producer — not DB serialization) and a local pg16 two-session `FOR UPDATE` test (the real serialization proof; PR-A's was thrown away). (2) The original "kill `applyMatchResult` mid-sequence" crash test is obsolete — PR-A made completion+elimination+advancement one transaction; reframed to "RPC committed, Node post-processing didn't" → recovery re-dispatches. (3) `assertBracketConsistent` did not exist — written from scratch. (4) T-1 is prod-verified + the migration self-asserts, but there is no regression / greenfield check. Split into **PR-E** (helper, CI), **PR-F** (concurrency + recovery harness, CI), **PR-G** (local pg16 script + committed RLS diagnostic `.sql`, not CI). Additions from review: helper also asserts no spurious `tournament_match_winner_conflict` log (D-3); PR-F's cold-wake catch-up runs ≥2 processing orders; PR-G stays in scope this pass. **PR-E (`assertBracketConsistent.testkit.ts`) merged** — T-INV-1/2/5/6/7/8/10 consequences + the D-3 log check, 12 unit tests, wired into `engine.test.ts`. `tsc` clean, 199 files / 1142 tests. §1.6 rewritten with the E/F/G plan. |
 | 2026-09-01 | **Step 5 / PR-F merged (PR #104).** `concurrencyRecoveryHarness.test.ts` — 6 tests: redundant producers 1–3 on one match (same-winner ⇒ one completion / one advancement / 0 `tournament_match_winner_conflict` logs; conflicting-winner ⇒ first-recorded wins + one D-3 warn per disagreement with correct recorded/attempted ids), "RPC committed but Node crashed before dispatch" ⇒ `recoverTournamentMatches` dispatches the orphaned `ready` target, reconciler tick logs `tournament_advance_target_missing` and continues to the next match, cold-wake catch-up identical end-state across forward / reversed / shuffled orders (§1.4.8 addition #3). `vi.mock('../logger')` captures real output so the D-3 assertions are genuine (the `engine.test.ts` wiring from PR-E was a placeholder). **Scope boundary stated in the file header and PR body: proves Node orchestration, not Postgres `FOR UPDATE` — that is PR-G.** `tsc` clean, 200 files / 1148 tests, `grep console.` clean. Only **PR-G** remains before the tournament system is "closed". |
+| 2026-09-01 | **Step 5 / PR-G merged (PR #106) — SYSTEM 1 (TOURNAMENT) CLOSED.** `scripts/tournament-db-verify.sh` + `scripts/tournament-db-verify/{shim,seed}.sql` — a hermetic local pg16 verification (own `initdb` in a temp dir, deleted on exit; aborts if `PGHOST`/`DATABASE_URL`/`SUPABASE_*_URL`/any arg points at a remote or Supabase target — proven). Four stages: greenfield apply of the curated 10-file tournament migration chain (the 2026-08-30 lockdown self-asserts); two-session `SELECT … FOR UPDATE` — session B blocks on A's row lock >= 1s then takes `applied:false`/`conflict:true`, bracket shows one completion + one advancement (**the Postgres-level proof PR-F structurally can't give — guards T-3/T-4**; the PR-A verification was thrown away); the three RLS registrations diagnostics clean on the fresh schema; `assert_security_posture()` 0 -> plant `disable row level security` -> 1 (names the table) -> re-enable -> 0. Plus `supabase/tests/rls_registrations_lockdown.sql` (paste-into-SQL-editor artifact) and `docs/ops/tournament-db-verify.md`. Not CI (no pg service / no migration runner — which is why it exists). Green locally 3x, no flake; the `FOR UPDATE` timing margin is sleep-based (flake = timing issue first, not a lock regression). **Steps 1–5 complete. The tournament hardening is done.** Next: System 2 (Multiplayer rooms) Step 1 audit — its own session, awaiting human sign-off. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
