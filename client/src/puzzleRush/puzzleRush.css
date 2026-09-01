@@ -713,9 +713,16 @@
  * Rush is a blue mode — its hub, HUD and Start button all run on
  * --tier-standard — so the board takes the same accent rather than Fritz's
  * gold. Retinting the accent block is all it takes; every accented element on
- * the board reads from it.
+ * the board reads from it — the derived --dfl-accent-* vars re-resolve from
+ * --dfl-accent-rgb at their use site.
+ *
+ * Selector is .dfl-page.pr-board, not bare .pr-board: Fritz sets these on
+ * .dfl-page, an equal-specificity selector, so a bare .pr-board only wins on
+ * stylesheet order — and dailyFritzLeaderboardBoard.css is imported by three
+ * components, so bundle order is not ours to rely on. The extra class makes
+ * the win deterministic.
  */
-.pr-board {
+.dfl-page.pr-board {
   --dfl-accent: var(--tier-standard);
   --dfl-accent-rgb: 59, 130, 246;
   --dfl-accent-ink: var(--bg-obsidian);
