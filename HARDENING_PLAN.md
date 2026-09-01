@@ -12,7 +12,15 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament (System 1) → Steps 1–5 COMPLETE. The tournament hardening is closed. Next: System 2 (Multiplayer rooms) Step 1 — its own session, awaiting sign-off.**
+**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 (current-state audit §2.1) WRITTEN 2026-09-01 — awaiting human sign-off before Step 2 (invariants + gap list). One Step 1 follow-up open: human to verify `room_live_sessions` / `room_match_logs` RLS against the live DB (§2.7).**
+
+- **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
+  (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
+  seat/identity binding (§2.1.4), concurrency windows MP-1..MP-8 (§2.1.5),
+  game-over/forfeit sequence (§2.1.6), authz map (§2.1.7), recovery (§2.1.8),
+  move-log verification (§2.1.9), prior art (§2.1.10). **Do not start Step 2
+  until the human signs off and the RLS follow-up is done.** Gap candidates
+  parked in §2.3 (not risk-ranked yet — that's Step 2).
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
@@ -1105,10 +1113,487 @@ proves it (Step 5 harness).
 
 # System 2: Multiplayer rooms
 
-**Not started.** Begins after System 1 Steps 1–3 are complete. Scope preview:
-`server/src/multiplayer/**`, `server/src/rooms.ts`, `server/src/realtime/**`,
-room lifecycle / seat allocation / reconnection / abandon / forfeit /
-move-log verification / spectator attach.
+Scope: `server/src/rooms.ts`, `server/src/multiplayer/**`,
+`server/src/realtime/gameOverPersistence.ts`, `server/src/roomEvents.ts`, and
+the room-facing parts of `server/src/matchmaking/**` and
+`server/src/spectator/**`. Two-player live dominoes rooms — private (code-share),
+matchmaking (quick match), and scheduled-tournament rooms (System 1 seats its
+matches here). Room lifecycle, seat allocation, reconnection, abandon/forfeit,
+move-log verification, spectator attach.
+
+> Not in scope for this section: the **bracket** side of scheduled tournaments
+> (System 1, closed) — §2.1 covers only the room→bracket handoff. The legacy
+> league (`server/src/league/**`, `legacyTournament/`) is System 4; §2.1 notes
+> where the game-over path still branches into it but does not audit it.
+
+> **Structural note — this system is not DB-authoritative.** Unlike System 1
+> (Postgres is the source of truth, the RPC is the sink), a multiplayer room's
+> authority is the **in-memory `Room` object in `rooms.ts`**. The DB tables
+> (`room_live_sessions`, `room_match_logs`, `room_command_receipts`,
+> `matchmaking_matches`) are a durability/hydration/idempotency backing, not the
+> record. This changes the shape of the audit: the concurrency analysis is about
+> in-process interleaving and process-restart recovery, not row locks, and it is
+> **wholly dependent on the single-instance deployment fact in §2.1.1**.
+
+## 2.1 Current-state map
+
+Status: **written 2026-09-01, Step 1.** Read-only investigation. No fixes. The
+gap list (§2.3) and invariants (§2.2) are not written yet — this section only
+maps what is there.
+
+### 2.1.1 Deployment topology — the assumption everything else rests on
+
+**Fact (human-confirmed via the Render dashboard, 2026-08-31, HARDENING_PLAN
+D-2 addendum):** the server runs as **exactly one process** on Render's free
+tier ($0, 0.1 CPU, 512 MB). The free tier **cannot** horizontally scale.
+
+Corroborating evidence in the repo:
+
+- `index.ts` (~508) constructs `new Server(server, { … })` with **no socket.io
+  adapter** — no `@socket.io/redis-adapter`, no `createAdapter` call anywhere.
+  The default in-memory adapter means every `io.to(room).emit(...)` is
+  process-local: a second instance could not deliver broadcasts to the first
+  instance's sockets.
+- All room state is a module-level `Map` or similar in-process structure, none
+  of it shared: `rooms` (`rooms.ts`), the roster store, `graceTimersByRoomSeat`
+  (`disconnectGrace.ts`), the `withRoomGameplayLock` chains
+  (`roomGameplayLock.ts`), `nextHandStartsByRoom` (`rooms.ts`), the spectator
+  registry (`spectatorRegistry.ts`), `inFlightHydrationByRoomCode`
+  (`roomLivePersistence.ts`), the matchmaking registries.
+- `index.ts` (~887) — the port-in-use guard message treats a bound port as
+  "an existing Racehorse server instance", i.e. one per host.
+- System 1's scheduler singleton (D-7) is already predicated on this.
+
+**Consequence for this audit:** every concurrency window in §2.1.5 is analysed
+as *in-process async interleaving*. A second instance would give each instance a
+disjoint view of every room (double seat allocation, split-brain game state,
+double forfeit, broadcasts that reach only half the clients) — a **different and
+larger** failure class not covered here.
+
+**Revisit trigger (same status as D-7):** if the Render plan changes to anything
+that can run 2+ instances, or a dedicated worker/process split is introduced,
+§2.1.5 and §2.2 must be re-derived before that change ships. The in-memory
+`Room` Map would need to move behind shared storage (or a sticky-routing +
+per-room-owner model), and the game-over / forfeit / hydration paths would each
+need a cross-instance guard. Flag it in **Current focus** the moment it is on
+the table.
+
+### 2.1.2 Data model — in-memory `Room` + the tables that back it
+
+**The authority: `Room` (`rooms.ts`, ~57–125).** Held in `const rooms =
+new Map<RoomCode, Room>()`. Lost entirely on process restart; reconstructed
+lazily per room from `room_live_sessions` on the next attach (§2.1.8 — there is
+**no** boot-time recovery sweep, unlike System 1).
+
+Load-bearing fields (the ones authz / recovery / idempotency / bracket-handoff
+decisions read):
+
+| Field | Meaning | Read by |
+|---|---|---|
+| `code` | 5-char room code (`makeCode`, `A–Z2–9` minus ambiguous) or a reserved code (matchmaking / tournament) | everything |
+| `players: string[]` | **synthetic `playerSeatId` values** in engine seat order — never socket ids, never user ids (`allocatePlayerSeatId()`) | seat/authz checks, engine |
+| `state: GameState \| null` | authoritative game state; `null` pre-start | gameplay, masking, game-over detection |
+| `config: RoomConfig` | `winningScore`, `tilesPerPlayer`, `fritzTier`, **`tournamentId`** (legacy league only), `tournamentMatchId`, `tournamentMode` | `roomKind`, scoring, legacy-league game-over |
+| `matchId` | stable id for this match instance; `room_match_logs` PK, ranked-game `sourceMatchId` | archive, ranked idempotency |
+| `matchmakingMatchId?` | set ⇒ matchmaking room; drives `matchmaking_matches` update on end + spectator discovery | game-over, spectator projection |
+| `matchmakingParticipantUserIds?` | M4 seat ACL — only these two userIds may attach | `attachSocketToTrackedRoom` |
+| `scheduledTournamentMatchId?` / `scheduledTournamentId?` / `scheduledTournamentBotTier?` | set ⇒ scheduled-tournament room; the routing key to System 1's bracket. **Not persisted in the room shell** (§2.1.8) | game-over routing, `room:join` tournament ACL, `roomKind` |
+| `abandonedAt?` / `abandonedByUserId?` / `abandonedWinnerUserId?` / `abandonedReason?` | terminal intentional-leave marker; abandoned rooms are not recoverable | join/gameplay/forfeit guards |
+| `tournamentForfeitApplyStatus?` | `idle\|pending\|succeeded\|failed` — `abandonedAt` for a tournament room is latched **only after** `applyMatchResult` succeeds; `pending`/`failed` block the room without claiming the bracket advanced | join/gameplay/abandon guards |
+| `activeGameOverPersist?` / `gameOverPersistStatus?` | in-flight game-over side-effect promise + `idle\|pending\|succeeded\|failed`; rematch waits on it | rematch handler, `nextHand` |
+| `asyncStateVersion` | bumped on each hand (start/next) to invalidate dangling async closures from a previous game | `startGame`, `nextHand`, live persist |
+| `eventSequence` / `events: RoomMatchEvent[]` | append-only per-room event log; monotonic | persist freshness, spectator feed, `room_match_logs` |
+| `ghostMoveLogs: Record<seatId, GhostMoveLogEntry[]>` / `ghostTurnIndex` | per-seat move transcript — the move-log-verification input (§2.1.9) | game-over verification, ghost service |
+| `durability: RoomDurabilityState` | commit fence + degraded/failed status; gates mutating operations | `roomDurabilityPolicy`, hydration freshness |
+| `disconnectExpiries?: Record<seatId, number>` | count of grace-timer expiries per seat; ≥ 2 ⇒ forfeit | `disconnectGrace` |
+| `preGameDraw?` / `preGameDrawTimer?` | pre-game high-draw state + its timer (in-memory) | match start |
+
+**Room-adjacent in-memory state (not on `Room`, same process-local lifetime):**
+the roster store (`getRoomRoster`/`setRoomRoster` — `RoomPlayer` = `{id: seatId,
+socketId, username, userId}`, this is where the **seatId ↔ userId** binding
+actually lives), reconnect-seat holds, `graceTimersByRoomSeat`, gameplay-lock
+chains, `nextHandStartsByRoom`, spectator sessions, in-flight hydration promises.
+
+**Room classification — `roomKind()` (`multiplayer/roomKind.ts`, T-12 / PR-D):**
+one classifier, precedence order:
+
+```
+scheduledTournamentMatchId  → 'scheduled_tournament'
+config.tournamentId         → 'legacy_league'
+matchmakingMatchId          → 'matchmaking'
+otherwise                   → 'private'
+```
+
+Helpers: `isScheduledTournamentRoom`, `isLegacyLeagueRoom`, `isAnyTournamentRoom`
+(cross-cutting: telemetry, rematch block). The game-over persist path in
+`gameOverPersistence.ts` deliberately reads `room.scheduledTournamentMatchId`
+**directly** (not `roomKind`) because that branch *is* the routing to bracket
+advancement — see the loud comment there and §1.3 T-12.
+
+**DB tables:**
+
+| Table | Migration? | Purpose | Key columns | RLS |
+|---|---|---|---|---|
+| `room_live_sessions` (`/rest/v1/room_live_sessions`) | **NONE — unmanaged schema** | hydration shell + full unmasked snapshot for reconnect/restart recovery. Debounced upsert on `room_code` while the room is live; deleted on terminal finalize | `room_code`, `match_id`, `status` (`lobby\|playing\|hand_over\|game_over\|abandoned`), `source_type` (`private\|matchmaking\|tournament`), `game_state` (jsonb, **unmasked** — `assertUnmaskedGameStateForPersistence`), `game_state_sequence`, `room_shell` (jsonb, incl. `durabilityCommit` fence), `engine_seat_ids`, `roster` (jsonb, **incl. `userId`**), `events` (jsonb), `last_event_sequence`, `participant_user_ids`, `matchmaking_match_id`, `scheduled_tournament_id`, `scheduled_tournament_match_id`, `started_at`/`updated_at`/`created_at` | **UNVERIFIED — must check live DB.** If client roles can `SELECT` this table they can read live opponent hands (`game_state`) and full transcripts (`events`). No migration ⇒ third instance of the "reviewed migration sitting unapplied / schema with no posture check" pattern from System 1. |
+| `room_match_logs` (`/rest/v1/room_match_logs`) | **NONE — unmanaged schema** | terminal archive (one row per finished/abandoned match); read for terminal-join routing and match history | `match_id` (PK, `on_conflict=match_id`), `room_code`, `status` (`completed\|abandoned`), `event_log_version`, `last_event_sequence`, `event_count`, `started_at`, `archived_at`, `participant_user_ids`, `participants`, `summary` (jsonb, incl. `rankingOutcome`), `state_snapshot`, `events` | **UNVERIFIED — must check live DB.** Same exposure question for `state_snapshot` / `events`. |
+| `room_command_receipts` (`/rest/v1/room_command_receipts`) | `2026-08-01_room_command_receipts.sql` ✔ | `game:action` idempotency receipts (survive shell trimming; multi-writer diagnostics) | PK `(room_code, player_seat_id, request_id)`, `ack` jsonb, `expires_at`, `match_id` | ✔ RLS enabled, `for all to authenticated using(false) with check(false)` — **service-role writes only, verified in migration.** |
+| `matchmaking_matches` | `2026-05-13_matchmaking.sql` ✔ | matchmaking pairing + outcome; `recordMatchEnd` writes `status`/`winner_id`/rating deltas on game-end/forfeit | (see migration) | (verify in Step 1 follow-up alongside System 4 matchmaking) |
+
+**Tables the game-over path *also* writes** (shared, not room-owned — enumerated
+in §2.1.6): `scheduled_tournament_matches` (via System 1's RPC),
+`ranked_games` + `profiles` (`insertRankedGameIdempotent` /
+`processRealtimeMultiplayerGame`), the ghost tables (`completeGhostGame`),
+`fixtures` + `league_members` (legacy league live-finalize), plus the stats
+match-log and the social activity writer.
+
+### 2.1.3 All state writes (in-memory `Room` + durable)
+
+**In-memory `Room` mutations.** Gameplay-path mutations are serialized per room
+by `withRoomGameplayLock` (`roomGameplayLock.ts` — a per-room promise chain).
+Everything else is not.
+
+| Mutator (`rooms.ts` unless noted) | Mutates | Under gameplay lock? | Durability contract |
+|---|---|---|---|
+| `createRoom` / `createReservedRoom` | new `Room` in the Map | no | `notifyLiveRoomStateCommitted` (best-effort schedule) |
+| `joinRoom` | `room.players.push(seatId)` (2-player cap) | no (called inside `attachSocketToTrackedRoom`) | roster persisted via live-session upsert |
+| `initiatePregameDrawOrStart` / `startGame` | `state`, `preGameDraw`, `asyncStateVersion`, ready sets, event log | **yes** (`initiatePregameDrawOrStartUnlocked` / `startGameUnlocked` wrapped) | `commitLifecycleAfterMutate` — schedule + flush + **rollback + throw `RoomLifecyclePersistUncertainError`** if not durably recoverable |
+| `nextHand` / `readyForNextHand` | `state` (new hand), `nextHandReady`, `lastHandEndedAtMs`, event log; `nextHandStartsByRoom` coalescing entry | **yes** (mark phase) + a detached `advance` chain that re-takes the lock | `commitLifecycleAfterMutate`; the detached advance swallows its own rejection, awaiters surface it |
+| `act` (`MOVE` / `DRAW` / `PASS`) | `state`, `ghostMoveLogs`, `ghostTurnIndex`, event log, `pendingAutoPassNotice`, `pendingForcedDrawBroadcast` | **yes** (`actUnlocked` wrapped) | `notifyLiveRoomStateCommitted` after each commit; `game:action` handler adds `withGameActionIdempotency` + a rollback-on-uncertain path |
+| `disconnectGrace` auto-act | calls `act()` (PASS/DRAW), `disconnectExpiries[seat]++` | via `act()` | flush + `rollbackRoomGameplayCommit` on uncertain, then stall-retry |
+| `applyActiveMatchForfeit` (`roomForfeit.ts`) | `tournamentForfeitApplyStatus`, `abandonedAt`, `abandonedByUserId`, `abandonedReason`, `abandonedWinnerUserId`, event log | **no** | tournament: `abandonedAt` latched only after 4×-retry `applyMatchResult` succeeds; private/mm: latched immediately |
+| `roomSession` `onGameOver` tail | `activeGameOverPersist`, `gameOverPersistStatus`, `matchLogged`, `rankingOutcome` | no (deferred scheduler) | 4-attempt retry ceiling; `markGameOverPersist{Succeeded,Failed}` |
+| `game:rematch` handler | `rematchReady`, then `startGame` (resets `state`, event log) | start is locked; `rematchReady` mutation is not | waits on `gameOverPersistStatus`; archives `room_match_logs` before reset |
+| `leaveTrackedRoom` (`roomSocketAttach.ts`) | `room.players` filter, roster, reconnect seats, event log | no | roster persisted best-effort |
+| `migrateRoomSeat` / roster edits (`roomSession.ts`) | roster `socketId`/`userId`/`username`, `socket.data.{playerId,roomId,userId,username}` | no | in-memory + next live-session upsert |
+| `roomEvents.appendRoomEvent` | `events`, `eventSequence` (monotonic) | inherits caller's lock | persisted with the room |
+
+**Durable writes (all via `supabaseFetch` / PostgREST, service-role key, no
+transactions — one `POST`/`PATCH`/`DELETE` each):**
+
+| Helper | Table | Trigger | Idempotency |
+|---|---|---|---|
+| `schedulePersistLiveRoomSessionForRoom` → debounced `persistLiveRoomSessionNow` | `room_live_sessions` | every committed room mutation while live; forced flush on lifecycle ops + disconnect auto-act + shutdown | upsert on `room_code`; freshness fence in `room_shell.durabilityCommit`; spectator/persist skip when incoming `sequence` < stored |
+| `finalizeAndDeleteLiveRoomSession` / `deleteLiveRoomSession` | `room_live_sessions` | terminal (game over persisted, abandoned) | delete by `room_code` |
+| `persistRoomMatchLog(room, 'completed'\|'abandoned')` | `room_match_logs` | game-over persist success; forfeit; before rematch reset | `on_conflict=match_id` (last-write-wins on the same match id) |
+| `persistRoomCommandReceipt` | `room_command_receipts` | each acked `game:action` | `on_conflict=(room_code,player_seat_id,request_id)`, `resolution=merge-duplicates` |
+| `recordMatchEnd` (`matchmaking/persistence.ts`) | `matchmaking_matches` | game-over (completed) / forfeit | PATCH by `matchId`; no ordering guard noted |
+| game-over side-effects | shared tables | see §2.1.6 | per-helper — some verified (`insertRankedGameIdempotent`), some **unverified** (`appendMatch`, `recordPublicOnlineMatch`, `writeMatchActivity`) |
+
+### 2.1.4 Seat allocation & attach — the identity binding
+
+A socket becomes a seat through **`attachSocketToTrackedRoom`**
+(`roomSocketAttach.ts`), reached by two doors:
+
+- **`room:join`** (`registerRoomJoinHandlers.ts`) — `via: 'room:join'`. Identity
+  from `handlerDeps.resolveSocketIdentity(config)` (validates `authToken` →
+  `userId`, or `null` for a guest).
+- **`tournament:attach_assigned_match`**
+  (`registerTournamentAttachHandlers.ts`) — `via: 'tournament:attach_assigned_match'`;
+  enforces `match.player{1,2}_id === uid` **before** calling attach (§1.1.5 —
+  this path is correctly gated).
+
+A third door, matchmaking, goes through the same function with
+`hydrateMatchmakingRoom: true` and an extra shell-hydration + ACL step.
+
+**`attachSocketToTrackedRoom` sequence** (`roomSocketAttach.ts` ~237–718):
+
+1. `leaveExistingSocketRooms({ exceptRoomCode: roomCode })` — sequential,
+   awaited; forfeits any *other* live seat this socket holds (P4). Re-attaching
+   to the room the socket already occupies is treated as a reconnect (not left).
+2. `ensureRoomHydrated(roomCode)` → `room_live_sessions` load + freshness
+   validation (§2.1.8). Outcomes: `already_in_memory` / `hydrated` /
+   `shell_only` / `not_found` / `persistence_unavailable` /
+   `snapshot_freshness_unknown` / `snapshot_invalid` / `snapshot_stale` — the
+   last few **throw** (fail closed).
+3. Matchmaking shell hydration (if `hydrateMatchmakingRoom` and room not in
+   memory) → `handlerDeps.tryHydrateMatchmakingRoomShell(roomCode, userId)`.
+   `forbidden` ⇒ `throw 'not_match_participant'` (M4).
+4. Terminal-state gates on the in-memory room: `abandonedAt` ⇒ `match_abandoned`
+   (+ archived-terminal routing); `tournamentForfeitApplyStatus` `pending`/`failed`;
+   `state.gameOver` ⇒ `match_completed` (+ archived-terminal routing).
+5. **Matchmaking seat ACL (M4):** if `existingRoom.matchmakingParticipantUserIds`
+   is set and `userId` is not in it ⇒ `throw 'not_match_participant'`. Covers
+   the already-in-memory shell (the hydrate check alone would lapse once a
+   legitimate participant restored the shell).
+6. **`room:join` tournament participant ACL (T-5 / PR-B):** only for
+   `via === 'room:join'`. If `existingRoom.scheduledTournamentMatchId` is set
+   **or** `isTournamentRoomCode(roomCode)` (shape check — tournament codes are a
+   pure function of tournament id + round + match number, guessable from the
+   public bracket), call `authorizeMatchParticipant(userId, {matchId}|{roomCode},
+   {allowCompleted:true})`. Fail closed when a match-id marker or a resolved
+   bracket row exists; a bare code-shape match with **no** backing row falls
+   through to "ordinary private room" (documented intentional tradeoff). No ACL
+   here for `tournament:attach_assigned_match` (already gated upstream).
+7. **Reconnect by userId:** if a roster entry has `player.userId === userId` →
+   `assertRoomDurabilityOperationAllowed(room, 'reconnect_existing_player')` →
+   `migrateRoomSeat(roomCode, existingPlayer.id, socket.id)` **before**
+   disconnecting the old socket, then `room:session:superseded` to the old
+   socket, a 150 ms delay, `oldSocket.disconnect(true)`. Order is deliberate
+   (`resolveActorSeatId` rejects the old socket the instant the roster entry
+   moves — closes the duplicate-tab window).
+8. **Reconnect-hold reclaim:** else, `pruneReconnectSeats(roomCode)` +
+   `identityMatchesReconnectSeat(seat, {username, userId})` → reclaim that seat
+   (prevents a solo-host reconnect from forking a zombie seat and falsely
+   filling the room).
+9. **New seat:** else `allocatePlayerSeatId()` + `joinRoom(roomCode, seatId)`
+   (2-player cap in `rooms.ts joinRoom` — `throw 'Room is full'`).
+10. `socket.join(code)`; set `socket.data.{roomId, username, userId}` +
+    `ensureSocketDataSeat(socket, seatId)`; roster upsert; `room:update` emit.
+11. Matchmaking auto-start (M6): if `matchmakingMatchId && !state` and both
+    seats' sockets are synced (`waitUntilMatchmakingRoomSocketsReady`), run
+    `tryStartMatchIfReady`; a sync timeout aborts + requeues both players
+    (`throw 'match_sync_failed'`).
+12. Best-effort tournament match metadata lookup (opponent name/rating) —
+    never blocks the attach.
+
+**`resolveActorSeatId(roomCode, socket)` (`roomSession.ts` ~206) — the gameplay
+authz primitive:** trusts `socket.data.playerId` **only if** the roster says
+*this* `socket.id` currently owns that seat (`owner.socketId === socket.id`);
+else falls back to `getSeatIdForSocket(roomCode, socket.id)`; else throws.
+Explicitly defends the seat-migration ↔ old-socket-teardown race.
+
+**Identity model:** `playerSeatId` values are synthetic and internal. The
+`seatId → userId` map is the **roster** (`RoomPlayer.userId`), which lives in
+memory and is persisted in `room_live_sessions.roster`. `null` userId = guest
+seat (allowed in private rooms; disallowed for ranked/tournament outcomes —
+enforced at the game-over / forfeit sites, not at seat allocation).
+
+### 2.1.5 Concurrency windows / race producers
+
+All analysed as **in-process async interleaving** (single instance — §2.1.1).
+
+**What `withRoomGameplayLock` serializes:** `act` (MOVE/DRAW/PASS),
+`initiatePregameDrawOrStart` / `startGame` / `nextHand` bodies, the
+`readyForNextHand` mark phase and its detached `advance` chain. Per room, FIFO.
+
+**What runs *outside* that lock (the windows):**
+
+| # | Window | Producers that can overlap | Current mitigation | Residual |
+|---|---|---|---|---|
+| MP-1 | **Game-over side-effect persist** | the deferred `onGameOver` scheduler runs detached from the lock; a `game:rematch`, a `room:abandon_match`, and a late `act` can all arrive while it is mid-flight | `activeGameOverPersist` promise + `gameOverPersistStatus` gate rematch/next-hand; `act` rejects on `state.gameOver` | rematch/abandon vs. persist ordering rests on status polling, not a lock |
+| MP-2 | **Forfeit vs. real game-over** (shared with §1.1.3 producer 2) | `applyActiveMatchForfeit` (from `leaveTrackedRoom`, `room:abandon_match`, or disconnect-timeout) vs. `persistGameOverOnce` — both can call into System 1's `applyMatchResult` for the same tournament match | `authorizeMatchParticipant({allowCompleted:true})` + the RPC is the idempotent arbiter (System 1 T-INV-3); `tournamentForfeitApplyStatus` guards re-entry | non-tournament rooms: `abandonedAt` vs. `state.gameOver` both terminal, last writer wins on `room_match_logs` (`on_conflict=match_id`) |
+| MP-3 | **Two attach attempts, same identity** (duplicate tab, reconnect race) | two `attachSocketToTrackedRoom` calls for one `userId` | `migrateRoomSeat` before old-socket teardown; `resolveActorSeatId` roster-ownership check; `inFlightHydrationByRoomCode` dedupes concurrent hydration | attach itself is not lock-serialized; step 7/8/9 branch selection is a read-then-act on roster state |
+| MP-4 | **Disconnect-grace auto-act vs. reconnect** | grace timer firing `act()` vs. `onPlayerSocketRejoined` clearing the timer | `clearDisconnectGraceForSeat` on rejoin; expiry re-checks `stillConnected` + current turn before acting | timer callback already scheduled and past its guard checks can still act just as the player reconnects |
+| MP-5 | **Pre-game draw timer vs. manual start** | `preGameDrawTimer` firing vs. an explicit start/ready | `startGameUnlocked` clears the timer; "coalesce concurrent starts" no-op when `room.state` already set | timer is in-memory only — lost on restart, leaving a room stuck pre-start until a client re-triggers |
+| MP-6 | **`nextHand` coalescing** | multiple `readyForNextHand` + the detached `advance` promise | `nextHandStartsByRoom` single-flight per room; `advance` re-checks `nextHandReady.size` under the lock | the coalescing map is in-memory; a rollback after uncertain flush deliberately leaves `nextHandReady` populated for retry |
+| MP-7 | **Spectator publish vs. mutation** | `publishMultiplayerSpectatorSnapshot` reads `room.state` while `act` mutates it | sequence check (`snapshot.sequence < session.latestSnapshot.sequence` ⇒ skip); `maskStateForRecipient(state, null)` | read is not under the lock; a torn read is possible but only feeds the read-only spectator projection |
+| MP-8 | **Live-session persist vs. terminal delete** | debounced `persistLiveRoomSessionNow` vs. `finalizeAndDeleteLiveRoomSession` | `setLiveRoomPersistenceShuttingDown`, `cancelScheduledLiveRoomPersistence` on finalize | a debounced write that already left for PostgREST can land after the delete, resurrecting a terminal room's row |
+
+**Cross-instance (out of scope, listed for the revisit trigger):** the `rooms`
+Map, roster store, grace timers, lock chains, spectator registry, and hydration
+dedupe map are all process-local; a second instance breaks all of MP-1..MP-8
+and adds double seat allocation and undeliverable broadcasts.
+
+### 2.1.6 Game-over / match-result sequence (multi-step, non-atomic)
+
+Trigger: the engine sets `state.gameOver` inside a locked `act`; `roomSession`'s
+broadcast tail calls `deps.onGameOver(input)` →
+`createGameOverPersistScheduler(io)` returns a deferred runner stored in
+`room.activeGameOverPersist`, status `pending`.
+
+`persistGameOverOnce` (`gameOverPersistence.ts` ~111) runs, wrapped in a
+**4-attempt** retry ceiling (`GAME_OVER_PERSIST_RETRY_DELAYS_MS`). No
+transaction; each step is an independent `supabaseFetch`:
+
+1. If `winnerUserId` resolvable → `applyTournamentGameOverFromRoom(io, room, …)`
+   → System 1's `applyMatchResult` → `complete_tournament_match` RPC. **Returns
+   early if applied** — a tournament match that played to completion reaches the
+   bracket *only* through this branch.
+2. Tournament room but not applied (or `findTournamentMatchByRoom(room.code)`
+   fallback for a rehydrated room with no marker) → `throw`
+   `TOURNAMENT_MISSING_WINNER_ERROR` / `TOURNAMENT_APPLY_FAILED_ERROR` (retry /
+   give-up; ops repair doc `docs/ops/tournament-apply-match-result-repair.md`).
+3. Pending Fritz match → `resolvePendingFritzMatch(room.code)`.
+4. `appendMatch(...)` — stats match log.
+5. `writeMatchActivity(...)` — social feed, fire-and-forget (`.catch(() => {})`).
+6. `recordPublicOnlineMatch(...)` — public online match record (human-v-human,
+   fire-and-forget).
+7. **Move-log verification gate:** `evaluateHumanMoveLogVerification` →
+   `verifyPlayerMoveLog(moveLog, {strictHandContinuity:true})` per human seat.
+   Failure ⇒ `private_move_log_verification_failed` telemetry + record the
+   result **without Glicko** (the match outcome still stands).
+8. `insertRankedGameIdempotent(...)` ×2 (`ON CONFLICT (player_id,
+   source_match_id) DO NOTHING`), then `processRealtimeMultiplayerGame(...)` if
+   **both** inserts are new — Glicko-2 update to `profiles`.
+9. `completeGhostGame(...)` per human seat (feeds the ghost/Fritz system;
+   `applyGlicko` gated on verification).
+10. `recordMatchEnd(...)` → `matchmaking_matches` (if `matchmakingMatchId`).
+11. `room.rankingOutcome` set (`applied` / `duplicate` / `verification_skipped`
+    / `eligible_not_applied` / `not_ranked`).
+12. Linked `fixtures` / `league_members` → `recordLeagueLiveResult` (legacy
+    league live-finalize).
+
+On success: `markGameOverPersistSucceeded(room)` (sets `matchLogged`),
+`private_game_over_persist_succeeded` telemetry, `room_match_logs` archived,
+`room_live_sessions` row finalized/deleted. On give-up:
+`markGameOverPersistFailed`, `match:result_persist_failed` to the room,
+`private_game_over_persist_failed` telemetry.
+
+**Partial-failure exposure:** an attempt that fails at step *k* is retried from
+step 1. Steps 1 and 8 are idempotent (RPC conflict branch; `ON CONFLICT`).
+Steps 4/6/5/9/10/12 rely on each helper's own idempotency — **`appendMatch`,
+`recordPublicOnlineMatch`, `writeMatchActivity`, `recordMatchEnd` idempotency is
+unverified** and is a Step-1-follow-up / gap-list item. A give-up after 4
+attempts leaves: bracket possibly advanced (step 1 succeeded) but ranked/stats/
+activity partially written, `room_live_sessions` **not** deleted (room stays
+recoverable, `gameOverPersistStatus='failed'`), players see
+`match:result_persist_failed`.
+
+**Forfeit variant (`applyActiveMatchForfeit`, `roomForfeit.ts`):** triggered by
+`leaveTrackedRoom` when `isLiveSeat && !preserveSeat`, by `room:abandon_match`,
+and by `disconnectGrace` after 2 expiries (`forfeitReason:'disconnect_timeout'`,
+Glicko scaled ×0.5). Tournament path: `tournamentForfeitApplyStatus='pending'` →
+`authorizeMatchParticipant` (T-6 — a `null`/guest/non-participant leaver
+forfeits **nothing**, status back to `idle`) → 4× `applyMatchResult`
+(`winnerSource:'forfeit'`) → success latches `abandonedAt`; failure ⇒
+`tournamentForfeitApplyStatus='failed'`, `abandonedAt` left unset. Private /
+matchmaking path: latch `abandonedAt` immediately, then Glicko (actual
+`room.state` scores, but outcome forced by who-quit), `recordMatchEnd`,
+`persistRoomMatchLog(room, 'abandoned')`, emit `room:match_abandoned`.
+
+### 2.1.7 Authorization checks (present / missing)
+
+| Path | Identity source | Check present | Notes / gap candidate |
+|---|---|---|---|
+| `room:join` (private room) | `resolveSocketIdentity(config)` → `userId` or `null` | **none beyond knowing the 5-char code** | by design — the code is the capability. But: a guest (`userId=null`) can take a seat; two guests are indistinguishable on reconnect (roster match is by `userId` **or** username/hold) |
+| `room:join` (matchmaking room) | as above | `matchmakingParticipantUserIds` ACL (M4) — in-memory **and** post-hydration | requires `userId` (guest can't be a matchmaking participant) |
+| `room:join` (scheduled-tournament room) | as above | `authorizeMatchParticipant()` (T-5 / PR-B), fresh bracket read, fail-closed | bare code-shape-with-no-row falls through to private (documented tradeoff) |
+| `tournament:attach_assigned_match` | `socket.data.userId` | `match.player{1,2}_id === uid` upstream (§1.1.5) ✔ | — |
+| `game:action` (MOVE/DRAW/PASS) | `resolveActorSeatId` | roster-ownership (`owner.socketId === socket.id`) + `room.players.includes(seatId)` + engine turn/legal-move validation | solid; engine is authoritative |
+| `game:ready_next_hand` | `resolveActorSeatId` | same as above; `room.players.includes` | — |
+| `game:rematch` | `resolveActorSeatId` | `room.players` membership; `isAnyTournamentRoom` ⇒ blocked (T-12 / PR-D); waits on `gameOverPersistStatus` | — |
+| `room:abandon_match` | `handlerDeps.normalizeUserId(socket.data.userId)` — **requires auth** | roster lookup by `userId`/`socketId` + `room.players.includes` | a guest seat cannot self-abandon (must disconnect out) |
+| `leaveTrackedRoom` forfeit | `abandoningPlayer.userId ?? socket.data.userId` | `isLiveSeat`; tournament ⇒ `authorizeMatchParticipant` (T-6) | private/mm: whoever holds the seat forfeits it |
+| `room:spectate` | `resolveSocketIdentity(config)` | `getRoom` + `!abandonedAt` — **no room-kind check** | **any** socket can spectate **any** room (incl. private), receiving `maskStateForRecipient(state, null)` (hands hidden; board, scores, hand counts, move feed visible). Info-exposure question for private rooms — gap candidate |
+| Spectator **discovery** (`spectator:*` list) | — | `projectMultiplayerRoomForSpectators` only emits a discoverable session for `matchmakingMatchId && !scheduledTournamentMatchId && !abandonedAt` rooms | private + tournament rooms are spectatable-if-you-know-the-code but not listed |
+| `room_live_sessions` / `room_match_logs` (direct Supabase read) | anon key + user JWT | **UNVERIFIED — no migration to cite** | if client `SELECT` is allowed: live opponent hands (`game_state`), full transcripts (`events` / `state_snapshot`). **Highest-priority Step 1 follow-up.** |
+| `room_command_receipts` | — | RLS deny-all client (migration) ✔ | — |
+
+### 2.1.8 Reconnection & recovery paths
+
+| Trigger | Path | What it does |
+|---|---|---|
+| **Server boot** | *(none)* | **There is no live-room recovery sweep.** Unlike System 1's `recoverTournamentMatches`, `index.ts server.listen` does not rehydrate rooms. An in-progress room whose players don't reconnect simply does not exist in memory until someone attaches. |
+| Client reconnect / attach | `attachSocketToTrackedRoom` → `ensureRoomHydrated` → `loadLiveRoomSession(code)` → `validateLiveRoomHydrationRow` (freshness) → `applyLiveSessionRow` → supplement `room_command_receipts` from table → `hydrateGameActionReceiptsForRoom` | rebuilds the `Room` from `room_live_sessions`; `already_in_memory` short-circuits |
+| Hydration freshness | `validateLiveRoomHydrationRow` + the `durabilityCommit` fence in `room_shell` | outcomes: `hydrated` / `shell_only` (roster but no game state) / `snapshot_stale` / `snapshot_invalid` / `snapshot_freshness_unknown` — the stale/invalid/unknown ones **throw** on attach (`room_snapshot_uncommitted`, etc.) rather than admit a possibly-behind room |
+| Concurrent hydration | `inFlightHydrationByRoomCode` single-flight per code | second caller awaits the first |
+| Disconnect (active player, mid-hand) | `onActivePlayerSocketDisconnect` → 30 s `graceTimersByRoomSeat` timer (in-memory, lost on restart) | on expiry, if still disconnected and it's their turn: durability check → auto-`act` (PASS/DRAW) → flush → rollback + stall-retry (6 × 10 s, then **pause — no forfeit**) if not durably recoverable; after **2** successful expiries → `applyActiveMatchForfeit('disconnect_timeout')` |
+| Rejoin during grace | `onPlayerSocketRejoined` → `clearDisconnectGraceForSeat` + `disconnectExpiries[seat]=0` | emits `player:reconnected` |
+| Terminal room join | archived `room_match_logs` row → `resolveArchivedTerminalJoin` → `MatchTerminalJoinError` | client routed to the result screen instead of a dead room |
+| Rehydrated tournament room | `scheduledTournamentMatchId` is **not** in the persisted shell → `room:join` uses `isTournamentRoomCode(code)` shape + a fresh bracket lookup (PR-B) | keeps the tournament ACL working across a restart |
+| Graceful shutdown (SIGTERM/SIGINT) | `platform/gracefulShutdown.ts`: notify clients → stop HTTP → `flushAllPendingLiveSessions({timeoutMs})` → close sockets → exit | bounded flush of all debounced pending live-session writes |
+| Hard kill / OOM | *(none)* | debounced pending `room_live_sessions` write is lost; the last committed row is the recovery point (a few seconds of play may be gone; freshness fence should force `snapshot_stale` rather than silent rollback) |
+| Self-ping | `index.ts` ~950 — `SERVER_URL` set ⇒ `fetch(${SERVER_URL}/ping)` every 10 min | redundant backup to the external UptimeRobot monitor (System 1 T-17) |
+
+**Lost on every restart:** `graceTimersByRoomSeat`, `preGameDrawTimer`, the
+spectator registry, `nextHandStartsByRoom`, `withRoomGameplayLock` chains,
+`getRoomRuntimeStats` counters, in-flight hydration promises.
+
+### 2.1.9 Move-log / match-log verification — verified vs. merely recorded
+
+**Server-authoritative (verified by construction):** the game itself. The client
+sends action *intents* (`MOVE {tile, position}`, `DRAW`, `PASS`); the server's
+engine (`applyMove` / `resolveDrawUntilPlayableAtomically` /
+`finalizeMandatoryAutoPasses`) computes the next `GameState`, and every commit
+runs `assertTileCountInvariant` + `assertValidGameState`. A client cannot inject
+a board state. `handStateTamperBackstop` (`handStateTamperBackstop.test.ts`) is
+the regression guard for this.
+
+**Recorded, sequence-guarded, but not independently re-verified:**
+
+- `RoomMatchEvent` log (`roomEvents.ts`) — append-only, monotonic `eventSequence`;
+  persisted to `room_live_sessions.events` and archived to
+  `room_match_logs.events`. On persist, an incoming snapshot with a lower
+  sequence is skipped. Not re-checked for internal consistency on read.
+- `room_match_logs.state_snapshot` / `summary` — a point-in-time archive; no
+  replay-verification on write or read.
+
+**Verified at game-over (and only gating Glicko, not the result):**
+
+- `ghostMoveLogs[seatId]` — the per-seat transcript, same shape as the Daily
+  Fritz engine journal. `verifyPlayerMoveLog(moveLog, {strictHandContinuity:true})`
+  checks hand continuity (each entry's `hand_before` follows from the previous
+  entry's play/draw). Failure ⇒ record the match **without Glicko** +
+  `private_move_log_verification_failed` telemetry. The match outcome, scores,
+  and `room_match_logs` archive are unaffected.
+- `assertUnmaskedGameStateForPersistence` — guards that what goes into
+  `room_live_sessions.game_state` is the full state, never a
+  `maskStateForRecipient` projection (so a hydrated room isn't missing the
+  opponent's hand).
+
+**The analogue of System 1's "is the score server-authoritative?" question:**
+here the *game* is server-authoritative, but the *transcript* used for anti-cheat
+(`ghostMoveLogs`) is verified only for hand-continuity and only at the end, and a
+verification failure is non-blocking. Whether that is the right posture is a §2.2
+question.
+
+### 2.1.10 Existing idempotency / durability prior art (reusable)
+
+- **`roomCommandReceiptStore` + `gameActionIdempotency`** — `withGameActionIdempotency(roomCode, playerSeatId, requestId, execute)` returns the cached `ack` for a replayed `game:action`; backed by `room_command_receipts` (RLS-locked, migrated) **and** an embedded `room_shell.actionReceipts` snapshot, reconciled on hydration.
+- **`roomDurability` / `roomDurabilityPolicy`** — a commit fence + `idle|degraded|failed` status; `assertRoomDurabilityOperationAllowed(room, op)` gates `match_start` / `new_hand` / `gameplay_action` / `rematch` / `reconnect_existing_player` / `join_new_player` against it.
+- **`commitLifecycleAfterMutate` / `captureRoomLifecycleSnapshot` / `rollbackRoomLifecycleCommit`** — the mutate → schedule → flush → *roll back and throw `RoomLifecyclePersistUncertainError`* contract, already shared by `startGame` / `nextHand` / `readyForNextHand` and the disconnect auto-act.
+- **`insertRankedGameIdempotent`** (`ON CONFLICT (player_id, source_match_id) DO NOTHING`, `resolution=ignore-duplicates`) — the ranked-write idempotency primitive, already used by both the game-over and forfeit paths.
+- **`asyncStateVersion`** (per-hand bump) + **monotonic `eventSequence`** + the persist/spectator **sequence-skip** — the "reject a stale write" pattern.
+- **System 1's `complete_tournament_match` RPC** — for scheduled-tournament rooms this is *already* the atomic, idempotent, conflict-explicit sink for both game-over and forfeit. The multiplayer side's job is to route to it correctly and durably, not to re-implement the guarantee.
+- **`matchmaking` `recordMatchEnd`** — single PATCH of the outcome row (ordering-guard status TBD in §2.3).
+
+## 2.2 Invariants
+
+**Not started.** Step 2 — awaiting sign-off on §2.1.
+
+## 2.3 Gap list (ranked by risk)
+
+**Not started.** Step 2/3. Candidates surfaced during the §2.1 pass, to be
+triaged (not yet risk-ranked, not yet confirmed):
+
+- `room_live_sessions` / `room_match_logs` RLS is unverified and the schema is
+  unmanaged (no migration) — potential live-hand / transcript read exposure; and
+  the third instance of System 1's "unmanaged schema, no posture check" pattern.
+- `room:spectate` has no room-kind check — any socket may spectate any private
+  room (masked state only).
+- Game-over side-effect helpers `appendMatch` / `recordPublicOnlineMatch` /
+  `writeMatchActivity` / `recordMatchEnd` have unverified idempotency under the
+  4-attempt whole-sequence retry.
+- MP-8: a debounced live-session write can land after the terminal delete.
+- MP-5: an in-memory pre-game-draw timer lost on restart can strand a room
+  pre-start.
+- Move-log verification is non-blocking and hand-continuity-only.
+- No boot-time recovery sweep for live rooms (deliberate? — confirm in Step 2).
+
+## 2.4 State machine / concurrency design
+
+**Not started.** Step 3.
+
+## 2.5 Refactor plan
+
+**Not started.** Step 4.
+
+## 2.6 Test plan
+
+**Not started.** Step 5.
+
+## 2.7 Checklist
+
+### Step 1 — Current-state audit
+- [x] Deployment topology stated as a verified fact + revisit trigger — §2.1.1
+- [x] Data model (in-memory `Room` + 4 tables + shared write targets) mapped — §2.1.2
+- [x] All state writes (in-memory + durable) catalogued — §2.1.3
+- [x] Seat allocation & attach / identity binding mapped — §2.1.4
+- [x] Concurrency windows (MP-1..MP-8) enumerated — §2.1.5
+- [x] Game-over / forfeit multi-step sequence mapped — §2.1.6
+- [x] Authorization checks (present/missing) mapped — §2.1.7
+- [x] Reconnection / recovery paths mapped — §2.1.8
+- [x] Move-log / match-log verification (verified vs recorded) mapped — §2.1.9
+- [x] Existing idempotency / durability prior art noted — §2.1.10
+- [ ] **Step 1 follow-up (before Step 2):** human verifies `room_live_sessions`
+  + `room_match_logs` RLS against the live DB (client `SELECT` allowed? on which
+  columns?) — same diagnostic shape as System 1 T-1.
+
+### Steps 2–6
+- [ ] Step 2 — Invariants (§2.2) + risk-ranked gap list (§2.3)
+- [ ] Step 3 — State machine / concurrency design (§2.4)
+- [ ] Step 4 — Refactor (§2.5)
+- [ ] Step 5 — Tests prove closure (§2.6)
 
 ---
 
@@ -1169,4 +1654,5 @@ registry.
 | 2026-09-01 | **Step 5 scoped + PR-E merged (PR #103).** Findings from a read-only pass: (1) "producers 1-3" splits into a CI in-memory-port test (proves Node orchestration handles a redundant producer — not DB serialization) and a local pg16 two-session `FOR UPDATE` test (the real serialization proof; PR-A's was thrown away). (2) The original "kill `applyMatchResult` mid-sequence" crash test is obsolete — PR-A made completion+elimination+advancement one transaction; reframed to "RPC committed, Node post-processing didn't" → recovery re-dispatches. (3) `assertBracketConsistent` did not exist — written from scratch. (4) T-1 is prod-verified + the migration self-asserts, but there is no regression / greenfield check. Split into **PR-E** (helper, CI), **PR-F** (concurrency + recovery harness, CI), **PR-G** (local pg16 script + committed RLS diagnostic `.sql`, not CI). Additions from review: helper also asserts no spurious `tournament_match_winner_conflict` log (D-3); PR-F's cold-wake catch-up runs ≥2 processing orders; PR-G stays in scope this pass. **PR-E (`assertBracketConsistent.testkit.ts`) merged** — T-INV-1/2/5/6/7/8/10 consequences + the D-3 log check, 12 unit tests, wired into `engine.test.ts`. `tsc` clean, 199 files / 1142 tests. §1.6 rewritten with the E/F/G plan. |
 | 2026-09-01 | **Step 5 / PR-F merged (PR #104).** `concurrencyRecoveryHarness.test.ts` — 6 tests: redundant producers 1–3 on one match (same-winner ⇒ one completion / one advancement / 0 `tournament_match_winner_conflict` logs; conflicting-winner ⇒ first-recorded wins + one D-3 warn per disagreement with correct recorded/attempted ids), "RPC committed but Node crashed before dispatch" ⇒ `recoverTournamentMatches` dispatches the orphaned `ready` target, reconciler tick logs `tournament_advance_target_missing` and continues to the next match, cold-wake catch-up identical end-state across forward / reversed / shuffled orders (§1.4.8 addition #3). `vi.mock('../logger')` captures real output so the D-3 assertions are genuine (the `engine.test.ts` wiring from PR-E was a placeholder). **Scope boundary stated in the file header and PR body: proves Node orchestration, not Postgres `FOR UPDATE` — that is PR-G.** `tsc` clean, 200 files / 1148 tests, `grep console.` clean. Only **PR-G** remains before the tournament system is "closed". |
 | 2026-09-01 | **Step 5 / PR-G merged (PR #106) — SYSTEM 1 (TOURNAMENT) CLOSED.** `scripts/tournament-db-verify.sh` + `scripts/tournament-db-verify/{shim,seed}.sql` — a hermetic local pg16 verification (own `initdb` in a temp dir, deleted on exit; aborts if `PGHOST`/`DATABASE_URL`/`SUPABASE_*_URL`/any arg points at a remote or Supabase target — proven). Four stages: greenfield apply of the curated 10-file tournament migration chain (the 2026-08-30 lockdown self-asserts); two-session `SELECT … FOR UPDATE` — session B blocks on A's row lock >= 1s then takes `applied:false`/`conflict:true`, bracket shows one completion + one advancement (**the Postgres-level proof PR-F structurally can't give — guards T-3/T-4**; the PR-A verification was thrown away); the three RLS registrations diagnostics clean on the fresh schema; `assert_security_posture()` 0 -> plant `disable row level security` -> 1 (names the table) -> re-enable -> 0. Plus `supabase/tests/rls_registrations_lockdown.sql` (paste-into-SQL-editor artifact) and `docs/ops/tournament-db-verify.md`. Not CI (no pg service / no migration runner — which is why it exists). Green locally 3x, no flake; the `FOR UPDATE` timing margin is sleep-based (flake = timing issue first, not a lock regression). **Steps 1–5 complete. The tournament hardening is done.** Next: System 2 (Multiplayer rooms) Step 1 audit — its own session, awaiting human sign-off. |
+| 2026-09-01 | **System 2 (Multiplayer rooms) Step 1 — current-state audit §2.1 WRITTEN.** Structure agreed with the human first (10 subsections, reshaped around the in-memory-vs-DB-authority difference rather than following the System 1 template). §2.1.1 states the single-instance deployment as a **verified fact** (Render free tier, no adapter in `index.ts`, all room state process-local Maps, D-2 addendum) with a D-7-style revisit trigger — the whole concurrency analysis is scoped to in-process interleaving. §2.1.2–2.1.10: `Room` object + 4 backing tables (`room_live_sessions` + `room_match_logs` are **unmanaged schema, no migration** — flagged as the 3rd instance of System 1's "unmanaged schema / no posture check" pattern, RLS unverified → **Step 1 follow-up: human checks live-DB RLS before Step 2**); state writes; seat/`playerSeatId`↔`userId` binding via `resolveActorSeatId` + attach flow; concurrency windows MP-1..MP-8; the non-atomic 4-attempt game-over/forfeit side-effect chain; authz map (surfaced: `room:spectate` has no room-kind check; helper idempotency unverified); recovery (no boot sweep — lazy hydration only); move-log verification is hand-continuity-only + non-blocking. Gap candidates parked unranked in §2.3. §2.2–2.6 stubbed. Current focus + §2.7 checklist updated. **Stop — await human sign-off + the RLS follow-up before Step 2.** |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
