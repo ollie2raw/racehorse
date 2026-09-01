@@ -1,0 +1,48 @@
+name: Security posture
+
+# Weekly drift detector for the prod Supabase schema. Backs the
+# assert_security_posture() RPC (supabase/migrations/2026-09-01_assert_security_posture_rpc.sql).
+# Exists because there is no CI migration runner — three reviewed lockdown
+# migrations had sat unapplied before this was built (2026-09-01 incident).
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Mondays 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  posture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: assert_security_posture() against prod
+        env:
+          # Not a secret — also hardcoded in ci.yml. The service key IS a secret
+          # and is only ever passed as a header, never echoed.
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          set -euo pipefail
+          resp="$(curl -sS -X POST \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+            -H 'Content-Type: application/json' \
+            "$SUPABASE_URL/rest/v1/rpc/assert_security_posture")"
+
+          echo "$resp" | jq .   # response carries no secrets
+
+          hard="$(echo "$resp" | jq -r '.hard_fail_count // "ERR"')"
+          adv="$(echo  "$resp" | jq -r '.advisory_count // 0')"
+
+          if [ "$hard" = "ERR" ]; then
+            echo "::error::assert_security_posture() did not return the expected shape (RPC missing / not applied?)"
+            exit 1
+          fi
+          if [ "$adv" -gt 0 ]; then
+            echo "::warning::${adv} advisory finding(s) — see report above"
+          fi
+          if [ "$hard" -gt 0 ]; then
+            echo "::error::${hard} HARD security-posture failure(s)"
+            echo "$resp" | jq '.hard_fails'
+            exit 1
+          fi
+          echo "security posture clean (${adv} advisories)"
