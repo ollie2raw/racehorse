@@ -427,7 +427,9 @@ describe('results', () => {
       share!.click();
     });
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText.mock.calls[0][0]).toContain('870 pts');
+    // The share card is the numbered emoji-grid format, not a bare "N pts" line.
+    expect(writeText.mock.calls[0][0]).toContain('Racehorse Puzzle Rush #');
+    expect(writeText.mock.calls[0][0]).toContain('solved');
     unmount();
   });
 
