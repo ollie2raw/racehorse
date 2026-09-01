@@ -12,7 +12,7 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 (current-state audit §2.1) WRITTEN 2026-09-01 — awaiting human sign-off before Step 2 (invariants + gap list). RLS follow-up DONE: `room_live_sessions` / `room_match_logs` RLS is ON, anon reads nothing (0/2458, 0/1236 rows) — no anon exposure. Residual for the human: read the authenticated-role SELECT policy (can a participant read their own *live* row = unmasked opponent hand?) — SQL editor, bounded, not urgent.**
+**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 (current-state audit §2.1) WRITTEN 2026-09-01 — awaiting human sign-off before Step 2 (invariants + gap list). RLS follow-up RESOLVED 2026-09-01: `room_live_sessions` / `room_match_logs` RLS ON; anon reads nothing (*/0 vs 2463/1237 rows); authenticated non-participant reads nothing (genuine `authenticated` JWT probe, incl. targeted `room_code=eq.<live room>` → */0). **`pg_policies` confirmed against prod (human ran it 2026-09-01)** — exactly 3 rows, matching `supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`: `room_live_sessions_no_client_write` (ALL / {authenticated} / `false`) = deny-all-to-client, **participant CANNOT read own live row — unmasked `game_state` never exposed, no competitive-integrity hole**; `room_match_logs_select_own` (SELECT / {public} / `auth.uid() = ANY(participant_user_ids)`) + `room_match_logs_no_client_write` (ALL / {public} / `false`) = participant-can-read-own-TERMINAL-rows, writes denied (post-game data, flag in Step 2). **Authenticated-role SELECT question CLOSED.** Separate lower-urgency follow-up still open: `room_command_receipts` returns PGRST205 → migration likely unapplied to prod (§2.7).**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -1546,19 +1546,31 @@ question.
 **Not started.** Step 2/3. Candidates surfaced during the §2.1 pass, to be
 triaged (not yet risk-ranked, not yet confirmed):
 
-- `room_live_sessions` / `room_match_logs`: **anon read exposure ruled out**
-  (RLS ON, verified live 2026-09-01). Residual gap candidates: (a) the
-  **authenticated**-role `SELECT` policy is unread — if a participant can read
-  their own **live** `room_live_sessions` row they get the *unmasked*
-  `game_state` (opponent's hand); (b) anon/authenticated hold INSERT/UPDATE/
-  DELETE grants gated only by RLS (broad 44-table advisory, not a hard fail —
-  defence-in-depth revoke); (c) schema is still **unmanaged (no migration)** —
-  3rd instance of System 1's "unmanaged schema / no posture check" pattern.
-- `room_command_receipts`: PostgREST returns `PGRST205` (not in schema cache) —
-  the migration may not be applied to prod, or the table is not REST-exposed.
+- `room_live_sessions` / `room_match_logs`: **anon AND authenticated
+  non-participant read exposure ruled out** (RLS ON; verified live 2026-09-01
+  with a genuine `authenticated` JWT). **Participant-reads-own-row resolved via
+  repo DDL** (`supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`):
+  `room_live_sessions` is deny-all-to-client (`FOR ALL TO authenticated
+  USING(false)`) ⇒ **no unmasked-`game_state` hole** — a participant cannot read
+  their own live row. `room_match_logs` has `room_match_logs_select_own`
+  (`FOR SELECT USING (auth.uid() = ANY(participant_user_ids))`) ⇒ a participant
+  **can** read their own *terminal* archive rows (`events`/`state_snapshot`/
+  `summary`) — post-game, per-match-private, **deliberate**; decide in Step 2 if
+  that exposure is acceptable or should be server-proxied. Prod policy text
+  **confirmed** against the DDL — human ran `pg_policies` 2026-09-01, exact
+  3-row match (§2.7). Residuals: (b)
+  anon/authenticated hold INSERT/UPDATE/DELETE grants gated only by RLS (broad
+  44-table advisory, not a hard fail — defence-in-depth revoke); (c) schema is
+  still **unmanaged (no migration)** — 3rd instance of System 1's "unmanaged
+  schema / no posture check" pattern.
+- `room_command_receipts`: PostgREST returns `PGRST205` (not in schema cache)
+  for anon *and service-role* — the `2026-08-01_room_command_receipts.sql`
+  migration is likely not applied to prod (or the table is not REST-exposed).
   Server `probeRoomCommandReceiptsTable` would be reporting this; the receipt
-  store silently degrades to shell-embedded-only. Not sensitive, but another
-  "reviewed migration possibly unapplied" data point.
+  store silently degrades to `room_shell.actionReceipts` embedded-only. **Own
+  follow-up item (§2.7)** — same class as T-1 / ghost tables / commit_glicko:
+  reviewed migration sitting unapplied, no CI migration runner. Lower urgency
+  (not sensitive, idempotency still functions degraded).
 - `room:spectate` has no room-kind check — any socket may spectate any private
   room (masked state only).
 - Game-over side-effect helpers `appendMatch` / `recordPublicOnlineMatch` /
@@ -1599,12 +1611,57 @@ triaged (not yet risk-ranked, not yet confirmed):
   Both tables: RLS ON (`assert_security_posture()` `hard_fail_count:0`), anon
   `SELECT` → HTTP 200 `content-range: */0` against 2458 / 1236 rows. **No anon
   exposure.** Not urgent.
-- [ ] **Residual for the human (SQL editor, before Step 2 sign-off):** read the
-  **authenticated**-role `SELECT` policy on `room_live_sessions` — confirm it
-  cannot return a *live* (`status` in `playing`/`hand_over`) row to a
-  participant (unmasked `game_state` = opponent hand). Also decide on revoking
-  the anon/authenticated write grants (defence-in-depth) and whether
-  `room_command_receipts` is applied to prod.
+- [x] **Step 1 follow-up — authenticated-role SELECT probed against live DB
+  (2026-09-01).** Minted a genuine `authenticated`-role JWT (throwaway user via
+  service-key admin API, created → password-grant → deleted; role/aud verified
+  `authenticated`). Non-participant authed `SELECT`:
+  `room_live_sessions` → `content-range */0`; `room_live_sessions?room_code=eq.<live room>`
+  → `*/0`; `room_match_logs` → `*/0`. **No broad `TO authenticated USING(true)`
+  SELECT policy on either table — a logged-in non-participant reads zero rows.**
+  The "any logged-in user scrapes live `game_state`" scenario is disproven.
+- [x] **Authenticated *participant*-reads-own-row — resolved via repo DDL +
+  probe (2026-09-01).** The canonical DDL lives in `supabase/room_live_sessions.sql`
+  and `supabase/room_match_logs.sql` (not in `supabase/migrations/` — hence §2.1's
+  "unmanaged schema"; but it is *reviewed* SQL, not absent). It says:
+  - `room_live_sessions`: only policy is `room_live_sessions_no_client_write`
+    = `FOR ALL TO authenticated USING(false) WITH CHECK(false)`. `USING(false)`
+    covers SELECT ⇒ **a participant cannot read their own live row. The unmasked
+    `game_state` is never exposed to any client.** No competitive-integrity hole.
+  - `room_match_logs`: `room_match_logs_select_own` = `FOR SELECT USING (auth.uid()
+    = any(participant_user_ids))` ⇒ a participant **can** read their own
+    *terminal* (game-over/abandoned) archive rows by design — `events` /
+    `state_snapshot` / `summary` for matches they played. This is post-game data,
+    not a live hand; acceptable, but note it in Step 2 as a deliberate exposure.
+  The non-participant probe above is consistent with both policies. Full prod
+  confirmation that prod matches this DDL = the `pg_policies` query below (still
+  worth running once — this is the 3rd "reviewed SQL maybe unapplied" instance).
+- [x] **Prod policy text confirmed against the repo DDL (human ran the
+  `pg_policies` query 2026-09-01).** Exactly 3 rows, all matching:
+  `room_live_sessions_no_client_write` (ALL / {authenticated} / qual `false` /
+  wc `false`), `room_match_logs_select_own` (SELECT / {public} / qual
+  `auth.uid() = ANY (participant_user_ids)` / wc null),
+  `room_match_logs_no_client_write` (ALL / {public} / qual `false` / wc
+  `false`). No `qual true` anywhere. `room_live_sessions` has **no** SELECT
+  policy for any role and nothing at all for `anon` ⇒ RLS default-deny ⇒ only
+  `service_role` reads it. **Authenticated-role SELECT question CLOSED — no
+  competitive-integrity hole.**
+- [ ] **FOLLOW-UP ITEM (own line, lower urgency) — `room_command_receipts`
+  possibly unapplied to prod.** PostgREST returns `PGRST205` ("Could not find
+  the table 'public.room_command_receipts' in the schema cache") for both anon
+  and service-role. Either `2026-08-01_room_command_receipts.sql` was never
+  applied to prod, or the table exists but is not REST-exposed (not in a
+  PostgREST-visible schema / no grants). Server `probeRoomCommandReceiptsTable`
+  would be logging this; `withGameActionIdempotency` silently degrades to the
+  `room_shell.actionReceipts` embedded snapshot only. Not sensitive, not
+  urgent — same class as T-1 / ghost-tables / commit_glicko: reviewed migration
+  sitting unapplied, no CI migration runner. Verify in SQL editor
+  (`select to_regclass('public.room_command_receipts');` + check grants /
+  `pg_publication`), apply if missing.
+- [ ] **Defence-in-depth (deferred, not blocking):** revoke the
+  anon/authenticated INSERT/UPDATE/DELETE grants on both room tables (RLS
+  already denies via the `_no_client_write` policies; this is the same 44-table
+  `client_write_grant_rls_on` advisory). Roll into the schema-management
+  migration when the unmanaged-schema gap is closed.
 
 ### Steps 2–6
 - [ ] Step 2 — Invariants (§2.2) + risk-ranked gap list (§2.3)
@@ -1642,6 +1699,7 @@ registry.
 | D-7 | 2026-08-31 | **No-show reconciler / scheduler multi-instance = a boot-time singleton flag, not a lock.** Add `TOURNAMENT_SCHEDULER_ENABLED` (default `true`); `startTournamentScheduler` no-ops with a boot log line when false. When multi-instance ever happens, it's `true` on exactly one process (the dedicated worker, D-4 option e) and `false` on the web dynos. **`pg_try_advisory_lock` at the top of the tick was rejected** and the reason is preserved so it is not re-proposed: the server has no direct Postgres connection — every DB call is `supabaseFetch` → PostgREST over HTTP on a *different* pooled connection each time, so a session-scoped advisory lock releases the instant the first HTTP call's connection returns to the pool, before the tick's next call. Only `pg_try_advisory_xact_lock` works over PostgREST, and only inside one RPC. A lease/heartbeat table and an RPC-embedded xact lock were also rejected (machinery for a non-problem at 1 instance; unnecessary overlap with the §1.4.3 RPC work). | Schedulers are singletons even at large scale — you split them to a dedicated worker, not leader-elect them across N web instances. The RPC row locks (D-2) already make the completion path instance-agnostic; the scheduler only needs to know it's not the leader. Near-zero cost now (one `if` at startup), structurally moot on free tier. The reconciler's own logic is untouched. |
 | D-6 | 2026-08-31 | **T-INV-6 reworded + re-ratified: "a round-N match enters `ready`/`in_progress` only after *both its feeder matches* (round N−1, match numbers 2M−1 and 2M) are `completed`/`bye`"** — not "the whole previous round". Client-impact check (§1.4.3): `tournament:round_completed` has no client listener; bracket view / "next match" / hub "waiting" / flow stepper / notifications / post-match nav are all per-match; the engine already dispatches human SF/Final on the two-feeder condition. **Also pulled forward from Step 4 (human's explicit direction):** replace `isPreviousRoundComplete` with `areFeederMatchesComplete(tournamentId, round, matchNumber)` in `canAutoSimulateBotOnlyMatch`; update the one engine test that asserted the strict rule. | The strict rule was an unexamined over-constraint. Only observable effect of relaxing: a fully-bot semifinal/final auto-simulates as soon as its two bot feeders finish instead of waiting for the human's half of the bracket — invisible to players (bracket-reveal spoiler logic hides non-human results beyond the player's current round). |
 | D-5 | 2026-08-31 | **RPC surface = three functions, not one.** `complete_tournament_match` (owns T-INV-1,2,3,4,5,10), `promote_tournament_match(p_to_status)` (`waiting→ready` / `ready→in_progress`), `generate_tournament_bracket` (T-INV-8), plus three non-Node-facing helper functions (`_tournament_is_participant`, `_tournament_canonical_scores`, `_tournament_advance_target`). Rejected: a single `tournament_match_command(match_id, command, args jsonb)` dispatcher. | Three small auditable transactions with explicit per-function lock targets and typed signatures beat one `CASE`-on-action function with a fat `jsonb` arg and runtime shape checks. Bracket *generation* is a different concern from match *state* and gets a different deployable object. Shared logic goes in the helper functions. |
+| D-8 | 2026-09-01 | **System 2 Step 1 RLS follow-up — authenticated-role SELECT question RESOLVED (not just queried).** Method: minted a real `authenticated`-role JWT via the service-key Auth admin API (create confirmed throwaway user → `grant_type=password` → JWT role/aud verified `authenticated` → user deleted; net-zero prod state). Probed both room tables as a non-participant authed user incl. a targeted `room_code=eq.<live room>` filter → **`content-range */0` every time**. Combined with the canonical DDL in `supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`: **`room_live_sessions` = deny-all-to-client** (`FOR ALL TO authenticated USING(false)`, no SELECT policy) ⇒ a participant **cannot** read their own live row ⇒ the unmasked `game_state` (opponent's hand) is **never** reachable by any client — `maskStateForRecipient` is not bypassable this way. **No competitive-integrity hole.** `room_match_logs` = `room_match_logs_select_own` (`FOR SELECT USING (auth.uid() = ANY(participant_user_ids))`) ⇒ a participant **can** read their own *terminal* archive rows — this is post-game data, per-match-private, and by design; Step 2 decides whether to keep it or route reads through the server. **CONFIRMED (2026-09-01):** the human ran `select policyname, cmd, roles, qual, with_check from pg_policies where tablename in ('room_live_sessions','room_match_logs')` → exactly 3 rows, exact match to the DDL (`room_live_sessions_no_client_write` ALL/{authenticated}/false; `room_match_logs_select_own` SELECT/{public}/`auth.uid() = ANY (participant_user_ids)`; `room_match_logs_no_client_write` ALL/{public}/false). No `qual true`. `room_live_sessions` has no SELECT policy at all. **Authenticated-role SELECT question CLOSED — Step 2 unblocked.** | The concern was that an authed participant reading their own live row would leak the opponent's tiles mid-game. The deny-all policy on `room_live_sessions` closes it structurally. Recording the JWT-minting method so it is reusable for future authenticated-role RLS probes (same principle as the anon row-count check). |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
 
 ---
@@ -1673,4 +1731,6 @@ registry.
 | 2026-09-01 | **Step 5 / PR-G merged (PR #106) — SYSTEM 1 (TOURNAMENT) CLOSED.** `scripts/tournament-db-verify.sh` + `scripts/tournament-db-verify/{shim,seed}.sql` — a hermetic local pg16 verification (own `initdb` in a temp dir, deleted on exit; aborts if `PGHOST`/`DATABASE_URL`/`SUPABASE_*_URL`/any arg points at a remote or Supabase target — proven). Four stages: greenfield apply of the curated 10-file tournament migration chain (the 2026-08-30 lockdown self-asserts); two-session `SELECT … FOR UPDATE` — session B blocks on A's row lock >= 1s then takes `applied:false`/`conflict:true`, bracket shows one completion + one advancement (**the Postgres-level proof PR-F structurally can't give — guards T-3/T-4**; the PR-A verification was thrown away); the three RLS registrations diagnostics clean on the fresh schema; `assert_security_posture()` 0 -> plant `disable row level security` -> 1 (names the table) -> re-enable -> 0. Plus `supabase/tests/rls_registrations_lockdown.sql` (paste-into-SQL-editor artifact) and `docs/ops/tournament-db-verify.md`. Not CI (no pg service / no migration runner — which is why it exists). Green locally 3x, no flake; the `FOR UPDATE` timing margin is sleep-based (flake = timing issue first, not a lock regression). **Steps 1–5 complete. The tournament hardening is done.** Next: System 2 (Multiplayer rooms) Step 1 audit — its own session, awaiting human sign-off. |
 | 2026-09-01 | **System 2 (Multiplayer rooms) Step 1 — current-state audit §2.1 WRITTEN.** Structure agreed with the human first (10 subsections, reshaped around the in-memory-vs-DB-authority difference rather than following the System 1 template). §2.1.1 states the single-instance deployment as a **verified fact** (Render free tier, no adapter in `index.ts`, all room state process-local Maps, D-2 addendum) with a D-7-style revisit trigger — the whole concurrency analysis is scoped to in-process interleaving. §2.1.2–2.1.10: `Room` object + 4 backing tables (`room_live_sessions` + `room_match_logs` are **unmanaged schema, no migration** — flagged as the 3rd instance of System 1's "unmanaged schema / no posture check" pattern, RLS unverified → **Step 1 follow-up: human checks live-DB RLS before Step 2**); state writes; seat/`playerSeatId`↔`userId` binding via `resolveActorSeatId` + attach flow; concurrency windows MP-1..MP-8; the non-atomic 4-attempt game-over/forfeit side-effect chain; authz map (surfaced: `room:spectate` has no room-kind check; helper idempotency unverified); recovery (no boot sweep — lazy hydration only); move-log verification is hand-continuity-only + non-blocking. Gap candidates parked unranked in §2.3. §2.2–2.6 stubbed. Current focus + §2.7 checklist updated. **Stop — await human sign-off + the RLS follow-up before Step 2.** |
 | 2026-09-01 | **System 2 Step 1 follow-up — `room_live_sessions` / `room_match_logs` RLS verified live; grep of committed §2.1 confirmed clean.** `git show HEAD:HARDENING_PLAN.md | grep` for `authorizeMatchParticipant` / `assertUnmaskedGameStateForPersistence` / `commitLifecycleAfterMutate` — all intact, no garbling in the committed file. **RLS probe (anon key, prod `fisfadjqllojdzibcdfx`, read-only):** `assert_security_posture()` → `hard_fail_count:0` (RLS enabled on every `public` table incl. both room tables); anon `SELECT room_live_sessions` / `room_match_logs` → HTTP 200 `content-range: */0` while service-role counts show **2458** / **1236** rows. **No anonymous read exposure — the "transcripts readable with the anon key" fear does not materialise.** Residuals recorded in §2.1.2 / §2.1.7 / §2.3: (a) authenticated-role `SELECT` policy text not readable via PostgREST — human to check in SQL editor whether a participant can read their own *live* row (unmasked `game_state` = opponent hand); (b) both tables carry the `client_write_grant_rls_on` advisory (anon+authenticated INSERT/UPDATE/DELETE grants, RLS-gated only — same advisory on 44 tables incl. `profiles`/`ranked_games`, not a hard fail; defence-in-depth revoke); (c) schema still unmanaged — no migration. **Side finding:** `room_command_receipts` → PostgREST `PGRST205` (not in schema cache) — migration may be unapplied to prod / table not REST-exposed; receipt store degrades to shell-embedded-only. Anon/authenticated **write** probes to prod were not run (auto-mode classifier blocked the mutating request — correct; needs human approval). §2.7 Step 1 follow-up checkbox flipped to done for the anon question, residual item added for the human. |
+| 2026-09-01 | **System 2 Step 1 follow-up — authenticated-role SELECT RESOLVED (D-8).** Minted a genuine `authenticated`-role JWT (service-key admin API: create confirmed throwaway user → `grant_type=password` → JWT verified role/aud `authenticated` → user deleted; net-zero prod state). Non-participant authed probe: `room_live_sessions` full select **and** `?room_code=eq.<live room>` → `content-range */0`; `room_match_logs` → `*/0`. **No broad `TO authenticated USING(true)` policy on either table.** Found the canonical DDL — `supabase/room_live_sessions.sql` (only policy `room_live_sessions_no_client_write` = `FOR ALL TO authenticated USING(false)` — no SELECT policy ⇒ **participant cannot read own live row ⇒ unmasked `game_state`/opponent hand is unreachable by any client — no competitive-integrity hole**) and `supabase/room_match_logs.sql` (`room_match_logs_select_own` = `FOR SELECT USING (auth.uid() = ANY(participant_user_ids))` ⇒ participant **can** read own *terminal* archive rows — post-game, deliberate; Step 2 decides keep-vs-proxy). §2.1 "unmanaged schema / NONE" corrected: the DDL exists in `supabase/`, just not in `migrations/`. Residual: one `pg_policies` query to confirm prod == DDL (§2.7). **Follow-up item logged separately (§2.7, §2.3):** `room_command_receipts` → PGRST205 for anon *and service-role* ⇒ `2026-08-01_room_command_receipts.sql` likely unapplied to prod (idempotency degrades to `room_shell.actionReceipts` embedded-only) — same "reviewed migration unapplied" class as T-1 / ghost tables / commit_glicko, lower urgency. Current focus + §2.7 + §2.3 updated. **Step 2 may start once prod==DDL is confirmed or the probe evidence is accepted as sufficient.** |
+| 2026-09-01 | **System 2 Step 1 follow-up — CLOSED.** Human ran the `pg_policies` query against prod: exactly 3 rows, **exact match to the repo DDL** — `room_live_sessions_no_client_write` (ALL / {authenticated} / qual `false` / wc `false`), `room_match_logs_select_own` (SELECT / {public} / qual `auth.uid() = ANY (participant_user_ids)` / wc null), `room_match_logs_no_client_write` (ALL / {public} / qual `false` / wc `false`). No `qual true` on any policy; `room_live_sessions` has no SELECT policy for any role and nothing for `anon` ⇒ RLS default-deny ⇒ service_role-only reads. **Authenticated-role SELECT question CLOSED — no competitive-integrity hole (participant cannot read own live `room_live_sessions` row / unmasked `game_state`).** `room_match_logs` participant-reads-own-terminal-rows confirmed deliberate — flagged for Step 2 keep-vs-proxy. §2.7 box checked, D-8 / Current focus / §2.3 updated to CONFIRMED. **System 2 Step 1 fully done — awaiting human sign-off for Step 2.** Still-open lower-urgency follow-up: `room_command_receipts` PGRST205 (migration likely unapplied to prod). New memory: `authenticated-rls-probe-technique` (the JWT-minting method). |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
