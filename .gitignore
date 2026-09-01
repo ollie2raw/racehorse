@@ -23,3 +23,9 @@ reset-password.mjs
 .worktrees/
 dump.rdb
 *.tsbuildinfo
+
+# Brainstorming skill scratch dir (local only)
+.superpowers/
+
+# Local reference docs dropped into the repo root (not repo assets)
+/Racehorse-Dominoes-Growth-Assessment.pdf
