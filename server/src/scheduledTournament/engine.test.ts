@@ -47,6 +47,7 @@ import {
 } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
 import { inMemoryMatchRpcForArrayStore, recordMatchResultForTest } from './inMemoryMatchRpc.testkit';
+import { assertBracketConsistentForStore } from './assertBracketConsistent.testkit';
 import type {
   MatchRow,
   RegistrationRow,
@@ -601,6 +602,8 @@ describe('full bracket lifecycle (8 players)', () => {
     expect(completed).toHaveLength(1);
     expect(completed[0].payload).toEqual({ tournamentId: 'tour-1', winnerId: 'u8' });
     expect(events.some((e) => e.event === 'tournament:round_completed' && (e.payload as any).round === 2)).toBe(true);
+
+    assertBracketConsistentForStore(store, { context: 'engine:full-lifecycle' });
   });
 
   it('applyMatchResult is idempotent — replay does not re-fire completed', async () => {
@@ -629,6 +632,12 @@ describe('full bracket lifecycle (8 players)', () => {
 
     expect(before).toBe(1);
     expect(after).toBe(1);
+
+    // Same-winner replay is not a conflict — no tournament_match_winner_conflict
+    // log should have fired (D-3). engine.test does not mock the logger, so this
+    // relies on the bracket-state checks; the log-count assertion is exercised
+    // directly in assertBracketConsistent.testkit.test.ts and live in PR-F.
+    assertBracketConsistentForStore(store, { context: 'engine:idempotent-replay' });
   });
 });
 
