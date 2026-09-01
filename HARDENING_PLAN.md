@@ -67,6 +67,37 @@ ICMP→HTTP on `/ping` @ 5 min + `SERVER_URL` set; both verified). T-18 + T-19 =
 ACCEPTED RISK at current scale, revisit at paid-tier upgrade. D-4 = external
 monitor, free tier. `/internal/tick` not built.
 
+**RLS / config hardening — 2026-09-01.** A Supabase advisor flagged a public
+table with RLS disabled. Confirmed the project is ours via local env files;
+did not use the email link. **Initial scope assessment was wrong** — the first
+probe conflated "a client role holds a write grant" with "a client role can
+write"; on RLS-enabled tables (the large majority) RLS is the real gate, and a
+spot check confirmed anon writes to them are rejected. **Actual issue: 4
+tables with RLS not enabled** — `bot_match_pending`, `ghost_games`,
+`ghost_profiles` (lockdown SQL for these already existed in
+`2026-08-11_authoritative_ranking_and_bot_pending.sql` and `supabase/ghost.sql`
+but had never been applied to prod), plus `ranked_games_backup_bugfix` (an
+undocumented one-off backup from an April rating-bug investigation — 8 rows,
+one dev account, no code references; exported to `~/racehorse-security-backups/`
+then dropped). The advisor sweep also flagged `commit_glicko_game_update`
+(SECURITY DEFINER with a mutable `search_path`, EXECUTE granted to client
+roles). A data-integrity check across `profiles` / `ranked_games` /
+`rating_periods` found **no evidence of misuse** — the only rating anomalies
+trace to the known April bug on one dev account. **Fixes**
+(`supabase/migrations/2026-09-01_ghost_bot_pending_rls_lockdown.sql`,
+`..._commit_glicko_rpc_lockdown.sql`, both self-asserting): enable RLS +
+deny-all on `bot_match_pending`; RLS + own-row select on the ghost tables;
+revoke client write grants; drop the backup table; pin the RPC `search_path`
+and restrict its EXECUTE to `service_role`. Applied via the SQL editor and
+verified before/after. **Pattern: this is the third reviewed, correct
+migration found sitting unapplied** (T-1 registrations lockdown, these RLS
+tables, this RPC). Root cause: no CI migration runner, no schema-posture
+check. **Follow-up (built this session):** `assert_security_posture()`
+service-role RPC + a weekly GitHub Actions cron that hard-fails if any
+`public` table has RLS off or any SECURITY DEFINER function has a mutable
+`search_path`, with advisory-only reporting for client-callable RPC judgment
+calls.
+
 **Resolved — the long-standing uncommitted working-tree pile is gone.** A
 share-card / Puzzle-Rush-dossier redesign had sat uncommitted across several
 sessions; on 2026-09-01 it was committed to `feat/share-card-dossier-redesign`
