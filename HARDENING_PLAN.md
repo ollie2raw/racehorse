@@ -59,12 +59,15 @@ monitor, free tier. `/internal/tick` not built.
 **Parked, unrelated to this plan — draft PR #100 (`feat/share-card-dossier-redesign`).**
 A share-card / Puzzle-Rush-results-dossier redesign that had been sitting
 uncommitted in the working tree across several sessions; committed to its own
-branch + **draft** PR on 2026-09-01 so `main` stays clean. **It has 5 known
-failing tests** (`client/src/puzzleRush/puzzleRushRun.test.tsx` — the
-RushResultsView rewrite dropped `data-ui` hooks + `AnimatedScore` without
-updating those tests). Not part of the tournament/multiplayer hardening;
-tracked here only so it doesn't silently rot. Owner decision needed: finish
-(update the tests, design-review the dossier) or close.
+branch + **draft** PR on 2026-09-01 so `main` stays clean. **CI is red:**
+(1) client lint over the `--max-warnings 401` budget by one — a `new Date()`
+declared in a component body used in `useMemo` (`PuzzleRushLeaderboardScreen.tsx:226`),
+hoist it to module scope; (2) behind that, **5 failing tests** in
+`client/src/puzzleRush/puzzleRushRun.test.tsx` (RushResultsView rewrite dropped
+`data-ui` hooks + `AnimatedScore`). `tsc -b` clean. Not part of the
+tournament/multiplayer hardening; tracked here only so it doesn't silently rot.
+**Owner decision needed: finish (~1 lint fix + test rewrite + design review) or
+close.** Recommendation: close unless the redesign is actually wanted.
 
 **⚠ UNREVIEWED RISK — PR #91 was merged early, out of sequence.** The human
 merged #91 (`e4760058`) before Step 4's review happened. What is now live on
