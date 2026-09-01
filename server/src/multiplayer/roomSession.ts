@@ -28,6 +28,7 @@ import {
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
 import { maskPregameDrawForRecipient } from './preGameDraw';
+import { isLegacyLeagueRoom } from './roomKind';
 import { publishMultiplayerSpectatorSnapshotIfEnabled } from '../spectator/spectatorIntegration';
 import type {
   LegacyMatchmakingRoomShellHydrationResult,
@@ -716,7 +717,10 @@ export function broadcastStateUpdate(roomCode: string): void {
   );
 
   const cfg = room.config;
-  const isTournamentRoom = Boolean(cfg.tournamentId);
+  // ONLY the legacy league (`cfg.tournamentId`). Scheduled-tournament rooms are
+  // `roomKind === 'scheduled_tournament'` and are deliberately NOT this — see
+  // the game-over branch below.
+  const legacyLeagueRoom = isLegacyLeagueRoom(room);
   const pidsForLead = room.state.playerIds;
   if (Array.isArray(pidsForLead) && pidsForLead.length === 2) {
     const aId = pidsForLead[0];
@@ -733,7 +737,16 @@ export function broadcastStateUpdate(roomCode: string): void {
     }
   }
 
-  if (room.state.gameOver && !isTournamentRoom && !room.matchLogged) {
+  // DO NOT widen this guard to `!isAnyTournamentRoom`. A scheduled-tournament
+  // match's normal play-to-completion result reaches the bracket ONLY by
+  // flowing through this branch: `onGameOver` -> `persistGameOverOnce` ->
+  // `applyTournamentGameOverFromRoom`, which is the single call site of that
+  // function for game-over-from-play. Excluding scheduled-tournament rooms here
+  // (the obvious-looking "consolidation") silently stops bracket advancement
+  // for played-out matches — forfeit / no-show paths still work, so it passes a
+  // smoke test. Only the legacy league (`legacyLeagueRoom`) is excluded, because
+  // it runs its own finalizer via `deps.finalizeTournamentMatch` below.
+  if (room.state.gameOver && !legacyLeagueRoom && !room.matchLogged) {
     const status = room.gameOverPersistStatus ?? 'idle';
     // Do not re-schedule while pending, after success, or after give-up.
     if (status === 'idle') {
@@ -942,7 +955,10 @@ export function broadcastStateUpdate(roomCode: string): void {
   if (room.state.gameOver) {
     const finRoom = room;
     const finCode = roomCode;
-    const shouldFinalizeTour = isTournamentRoom;
+    // Legacy league only — `finalizeTournamentMatchHook` is wired solely under
+    // ENABLE_LEGACY_TOURNAMENTS. Scheduled-tournament rooms finalize via the
+    // game-over branch above, not here.
+    const shouldFinalizeTour = legacyLeagueRoom;
     setImmediate(() => {
       if (shouldFinalizeTour) deps.finalizeTournamentMatch?.(finRoom);
       evaluateRoomLifecycle(finCode);
