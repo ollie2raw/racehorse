@@ -12,14 +12,15 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 (current-state audit §2.1) WRITTEN 2026-09-01 — awaiting human sign-off before Step 2 (invariants + gap list). RLS follow-up RESOLVED 2026-09-01: `room_live_sessions` / `room_match_logs` RLS ON; anon reads nothing (*/0 vs 2463/1237 rows); authenticated non-participant reads nothing (genuine `authenticated` JWT probe, incl. targeted `room_code=eq.<live room>` → */0). **`pg_policies` confirmed against prod (human ran it 2026-09-01)** — exactly 3 rows, matching `supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`: `room_live_sessions_no_client_write` (ALL / {authenticated} / `false`) = deny-all-to-client, **participant CANNOT read own live row — unmasked `game_state` never exposed, no competitive-integrity hole**; `room_match_logs_select_own` (SELECT / {public} / `auth.uid() = ANY(participant_user_ids)`) + `room_match_logs_no_client_write` (ALL / {public} / `false`) = participant-can-read-own-TERMINAL-rows, writes denied (post-game data, flag in Step 2). **Authenticated-role SELECT question CLOSED.** Separate lower-urgency follow-up still open: `room_command_receipts` returns PGRST205 → migration likely unapplied to prod (§2.7).**
+**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 (current-state audit §2.1) SIGNED OFF 2026-09-01. Step 2 (invariants + risk-ranked gap list for multiplayer rooms) starts next, as its own pass. RLS follow-up RESOLVED 2026-09-01: `room_live_sessions` / `room_match_logs` RLS ON; anon reads nothing (*/0 vs 2463/1237 rows); authenticated non-participant reads nothing (genuine `authenticated` JWT probe, incl. targeted `room_code=eq.<live room>` → */0). **`pg_policies` confirmed against prod (human ran it 2026-09-01)** — exactly 3 rows, matching `supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`: `room_live_sessions_no_client_write` (ALL / {authenticated} / `false`) = deny-all-to-client, **participant CANNOT read own live row — unmasked `game_state` never exposed, no competitive-integrity hole**; `room_match_logs_select_own` (SELECT / {public} / `auth.uid() = ANY(participant_user_ids)`) + `room_match_logs_no_client_write` (ALL / {public} / `false`) = participant-can-read-own-TERMINAL-rows, writes denied (post-game data, flag in Step 2). **Authenticated-role SELECT question CLOSED.** Separate lower-urgency follow-up still open: `room_command_receipts` returns PGRST205 → migration likely unapplied to prod (§2.7).**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
   seat/identity binding (§2.1.4), concurrency windows MP-1..MP-8 (§2.1.5),
   game-over/forfeit sequence (§2.1.6), authz map (§2.1.7), recovery (§2.1.8),
-  move-log verification (§2.1.9), prior art (§2.1.10). **Do not start Step 2
-  until the human signs off and the RLS follow-up is done.** Gap candidates
+  move-log verification (§2.1.9), prior art (§2.1.10). **SIGNED OFF 2026-09-01**
+  — human ratified §2.1 content, `pg_policies` confirmed against prod, and the
+  RPC EXECUTE-grant sweep it surfaced is fixed in prod + repo. Gap candidates
   parked in §2.3 (not risk-ranked yet — that's Step 2).
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
@@ -110,75 +111,63 @@ service-role RPC + a weekly GitHub Actions cron that hard-fails if any
 `search_path`, with advisory-only reporting for client-callable RPC judgment
 calls.
 
-**RPC EXECUTE-grant sweep — 2026-09-01 (read-only pass; NOTHING applied).**
+**RPC EXECUTE-grant sweep — 2026-09-01. RESOLVED — fixed in prod + repo.**
 While closing out the System 2 Step 1 follow-up the human asked for an urgent
-check of two admin-only content-lifecycle RPCs. Triaged `assert_security_posture()`
-ADVISORY 2 (`securitydefiner_client_executable`, ~35 functions). Most are
-legitimately client-facing (`gauntlet_start_attempt`, `gauntlet_submit_round`,
-`commit_daily_fritz_attempt_command`, the `project_*` / `*_is_immutable` trigger
-functions, …). **Two are admin-only and must not be client-callable:**
+check of the admin-only content-lifecycle RPCs. Triaged
+`assert_security_posture()` ADVISORY 2 (`securitydefiner_client_executable`,
+~35 functions). Most are legitimately client-facing (`gauntlet_start_attempt`,
+`gauntlet_submit_round`, `commit_daily_fritz_attempt_command`, the `project_*` /
+`*_is_immutable` trigger functions, …). **Four are admin-only and must not be
+client-callable:**
 
-- `public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)` —
-  publishes a gauntlet day (`p_day_date, p_seed, p_rounds, p_rounds_optimal,
-  p_closes_at`).
-- `public.gauntlet_close_day(date)` — closes a gauntlet day (`p_day_date`).
+| RPC | What it does | Prod state before the fix |
+|---|---|---|
+| `publish_daily_fritz_challenge(text,date,int,int,int,int,int,int,int,int,text,int,text,text,jsonb,timestamptz)` | publishes a Daily Fritz challenge | **CONFIRMED `anon` = true** — live, real exposure |
+| `invalidate_daily_fritz_challenge(date,text)` | invalidates a published Daily Fritz day | **CONFIRMED `anon` = true** — live, real exposure |
+| `gauntlet_publish_day(date,text,jsonb,jsonb,timestamptz)` | publishes a Gauntlet day | client-executable — **preventive** (see below) |
+| `gauntlet_close_day(date)` | closes a Gauntlet day | client-executable — **preventive** (see below) |
 
-**Verified today (via `assert_security_posture()` + the PostgREST OpenAPI
-spec):** both are `SECURITY DEFINER` and pass the `securitydefiner_client_executable`
-predicate → a client role holds `EXECUTE`. **Neither signature carries a
-secret-token / auth param.** `grep` finds **no lockdown migration** for either
-in the repo, and **no caller** anywhere in `client/` or `server/` code (the
-whole gauntlet feature is DB-only + client UI shell right now). Absent a
-body-internal guard, `proacl` is Postgres-default ⇒ **an arbitrary anon caller
-can `POST /rest/v1/rpc/gauntlet_publish_day` (or `…/gauntlet_close_day`) and
-publish or close a gauntlet day out of schedule.** Stated plainly: **as far as
-can be seen without the function body, there is nothing stopping this.**
+**The Daily Fritz finding was a live gap in a shipped feature, not
+hypothetical.** `2026-08-01_daily_fritz_published_challenges.sql` revoked
+EXECUTE from `public` and `authenticated` only — it **omitted `anon`**, and
+Supabase grants EXECUTE on new public functions to `anon` explicitly, so
+`revoke … from public` never removed it. An anonymous `POST
+/rest/v1/rpc/publish_daily_fritz_challenge` (or `…/invalidate_…`) could publish
+or invalidate a Daily Fritz day out of schedule. Neither function has any
+body-internal auth check — protection is grant-only. **No evidence it was
+exploited** (Daily Fritz publications all trace to the server's scheduled
+publisher; content is content-addressed + `on conflict do nothing`, so a
+replay of the real package is a no-op and a *different* package raises
+`daily_fritz_challenge_identity_conflict`). Still, the window was real.
 
-**NOT verifiable from the agent session:** the function *bodies*.
-`pg_get_functiondef` needs `pg_catalog`, which PostgREST does not expose
-(`PGRST106: Only public, graphql_public exposed`), and there is no DB
-connection string / SQL-editor access here. **Whether either body has an
-`auth.uid()` / `auth.jwt()->>'role'` / time-window guard is UNKNOWN — the human
-must run `\sf+ public.gauntlet_publish_day` and `\sf+ public.gauntlet_close_day`
-(or `pg_get_functiondef('public.gauntlet_publish_day(date,text,jsonb,jsonb,timestamptz)'::regprocedure)`)
-and confirm.**
+**Gauntlet mode is scrapped / in-progress** — not shipped, no multiplayer
+connection, no `pg_cron`, no server caller. `gauntlet_publish_day` /
+`gauntlet_close_day` had no lockdown migration ever written; locking them down
+now is **preventive**, so they don't ship exposed if the feature is revived.
 
-**Codebase precedent:** the two direct analogues —
-`publish_daily_fritz_challenge` / `invalidate_daily_fritz_challenge`
-(`supabase/migrations/2026-08-01_daily_fritz_published_challenges.sql`) — have
-**no body-internal auth check at all**; they rely purely on
-`revoke all … from public; revoke all … from authenticated; grant execute … to
-service_role`. So the established pattern here is **grant-based, not
-body-guard** — which makes a body guard on the gauntlet pair *unlikely* but not
-ruled out. **Related finding:** those two fritz RPCs *still* show up in the
-posture advisory — their revoke omits `anon` (only `public` + `authenticated`
-revoked), so they may **still be anon-executable in prod**. Worth checking
-`aclexplode(proacl)` for all the admin RPCs while in the SQL editor.
-
-**Minimal fix (matches the existing pattern; also closes the `anon` gap that
-pattern left open). Propose as a committed, self-asserting migration — not
-SQL-editor-only — because "reviewed SQL sits unapplied" is the documented root
-cause here:**
+**Fix (human, SQL editor, 2026-09-01) — same revoke/grant pattern for all
+four:**
 
 ```sql
-revoke all on function public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)
-  from public, anon, authenticated;
-grant  execute on function public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)
-  to service_role;
-
-revoke all on function public.gauntlet_close_day(date)
-  from public, anon, authenticated;
-grant  execute on function public.gauntlet_close_day(date)
-  to service_role;
+revoke all on function public.<fn>(<sig>) from public, anon, authenticated;
+grant  execute on function public.<fn>(<sig>) to service_role;
 ```
 
-Safe against the real callers: no repo code calls these; a `pg_cron` job runs
-as table owner and an Edge Function / admin script uses the `service_role` key —
-all unaffected by removing client `EXECUTE`. **Confirm the actual caller before
-applying.** A body guard (`if (auth.jwt()->>'role') is distinct from
-'service_role' then raise exception …`, plus `set search_path = public`) is
-worthwhile defence-in-depth but the grant is the fix. **Not applied today per
-the human's read-only instruction — awaiting go-ahead + the body confirmation.**
+**Verified in prod** with `has_function_privilege` for all four × {anon,
+authenticated, service_role} → `anon = false`, `authenticated = false`,
+`service_role = true` across the board (table in the changelog entry).
+
+**Repo sync:** `supabase/migrations/2026-09-01_content_lifecycle_rpc_execute_lockdown.sql`
+— self-asserting, carries all four real signatures, notes that it
+supersedes/corrects the `anon`-omission in
+`2026-08-01_daily_fritz_published_challenges.sql` and that the fix is **already
+live in prod** (brings the repo in sync; idempotent if re-applied). This is the
+**4th** reviewed-SQL-drift instance — root cause is still "no CI migration
+runner".
+
+No body guard was added (matching the codebase's grant-based pattern for these
+RPCs); a `service_role`-claim check + `set search_path` in the bodies remains
+optional defence-in-depth for a later pass.
 
 **Deferred to a later Daily-modes (System 3) pass — raised by the human
 2026-09-01, NOT today's problem, logged so they are not lost:**
@@ -1821,5 +1810,5 @@ registry.
 | 2026-09-01 | **System 2 Step 1 follow-up — `room_live_sessions` / `room_match_logs` RLS verified live; grep of committed §2.1 confirmed clean.** `git show HEAD:HARDENING_PLAN.md | grep` for `authorizeMatchParticipant` / `assertUnmaskedGameStateForPersistence` / `commitLifecycleAfterMutate` — all intact, no garbling in the committed file. **RLS probe (anon key, prod `fisfadjqllojdzibcdfx`, read-only):** `assert_security_posture()` → `hard_fail_count:0` (RLS enabled on every `public` table incl. both room tables); anon `SELECT room_live_sessions` / `room_match_logs` → HTTP 200 `content-range: */0` while service-role counts show **2458** / **1236** rows. **No anonymous read exposure — the "transcripts readable with the anon key" fear does not materialise.** Residuals recorded in §2.1.2 / §2.1.7 / §2.3: (a) authenticated-role `SELECT` policy text not readable via PostgREST — human to check in SQL editor whether a participant can read their own *live* row (unmasked `game_state` = opponent hand); (b) both tables carry the `client_write_grant_rls_on` advisory (anon+authenticated INSERT/UPDATE/DELETE grants, RLS-gated only — same advisory on 44 tables incl. `profiles`/`ranked_games`, not a hard fail; defence-in-depth revoke); (c) schema still unmanaged — no migration. **Side finding:** `room_command_receipts` → PostgREST `PGRST205` (not in schema cache) — migration may be unapplied to prod / table not REST-exposed; receipt store degrades to shell-embedded-only. Anon/authenticated **write** probes to prod were not run (auto-mode classifier blocked the mutating request — correct; needs human approval). §2.7 Step 1 follow-up checkbox flipped to done for the anon question, residual item added for the human. |
 | 2026-09-01 | **System 2 Step 1 follow-up — authenticated-role SELECT RESOLVED (D-8).** Minted a genuine `authenticated`-role JWT (service-key admin API: create confirmed throwaway user → `grant_type=password` → JWT verified role/aud `authenticated` → user deleted; net-zero prod state). Non-participant authed probe: `room_live_sessions` full select **and** `?room_code=eq.<live room>` → `content-range */0`; `room_match_logs` → `*/0`. **No broad `TO authenticated USING(true)` policy on either table.** Found the canonical DDL — `supabase/room_live_sessions.sql` (only policy `room_live_sessions_no_client_write` = `FOR ALL TO authenticated USING(false)` — no SELECT policy ⇒ **participant cannot read own live row ⇒ unmasked `game_state`/opponent hand is unreachable by any client — no competitive-integrity hole**) and `supabase/room_match_logs.sql` (`room_match_logs_select_own` = `FOR SELECT USING (auth.uid() = ANY(participant_user_ids))` ⇒ participant **can** read own *terminal* archive rows — post-game, deliberate; Step 2 decides keep-vs-proxy). §2.1 "unmanaged schema / NONE" corrected: the DDL exists in `supabase/`, just not in `migrations/`. Residual: one `pg_policies` query to confirm prod == DDL (§2.7). **Follow-up item logged separately (§2.7, §2.3):** `room_command_receipts` → PGRST205 for anon *and service-role* ⇒ `2026-08-01_room_command_receipts.sql` likely unapplied to prod (idempotency degrades to `room_shell.actionReceipts` embedded-only) — same "reviewed migration unapplied" class as T-1 / ghost tables / commit_glicko, lower urgency. Current focus + §2.7 + §2.3 updated. **Step 2 may start once prod==DDL is confirmed or the probe evidence is accepted as sufficient.** |
 | 2026-09-01 | **System 2 Step 1 follow-up — CLOSED.** Human ran the `pg_policies` query against prod: exactly 3 rows, **exact match to the repo DDL** — `room_live_sessions_no_client_write` (ALL / {authenticated} / qual `false` / wc `false`), `room_match_logs_select_own` (SELECT / {public} / qual `auth.uid() = ANY (participant_user_ids)` / wc null), `room_match_logs_no_client_write` (ALL / {public} / qual `false` / wc `false`). No `qual true` on any policy; `room_live_sessions` has no SELECT policy for any role and nothing for `anon` ⇒ RLS default-deny ⇒ service_role-only reads. **Authenticated-role SELECT question CLOSED — no competitive-integrity hole (participant cannot read own live `room_live_sessions` row / unmasked `game_state`).** `room_match_logs` participant-reads-own-terminal-rows confirmed deliberate — flagged for Step 2 keep-vs-proxy. §2.7 box checked, D-8 / Current focus / §2.3 updated to CONFIRMED. **System 2 Step 1 fully done — awaiting human sign-off for Step 2.** Still-open lower-urgency follow-up: `room_command_receipts` PGRST205 (migration likely unapplied to prod). New memory: `authenticated-rls-probe-technique` (the JWT-minting method). |
-| 2026-09-01 | **RPC EXECUTE-grant sweep (read-only, nothing applied).** Human asked for an urgent check of `gauntlet_publish_day` / `gauntlet_close_day` before closing the day's sweep. Findings (via `assert_security_posture()` ADVISORY 2 + PostgREST OpenAPI): both are `SECURITY DEFINER`, both pass `securitydefiner_client_executable` (client role holds EXECUTE), neither signature has a secret/auth param, no lockdown migration in the repo, no caller in `client/`/`server/` code. **Absent a body-internal guard, an anon caller can invoke either directly and publish/close a gauntlet day out of schedule.** Function *bodies* NOT readable from the agent session (`pg_get_functiondef` → `pg_catalog` → `PGRST106`, no DB connection) — human must `\sf+` both and confirm whether a guard exists. Precedent (`publish_daily_fritz_challenge` / `invalidate_daily_fritz_challenge`, `2026-08-01_daily_fritz_published_challenges.sql`): **no body check — pure `revoke … / grant execute to service_role`**, and those revokes **omit `anon`** so they may still be anon-executable in prod. Minimal fix drafted (`revoke all … from public, anon, authenticated; grant execute … to service_role` for both gauntlet fns, as a committed self-asserting migration) — **not applied, awaiting go-ahead + body confirmation.** New block added after the RLS/config-hardening note. Also logged deferred: `fritz_challenge_*` REST/grant contradiction, `handle_new_user()` body review, `assert_security_posture()` follow-up queries b/c/d (incl. SECURITY DEFINER views — not covered by the current RPC). |
+| 2026-09-01 | **RPC EXECUTE-grant sweep — started as an urgent check of `gauntlet_publish_day` / `gauntlet_close_day`, surfaced a LIVE gap in Daily Fritz.** Agent findings (via `assert_security_posture()` ADVISORY 2 + PostgREST OpenAPI; function bodies not readable from the agent session — `pg_get_functiondef` → `pg_catalog` → `PGRST106`): four admin-only content-lifecycle RPCs were `SECURITY DEFINER` + client-executable, no secret/auth param, no body guard (the codebase pattern for these is grant-only). **Human verified + fixed in prod (SQL editor):** `publish_daily_fritz_challenge` and `invalidate_daily_fritz_challenge` were **`anon` = true in prod** — `2026-08-01_daily_fritz_published_challenges.sql` revoked from `public`+`authenticated` but omitted `anon`, and Supabase grants EXECUTE to `anon` explicitly. **A live, real gap in a shipped feature** — an anonymous caller could publish/invalidate a Daily Fritz day out of schedule (no evidence of exploitation: content-addressed + `on conflict do nothing` + identity-conflict raise). `gauntlet_*` were preventive (mode scrapped/in-progress, not shipped, no MP connection). Fix = `revoke all … from public, anon, authenticated; grant execute … to service_role` for all four. **Post-fix verification (`has_function_privilege`):** <br>`gauntlet_close_day` — anon:false authenticated:false service_role:true<br>`gauntlet_publish_day` — anon:false authenticated:false service_role:true<br>`invalidate_daily_fritz_challenge` — anon:false authenticated:false service_role:true<br>`publish_daily_fritz_challenge` — anon:false authenticated:false service_role:true<br>**Repo sync:** `supabase/migrations/2026-09-01_content_lifecycle_rpc_execute_lockdown.sql` (self-asserting, all four real signatures, notes it supersedes the `anon`-omission in the 2026-08-01 file and that the fix is already live). 4th reviewed-SQL-drift instance. Block above rewritten to RESOLVED. Also logged deferred (System 3 pass): `fritz_challenge_*` REST/grant contradiction, `handle_new_user()` body review, `assert_security_posture()` follow-up queries b/c/d (incl. SECURITY DEFINER views — not covered by the current RPC). |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
