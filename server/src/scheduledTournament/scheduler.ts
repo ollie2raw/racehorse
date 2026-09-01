@@ -1,5 +1,6 @@
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
+import { config } from '../config';
 import { isTournamentPastActiveWindow } from './activeWindow';
 import { fetchTournamentsByStatus } from './persistence';
 import {
@@ -26,13 +27,33 @@ let seedTimer: ReturnType<typeof setInterval> | null = null;
  *   - If now >= scheduled_start and status='in_progress' → dispatchScheduledStartMatches
  *
  * Idempotent: status transitions guarded by the current status check, so a slow
- * tick or a restart won't double-fire. No-show resolution also runs off
- * persisted deadlines here; this is acceptable for the current single-instance
- * Render deployment, but multi-instance scale needs a DB-backed lease/lock so
- * only one worker resolves expired matches.
+ * tick or a restart won't double-fire.
+ *
+ * SINGLETON (D-7 / HARDENING_PLAN.md §1.4.6): this whole tick — registration
+ * open/close, scheduled-start dispatch, expired-tournament cancel, AND the
+ * no-show reconciler (`reconcileExpiredReadyMatches`) — must run on exactly one
+ * process. The per-match RPC row lock (D-2) makes each `complete_tournament_match`
+ * call safe, but it does NOT stop two instances from each *scheduling* a call
+ * for different stale matches in the same tick (duplicated work + log noise).
+ * Gated on `TOURNAMENT_SCHEDULER_ENABLED` (default true): Render runs one
+ * instance so this is structurally moot today; when a dedicated scheduler worker
+ * is split out, the flag is false on the web dynos and true on that worker.
+ *
+ * A pg advisory lock was evaluated and REJECTED — the server has no holdable
+ * Postgres session (every DB call is PostgREST over HTTP on a different pooled
+ * connection), so a session-scoped lock releases before the tick's next call.
+ * Only `pg_try_advisory_xact_lock` works over PostgREST, and only inside one RPC.
+ * See §1.4.6 for the full rationale so this is not re-proposed.
  */
 export function startTournamentScheduler(io: Server): void {
   if (timer) return;
+  if (!config.tournamentSchedulerEnabled) {
+    log.info(
+      { flag: 'TOURNAMENT_SCHEDULER_ENABLED', value: false },
+      'tournament scheduler + no-show reconciler disabled on this instance — not ticking',
+    );
+    return;
+  }
   const tick = async () => {
     try {
       const now = Date.now();

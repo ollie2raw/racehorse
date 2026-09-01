@@ -14,6 +14,13 @@ export interface Config {
   clientUrl: string | null;
   serverUrl: string | null;
   enableLegacyTournaments: boolean;
+  /**
+   * Boot-time singleton gate for the scheduled-tournament scheduler tick +
+   * no-show reconciler (D-7 / HARDENING_PLAN.md §1.4.6). Default true. Set
+   * false on web dynos once a dedicated scheduler worker is split out, so the
+   * tick runs on exactly one process.
+   */
+  tournamentSchedulerEnabled: boolean;
   matchmakingDebug: boolean;
   matchmakingDevMode: string | null;
   mpDrawAudit: boolean;
@@ -97,6 +104,7 @@ export function validateAndLoadConfig(): Config {
     clientUrl: getEnv('CLIENT_URL'),
     serverUrl: getEnv('SERVER_URL'),
     enableLegacyTournaments: getEnvBool('ENABLE_LEGACY_TOURNAMENTS', false),
+    tournamentSchedulerEnabled: getEnvBool('TOURNAMENT_SCHEDULER_ENABLED', true),
     matchmakingDebug: getEnvBool('MATCHMAKING_DEBUG', false),
     matchmakingDevMode: getEnv('MATCHMAKING_DEV_MODE'),
     mpDrawAudit: getEnvBool('MP_DRAW_AUDIT', false),
