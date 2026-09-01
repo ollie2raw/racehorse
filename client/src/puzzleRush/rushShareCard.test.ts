@@ -1,65 +1,98 @@
 import { describe, it, expect } from 'vitest';
 import { buildRushShareText } from './rushShareCard';
 import { SITE_DOMAIN } from '../lib/siteUrl';
-import { buildShareGridRow } from '../lib/shareGrid';
-
-const STAGES = [
-  { label: 'Warm-Up', done: 2, total: 3 },
-  { label: 'Building', done: 0, total: 5 },
-  { label: 'Master', done: 0, total: 7 },
-];
 
 describe('buildRushShareText', () => {
-  it('leads with the score and solved count, then every stage', () => {
+  it('shows puzzle number, one emoji per puzzle, solve count, and time', () => {
     const text = buildRushShareText({
       score: 250,
       solved: 2,
-      stages: STAGES,
+      puzzles: [
+        { solved: true },
+        { solved: false },
+        { solved: true },
+      ],
       secondsBanked: 2,
-      playedAt: '2026-08-27T22:12:00.000Z',
+      runDate: '2026-08-31',
     });
-    expect(text).toContain('250 pts · 2 solved');
-    // Warm-Up is 2 of 3, so a partly-filled row; the two untouched stages read
-    // as unplayed rather than as failures.
-    expect(text).toContain(buildShareGridRow(2 / 3, 'win'));
-    expect(text.split('\n').filter((line) => line.startsWith('⬜'))).toHaveLength(2);
-    expect(text).toContain('+2s banked');
-    expect(text.endsWith(SITE_DOMAIN)).toBe(true);
+    expect(text).toContain('Racehorse Puzzle Rush #144');
+    expect(text).toContain('🟩🟥🟩');
+    expect(text).toContain('2 solved');
+    expect(text).toContain('2s');
+    expect(text).toContain(SITE_DOMAIN);
   });
 
-  it('marks a fully cleared stage as exceptional', () => {
+  it('formats minutes and seconds correctly', () => {
     const text = buildRushShareText({
-      score: 900, solved: 15, secondsBanked: 0,
-      stages: [{ label: 'Warm-Up', done: 3, total: 3 }],
+      score: 900,
+      solved: 7,
+      puzzles: [
+        { solved: true },
+        { solved: true },
+        { solved: true },
+        { solved: true },
+        { solved: true },
+        { solved: true },
+        { solved: true },
+      ],
+      secondsBanked: 125, // 2m 5s
+      runDate: '2026-08-31',
     });
-    expect(text).toContain(buildShareGridRow(1, 'skunk'));
+    expect(text).toContain('2m 5s');
   });
 
-  it('omits the solve count when the server did not report one', () => {
-    const text = buildRushShareText({ score: 250, solved: null, stages: STAGES, secondsBanked: 0 });
-    expect(text).toContain('250 pts');
-    expect(text).not.toContain('solved');
-  });
-
-  it('drops the banked line when nothing was banked', () => {
-    const text = buildRushShareText({ score: 250, solved: 2, stages: STAGES, secondsBanked: 0 });
-    expect(text).not.toContain('banked');
-  });
-
-  it('falls back to a bare title when the run has no usable timestamp', () => {
-    for (const playedAt of [null, undefined, 'not-a-date']) {
-      const text = buildRushShareText({ score: 10, solved: 1, stages: [], secondsBanked: 0, playedAt });
-      expect(text.split('\n')[0]).toBe('Puzzle Rush');
-    }
-  });
-
-  it('omits stages that served no puzzles in this run', () => {
+  it('omits time when no bonuses earned', () => {
     const text = buildRushShareText({
       score: 250,
       solved: 2,
-      stages: [...STAGES, { label: 'Unused', done: 0, total: 0 }],
+      puzzles: [
+        { solved: true },
+        { solved: false },
+      ],
+      secondsBanked: 0,
+      runDate: '2026-08-31',
+    });
+    // Should only show solve count, no time bonuses
+    const lines = text.split('\n');
+    expect(lines[2]).toBe('2 solved');
+    expect(text).not.toMatch(/\d+[ms]\s/); // No "5s " or "2m " pattern
+  });
+
+  it('calculates puzzle number from run_date', () => {
+    const text = buildRushShareText({
+      score: 10,
+      solved: 1,
+      puzzles: [{ solved: true }],
+      secondsBanked: 0,
+      runDate: '2026-04-10',
+    });
+    expect(text).toContain('#1');
+  });
+
+  it('defaults to puzzle #1 when run_date is missing', () => {
+    const text = buildRushShareText({
+      score: 10,
+      solved: 1,
+      puzzles: [{ solved: true }],
       secondsBanked: 0,
     });
-    expect(text).not.toContain('Unused');
+    expect(text).toContain('#1');
+  });
+
+  it('handles max-length run (15 puzzles) without truncation', () => {
+    const puzzles = Array(15).fill(null).map((_, i) => ({ solved: i < 13 }));
+    const text = buildRushShareText({
+      score: 1200,
+      solved: 13,
+      puzzles,
+      secondsBanked: 45,
+      runDate: '2026-08-31',
+    });
+    const emojiLine = text.split('\n')[1];
+    const greenCount = (emojiLine.match(/🟩/g) ?? []).length;
+    const redCount = (emojiLine.match(/🟥/g) ?? []).length;
+    expect(greenCount).toBe(13);
+    expect(redCount).toBe(2);
+    expect(text).toContain('13 solved');
   });
 });

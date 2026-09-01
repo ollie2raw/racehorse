@@ -368,7 +368,7 @@ export default function DailyFritzLeaderboardScreen({
     };
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       void navigator
-        .share({ title: 'Daily Fritz', text: resultShareText })
+        .share({ text: resultShareText })
         .then(() => {
           markShared();
         })

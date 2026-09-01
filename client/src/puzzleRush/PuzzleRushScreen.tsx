@@ -202,8 +202,15 @@ function PuzzleRushActiveRun({
           <div className="home-bg__texture" />
         </div>
         {run.phase === 'completing' ? (
-          <div className="pr-results pr-results--pending" data-ui="rush-completing">
-            <span className="pr-results__eyebrow">Scoring your run…</span>
+          <div className="game-over-overlay pr-result-overlay" data-ui="rush-completing">
+            <div className="prd">
+              <div className="prd__body">
+                <span className="prd__eyebrow">Run complete</span>
+                <p style={{ marginTop: '16px', fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
+                  Scoring your run…
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           <RushResultsView

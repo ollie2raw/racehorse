@@ -56,6 +56,7 @@ export interface PuzzleRushRun {
   clientReportedScore: number;
   invalidatedReason: string | null;
   configVersion: number;
+  runDate?: string;
 }
 
 export interface PuzzleRushClockConfig {

@@ -26,6 +26,7 @@ import ActivityFeedPanel, {
 import { fetchGlobalLeaderboard } from './socialApi';
 import './hub/hubShared.css';
 import './activityFeedScreen.css';
+import './socialBoard.css';
 
 interface ActivityFeedScreenProps {
   user: User | null;
@@ -383,8 +384,9 @@ export default function ActivityFeedScreen({
         <div className="rh-hub-grid rh-sf-layout-grid social-layout-grid">
           <main className="rh-hub-main rh-sf-main-column social-main-column">
             <SocialPageHero
+              eyebrow="Community"
               title="Social"
-              subtitle="Follow rivals, track wins, and see what’s happening across Racehorse."
+              subtitle="Every result your circle posts, in the order it happened."
               meta={user ? (
                 <>
                   {socialHeroStats.map((stat) => (

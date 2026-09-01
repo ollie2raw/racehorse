@@ -132,6 +132,7 @@ export function buildDailyFritzFinalOverlayViewModel({
     rankValue: ranked ? formatOrdinalPlace(rank) : null,
     rankShort: ranked ? formatOrdinal(rank) : null,
     shareDate: formatDateLabel(runDate),
+    shareRunDate: runDate,
     shareTier: titleCaseTier(fritzTier),
     shareRating,
     shareStreak,

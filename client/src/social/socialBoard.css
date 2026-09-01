@@ -1,0 +1,724 @@
+/*
+ * Social — board treatment.
+ *
+ * Carries the Daily Fritz leaderboard's visual system onto the Social page:
+ * square records instead of rounded cards, a display masthead fused to a
+ * connected stat strip, hairline table rows instead of floating tiles, and
+ * gold reserved for signal (your own row, rank 1, a skunk, the primary CTA)
+ * rather than sprinkled on every badge.
+ *
+ * Values mirror dailyFritzLeaderboardBoard.css so the two screens read as one
+ * system. Loaded last by ActivityFeedScreen so it wins over the card-era rules
+ * in activityFeedScreen.css / activityFeed.css / socialPageHero.css at equal
+ * specificity; everything here is scoped under .rh-sf-page so it cannot leak.
+ *
+ * Content model is unchanged — same feed, same filters, same rail panels.
+ */
+
+.rh-sf-page {
+  --sb-line: var(--border-subtle);
+  --sb-line-soft: rgba(255, 255, 255, 0.05);
+  --sb-line-strong: var(--border-light);
+  --sb-ink: var(--text-primary);
+  --sb-subtle: rgba(255, 255, 255, 0.72);
+  --sb-muted: var(--text-secondary);
+  --sb-label: rgba(255, 255, 255, 0.42);
+  --sb-dim: var(--text-dim);
+  --sb-grid: rgba(255, 255, 255, 0.03);
+  --sb-surface: rgba(255, 255, 255, 0.015);
+  --sb-glass: var(--glass-bg);
+
+  --sb-accent: var(--tier-elite);
+  --sb-accent-border: rgba(var(--tier-elite-rgb), 0.42);
+  --sb-accent-dim: rgba(var(--tier-elite-rgb), 0.14);
+  --sb-accent-row: rgba(var(--tier-elite-rgb), 0.045);
+  --sb-accent-row-hover: rgba(var(--tier-elite-rgb), 0.065);
+  --sb-accent-head: rgba(var(--tier-elite-rgb), 0.09);
+  --sb-accent-head-border: rgba(var(--tier-elite-rgb), 0.22);
+  --sb-accent-ink: var(--text-on-elite);
+
+  --sb-win: var(--accent-green);
+  --sb-loss: var(--accent-red);
+}
+
+/* ------------------------------------------------------------- masthead */
+
+.rh-sf-page .social-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--hub-space-3, 24px);
+  padding: 26px 26px 22px;
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record) var(--radius-record) 0 0;
+  background-color: rgba(255, 255, 255, 0.012);
+  background-image:
+    linear-gradient(var(--sb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sb-grid) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+  box-shadow: none;
+}
+
+.rh-sf-page .social-hero__head {
+  display: block;
+  min-width: 0;
+}
+
+.rh-sf-page .social-hero__eyebrow {
+  display: block;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sb-label);
+}
+
+.rh-sf-page .social-hero__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5vw, 62px);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  color: var(--sb-ink);
+  text-transform: none;
+}
+
+.rh-sf-page .social-hero__title-dot {
+  color: var(--sb-accent);
+}
+
+.rh-sf-page .social-hero__subtitle {
+  margin: 10px 0 0;
+  max-width: 52ch;
+  font-size: 13px;
+  color: var(--sb-muted);
+}
+
+/* ----------------------------------------------------------- stat strip */
+
+/*
+ * The four stat tiles become one connected bar fused to the masthead's bottom
+ * edge — the leaderboard's DATE / RACERS / SKUNKS / RESETS IN treatment. The
+ * hero's own gap is removed so the two boxes read as a single unit.
+ */
+.rh-sf-page .social-hero {
+  margin-bottom: 0;
+}
+
+.rh-sf-page .social-hero__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 1px solid var(--sb-line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-record) var(--radius-record);
+  background: var(--sb-surface);
+}
+
+.rh-sf-page .social-hero__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-left: 1px solid var(--sb-line-soft);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.rh-sf-page .social-hero__stat:first-child {
+  border-left: 0;
+}
+
+.rh-sf-page .social-hero__stat-label {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sb-label);
+}
+
+.rh-sf-page .social-hero__stat-value {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--sb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .social-hero__stat--accent .social-hero__stat-value {
+  color: var(--sb-accent);
+}
+
+/* The note becomes a dim qualifier beside the value, not a third line. */
+.rh-sf-page .social-hero__stat-note {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sb-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-sf-page .social-hero__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+/* -------------------------------------------------------------- filters */
+
+.rh-sf-page .social-hero__filters {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.rh-sf-page .rh-af-filters {
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.rh-sf-page .rh-af-filter {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record);
+  background: var(--sb-glass);
+  color: var(--sb-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-af-filter:hover {
+  border-color: var(--sb-accent-border);
+  background: var(--sb-glass);
+  color: var(--sb-subtle);
+}
+
+.rh-sf-page .rh-af-filter--active {
+  border-color: var(--sb-accent-border);
+  background: var(--sb-accent-dim);
+  color: var(--sb-accent);
+  box-shadow: none;
+}
+
+/* The tab icons were carrying most of the pill-era colour. */
+.rh-sf-page .rh-af-filter-icon {
+  color: currentColor;
+  opacity: 0.8;
+}
+
+/* --------------------------------------------------------------- layout */
+
+.rh-sf-page .rh-hub-grid {
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 16px;
+}
+
+/* ----------------------------------------------------------- feed table */
+
+.rh-sf-page .rh-af-panel,
+.rh-sf-page .social-feed-panel {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.rh-sf-page .rh-af-feed-card {
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record);
+  background: var(--sb-surface);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.rh-sf-page .rh-af-feed {
+  padding: 0;
+  gap: 0;
+}
+
+/*
+ * Rows, not cards. The existing five-child grid (avatar / icon / main /
+ * stats / time) already matches the board's column rhythm, so this only has
+ * to strip the card chrome and swap the separator to a hairline.
+ */
+.rh-sf-page .rh-af-rich-row {
+  grid-template-columns: 28px 18px minmax(0, 1fr) auto 68px;
+  gap: 11px;
+  min-height: 60px;
+  margin: 0;
+  padding: 11px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--sb-line-soft);
+  border-radius: 0;
+  background: none;
+  transition: background 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.rh-sf-page .rh-af-rich-row:last-child {
+  border-bottom: 0;
+}
+
+.rh-sf-page .rh-af-rich-row:hover {
+  border-color: var(--sb-line-soft);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.rh-sf-page .rh-af-rich-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-record);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rh-sf-page .rh-af-rich-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sb-subtle);
+}
+
+.rh-sf-page .rh-af-rich-user {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sb-ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rh-sf-page .rh-af-rich-user:hover {
+  color: var(--sb-accent);
+}
+
+.rh-sf-page .rh-af-rich-action {
+  color: var(--sb-subtle);
+}
+
+.rh-sf-page .rh-af-rich-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.rh-sf-page .rh-af-rich-secondary {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--sb-muted);
+}
+
+.rh-sf-page .rh-af-rich-stats {
+  gap: 10px;
+}
+
+.rh-sf-page .rh-af-rich-score {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--sb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .rh-af-rich-points,
+.rh-sf-page .rh-af-rich-delta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sb-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .rh-af-rich-end {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.rh-sf-page .rh-af-rich-end time {
+  font-size: 12px;
+  color: var(--sb-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .rh-af-rich-chevron {
+  color: var(--sb-dim);
+}
+
+/* ---------------------------------------------------------------- badges */
+
+/*
+ * Gold is a signal, not decoration. A mode badge says which mode a result came
+ * from — routine information — so it drops to a neutral hairline tag whatever
+ * tone the row model assigned it. Only the outcome badge in the stats column
+ * keeps its colour, and only a skunk gets gold.
+ */
+.rh-sf-page .rh-af-rich-badge {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 2px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-af-rich-meta .rh-af-rich-badge {
+  border: 1px solid var(--sb-line);
+  background: none;
+  color: var(--sb-muted);
+}
+
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--gold {
+  border: 1px solid var(--sb-accent-border);
+  background: var(--sb-accent-dim);
+  color: var(--sb-accent);
+}
+
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--teal,
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--green {
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: none;
+  color: var(--sb-win);
+}
+
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--red {
+  border: 1px solid rgba(242, 71, 71, 0.36);
+  background: none;
+  color: var(--sb-loss);
+}
+
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--gray,
+.rh-sf-page .rh-af-rich-stats .rh-af-rich-badge--purple {
+  border: 1px solid var(--sb-line);
+  background: none;
+  color: var(--sb-muted);
+}
+
+/* ------------------------------------------------------- feed states */
+
+.rh-sf-page .rh-af-status,
+.rh-sf-page .rh-af-empty,
+.rh-sf-page .rh-sf-signin {
+  margin: 0;
+  padding: 30px 22px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--sb-muted);
+}
+
+.rh-sf-page .rh-sf-signin {
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record);
+  background: var(--sb-surface);
+}
+
+.rh-sf-page .rh-af-status-kicker {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--sb-label);
+}
+
+.rh-sf-page .rh-af-load-more-wrap {
+  padding: 12px;
+  border-top: 1px solid var(--sb-line);
+}
+
+.rh-sf-page .rh-af-load-more,
+.rh-sf-page .rh-sf-widget-link,
+.rh-sf-page .rh-af-status-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record);
+  background: var(--sb-glass);
+  color: var(--sb-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-af-load-more:hover,
+.rh-sf-page .rh-sf-widget-link:hover,
+.rh-sf-page .rh-af-status-btn:hover {
+  border-color: var(--sb-line-strong);
+  background: var(--sb-glass);
+  color: var(--sb-ink);
+}
+
+/* ------------------------------------------------------------------ rail */
+
+.rh-sf-page .rh-sf-right-rail {
+  gap: 16px;
+}
+
+.rh-sf-page .rh-sf-widget,
+.rh-sf-page .rh-hub-rail-card,
+.rh-sf-page .rh-social-card {
+  padding: 0;
+  border: 1px solid var(--sb-line);
+  border-radius: var(--radius-record);
+  background: var(--sb-surface);
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-sf-widget-head {
+  align-items: center;
+  margin: 0;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--sb-line);
+}
+
+.rh-sf-page .rh-sf-widget-title,
+.rh-sf-page .rh-hub-rail-title {
+  margin: 0;
+  padding: 9px 14px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--sb-label);
+}
+
+/* A title inside a head row must not double the head's own padding. */
+.rh-sf-page .rh-sf-widget-head .rh-sf-widget-title {
+  padding: 0;
+}
+
+.rh-sf-page .rh-sf-widget-online {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sb-dim);
+}
+
+.rh-sf-page .rh-sf-online-strip,
+.rh-sf-page .rh-sf-widget-list,
+.rh-sf-page .rh-sf-ranked-list,
+.rh-sf-page .rh-sf-rivals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+
+.rh-sf-page .rh-sf-online-chip,
+.rh-sf-page .rh-sf-ranked-row,
+.rh-sf-page .rh-sf-rival-card,
+.rh-sf-page .rh-sf-tournament {
+  margin: 0;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--sb-line-soft);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-sf-online-chip:last-child,
+.rh-sf-page .rh-sf-ranked-row:last-child,
+.rh-sf-page .rh-sf-rival-card:last-child,
+.rh-sf-page .rh-sf-tournament:last-child {
+  border-bottom: 0;
+}
+
+.rh-sf-page .rh-sf-avatar,
+.rh-sf-page .rh-social-avatar {
+  border-radius: var(--radius-record);
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+/* Rank 1 is the only gold row in the rail. */
+.rh-sf-page .rh-sf-ranked-num {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sb-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .rh-sf-ranked-num.rank-1 {
+  color: var(--sb-accent);
+}
+
+.rh-sf-page .rh-sf-ranked-row:has(.rank-1) {
+  background: var(--sb-accent-row);
+}
+
+.rh-sf-page .rh-sf-ranked-crown {
+  color: var(--sb-dim);
+}
+
+.rh-sf-page .rh-sf-ranked-crown.rank-1 {
+  color: var(--sb-accent);
+}
+
+.rh-sf-page .rh-sf-ranked-delta {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sb-win);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Weekly highlights — the sub-stat rhythm from "Your position". */
+.rh-sf-page .rh-sf-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+.rh-sf-page .rh-sf-highlights-grid > * {
+  min-width: 0;
+  padding: 10px 12px 11px;
+  border: 0;
+  border-left: 1px solid var(--sb-line-soft);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.rh-sf-page .rh-sf-highlights-grid > *:first-child {
+  border-left: 0;
+}
+
+.rh-sf-page .rh-sf-highlights-grid strong {
+  display: block;
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--sb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sf-page .rh-sf-highlights-grid p {
+  order: -1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--sb-label);
+}
+
+.rh-sf-page .rh-sf-highlights-grid small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--sb-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-sf-page .rh-sf-weekly-reset {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sb-dim);
+}
+
+/* The only gold control on the page is the primary action. */
+.rh-sf-page .rh-sf-challenge-btn--gold {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--sb-accent-border);
+  border-radius: var(--radius-record);
+  background: var(--sb-accent-dim);
+  color: var(--sb-accent);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.rh-sf-page .rh-sf-challenge-btn--gold:hover:not(:disabled) {
+  border-color: var(--sb-accent);
+  background: var(--sb-accent-dim);
+  color: var(--sb-accent);
+}
+
+/* ---------------------------------------------------------- responsive */
+
+@media (max-width: 1080px) {
+  .rh-sf-page .rh-hub-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rh-sf-page .rh-sf-right-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .rh-sf-page .social-hero {
+    flex-direction: column;
+    gap: 18px;
+    padding: 20px 18px 18px;
+  }
+
+  .rh-sf-page .social-hero__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rh-sf-page .social-hero__stat:nth-child(3) {
+    border-left: 0;
+  }
+
+  .rh-sf-page .social-hero__stat:nth-child(n + 3) {
+    border-top: 1px solid var(--sb-line-soft);
+  }
+
+  .rh-sf-page .rh-af-rich-row {
+    grid-template-columns: 28px 18px minmax(0, 1fr) auto;
+    padding: 11px 14px;
+  }
+
+  .rh-sf-page .rh-af-rich-end {
+    grid-column: 3 / -1;
+    justify-content: flex-start;
+  }
+}

@@ -1,40 +1,47 @@
-import { buildShareGridRow, pointsShare } from '../lib/shareGrid';
 import type { DailyFritzSetGameNumber } from './api';
 
 const SET_GAME_NUMBERS: DailyFritzSetGameNumber[] = [1, 2, 3];
+const DAILY_FRITZ_LAUNCH_DATE = new Date('2026-04-10');
 
 import { SITE_DOMAIN } from '../lib/siteUrl';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 
-export function buildShareText(vm: DailyFritzSetOverlayViewModel): string {
-  const date = vm.shareDate ?? '';
-  const result = vm.resultValue ?? '';
-  const tier = vm.shareTier?.trim() || 'Fritz';
-  const margin = vm.marginValue ?? '';
-  const rating = vm.shareRating ? `${vm.shareRating} rating` : '';
-  const streak = vm.shareStreak ? `${vm.shareStreak}-day streak` : '';
+function calculatePuzzleNumber(runDate: string): number {
+  const date = new Date(`${runDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return 1;
+  const daysSinceLaunch = Math.floor(
+    (date.getTime() - DAILY_FRITZ_LAUNCH_DATE.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return Math.max(1, daysSinceLaunch + 1);
+}
 
-  // Three rows always, so the block is the same height whether the set went two
-  // games or three — an unplayed decider reads as unplayed, not as absent.
+function buildEmojiGrid(vm: DailyFritzSetOverlayViewModel): string {
   const byNumber = new Map((vm.games ?? []).map((game) => [game.gameNumber, game] as const));
-  const gameLines = SET_GAME_NUMBERS
+  const emojis = SET_GAME_NUMBERS
     .map((gameNumber) => {
       const game = byNumber.get(gameNumber);
-      if (!game) return buildShareGridRow(null, 'none');
+      if (!game) return '⬜';
       const won = game.playerScore > game.fritzScore;
-      const tone = game.skunk && won ? 'skunk' : won ? 'win' : 'loss';
-      return buildShareGridRow(pointsShare(game.playerScore, game.fritzScore), tone);
+      return won ? '🟩' : '🟥';
     })
-    .join('\n');
+    .join('');
+  return emojis;
+}
 
-  const lines = [
-    `Daily Fritz · ${date}`,
-    `${result} vs ${tier} Fritz`,
-    gameLines,
-    `${margin} margin${rating ? ' · ' + rating : ''}`,
-    streak,
+export function buildShareText(vm: DailyFritzSetOverlayViewModel): string {
+  const runDate = vm.shareRunDate ?? '';
+  const margin = vm.marginValue ?? '';
+  const streak = vm.shareStreak ? `${vm.shareStreak} day streak` : '';
+  const puzzleNumber = calculatePuzzleNumber(runDate);
+
+  const emojiGrid = buildEmojiGrid(vm);
+  const statLine = [margin, streak].filter(Boolean).join(' · ');
+
+  return [
+    `Racehorse Daily Fritz #${puzzleNumber}`,
+    emojiGrid,
+    '',
+    statLine,
     SITE_DOMAIN,
-  ].filter(Boolean);
-
-  return lines.join('\n');
+  ].filter(Boolean).join('\n');
 }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { track } from '../lib/analytics';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components';
 import FilterPills from '../social/hub/FilterPills';
 import { avatarHue, getInitials } from '../components/hub/playerInitialsAvatarUtils';
@@ -158,6 +159,7 @@ export function PuzzleRushLeaderboardScreen({
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('today');
   const [resetSeconds, setResetSeconds] = useState(() => secondsUntilNextPacificMidnight(new Date()));
+  const [shareDone, setShareDone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +198,56 @@ export function PuzzleRushLeaderboardScreen({
     [rows],
   );
 
+  const PUZZLE_RUSH_LAUNCH_DATE = new Date('2026-04-10');
+
+  const shareText = useMemo(() => {
+    if (filter !== 'today' || !data?.personalBest) return '';
+
+    const puzzleNumber = (() => {
+      const date = new Date(`${data.runDate}T00:00:00Z`);
+      if (Number.isNaN(date.getTime())) return 1;
+      const daysSinceLaunch = Math.floor(
+        (date.getTime() - PUZZLE_RUSH_LAUNCH_DATE.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return Math.max(1, daysSinceLaunch + 1);
+    })();
+
+    const emojiBoxes = Array(data.personalBest.puzzlesSolved)
+      .fill('🟩')
+      .join('');
+
+    return [
+      `Racehorse Puzzle Rush #${puzzleNumber}`,
+      emojiBoxes,
+      '',
+      `${data.personalBest.puzzlesSolved} solved`,
+      'playracehorse.com',
+    ].filter(Boolean).join('\n');
+  }, [data, filter]);
+
+  const handleShareResult = useCallback(() => {
+    if (!shareText) return;
+    track('share_initiated', { mode: 'puzzle_rush', context: 'leaderboard' });
+    const markShared = (): void => {
+      setShareDone(true);
+      window.setTimeout(() => setShareDone(false), 2000);
+    };
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      void navigator
+        .share({ title: 'Puzzle Rush', text: shareText })
+        .then(() => {
+          markShared();
+        })
+        .catch(() => {
+          /* user dismissed native share */
+        });
+      return;
+    }
+    void navigator.clipboard.writeText(shareText).then(() => {
+      markShared();
+    });
+  }, [shareText]);
+
   return (
     <div className="rh-hub-screen dfl-page pr-board">
       <div className="rh-hub-shell">
@@ -219,6 +271,15 @@ export function PuzzleRushLeaderboardScreen({
                     <span aria-hidden>←</span>
                     Puzzle Rush
                   </button>
+                  {filter === 'today' && data?.personalBest ? (
+                    <button
+                      type="button"
+                      className="dfl-btn dfl-btn--accent"
+                      onClick={handleShareResult}
+                    >
+                      {shareDone ? 'Copied' : 'Share Result'}
+                    </button>
+                  ) : null}
                 </div>
               </header>
 
