@@ -12,7 +12,7 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament → Steps 1–3 COMPLETE. Step 4 (refactor) IN PROGRESS — PR-A/B/C merged; T-11/T-12 cleanup + Step 5 remain.**
+**Tournament → Steps 1–3 COMPLETE. Step 4 (refactor) IN PROGRESS — PR-A/B/C merged, T-11 done; T-12 + Step 5 remain.**
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
@@ -40,10 +40,12 @@ focus" line, then the section for the system in progress.
     leaf module.
   - **PR-C** — `TOURNAMENT_SCHEDULER_ENABLED` boot flag (D-7) — **MERGED
     PR #99 (2026-09-01)**. Closes T-16.
-  - **T-11 / T-12** cleanup (the plan said "while doing PR-A/PR-B" — that window
-    passed; deliberately **not** folded into PR-C) — **STILL OPEN**, own task:
-    T-11 = `fetchActiveAssignedMatchForUser` latest-row pick; T-12 = collapse
-    the two "tournament room" concepts now that the authz gate exists.
+  - **T-11** — `fetchActiveAssignedMatchForUser` selection — **DONE / downgraded**
+    (PR #101, 2026-09-01). Analysis showed PR-A/PR-B already neutralized the
+    data-integrity concern (see §1.3 T-11); the small residual hardening
+    (`humanJoinedAt` top sort key + warn on multi-match) shipped.
+  - **T-12** — collapse the two "tournament room" concepts now that the authz
+    gate exists — **STILL OPEN**, own task.
   - RLS migration #9 → **T-1 CLOSED** (verified in prod 2026-08-31).
 - **Step 5** (tests prove closure): NOT started — concurrency harness,
   crash-injection/recovery, `assertBracketConsistent` in engine tests, RLS
@@ -53,6 +55,16 @@ focus" line, then the section for the system in progress.
 ICMP→HTTP on `/ping` @ 5 min + `SERVER_URL` set; both verified). T-18 + T-19 =
 ACCEPTED RISK at current scale, revisit at paid-tier upgrade. D-4 = external
 monitor, free tier. `/internal/tick` not built.
+
+**Parked, unrelated to this plan — draft PR #100 (`feat/share-card-dossier-redesign`).**
+A share-card / Puzzle-Rush-results-dossier redesign that had been sitting
+uncommitted in the working tree across several sessions; committed to its own
+branch + **draft** PR on 2026-09-01 so `main` stays clean. **It has 5 known
+failing tests** (`client/src/puzzleRush/puzzleRushRun.test.tsx` — the
+RushResultsView rewrite dropped `data-ui` hooks + `AnimatedScore` without
+updating those tests). Not part of the tournament/multiplayer hardening;
+tracked here only so it doesn't silently rot. Owner decision needed: finish
+(update the tests, design-review the dossier) or close.
 
 **⚠ UNREVIEWED RISK — PR #91 was merged early, out of sequence.** The human
 merged #91 (`e4760058`) before Step 4's review happened. What is now live on
@@ -421,7 +433,7 @@ round agreement.
 |---|---|---|---|
 | **T-9** | No-show / forfeit / game-over all emit `tournament:match_completed` with `winnerSource` hard-coded to `'game_over'` in one branch regardless of the real source (`applyMatchResult` line ~497: `params.winnerSource ?? (params.byeWalkover ? 'game_over' : 'game_over')`). | `engine.ts` `applyMatchResult` emit block | Client shows "you lost" instead of "opponent didn't show" / "opponent forfeited". |
 | **T-10** | `reconcileExpiredReadyMatches` runs off a 30 s poll. A match can sit `ready` up to ~30 s past `ready_deadline_at` before no-show resolves; two ticks overlapping a slow Supabase call can both enter the loop for the same match. | `scheduler.ts` tick + `engine.reconcileExpiredReadyMatches` | Delayed resolution; compounds T-3. |
-| **T-11** | `fetchActiveAssignedMatchForUser` returns *the latest* of multiple `ready`/`in_progress` matches for a user when there is more than one — masking T-6 rather than preventing it, and can point a reconnecting player at the wrong match. | `persistence.ts` `fetchActiveAssignedMatchForUser` (~377 sort) | Player re-attaches to the wrong game after reconnect. |
+| **T-11** — **DOWNGRADED to low-priority hardening / accepted (2026-09-01, PR #101)** | `fetchActiveAssignedMatchForUser` returns *the latest* of multiple surviving `ready`/`in_progress` matches for a user. Originally filed as data-integrity (masking T-6; wrong-match-on-reconnect). | `persistence.ts` `fetchActiveAssignedMatchForUser` | **Why it's no longer a real integrity gap:** (1) **"masks T-6" is obsolete** — T-6 (forfeit defaulting the win to player1) was closed *at its source* by PR-B's `authorizeMatchParticipant` in the forfeit path; a wrong pick by this selector now only routes the player to a *different real match they are a participant of*. (2) **Intra-tournament "two active matches" is closed by PR-A** — the only way a user was ever in 2+ non-completed matches of the *same* tournament was a T-3/T-4 partial-write / double-advancement state; PR-A's atomic `complete_tournament_match` RPC eliminates those, so within one tournament a user now has exactly one active match, always. (3) **Cross-tournament overlap** (user in two tournaments whose active windows overlap) is the only remaining case where 2+ candidates survive filtering, and the tie-breaker is a *deliberate, tested* heuristic — `persistence.test.ts` → "prefers the newest attachable tournament match over older stale candidates" locks it in; the newer tournament is the one that just started, the older is about to be `cancelled` by the reliably-ticking scheduler (post PR-C + T-17) or was already no-showed. **PR #101 hardening (shipped):** `humanJoinedAt(match, userId)` is now the top sort key ahead of `scheduled_start` (a room the player actually entered beats "newest tournament"), and `filtered.length > 1` now `log.warn`s (referencing T-11 / T-15) instead of being silent. No further work planned. |
 | **T-12** | Two "tournament room" concepts: `cfg.tournamentId` (legacy league) vs `room.scheduledTournamentMatchId` (scheduled). `roomSession.broadcastStateUpdate` gates the game-over persist on `!isTournamentRoom` where `isTournamentRoom = Boolean(cfg.tournamentId)`. Reserved scheduled-tournament rooms are created **without** `cfg.tournamentId`, so they fall through the "private match" branch and are only re-routed to the tournament path *inside* `persistGameOverOnce`. Fragile; a future change to that gate silently breaks tournament result persistence. | `multiplayer/roomSession.ts` (~719, 736) + `matchDispatch.ts` (~139) | Latent: tournament results silently not persisted if the gate logic changes. |
 
 ### cosmetic / lower-risk
@@ -1001,7 +1013,8 @@ proves it (Step 5 harness).
 - [x] **PR-B: the authz layer** `authorizeMatchParticipant()` + `matchAuthzAck` / `matchAuthzHttpStatus` (§1.4.5) — **merged PR #98 (2026-09-01)**. Closes gaps **T-5, T-6**; consolidated #91's #7/#8 + the attach handler's own inline check into one fresh-read gate; `isTournamentRoomCode` + `makeTournamentRoomCode` moved to a dependency-free leaf `tournamentRoomCode.ts` (keeps #6, breaks the persistence-graph pull). Fail-closed `room:join` semantics preserved from #91.
 - [x] **PR-C: `TOURNAMENT_SCHEDULER_ENABLED` flag** (D-7) — **merged PR #99 (2026-09-01)**. `startTournamentScheduler` gated on `config.tournamentSchedulerEnabled` (default `true`); no-ops + boot log when false, covering the tick, the no-show reconciler, and the seed fallback. `.env.example` documents it. Tests: config parsing + scheduler no-tick-when-false. Closes gap **T-16**.
 - [x] #91's RLS migration (#9) **verified applied to prod 2026-08-31** — 3 diagnostic checks clean → gap **T-1 CLOSED**
-- [ ] **T-10** (30s poll latency) — accepted; **T-11** (`fetchActiveAssignedMatchForUser` picks latest) — **STILL OPEN**, own task (the "while doing PR-A/PR-B" window passed; not folded into PR-C); **T-12** (two "tournament room" concepts) — **STILL OPEN**, own task; **T-13–T-15** (cosmetic / observability) — lower priority
+- [x] **T-11** (`fetchActiveAssignedMatchForUser` picks latest) — **DOWNGRADED + hardened, PR #101 (2026-09-01)**. PR-A/PR-B neutralized the integrity concern (§1.3 T-11); shipped `humanJoinedAt` top sort key + multi-match warn.
+- [ ] **T-10** (30s poll latency) — accepted; **T-12** (two "tournament room" concepts) — **STILL OPEN**, own task; **T-13–T-15** (cosmetic / observability) — lower priority
 - Note: T-INV-6 (feeder gating — an *invariant*, not a §1.3 gap) already enforced — merged PR #94
 - [x] T-17 — **CLOSED** — root cause was a **mis-typed ICMP UptimeRobot monitor** (not a missing pinger). Fixed to HTTP(s) → `/ping` @ 5 min, 100 % uptime verified; `SERVER_URL` set, `GET /ready` confirms `true`, self-ping active as second signal. — D-4, changelog 2026-08-31
 - [ ] T-18, T-19 — **ACCEPTED RISK at current scale** (D-4 / §1.3). Not fixed now; revisit at paid-tier upgrade.
@@ -1075,4 +1088,5 @@ registry.
 | 2026-08-31 | **Step 4 / PR-A — three match RPCs MERGED (PR #97).** `complete_tournament_match` / `promote_tournament_match` / `generate_tournament_bracket` + helpers (`_tournament_is_bot`, `_tournament_advance_target`, `_tournament_canonical_scores`); `security definer`, `service_role`-only. `applyMatchResult` shrunk from an 8-write orchestrator to a thin RPC caller; `finalizeCompletedTournament` renamed. #91's `completeMatchIfNotCompleted` CAS + JS participant check + CAS no-op deleted. `advance_target_missing` softened to a flagged soft-return (a raise would kill the reconciler tick). `inMemoryMatchRpc.testkit.ts` = faithful JS port for the unit suite (header points at the migration as source of truth). Verified on a real local pg16 (two-session `FOR UPDATE` race) + full server suite 1121 tests. Closes **T-2, T-3, T-4, T-7, T-8, T-9**. CI failure on the SQL-only push was a split-commit artifact (test files uncommitted), fixed by pushing the testkit commit — not a migration bug. |
 | 2026-09-01 | **Step 4 / PR-B — participant authz layer MERGED (PR #98).** `authorizeMatchParticipant(userId, {matchId}\|{roomCode}, {allowCompleted?})` + `matchAuthzAck` / `matchAuthzHttpStatus` in `tournamentAuth.ts` (§1.4.5). Fresh match read every call; a fetch *throw* propagates (caller picks retry vs give-up — it is **not** swallowed as `match_not_found`). Consolidated three drifted inline gates: attach handler, `roomForfeit` (PR-91 #7), `roomSocketAttach` `room:join` ACL (PR-91 #8) — #91's fail-closed semantics preserved exactly (regex-shaped code with no bracket row → treated as ordinary private room, an intentional tradeoff). `isTournamentRoomCode` + `makeTournamentRoomCode` extracted to a dependency-free leaf `tournamentRoomCode.ts` (breaks the persistence-graph pull into the authz layer); `matchDispatch` re-exports. `tsc` clean, 1121 tests pass, `grep console.` clean across all 7 files. Closes **T-5, T-6**. Next: **PR-C** (`TOURNAMENT_SCHEDULER_ENABLED` flag) + T-11/T-12 cleanup, then Step 5. |
 | 2026-09-01 | **Step 4 / PR-C — `TOURNAMENT_SCHEDULER_ENABLED` singleton gate MERGED (PR #99).** D-7 / §1.4.6. `config.tournamentSchedulerEnabled = getEnvBool('TOURNAMENT_SCHEDULER_ENABLED', true)`; `startTournamentScheduler` early-returns with a boot log line when false — gating the whole tick (registration open/close, scheduled-start dispatch, expired-tournament cancel), the no-show reconciler, and the seed fallback. `.env.example` documents it. Tests: config flag parsing (`false`/`0` disable) + scheduler does not tick/fetch/reconcile/seed when disabled. `tsc` clean, 1123 tests pass, `grep console.` clean. Closes gap **T-16**. **T-11 and T-12 deliberately NOT folded in** — the plan listed them "while doing PR-A/PR-B", that window passed; they are now standalone open tasks. Step 4 remaining: **T-11 / T-12 cleanup**, then **Step 5** (tests prove closure). |
+| 2026-09-01 | **Step 4 / T-11 — DOWNGRADED + hardened (PR #101).** Analysis: PR-A/PR-B already neutralized the integrity concern — "masks T-6" is obsolete (T-6 closed at source by PR-B); intra-tournament "two active matches" is closed by PR-A's atomic completion RPC; the only residual is cross-tournament active-window overlap, whose newest-scheduled tie-breaker is a deliberate tested heuristic (`persistence.test.ts`). Shipped hardening: `humanJoinedAt(match, userId)` promoted to the top sort key ahead of `scheduled_start`; `filtered.length > 1` now `log.warn`s (message references T-11 / T-15) instead of silent. §1.3 T-11 row rewritten with the full why. `tsc` clean, 1124 server tests pass, `grep console.` clean. **Separately:** the long-standing uncommitted working-tree pile (share-card / rush-dossier redesign) was committed to `feat/share-card-dossier-redesign` → **draft PR #100** (5 known-failing tests) so `main` is clean; `.superpowers/` + the local growth-assessment PDF added to `.gitignore`. Step 4 remaining: **T-12**, then **Step 5**. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
