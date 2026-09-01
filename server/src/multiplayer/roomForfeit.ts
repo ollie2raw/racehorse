@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
 import { getRoom, type Room } from '../rooms';
-import { fetchMatchById } from '../scheduledTournament/persistence';
+import { authorizeMatchParticipant } from '../scheduledTournament/tournamentAuth';
 import { applyMatchResult } from '../scheduledTournament/engine';
 import { recordMatchEnd } from '../matchmaking/persistence';
 import {
@@ -117,47 +117,55 @@ export async function applyActiveMatchForfeit(
   if (room.scheduledTournamentMatchId) {
     room.tournamentForfeitApplyStatus = 'pending';
 
-    let match;
+    // Who left decides who wins, so an unresolved leaver cannot be allowed to
+    // fall through to a default: a null userId (guest seat, or an identity lost
+    // on the disconnect-timeout path) or anyone who reached this room without
+    // being assigned to the match must forfeit nothing — not hand player1 the
+    // win. The participant gate (§1.4.5) reads the match fresh and answers this.
+    // `allowCompleted` so a race with the real game-over still flows through
+    // (the RPC is idempotent); the not-a-participant branch is preserved below.
+    let authz;
     try {
-      match = await fetchMatchById(room.scheduledTournamentMatchId);
+      authz = await authorizeMatchParticipant(
+        authenticatedUserId,
+        { matchId: room.scheduledTournamentMatchId },
+        { allowCompleted: true },
+      );
     } catch (err) {
       room.tournamentForfeitApplyStatus = 'failed';
       emitTournamentForfeitApplyFailed(io, room, err);
       return null;
     }
 
-    if (!match || !match.player1_id || !match.player2_id) {
-      room.tournamentForfeitApplyStatus = 'failed';
-      emitTournamentForfeitApplyFailed(io, room, new Error('match_not_found'));
-      return null;
-    }
-
-    // Who left decides who wins, so an unresolved leaver cannot be allowed to
-    // fall through to a default. The previous two-branch ternary had no "not a
-    // participant" case: a null userId (guest seat, or an identity lost on the
-    // disconnect-timeout path) or anyone who reached this room without being
-    // assigned to the match took the else branch and handed the win to
-    // player1 — forfeiting on behalf of a player who never left.
-    const abandonerIsPlayer1 = match.player1_id === authenticatedUserId;
-    const abandonerIsPlayer2 = match.player2_id === authenticatedUserId;
-    if (!abandonerIsPlayer1 && !abandonerIsPlayer2) {
-      // Not this match's player: leaving forfeits nothing. Leave the row alone
-      // for the real players, or for the no-show reconciler if neither shows.
+    if (!authz.ok) {
+      if (authz.code === 'match_not_found') {
+        room.tournamentForfeitApplyStatus = 'failed';
+        emitTournamentForfeitApplyFailed(io, room, new Error('match_not_found'));
+        return null;
+      }
+      // not_authenticated / not_a_participant: leaving forfeits nothing. Leave
+      // the row alone for the real players, or for the no-show reconciler.
       room.tournamentForfeitApplyStatus = 'idle';
       log.warn(
         {
           roomCode: room.code,
-          matchId: match.id,
-          tournamentId: match.tournament_id,
+          matchId: room.scheduledTournamentMatchId,
           leavingUserId: authenticatedUserId,
-          player1Id: match.player1_id,
-          player2Id: match.player2_id,
+          authzCode: authz.code,
         },
         'tournament forfeit ignored — leaver is not a participant of this match',
       );
       return null;
     }
 
+    const match = authz.match;
+    if (!match.player1_id || !match.player2_id) {
+      room.tournamentForfeitApplyStatus = 'failed';
+      emitTournamentForfeitApplyFailed(io, room, new Error('match_not_found'));
+      return null;
+    }
+
+    const abandonerIsPlayer1 = match.player1_id === authenticatedUserId;
     winnerUserId = abandonerIsPlayer1 ? match.player2_id : match.player1_id;
     const winTarget =
       typeof room.config.winningScore === 'number' && Number.isFinite(room.config.winningScore)
