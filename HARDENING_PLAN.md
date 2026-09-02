@@ -85,6 +85,22 @@ focus" line, then the section for the system in progress.
   code). No action needed — flagged so a future session knows prod ≠
   `origin/main` HEAD but is functionally current.
 
+- **Cross-cutting security sweep (2026-09-02, read-only) — 1 CONFIRMED GAP.**
+  See the "Cross-cutting security follow-up sweep" block above §"# System 1".
+  **`fritz_challenge_*` RPCs are anon-executable in prod** — ~8 `SECURITY
+  DEFINER` functions (`claim_fritz_challenge_opponent`, `advance_fritz_challenge_hand`,
+  `record_fritz_challenge_game`, `start_fritz_challenge_attempt`,
+  `get_or_create_fritz_challenge_hand`, `create_fritz_challenge_invite`,
+  `commit_fritz_challenge_attempt_command`, `start_fritz_challenge_attempt_command`),
+  no internal `auth.uid()` check, `revoke … from public, authenticated` from the
+  repo never applied → **anon (not authenticated!) can hijack an open challenge's
+  opponent and overwrite another player's attempt result.** 7th drift instance.
+  Auth-bypass / competitive-integrity; likelihood low–medium (needs a target
+  UUID out-of-band — the tables deny anon reads). **Not fixed — scoped for a
+  later pass** (revokes + body `auth.uid()` guards). The other two follow-ups
+  (`handle_new_user`, posture b/c/d) came back **safe** (posture d has one
+  optional confirmation query left).
+
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
   re-ratified to feeder-gating (D-6, code merged PR #94).
@@ -248,6 +264,106 @@ optional defence-in-depth for a later pass.
    with the definer's rights and bypass RLS, and the current posture RPC does
    **not** check for them at all. Extend the RPC to cover (d) or run the query
    manually.
+
+**Cross-cutting security follow-up sweep — 2026-09-02 (read-only investigation;
+nothing fixed).** The three items above investigated. Verdicts:
+
+**(1) `handle_new_user()` — CONFIRMED SAFE.** Source:
+`supabase/migrations/2026-08-26_signup_profile_username_from_metadata.sql`
+(also in `supabase/schema.sql`). Wired as `after insert on auth.users for each
+row` (trigger `on_auth_user_created`). Body does exactly one write —
+`insert into public.profiles (id, username) values (new.id, <desired-or-fallback>)
+on conflict (id) do nothing` — **id is always the trigger `NEW.id`, there is no
+parameter, nothing forgeable**, and `on conflict do nothing` means it can never
+overwrite an existing profile. The username-collision check is a read
+(`select 1 from profiles where username = …`), no cross-row write.
+`set search_path = public` — pinned, not a (c) issue. **Not client-callable:**
+it `returns trigger`, so PostgREST does not expose it (`/rpc/handle_new_user`
+absent from the OpenAPI spec; a direct `POST /rest/v1/rpc/handle_new_user` →
+`PGRST202` for anon *and* service_role) and Postgres refuses a direct
+`SELECT handle_new_user()` (`0A000 trigger functions can only be called as
+triggers`). A client cannot insert into `auth.users` to fire it with a forged
+id. The `assert_security_posture()` ADVISORY-2 flag on it is a **false positive**
+of the "EXECUTE-to-PUBLIC by default" heuristic — add it to
+`intentional_client_rpcs` (or `revoke execute … from public, anon, authenticated`
+for tidiness). Same reasoning clears the other trigger functions in that
+advisory list (`assert_fritz_challenge_attempt_invite`,
+`fritz_challenge_contract_is_immutable`, `project_*` — all `returns trigger`,
+all `PGRST202`).
+
+**(2) `fritz_challenge_*` RPC grants — CONFIRMED GAP (auth-bypass,
+competitive-integrity). 7th drift instance.** The earlier "PGRST202 / not
+exposed" reading was a **wrong-shape call** — the functions ARE exposed. Real
+state, confirmed by live anon probes against prod:
+
+| Function (all `SECURITY DEFINER`, all in `supabase/fritz_challenges.sql` or `2026-08-02_fritz_challenge_authority_primitives.sql` with `revoke … from public, authenticated` **that never reached prod**) | `anon` call | `authenticated` call |
+|---|---|---|
+| `claim_fritz_challenge_opponent(uuid, uuid)` | **executes** (`[] 200`) | `42501 permission denied` (403) |
+| `advance_fritz_challenge_hand(uuid,int,int,jsonb,int,int,int,int)` | **executes** | (assumed same) |
+| `start_fritz_challenge_attempt(uuid, uuid)` | **executes** | — |
+| `record_fritz_challenge_game(…)` | **executes** | — |
+| `get_or_create_fritz_challenge_hand(uuid,int,int,jsonb)` | **executes** (hits an FK error → past the grant check) | — |
+| `create_fritz_challenge_invite(…)` | **executes** (hits `recipient_not_friend` business check) | — |
+| `commit_fritz_challenge_attempt_command(…)` | **executes** (`{"outcome":"rejected","error_code":"attempt_not_found"}`) | — |
+| `start_fritz_challenge_attempt_command(…)` | **executes** (`challenge_not_found`) | — |
+
+- **`anon` has EXECUTE, `authenticated` does not** — a logged-*out* request can
+  do what a logged-*in* one cannot. Backwards ACL; the vector is specifically
+  the public anon key.
+- **None of these functions has an `auth.uid()` check** — they trust their
+  `p_user_id` / `p_attempt_id` / `p_challenge_id` params. (Contrast:
+  `gauntlet_start_attempt` → anon gets `P0001 "Authentication required"` — the
+  gauntlet RPCs *do* guard internally. The fritz ones do not.)
+- **Concrete unauthenticated writes** (SECURITY DEFINER ⇒ bypasses the table's
+  RLS): `claim_fritz_challenge_opponent('<open challenge id>', '<any uuid>')` →
+  `UPDATE fritz_challenges SET opponent_user_id = <attacker's pick>,
+  status='active'` — hijack who plays an open challenge.
+  `advance_fritz_challenge_hand` / `record_fritz_challenge_game` /
+  `commit_fritz_challenge_attempt_command` with a victim's `attempt_id`
+  (+ `user_id`) → overwrite/forge that attempt's `result`, scores, verified
+  hand/game receipts.
+- **Mitigant:** needs a target UUID out-of-band — `fritz_challenges` and
+  `fritz_challenge_attempts` tables **deny anon reads** (RLS, `*/0`), so ids are
+  not enumerable; challenge ids do travel in share links. Likelihood
+  **low–medium**; blast radius per-challenge / per-attempt; **no evidence of
+  exploitation** (a `fritz_challenges` scan for anomalous `opponent_user_id` /
+  `status` and a `fritz_challenge_attempts` scan for implausible score jumps
+  would confirm — human-run, like the commit_glicko tamper check).
+- **Fix (later, not now):** apply the revokes (they exist in the repo) **and**
+  add an `auth.uid()` guard to each body (defence-in-depth — the app server
+  uses `service_role`, which bypasses the grant, so a body check is the durable
+  fix), mirroring `commit_glicko_game_update`'s lockdown + the gauntlet RPCs'
+  internal `Authentication required` pattern. ~8 functions. `commit_daily_fritz_attempt_command`
+  (21 params) not probed for shape — check it in the same pass.
+
+**(3) posture follow-up queries b / c / d:**
+- **(b) — no gap.** `assert_security_posture()` HARD FAIL 1 iterates every
+  `public` table for RLS-disabled and returns `hard_fail_count: 0` /
+  `hard_fails: []`. RLS is ON for every `public` table ⇒ there are **no inert
+  policies on RLS-disabled `public` tables**. (Non-`public` schemas are outside
+  the RPC's scope — a full-cluster `pg_policies ⋈ pg_class` check would need the
+  SQL editor, low priority.)
+- **(c) — no gap.** HARD FAIL 2 is exactly the mutable-`search_path` check on
+  `SECURITY DEFINER` functions; `hard_fails: []` ⇒ **zero `SECURITY DEFINER`
+  functions in `public` have a mutable `search_path`.** (Every function read
+  this session had `set search_path = public`.) Definitive for `public`.
+- **(d) — no gap found; one SQL-editor query away from definitive.** Every
+  `create view` in the repo (8+: `daily_fritz_*_metrics`,
+  `fritz_challenge_*_metrics`, `mp_authority_funnel_metrics`) is
+  `with (security_invoker = true)` — they run with the *querying* user's rights,
+  no RLS bypass. And live probes: **anon AND authenticated both get
+  `42501 permission denied for view` on all `*_metrics` views** (service_role
+  only). So even a hypothetical `security_definer` view would be unreadable by a
+  client. To make it fully definitive, one SQL-editor query:
+  `select c.relname, c.reloptions from pg_class c join pg_namespace n on n.oid=c.relnamespace
+   where n.nspname='public' and c.relkind='v';` — flag any view whose
+  `reloptions` lacks `security_invoker=true` **and** that `anon`/`authenticated`
+  can `SELECT`.
+
+**Net:** 1 confirmed gap (**item 2 — fritz RPC anon-execute, auth-bypass**), 3
+confirmed safe (handle_new_user, posture b, posture c), 1 effectively safe with
+a cheap confirmation query outstanding (posture d — SECURITY DEFINER views).
+Item 2 fix is scoped for a later pass (revokes + body guards, ~8 functions).
 
 **Resolved — the long-standing uncommitted working-tree pile is gone.** A
 share-card / Puzzle-Rush-dossier redesign had sat uncommitted across several
@@ -2561,5 +2677,6 @@ registry.
 | 2026-09-01 | **System 2 MP-G6 (Tier B) verified — both tables CONFIRMED absent from prod; fix migration written.** `room_command_receipts` and `mp_authority_events` return `PGRST205` for **service_role** (not just anon), are absent from the PostgREST OpenAPI spec (while `room_live_sessions`/`room_match_logs` are present → schema cache is current), and leave no trace in `assert_security_posture()` (server-side, reads pg_catalog). Both source migrations exist + are committed (`2026-08-01_room_command_receipts.sql` @ `5947dd36`; `2026-08-20_mp_authority_events.sql` @ `420be2b7`) — **never applied** (no CI migration runner; 5th/6th drift instance after T-1 / ghost tables / commit_glicko / content-lifecycle RPCs / the room tables). Effects: `withGameActionIdempotency` runs degraded to `room_shell.actionReceipts` embedded-only (silent; a shell trim under a reconnect storm could drop a receipt); the durable `mp.authority` funnel is dead (stdout-only telemetry — why MP-G5 was unmeasurable). **Not a stale/environment-specific PGRST205** — re-confirmed live 2026-09-01, three independent signals agree. Wrote `supabase/migrations/2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql` — creates both tables + the `mp_authority_funnel_metrics` view, **corrects the originals**: (a) explicit `revoke all from anon,authenticated` + `grant all to service_role` on `room_command_receipts` (original relied on Supabase defaults); (b) **drops the `event` CHECK** on `mp_authority_events` (hard-coded 14 names, the server emits 18 incl. `private_game_over_persist_*` / `private_disconnect_auto_act_*`, and the insert is best-effort → a stale CHECK silently drops telemetry). Self-asserting, `to_regclass` + RLS + grant checks. **pg16-verified**: applies clean + idempotent; the funnel table accepts the previously-rejected event names. Added "never applied / superseded" header notes to both original files. §2.3 MP-G6 row + §2.7 + Current focus updated from "likely unapplied" to **CONFIRMED absent, fix written, awaiting human prod-apply**. SQL + expected output printed to the human. **Not applied to prod by the agent.** |
 | 2026-09-01 | **System 2 MP-G6 — CLOSED + LIVE.** Human applied `2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql` in the SQL editor (self-assert `do` block passed → no `raise exception`). Agent verified against prod (read-only + a service-role insert/delete round-trip): (1) `select to_regclass(...)` → `room_command_receipts` / `mp_authority_events` / `mp_authority_funnel_metrics` all non-NULL; (2) PostgREST OpenAPI spec now lists all 3; (3) `service_role` GET on all 3 → `HTTP 200 content-range */0` (was `PGRST205`); (4) `assert_security_posture()` → `hard_fail_count:0`, neither table flagged, `advisory_count` unchanged at 70 ⇒ RLS enabled + no `client_write_grant_rls_on` (i.e. no anon/authenticated write grant); (5) anon GET **and** INSERT on both → `HTTP 401 / 42501 permission denied for table`; (6) `service_role` INSERT → `201` on both (incl. `mp_authority_events` with `event='private_game_over_persist_succeeded'`, which the *original* migration's CHECK would have rejected — the CHECK-drop works), test rows `DELETE`d (`204`), both tables back to `*/0`. **No deploy required** — `roomCommandReceiptStore` / `mpAuthorityEventStore` already POST to these endpoints; they were silently swallowing `PGRST205` and are now writing for real. §2.3 MP-G6 row, §2.7, Current focus → CLOSED + LIVE. **All Tier-A + Tier-B System 2 gaps done. Next: System 2 Step 5.** |
 | 2026-09-01 | **System 2 Step 5 — first pass DONE (§2.6).** Scoped (per the human) to the invariants whose enforcement *changed this session*: **MP-INV-6** (spectate gating, MP-G3) + **MP-INV-15** (idempotent game-over side-effects, MP-G4/MP-G6), plus a focused MP-INV-1..3 base check. Built `mpSideEffectStore.testkit.ts` — a faithful in-memory port of what the two MP-G4 migrations add (partial unique indexes `matches_room_match_id_uidx` / `activity_feed_dedupe_key_uidx`, `recordMatchEnd`'s conditional `PATCH ?status=eq.in_progress`), wired as the `supabaseFetch` + `node:fs` mock so the **real** helpers run against it (System 1 analogue: `inMemoryMatchRpc.testkit.ts`). `mpInvariantHarness.test.ts` — **13 tests**, each naming the invariant + the assertion that maps to its rule (table in §2.6.1): unauth spectate rejected before `socket.join`/`leaveExistingSocketRooms`; private room `not_spectatable` unless `config.spectatable`; matchmaking/tournament/legacy still allowed; the side-effect tail run twice → `jsonl` 1 line / `matches` 1 row / `activity_feed` 2 rows (not 4); the **real `persistGameOverOnce` retry loop** (attempt 1 throws at `completeGhostGame`, attempt 2 succeeds) re-runs steps 4/5/6 and still writes each sink once; `recordMatchEnd` game-over-then-forfeit → first terminal write wins; seat-migrated stale socket can't `resolveActorSeatId`; redundant reconnects don't grow `room.players`; 3rd identity into a full room throws. **No pg16 script** (§2.6.3 — no real-row-lock claim in MP-INV-1..19; the MP-G4 DB guarantee was already verified against real Postgres via the pg16 apply + prod `ON CONFLICT` / DELETE round-trip). `tsc -b` clean (server + client); **full server suite 205 files / 1186 tests pass** (+1 file / +13); server lint identical (74 pre-existing errors, 0 new). §2.6 written, §2.7 Step 5 + Current focus updated. **System 2 Steps 1–5 done for the Tier-A/B scope; remaining = Tiers C–E.** |
+| 2026-09-02 | **Cross-cutting security follow-up sweep (read-only) — 1 confirmed gap, 3 safe.** Investigated the 3 deferred items. **(1) `handle_new_user()` — SAFE.** `after insert on auth.users` trigger; body only `insert into profiles (id, username) values (new.id, …) on conflict (id) do nothing` — id is `NEW.id`, no param, unforgeable, can't overwrite. `returns trigger` ⇒ not PostgREST-exposed (`/rpc/handle_new_user` absent; `PGRST202` for anon + service_role) and not directly callable in SQL (`0A000`). ADVISORY-2 flag is a false positive; same clears the other trigger fns. **(2) `fritz_challenge_*` RPCs — CONFIRMED GAP (auth-bypass, 7th drift instance).** The "PGRST202/not exposed" reading was a wrong-shape call. Live anon probes: `claim_fritz_challenge_opponent`, `advance_fritz_challenge_hand`, `start_fritz_challenge_attempt`, `record_fritz_challenge_game`, `get_or_create_fritz_challenge_hand`, `create_fritz_challenge_invite`, `commit_fritz_challenge_attempt_command`, `start_fritz_challenge_attempt_command` **all execute for `anon`** (`200` / business-logic errors, not `42501`) — while `authenticated` gets `42501 permission denied` (backwards ACL). All `SECURITY DEFINER`, **none has an `auth.uid()` check**; the `revoke … from public, authenticated` in `supabase/fritz_challenges.sql` + `2026-08-02_fritz_challenge_authority_primitives.sql` never reached prod. Concrete unauthenticated writes: hijack an open challenge's `opponent_user_id`; overwrite a victim's attempt `result`/scores/receipts. Mitigant: needs a target UUID out-of-band (the tables deny anon reads, `*/0` — ids not enumerable; challenge ids travel in share links). Likelihood low–medium, no evidence of exploitation. **Not fixed** — scoped for a later pass (revokes + body `auth.uid()` guards on ~8 fns, mirroring commit_glicko + the gauntlet RPCs' internal `Authentication required`; also probe `commit_daily_fritz_attempt_command`). **(3) posture b/c/d — b + c confirmed no gap** (`hard_fail_count:0` ⇒ no RLS-disabled `public` table ⇒ no inert policies; no `SECURITY DEFINER` fn with mutable `search_path`). **d — no gap found:** every repo `create view` is `with (security_invoker = true)`, and anon **and** authenticated both get `42501 permission denied for view` on all `*_metrics` views; one optional SQL-editor query (`pg_class.reloptions` for `relkind='v'`) would make it fully definitive. Findings block added before "# System 1"; Current focus updated. Nothing fixed — investigation only. |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
