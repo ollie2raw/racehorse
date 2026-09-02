@@ -62,7 +62,20 @@ focus" line, then the section for the system in progress.
   advisory_count unchanged); anon GET/INSERT `401 42501`; service_role INSERT
   round-trip works. No deploy needed — the server code already targeted these
   tables and was degrading silently. **Every Tier-A and Tier-B gap in System 2
-  is now closed + live. Next: System 2 Step 5 (tests prove closure).**
+  is now closed + live.**
+
+- **System 2 Step 5 (§2.6)** — **FIRST PASS DONE 2026-09-01.** `mpInvariantHarness.test.ts`
+  (13 tests) + `mpSideEffectStore.testkit.ts` (in-memory port of the MP-G4
+  unique indexes + `recordMatchEnd` conditional PATCH) prove **MP-INV-6**
+  (spectate gating) and **MP-INV-15** (idempotent game-over side-effects) —
+  including the real `persistGameOverOnce` retry loop re-running steps 4/5/6 and
+  still writing each sink once — plus a focused MP-INV-1..3 base check. Full
+  server suite **205 files / 1186 tests**; `tsc -b` clean (server + client);
+  server lint no new problems. No pg16 script needed (§2.6.3 — no real-row-lock
+  claim in MP-INV-1..19; the one DB-level MP-G4 guarantee was already verified
+  against real Postgres). Remaining invariants (MP-INV-7/8/10/11/13/16/17/18/19)
+  get harness passes as their tiers open (§2.6.4). **System 2: Steps 1–5 done
+  for the Tier-A/B scope. Remaining: Tiers C–E (each its own pass).**
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
@@ -2285,7 +2298,76 @@ The rest of §2.5 (Tiers B–E, deeper concurrency) is a later pass.
 
 ## 2.6 Test plan
 
-**Not started.** Step 5.
+Status: **Step 5 first pass DONE 2026-09-01.** Scoped (per the human) to the
+invariants whose *enforcement changed this session* and now needs proof —
+**MP-INV-6** (spectate gating, MP-G3) and **MP-INV-15** (idempotent game-over
+side-effects, MP-G4 + MP-G6) — plus a focused base check of **MP-INV-1..3**.
+The already-solid invariants keep their existing coverage (cited below).
+
+### 2.6.1 The harness (this pass)
+
+Analogous to System 1's PR-F (`concurrencyRecoveryHarness.test.ts`) + the PR-E
+helper. **CI-safe, in-memory, no DB.**
+
+- **`server/src/multiplayer/mpSideEffectStore.testkit.ts`** — a faithful JS port
+  of what the two 2026-09-01 MP-G4 migrations add to prod: the partial unique
+  indexes `matches_room_match_id_uidx` / `activity_feed_dedupe_key_uidx` and
+  `recordMatchEnd`'s conditional `PATCH ?status=eq.in_progress`. Wired as the
+  `supabaseFetch` + `node:fs` mock so the **real** helpers run against it.
+  (System 1 analogue: `inMemoryMatchRpc.testkit.ts`.)
+- **`server/src/multiplayer/mpInvariantHarness.test.ts`** — 13 tests, each
+  naming the invariant and citing the assertion that maps to its stated rule:
+
+| Test | Proves | Assertion ↔ rule |
+|---|---|---|
+| unauth spectate rejected before room state touched | **MP-INV-6** ("a spectator socket must be authenticated") | `ack = {ok:false, error:'auth_required'}` **and** `socket.join` / `leaveExistingSocketRooms` never called |
+| authed spectate on a private room | **MP-INV-6** ("a private room is not spectatable without opt-in") | `ack = {ok:false, error:'not_spectatable'}`, no `socket.join` |
+| private room with `config.spectatable` | **MP-INV-6** (opt-in escape hatch) | `ack.ok === true`, `socket.join(code)` |
+| matchmaking / scheduled_tournament / legacy_league (×3) | **MP-INV-6** (intended spectator surfaces still work) | `ack.ok === true` for each `roomKind` |
+| side-effect tail run **twice**, same `sourceMatchId` | **MP-INV-15** ("each sink receives a result at most once") | `jsonlLines.length === 1`; `matches.length === 1`; `activityFeed.length === 2` (not 4) with keys `${src}:user-a:win` / `${src}:user-b:loss` |
+| **real `persistGameOverOnce` retry loop** (attempt 1 fails at `completeGhostGame`, attempt 2 succeeds) | **MP-INV-15** under the real §2.1.6 retry structure | `completeGhostGame` called ≥ 2×, yet `jsonlLines`/`matches`/`activityFeed` still `1/1/2` |
+| `recordMatchEnd` game-over then late forfeit | **MP-INV-14 / MP-INV-15** ("first terminal write wins") | after both calls: `matchmaking_matches` row `status==='completed'`, `winner_id==='user-a'` (the 2nd call matched 0 rows) |
+| sim match never written | regression guard (MP-G4 didn't change this) | row stays `in_progress` |
+| seat migrates → stale socket can't act | **MP-INV-1** ("actor re-derived from current roster ownership") | `resolveActorSeatId(newSock) === 'seat-a'`; `resolveActorSeatId(staleSock)` throws |
+| redundant reconnects for one identity | **MP-INV-3** ("reconnect never grows `room.players`") | `room.players` stays `['seat-a','seat-b']` after 2 more `migrateRoomSeat` |
+| third identity into a full room | **MP-INV-2 / MP-INV-3** (allocation-time cap) | `joinRoom('seat-c')` throws `Room is full`; `players.length === 2` |
+
+### 2.6.2 Existing coverage relied on (not re-written)
+
+- **MP-INV-15, receipt half** (`room_command_receipts` idempotency of a replayed
+  `game:action`) — `gameActionIdempotency.test.ts`, `roomCommandReceiptStore.test.ts`,
+  `actionReceiptDurability.test.ts`. MP-G6 (2026-09-01) applied the backing
+  table so this path is no longer degraded to the embedded snapshot.
+- **MP-INV-1** — `resolveActorSeatId.test.ts` (stale-socket rejection).
+- **MP-INV-4** (matchmaking seat ACL) — `matchmakingSeatAcl.test.ts`,
+  `roomSocketAttach.test.ts`.
+- **MP-INV-5** (tournament participant ACL) — `registerTournamentAttachHandlers.test.ts`,
+  System 1's PR-B tests.
+- **MP-INV-9** (lifecycle commit-or-rollback) — `handLifecyclePersistRollback.test.ts`,
+  `gameActionPersistRollback.integration.test.ts`.
+- Per-helper MP-G4 unit tests — `matchLog.test.ts`, `recordPublicMatch.test.ts`,
+  `matchmaking/recordMatchEnd.test.ts`, `activityWriter.test.ts`.
+- **MP-G3 gate** — `registerRoomSpectateHandlers.test.ts` (+4 gate tests),
+  `spectateSeatPreservation.test.ts`.
+
+### 2.6.3 Local-pg16 script (System 1's PR-G analogue) — NOT needed this pass
+
+Every MP-INV is scoped to single-instance in-process interleaving (§2.1.1) —
+there is **no real-Postgres-row-locking claim** in MP-INV-1..19 (unlike System
+1's `complete_tournament_match` `SELECT … FOR UPDATE`). The one DB-level
+guarantee that shipped this session — the MP-G4 partial unique indexes +
+`recordMatchEnd`'s conditional PATCH — was already verified against real
+Postgres directly: pg16 apply + a prod insert / `ON CONFLICT DO NOTHING` /
+DELETE round-trip (changelog 2026-09-01). No new script.
+
+### 2.6.4 Not yet covered (future Step-5 passes, as tiers open)
+
+MP-INV-7/8 (gameplay-lock serialization, `eventSequence` monotonicity),
+MP-INV-10/11/13 (hydration freshness, terminal-finalize finality, restart
+recovery), MP-INV-16/17 (tournament-bracket routing, no-defaulted-winner),
+MP-INV-18 (grace auto-act), MP-INV-19 (move-log posture). These invariants did
+not change this session; they get a harness pass when their tier (C/D) is
+worked.
 
 ## 2.7 Checklist
 
@@ -2388,7 +2470,14 @@ The rest of §2.5 (Tiers B–E, deeper concurrency) is a later pass.
   idempotency indexes built clean). **Code pushed + deployed to Render
   2026-09-01 (prod release `907435df`); MP-G3 smoke-verified live in prod
   (`auth_required` / `not_spectatable`). All 4 Tier-A gaps CLOSED + LIVE.**
-- [ ] Step 5 — Tests prove closure (§2.6)
+- [~] **Step 5 — Tests prove closure (§2.6) — FIRST PASS DONE 2026-09-01.**
+  Scoped to what changed this session: **MP-INV-6** + **MP-INV-15** proven by
+  `mpInvariantHarness.test.ts` (13 tests) + `mpSideEffectStore.testkit.ts`
+  (in-memory port of the MP-G4 unique indexes / conditional PATCH), plus a
+  focused MP-INV-1..3 base check. Full server suite **205 files / 1186 tests**;
+  `tsc -b` clean (server + client); server lint no new problems. No pg16 script
+  needed (§2.6.3 — no real-row-lock claim in MP-INV-1..19). Remaining invariants
+  get harness passes as their tiers open (§2.6.4).
 
 ---
 
@@ -2463,5 +2552,6 @@ registry.
 | 2026-09-01 | **System 2 — both Tier-A migrations applied to prod (human, SQL editor). MP-G1 / MP-G2 / MP-G4 CLOSED.** Both returned "Success. No rows returned" (self-assert `do` blocks passed → no `raise exception`). Agent verified read-only: `assert_security_posture()` → `hard_fail_count:0` and the `client_write_grant_rls_on` advisory **no longer lists** `public.room_live_sessions` or `public.room_match_logs` (both were flagged before); anon `INSERT` into `room_match_logs` → `HTTP 401 / 42501 permission denied for table` (grant-layer denial, was RLS-layer). Migration 2's `create unique index matches_room_match_id_uidx` built without error ⇒ **`public.matches` had zero duplicate `metadata->>'roomMatchId'` values** — the pre-fix double-write never actually occurred in prod (consistent with MP-G5's 0-evidence finding). §2.3 Tier-A header + MP-G2 row + §2.5 + §2.7 Step 4 + Current focus updated to CLOSED. **MP-G3 is code-only (`37054fda`) and deploys with the next release.** Remaining System 2: Step 5 (tests prove closure); MP-G6 (Tier B); Tiers C–E. |
 | 2026-09-01 | **System 2 MP-G6 (Tier B) verified — both tables CONFIRMED absent from prod; fix migration written.** `room_command_receipts` and `mp_authority_events` return `PGRST205` for **service_role** (not just anon), are absent from the PostgREST OpenAPI spec (while `room_live_sessions`/`room_match_logs` are present → schema cache is current), and leave no trace in `assert_security_posture()` (server-side, reads pg_catalog). Both source migrations exist + are committed (`2026-08-01_room_command_receipts.sql` @ `5947dd36`; `2026-08-20_mp_authority_events.sql` @ `420be2b7`) — **never applied** (no CI migration runner; 5th/6th drift instance after T-1 / ghost tables / commit_glicko / content-lifecycle RPCs / the room tables). Effects: `withGameActionIdempotency` runs degraded to `room_shell.actionReceipts` embedded-only (silent; a shell trim under a reconnect storm could drop a receipt); the durable `mp.authority` funnel is dead (stdout-only telemetry — why MP-G5 was unmeasurable). **Not a stale/environment-specific PGRST205** — re-confirmed live 2026-09-01, three independent signals agree. Wrote `supabase/migrations/2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql` — creates both tables + the `mp_authority_funnel_metrics` view, **corrects the originals**: (a) explicit `revoke all from anon,authenticated` + `grant all to service_role` on `room_command_receipts` (original relied on Supabase defaults); (b) **drops the `event` CHECK** on `mp_authority_events` (hard-coded 14 names, the server emits 18 incl. `private_game_over_persist_*` / `private_disconnect_auto_act_*`, and the insert is best-effort → a stale CHECK silently drops telemetry). Self-asserting, `to_regclass` + RLS + grant checks. **pg16-verified**: applies clean + idempotent; the funnel table accepts the previously-rejected event names. Added "never applied / superseded" header notes to both original files. §2.3 MP-G6 row + §2.7 + Current focus updated from "likely unapplied" to **CONFIRMED absent, fix written, awaiting human prod-apply**. SQL + expected output printed to the human. **Not applied to prod by the agent.** |
 | 2026-09-01 | **System 2 MP-G6 — CLOSED + LIVE.** Human applied `2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql` in the SQL editor (self-assert `do` block passed → no `raise exception`). Agent verified against prod (read-only + a service-role insert/delete round-trip): (1) `select to_regclass(...)` → `room_command_receipts` / `mp_authority_events` / `mp_authority_funnel_metrics` all non-NULL; (2) PostgREST OpenAPI spec now lists all 3; (3) `service_role` GET on all 3 → `HTTP 200 content-range */0` (was `PGRST205`); (4) `assert_security_posture()` → `hard_fail_count:0`, neither table flagged, `advisory_count` unchanged at 70 ⇒ RLS enabled + no `client_write_grant_rls_on` (i.e. no anon/authenticated write grant); (5) anon GET **and** INSERT on both → `HTTP 401 / 42501 permission denied for table`; (6) `service_role` INSERT → `201` on both (incl. `mp_authority_events` with `event='private_game_over_persist_succeeded'`, which the *original* migration's CHECK would have rejected — the CHECK-drop works), test rows `DELETE`d (`204`), both tables back to `*/0`. **No deploy required** — `roomCommandReceiptStore` / `mpAuthorityEventStore` already POST to these endpoints; they were silently swallowing `PGRST205` and are now writing for real. §2.3 MP-G6 row, §2.7, Current focus → CLOSED + LIVE. **All Tier-A + Tier-B System 2 gaps done. Next: System 2 Step 5.** |
+| 2026-09-01 | **System 2 Step 5 — first pass DONE (§2.6).** Scoped (per the human) to the invariants whose enforcement *changed this session*: **MP-INV-6** (spectate gating, MP-G3) + **MP-INV-15** (idempotent game-over side-effects, MP-G4/MP-G6), plus a focused MP-INV-1..3 base check. Built `mpSideEffectStore.testkit.ts` — a faithful in-memory port of what the two MP-G4 migrations add (partial unique indexes `matches_room_match_id_uidx` / `activity_feed_dedupe_key_uidx`, `recordMatchEnd`'s conditional `PATCH ?status=eq.in_progress`), wired as the `supabaseFetch` + `node:fs` mock so the **real** helpers run against it (System 1 analogue: `inMemoryMatchRpc.testkit.ts`). `mpInvariantHarness.test.ts` — **13 tests**, each naming the invariant + the assertion that maps to its rule (table in §2.6.1): unauth spectate rejected before `socket.join`/`leaveExistingSocketRooms`; private room `not_spectatable` unless `config.spectatable`; matchmaking/tournament/legacy still allowed; the side-effect tail run twice → `jsonl` 1 line / `matches` 1 row / `activity_feed` 2 rows (not 4); the **real `persistGameOverOnce` retry loop** (attempt 1 throws at `completeGhostGame`, attempt 2 succeeds) re-runs steps 4/5/6 and still writes each sink once; `recordMatchEnd` game-over-then-forfeit → first terminal write wins; seat-migrated stale socket can't `resolveActorSeatId`; redundant reconnects don't grow `room.players`; 3rd identity into a full room throws. **No pg16 script** (§2.6.3 — no real-row-lock claim in MP-INV-1..19; the MP-G4 DB guarantee was already verified against real Postgres via the pg16 apply + prod `ON CONFLICT` / DELETE round-trip). `tsc -b` clean (server + client); **full server suite 205 files / 1186 tests pass** (+1 file / +13); server lint identical (74 pre-existing errors, 0 new). §2.6 written, §2.7 Step 5 + Current focus updated. **System 2 Steps 1–5 done for the Tier-A/B scope; remaining = Tiers C–E.** |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
