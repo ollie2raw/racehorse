@@ -1,3 +1,9 @@
+-- NOTE (2026-09-01): this file was NEVER applied to prod (confirmed absent —
+-- HARDENING_PLAN MP-G6). Superseded by
+-- 2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql, which
+-- drops the `event` CHECK (already 4 event names behind the code) and adds a
+-- self-assert. Kept as the historical record.
+--
 -- Durable mp.authority funnel (service-role insert). Best-effort from the
 -- game server — insert failure must never block gameplay.
 

@@ -1,3 +1,8 @@
+-- NOTE (2026-09-01): this file was NEVER applied to prod (confirmed absent —
+-- HARDENING_PLAN MP-G6). Superseded by
+-- 2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql, which
+-- adds the explicit grants and a self-assert. Kept as the historical record.
+--
 -- Dedicated game:action idempotency receipts for private/live multiplayer.
 -- Complements room_shell.actionReceipts (embedded snapshot) with a queryable
 -- table so receipts survive even if shell size is trimmed, and support
