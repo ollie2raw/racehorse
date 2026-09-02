@@ -17,7 +17,24 @@ focus" line, then the section for the system in progress.
 - **System 1 (Tournament) → CLOSED.** Steps 1–5 complete; residual accepted-risk / cosmetic items only (T-10, T-13–T-15, T-18, T-19 — see §1.7).
 - **System 2 (Multiplayer rooms) → fully passed through, Tiers A–E.** Steps 1–5 done. **Tier A + Tier B gaps CLOSED + LIVE in prod:** MP-G1/MP-G2 (room-table schema + grant lockdown), MP-G3 (spectate room-kind gate + auth), MP-G4 (game-over side-effect idempotency), MP-G6 (`room_command_receipts` + `mp_authority_events` applied). MP-INV-6 + MP-INV-15 proven by the §2.6 harness. **Tiers C/D/E verified 2026-09-02 (§2.3.3), all REVISIT-IF-SCALE / ACCEPT** — nothing escalated; MP-G12 moved C→E (fix already shipped). Remaining System-2 work is all deferred-until-scale (§2.3 Tier C/D) + the §2.6.4 harness passes for the not-yet-covered invariants.
 - **Cross-cutting security sweep (§ before "# System 1") → done.** `fritz_challenge_*` / daily-fritz command RPC anon-execute gap (8th drift instance) — `2026-09-02_fritz_challenge_rpc_lockdown.sql` applied to prod, all 10 functions verified locked. `handle_new_user` + posture (b)/(c)/(d) all confirmed safe/closed. Residual: extend `assert_security_posture()` to check `SECURITY DEFINER` views (coverage, nothing to find); 3 fritz functions have grant lockdown but body guards deferred (low-priority defence-in-depth); the `gauntlet_*` client RPCs still carry the advisory (by-design, scrapped feature).
-- **NEXT: pick the next system.** Per the sequencing, that's **System 3 (Daily modes)** — not started. **System 4 (Everything else)** after that. Both need the full audit → invariants → design → refactor → tests cycle. The human chooses when to start.
+- **System 3 (Daily modes) → Step 1 (current-state audit §3.1) WRITTEN
+  2026-09-02 — awaiting human review before Step 2.** Covers Daily Fritz,
+  Puzzle Rush, Daily Puzzle Ladder. Key findings: **Puzzle Rush is clean**
+  (server-authoritative, RLS+grants deny clients, engine-replay verdict; but
+  not shipped). **Daily Fritz** is heavily engineered (event-sourced +
+  transactional-command RPCs + engine-transcript verification) but
+  **verification is non-blocking and doesn't gate the speed leaderboard**
+  (DF-CAND-2, MP-G14 analogue). **Daily Puzzle Ladder has a live
+  competitive-integrity gap** — `daily_puzzle_attempts` / `daily_puzzle_slot_results`
+  carry `insert_own`/`update_own` RLS, so an authenticated client can `POST` an
+  arbitrary `total_score` directly (confirmed live, HTTP 201), bypassing the
+  server's engine-replay; same class as T-1, **likely Tier A** (DF-CAND-1).
+  7 gap candidates parked unranked in §3.1.8. **Stop — await human sign-off on
+  §3.1 before Step 2 (invariants + gap list).**
+
+- **NEXT after System 3: System 4 (Everything else)** — legacy league/tournament
+  (keep/wall-off/delete decision), social/activity writer, Glicko idempotency,
+  spectator registry. Not started.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -480,7 +497,7 @@ Audit-first, one system at a time:
 
 1. **Tournament** ← CLOSED (Steps 1–5)
 2. **Multiplayer rooms** ← passed through Tiers A–E; Tier-A/B fixed + live, C/D/E deferred-until-scale
-3. **Daily modes** (Daily Fritz / Puzzle Rush / Daily Puzzle Ladder) ← NEXT, not started
+3. **Daily modes** (Daily Fritz / Puzzle Rush / Daily Puzzle Ladder) ← Step 1 audit written (§3.1), awaiting review
 4. **Everything else** (legacy league/tournament, social, ranking, spectator…) ← not started
 
 **Do not start refactoring a system until its audit (steps 1–3 below) is written
@@ -2786,9 +2803,258 @@ worked.
 
 # System 3: Daily modes
 
-**Not started.** Daily Fritz, Puzzle Rush, Daily Puzzle Ladder — run
-integrity, score authority (server-authored), leaderboard writes, share-result
-verification, the async verification outbox.
+Scope: **Daily Fritz** (`server/src/dailyFritz*`, `server/src/http/routes/dailyFritz*`,
+`server/src/http/stores/dailyFritz*`), **Puzzle Rush** (`server/src/puzzleRush/**`,
+`server/src/http/routes/puzzleRush.ts`, `…/stores/puzzleRushStore.ts`), **Daily
+Puzzle Ladder** (`server/src/dailyPuzzle*`, `…/routes/dailyPuzzle.ts`,
+`…/stores/dailyPuzzleStore.ts`). One challenge per Pacific calendar day, a
+score/speed leaderboard per day, an anti-cheat verification model per mode.
+
+> Not in scope: the **Fritz Challenge** friend-vs-friend feature
+> (`fritz_challenges*`, `server/src/http/stores/fritzChallenge*`) — a separate
+> head-to-head system, deferred to System 4. Its RPCs were locked down in the
+> 2026-09-02 cross-cutting sweep; that is not this audit.
+
+## 3.1 Current-state map
+
+Status: **written 2026-09-02, Step 1.** Read-only investigation. No fixes, no
+invariants — this maps what exists. §3.2 (invariants) / §3.3 (gap list) not
+started.
+
+### 3.1.1 The three modes — topology, shared infra
+
+All three are **HTTP routes on the same single Render process** (§2.1.1 —
+one instance, free tier) mounted under `/api/{daily-fritz,puzzle-rush,daily-puzzle}/*`.
+Identity at every write endpoint is `getAuthenticatedUserId(req)`
+(`platform/auth/supabaseAuth` — validates the `Authorization: Bearer` token
+against Supabase, returns a verified `uid`; **not** a client-claimed id). All DB
+access from these routes is `supabaseFetch` with the **service-role key**
+(bypasses RLS). Content is published by a cron/warm path per mode. There is no
+socket.io involvement — these are request/response.
+
+| | Daily Fritz | Puzzle Rush | Daily Puzzle Ladder |
+|---|---|---|---|
+| Prod rows (2026-09-02) | `daily_fritz_runs` 147, `daily_fritz_attempts` 404 | `rush_runs` 26 | `daily_puzzle_attempts` 172, `daily_puzzle_slot_results` 417 |
+| Shipped to players? | yes | **no** (per `2026-08-20_puzzle_rush_daily_official.sql` header + 26 rows) | yes |
+| Schema source | `supabase/daily_fritz.sql` + 8 migrations | `2026-08-20_puzzle_rush*.sql` (3) | `supabase/daily_puzzle_ladder_v1.sql` + `2026-08-06_*` (evolved from `daily_puzzle.sql` → `daily_puzzle_v2.sql` → ladder, **in place**) |
+| Score authority | server-authored; engine-verified transcript; **verification non-blocking** | server-authored; **engine replay at `/complete`**, over-report ⇒ `invalidated` | server-computed at `/submit-slot` (`validateDailyPuzzleSubmission` engine replay) — **but the score tables are also client-writable via RLS** (see §3.1.4) |
+| Client-writable state tables? | **no** (`select_own` + `no_client_write` deny-all) | **no** (RLS deny-all + `revoke all from anon, authenticated`) | **YES** — `daily_puzzle_attempts` / `daily_puzzle_slot_results` carry `insert_own` / `update_own` policies |
+
+### 3.1.2 Daily Fritz — data model + score authority
+
+**Tables** (all `public`, RLS on):
+
+| Table | Key | RLS | Purpose |
+|---|---|---|---|
+| `daily_fritz_runs` | `run_date` PK | `read_all` (authenticated / `using(true)`) + `no_client_write` | the day's seed / tier / deal_size / `hand_deals` jsonb; `status` ∈ live/archived/invalidated |
+| `daily_fritz_attempts` | `id`; **unique `(run_date, user_id)`** | `select_own` (`auth.uid()=user_id`) + `no_client_write` (deny-all) | one attempt per user per day; `status` ∈ started/completed/abandoned; `result` jsonb holds the **authority ledger** + **authority contract**; `final_score`/`won`/`moves_used` server-authored; `current_hand_index` progress; `verified_match_id` links the in-room game |
+| `daily_fritz_events` | `id`; **unique `idempotency_key`** | `no_client_access` (deny-all) | append-only event journal: `attempt_started` / `hand_verified` / `next_hand_replayed` / `game_recorded` / `attempt_completed` / `attempt_abandoned` / `verification_failed` / `request_failed` / `retry_request`; `verifier_code`, `transcript_digest` |
+| `daily_fritz_published_challenges` | `challenge_id` (text) PK; unique `(run_date, contract_version)`, unique `content_digest` | `read` (authenticated / `using(true)`) + `no_client_write`; **immutable** — `protect_daily_fritz_published_challenge` (BEFORE UPDATE trigger blocks any change except status→invalidated) + `prevent_daily_fritz_published_challenge_delete` | content-addressed challenge package (contract/generation/verifier versions, `package` jsonb) |
+| `daily_fritz_attempt_operations` | `id`; unique `(attempt_id, operation_id)`, unique `(user_id, challenge_id, operation_id)` | `no_client_access` | transactional-command idempotency + result cache; `committed_revision`, `status` ∈ committed/rejected |
+| `daily_fritz_verified_hands` | PK `(attempt_id, game_number, hand_index)`; unique `(attempt_id, operation_id)` | `no_client_access` | per-hand verified receipt (`transcript_digest`, `action_count`, scores, `verifier_version`, `receipt` jsonb) |
+| `daily_fritz_verified_games` | PK `(attempt_id, game_number)`; unique `(attempt_id, operation_id)` | `no_client_access` | per-game verified receipt |
+| `daily_fritz_outbox` | `id`; unique `(attempt_id, operation_id, event_type)` | `no_client_access` | async projection queue (`available_at`, `delivered_at`, `delivery_attempts`) |
+| `daily_fritz_event_metrics` (view, `security_invoker=true`) | — | `revoke all from anon, authenticated`; `grant select to service_role` | daily funnel aggregate |
+
+**Score-authority model.** An attempt is a **best-of-3 games vs Fritz**. Each
+game is a sequence of verified hands. The write path:
+
+1. `/api/daily-fritz/start` → `getAuthenticatedUserId` → `start_daily_fritz_attempt_command`
+   RPC (`security definer`, `set search_path = public`, `pg_advisory_xact_lock`
+   on `user_id:challenge_id`, `on conflict do nothing` on the attempt) — **now
+   service-role-only** (2026-09-02 fritz-RPC lockdown). Writes the **authority
+   contract** (`buildDailyFritzAuthorityContract` — rules/policy/verifier
+   versions) into `attempt.result` if absent.
+2. `/api/daily-fritz/record-game` (and `/next-hand`, `/checkpoint`) →
+   `withDailyFritzAttemptLock(attemptId, …)` (in-process per-attempt promise
+   chain) → `dailyFritzVerifier` **re-plays the submitted transcript through
+   `@racehorse/game-core`** (`applyGameCommand`, `getDailyFritzAuthorityStateDigest`,
+   `isOptimalOfficialFritzPlayForVersion` — verifies Fritz's moves were the
+   policy-optimal ones) → on success writes a `daily_fritz_verified_hands` /
+   `_verified_games` receipt + appends to the authority ledger via
+   `commit_daily_fritz_attempt_command` (RPC, `expected_revision` CAS).
+   **On verification failure the hand is `writeUnverifiedDailyFritzHand` — "recorded
+   as unverified, never refused"** (`dailyFritzRecordGameRoute` ~line 116). A
+   `verification_failed` event is journaled; there is also an **async
+   verification** re-check path (`dailyFritzRecordGameAsyncVerification`,
+   `2026-08-20_daily_fritz_events_async_verification_scheduled`).
+3. `/api/daily-fritz/complete` → requires every game to have a complete
+   authority record, sets `status='completed'`, `final_score` etc.
+4. `/api/daily-fritz/leaderboard/:date` → `daily_fritz_attempts?run_date=eq.X&status=eq.completed&order=completed_at.asc`
+   — a **speed** board (first to finish), 5-minute in-process cache. **Does not
+   filter on verification status.**
+
+**Idempotency / recovery.** `daily_fritz_events.idempotency_key` unique index;
+`daily_fritz_attempt_operations` command dedup + result replay;
+`expected_revision` optimistic CAS on the ledger; the event journal is
+replayable. `withDailyFritzAttemptLock` is **in-process only** (lost on
+restart — the DB advisory lock + CAS are the cross-restart guard).
+
+### 3.1.3 Puzzle Rush — data model + score authority
+
+**Tables** (`public`, RLS deny-all `to anon, authenticated using(false)`,
+`revoke all … from public, anon, authenticated`, `grant all … to service_role`):
+
+| Table | Key | Purpose |
+|---|---|---|
+| `puzzle_pool` | `id`; unique `(source, source_puzzle_id)` | content bank (seeded from `daily_puzzles`); carries `best_possible_score` (**"must never reach a client mid-run"**), `difficulty_score`, `play_count` |
+| `rush_runs` | `id`; **partial unique `(user_id) where status='in_progress'`**; **partial unique `(user_id, run_date) where is_official`**; partial `(user_id, run_date) where is_official` | one row per run (replayable — no per-day unique on the base table); `total_score` / `puzzles_solved` "written only by the server's end-of-run replay"; `client_reported_score` kept for the mismatch audit, "never trusted"; `status` ∈ in_progress/completed/invalidated; `run_date` + `is_official` (first run of the Pacific day) govern the daily board |
+| `rush_run_puzzles` | `id`; unique `(run_id, ordinal)` | per-puzzle-served row; `raw_score`/`awarded_points` server-graded, `client_raw_score` audit-only; `graded_at`, `grading_error` |
+
+**Score-authority model.**
+1. `/api/puzzle-rush/start` → idempotent: `INSERT` (no `on_conflict`), relies
+   on the two partial unique indexes; a `23505` on `rush_runs_one_open_per_user_idx`
+   ⇒ replay the existing open run. `is_official` chosen by an existence check +
+   the `rush_runs_one_official_per_user_day_idx` backstop.
+2. `/api/puzzle-rush/report` — **"Records only — no engine replay"** (optimistic
+   per-puzzle client report into `client_raw_score` / `submitted_line`).
+3. `/api/puzzle-rush/complete` — **"replay every reported line through the real
+   engine, compute the authoritative score. That, not what the client reported,
+   is stored; a client that over-reported gets the run marked `invalidated`."**
+   (`puzzleRush/grading.ts` → `calculateRushAwardedPoints`). Idempotent — a
+   duplicate `/complete` returns the stored result.
+4. `/api/puzzle-rush/leaderboard` → `buildPuzzleRushLeaderboard(runs)` — readable
+   without auth.
+
+**This mode is the cleanest of the three** — fully server-authoritative, RLS +
+grants both deny clients, engine-replay verdict, idempotent. Caveat: **not
+shipped to players**, so it has had the least real-world exercise.
+
+### 3.1.4 Daily Puzzle Ladder — data model + score authority + the write gap
+
+**Tables:**
+
+| Table | Key | RLS | Notes |
+|---|---|---|---|
+| `daily_puzzles` | `id`; unique `(puzzle_date, slot_index, set_version)` | `select_all` (anon+authenticated / `published=true`) + admin write policies keyed on **`(auth.jwt()->>'email') = 'admin@example.com'`** (a **stale placeholder** — no real user has that email; publishing is server-side) | evolved in place from v1→v2→ladder; 5 slots / day (`slot_index` 1–5), `tier`, `slot_max_points`, `objective_type`, `set_version` |
+| `daily_puzzle_attempts` | `id`; **unique `(puzzle_date, user_id)`** | **`select_own` + `insert_own` (`with check auth.uid()=user_id`) + `update_own`** | one attempt per user per day; `total_score` / `puzzles_completed` (0–5) / `master_chain_score` / `current_slot_index` / `status` ∈ started/completed; feeds `daily_puzzle_attempts_leaderboard_idx` |
+| `daily_puzzle_slot_results` | `id`; unique `(attempt_id, slot_index)` | **`select_own` + `insert_own` + `update_own`** | per-slot `raw_score` / `awarded_points` / `solved` / `perfect` / `submitted_line` |
+| `daily_puzzle_scores` / `daily_puzzle_submissions` / `daily_puzzle_completions` | — | not in repo | **legacy** (pre-ladder Daily Puzzle v1/v2); frozen history (`daily_puzzle_completions` still read by `homeCompletionDates.ts` as "frozen history"); 59 / 1 / — rows; policies unknown |
+
+**Score-authority model (the app path).** `/api/daily-puzzle/submit-slot` →
+`getAuthenticatedUserId` → `validateDailyPuzzleSubmission({slot, submittedLine,
+elapsedSeconds, clientRawScore})` — **the server re-plays the submitted line
+through the game engine** (`applyMove` / `getLegalMoves`) and computes
+`rawScore` / `movesUsed` / `solved` / `perfect` itself; `clientRawScore` is
+audit-only. `/api/daily-puzzle/complete` aggregates `total_score` /
+`puzzles_completed` / `master_chain_score` from the slot results. All writes go
+through `dailyPuzzleStore.ts` via `supabaseFetch` (service-role). Start is
+idempotent (`on_conflict=puzzle_date,user_id`).
+
+**The gap (confirmed live 2026-09-02, read-only).** Unlike Daily Fritz and
+Puzzle Rush, `daily_puzzle_attempts` and `daily_puzzle_slot_results` carry
+`insert_own` / `update_own` RLS policies, so an **authenticated client can
+bypass the API entirely** and `POST /rest/v1/daily_puzzle_attempts` with its own
+`user_id` and an arbitrary score:
+
+```
+POST /rest/v1/daily_puzzle_attempts   (anon key + a user JWT)
+{ "user_id": "<self>", "puzzle_date": "2026-09-02", "status": "completed",
+  "puzzles_completed": 5, "total_score": 999999, "master_chain_score": 999999 }
+→ HTTP 201, row created
+```
+
+Verified against prod with a throwaway account (row + user deleted after). The
+`with check (auth.uid() = user_id)` policy passes (own row); the CHECK
+constraints only bound `total_score >= 0`, `puzzles_completed between 0 and 5` —
+**no upper bound**. That row sorts straight to the top of
+`daily_puzzle_attempts_leaderboard_idx` (the daily leaderboard). `update_own`
+also allows inflating an existing legitimate attempt. Anon (no JWT) is correctly
+rejected (`42501` — can't forge `user_id`).
+
+This is the same class as **T-1** (tournament-registration RLS let the client
+write `seed`/`placement`) and the fritz-RPC gap — RLS grants a client write
+access to columns that are supposed to be service-role-only, and the
+server-side engine-replay validation is simply *bypassed*. **Daily Puzzle
+Ladder is a shipped feature with a leaderboard.** Parked as a gap candidate
+(§3.1.8) — a strong Tier-A candidate for Step 2/3.
+
+### 3.1.5 Authorization map (all three modes)
+
+| Path | Identity | Server check | RLS backstop |
+|---|---|---|---|
+| `daily-fritz/*` writes | `getAuthenticatedUserId(req)` | attempt lookup filtered `user_id=eq.<uid>`; per-attempt in-process lock; RPC `pg_advisory_xact_lock` + `expected_revision` CAS | `daily_fritz_attempts` `no_client_write` deny-all; events / operations / verified_* / outbox `no_client_access`; RPCs service-role-only |
+| `daily-fritz` reads (`/today`, `/history`, `/leaderboard`) | `getAuthenticatedUserId` (leaderboard cache is per-date, not per-user) | — | `daily_fritz_runs` / `_published_challenges` `read_all` to authenticated; `daily_fritz_attempts` `select_own` |
+| `puzzle-rush/*` writes | `getAuthenticatedUserId(req)` | `run_id`/`user_id` match; partial unique indexes; engine replay at `/complete` | all 3 tables deny-all **and** grants revoked from clients |
+| `puzzle-rush/leaderboard` | optional auth | — | (read via service-role) |
+| `daily-puzzle/*` writes | `getAuthenticatedUserId(req)` | `validateDailyPuzzleSubmission` engine replay; `attempt.user_id` match | **`insert_own` / `update_own` — client CAN write (§3.1.4 gap)** |
+| `daily-puzzle` `select` | anon + authenticated | — | `daily_puzzles` `select_all` (`published=true`); `daily_puzzle_attempts` / `_slot_results` `select_own` |
+| `daily_puzzles` admin write | (n/a — server publishes) | — | `admin@example.com` placeholder policy — **stale / dead** |
+
+### 3.1.6 Concurrency windows
+
+| # | Window | Mode | Current guard |
+|---|---|---|---|
+| DM-1 | Two concurrent `/start` for one user/day | all | Daily Fritz: RPC `pg_advisory_xact_lock` + `on conflict do nothing` + unique `(run_date,user_id)`. Rush: partial unique `(user_id) where in_progress` → `23505` → replay. Daily Puzzle: `on_conflict=puzzle_date,user_id` + unique. **Bounded in all three.** |
+| DM-2 | Concurrent hand/game submits for one Daily Fritz attempt (two tabs, a retry racing a real submit) | Daily Fritz | `withDailyFritzAttemptLock` (in-process, per-attempt) **serializes within one process**; `expected_revision` CAS + `daily_fritz_attempt_operations` unique `(attempt_id, operation_id)` are the cross-restart / (hypothetical) cross-instance guard. `daily_fritz_events.idempotency_key` unique dedups journaled events. |
+| DM-3 | Verification failure vs the leaderboard | Daily Fritz | **none** — an unverified hand is recorded, the attempt can still reach `status='completed'`, and the leaderboard query doesn't filter verification. §3.2 question (analogue of MP-G14 / MP-INV-19). |
+| DM-4 | `/report` (no replay) vs `/complete` (replay) for a Puzzle Rush run | Puzzle Rush | `/complete` recomputes from `submitted_line` and overwrites; over-report ⇒ `invalidated`. A run left `in_progress` (no `/complete`) never reaches the board. |
+| DM-5 | Direct client write racing the API write | Daily Puzzle Ladder | **none** — both the API (service-role) and a direct client `POST`/`PATCH` (RLS `insert_own`/`update_own`) can write `daily_puzzle_attempts`; last-write-wins on the `(puzzle_date, user_id)` upsert. This is §3.1.4. |
+| DM-6 | Restart mid-attempt | all | Daily Fritz: event-sourced + DB CAS → replayable; the outbox drains async. Rush: idempotent `/complete`. Daily Puzzle: upsert-based, `current_slot_index` persisted. In-process locks (`withDailyFritzAttemptLock`) lost — DB constraints are the real guard. |
+| DM-7 | Content publish vs an in-flight attempt | all | Daily Fritz: `daily_fritz_published_challenges` is **immutable** (trigger) — a re-publish for the same `(run_date, contract_version)` / digest is rejected; `daily_fritz_runs.status` can go `live→invalidated`. Daily Puzzle: `daily_puzzles` mutated in place — an admin edit mid-day would change the puzzle under an open attempt (no version fence on the attempt beyond `set_version`). |
+
+### 3.1.7 Recovery / idempotency prior art (reusable)
+
+- **Daily Fritz event journal + `idempotency_key` unique** — every state
+  transition is an idempotent event; replay reconstructs the attempt.
+- **`daily_fritz_attempt_operations`** — command dedup + cached result (the
+  System-1 `insertRankedGameIdempotent` pattern, generalised to a command).
+- **`expected_revision` CAS** on the authority ledger — reject a stale write.
+- **`daily_fritz_outbox`** — at-least-once async projection with
+  `delivery_attempts` / `available_at` (a scheduled drain).
+- **Puzzle Rush partial unique indexes** — `(user_id) where status='in_progress'`
+  makes "one open run" a DB invariant without forbidding replays.
+- **`daily_fritz_published_challenges` immutability triggers** — content, once
+  published, cannot be silently changed.
+- **Engine replay as the score oracle** — Daily Fritz (`dailyFritzVerifier`),
+  Puzzle Rush (`grading.ts`), Daily Puzzle (`validateDailyPuzzleSubmission`)
+  all re-run the submitted line through `@racehorse/game-core`. The gap is
+  never the *computation* — it's whether the client can write *around* it
+  (Daily Puzzle) or whether a failed verification still counts (Daily Fritz).
+
+### 3.1.8 Parked gap candidates (not risk-ranked — that is Step 2)
+
+- **DF-CAND-1 — Daily Puzzle Ladder score tables are client-writable.**
+  `daily_puzzle_attempts` / `daily_puzzle_slot_results` `insert_own` /
+  `update_own` RLS ⇒ an authenticated client `POST`s an arbitrary
+  `total_score` / `puzzles_completed` / `master_chain_score` directly, bypassing
+  the server engine-replay; confirmed live (HTTP 201). Feeds the daily
+  leaderboard. Same class as T-1. **Likely Tier A.**
+- **DF-CAND-2 — Daily Fritz verification is non-blocking and doesn't gate the
+  leaderboard.** A hand that fails transcript verification is recorded
+  `unverified`, the attempt can still reach `completed`, and
+  `daily-fritz/leaderboard` filters only `status=eq.completed`. Whether an
+  unverified completion should appear on the speed board is a §3.2 posture
+  question (analogue of MP-INV-19 / MP-G14).
+- **DF-CAND-3 — legacy Daily Puzzle tables.** `daily_puzzle_scores` /
+  `daily_puzzle_submissions` / `daily_puzzle_completions` exist in prod, are not
+  in the repo schema, and their RLS/grants are unverified. Frozen history
+  (`daily_puzzle_completions` still read). Schema-drift / unknown-posture item.
+- **DF-CAND-4 — `daily_puzzles` in-place mutation + stale admin policy.**
+  `daily_puzzles` was migrated v1→v2→ladder in place; the `admin@example.com`
+  write policy is a dead placeholder; an admin edit mid-day changes the puzzle
+  under open attempts with no per-attempt content fence.
+- **DF-CAND-5 — `withDailyFritzAttemptLock` is in-process only.** Same class as
+  System 2's in-memory locks (§2.1.1) — fine at one instance, breaks under
+  multi-instance; the DB advisory lock + CAS are the real guard, so this is
+  lower severity than System 2's equivalent, but it should be confirmed the CAS
+  path is airtight without the in-process lock.
+- **DF-CAND-6 — `daily_fritz_outbox` drain / async-verification liveness.**
+  These depend on a scheduled drainer running on the single free-tier process
+  (§1.3 T-17 class). If the drainer is a `setInterval`, it shares the
+  spin-down / deploy-restart exposure. Not yet traced.
+- **DF-CAND-7 — the fritz-challenge RPC lockdown (2026-09-02) left 3 functions
+  grant-locked but body-unguarded**, two of which are Daily Fritz
+  (`commit_daily_fritz_attempt_command` / `start_daily_fritz_attempt_command`).
+  Carried here from the cross-cutting sweep as a System-3 follow-up.
+
+## 3.2 Invariants
+
+**Not started.** Step 2 — awaiting sign-off on §3.1.
+
+## 3.3 Gap list (risk-ranked)
+
+**Not started.** Step 2.
 
 ---
 
@@ -2861,5 +3127,6 @@ registry.
 | 2026-09-02 | **Posture (d) DIRECTLY CONFIRMED closed.** Human ran the `pg_class.reloptions` view query → exactly 7 `public` views, **every one `["security_invoker=true"]`** (`daily_fritz_{funnel,failure,retention,event}_metrics`, `fritz_challenge_{funnel,failure}_metrics`, `mp_authority_funnel_metrics`). **No `SECURITY DEFINER` view exists** — matches the OpenAPI-spec view list exactly, and all 7 already deny anon (401) + authenticated (403). (d) upgraded from "no gap found" to fully closed on direct evidence. Residual (coverage, not a gap): extend `assert_security_posture()` to check for `SECURITY DEFINER` views. |
 | 2026-09-02 | **Item 2 — `2026-09-02_fritz_challenge_rpc_lockdown.sql` APPLIED TO PROD (human, SQL editor) — CLOSED + LIVE.** Agent verified read-only, same style as MP-G3 / MP-G6: **(1) anon probe, all 10 functions → `HTTP 401 / 42501 permission denied for function`** (was `200`): `claim_fritz_challenge_opponent`, `advance_fritz_challenge_hand`, `start_fritz_challenge_attempt`, `record_fritz_challenge_game`, `get_or_create_fritz_challenge_hand`, `create_fritz_challenge_invite`, `commit_fritz_challenge_attempt_command`, `start_fritz_challenge_attempt_command`, `commit_daily_fritz_attempt_command`, `start_daily_fritz_attempt_command`. **(2) authenticated** (throwaway JWT) on 2 → `403 / 42501`. **(3) service_role** on 4 (incl. the guarded PART-B fns `claim_*`, `advance_*`, `start_*_command`) → `200` with normal business errors (`[]` / `unsupported_command` / `challenge_not_found`), **no permission error** — app unaffected, `_assert_fritz_rpc_server_only()` passes for service_role. **(4) `assert_security_posture()`** → `hard_fail_count:0`; **none of the 10 (nor `_assert_fritz_rpc_server_only`) still flagged `securitydefiner_client_executable`** (all were, before) ⇒ anon + authenticated confirmed to have no EXECUTE on all 10; `advisory_count` 76→60 across the session. Still flagged (separate, lower priority): the `gauntlet_*` client-facing RPCs (by-design client-callable, internal auth guards, scrapped feature) + the `returns trigger` false positives. **8th drift instance closed.** §"Cross-cutting…" block + Current focus + Net line updated to CLOSED + LIVE. |
 | 2026-09-02 | **System 2 Tiers C/D/E — verification pass (§2.3.3).** The Tier-A/B gaps were code-verified in Step 5; the Tier C/D/E rows were still §2.1 initial reads. Traced each against the code, read-only. **Nothing escalates to Tier A/B.** **MP-G12 reclassified Tier C → Tier E:** the §2.1.5 audit claim ("rests on status polling, not awaiting the promise") is wrong — `game:rematch` → `waitForActiveGameOverPersist` (`roomSession.ts:685`) does `return await pending` on `room.activeGameOverPersist`; the pre-assignment window is handled by an `idle`-status reject. The recommended Step-3 fix is already shipped. **MP-G7 record corrected:** `finalizeAndDeleteLiveRoomSession` bypasses the `inFlightPersistByRoomCode` single-flight and doesn't await in-flight writes; the freshness fence (`validateLiveRoomHydrationRow:565`, status↔`game_state` consistency) rejects a resurrected **game-over** row but **not** an **abandon** one (`status='playing'`+`gameOver=false` self-consistent; `abandonedAt` lives only in `room_shell` and is overwritten) → verdict Tier C holds but the "fence rejects it" reasoning was half wrong; the tombstone guard is the real fix. **MP-G10 confidence low-med → low** (could not construct a duplicate-seat failure for one identity — the post-hydration branch is fully synchronous; `resolveActorSeatId` + `joinRoom` cap bound it). **MP-G8 / MP-G11 / MP-G13 / MP-G15 / MP-G16 / MP-G17 confirmed as classified** (MP-G8: `serializeRoomShell` genuinely omits `preGameDraw`; MP-G11: the `stillConnected`→`act` path is synchronous, a reconnect can't interleave unless the gameplay lock is held; MP-G13: `identityMatchesReconnectSeat` matches two `userId=null` guests by username — private+unranked only; MP-G16: `projectMultiplayerRoomForSpectators` doesn't mutate `room.state`). **MP-G5 + MP-G14** note that MP-G6 made `mp_authority_events` live → MP-G5's race is now measurable, MP-G14's failure event is now durably recorded (residual: no alert, no per-user aggregation). §2.3.3 written; MP-G5/G7/G10/G12/G14 rows + Current focus updated. Nothing fixed — verification only. |
+| 2026-09-02 | **System 3 (Daily modes) Step 1 — current-state audit §3.1 WRITTEN.** Mapped Daily Fritz, Puzzle Rush, Daily Puzzle Ladder: topology (§3.1.1 — HTTP routes on the single Render process, `getAuthenticatedUserId` at every write, all DB via service-role `supabaseFetch`), per-mode data model + score-authority model (§3.1.2–§3.1.4), authz map (§3.1.5), 7 concurrency windows DM-1..DM-7 (§3.1.6), recovery/idempotency prior art (§3.1.7), 7 parked gap candidates (§3.1.8). **Key findings:** (a) **Puzzle Rush is clean** — server-authoritative, RLS deny-all **and** grants revoked from clients, engine-replay verdict at `/complete` with over-report→`invalidated`, idempotent; but never shipped to players (26 rows). (b) **Daily Fritz** — heavily engineered (event journal `daily_fritz_events` w/ unique `idempotency_key`, transactional-command RPCs `start/commit_daily_fritz_attempt_command` now service-role-only, `dailyFritzVerifier` re-plays the transcript through `@racehorse/game-core` incl. Fritz-policy optimality, `expected_revision` CAS, immutable published challenges). **Verification is non-blocking** ("recorded as unverified, never refused") and the speed leaderboard (`status=eq.completed order by completed_at`) doesn't filter verification — DF-CAND-2 (MP-G14 analogue). (c) **Daily Puzzle Ladder — CONFIRMED LIVE competitive-integrity gap (DF-CAND-1):** `daily_puzzle_attempts` / `daily_puzzle_slot_results` carry `insert_own`/`update_own` RLS → an authenticated client `POST /rest/v1/daily_puzzle_attempts` with its own `user_id` + `total_score: 999999` / `puzzles_completed: 5` → **HTTP 201, row created** (CHECK constraints only bound `>=0` / `<=5`), sorts to the top of `daily_puzzle_attempts_leaderboard_idx`; `update_own` also inflates a legit attempt. Verified with a throwaway account (row + user deleted). The server's `validateDailyPuzzleSubmission` engine-replay is simply bypassed. Same class as T-1. Anon (no JWT) correctly `42501`. **Likely Tier A.** Also parked: DF-CAND-3 (legacy `daily_puzzle_scores`/`_submissions`/`_completions` — in prod, not in repo, unverified RLS), DF-CAND-4 (`daily_puzzles` in-place v1→v2→ladder migration + dead `admin@example.com` policy + no per-attempt content fence), DF-CAND-5 (`withDailyFritzAttemptLock` in-process only), DF-CAND-6 (outbox/async-verify drainer liveness on the free-tier process), DF-CAND-7 (the 3 grant-locked-but-body-unguarded fritz/daily-fritz RPCs from 2026-09-02). §3.2 / §3.3 stubbed. Current focus + Sequencing updated. **Stop — await human sign-off on §3.1 before Step 2.** |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
