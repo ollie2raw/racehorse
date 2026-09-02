@@ -36,9 +36,21 @@ focus" line, then the section for the system in progress.
   historical — `socialProfile.ts` + `homeCompletionDates.ts` still read them).
   pg16-verified. **Migration NOT applied to prod DB yet — human runs it.** Small
   follow-up DF-CAND-1b: delete the now-inert `route: 'daily'` Home branches +
-  `client/src/dailyPuzzle/**`. 7 gap candidates parked unranked in §3.1.8.
-  **Stop — await human sign-off on §3.1 before Step 2 (invariants + gap list),
-  and the migration apply.**
+  `client/src/dailyPuzzle/**`.
+- **System 3 (Daily modes) → Step 2 (invariants + gap list §3.2 / §3.3) WRITTEN
+  2026-09-02 — CANDIDATE, awaiting line-by-line sign-off (→ D-10).** Scoped to
+  the 2 active modes. **DM-INV-1..18** (rule / mechanism-or-`UNENFORCED` /
+  failure), grounded in DM-1..DM-7 + §3.1.5. **DF-G1..DF-G5** risk-ranked —
+  only **DF-G1 is FIX NOW** (async re-verification is fire-and-forget → a
+  restart strands a legit Daily Fritz run permanently off the board, no
+  recovery; analogue of `recoverTournamentMatches` / MP-G9). DF-G2 = a POSTURE
+  decision (keep verification non-blocking + add an alert, same as MP-INV-19) +
+  a REVISIT-IF-SCALE streak filter; DF-G3/G4 REVISIT IF SCALE; DF-G5 ACCEPT.
+  Two audit claims corrected against code: the DF speed board **is**
+  verification-gated (`isDailyFritzAttemptLeaderboardEligible`); the outbox is
+  projected by a **DB trigger**, not a Node drainer (no liveness risk).
+  **Stop — await human sign-off on §3.2 / §3.3 before Step 3, and the
+  `2026-09-02_daily_puzzle_ladder_decommission.sql` apply.**
 
 - **NEXT after System 3: System 4 (Everything else)** — legacy league/tournament
   (keep/wall-off/delete decision), social/activity writer, Glicko idempotency,
@@ -3063,7 +3075,7 @@ Parked as a gap candidate (§3.1.8).
 |---|---|---|---|
 | DM-1 | Two concurrent `/start` for one user/day | all | Daily Fritz: RPC `pg_advisory_xact_lock` + `on conflict do nothing` + unique `(run_date,user_id)`. Rush: partial unique `(user_id) where in_progress` → `23505` → replay. Daily Puzzle: `on_conflict=puzzle_date,user_id` + unique. **Bounded in all three.** |
 | DM-2 | Concurrent hand/game submits for one Daily Fritz attempt (two tabs, a retry racing a real submit) | Daily Fritz | `withDailyFritzAttemptLock` (in-process, per-attempt) **serializes within one process**; `expected_revision` CAS + `daily_fritz_attempt_operations` unique `(attempt_id, operation_id)` are the cross-restart / (hypothetical) cross-instance guard. `daily_fritz_events.idempotency_key` unique dedups journaled events. |
-| DM-3 | Verification failure vs the leaderboard | Daily Fritz | **none** — an unverified hand is recorded, the attempt can still reach `status='completed'`, and the leaderboard query doesn't filter verification. §3.2 question (analogue of MP-G14 / MP-INV-19). |
+| DM-3 | Verification failure vs the leaderboard | Daily Fritz | **partial** (corrected in Step 2) — an unverified hand is recorded and the attempt can still reach `status='completed'`, BUT the speed *board* IS verification-gated: `buildDailyFritzLeaderboard` applies `.filter(isDailyFritzAttemptLeaderboardEligible)` (`verification_status==='verified'` + empty `unverified_hands`). The raw PostgREST query at `dailyFritzStore.ts:640` doesn't filter — the consumer does. Residual: `getDailyFritzStreak` is **not** filtered (DF-G2), and there is no alert on a `verification_failed` event (§3.2 posture question, analogue of MP-G14 / MP-INV-19). |
 | DM-4 | `/report` (no replay) vs `/complete` (replay) for a Puzzle Rush run | Puzzle Rush | `/complete` recomputes from `submitted_line` and overwrites; over-report ⇒ `invalidated`. A run left `in_progress` (no `/complete`) never reaches the board. |
 | DM-5 | Direct client write racing the API write | Daily Puzzle Ladder *(retired — still reachable)* | **none** — both the API (service-role) and a direct client `POST`/`PATCH` (RLS `insert_own`/`update_own`) can write `daily_puzzle_attempts`; last-write-wins on the `(puzzle_date, user_id)` upsert. This is §3.1.4. Retirement means no live API writes any more, but the direct-client path is unchanged and the forged row still surfaces on the URL-reachable `/daily/leaderboard`. |
 | DM-6 | Restart mid-attempt | all | Daily Fritz: event-sourced + DB CAS → replayable; the outbox drains async. Rush: idempotent `/complete`. Daily Puzzle: upsert-based, `current_slot_index` persisted. In-process locks (`withDailyFritzAttemptLock`) lost — DB constraints are the real guard. |
@@ -3125,12 +3137,13 @@ Parked as a gap candidate (§3.1.8).
   - Full `tsc -b` (client + server) clean; client vitest 1482/1482, server 1183/1183;
     client lint at budget (401/401), server lint unchanged (pre-existing errors).
   Not touched (DF-CAND-3 / DF-CAND-4): `daily_puzzles`, `daily_puzzle_scores`/`_submissions`/`_completions`.
-- **DF-CAND-2 — Daily Fritz verification is non-blocking and doesn't gate the
-  leaderboard.** A hand that fails transcript verification is recorded
-  `unverified`, the attempt can still reach `completed`, and
-  `daily-fritz/leaderboard` filters only `status=eq.completed`. Whether an
-  unverified completion should appear on the speed board is a §3.2 posture
-  question (analogue of MP-INV-19 / MP-G14).
+- **DF-CAND-2 — Daily Fritz verification non-blocking → risk-ranked as DF-G2
+  (§3.3), partly corrected.** The speed *board* **is** verification-gated
+  (`buildDailyFritzLeaderboard` → `.filter(isDailyFritzAttemptLeaderboardEligible)`)
+  — the audit's "filters only `status=eq.completed`" was true of the raw query,
+  false of the consumer. Real residual: `getDailyFritzStreak` counts unverified
+  completions, and there is no alert on `verification_failed`. See §3.3 DF-G2
+  (REVISIT IF SCALE + a POSTURE decision).
 - **DF-CAND-3 — legacy Daily Puzzle tables.** `daily_puzzle_scores` /
   `daily_puzzle_submissions` / `daily_puzzle_completions` exist in prod, are not
   in the repo schema, and their RLS/grants are unverified. Frozen history
@@ -3139,27 +3152,319 @@ Parked as a gap candidate (§3.1.8).
   `daily_puzzles` was migrated v1→v2→ladder in place; the `admin@example.com`
   write policy is a dead placeholder; an admin edit mid-day changes the puzzle
   under open attempts with no per-attempt content fence.
-- **DF-CAND-5 — `withDailyFritzAttemptLock` is in-process only.** Same class as
-  System 2's in-memory locks (§2.1.1) — fine at one instance, breaks under
-  multi-instance; the DB advisory lock + CAS are the real guard, so this is
-  lower severity than System 2's equivalent, but it should be confirmed the CAS
-  path is airtight without the in-process lock.
-- **DF-CAND-6 — `daily_fritz_outbox` drain / async-verification liveness.**
-  These depend on a scheduled drainer running on the single free-tier process
-  (§1.3 T-17 class). If the drainer is a `setInterval`, it shares the
-  spin-down / deploy-restart exposure. Not yet traced.
-- **DF-CAND-7 — the fritz-challenge RPC lockdown (2026-09-02) left 3 functions
-  grant-locked but body-unguarded**, two of which are Daily Fritz
-  (`commit_daily_fritz_attempt_command` / `start_daily_fritz_attempt_command`).
-  Carried here from the cross-cutting sweep as a System-3 follow-up.
+- **DF-CAND-5 → DF-G3 (§3.3).** `withDailyFritzAttemptLock` in-process only.
+  **Traced:** the `expected_revision` CAS + `daily_fritz_attempt_operations`
+  unique + in-RPC `pg_advisory_xact_lock` keep ledger integrity airtight without
+  it. Residual = a Node-layer read-verify-commit that can surface a CAS conflict
+  as an error to a racing tab instead of replaying the cached op result.
+  REVISIT IF SCALE.
+- **DF-CAND-6 → split.** **(a) outbox projection — NOT a liveness risk:**
+  `daily_fritz_outbox` is projected by an **AFTER INSERT DB trigger**
+  (`project_daily_fritz_outbox_event()`, `2026-08-01_daily_fritz_canonical_telemetry.sql`)
+  — no Node drainer, no `setInterval`. DM-INV-13. **(b) async re-verification —
+  IS a liveness risk → DF-G1 (§3.3, FIX NOW):** `scheduleDailyFritzRecordGameVerification`
+  is a fire-and-forget bare promise, lost on restart, stranding a hand
+  permanently unverified.
+- **DF-CAND-7 → DF-G4 (§3.3).** The 2026-09-02 fritz-RPC lockdown left 3
+  functions grant-locked but PART-B-body-guard-deferred; 2 are Daily Fritz
+  (`commit_/start_daily_fritz_attempt_command`). Grant lockdown holds (verified
+  live); the missing in-body backstop is defence-in-depth only. REVISIT IF SCALE.
 
 ## 3.2 Invariants
 
-**Not started.** Step 2 — awaiting sign-off on §3.1.
+Status: **CANDIDATE — written 2026-09-02, awaiting human line-by-line sign-off
+(→ Decisions D-10, mirroring D-3 / D-9).** Scope: the **two active modes —
+Daily Fritz and Puzzle Rush**. The retired Daily Puzzle Ladder is excluded
+(decommissioned 2026-09-02, §3.1.4 / §3.1.8 DF-CAND-1).
+
+Framing mirrors §1.2 / §2.2: each invariant states **the rule**, **the mechanism
+that enforces it today** (or `UNENFORCED` / `PARTIAL`), and **the failure mode**
+if it breaks. Each is grounded in a §3.1.6 window (DM-1..DM-7) or a §3.1.5 authz
+row. Precondition for all of them: the **single Render instance** (§2.1.1) — a
+cross-instance failure is the revisit trigger, not a gap. Unlike System 1 there
+is no single RPC sink; unlike System 2 there is no in-memory authority — the
+authority is **the DB (event journal + command RPCs + CHECK/unique constraints)
+plus server-side engine replay**. `[DF]` = Daily Fritz, `[PR]` = Puzzle Rush,
+`[both]` = both modes.
+
+### Score authority
+
+**DM-INV-1 — The recorded score is server-computed by engine replay, never
+client-reported. `[both]`**
+Every score that reaches a leaderboard or a player's history is produced by
+re-running the submitted line/transcript through `@racehorse/game-core` on the
+server.
+*Enforced by:* `[DF]` `dailyFritzVerifier` re-plays each hand
+(`applyGameCommand` + `getDailyFritzAuthorityStateDigest`), writes a
+`daily_fritz_verified_hands` / `_verified_games` receipt, and appends to the
+authority ledger via `commit_daily_fritz_attempt_command` (`expected_revision`
+CAS). `[PR]` `/api/puzzle-rush/complete` → `gradeRun` replays every
+`rush_run_puzzles.submitted_line`; `total_score` / `puzzles_solved` are written
+only from that result. Client-reported values are stored **audit-only**
+(`daily_fritz` transcript diagnostics; `rush_runs.client_reported_score`,
+`rush_run_puzzles.client_raw_score`).
+*Failure mode:* an inflated score on the daily board.
+
+**DM-INV-2 — No client can write a score or attempt-state row directly. `[both]`**
+`daily_fritz_attempts`, `rush_runs`, `rush_run_puzzles`, and every Daily Fritz
+sub-table are writable only by the service-role backend.
+*Enforced by:* `[DF]` `daily_fritz_attempts` `select_own` + `no_client_write`
+(deny-all); `daily_fritz_events` / `_attempt_operations` / `_verified_*` /
+`_outbox` `no_client_access`; the `start_/commit_daily_fritz_attempt_command`
+RPCs `revoke execute from public, anon, authenticated` (2026-09-02 lockdown —
+verified live: anon/authenticated → `42501`). `[PR]` all three tables RLS
+deny-all `to anon, authenticated using(false)` **and** `revoke all … from
+public, anon, authenticated`.
+*Failure mode:* the T-1 / DF-CAND-1 class — a forged leaderboard row that
+bypasses replay entirely. (This is exactly what the retired Ladder violated;
+§3.1.4.)
+
+**DM-INV-3 — A client over-report is caught and quarantined, not silently
+accepted. `[PR]`**
+If the client's reported total exceeds the server replay, the run is marked
+`status='invalidated'` with an `invalidated_reason` and never reaches the board.
+*Enforced by:* `gradeRun` compares `clientReportedScore` against the replayed
+total; `/complete` writes `status: grade.valid ? 'completed' : 'invalidated'`.
+*Failure mode:* score inflation via a doctored `/report` stream.
+
+**DM-INV-4 — Only a verification-passing attempt appears on the Daily Fritz
+speed leaderboard. `[DF]` — PARTIAL**
+The public daily board shows an attempt only if every hand carries a verified
+receipt.
+*Enforced by:* `buildDailyFritzLeaderboard` applies
+`.filter(isDailyFritzAttemptLeaderboardEligible)` —
+`verification_protocol_version ∈ {1,2}` **and**
+`getDailyFritzVerificationStatus(result) === 'verified'` **and**
+`result.unverified_hands` empty. (Corrects the §3.1 audit note: the *board* IS
+verification-gated; the raw PostgREST query is not, the consumer is.)
+*`PARTIAL` / failure mode:* **`getDailyFritzStreak` does NOT apply this filter**
+— it counts any `daily_fritz_attempts` row with `status=eq.completed`. An
+unverified or verification-failed completion still extends the player's daily
+streak and its "done today" state. (§3.3 DF-G2.)
+
+**DM-INV-5 — Fritz's moves in a submitted transcript must be policy-optimal for
+the pinned verifier version. `[DF]`**
+A transcript in which Fritz "blunders" to inflate the player's margin is
+rejected by the verifier.
+*Enforced by:* `isOptimalOfficialFritzPlayForVersion` inside `dailyFritzVerifier`
+— a non-optimal Fritz move fails verification → the hand takes the
+advance-without-verification path → the attempt is not leaderboard-eligible
+(DM-INV-4).
+*Failure mode:* enforced for the board, **not** for `status='completed'` or the
+streak (see DM-INV-4 PARTIAL).
+
+### One attempt / one run per day
+
+**DM-INV-6 — ≤ 1 Daily Fritz attempt per (run_date, user_id). `[DF]`**
+*Enforced by:* `unique (run_date, user_id)` on `daily_fritz_attempts`;
+`start_daily_fritz_attempt_command` takes `pg_advisory_xact_lock` on
+`user_id:challenge_id` and `INSERT … ON CONFLICT DO NOTHING`. DM-1.
+*Failure mode:* two attempts, split hand progress, ambiguous leaderboard row.
+
+**DM-INV-7 — ≤ 1 open Puzzle Rush run per user, and ≤ 1 official run per
+(user_id, run_date). `[PR]`**
+*Enforced by:* partial unique `rush_runs_one_open_per_user_idx (user_id) where
+status='in_progress'` and `rush_runs_one_official_per_user_day_idx (user_id,
+run_date) where is_official`. `/start` is a plain `INSERT`; a `23505` on the
+open-run index ⇒ replay the existing open run; `is_official` chosen by an
+existence check with the day index as the backstop. DM-1.
+*Failure mode:* multiple concurrent runs for one user; two "official" entries
+competing on the daily board.
+
+### Idempotent recovery / mutation ordering
+
+**DM-INV-8 — Every Daily Fritz state transition is an idempotent, replayable
+command. `[DF]`**
+A retried `/record-game` / `/next-hand` / `/complete` produces the same ledger
+state, never a double-append or double-score.
+*Enforced by:* `daily_fritz_events.idempotency_key` unique;
+`daily_fritz_attempt_operations` unique `(attempt_id, operation_id)` = command
+dedup + cached result replay; `expected_revision` optimistic CAS on the ledger
+inside `commit_daily_fritz_attempt_command`. DM-2 / DM-6.
+*Failure mode:* a network retry double-counts a hand.
+
+**DM-INV-9 — Concurrent hand/game submits for one attempt are serialized. `[DF]`
+— PARTIAL**
+Two tabs (or a retry racing a live submit) for the same attempt do not interleave
+a read-verify-commit.
+*Enforced by:* `withDailyFritzAttemptLock(attemptId, …)` — an **in-process
+per-attempt promise chain**. `UNENFORCED across a process restart or a second
+instance`; the durable guard is the `expected_revision` CAS +
+`daily_fritz_attempt_operations` unique inside the RPC.
+*`PARTIAL` / failure mode:* the CAS holds ledger *integrity* without the lock
+(the losing racer's `commit_*` fails the CAS). The residual is the Node-layer
+read-modify-write of `attempt.result` *between* verify and the `commit_*` call —
+two requests both read revision N, both verify, one wins the CAS, the other must
+replay via `daily_fritz_attempt_operations` rather than error to the client.
+(§3.3 DF-G3 — confirm the loser replays cleanly.)
+
+**DM-INV-10 — Puzzle Rush `/complete` is idempotent and terminal. `[PR]` —
+PARTIAL**
+A duplicate `/complete` returns the stored result; a terminal run is never
+re-graded.
+*Enforced by:* `if (run.status !== 'in_progress') → return { replayed: true, run }`.
+*`PARTIAL` / failure mode:* **no in-process lock and `finalizeRushRun`'s PATCH
+has no `status=eq.in_progress` guard** — two concurrent *first-time* `/complete`
+calls both grade and both PATCH. Low impact: the replay is deterministic from
+the same `rush_run_puzzles` rows, so both writes are identical. A late `/report`
+landing between the two grades could be missed. (§3.3 DF-G5.)
+
+**DM-INV-11 — A hand recorded without a verification receipt is durably marked
+unverified and never silently promoted. `[DF]`**
+*Enforced by:* `recordDailyFritzAdvanceWithoutVerification` appends to
+`result.unverified_hands` + journals a `verification_failed` event; the
+record-game route comment: *"never-strand: publish with sticky rejected only
+after evidence is archived — do not leave pending_verification / fire-and-forget
+async verify."* DM-3.
+*Failure mode:* a failed hand silently counts as verified on the board.
+
+**DM-INV-12 — The async re-verification of an advance-without-verification hand
+eventually runs. `[DF]` — UNENFORCED across restart**
+A hand that took the advance-without-verification path is re-checked so a
+legitimate run can still become leaderboard-eligible.
+*Mechanism today:* `scheduleDailyFritzRecordGameVerification` — a
+**fire-and-forget bare promise** (`void runDailyFritzRecordGameVerification(…).catch(…)`).
+Not persisted, not queued, not retried. `UNENFORCED across a process restart.`
+*Failure mode:* a deploy / OOM / spin-down between the HTTP response and the
+async verify completing → the hand stays unverified forever → the attempt is
+permanently ineligible for the board **even if legitimate**, with no automatic
+recovery. (§3.3 DF-G1 — the real half of the old DF-CAND-6.)
+
+**DM-INV-13 — Outbox analytics projection happens exactly once and does not
+depend on process liveness. `[DF]`**
+*Enforced by:* `daily_fritz_outbox` **AFTER INSERT trigger**
+`project_daily_fritz_outbox_event()` (in-DB, synchronous) →
+`daily_fritz_events … ON CONFLICT (idempotency_key) DO NOTHING` + sets
+`analytics_projected_at`. **No Node drainer / `setInterval` is involved.**
+(Corrects the §3.1.8 DF-CAND-6 premise — there is no liveness risk here; the
+`available_at` / `delivered_at` columns are vestigial.)
+*Failure mode:* n/a — this invariant holds.
+
+### Content integrity
+
+**DM-INV-14 — A published Daily Fritz challenge is immutable. `[DF]`**
+Once `daily_fritz_published_challenges` has a row for a `(run_date,
+contract_version)` / `content_digest`, the deal never changes.
+*Enforced by:* `protect_daily_fritz_published_challenge` BEFORE UPDATE trigger
+(blocks every change except `status → invalidated`) +
+`prevent_daily_fritz_published_challenge_delete` + content-addressed digest +
+unique `(run_date, contract_version)` / unique `content_digest`. DM-7.
+*Failure mode:* the deal shifts under an in-flight attempt.
+
+**DM-INV-15 — The authority contract is pinned at start and never renegotiated
+mid-attempt. `[DF]`**
+Rules / Fritz-policy / verifier versions for an attempt are fixed when the
+attempt is created.
+*Enforced by:* `buildDailyFritzAuthorityContract` writes the contract into
+`attempt.result` at `/start` if absent; `pinAuthorityContractFromVerifiedTranscript`
+only *pins* from the first verified transcript, never rewrites. DM-7.
+*Failure mode:* a verifier-version bump mid-attempt retroactively moves the
+optimality bar (DM-INV-5).
+
+**DM-INV-16 — Puzzle solutions / `best_possible_score` never reach the client
+mid-run. `[PR]`**
+*Enforced by:* `puzzle_pool.best_possible_score` is documented *"must never
+reach a client mid-run"*; the `/start` and `/report` payloads carry the board
+and objective but not the target or solution; grading is server-side at
+`/complete`.
+*Failure mode:* the client knows the exact target and games the clock/score.
+
+### Authorization
+
+**DM-INV-17 — Every write endpoint identifies the actor by verified JWT, not a
+client-claimed id. `[both]`**
+*Enforced by:* `getAuthenticatedUserId(req)` (`platform/auth/supabaseAuth` —
+validates the Bearer token against Supabase) at every `daily-fritz/*` and
+`puzzle-rush/*` write route; attempt/run lookups are filtered `user_id=eq.<uid>`
+and a mismatch is a 404. §3.1.5.
+*Failure mode:* acting as another user / writing to their attempt.
+
+**DM-INV-18 — The command + content-lifecycle RPCs are service-role only. `[DF]`
+— PARTIAL (grant layer holds; body backstop missing on 2)**
+`start_/commit_daily_fritz_attempt_command`, `publish_daily_fritz_challenge`,
+`invalidate_daily_fritz_challenge` execute only for the service role.
+*Enforced by:* the 2026-09-01 content-lifecycle lockdown + the 2026-09-02
+fritz-RPC lockdown (PART A grant revoke) — verified live: anon / authenticated →
+`42501` on all of them.
+*`PARTIAL` / failure mode:* the 2 Daily Fritz command RPCs
+(`commit_daily_fritz_attempt_command`, `start_daily_fritz_attempt_command`) did
+**not** get the PART-B `_assert_fritz_rpc_server_only()` in-body guard the other
+7 fritz RPCs got (their bodies span 3 migrations — deferred as a careful pass).
+If a future migration re-`grant`ed EXECUTE, there is no in-body `auth.role()`
+backstop. (§3.3 DF-G4.)
+
+### Notes for Step 3
+
+- **DM-INV-1/2/6/7/8/11/13/14/15/16/17** are fully enforced today — Step 3 adds
+  tests, not fixes.
+- **DM-INV-4 (streak), DM-INV-9, DM-INV-10, DM-INV-12, DM-INV-18** carry the
+  `PARTIAL` / `UNENFORCED` residuals that §3.3 ranks (DF-G1..DF-G5).
+- **DM-INV-12 is the one with a real player-facing failure** (a legit run
+  silently missing from the board with no recovery) — it is the Step-3
+  priority.
+- There is **no client write vector into either active mode** — DM-INV-2 holds,
+  which is the whole point of decommissioning the Ladder.
 
 ## 3.3 Gap list (risk-ranked)
 
-**Not started.** Step 2.
+Status: **CANDIDATE — written 2026-09-02, awaiting sign-off (→ D-10).**
+
+**Scoring** (same axes as §1.3 / §2.3). *Severity* ∈ {data-corruption,
+competitive-integrity, auth-bypass, player-visible-bug, cosmetic}. *Likelihood*
+is for the **single Render instance** (§2.1.1) and current pre-marketing traffic
+(Daily Fritz 404 attempts ever; Puzzle Rush 26 runs). *Verdict* ∈ {**FIX NOW**
+(Step 3), **POSTURE** (Step-2 decision, no code), **REVISIT IF SCALE**, **ACCEPT**}.
+
+**DF-CAND-1 (Ladder client-writable scores) — RESOLVED 2026-08→09-02**,
+decommissioned; dropped from this list (§3.1.4 / §3.1.8). **DF-CAND-3 / DF-CAND-4**
+(legacy `daily_puzzle_scores*` tables; stale `admin@example.com` policy on
+`daily_puzzles`) and **DF-CAND-1b** (delete the dead `route:'daily'` Home
+branches + `client/src/dailyPuzzle/**`) stay parked — not integrity risks,
+out of Step-2 scope.
+
+| ID | Gap (mode) | Location | Severity | Likelihood (1 instance) | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **DF-G1** | **Async re-verification is fire-and-forget, not durable `[DF]`.** `scheduleDailyFritzRecordGameVerification` is a bare `void …promise.catch()`. A hand that took the advance-without-verification path (verifier flake, transcript edge case) is re-checked only by this in-memory task. A restart in the window ⇒ the hand stays unverified forever ⇒ the whole attempt is permanently ineligible for the daily board even if 100% legitimate, with **no automatic recovery**. Direct analogue of System 1's "RPC committed, Node crashed before dispatch" → `recoverTournamentMatches`, and of MP-G9. | `dailyFritzRecordGameAsyncVerification.ts:63`; `dailyFritzRecordGameRoute.ts` | player-visible-bug (competitive-integrity-adjacent — a legit run silently absent from the board) | **medium** — deploy-restarts are frequent (MP-G9 evidence: `main` took commits 20 of the last 21 days, ≥1 restart/day); the window is short but the advance-without-verification path is exactly the flaky one | one attempt per occurrence; accumulates over restarts | **FIX NOW (Step 3)** — cheapest form: a boot sweep + periodic reaper over `daily_fritz_attempts WHERE status='started' AND result->'unverified_hands' <> '[]'` older than N min, re-running `runDailyFritzRecordGameVerification`; or enqueue into `daily_fritz_outbox` (already durable via the trigger) and drain it. Mirror `recoverTournamentMatches`. | DM-INV-12 |
+| **DF-G2** | **Daily-streak counts unverified completions `[DF]`.** The speed *board* is verification-gated (`isDailyFritzAttemptLeaderboardEligible` — this **corrects the §3.1 audit**), but `getDailyFritzStreak` counts any `status=eq.completed` row. An attempt that failed transcript verification still extends the daily streak + "done today" state. Also: a `verification_failed` event is journaled + queryable (`daily_fritz_failure_metrics`) but there is **no alert** and **no per-user aggregation** — identical to MP-G14 / MP-INV-19. | `dailyFritzStore.ts:800` (`getDailyFritzStreak`); `dailyFritzRecordGameRoute.ts` (`verification_failed` emit) | competitive-integrity (minor — streak, not the ranked board) | **low** — needs a completion whose transcript failed verification, which needs a doctored/edited transcript (the honest client can't produce one) | one player's streak / a "ritual" badge | **REVISIT IF SCALE** for the streak filter (add `isDailyFritzAttemptLeaderboardEligible` to the streak scan). **POSTURE** for the alert: keep verification non-blocking for `status='completed'`; Step 3 adds a `verification_failed` alert + per-user failure aggregation (same resolution as MP-INV-19). | DM-INV-4, DM-INV-5 |
+| **DF-G3** | **`withDailyFritzAttemptLock` is in-process only `[DF]`.** Confirmed the durable guard (`expected_revision` CAS + `daily_fritz_attempt_operations` unique + `pg_advisory_xact_lock` in the RPC) keeps the **ledger integrity** airtight without the lock — a losing racer's `commit_*` fails the CAS. Residual: the Node-layer read-verify-commit of `attempt.result` is not transactional, so two concurrent submits for one attempt both verify at revision N and one gets a CAS conflict — need to confirm that path **replays the cached operation result** (via `daily_fritz_attempt_operations`) rather than surfacing an error to the racing tab. | `dailyFritzAttemptLock.ts`; `dailyFritzCommandStore.ts`; `commit_daily_fritz_attempt_command` | player-visible-bug (a spurious error on a racing tab) — **not** data-corruption | **low** — needs two concurrent submits for one attempt (two tabs; single-player mode, no adversary) | one request | **REVISIT IF SCALE** — the CAS holds for integrity. Step 3 (if cheap): make the Node command layer treat a CAS conflict as "load and return the `daily_fritz_attempt_operations` cached result" so a double-submit is a clean no-op, not an error. | DM-INV-9 |
+| **DF-G4** | **2 Daily Fritz command RPCs are grant-locked but body-guard-deferred `[DF]`.** `commit_daily_fritz_attempt_command` / `start_daily_fritz_attempt_command` got PART-A `revoke execute` (verified live: anon/authenticated → `42501`) but not the PART-B `_assert_fritz_rpc_server_only()` first-line body guard (bodies span 3 migrations — `2026-08-01_daily_fritz_transactional_commands.sql` + 2 more). No exposure today; a future accidental `grant execute` would have no in-body backstop. | `supabase/migrations/2026-09-02_fritz_challenge_rpc_lockdown.sql` (PART B "Deferred" list) | none today; defence-in-depth only | **very low** — needs a future migration to re-grant EXECUTE | — | **REVISIT IF SCALE / defence-in-depth** — add the one-line `perform public._assert_fritz_rpc_server_only();` guard on the next migration that legitimately touches either function body. Not urgent. | DM-INV-18 |
+| **DF-G5** | **Puzzle Rush `/complete` has no lock + unconditional finalize PATCH `[PR]`.** Two concurrent first-time `/complete` for one run both `gradeRun` and both `finalizeRushRun` (PATCH by `id`, no `status=eq.in_progress`). Deterministic replay ⇒ identical writes, so no corruption; a `/report` landing between the two grades could be missed from the second grade. Analogue of MP-G4's `recordMatchEnd`. | `puzzleRush.ts` `/complete` (193); `puzzleRushStore.ts` `finalizeRushRun` (299) | cosmetic (deterministic; worst case one late-reported puzzle missed) | **very low** — needs two concurrent `/complete` for one run (client sends it once at clock-zero) | one run | **ACCEPT** (Step 3 if trivially cheap: add `&status=eq.in_progress` to the finalize PATCH, mirroring MP-G4). | DM-INV-10 |
+
+### Tier summary
+
+- **FIX NOW (Step 3):** DF-G1 only.
+- **POSTURE (Step 2 decision):** DF-G2's alert half — recommendation: keep
+  verification non-blocking for `status='completed'`; add a `verification_failed`
+  alert + per-user aggregation (identical stance to D-9's MP-INV-19 / MP-G14).
+- **REVISIT IF SCALE:** DF-G2 (streak filter), DF-G3, DF-G4.
+- **ACCEPT:** DF-G5.
+
+Nothing here is a client-reachable integrity hole — DM-INV-2 holds for both
+active modes. The one real player-facing bug is DF-G1 (a legit Daily Fritz run
+can silently vanish from the board across a restart).
+
+## 3.4 Checklist
+
+### Step 1 — Current-state audit
+- [x] Topology + shared infra mapped — §3.1.1
+- [x] Per-mode data model + score authority mapped — §3.1.2 (DF), §3.1.3 (PR)
+- [x] Authorization map — §3.1.5
+- [x] Concurrency windows DM-1..DM-7 — §3.1.6
+- [x] Recovery / idempotency prior art — §3.1.7
+- [x] Gap candidates parked — §3.1.8
+- [x] Scope-corrected (Daily Puzzle Ladder retired) + reconciled — §3.1.1
+- [x] DF-CAND-1 decommissioned (routes + client + migration) — commit `56c0bb67`
+
+### Step 2 — Invariants + risk-ranked gap list
+- [x] DM-INV-1..18 written (rule / mechanism-or-`UNENFORCED` / failure) — §3.2
+- [x] Every invariant grounded in a DM-window or an authz row — §3.2
+- [x] §3.1.8 candidates risk-ranked as DF-G1..DF-G5 — §3.3
+- [x] Audit claims re-verified against code (DM-3 leaderboard filter; DF-CAND-6 outbox trigger vs async-verify) — §3.2 / §3.3
+- [ ] DM-INV-1..18 + DF-G1..DF-G5 reviewed line-by-line and signed off — → Decisions **D-10**
+- [ ] Step 3 scope agreed (proposed: DF-G1 only, + the DF-G2 POSTURE decision)
+
+### Step 3 — Design
+- [ ] Not started — opens after D-10
 
 ---
 
@@ -3235,5 +3540,6 @@ registry.
 | 2026-09-02 | **System 3 (Daily modes) Step 1 — current-state audit §3.1 WRITTEN.** Mapped Daily Fritz, Puzzle Rush, Daily Puzzle Ladder: topology (§3.1.1 — HTTP routes on the single Render process, `getAuthenticatedUserId` at every write, all DB via service-role `supabaseFetch`), per-mode data model + score-authority model (§3.1.2–§3.1.4), authz map (§3.1.5), 7 concurrency windows DM-1..DM-7 (§3.1.6), recovery/idempotency prior art (§3.1.7), 7 parked gap candidates (§3.1.8). **Key findings:** (a) **Puzzle Rush is clean** — server-authoritative, RLS deny-all **and** grants revoked from clients, engine-replay verdict at `/complete` with over-report→`invalidated`, idempotent; but never shipped to players (26 rows). (b) **Daily Fritz** — heavily engineered (event journal `daily_fritz_events` w/ unique `idempotency_key`, transactional-command RPCs `start/commit_daily_fritz_attempt_command` now service-role-only, `dailyFritzVerifier` re-plays the transcript through `@racehorse/game-core` incl. Fritz-policy optimality, `expected_revision` CAS, immutable published challenges). **Verification is non-blocking** ("recorded as unverified, never refused") and the speed leaderboard (`status=eq.completed order by completed_at`) doesn't filter verification — DF-CAND-2 (MP-G14 analogue). (c) **Daily Puzzle Ladder — CONFIRMED LIVE competitive-integrity gap (DF-CAND-1):** `daily_puzzle_attempts` / `daily_puzzle_slot_results` carry `insert_own`/`update_own` RLS → an authenticated client `POST /rest/v1/daily_puzzle_attempts` with its own `user_id` + `total_score: 999999` / `puzzles_completed: 5` → **HTTP 201, row created** (CHECK constraints only bound `>=0` / `<=5`), sorts to the top of `daily_puzzle_attempts_leaderboard_idx`; `update_own` also inflates a legit attempt. Verified with a throwaway account (row + user deleted). The server's `validateDailyPuzzleSubmission` engine-replay is simply bypassed. Same class as T-1. Anon (no JWT) correctly `42501`. **Likely Tier A.** Also parked: DF-CAND-3 (legacy `daily_puzzle_scores`/`_submissions`/`_completions` — in prod, not in repo, unverified RLS), DF-CAND-4 (`daily_puzzles` in-place v1→v2→ladder migration + dead `admin@example.com` policy + no per-attempt content fence), DF-CAND-5 (`withDailyFritzAttemptLock` in-process only), DF-CAND-6 (outbox/async-verify drainer liveness on the free-tier process), DF-CAND-7 (the 3 grant-locked-but-body-unguarded fritz/daily-fritz RPCs from 2026-09-02). §3.2 / §3.3 stubbed. Current focus + Sequencing updated. **Stop — await human sign-off on §3.1 before Step 2.** |
 | 2026-09-02 | **System 3 §3.1 SCOPE CORRECTION — Daily Puzzle Ladder is retired, not an active mode.** Human: "it's Daily Fritz and Puzzle Rush only now." Reconciled read-only. **Server routes:** `registerDailyPuzzleRoutes(app)` still called (`index.ts:607`) — `/api/daily-puzzle/{today,start,submit-slot,complete,leaderboard}` + warm cron all **mounted**, rate limits still wired. **Client:** `appRoutePath.ts` still maps `/daily` + `/daily/leaderboard`; `AppRoutes.tsx:117-122` still dispatches `<DailyRoute>` / `<DailyPuzzleLeaderboardRoute>` (the 5-slot `DailyPuzzleScreen`). **But** `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` is an explicit regression guard — the Home "Daily Puzzle" card routes straight to `puzzleRush`, Single Player hub + ladder hub have no door to `'daily'`, "no live surface should send a player there"; `DailyRoute` is referenced only by the URL dispatcher. `api.ts` still has the five calls but only the unlinked screen invokes them. **Prod writes:** `daily_puzzle_attempts` last `updated_at` = `2026-08-20T16:00`, `daily_puzzle_slot_results` last `completed_at` = `2026-08-20T16:00` — **zero writes since 2026-08-20** (the day `2026-08-20_puzzle_rush_daily_official.sql` "Puzzle Rush becomes the Daily Puzzle" landed); `rush_runs` active through `2026-09-02`. **RLS unchanged** (`insert_own`/`update_own` still on both tables). **Verdict: case (b) — reachable but unlinked.** Not case (a) (routes + `/daily` URL + RLS all live; DF-CAND-1 re-verified working). Not case (c) (Puzzle Rush is its own schema `rush_runs`, not a rename of `daily_puzzle_attempts` — the change was UI positioning, no data migration). **DF-CAND-1 still exploitable**: an authenticated `POST /rest/v1/daily_puzzle_attempts` still lands and still sorts onto the URL-reachable `/daily/leaderboard` — severity drops (no players directed there, no legit scores since Aug 20) but the gap is open. Corrected: Current focus, §3.1.1 (reconciliation block + table), §3.1.3 (Puzzle Rush IS the live Daily Puzzle, not "unshipped"), §3.1.4 heading + gap text, §3.1.5, DM-5, DF-CAND-1, Sequencing line. **Step 2/3 decision framed: decommission (drop routes + tables) vs. lock the RLS — decommission preferred.** No code/migration changes — audit correction only. |
 | 2026-09-02 | **DF-CAND-1 — Daily Puzzle Ladder DECOMMISSIONED (one commit; migration pending human apply).** Human confirmed no pending client release re-links it and `racehorse.onrender.com` is the only `/api/daily-puzzle/*` consumer. Extra finding during the cut: the Home command center still wired the ladder in (`homeDataLoaders.loadDailyPuzzle` → `/api/daily-puzzle/today` on every home load; `homePrimaryAction.ts` / `homeActivityTimeline.ts` emit `route: 'daily'` next-move/timeline branches) — `dailyPuzzleIsRush.test.ts` had only guarded the Home *card* + hub + solo routes. **Server:** removed `registerDailyPuzzleRoutes` + 3 `/api/daily-puzzle/*` rate-limit mounts + nightly `scheduleDailyPuzzleLadderWarmup`; deleted `http/routes/dailyPuzzle.ts` (+ `/api/cron/daily-puzzle-ladder-warm`) + its forgery test; trimmed `scheduled/dailyWarmup.ts` (+ its test). **Client:** removed `/daily` + `/daily/leaderboard` (route table, `AppRoutes` branches, `DailyRoute`/`DailyPuzzleLeaderboardRoute`, prerender entries, `vercel.json` rewrites); `useHomeCommandCenter` no longer fetches the ladder (`model.daily.puzzle` pinned `unavailable`). Left the now-unreachable `route: 'daily'` branches in `homePrimaryAction`/`homeActivityTimeline` in place (gated on `status==='ready'` which can't happen) rather than churn personalization tests — parked as **DF-CAND-1b** (delete those + `client/src/dailyPuzzle/**`). **DB:** `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` drops the 4 `insert_own`/`update_own` policies + `revoke insert,update,delete,truncate` from `anon`/`authenticated` on `daily_puzzle_attempts` / `_slot_results`; tables stay in `public` as **read-only historical** (`select_own` + service-role SELECT kept — `socialProfile.ts` + `homeCompletionDates.ts` still read pre-Aug-20 rows). Self-asserting; **pg16-verified clean + idempotent** (only `select_own` remains; `authenticated` INSERT=f / SELECT=t; `anon` UPDATE=f; `service_role` SELECT=t; 2 seeded historical rows preserved). Not touched: `daily_puzzles`, `daily_puzzle_scores`/`_submissions`/`_completions` (DF-CAND-3/4). Full `tsc -b` clean; client vitest 1482/1482, server 1183/1183; client lint 401/401 (budget); server lint unchanged (74→71 pre-existing errors). **Migration NOT applied to prod DB — human runs it in the SQL editor. Not pushed.** |
+| 2026-09-02 | **System 3 (Daily modes) Step 2 — invariants §3.2 + risk-ranked gap list §3.3 WRITTEN (CANDIDATE, no code).** Scoped to the 2 active modes (Daily Fritz, Puzzle Rush); retired Ladder excluded. **§3.2: DM-INV-1..18** across 6 domains — score authority (1–5), one-attempt/run-per-day (6–7), idempotent recovery & ordering (8–13), content integrity (14–16), authz (17–18) — each rule / enforcing-mechanism-today-or-`UNENFORCED`/`PARTIAL` / failure-mode, grounded in a DM-1..DM-7 window or a §3.1.5 authz row. **§3.3: DF-G1..DF-G5** risk-ranked. **Two §3.1 audit claims corrected against code:** (1) the Daily Fritz speed board **IS** verification-gated — `buildDailyFritzLeaderboard` applies `.filter(isDailyFritzAttemptLeaderboardEligible)` (`verification_status==='verified'` + empty `unverified_hands`); the raw PostgREST query isn't, the consumer is. (2) `daily_fritz_outbox` is projected by an **AFTER INSERT DB trigger** (`project_daily_fritz_outbox_event()`), **not** a Node `setInterval` drainer — no liveness risk (DM-INV-13). **The real gaps:** **DF-G1 (FIX NOW)** — `scheduleDailyFritzRecordGameVerification` is a fire-and-forget bare promise; a restart in the async-verify window strands a hand permanently unverified ⇒ a legitimate Daily Fritz run is silently and permanently absent from the daily board with no recovery (analogue of System 1's `recoverTournamentMatches` / MP-G9). **DF-G2** — `getDailyFritzStreak` is not verification-filtered (streak inflation, minor) + no alert on `verification_failed` (POSTURE decision, same stance as MP-INV-19: keep non-blocking, add alert + per-user aggregation). **DF-G3** — `withDailyFritzAttemptLock` in-process only; traced — the `expected_revision` CAS + `daily_fritz_attempt_operations` unique keep ledger integrity airtight without it; residual is a CAS-conflict surfacing as an error to a racing tab instead of replaying the cached op (REVISIT IF SCALE). **DF-G4** — 2 daily-fritz command RPCs grant-locked (verified live) but PART-B body-guard deferred; defence-in-depth only (REVISIT IF SCALE). **DF-G5** — Puzzle Rush `/complete` no lock + unconditional finalize PATCH; deterministic replay ⇒ no corruption (ACCEPT). **DF-CAND-1 dropped (RESOLVED/decommissioned); DF-CAND-1b / DF-CAND-3 / DF-CAND-4 stay parked (not integrity risks).** §3.4 checklist added; Step-2 boxes checked; Current focus updated. **Awaiting human line-by-line sign-off → Decisions D-10 (mirroring D-3 / D-9). Step 3 does not start until then.** |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
