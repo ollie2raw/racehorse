@@ -75,15 +75,27 @@ focus" line, then the section for the system in progress.
   claim in MP-INV-1..19; the one DB-level MP-G4 guarantee was already verified
   against real Postgres). Remaining invariants (MP-INV-7/8/10/11/13/16/17/18/19)
   get harness passes as their tiers open (§2.6.4). **System 2: Steps 1–5 done
-  for the Tier-A/B scope. Remaining: Tiers C–E (each its own pass).**
+  for the Tier-A/B scope.**
 
-- **Deploy state note (2026-09-01):** all session work is pushed to
-  `origin/main` (HEAD `1f9aa27e`). **Prod is on `907435df`** — 4 commits behind,
-  all docs/tests only (MP-G3 smoke-verified, MP-G6 docs/verify, Step 5 harness),
-  no server-code difference. Render did **not** auto-deploy the doc/test pushes
-  (`ec939392` onward); the last actual deploy was `907435df` (the MP-G3/MP-G4
-  code). No action needed — flagged so a future session knows prod ≠
-  `origin/main` HEAD but is functionally current.
+- **System 2 Tiers C/D/E — verification pass 2026-09-02 (§2.3.3).** Traced every
+  Tier C/D/E gap against the code, read-only. **Nothing escalates to Tier A/B.**
+  Corrections: **MP-G12 C→E** — the audit was wrong, `game:rematch` already
+  `await`s the game-over persist promise (`waitForActiveGameOverPersist`), the
+  recommended fix is shipped. **MP-G7** — real for the *abandon* case; the
+  freshness fence catches a resurrected game-over row but not an abandon one
+  (record corrected; verdict Tier C holds). **MP-G10** confidence low-med→low
+  (couldn't construct a failure). MP-G5 + MP-G14 now have live telemetry
+  (MP-G6). MP-G8/G11/G13/G15/G16/G17 confirmed as classified. Highest-value
+  Tier-C to do early: **MP-G13** (auth-bypass class, narrow) + a per-room attach
+  lock (also closes MP-G10 / MP-G11 residuals).
+
+- **Deploy state note (2026-09-02):** all session work is pushed to
+  `origin/main` (HEAD `6a89418f`). **Prod runs `907435df`** for the app server
+  (Render did not auto-deploy the doc/test/migration commits since — no
+  server-code difference; MP-G3/MP-G4 code is the last real deploy). The
+  security migrations (MP-G6, fritz RPC lockdown) were applied directly in the
+  SQL editor and are live. Prod ≠ `origin/main` HEAD but is functionally
+  current.
 
 - **Cross-cutting security sweep (2026-09-02) — 1 confirmed gap, FIXED + LIVE.**
   See the "Cross-cutting security follow-up sweep" block above §"# System 1".
@@ -2140,20 +2152,19 @@ authenticated `room:spectate` on a private room returns `not_spectatable`
 
 | ID | Gap | Window | Severity | Why it's low now | Verdict | Protects |
 |---|---|---|---|---|---|---|
-| **MP-G5** | **Non-tournament terminal outcome is last-writer-wins.** `abandonedAt` and `state.gameOver` are both terminal; the later `persistRoomMatchLog` / `recordMatchEnd` overwrites (`on_conflict=match_id`). A rage-quit at the score screen, or a disconnect-timeout racing a real finish (MP-2), records the wrong terminal status / blames the wrong player. Tournament rooms are covered (RPC + `tournamentForfeitApplyStatus`); private/matchmaking are not. | MP-2 | player-visible-bug + minor data-corruption | **low, and not precisely measurable from here** (see §2.3.2): the purpose-built durable telemetry (`mp_authority_events`, `2026-08-20_mp_authority_events.sql`) is **not applied to prod** (`PGRST205`) so the intended signal path is dead; the funnel `console.info` lines go only to Render stdout (no query API here); `room_match_logs` (`on_conflict=match_id`) collapses a race to one row, but a scan for `status='abandoned' AND summary->>gameOver='true'` returned **0 rows**. Base rate: ~88 human-v-human matches ever, ~45 archived `abandoned` — the abandon *rate* is high but the overlap *window* (both terminal paths firing within the seconds `persistGameOverOnce` runs) is narrow, and nothing indicates it has fired. | one match's archive + matchmaking outcome + rating delta | **REVISIT IF SCALE** (was Tier A / FIX NOW — downgraded 2026-09-01 after finding 0 evidence and no measurement path). Step 3: a "first terminal outcome wins" latch for private/mm (mirror `tournamentForfeitApplyStatus`) whenever the terminal-outcome path is touched. | MP-INV-14 |
-| **MP-G7** | Debounced `persistLiveRoomSessionNow` already in flight to PostgREST lands **after** `finalizeAndDeleteLiveRoomSession` → resurrects a terminal row with `status='playing'`. | MP-8 | player-visible-bug | needs an in-flight write at the exact finalize instant; the freshness fence should reject the stale hydration; next finalize re-deletes | **REVISIT IF SCALE** — Step 3 if cheap: a short-lived tombstone / `deleted_at` guard so a late upsert no-ops | MP-INV-11 |
+| **MP-G5** | **Non-tournament terminal outcome is last-writer-wins.** `abandonedAt` and `state.gameOver` are both terminal; the later `persistRoomMatchLog` / `recordMatchEnd` overwrites (`on_conflict=match_id`). A rage-quit at the score screen, or a disconnect-timeout racing a real finish (MP-2), records the wrong terminal status / blames the wrong player. Tournament rooms are covered (RPC + `tournamentForfeitApplyStatus`); private/matchmaking are not. **The matchmaking half is fixed by MP-G4's `recordMatchEnd` conditional PATCH** (first-terminal-wins) — the `room_match_logs` half is the residual. | MP-2 | player-visible-bug + minor data-corruption | **low; 0 evidence.** §2.3.2 scan for `status='abandoned' AND summary->>gameOver='true'` = 0 rows; ~88 human-v-human matches ever. **Now measurable in prod** (2026-09-02): MP-G6 made `mp_authority_events` live, so `private_match_abandoned` + `private_match_archived` events for one `room_code` close in time would show the race. | one match's archive | **REVISIT IF SCALE** (was Tier A — downgraded 2026-09-01). Step 3: a "first terminal outcome wins" latch for private (mirror `tournamentForfeitApplyStatus`). | MP-INV-14 |
+| **MP-G7** | Debounced live-session write in flight to PostgREST lands **after** `finalizeAndDeleteLiveRoomSession`'s DELETE → resurrects a `status='playing'` row. `finalizeAndDeleteLiveRoomSession` calls `persistLiveSessionRowNow` **directly** (bypasses the `inFlightPersistByRoomCode` single-flight) and does not await an in-flight write. | MP-8 | player-visible-bug | **verified 2026-09-02 (§2.3.3):** the freshness fence (`validateLiveRoomHydrationRow:565`) rejects a resurrected **game-over** row (status↔`game_state` consistency) — but **NOT** an **abandon** resurrect (`status='playing'` + `gameOver=false` is self-consistent; `abandonedAt` lives only in `room_shell` and is overwritten). Window: a debounced write (`LIVE_PERSIST_DEBOUNCE_MS=75`) mid-HTTP at the DELETE instant + a surviving process. | **REVISIT IF SCALE** — Step 3: a short-lived tombstone / `deleted_at` guard so a late upsert no-ops (this is the real fix — the fence is not sufficient for the abandon case) | MP-INV-11 |
 | **MP-G8** | `preGameDrawTimer` is in-memory; a restart during the (seconds-long) pre-game high-draw window strands the room pre-start until a client re-triggers. | MP-5 | player-visible-bug | tiny window; client re-trigger recovers it | **REVISIT IF SCALE** — Step 3 if cheap: persist a `preGameDrawDeadline`, or fall back to immediate start on hydrate | MP-INV-13 |
 | **MP-G9** | **No boot-time live-room recovery sweep.** A restart drops every in-memory `Room`; rooms recover **lazily** when a player reconnects and re-hydrates from `room_live_sessions`. If **neither** player of an in-progress match reconnects, the match is stranded — no archive, no result, no rating applied — and there is **no periodic stale-live-session reaper** to clean it up. Tournament rooms are covered separately by System 1's `reconcileExpiredReadyMatches`. | §2.1.8 | player-visible-bug ("my ranked game vanished with no result"); **not** corruption (the freshness fence rejects a stale hydration cleanly) | **restarts are more frequent than a dedicated box** (§2.3.2): deploy-driven, `main` took commits on 20 of the last 21 days (bursty — up to 58/day); prod is on `a93eea1e` (committed 11:36 PT) with `uptimeSeconds ≈ 20360` (~5.6 h) ⇒ ≥1 restart today. Free-tier *idle* spin-down is mitigated (T-17 pinger) but deploy restarts are not; Render crash logs aren't visible from here. Lazy hydration does handle the common case (someone reconnects). | **REVISIT IF SCALE** (was ACCEPT — upgraded 2026-09-01: restart frequency is real, currently more a heavy-dev artifact than a prod steady-state one). Step 3: pair with a **periodic stale-`room_live_sessions` reaper** (resolve/abandon a live row untouched for N minutes) rather than a boot sweep; document the lazy-hydration rationale in §2.4. | MP-INV-13 |
-| **MP-G10** | `attachSocketToTrackedRoom` is **not lock-serialized** — the step 7/8/9 branch selection (reconnect-by-userId / hold-reclaim / new-seat) is a read-then-act on roster state. Two attach attempts for one identity (double-click reconnect, duplicate tab) can race. | MP-3 | player-visible-bug (double-allocated / zombie seat) | low–medium; mitigations exist (`inFlightHydrationByRoomCode`, migrate-before-teardown, `resolveActorSeatId` ownership check, step-8 reclaim) — but the branch choice itself isn't atomic | **REVISIT IF SCALE** — Step 3: consider a per-room attach lock (cheap, removes the class) | MP-INV-1, MP-INV-2, MP-INV-3 |
+| **MP-G10** | `attachSocketToTrackedRoom` is **not lock-serialized** — the step 7/8/9 branch selection is a read-then-act on roster state after the (deduped) `ensureRoomHydrated` await. | MP-3 | player-visible-bug (double-allocated / zombie seat) | **verified 2026-09-02 (§2.3.3): low** — could not construct a concrete failure for a single identity: the post-hydration reconnect-by-userId branch (`roomSocketAttach.ts:406–432`) is fully synchronous, `resolveActorSeatId` ownership + `joinRoom`'s 2-seat cap bound the rest. Downgraded from low–medium. | **REVISIT IF SCALE** — a per-room attach lock is belt-and-braces (also closes MP-G11's residual), not a fix for a demonstrated bug | MP-INV-1, MP-INV-2, MP-INV-3 |
 | **MP-G11** | A disconnect-grace timer callback already past its `stillConnected` + turn guards can still auto-`act` in the instant the player reconnects. | MP-4 | player-visible-bug | one turn; tight window between guard check and the locked `act` | **REVISIT IF SCALE** — Step 3 if cheap: re-check seat ownership *inside* the locked `act` the callback schedules | MP-INV-18 |
-| **MP-G12** | Rematch / abandon vs the in-flight game-over persist is ordered by **polling `gameOverPersistStatus`**, not by awaiting the promise. A `game:rematch` or `room:abandon_match` mid-persist rests on the status being observed in time. | MP-1 | player-visible-bug (double-archive / a fresh game before persist settles) | low — the status gate covers the common path; `activeGameOverPersist` promise exists but isn't awaited here | **REVISIT IF SCALE** — Step 3: await the persist promise instead of polling | MP-INV-14, MP-INV-15 |
 | **MP-G13** | **Two guest seats are indistinguishable on reconnect** — the roster match is `userId` **or** username/hold, and both guests have `userId=null`. A second guest who knows the room code and the first guest's display name can reclaim their seat. | §2.1.4 step 8 | auth-bypass (narrow) | low — private + unranked context, needs code + known display name | **REVISIT IF SCALE** — Step 3 if cheap: bind a guest seat to a per-connection hold token, not the username | MP-INV-2 |
 
 ### Tier D — anti-cheat posture decision (Step 2)
 
 | ID | Question | Recommendation |
 |---|---|---|
-| **MP-G14** | Move-log verification is **non-blocking and hand-continuity-only**, run once at game-over; a failure suppresses Glicko but not the result or the `room_match_logs` archive (§2.1.9). Is that the right bar for a rated ladder? | Keep it non-blocking for the *result* (don't deny a legitimately-won game over a transcript hiccup), but in Step 3 add: (a) a **structured alert** on verification failure (the D-3 `*_conflict` pattern) so it's visible in prod, not just telemetry; (b) **per-user tracking** so repeated failures for one account surface. Not a code change this step — logged as MP-INV-19's resolution target. |
+| **MP-G14** | Move-log verification is **non-blocking and hand-continuity-only**, run once at game-over; a failure suppresses Glicko but not the result or the `room_match_logs` archive (§2.1.9). Is that the right bar for a rated ladder? **Confirmed 2026-09-02** — `verifyPlayerMoveLog({strictHandContinuity:true})` → on fail `emitMpAuthorityFunnel('private_move_log_verification_failed')` + `humanGlickoEligible=false`. **Partially addressed:** since MP-G6, `mp_authority_events` is live so the failure IS durably recorded + queryable (`mp_authority_funnel_metrics`). | Keep it non-blocking for the *result*. Remaining Step-3 work: (a) an actual **alert** (notification) on the failure event, not just a queryable row; (b) **per-user aggregation** so repeated failures for one account surface. MP-INV-19's resolution target. |
 
 ### Tier E — accept, no action
 
@@ -2162,6 +2173,7 @@ authenticated `room:spectate` on a private room returns `not_spectatable`
 | **MP-G15** | MP-6 — `nextHandStartsByRoom` coalescing map is in-memory; a rollback after an uncertain flush deliberately leaves `nextHandReady` populated for retry. | Deliberate design; the retry is the correct behaviour. |
 | **MP-G16** | MP-7 — spectator publish can do a torn read of `room.state` while `act` mutates it. | Feeds only the read-only, masked spectator projection; the sequence-skip drops stale snapshots. Cosmetic. |
 | **MP-G17** | `room_match_logs` participant-reads-own-**terminal**-rows (RLS `room_match_logs_select_own`). | Post-game, per-match-private data, readable only by a participant of that match. Deliberate and confirmed (§2.7 / D-8). Re-classify to a Tier-C item only if a concrete "why should the client not have this" emerges — none identified. |
+| **MP-G12** — **moved here from Tier C (2026-09-02, §2.3.3)** | Rematch vs the in-flight game-over persist. The §2.1.5 audit said it "rests on status polling, not awaiting the promise" — **wrong.** `game:rematch` → `waitForActiveGameOverPersist` → `return await pending` awaits `room.activeGameOverPersist`; the pre-assignment window is handled by an `idle`-status reject (`MATCH_RESULT_STILL_SAVING_MESSAGE`). The recommended fix is already implemented. |
 
 ### 2.3.1 — §2.1.7 authz-map items: real gap, or already covered?
 
@@ -2248,6 +2260,103 @@ one.
 **Net:** two verdicts changed (MP-G5 down a tier, MP-G9 up from ACCEPT), one
 correction (MP-G3 rate-limit claim), one new sub-finding (`mp_authority_events`
 unapplied → MP-G6). Tier A is now **MP-G1, MP-G3, MP-G4** (MP-G5 moved out).
+
+### 2.3.3 — Tier C/D/E verification pass (2026-09-02)
+
+The Tier-A/B gaps were code-verified in Step 5; the Tier C/D/E rows were still
+"initial reads" from the §2.1 audit. Traced each against the actual code /
+data, read-only. **No gap escalates to Tier A/B.** Two corrections:
+
+**MP-G12 — the audit was wrong; the recommended fix is already implemented.**
+The §2.1.5 MP-1 note said "rematch/abandon vs. the in-flight game-over persist
+rests on status polling, not awaiting the promise." In fact `game:rematch` →
+`registerRematchPregameHandlers.ts:79` → `waitForActiveGameOverPersist(room.code)`
+→ `roomSession.ts:685` **`return await pending`** — it awaits the actual
+`room.activeGameOverPersist` promise, falling back to a status check only when
+the promise is already gone. The narrow window (game-over set in the locked
+`act`, `activeGameOverPersist` not yet assigned in the broadcast tail) is
+handled: `gameOverPersistStatus` is `idle` there → the handler returns
+`MATCH_RESULT_STILL_SAVING_MESSAGE` and **rejects** the rematch rather than
+proceeding. **→ MP-G12 reclassified Tier C → Tier E (ACCEPT).** The "Step 3:
+await the promise" recommendation is done.
+
+**MP-G7 — real for the *abandon* case; the audit's "freshness fence rejects
+the stale hydration" reasoning is only half right.** `finalizeAndDeleteLiveRoomSession`
+(`roomLivePersistence.ts:736`) calls `persistLiveSessionRowNow` **directly**,
+bypassing `persistLiveRoomSessionNow`'s `inFlightPersistByRoomCode` single-flight
+guard, and does **not** await an in-flight debounced write before the DELETE.
+For a **game-over** finalize, a resurrected stale row is caught:
+`validateLiveRoomHydrationRow` (`:565`) requires `row.status` to match
+`row.game_state` (`gameOver → 'game_over'`), and `inferLiveSessionStatus` maps
+`state.gameOver → 'game_over'`, so any write after game-over already carries
+`status='game_over'` and hydration routes it to the terminal archive. For an
+**abandon** finalize, `status='playing'` + `game_state.gameOver=false` is
+self-consistent → the fence passes; `abandonedAt` lives only in `room_shell`,
+which the resurrected stale write overwrites without it → the attach's
+`existingRoom.abandonedAt` / `state.gameOver` terminal checks
+(`roomSocketAttach.ts:311/337`) don't fire → a reconnecting player can hydrate
+into a `playing` room that was actually abandoned, with no route to a
+result/terminal screen. **Window:** a debounced write (`LIVE_PERSIST_DEBOUNCE_MS
+= 75`) that already fired and is mid-HTTP at the instant the abandon finalize's
+DELETE lands (network RTT ~50–200 ms), *and* a process that survives to serve
+the next attach. **Verdict holds (Tier C, REVISIT IF SCALE — player-visible,
+not corruption, tight window), but the record is corrected: the fence covers
+game-over, not abandon; the Step-3 tombstone/`deleted_at` guard is the real
+fix.**
+
+**Confirmed as classified (no change):**
+- **MP-G8** — `serializeRoomShell` (`:246`) genuinely does not include
+  `preGameDraw`; it's an in-memory `setTimeout` (`rooms.ts:123`). A restart
+  mid-draw loses it; the room reloads as `lobby` (initial) or terminal
+  (rematch), client re-triggers. Player-visible, recoverable, tiny window.
+- **MP-G11** — the grace-expiry callback's `stillConnected` check
+  (`disconnectGrace.ts:279`) → `act()` call (`:303`) is **fully synchronous**;
+  a reconnect (a socket macrotask) cannot interleave unless the per-room
+  gameplay lock is already held by another action. One auto-`PASS`/`DRAW`.
+  Extremely narrow — arguably Tier E, kept at C.
+- **MP-G13** — `identityMatchesReconnectSeat` (`roomSession.ts:361`) matches
+  two `userId=null` guests by case-insensitive `username` (generic names
+  rejected). Confirmed exactly as stated. Private + **unranked** only (a guest
+  seat produces no Glicko / `ranked_games`), needs code + display name +
+  reconnect-hold timing. Auth-bypass severity, narrow scope; C holds.
+- **MP-G14** (Tier D) — confirmed: `verifyPlayerMoveLog({strictHandContinuity:true})`
+  at game-over; failure → `emitMpAuthorityFunnel('private_move_log_verification_failed')`
+  + `humanGlickoEligible=false`, result/archive stand. **Now partially
+  addressed** — since MP-G6 (2026-09-01) `mp_authority_events` is live, so the
+  failure event is durably recorded and queryable via
+  `mp_authority_funnel_metrics`. Residual: no *alert* (notification), no
+  per-user aggregation.
+- **MP-G15 / MP-G16 / MP-G17** (Tier E) — spot-confirmed. MP-G16:
+  `projectMultiplayerRoomForSpectators` returns a deep-copied masked snapshot
+  and does not mutate `room.state` (`spectatorRegistry.test.ts` asserts
+  `JSON.stringify(room.state)` unchanged); a torn read only affects a
+  read-only masked projection. MP-G17: RLS `room_match_logs_select_own`,
+  deliberate (D-8).
+
+**Downgraded confidence (not a tier change):**
+- **MP-G10** — could not construct a concrete duplicate-seat / zombie for a
+  single identity: two concurrent `attachSocketToTrackedRoom` calls share the
+  `ensureRoomHydrated` promise (`inFlightHydrationByRoomCode`), then run a
+  **fully synchronous** reconnect-by-userId branch (`roomSocketAttach.ts:406–432`)
+  — one finishes migrate+`setRoomRoster` before the other starts; the second
+  re-finds the same seat and re-migrates to its own socket; `resolveActorSeatId`
+  ownership + `joinRoom`'s 2-seat cap bound the rest. Likelihood **low-medium →
+  low**; a per-room attach lock would be belt-and-braces, not a fix for a
+  demonstrated bug. Stays Tier C.
+
+**MP-G5 note:** since MP-G6 landed, `mp_authority_events` persists the
+`private_match_abandoned` / `private_match_archived` / `private_game_over_persist_*`
+funnel events — so the private-room terminal-outcome race **is now measurable
+in prod** (query for a room_code with both an abandon and an archived event
+close in time). The "not measurable" caveat in MP-G5's row is stale going
+forward.
+
+**Net:** MP-G12 C→E (fix already shipped); MP-G7 record corrected (fence covers
+game-over only); MP-G10 confidence lowered; MP-G5 + MP-G14 note the MP-G6
+telemetry is now live. **Nothing escalates to Tier A/B.** The Tier-C fixes stay
+"revisit when traffic / instance count changes" — the highest-value one to do
+early is **MP-G13** (auth-bypass class, even if narrow) alongside a per-room
+attach lock (closes MP-G10 + MP-G11's residual for free).
 
 ## 2.4 State-machine / concurrency design
 
@@ -2746,5 +2855,6 @@ registry.
 | 2026-09-02 | **Cross-cutting sweep follow-through — posture (d) fully closed; fritz RPC lockdown migration written.** **(d):** the PostgREST OpenAPI spec exposes exactly 7 `public` views (`daily_fritz_*_metrics`, `fritz_challenge_{funnel,failure}_metrics`, `mp_authority_funnel_metrics`); live probe — **anon → 401, authenticated → 403, service_role → 200 on all 7**. No client role can `SELECT` any view ⇒ no RLS-bypass-via-view is possible regardless of `security_invoker`. Marked **FULLY CLOSED** (not "no gap found"). **Item 2 fix:** tamper audit first (service-role read) — `fritz_challenges` 17 rows all `open`, `fritz_challenge_attempts` 9 rows all `started`/g1h0/`final_score` null → **zero exploitation history**. Follow-up probe found `commit_daily_fritz_attempt_command` + `start_daily_fritz_attempt_command` **also anon-callable** (Daily Fritz, live feature) → gap is **10 functions**. Wrote `supabase/migrations/2026-09-02_fritz_challenge_rpc_lockdown.sql`: PART A `revoke … from public, anon, authenticated` + `grant … to service_role` for all 10 (`to_regprocedure` skip-guard); PART B `_assert_fritz_rpc_server_only()` (raises unless `auth.role()` = `service_role` / NULL) called first in the 7 fns with a single-source repo body (5 `fritz_challenges.sql` + 2 `2026-08-02_…` command RPCs), body verbatim; 3 body guards deferred (`create_fritz_challenge_invite` prod-only body; `commit_daily_fritz_attempt_command` / `start_daily_fritz_attempt_command` need the exact current body). Self-asserting. Added `auth.role()` to `scripts/tournament-db-verify/shim.sql`. **pg16-verified:** clean + idempotent, all 7 → anon:f/authenticated:f/service_role:t, guard raises `role=anon` / passes `service_role`+internal. **Not applied to prod — human call.** |
 | 2026-09-02 | **Posture (d) DIRECTLY CONFIRMED closed.** Human ran the `pg_class.reloptions` view query → exactly 7 `public` views, **every one `["security_invoker=true"]`** (`daily_fritz_{funnel,failure,retention,event}_metrics`, `fritz_challenge_{funnel,failure}_metrics`, `mp_authority_funnel_metrics`). **No `SECURITY DEFINER` view exists** — matches the OpenAPI-spec view list exactly, and all 7 already deny anon (401) + authenticated (403). (d) upgraded from "no gap found" to fully closed on direct evidence. Residual (coverage, not a gap): extend `assert_security_posture()` to check for `SECURITY DEFINER` views. |
 | 2026-09-02 | **Item 2 — `2026-09-02_fritz_challenge_rpc_lockdown.sql` APPLIED TO PROD (human, SQL editor) — CLOSED + LIVE.** Agent verified read-only, same style as MP-G3 / MP-G6: **(1) anon probe, all 10 functions → `HTTP 401 / 42501 permission denied for function`** (was `200`): `claim_fritz_challenge_opponent`, `advance_fritz_challenge_hand`, `start_fritz_challenge_attempt`, `record_fritz_challenge_game`, `get_or_create_fritz_challenge_hand`, `create_fritz_challenge_invite`, `commit_fritz_challenge_attempt_command`, `start_fritz_challenge_attempt_command`, `commit_daily_fritz_attempt_command`, `start_daily_fritz_attempt_command`. **(2) authenticated** (throwaway JWT) on 2 → `403 / 42501`. **(3) service_role** on 4 (incl. the guarded PART-B fns `claim_*`, `advance_*`, `start_*_command`) → `200` with normal business errors (`[]` / `unsupported_command` / `challenge_not_found`), **no permission error** — app unaffected, `_assert_fritz_rpc_server_only()` passes for service_role. **(4) `assert_security_posture()`** → `hard_fail_count:0`; **none of the 10 (nor `_assert_fritz_rpc_server_only`) still flagged `securitydefiner_client_executable`** (all were, before) ⇒ anon + authenticated confirmed to have no EXECUTE on all 10; `advisory_count` 76→60 across the session. Still flagged (separate, lower priority): the `gauntlet_*` client-facing RPCs (by-design client-callable, internal auth guards, scrapped feature) + the `returns trigger` false positives. **8th drift instance closed.** §"Cross-cutting…" block + Current focus + Net line updated to CLOSED + LIVE. |
+| 2026-09-02 | **System 2 Tiers C/D/E — verification pass (§2.3.3).** The Tier-A/B gaps were code-verified in Step 5; the Tier C/D/E rows were still §2.1 initial reads. Traced each against the code, read-only. **Nothing escalates to Tier A/B.** **MP-G12 reclassified Tier C → Tier E:** the §2.1.5 audit claim ("rests on status polling, not awaiting the promise") is wrong — `game:rematch` → `waitForActiveGameOverPersist` (`roomSession.ts:685`) does `return await pending` on `room.activeGameOverPersist`; the pre-assignment window is handled by an `idle`-status reject. The recommended Step-3 fix is already shipped. **MP-G7 record corrected:** `finalizeAndDeleteLiveRoomSession` bypasses the `inFlightPersistByRoomCode` single-flight and doesn't await in-flight writes; the freshness fence (`validateLiveRoomHydrationRow:565`, status↔`game_state` consistency) rejects a resurrected **game-over** row but **not** an **abandon** one (`status='playing'`+`gameOver=false` self-consistent; `abandonedAt` lives only in `room_shell` and is overwritten) → verdict Tier C holds but the "fence rejects it" reasoning was half wrong; the tombstone guard is the real fix. **MP-G10 confidence low-med → low** (could not construct a duplicate-seat failure for one identity — the post-hydration branch is fully synchronous; `resolveActorSeatId` + `joinRoom` cap bound it). **MP-G8 / MP-G11 / MP-G13 / MP-G15 / MP-G16 / MP-G17 confirmed as classified** (MP-G8: `serializeRoomShell` genuinely omits `preGameDraw`; MP-G11: the `stillConnected`→`act` path is synchronous, a reconnect can't interleave unless the gameplay lock is held; MP-G13: `identityMatchesReconnectSeat` matches two `userId=null` guests by username — private+unranked only; MP-G16: `projectMultiplayerRoomForSpectators` doesn't mutate `room.state`). **MP-G5 + MP-G14** note that MP-G6 made `mp_authority_events` live → MP-G5's race is now measurable, MP-G14's failure event is now durably recorded (residual: no alert, no per-user aggregation). §2.3.3 written; MP-G5/G7/G10/G12/G14 rows + Current focus updated. Nothing fixed — verification only. |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
