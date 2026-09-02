@@ -77,6 +77,14 @@ focus" line, then the section for the system in progress.
   get harness passes as their tiers open (§2.6.4). **System 2: Steps 1–5 done
   for the Tier-A/B scope. Remaining: Tiers C–E (each its own pass).**
 
+- **Deploy state note (2026-09-01):** all session work is pushed to
+  `origin/main` (HEAD `1f9aa27e`). **Prod is on `907435df`** — 4 commits behind,
+  all docs/tests only (MP-G3 smoke-verified, MP-G6 docs/verify, Step 5 harness),
+  no server-code difference. Render did **not** auto-deploy the doc/test pushes
+  (`ec939392` onward); the last actual deploy was `907435df` (the MP-G3/MP-G4
+  code). No action needed — flagged so a future session knows prod ≠
+  `origin/main` HEAD but is functionally current.
+
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
   re-ratified to feeder-gating (D-6, code merged PR #94).
