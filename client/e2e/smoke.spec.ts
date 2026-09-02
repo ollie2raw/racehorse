@@ -23,10 +23,18 @@ test.describe('Smoke — Single Player hub', () => {
 });
 
 test.describe('Smoke — Daily Puzzle', () => {
-  test('daily puzzle screen loads board', async ({ page }) => {
-    await page.goto('/daily');
-    // Should show puzzle UI or a loading state — not a blank screen or error
-    await expect(page.locator('.df-page, .df-shell, .screen, [data-ui], .daily-puzzle-screen, .loading-screen').first()).toBeVisible({ timeout: 15_000 });
+  // The Daily Puzzle is Puzzle Rush (the 5-slot ladder was retired 2026-08-20).
+  // Puzzle Rush has no URL route — it is reached from the Home card.
+  test('daily puzzle (Puzzle Rush) hub loads from the Home card', async ({ page }) => {
+    await page.goto('/');
+    await page
+      .getByRole('region', { name: /Daily Puzzle/ })
+      .getByRole('button', { name: /play|continue|view results/i })
+      .click();
+    // Show the Puzzle Rush hub shell or a loading state — not a blank screen.
+    await expect(
+      page.locator('.df-page, .df-shell, [data-ui="rush-start-button"], .loading-screen').first(),
+    ).toBeVisible({ timeout: 15_000 });
   });
 });
 

@@ -20,12 +20,12 @@ test.describe('browser routing', () => {
   });
 
   test('direct deep load and refresh keep the route', async ({ page }) => {
-    await page.goto('/daily');
-    await expect(page).toHaveURL(/\/daily$/);
+    await page.goto('/daily-fritz');
+    await expect(page).toHaveURL(/\/daily-fritz$/);
     await expect(page.locator('.df-page, .df-shell, .daily-puzzle-screen, .loading-screen').first()).toBeVisible({ timeout: 15_000 });
 
     await page.reload();
-    await expect(page).toHaveURL(/\/daily$/);
+    await expect(page).toHaveURL(/\/daily-fritz$/);
     await expect(page.locator('.df-page, .df-shell, .daily-puzzle-screen, .loading-screen').first()).toBeVisible({ timeout: 15_000 });
   });
 
@@ -44,7 +44,6 @@ test.describe('browser routing', () => {
       '/social',
       '/players/route-smoke',
       '/daily-fritz/leaderboard',
-      '/daily/leaderboard',
       '/learn/how-to-play',
       '/tournament/route-smoke',
       '/tournament/route-smoke/result',
@@ -102,8 +101,6 @@ test.describe('browser routing', () => {
     '/social',
     '/daily-fritz',
     '/daily-fritz/leaderboard',
-    '/daily',
-    '/daily/leaderboard',
     '/solo',
     '/solo/fritz',
     '/solo/ghost',

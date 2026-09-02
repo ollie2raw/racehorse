@@ -35,7 +35,6 @@ const HUBS = [
   { name: 'social', route: '/social' },
   { name: 'multiplayer', route: '/multiplayer' },
   { name: 'daily-fritz', route: '/daily-fritz' },
-  { name: 'daily-puzzle', route: '/daily' },
 ] as const;
 
 test.beforeEach(async ({ page }) => {
