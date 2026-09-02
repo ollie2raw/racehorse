@@ -7,7 +7,6 @@ import type { AppRoutesTournamentProps } from '../appRouteTypes';
 let authUser: { id: string; email: string } | null = { id: 'user-a', email: 'a@example.com' };
 const loadDailySummary = vi.hoisted(() => vi.fn());
 const loadDailyFritz = vi.hoisted(() => vi.fn());
-const loadDailyPuzzle = vi.hoisted(() => vi.fn());
 const loadSocialPresence = vi.hoisted(() => vi.fn());
 const loadSocialActivity = vi.hoisted(() => vi.fn());
 const loadSocialRivals = vi.hoisted(() => vi.fn());
@@ -26,7 +25,6 @@ vi.mock('../auth/useAuth', () => ({
 vi.mock('./homeDataLoaders', () => ({
   loadDailySummary,
   loadDailyFritz,
-  loadDailyPuzzle,
   loadSocialPresence,
   loadSocialActivity,
   loadSocialRivals,
@@ -53,7 +51,6 @@ const tournament = {
 function configureSuccessfulLoaders() {
   loadDailySummary.mockResolvedValue({ dateKey: '2026-07-10', week: [], weeklyCompletedCount: 1, currentStreakCount: 1, todayComplete: false });
   loadDailyFritz.mockResolvedValue({ state: 'started', outcome: null, rank: null, currentGame: 1, streak: 1, runDate: '2026-07-10' });
-  loadDailyPuzzle.mockResolvedValue({ state: 'unstarted', score: null, runDate: '2026-07-10', nextAvailableSlotIndex: 1 });
   loadSocialPresence.mockResolvedValue([{ id: 'f1', userId: 'friend-a', username: 'Maya', status: 'online', currentMode: null }]);
   loadSocialActivity.mockResolvedValue([]);
   loadSocialRivals.mockResolvedValue([]);
@@ -86,7 +83,6 @@ describe('useHomeCommandCenter', () => {
     for (const [name, loader] of [
       ['summary', loadDailySummary],
       ['fritz', loadDailyFritz],
-      ['puzzle', loadDailyPuzzle],
       ['presence', loadSocialPresence],
       ['activity', loadSocialActivity],
       ['rivals', loadSocialRivals],
@@ -96,13 +92,13 @@ describe('useHomeCommandCenter', () => {
     ] as const) {
       loader.mockImplementationOnce(() => {
         calls.push(name);
-        return Promise.resolve(loader === loadDailySummary ? { dateKey: null, week: [], weeklyCompletedCount: null, currentStreakCount: null, todayComplete: null } : loader === loadDailyFritz ? { state: 'unstarted', outcome: null, rank: null, currentGame: null, streak: null, runDate: null } : loader === loadDailyPuzzle ? { state: 'unstarted', score: null, runDate: null, nextAvailableSlotIndex: null } : loader === loadSocialPresence ? [] : loader === loadSocialActivity ? [] : loader === loadSocialRivals ? [] : loader === loadRanking ? { rating: null, peakRating: null, globalRank: null, rankedGamesPlayed: null, currentWinStreak: null, provisional: null } : loader === loadJourney ? { activeChapterId: null, activeChapterTitle: null, completedNodes: 0, totalNodes: 0, totalCompleted: 0, hasAnyProgress: false, lastVisitedNodeId: null } : { upcomingCount: 0, registeredTournamentIds: [], activeTournamentId: null, phase: null, recoveryMatch: null });
+        return Promise.resolve(loader === loadDailySummary ? { dateKey: null, week: [], weeklyCompletedCount: null, currentStreakCount: null, todayComplete: null } : loader === loadDailyFritz ? { state: 'unstarted', outcome: null, rank: null, currentGame: null, streak: null, runDate: null } : loader === loadSocialPresence ? [] : loader === loadSocialActivity ? [] : loader === loadSocialRivals ? [] : loader === loadRanking ? { rating: null, peakRating: null, globalRank: null, rankedGamesPlayed: null, currentWinStreak: null, provisional: null } : loader === loadJourney ? { activeChapterId: null, activeChapterTitle: null, completedNodes: 0, totalNodes: 0, totalCompleted: 0, hasAnyProgress: false, lastVisitedNodeId: null } : { upcomingCount: 0, registeredTournamentIds: [], activeTournamentId: null, phase: null, recoveryMatch: null });
       });
     }
 
     renderHook(() => useHomeCommandCenter(tournament));
-    await waitFor(() => expect(calls).toHaveLength(9));
-    expect(new Set(calls)).toEqual(new Set(['summary', 'fritz', 'puzzle', 'presence', 'activity', 'rivals', 'ranking', 'journey', 'tournament']));
+    await waitFor(() => expect(calls).toHaveLength(8));
+    expect(new Set(calls)).toEqual(new Set(['summary', 'fritz', 'presence', 'activity', 'rivals', 'ranking', 'journey', 'tournament']));
   });
 
   it('clears personalized data on logout and builds a new model on login', async () => {

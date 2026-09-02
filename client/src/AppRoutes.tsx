@@ -17,8 +17,6 @@ import {
   JourneyRoute,
 } from './routes/soloPlayRoutes';
 import {
-  DailyRoute,
-  DailyPuzzleLeaderboardRoute,
   DailyFritzRoute,
   DailyFritzLeaderboardRoute,
 } from './routes/dailyRoutes';
@@ -112,14 +110,6 @@ export default function AppRoutes({
         botMatch={botMatch}
       />
     );
-  }
-
-  if (appMode === 'daily') {
-    return <DailyRoute shell={shell} navigation={navigation} auth={auth} />;
-  }
-
-  if (appMode === 'dailyPuzzleLeaderboard') {
-    return <DailyPuzzleLeaderboardRoute shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'dailyFritz') {

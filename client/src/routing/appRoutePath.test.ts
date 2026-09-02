@@ -10,7 +10,6 @@ describe('app route paths', () => {
     ['/solo/ghost', { mode: 'ghostSetup' }],
     ['/social', { mode: 'feed' }],
     ['/daily-fritz/leaderboard', { mode: 'dailyFritzLeaderboard' }],
-    ['/daily/leaderboard', { mode: 'dailyPuzzleLeaderboard' }],
     ['/learn/how-to-play', { mode: 'learn', learnHowToPlay: true }],
     ['/settings', { mode: 'settings' }],
   ])('resolves %s', (path, expected) => {

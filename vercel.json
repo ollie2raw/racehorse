@@ -79,8 +79,6 @@
   "rewrites": [
     { "source": "/daily-fritz", "destination": "/daily-fritz.html" },
     { "source": "/daily-fritz/leaderboard", "destination": "/daily-fritz-leaderboard.html" },
-    { "source": "/daily", "destination": "/daily.html" },
-    { "source": "/daily/leaderboard", "destination": "/daily-leaderboard.html" },
     { "source": "/solo", "destination": "/solo.html" },
     { "source": "/solo/fritz", "destination": "/solo-fritz.html" },
     { "source": "/solo/ghost", "destination": "/solo-ghost.html" },

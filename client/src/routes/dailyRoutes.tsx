@@ -9,75 +9,10 @@ import type {
   AppRoutesSocialProps,
 } from '../appRouteTypes';
 
-const DailyPuzzleScreen = React.lazy(() => import('../dailyPuzzle/DailyPuzzleScreen'));
 const DailyFritzScreen = React.lazy(() => import('../dailyFritz/DailyFritzScreen'));
 const DailyFritzLeaderboardRouteScreen = React.lazy(
   () => import('../dailyFritz/DailyFritzLeaderboardRoute'),
 );
-
-export function DailyRoute({
-  shell,
-  navigation,
-  auth,
-}: {
-  shell: AppRoutesShellProps;
-  navigation: AppRoutesNavigationProps;
-  auth: AppRoutesAuthProps;
-}) {
-  const { withAuthModals, appRootClassName } = shell;
-  const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
-  return withAuthModals(
-    <div className={appRootClassName}>
-      <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
-        <ErrorBoundary context="daily-puzzle">
-        <DailyPuzzleScreen
-          key="daily-hub"
-          user={authUser}
-          profile={authProfile}
-          onBack={() => setAppMode('home')}
-          onNavigate={setAppMode}
-          onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={handleSignOut}
-        />
-        </ErrorBoundary>
-      </Suspense>
-    </div>
-  );
-}
-
-export function DailyPuzzleLeaderboardRoute({
-  shell,
-  navigation,
-  auth,
-}: {
-  shell: AppRoutesShellProps;
-  navigation: AppRoutesNavigationProps;
-  auth: AppRoutesAuthProps;
-}) {
-  const { withAuthModals, appRootClassName } = shell;
-  const { setAppMode } = navigation;
-  const { authUser, authProfile, setAuthModalOpen, handleSignOut } = auth;
-  return withAuthModals(
-    <div className={appRootClassName}>
-      <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle Leaderboard…" />}>
-        <ErrorBoundary context="daily-puzzle-leaderboard">
-        <DailyPuzzleScreen
-          key="daily-leaderboard"
-          user={authUser}
-          profile={authProfile}
-          initialView="leaderboard"
-          onLeaderboardClose={() => setAppMode('daily')}
-          onBack={() => setAppMode('home')}
-          onNavigate={setAppMode}
-          onOpenAuth={() => setAuthModalOpen(true)}
-          onSignOut={handleSignOut}
-        />
-        </ErrorBoundary>
-      </Suspense>
-    </div>
-  );
-}
 
 export function DailyFritzRoute({
   shell,

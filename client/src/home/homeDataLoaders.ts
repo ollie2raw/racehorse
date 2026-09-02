@@ -1,5 +1,4 @@
 import { getTodayDailyFritz } from '../dailyFritz/api';
-import { getTodayDailyPuzzleLadder } from '../dailyPuzzle/api';
 import { getHomeDailySummary } from '../features/daily/homeDailySummaryApi';
 import { fetchActivityFeed, fetchFriendsWithPresence, fetchRivals } from '../social/socialApi';
 import { fetchRankingProfile } from '../stats/statsApi';
@@ -8,7 +7,6 @@ import { loadJourneyProgress } from '../journey/journeyStorage';
 import type { HomeSourceKey } from './homeTypes';
 import {
   normalizeDailyFritz,
-  normalizeDailyPuzzle,
   normalizeDailySummary,
   normalizeJourney,
   normalizeRanking,
@@ -17,7 +15,6 @@ import {
 } from './homeNormalization';
 import type {
   DailyFritzModel,
-  DailyPuzzleModel,
   HomeJourneyModel,
   HomeRankingModel,
   HomeSocialModel,
@@ -33,10 +30,6 @@ export async function loadDailySummary() {
 export async function loadDailyFritz(authenticated: boolean): Promise<DailyFritzModel> {
   if (!authenticated) throw new Error('Daily Fritz requires authentication');
   return normalizeDailyFritz(await getTodayDailyFritz());
-}
-
-export async function loadDailyPuzzle(): Promise<DailyPuzzleModel> {
-  return normalizeDailyPuzzle(await getTodayDailyPuzzleLadder());
 }
 
 export async function loadSocial(): Promise<HomeSocialModel> {
@@ -90,7 +83,6 @@ export type HomeLoaderKey = Exclude<HomeSourceKey, 'runtime'>;
 export type HomeLoaderMap = {
   dailySummary: typeof loadDailySummary;
   dailyFritz: typeof loadDailyFritz;
-  dailyPuzzle: typeof loadDailyPuzzle;
   social: typeof loadSocial;
   tournament: typeof loadTournament;
   journey: typeof loadJourney;

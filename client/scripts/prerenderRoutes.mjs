@@ -27,14 +27,6 @@ export const PRERENDER_ROUTES = [
     image: '/dailyfritznew.png',
   },
   {
-    path: '/daily',
-    title: 'Daily Puzzle | Racehorse Dominoes',
-    description: 'Solve five daily Racehorse Dominoes positions and compare your strategy on the shared leaderboard.',
-    heading: 'Daily Puzzle',
-    body: 'Three daily puzzles. The first one is today’s ritual.',
-    image: defaultImage,
-  },
-  {
     path: '/solo',
     title: 'Single Player | Racehorse Dominoes',
     description: 'Practice Racehorse Dominoes against Fritz, sharpen your decisions, and build your game.',
@@ -126,15 +118,6 @@ export const PRERENDER_ROUTES = [
     heading: 'Daily Fritz Leaderboard',
     body: 'See how today’s shared Daily Fritz set played out across the field.',
     image: '/dailyfritznew.png',
-  },
-  {
-    path: '/daily/leaderboard',
-    output: 'daily-leaderboard.html',
-    title: 'Daily Puzzle Leaderboard | Racehorse Dominoes',
-    description: 'Compare scores from today’s Racehorse Dominoes Daily Puzzle ladder.',
-    heading: 'Daily Puzzle Leaderboard',
-    body: 'See today’s top Daily Puzzle ladder scores.',
-    image: defaultImage,
   },
   {
     path: '/learn/how-to-play',

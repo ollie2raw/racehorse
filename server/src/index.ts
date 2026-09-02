@@ -123,7 +123,6 @@ import { startRankingCron } from './ranking/cron';
 import { buildApiHealthPayload } from './platform/health/apiHealthPayload';
 import {
   scheduleDailyFritzWarmup,
-  scheduleDailyPuzzleLadderWarmup,
   scheduleStartupDailyWarmups,
 } from './scheduled/dailyWarmup';
 import { getLeaderboard, processRatingPeriod } from './ranking/periodService';
@@ -276,7 +275,6 @@ import {
   getDailyPuzzleAttemptById,
   getDailyPuzzleLadderStreak,
   getUsernameForUserId,
-  handleDailyPuzzleLadderCronWarm,
   listDailyPuzzleSlotsForAttempt,
   listDailyPuzzleSlotsForDate,
   listDailyPuzzleSlotsForDateWithAutoSeed,
@@ -287,7 +285,6 @@ import { registerRankingRoutes } from './http/routes/ranking';
 import { registerGhostRoutes } from './http/routes/ghost';
 import { registerLeagueRoutes } from './http/routes/league';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
-import { registerDailyPuzzleRoutes } from './http/routes/dailyPuzzle';
 import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
 import {
@@ -433,7 +430,6 @@ const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60
 const leaderboardLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 60_000, max: 30 }, 'rest:leaderboard');
 
 app.use('/api/cron', cronLimit);
-app.use('/api/daily-puzzle/leaderboard', leaderboardLimit);
 app.use('/api/daily-fritz/leaderboard', leaderboardLimit);
 app.use('/api/ranking/leaderboard', leaderboardLimit);
 // record-match triggers rating computation — tighter budget than the generic REST limit
@@ -453,8 +449,6 @@ const dailyFritzInitLimit = createRateLimitMiddleware(
 );
 app.use('/api/daily-fritz/today', dailyFritzInitLimit);
 app.use('/api/daily-fritz/start', dailyFritzInitLimit);
-app.use('/api/daily-puzzle/submit-slot', dailySubmitLimit);
-app.use('/api/daily-puzzle/complete', dailySubmitLimit);
 app.use('/api/daily-fritz/next-hand', dailySubmitLimit);
 app.use('/api/daily-fritz/record-game', dailySubmitLimit);
 app.use('/api/daily-fritz/complete', dailySubmitLimit);
@@ -604,7 +598,6 @@ registerBotMatchesRoutes(app, {
   parseOptionalActivityScore,
 });
 
-registerDailyPuzzleRoutes(app);
 registerPuzzleRushRoutes(app);
 registerDailyFritzRoutes(app);
 
@@ -955,6 +948,5 @@ server.listen(PORT, () => {
   startMatchmakingReservationSweeper();
   startRankingCron();
   scheduleDailyFritzWarmup();
-  scheduleDailyPuzzleLadderWarmup();
   scheduleStartupDailyWarmups();
 });

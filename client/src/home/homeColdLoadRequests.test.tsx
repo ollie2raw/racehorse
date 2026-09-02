@@ -47,7 +47,6 @@ const RUN_DATE = '2026-08-21';
 /** Exactly the endpoints a cold home load may touch — one call each. */
 const EXPECTED_ENDPOINTS = [
   '/api/daily-fritz/today',
-  '/api/daily-puzzle/today',
   '/api/home/daily-summary',
   '/api/ranking/profile/:id',
   '/api/social/feed',
@@ -93,9 +92,6 @@ function bodyFor(path: string): unknown {
       deal_size: 7, winning_score: 100, attempt_status: 'none', next_action: 'start',
       streak: 0, result: null, set_result: null, rank: null, leaderboard_preview: [],
     };
-  }
-  if (path.includes('/api/daily-puzzle/today')) {
-    return { ok: true, puzzle_date: RUN_DATE, slots: [], attempt: null, completed: false };
   }
   if (path.includes('/api/social/friends/with-presence')) return { ok: true, friends: [] };
   if (path.includes('/api/social/feed')) return { ok: true, feed: [] };
@@ -159,7 +155,7 @@ afterEach(() => {
 });
 
 describe('cold home load request budget', () => {
-  it('issues exactly one request per endpoint and nine in total', async () => {
+  it('issues exactly one request per endpoint and eight in total', async () => {
     const { unmount } = renderHook(() => {
       const tournament = useTournament({ userId: TEST_USER.id });
       // The hook takes exactly what useTournament returns, as App.tsx passes it.
@@ -167,7 +163,7 @@ describe('cold home load request budget', () => {
       return null;
     });
 
-    // Settle on quiescence rather than an exact count. Waiting for "=== 9" would
+    // Settle on quiescence rather than an exact count. Waiting for "=== 8" would
     // never observe a regression that overshoots to 16, and would burn the whole
     // timeout before reaching the assertion that actually names the endpoint.
     await waitForRequestsToSettle();
@@ -176,7 +172,7 @@ describe('cold home load request budget', () => {
     expect(countByEndpoint()).toEqual(
       Object.fromEntries(EXPECTED_ENDPOINTS.map((e) => [e, 1])),
     );
-    expect(calls.length).toBe(9);
+    expect(calls.length).toBe(8);
 
     unmount();
   });

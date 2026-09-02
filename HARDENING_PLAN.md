@@ -26,18 +26,19 @@ focus" line, then the section for the system in progress.
   now the live Daily Puzzle). **Daily Fritz** is heavily engineered
   (event-sourced + transactional-command RPCs + engine-transcript verification)
   but **verification is non-blocking and doesn't gate the speed leaderboard**
-  (DF-CAND-2, MP-G14 analogue). **Retired Daily Puzzle Ladder — CASE (b):
-  reachable but unlinked.** `/api/daily-puzzle/*` routes still mounted, `/daily`
-  + `/daily/leaderboard` still URL-resolvable, `daily_puzzle_attempts` /
-  `daily_puzzle_slot_results` still carry `insert_own`/`update_own` RLS → the
-  DF-CAND-1 forged-score exploit (confirmed live, HTTP 201) **still works and
-  still surfaces on the URL-reachable `/daily/leaderboard`**, though no client
-  surface links there (regression-guarded by `dailyPuzzleIsRush.test.ts`) and
-  the tables have taken **zero writes since 2026-08-20**. Severity lower than
-  first written (no players directed there) but the gap is not closed —
-  disposition (decommission vs. lock the RLS) is a Step 2/3 call. 7 gap
-  candidates parked unranked in §3.1.8. **Stop — await human sign-off on §3.1
-  before Step 2 (invariants + gap list).**
+  (DF-CAND-2, MP-G14 analogue). **Retired Daily Puzzle Ladder — DECOMMISSIONED
+  2026-09-02 (DF-CAND-1 closed).** One commit: removed `/api/daily-puzzle/*`
+  routes + the nightly ladder warm job (server), removed `/daily` +
+  `/daily/leaderboard` client routes and the Home fetch of `/api/daily-puzzle/today`,
+  and `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` drops
+  the `insert_own`/`update_own` policies + revokes client write grants on
+  `daily_puzzle_attempts` / `_slot_results` (kept in `public` as read-only
+  historical — `socialProfile.ts` + `homeCompletionDates.ts` still read them).
+  pg16-verified. **Migration NOT applied to prod DB yet — human runs it.** Small
+  follow-up DF-CAND-1b: delete the now-inert `route: 'daily'` Home branches +
+  `client/src/dailyPuzzle/**`. 7 gap candidates parked unranked in §3.1.8.
+  **Stop — await human sign-off on §3.1 before Step 2 (invariants + gap list),
+  and the migration apply.**
 
 - **NEXT after System 3: System 4 (Everything else)** — legacy league/tournament
   (keep/wall-off/delete decision), social/activity writer, Glicko idempotency,
@@ -3034,9 +3035,15 @@ session. A forged row still lands and still sorts to the top of
 links there, and the tables have taken zero writes since 2026-08-20, so there is
 no legitimate score to displace and near-zero audience. Severity drops from
 "live shipped leaderboard" to "reachable orphan leaderboard" — still a real gap.
-Parked as a gap candidate (§3.1.8). **Step 2/3 decision: decommission (drop the
-routes + tables) vs. lock the RLS (`revoke` + drop `insert_own`/`update_own`).**
-Decommission is likely the cleaner call given no active use.
+Parked as a gap candidate (§3.1.8).
+
+> **RESOLVED 2026-09-02 — decommissioned.** `/api/daily-puzzle/*` routes + the
+> nightly ladder warm job + the `/daily` client routes removed; Home no longer
+> fetches the ladder. `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql`
+> drops the `insert_own`/`update_own` policies + revokes client write grants on
+> both tables (kept in `public` read-only for the two historical readers).
+> pg16-verified. Migration pending human apply. See §3.1.8 DF-CAND-1 and the
+> 2026-09-02 changelog entry.
 
 ### 3.1.5 Authorization map (all three modes)
 
@@ -3083,17 +3090,41 @@ Decommission is likely the cleaner call given no active use.
 
 ### 3.1.8 Parked gap candidates (not risk-ranked — that is Step 2)
 
-- **DF-CAND-1 — retired Daily Puzzle Ladder score tables are still
-  client-writable.** `daily_puzzle_attempts` / `daily_puzzle_slot_results`
-  `insert_own` / `update_own` RLS ⇒ an authenticated client `POST`s an arbitrary
-  `total_score` / `puzzles_completed` / `master_chain_score` directly, bypassing
-  the server engine-replay; confirmed live (HTTP 201). Same class as T-1.
-  **Mode retired ~2026-08-20 but not decommissioned (case (b), §3.1.1):** routes
-  mounted, `/daily/leaderboard` URL-reachable, RLS unchanged, tables idle since
-  2026-08-20. A forged row still sorts to the top of the orphan leaderboard.
-  Severity is lower than a live shipped board but the gap is open. **Step 2/3:
-  decommission (drop `/api/daily-puzzle/*` + the tables + the `/daily` routes)
-  vs. lock the RLS — decommission preferred given zero active use.**
+- **DF-CAND-1 — retired Daily Puzzle Ladder score tables were client-writable
+  → DECOMMISSIONED (code merged-pending, migration pending human apply).**
+  `daily_puzzle_attempts` / `daily_puzzle_slot_results` `insert_own` /
+  `update_own` RLS ⇒ an authenticated client `POST`s an arbitrary `total_score`
+  directly, bypassing the server engine-replay; confirmed live (HTTP 201). Same
+  class as T-1. **Decommission (2026-09-02, one commit, not yet applied to prod
+  DB):**
+  - **Server:** removed `registerDailyPuzzleRoutes` + the 3 `/api/daily-puzzle/*`
+    rate-limit mounts + the nightly `scheduleDailyPuzzleLadderWarmup` job;
+    deleted `server/src/http/routes/dailyPuzzle.ts` (took `/api/cron/daily-puzzle-ladder-warm`
+    with it) + its forgery test; trimmed `dailyWarmup.ts` (`warmDailyPuzzleLadders`,
+    `isStartupDailyPuzzleWarmupEnabled`, startup puzzle branch).
+  - **Client:** removed `/daily` + `/daily/leaderboard` (route table, `AppRoutes`
+    branches, `DailyRoute` / `DailyPuzzleLeaderboardRoute`, prerender entries,
+    `vercel.json` rewrites); Home command center no longer fetches
+    `/api/daily-puzzle/today` (`homeDataLoaders.loadDailyPuzzle` removed,
+    `model.daily.puzzle` pinned to `unavailable`). The now-inert `route: 'daily'`
+    next-move / timeline branches in `homePrimaryAction.ts` / `homeActivityTimeline.ts`
+    were **left in place** — they are gated on `model.daily.puzzle.status === 'ready'`
+    which can no longer happen; ripping them out churned delicate personalization
+    tests for no functional gain. **Follow-up (DF-CAND-1b, low): delete those
+    dead branches + the `continue_daily_puzzle` / `play_daily_puzzle` union
+    members + `DailyPuzzleScreen` and the rest of `client/src/dailyPuzzle/**`.**
+  - **DB:** `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql`
+    — drops the 4 `insert_own`/`update_own` policies, `revoke insert,update,delete,truncate`
+    from `anon`/`authenticated` on both tables; keeps them in `public` as
+    **read-only historical** (`select_own` + service-role SELECT retained) because
+    `social/socialProfile.ts` (profile "puzzles solved") and
+    `http/stores/homeCompletionDates.ts` (streak calendar) still read the
+    pre-Aug-20 rows. Self-asserting; pg16-verified clean + idempotent (only
+    `select_own` remains, `authenticated` INSERT=f, `service_role` SELECT=t, rows
+    preserved). **NOT applied to prod DB — human runs it in the SQL editor.**
+  - Full `tsc -b` (client + server) clean; client vitest 1482/1482, server 1183/1183;
+    client lint at budget (401/401), server lint unchanged (pre-existing errors).
+  Not touched (DF-CAND-3 / DF-CAND-4): `daily_puzzles`, `daily_puzzle_scores`/`_submissions`/`_completions`.
 - **DF-CAND-2 — Daily Fritz verification is non-blocking and doesn't gate the
   leaderboard.** A hand that fails transcript verification is recorded
   `unverified`, the attempt can still reach `completed`, and
@@ -3203,5 +3234,6 @@ registry.
 | 2026-09-02 | **System 2 Tiers C/D/E — verification pass (§2.3.3).** The Tier-A/B gaps were code-verified in Step 5; the Tier C/D/E rows were still §2.1 initial reads. Traced each against the code, read-only. **Nothing escalates to Tier A/B.** **MP-G12 reclassified Tier C → Tier E:** the §2.1.5 audit claim ("rests on status polling, not awaiting the promise") is wrong — `game:rematch` → `waitForActiveGameOverPersist` (`roomSession.ts:685`) does `return await pending` on `room.activeGameOverPersist`; the pre-assignment window is handled by an `idle`-status reject. The recommended Step-3 fix is already shipped. **MP-G7 record corrected:** `finalizeAndDeleteLiveRoomSession` bypasses the `inFlightPersistByRoomCode` single-flight and doesn't await in-flight writes; the freshness fence (`validateLiveRoomHydrationRow:565`, status↔`game_state` consistency) rejects a resurrected **game-over** row but **not** an **abandon** one (`status='playing'`+`gameOver=false` self-consistent; `abandonedAt` lives only in `room_shell` and is overwritten) → verdict Tier C holds but the "fence rejects it" reasoning was half wrong; the tombstone guard is the real fix. **MP-G10 confidence low-med → low** (could not construct a duplicate-seat failure for one identity — the post-hydration branch is fully synchronous; `resolveActorSeatId` + `joinRoom` cap bound it). **MP-G8 / MP-G11 / MP-G13 / MP-G15 / MP-G16 / MP-G17 confirmed as classified** (MP-G8: `serializeRoomShell` genuinely omits `preGameDraw`; MP-G11: the `stillConnected`→`act` path is synchronous, a reconnect can't interleave unless the gameplay lock is held; MP-G13: `identityMatchesReconnectSeat` matches two `userId=null` guests by username — private+unranked only; MP-G16: `projectMultiplayerRoomForSpectators` doesn't mutate `room.state`). **MP-G5 + MP-G14** note that MP-G6 made `mp_authority_events` live → MP-G5's race is now measurable, MP-G14's failure event is now durably recorded (residual: no alert, no per-user aggregation). §2.3.3 written; MP-G5/G7/G10/G12/G14 rows + Current focus updated. Nothing fixed — verification only. |
 | 2026-09-02 | **System 3 (Daily modes) Step 1 — current-state audit §3.1 WRITTEN.** Mapped Daily Fritz, Puzzle Rush, Daily Puzzle Ladder: topology (§3.1.1 — HTTP routes on the single Render process, `getAuthenticatedUserId` at every write, all DB via service-role `supabaseFetch`), per-mode data model + score-authority model (§3.1.2–§3.1.4), authz map (§3.1.5), 7 concurrency windows DM-1..DM-7 (§3.1.6), recovery/idempotency prior art (§3.1.7), 7 parked gap candidates (§3.1.8). **Key findings:** (a) **Puzzle Rush is clean** — server-authoritative, RLS deny-all **and** grants revoked from clients, engine-replay verdict at `/complete` with over-report→`invalidated`, idempotent; but never shipped to players (26 rows). (b) **Daily Fritz** — heavily engineered (event journal `daily_fritz_events` w/ unique `idempotency_key`, transactional-command RPCs `start/commit_daily_fritz_attempt_command` now service-role-only, `dailyFritzVerifier` re-plays the transcript through `@racehorse/game-core` incl. Fritz-policy optimality, `expected_revision` CAS, immutable published challenges). **Verification is non-blocking** ("recorded as unverified, never refused") and the speed leaderboard (`status=eq.completed order by completed_at`) doesn't filter verification — DF-CAND-2 (MP-G14 analogue). (c) **Daily Puzzle Ladder — CONFIRMED LIVE competitive-integrity gap (DF-CAND-1):** `daily_puzzle_attempts` / `daily_puzzle_slot_results` carry `insert_own`/`update_own` RLS → an authenticated client `POST /rest/v1/daily_puzzle_attempts` with its own `user_id` + `total_score: 999999` / `puzzles_completed: 5` → **HTTP 201, row created** (CHECK constraints only bound `>=0` / `<=5`), sorts to the top of `daily_puzzle_attempts_leaderboard_idx`; `update_own` also inflates a legit attempt. Verified with a throwaway account (row + user deleted). The server's `validateDailyPuzzleSubmission` engine-replay is simply bypassed. Same class as T-1. Anon (no JWT) correctly `42501`. **Likely Tier A.** Also parked: DF-CAND-3 (legacy `daily_puzzle_scores`/`_submissions`/`_completions` — in prod, not in repo, unverified RLS), DF-CAND-4 (`daily_puzzles` in-place v1→v2→ladder migration + dead `admin@example.com` policy + no per-attempt content fence), DF-CAND-5 (`withDailyFritzAttemptLock` in-process only), DF-CAND-6 (outbox/async-verify drainer liveness on the free-tier process), DF-CAND-7 (the 3 grant-locked-but-body-unguarded fritz/daily-fritz RPCs from 2026-09-02). §3.2 / §3.3 stubbed. Current focus + Sequencing updated. **Stop — await human sign-off on §3.1 before Step 2.** |
 | 2026-09-02 | **System 3 §3.1 SCOPE CORRECTION — Daily Puzzle Ladder is retired, not an active mode.** Human: "it's Daily Fritz and Puzzle Rush only now." Reconciled read-only. **Server routes:** `registerDailyPuzzleRoutes(app)` still called (`index.ts:607`) — `/api/daily-puzzle/{today,start,submit-slot,complete,leaderboard}` + warm cron all **mounted**, rate limits still wired. **Client:** `appRoutePath.ts` still maps `/daily` + `/daily/leaderboard`; `AppRoutes.tsx:117-122` still dispatches `<DailyRoute>` / `<DailyPuzzleLeaderboardRoute>` (the 5-slot `DailyPuzzleScreen`). **But** `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` is an explicit regression guard — the Home "Daily Puzzle" card routes straight to `puzzleRush`, Single Player hub + ladder hub have no door to `'daily'`, "no live surface should send a player there"; `DailyRoute` is referenced only by the URL dispatcher. `api.ts` still has the five calls but only the unlinked screen invokes them. **Prod writes:** `daily_puzzle_attempts` last `updated_at` = `2026-08-20T16:00`, `daily_puzzle_slot_results` last `completed_at` = `2026-08-20T16:00` — **zero writes since 2026-08-20** (the day `2026-08-20_puzzle_rush_daily_official.sql` "Puzzle Rush becomes the Daily Puzzle" landed); `rush_runs` active through `2026-09-02`. **RLS unchanged** (`insert_own`/`update_own` still on both tables). **Verdict: case (b) — reachable but unlinked.** Not case (a) (routes + `/daily` URL + RLS all live; DF-CAND-1 re-verified working). Not case (c) (Puzzle Rush is its own schema `rush_runs`, not a rename of `daily_puzzle_attempts` — the change was UI positioning, no data migration). **DF-CAND-1 still exploitable**: an authenticated `POST /rest/v1/daily_puzzle_attempts` still lands and still sorts onto the URL-reachable `/daily/leaderboard` — severity drops (no players directed there, no legit scores since Aug 20) but the gap is open. Corrected: Current focus, §3.1.1 (reconciliation block + table), §3.1.3 (Puzzle Rush IS the live Daily Puzzle, not "unshipped"), §3.1.4 heading + gap text, §3.1.5, DM-5, DF-CAND-1, Sequencing line. **Step 2/3 decision framed: decommission (drop routes + tables) vs. lock the RLS — decommission preferred.** No code/migration changes — audit correction only. |
+| 2026-09-02 | **DF-CAND-1 — Daily Puzzle Ladder DECOMMISSIONED (one commit; migration pending human apply).** Human confirmed no pending client release re-links it and `racehorse.onrender.com` is the only `/api/daily-puzzle/*` consumer. Extra finding during the cut: the Home command center still wired the ladder in (`homeDataLoaders.loadDailyPuzzle` → `/api/daily-puzzle/today` on every home load; `homePrimaryAction.ts` / `homeActivityTimeline.ts` emit `route: 'daily'` next-move/timeline branches) — `dailyPuzzleIsRush.test.ts` had only guarded the Home *card* + hub + solo routes. **Server:** removed `registerDailyPuzzleRoutes` + 3 `/api/daily-puzzle/*` rate-limit mounts + nightly `scheduleDailyPuzzleLadderWarmup`; deleted `http/routes/dailyPuzzle.ts` (+ `/api/cron/daily-puzzle-ladder-warm`) + its forgery test; trimmed `scheduled/dailyWarmup.ts` (+ its test). **Client:** removed `/daily` + `/daily/leaderboard` (route table, `AppRoutes` branches, `DailyRoute`/`DailyPuzzleLeaderboardRoute`, prerender entries, `vercel.json` rewrites); `useHomeCommandCenter` no longer fetches the ladder (`model.daily.puzzle` pinned `unavailable`). Left the now-unreachable `route: 'daily'` branches in `homePrimaryAction`/`homeActivityTimeline` in place (gated on `status==='ready'` which can't happen) rather than churn personalization tests — parked as **DF-CAND-1b** (delete those + `client/src/dailyPuzzle/**`). **DB:** `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` drops the 4 `insert_own`/`update_own` policies + `revoke insert,update,delete,truncate` from `anon`/`authenticated` on `daily_puzzle_attempts` / `_slot_results`; tables stay in `public` as **read-only historical** (`select_own` + service-role SELECT kept — `socialProfile.ts` + `homeCompletionDates.ts` still read pre-Aug-20 rows). Self-asserting; **pg16-verified clean + idempotent** (only `select_own` remains; `authenticated` INSERT=f / SELECT=t; `anon` UPDATE=f; `service_role` SELECT=t; 2 seeded historical rows preserved). Not touched: `daily_puzzles`, `daily_puzzle_scores`/`_submissions`/`_completions` (DF-CAND-3/4). Full `tsc -b` clean; client vitest 1482/1482, server 1183/1183; client lint 401/401 (budget); server lint unchanged (74→71 pre-existing errors). **Migration NOT applied to prod DB — human runs it in the SQL editor. Not pushed.** |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |

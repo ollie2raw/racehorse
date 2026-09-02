@@ -3,7 +3,6 @@ import { useAuth } from '../auth/useAuth';
 import type { AppRoutesTournamentProps } from '../appRouteTypes';
 import {
   loadDailyFritz,
-  loadDailyPuzzle,
   loadDailySummary,
   loadJourney,
   loadRanking,
@@ -29,7 +28,6 @@ type TournamentHookState = AppRoutesTournamentProps['tournament'];
 const ASYNC_KEYS: HomeSourceKey[] = [
   'dailySummary',
   'dailyFritz',
-  'dailyPuzzle',
   'socialPresence',
   'socialActivity',
   'socialRivals',
@@ -67,7 +65,8 @@ function createInitialModel(identity: HomeIdentity, tournament: TournamentHookSt
     daily: {
       summary: emptySource(dailyStatus),
       fritz: emptySource(guest ? 'unavailable' : dailyStatus),
-      puzzle: emptySource(dailyStatus),
+      // Daily Puzzle Ladder retired (Puzzle Rush is the Daily Puzzle). Never fetched.
+      puzzle: emptySource('unavailable'),
     },
     social: {
       presence: emptySource(socialStatus),
@@ -210,7 +209,6 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
       ...(identity.userId
         ? [loadDailyFritz(true).then((data) => commitDaily('fritz', data)).catch((error) => failDaily('fritz', error))]
         : []),
-      loadDailyPuzzle().then((data) => commitDaily('puzzle', data)).catch((error) => failDaily('puzzle', error)),
       ...(identity.userId
         ? [
             loadSocialPresence().then((data) => commitSocial('presence', data)).catch((error) => failSocial('presence', error)),
