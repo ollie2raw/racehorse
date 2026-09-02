@@ -10,6 +10,10 @@ export async function recordPublicOnlineMatch(input: {
 }): Promise<void> {
   try {
     const roomMatchIdEnc = encodeURIComponent(input.roomMatchId);
+    // Fast-path only — NOT the idempotency guarantee. The partial unique index
+    // `matches_room_match_id_uidx` on ((metadata->>'roomMatchId')) plus
+    // `resolution=ignore-duplicates` below is what makes this safe under the
+    // game-over persist retry (MP-G4).
     const existing = await supabaseFetch<Array<{ id: string }>>(
       `/rest/v1/matches?metadata->>roomMatchId=eq.${roomMatchIdEnc}&select=id&limit=1`,
     );
@@ -17,6 +21,7 @@ export async function recordPublicOnlineMatch(input: {
 
     await supabaseFetch('/rest/v1/matches', {
       method: 'POST',
+      headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' },
       body: JSON.stringify({
         mode: 'online',
         room_code: input.roomCode,

@@ -11,6 +11,7 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import { failedRoomLookupLimiter, socketRateLimitKey } from '../rateLimit';
+import { roomKind } from './roomKind';
 import type { LeaveExistingSocketRoomsFn } from './registerRoomLifecycleHandlers';
 
 export type RegisterRoomSpectateHandlersParams = {
@@ -34,6 +35,9 @@ export function registerRoomSpectateHandlers(
     try {
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
+      // MP-G3: spectating must be authenticated, so every spectator is
+      // attributable (the spectator_joined room event records actorUserId).
+      if (!userId) return cb?.({ ok: false, error: 'auth_required' });
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       // S2: spectating is a viewing intent, not a leave. Detach from the old
       // room's broadcasts, but never forfeit a match this socket is mid-playing.
@@ -50,6 +54,24 @@ export function registerRoomSpectateHandlers(
       }
       if (room.abandonedAt) {
         return cb?.({ ok: false, error: 'match_abandoned' });
+      }
+
+      // MP-G3: room-kind gate. Private rooms are not spectatable without an
+      // explicit opt-in — a private room with two logged-in players is a
+      // *ranked* game, and the masked spectator view (board + scores + move
+      // feed) is enough to assist a player. The intended spectator surfaces are
+      // matchmaking (discoverable) and tournament (public bracket) rooms.
+      // The failed-room-lookup limiter is deliberately NOT incremented here —
+      // the room exists; only genuine misses (the getRoom catch above) feed
+      // brute-force detection.
+      const kind = roomKind(room);
+      const spectatable =
+        kind === 'matchmaking' ||
+        kind === 'scheduled_tournament' ||
+        kind === 'legacy_league' ||
+        room.config?.spectatable === true;
+      if (!spectatable) {
+        return cb?.({ ok: false, error: 'not_spectatable' });
       }
 
       // Socket room only — DO NOT join the game engine.

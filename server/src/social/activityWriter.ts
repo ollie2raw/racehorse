@@ -7,12 +7,26 @@ async function writeActivity(
   userId: string,
   type: ActivityType,
   metadata: Record<string, unknown>,
+  dedupeKey?: string,
 ): Promise<void> {
   try {
     await supabaseFetch('/rest/v1/activity_feed', {
       method: 'POST',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ user_id: userId, type, metadata }),
+      // MP-G4: when a dedupeKey is supplied, the partial unique index
+      // `activity_feed_dedupe_key_uidx` + `resolution=ignore-duplicates` make
+      // the write idempotent under the game-over persist retry. Activity
+      // without a natural key (puzzle/streak) passes no key and is unchanged.
+      headers: {
+        Prefer: dedupeKey
+          ? 'return=minimal,resolution=ignore-duplicates'
+          : 'return=minimal',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        type,
+        metadata,
+        ...(dedupeKey ? { dedupe_key: dedupeKey } : {}),
+      }),
     });
   } catch (err) {
     // Non-critical: log but never throw so callers don't fail.
@@ -49,8 +63,12 @@ export async function writeMatchActivity(params: {
   winnerScore: number | null;
   loserScore: number | null;
   fritzTier?: string | null;
+  /** Stable match id (room.matchId). Enables the MP-G4 idempotency key. */
+  sourceMatchId?: string | null;
 }): Promise<void> {
-  const { winnerUserId, loserUserId, winnerUsername, loserUsername, mode, winnerScore, loserScore, fritzTier } = params;
+  const { winnerUserId, loserUserId, winnerUsername, loserUsername, mode, winnerScore, loserScore, fritzTier, sourceMatchId } = params;
+  const dedupeKey = (userId: string, type: ActivityType): string | undefined =>
+    sourceMatchId ? `${sourceMatchId}:${userId}:${type}` : undefined;
   const writes: Promise<void>[] = [];
   if (winnerUserId) {
     writes.push(writeActivity(winnerUserId, 'win', {
@@ -65,7 +83,7 @@ export async function writeMatchActivity(params: {
         score: winnerScore,
         opponentScore: loserScore,
       }),
-    }));
+    }, dedupeKey(winnerUserId, 'win')));
   }
   if (loserUserId) {
     writes.push(writeActivity(loserUserId, 'loss', {
@@ -80,7 +98,7 @@ export async function writeMatchActivity(params: {
         score: loserScore,
         opponentScore: winnerScore,
       }),
-    }));
+    }, dedupeKey(loserUserId, 'loss')));
   }
   await Promise.all(writes);
 }
@@ -185,5 +203,10 @@ export async function writeForfeitActivity(params: {
     const tier = typeof params.fritzTier === 'string' ? params.fritzTier.trim().toLowerCase() : '';
     if (tier) metadata.fritz_tier = tier;
   }
-  await writeActivity(params.userId, 'loss', metadata);
+  // MP-G4: same idempotency-key treatment as writeMatchActivity — a forfeit is
+  // another retry-prone match-ending side-effect on the same table.
+  const dedupeKey = params.sourceMatchId
+    ? `${params.sourceMatchId}:${params.userId}:loss`
+    : undefined;
+  await writeActivity(params.userId, 'loss', metadata, dedupeKey);
 }

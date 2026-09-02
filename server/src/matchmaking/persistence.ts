@@ -104,8 +104,13 @@ export async function recordMatchEnd(params: {
   if (params.isSim) return;
   const endedAt = new Date().toISOString();
   try {
+    // MP-G4 / MP-G5 (matchmaking half): conditional on `status=eq.in_progress`
+    // so the FIRST terminal write wins. A later game-over / forfeit / cleanup
+    // call for the same match updates 0 rows and is a harmless no-op — it can
+    // no longer overwrite the recorded winner or rating delta. (The private
+    // `room_match_logs` half of MP-G5 is Tier C and untouched.)
     await supabaseFetch(
-      `/rest/v1/matchmaking_matches?id=eq.${encodeURIComponent(params.matchId)}`,
+      `/rest/v1/matchmaking_matches?id=eq.${encodeURIComponent(params.matchId)}&status=eq.in_progress`,
       {
         method: 'PATCH',
         body: JSON.stringify({

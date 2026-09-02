@@ -28,21 +28,23 @@ focus" line, then the section for the system in progress.
   guest-reconnect gap (→ MP-G13), MP-INV-19 is a posture decision not a hard
   invariant (→ MP-G14).
 
-- **System 2 Step 3** (§2.4): **IN PROGRESS 2026-09-01 — Tier-A scope only
-  (MP-G1, MP-G3, MP-G4; MP-G2 folded into MP-G1).** §2.4.2 MP-G1 →
-  `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql`
-  **written** (codifies the `supabase/*.sql` DDL, revokes client write grants,
-  self-asserts; DDL parts are already live in prod, the grant revoke is not).
-  §2.4.3 MP-G3 → spectate gate **specified**: private rooms blocked outright,
-  spectate requires auth, `roomKind`-based check + new ack codes `auth_required`
-  / `not_spectatable`. §2.4.4 MP-G4 → **specified**: every game-over side-effect
-  sink idempotent on `sourceMatchId` — `appendMatch` (stable id + dedup-on-read),
-  `recordPublicOnlineMatch` (partial unique index on `metadata->>'roomMatchId'`
-  + ignore-duplicates), `writeMatchActivity` (`activity_feed.dedupe_key` column
-  + unique index), `recordMatchEnd` (conditional PATCH `status=eq.in_progress`
-  — also fixes the matchmaking half of MP-G5). Step 4 applies the MP-G3/G4 code
-  + writes `…_gameover_sideeffect_idempotency.sql`. **No application code
-  changed this step.**
+- **System 2 Steps 3 + 4** (§2.4 / §2.5, Tier-A scope: MP-G1, MP-G3, MP-G4;
+  MP-G2 folded into MP-G1): **IMPLEMENTED 2026-09-01 (§2.4.6).** MP-G3 —
+  `registerRoomSpectateHandlers.ts` now requires auth (`auth_required`) and
+  gates on `roomKind` (`not_spectatable` for private rooms unless
+  `config.spectatable`); failed-lookup limiter untouched. MP-G4 — every
+  game-over side-effect sink idempotent on `sourceMatchId`: `appendMatch`
+  (stable id + dedup), `recordPublicOnlineMatch` (`resolution=ignore-duplicates`
+  + `matches_room_match_id_uidx`), `writeMatchActivity`/`writeForfeitActivity`
+  (`activity_feed.dedupe_key` + unique index), `recordMatchEnd` (conditional
+  PATCH `status=eq.in_progress` — first-terminal-wins, also fixes the
+  matchmaking half of MP-G5). Two migrations written + **pg16-verified**
+  (`2026-09-01_room_tables_schema_and_grant_lockdown.sql`,
+  `2026-09-01_gameover_sideeffect_idempotency.sql`) — **NOT applied to prod**
+  (§2.5 open item). `tsc -b` clean; full server suite 204 files / 1173 tests
+  pass; new idempotency + spectate-gate unit tests; server lint no new
+  problems. Deferred as designed: the retry-from-step-1 structure, the
+  private-room `room_match_logs` first-terminal latch (MP-G5, Tier C).
 
 - **Step 1** (current-state audit): COMPLETE — §1.1, §1.3.
 - **Step 2** (invariants): RATIFIED — T-INV-1..10 (D-3); T-INV-6 reworded +
@@ -2021,14 +2023,13 @@ unapplied → MP-G6). Tier A is now **MP-G1, MP-G3, MP-G4** (MP-G5 moved out).
 
 ## 2.4 State-machine / concurrency design
 
-Status: **IN PROGRESS 2026-09-01, Step 3.** Scope = the three Tier-A gaps only
-(MP-G1, MP-G3, MP-G4; MP-G2 folded into MP-G1), per Decisions D-9. Tiers B–E and
-the deeper concurrency questions (attach serialization, the private-room
-terminal-outcome latch, the stale-live-session reaper) are their own later
-Step-3 pass. **No application code is changed in this step.** §2.4.2's migration
-is the Step-3 deliverable for MP-G1 (it is schema, not app code, and it codifies
-DDL that is already live); the MP-G3 and MP-G4 changes are *specified* here and
-applied in Step 4.
+Status: **DESIGN COMPLETE (Step 3) + IMPLEMENTED (Step 4), 2026-09-01.** Scope =
+the three Tier-A gaps only (MP-G1, MP-G3, MP-G4; MP-G2 folded into MP-G1), per
+Decisions D-9. Tiers B–E and the deeper concurrency questions (attach
+serialization, the private-room `room_match_logs` terminal-outcome latch, the
+stale-live-session reaper) are their own later pass. **The design below is
+unchanged; §2.4.6 records what shipped in Step 4.** The two SQL migrations are
+written and verified on a throwaway pg16 but **not applied to prod**.
 
 Unlike System 1, none of these three is a match-lifecycle state machine, so
 there is no RPC-surface or lock-target decision. The design work is: a
@@ -2190,14 +2191,53 @@ latch (MP-G5, Tier C) is out of scope.
 ### 2.4.5 Step-3 deliverables
 
 - `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql` —
-  **written** (MP-G1 + MP-G2).
-- MP-G3 spectate gate — **specified** (§2.4.3); Step 4 applies it.
+  **written + pg16-verified** (MP-G1 + MP-G2).
+- MP-G3 spectate gate — **specified** (§2.4.3).
 - MP-G4 per-helper changes + `…_gameover_sideeffect_idempotency.sql` —
-  **specified** (§2.4.4); Step 4 applies + writes that migration.
+  **specified** (§2.4.4).
+
+### 2.4.6 Step-4 — what shipped (2026-09-01)
+
+Implemented exactly as designed above. **No prod migration applied.**
+
+| Gap | Files | Change |
+|---|---|---|
+| **MP-G3** | `multiplayer/registerRoomSpectateHandlers.ts`, `rooms.ts` (`RoomConfig.spectatable?`) | `auth_required` check right after identity resolution (before `leaveExistingSocketRooms`); `not_spectatable` room-kind gate after the `abandonedAt` check — private blocked unless `config.spectatable`, matchmaking/scheduled_tournament/legacy_league allowed. Failed-lookup limiter untouched (comment + test). |
+| **MP-G4 `appendMatch`** | `stats/matchLog.ts`, `realtime/gameOverPersistence.ts` | caller passes `id: sourceMatchId`; `appendMatch` returns the existing entry (no append) when a line with that `id` exists; `computeWeeklyAwards` dedups on `id` as a backstop. |
+| **MP-G4 `recordPublicOnlineMatch`** | `stats/recordPublicMatch.ts` | POST now `Prefer: return=minimal,resolution=ignore-duplicates`; SELECT kept as a fast-path only (comment). Backed by `matches_room_match_id_uidx`. |
+| **MP-G4 `writeMatchActivity`** | `social/activityWriter.ts`, `realtime/gameOverPersistence.ts` | `writeActivity()` gains an optional `dedupeKey` (adds `dedupe_key` to the body + `resolution=ignore-duplicates`); `writeMatchActivity` gains `sourceMatchId` and builds `${sourceMatchId}:${userId}:${type}`. **Also wired `writeForfeitActivity`** (it already carries `sourceMatchId`) — same table, same retry class; a 1-line same-family extension beyond the literal §2.4.4 list, flagged here. |
+| **MP-G4 `recordMatchEnd`** | `matchmaking/persistence.ts` | PATCH now `?id=eq.<id>&status=eq.in_progress` — first terminal write wins; later calls (game-over / forfeit / cleanup) update 0 rows. Comment notes this fixes the matchmaking half of MP-G5; `room_match_logs` half stays Tier C. |
+| **schema** | `supabase/migrations/2026-09-01_gameover_sideeffect_idempotency.sql` | `matches_room_match_id_uidx` (partial unique on `(metadata->>'roomMatchId')`) + `activity_feed.dedupe_key` column + `activity_feed_dedupe_key_uidx` (partial unique). Self-asserting. **pg16-verified:** applies clean + idempotent; `ON CONFLICT DO NOTHING` dedups both tables; null `dedupe_key` rows unconstrained. |
+
+**Tests.** `tsc -b` clean (server + client). Full server suite **204 files /
+1173 tests pass**. New: `stats/matchLog.test.ts` (retry-same-id ⇒ one line;
+weekly-awards dedup), `stats/recordPublicMatch.test.ts` (ignore-duplicates
+header; SELECT fast-path), `matchmaking/recordMatchEnd.test.ts`
+(`status=eq.in_progress` on every call; sim no-op), `social/activityWriter.test.ts`
++2 (`dedupe_key` + header with `sourceMatchId`; omitted without it). Updated:
+`registerRoomSpectateHandlers.test.ts` (happy path → matchmaking room; +4 gate
+tests), `spectateSeatPreservation.test.ts` (`seedOtherRoom` opts in via
+`config.spectatable`). Server lint: **no new problems** (74 pre-existing errors,
+verified identical with/without the diff).
+
+**Not done (deferred, as designed):** the retry loop's "re-run from step 1"
+structure / a per-match side-effects checkpoint; the private-room
+`room_match_logs` first-terminal latch (MP-G5, Tier C).
 
 ## 2.5 Refactor plan
 
-**Not started.** Step 4.
+**Tier-A slice DONE 2026-09-01 (see §2.4.6).** MP-G1, MP-G3, MP-G4 implemented +
+tested; two migrations written and pg16-verified, **not applied to prod**. The
+rest of §2.5 (Tiers B–E, deeper concurrency) is a later pass.
+
+- [x] MP-G3 — spectate room-kind gate + auth requirement
+- [x] MP-G4 — idempotent game-over side-effect sinks (4 helpers + migration)
+- [x] MP-G1 + MP-G2 — room-table schema + grant migration (written, pg16-verified)
+- [ ] **Prod:** apply `2026-09-01_room_tables_schema_and_grant_lockdown.sql` +
+  `2026-09-01_gameover_sideeffect_idempotency.sql` in the SQL editor, verify the
+  self-assert NOTICEs, then MP-G1/MP-G2/MP-G4 are closed.
+- [ ] MP-G6 (Tier B) — verify `room_command_receipts` / `mp_authority_events` in prod
+- [ ] Tiers C–E — later
 
 ## 2.6 Test plan
 
@@ -2293,15 +2333,17 @@ latch (MP-G5, Tier C) is out of scope.
   = **MP-G15..MP-G17**. §2.3.1 = plain verdict per §2.1.7 authz row; §2.3.2 =
   the verification-pass record. **Awaiting human line-by-line sign-off**
   (→ Decisions D-9, mirroring D-3). Step 3 does not start until then.
-- [~] **Step 3 — State-machine / concurrency design (§2.4) — IN PROGRESS
-  2026-09-01, Tier-A scope only (MP-G1, MP-G3, MP-G4).** §2.4.1 scope; §2.4.2
-  MP-G1+MP-G2 → `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql`
-  (written this step — codifies the `supabase/*.sql` DDL, revokes client write
-  grants, self-asserts); §2.4.3 MP-G3 → spectate room-kind gate design
-  (private = blocked outright, spectate requires auth); §2.4.4 MP-G4 → every
-  game-over side-effect sink idempotent on `sourceMatchId` (per-helper design).
-  No application code changed — that is Step 4.
-- [ ] Step 4 — Refactor (§2.5)
+- [x] **Step 3 — State-machine / concurrency design (§2.4) — DONE 2026-09-01,
+  Tier-A scope only (MP-G1, MP-G3, MP-G4).** §2.4.1–§2.4.5: MP-G1+MP-G2 →
+  `2026-09-01_room_tables_schema_and_grant_lockdown.sql`; MP-G3 → spectate
+  room-kind gate (private blocked outright, auth required); MP-G4 → every
+  game-over side-effect sink idempotent on `sourceMatchId`, per-helper.
+- [x] **Step 4 — Refactor (§2.5, Tier-A slice) — DONE 2026-09-01 (§2.4.6).**
+  MP-G3 + MP-G4 code shipped (7 files), `2026-09-01_gameover_sideeffect_idempotency.sql`
+  written. `tsc -b` clean; full server suite 204/1173 pass; new idempotency +
+  spectate-gate unit tests; server lint no new problems. **Both SQL migrations
+  written + pg16-verified but NOT applied to prod** — §2.5 has the open
+  "apply in prod" item.
 - [ ] Step 5 — Tests prove closure (§2.6)
 
 ---
@@ -2373,4 +2415,5 @@ registry.
 | 2026-09-01 | **System 2 Step 2 WRITTEN (§2.2 + §2.3) — CANDIDATE, no code.** §2.2: **MP-INV-1..19** across 8 domains — seat/identity binding (1–3), room-kind ACL (4–6), state authority & mutation ordering (7–9), persistence & recovery (10–13), game-over/result integrity (14–17), disconnect/grace (18), anti-cheat posture (19, an open decision not yet an invariant). Framing mirrors §1.2 but without a single sink: each invariant names rule / enforcing-mechanism-today-or-`UNENFORCED` / failure-mode, and is grounded in an MP-1..MP-8 window or a §2.1.7 authz row. Single-instance (§2.1.1) is stated as the precondition for all of them. §2.3: **MP-G1..MP-G17** risk-ranked (severity {data-corruption, competitive-integrity, auth-bypass, player-visible-bug, cosmetic} × single-instance likelihood × blast radius), tiered: **A — fix now in Step 3:** MP-G1 (room_live_sessions/room_match_logs unmanaged schema — 4th drift instance), MP-G3 (`room:spectate` no room-kind check — masked but board+scores+move-feed of a *ranked* private room, unthrottled by code), MP-G4 (game-over side-effect idempotency unverified for `appendMatch`/`recordPublicOnlineMatch`/`writeMatchActivity`/`recordMatchEnd` — T-3 analogue), MP-G5 (non-tournament terminal outcome last-writer-wins, MP-2). **B — verify now:** MP-G6 (`room_command_receipts` PGRST205 — likely unapplied to prod), MP-G2 (client write-grant revoke). **C — revisit if scale:** MP-G7 (MP-8 resurrect-after-delete), MP-G8 (MP-5 pre-game timer), MP-G9 (no boot recovery sweep — likely accept), MP-G10 (MP-3 attach not lock-serialized), MP-G11 (MP-4 grace callback past guards), MP-G12 (MP-1 rematch/abandon polls status not promise), MP-G13 (two-guest reconnect ambiguity). **D — posture:** MP-G14 (move-log verification non-blocking + hand-continuity-only — recommend keep non-blocking + add alert + per-user tracking). **E — accept:** MP-G15 (MP-6 coalescing), MP-G16 (MP-7 spectator torn read), MP-G17 (`room_match_logs` participant-reads-own-terminal — deliberate). **§2.3.1** gives a plain real-gap-or-covered verdict on every §2.1.7 authz row (the human asked specifically re `room:spectate` — REAL GAP; spectator discovery limited to matchmaking — NOT a gap; private `room:join` code-only — NOT a gap, but guest reconnect ambiguity broken out as MP-G13; `room:abandon_match` auth requirement — NOT a gap). §2.7 Step 2 box checked, Current focus updated. **Awaiting human line-by-line sign-off → will be logged as D-9 (mirroring D-3). Step 3 (§2.4) does not start until then.** |
 | 2026-09-01 | **System 2 Step 2 verification pass (§2.3.2) — 3 claims checked against code/prod before sign-off; 2 verdicts changed.** (1) **MP-G3** — CONFIRMED in code: ranked eligibility is `a.userId && b.userId && !fritzActivityCtx` in `persistGameOverOnce` only — no matchmaking-origin / room-kind gate — so a 2-authed-user private room is fully rated (Glicko + `ranked_games`), and `room:spectate` has no room-kind check and accepts an unauthenticated spectator. Correction: my "no rate limit" claim was wrong (`room:spectate` 30/min + 5-failed-lookup block) — likelihood medium→low–medium, vector is a leaked code not a scan; severity (competitive-integrity) + verdict (FIX NOW / Tier A) stand. (2) **MP-G5** — NOT measurable from here: `mp_authority_events` (`2026-08-20_mp_authority_events.sql`) is `PGRST205`/unapplied to prod (new MP-G6 sub-finding), funnel is stdout-only, and a `room_match_logs` scan for `abandoned`+`gameOver=true` = 0 rows against ~88 human matches. Likelihood medium→low, **Tier A → Tier C (REVISIT IF SCALE)**. (3) **MP-G9** — restarts are deploy-driven and frequent (`main` commits on 20/21 days, up to 58/day; prod uptime ~5.6 h, ≥1 restart today; free-tier idle spin-down mitigated but deploy restarts not; Render crash logs not visible here). Residual = stranded `room_live_sessions` rows with no reaper; tournament covered by System 1's reconciler. **ACCEPT → REVISIT IF SCALE**; Step 3 add a periodic stale-live-session reaper. Tier A is now MP-G1/MP-G3/MP-G4. §2.3.2, the MP-G3/G5/G6/G9 rows, Current focus, and §2.7 updated. **Sign-off still pending.** |
 | 2026-09-01 | **System 2 Step 2 SIGNED OFF (Decisions D-9) + Step 3 started (§2.4, Tier-A scope).** Human ratified MP-INV-1..19 and MP-G1..MP-G17 (incl. the §2.3.2 changes) line-by-line. D-9 records residuals: MP-INV-2 has an unclosed guest-reconnect gap (MP-G13); MP-INV-19 is a posture decision, not a hard invariant (move-log verification stays non-blocking; add alert + per-user tracking = MP-G14). §2.2 / §2.3 status flipped CANDIDATE→RATIFIED. **Step 3 §2.4 written for the 3 Tier-A gaps only** (MP-G1, MP-G3, MP-G4; MP-G2 folded into MP-G1): §2.4.1 the only real concurrency is the `persistGameOverOnce` 4-attempt retry (verified: steps 4/5/6 re-run ungated; step 8 `insertRankedGameIdempotent` already gates Glicko + game-over-path `recordMatchEnd`); §2.4.2 **wrote** `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql` (codifies the `supabase/*.sql` DDL for both room tables, `revoke insert/update/delete/truncate ... from anon, authenticated` + `revoke select` on `room_live_sessions`, keeps `authenticated` SELECT on `room_match_logs` for `room_match_logs_select_own` / MP-G17, self-asserting; DDL+policy parts already live in prod, the grant revoke is the only real change and is NOT yet applied); §2.4.3 MP-G3 decision — **private rooms blocked from spectate outright** (no participant-relationship infra, no evidence of use; revisit via an opt-in `RoomConfig.spectatable` flag) **+ spectate requires auth** — concrete `roomKind`-based gate + ack codes `auth_required`/`not_spectatable` specified; §2.4.4 MP-G4 — one rule (*every game-over side-effect idempotent on `sourceMatchId`*): `appendMatch` stable-id + dedup-on-read (+ note: the JSONL file is ephemeral, a table would be better — later stats pass), `recordPublicOnlineMatch` partial unique index on `metadata->>'roomMatchId'` + `resolution=ignore-duplicates`, `writeMatchActivity` new `activity_feed.dedupe_key` column + partial unique index + `${sourceMatchId}:${userId}:${type}` key, `recordMatchEnd` conditional PATCH `status=eq.in_progress` (first-terminal-wins — also fixes the matchmaking half of MP-G5). MP-G3/G4 code + the sibling `…_gameover_sideeffect_idempotency.sql` migration are Step 4. **No application code changed.** Current focus + §2.7 updated. |
+| 2026-09-01 | **System 2 Step 4 — Tier-A code shipped (§2.4.6). No prod migration applied.** Implemented §2.4.3/§2.4.4 exactly as designed, 7 files: **MP-G3** — `registerRoomSpectateHandlers.ts` gate (`auth_required` before `leaveExistingSocketRooms`; `not_spectatable` via `roomKind` after the `abandonedAt` check — private blocked unless `config.spectatable`, which was added to `RoomConfig`; failed-lookup limiter untouched, asserted). **MP-G4** — `appendMatch` (caller passes `id: sourceMatchId`; returns existing entry on dup; `computeWeeklyAwards` dedup backstop), `recordPublicOnlineMatch` (`Prefer: resolution=ignore-duplicates`, SELECT kept as fast-path), `writeActivity`/`writeMatchActivity` (optional `dedupeKey` → `dedupe_key` body field + ignore-duplicates; `sourceMatchId` threaded from `gameOverPersistence.ts`) **+ `writeForfeitActivity`** (same-family 1-line extension, flagged), `recordMatchEnd` (conditional PATCH `?id=eq.<id>&status=eq.in_progress` — first-terminal-wins, fixes matchmaking half of MP-G5). **Migration** `supabase/migrations/2026-09-01_gameover_sideeffect_idempotency.sql` (`matches_room_match_id_uidx` partial unique on `(metadata->>'roomMatchId')`; `activity_feed.dedupe_key` + `activity_feed_dedupe_key_uidx`; self-asserting) — **pg16-verified** (applies clean + idempotent; `ON CONFLICT DO NOTHING` dedups both tables; null keys unconstrained), same as the room-tables migration earlier. `tsc -b` clean (server+client); **full server suite 204 files / 1173 tests pass**; new tests: `matchLog.test.ts`, `recordPublicMatch.test.ts`, `matchmaking/recordMatchEnd.test.ts`, `activityWriter.test.ts` +2; updated `registerRoomSpectateHandlers.test.ts` (+4 gate tests), `spectateSeatPreservation.test.ts`; server lint identical (74 pre-existing errors, 0 new). §2.4 status DESIGN→IMPLEMENTED, §2.4.6 added, §2.5 opened with the "apply in prod" checklist item, §2.7 Steps 3+4 checked, Current focus updated. **Neither migration applied to prod — MP-G1/MP-G2/MP-G4 close only after the human runs them in the SQL editor.** |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |

@@ -118,9 +118,12 @@ function seedLiveSeatedRoom(roomCode: string, socketId: string) {
   return room;
 }
 
-/** Room B: an unrelated room to spectate / join. */
+/** Room B: an unrelated room to spectate / join. `spectatable` so the MP-G3
+ * room-kind gate lets a spectator in — these tests are about seat preservation,
+ * not the gate itself. */
 function seedOtherRoom(roomCode: string) {
   const room = createReservedRoom(roomCode, { winningScore: 60 });
+  room.config.spectatable = true;
   joinRoom(roomCode, 'q1');
   setRoomRoster(roomCode, [
     { id: 'q1', socketId: 'sock-q1', username: 'Host', userId: 'user-host' },

@@ -88,6 +88,13 @@ export async function appendMatch(
     id: entry.id ?? randomUUID(),
     ...entry,
   };
+  // MP-G4: idempotent on `id` (the caller passes `sourceMatchId`). The
+  // game-over persist sequence re-runs from the top on every retry, so a
+  // partial failure downstream would otherwise append this line again.
+  if (entry.id) {
+    const existing = (await readMatches()).find((m) => m.id === entry.id);
+    if (existing) return existing;
+  }
   await fs.promises.appendFile(FILE_PATH, JSON.stringify(full) + '\n', 'utf8');
   weeklyAwardsCache = null;
   return full;
@@ -146,7 +153,16 @@ export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> 
     return weeklyAwardsCache.value;
   }
 
-  const matches = (await readMatches()).filter((m) => m.endedAtMs >= startMs && m.endedAtMs < endMs);
+  // MP-G4 backstop: dedup on `id` in case a retry appended the same match
+  // before appendMatch's own dedup landed (or a pre-fix duplicate exists).
+  const seenIds = new Set<string>();
+  const matches = (await readMatches())
+    .filter((m) => {
+      if (m.id && seenIds.has(m.id)) return false;
+      if (m.id) seenIds.add(m.id);
+      return true;
+    })
+    .filter((m) => m.endedAtMs >= startMs && m.endedAtMs < endMs);
 
   const iso = (ms: number) => new Date(ms).toISOString();
   const weekStartISO = iso(startMs);

@@ -45,6 +45,12 @@ export interface RoomConfig extends Partial<Config> {
   tournamentId?: string;
   tournamentMatchId?: string;
   tournamentMode?: string;
+  /**
+   * Opt-in escape hatch for spectating a private room (HARDENING_PLAN MP-G3).
+   * Unset/false ⇒ private rooms are not spectatable. There is no UI to set this
+   * yet — it exists so the future "allow spectators" toggle is a one-line change.
+   */
+  spectatable?: boolean;
 }
 
 export type LeadTracker = {

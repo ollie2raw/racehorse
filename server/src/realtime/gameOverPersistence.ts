@@ -158,6 +158,7 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   }
 
   await appendMatch({
+    id: sourceMatchId, // MP-G4: idempotency key for the retry loop
     endedAtMs: Date.now(),
     roomCode: room.code,
     tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
@@ -194,6 +195,7 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     winnerScore: winnerSeatId === aId ? scoreA : scoreB,
     loserScore: winnerSeatId === aId ? scoreB : scoreA,
     fritzTier: fritzActivityCtx?.fritzTier ?? null,
+    sourceMatchId, // MP-G4: idempotency key for the retry loop
   }).catch(() => {});
 
   if (a.userId && b.userId && !fritzActivityCtx) {

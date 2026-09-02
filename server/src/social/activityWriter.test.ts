@@ -91,6 +91,38 @@ describe('writeMatchActivity', () => {
   });
 });
 
+describe('writeMatchActivity — MP-G4 idempotency key', () => {
+  it('adds dedupe_key and ignore-duplicates when sourceMatchId is supplied', async () => {
+    await writeMatchActivity({
+      winnerUserId: 'w1', loserUserId: 'l1',
+      winnerUsername: 'alice', loserUsername: 'bob',
+      mode: 'online', winnerScore: 30, loserScore: 12,
+      sourceMatchId: 'match-abc',
+    });
+    const calls = mockFetch.mock.calls.map(([, init]: [string, { body: string; headers: Record<string, string> }]) => ({
+      body: JSON.parse(init.body), headers: init.headers,
+    }));
+    const win = calls.find((c) => c.body.type === 'win')!;
+    const loss = calls.find((c) => c.body.type === 'loss')!;
+    expect(win.body.dedupe_key).toBe('match-abc:w1:win');
+    expect(loss.body.dedupe_key).toBe('match-abc:l1:loss');
+    expect(win.headers.Prefer).toContain('resolution=ignore-duplicates');
+    expect(loss.headers.Prefer).toContain('resolution=ignore-duplicates');
+  });
+
+  it('omits dedupe_key entirely when no sourceMatchId (backward compatible)', async () => {
+    await writeMatchActivity({
+      winnerUserId: 'w1', loserUserId: 'l1',
+      winnerUsername: 'alice', loserUsername: 'bob',
+      mode: 'online', winnerScore: 30, loserScore: 12,
+    });
+    for (const [, init] of mockFetch.mock.calls as [string, { body: string; headers: Record<string, string> }][]) {
+      expect(JSON.parse(init.body)).not.toHaveProperty('dedupe_key');
+      expect(init.headers.Prefer).not.toContain('resolution=ignore-duplicates');
+    }
+  });
+});
+
 describe('writePuzzleActivity', () => {
   it('writes a puzzle row', async () => {
     await writePuzzleActivity({ userId: 'u1', score: 450, streak: 4 });

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, setRoomRoster } from './roomSession';
 import { registerRoomSpectateHandlers } from './registerRoomSpectateHandlers';
+import { failedRoomLookupLimiter } from '../rateLimit';
 
 function makeSocket(userId: string | null) {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -72,30 +73,37 @@ describe('registerRoomSpectateHandlers', () => {
     expect(leaveExistingSocketRooms).toHaveBeenCalledTimes(1);
   });
 
-  it('acks successful spectate with roster snapshot and socket room membership', async () => {
+  const deps = (userId: string | null) => ({
+    resolveSocketIdentity: async () => ({ username: 'Spec', userId }),
+    normalizeUsername: (v: unknown) => String(v ?? 'Guest'),
+    normalizeUserId: (v: unknown) => (typeof v === 'string' ? v : null),
+    tryHydrateMatchmakingRoomShell: async () => 'skipped' as const,
+    waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+    onAfterMatchStarted: async () => undefined,
+    notifyRoomPlayersInGame: () => undefined,
+    persistRoomMatchLog: async () => undefined,
+  });
+
+  function wire(userId: string | null) {
+    const leaveExistingSocketRooms = vi.fn();
+    const { socket, handlers } = makeSocket(userId ?? 'anon');
+    registerRoomSpectateHandlers(socket, {
+      handlerDeps: deps(userId) as any,
+      leaveExistingSocketRooms,
+    });
+    return { socket, handlers, leaveExistingSocketRooms };
+  }
+
+  it('acks successful spectate on a matchmaking room with roster snapshot and socket room membership', async () => {
     const roomCode = 'SPEOK1';
     createReservedRoom(roomCode);
+    getRoom(roomCode).matchmakingMatchId = 'mm-1';
     joinRoom(roomCode, 'p1');
     setRoomRoster(roomCode, [
       { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
     ]);
 
-    const leaveExistingSocketRooms = vi.fn();
-    const { socket, handlers } = makeSocket('spec-2');
-    registerRoomSpectateHandlers(socket, {
-      handlerDeps: {
-        resolveSocketIdentity: async () => ({ username: 'Spec', userId: 'spec-2' }),
-        normalizeUsername: (v) => String(v ?? 'Guest'),
-        normalizeUserId: (v) => (typeof v === 'string' ? v : null),
-        tryHydrateMatchmakingRoomShell: async () => 'skipped',
-        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
-        onAfterMatchStarted: async () => undefined,
-        notifyRoomPlayersInGame: () => undefined,
-        persistRoomMatchLog: async () => undefined,
-      },
-      leaveExistingSocketRooms,
-    });
-
+    const { socket, handlers } = wire('spec-2');
     const ack = vi.fn();
     await handlers.get('room:spectate')?.(roomCode, {}, ack);
 
@@ -110,5 +118,51 @@ describe('registerRoomSpectateHandlers', () => {
         players: [{ id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' }],
       }),
     );
+  });
+
+  it('MP-G3: rejects an unauthenticated spectator with auth_required', async () => {
+    const roomCode = 'SPECAUTH';
+    createReservedRoom(roomCode);
+    getRoom(roomCode).matchmakingMatchId = 'mm-2';
+    joinRoom(roomCode, 'p1');
+
+    const { socket, handlers } = wire(null);
+    const ack = vi.fn();
+    await handlers.get('room:spectate')?.(roomCode, {}, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'auth_required' });
+    expect(socket.rooms.has(roomCode)).toBe(false);
+  });
+
+  it('MP-G3: blocks spectating a private room outright with not_spectatable', async () => {
+    const roomCode = 'SPECPRIV';
+    createReservedRoom(roomCode); // private — no matchmaking/tournament markers
+    joinRoom(roomCode, 'p1');
+
+    const incSpy = vi.spyOn(failedRoomLookupLimiter, 'increment');
+    const { socket, handlers } = wire('spec-3');
+    const ack = vi.fn();
+    await handlers.get('room:spectate')?.(roomCode, {}, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'not_spectatable' });
+    expect(socket.rooms.has(roomCode)).toBe(false);
+    // the room exists — a rejected spectate must NOT feed brute-force detection
+    expect(incSpy).not.toHaveBeenCalled();
+    incSpy.mockRestore();
+  });
+
+  it('MP-G3: allows a private room that opted in via config.spectatable', async () => {
+    const roomCode = 'SPECOPTIN';
+    createReservedRoom(roomCode);
+    getRoom(roomCode).config.spectatable = true;
+    joinRoom(roomCode, 'p1');
+    setRoomRoster(roomCode, [{ id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' }]);
+
+    const { socket, handlers } = wire('spec-4');
+    const ack = vi.fn();
+    await handlers.get('room:spectate')?.(roomCode, {}, ack);
+
+    expect(ack).toHaveBeenCalledWith(expect.objectContaining({ ok: true, roomCode }));
+    expect(socket.rooms.has(roomCode)).toBe(true);
   });
 });
