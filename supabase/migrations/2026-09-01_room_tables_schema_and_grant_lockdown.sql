@@ -11,11 +11,15 @@
 -- This file SUPERSEDES supabase/room_live_sessions.sql and
 -- supabase/room_match_logs.sql as the source of truth for these two tables.
 --
+-- Applied to prod 2026-09-01 (SQL editor); self-assert passed. Verified after:
+-- assert_security_posture() no longer flags either table under
+-- client_write_grant_rls_on; anon INSERT -> 42501 permission denied for table.
+--
 -- Idempotent by construction:
 --   * the create table / add column / create index / policy statements match
 --     current prod exactly and are no-ops there;
 --   * MP-G2 — `revoke insert, update, delete, truncate ... from anon,
---     authenticated` on both tables IS a real change, not yet applied to prod.
+--     authenticated` on both tables was the one real change.
 --     SELECT is intentionally left for `authenticated` on room_match_logs
 --     (room_match_logs_select_own needs it — a participant reading their own
 --     *terminal* row is the deliberate, ratified behaviour, HARDENING_PLAN

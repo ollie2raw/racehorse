@@ -12,6 +12,10 @@
 -- recordMatchEnd (conditional PATCH) are handled in code, no schema.
 --
 -- Self-asserting: raises unless both indexes exist and are UNIQUE.
+--
+-- Applied to prod 2026-09-01 (SQL editor); self-assert passed. The unique index
+-- on matches built without error => public.matches had no duplicate
+-- metadata->>'roomMatchId' values (the pre-fix double-write never occurred).
 
 begin;
 
