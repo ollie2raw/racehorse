@@ -37,3 +37,14 @@ stable
 as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
+
+-- auth.role() — Supabase reads the JWT `role` claim. Here it reads a plain
+-- session GUC so a test can impersonate a role with
+--   set local request.jwt.claim.role = 'anon';
+create or replace function auth.role()
+returns text
+language sql
+stable
+as $$
+  select nullif(current_setting('request.jwt.claim.role', true), '');
+$$;
