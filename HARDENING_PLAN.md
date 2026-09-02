@@ -12,7 +12,12 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**Tournament (System 1) → Steps 1–5 COMPLETE, closed. System 2 (Multiplayer rooms) → Step 1 SIGNED OFF 2026-09-01. Step 2 (§2.2 MP-INV-1..19 + §2.3 MP-G1..MP-G17) **SIGNED OFF / RATIFIED 2026-09-01 (Decisions D-9)** incl. the §2.3.2 verification-pass changes; residual notes in D-9 (MP-INV-2 guest-reconnect gap → MP-G13; MP-INV-19 = posture not hard invariant → MP-G14). **Step 3 (§2.4) IN PROGRESS — Tier-A scope only (MP-G1, MP-G3, MP-G4; MP-G2 folded in).** MP-G1 migration `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql` **written** (codifies live DDL + revokes client write grants + self-asserts; grant revoke not yet applied to prod). MP-G3 (private rooms blocked from spectate + auth required) and MP-G4 (every game-over side-effect idempotent on `sourceMatchId`) **designed in §2.4.3/§2.4.4** — code applied in Step 4. No application code touched. Tier-A verification-pass results (§2.3.2): MP-G3 confirmed (private 2-authed-user rooms are fully ranked; spectate has no room-kind check + accepts an unauthenticated socket); MP-G5 A→C (0 evidence, `mp_authority_events` telemetry table not in prod); MP-G9 ACCEPT→REVISIT (restarts deploy-driven, ~daily in active dev). RLS follow-up RESOLVED 2026-09-01: `room_live_sessions` / `room_match_logs` RLS ON; anon reads nothing (*/0 vs 2463/1237 rows); authenticated non-participant reads nothing (genuine `authenticated` JWT probe, incl. targeted `room_code=eq.<live room>` → */0). **`pg_policies` confirmed against prod (human ran it 2026-09-01)** — exactly 3 rows, matching `supabase/room_live_sessions.sql` / `supabase/room_match_logs.sql`: `room_live_sessions_no_client_write` (ALL / {authenticated} / `false`) = deny-all-to-client, **participant CANNOT read own live row — unmasked `game_state` never exposed, no competitive-integrity hole**; `room_match_logs_select_own` (SELECT / {public} / `auth.uid() = ANY(participant_user_ids)`) + `room_match_logs_no_client_write` (ALL / {public} / `false`) = participant-can-read-own-TERMINAL-rows, writes denied (post-game data, flag in Step 2). **Authenticated-role SELECT question CLOSED.** Separate lower-urgency follow-up still open: `room_command_receipts` returns PGRST205 → migration likely unapplied to prod (§2.7).**
+**As of 2026-09-02:**
+
+- **System 1 (Tournament) → CLOSED.** Steps 1–5 complete; residual accepted-risk / cosmetic items only (T-10, T-13–T-15, T-18, T-19 — see §1.7).
+- **System 2 (Multiplayer rooms) → fully passed through, Tiers A–E.** Steps 1–5 done. **Tier A + Tier B gaps CLOSED + LIVE in prod:** MP-G1/MP-G2 (room-table schema + grant lockdown), MP-G3 (spectate room-kind gate + auth), MP-G4 (game-over side-effect idempotency), MP-G6 (`room_command_receipts` + `mp_authority_events` applied). MP-INV-6 + MP-INV-15 proven by the §2.6 harness. **Tiers C/D/E verified 2026-09-02 (§2.3.3), all REVISIT-IF-SCALE / ACCEPT** — nothing escalated; MP-G12 moved C→E (fix already shipped). Remaining System-2 work is all deferred-until-scale (§2.3 Tier C/D) + the §2.6.4 harness passes for the not-yet-covered invariants.
+- **Cross-cutting security sweep (§ before "# System 1") → done.** `fritz_challenge_*` / daily-fritz command RPC anon-execute gap (8th drift instance) — `2026-09-02_fritz_challenge_rpc_lockdown.sql` applied to prod, all 10 functions verified locked. `handle_new_user` + posture (b)/(c)/(d) all confirmed safe/closed. Residual: extend `assert_security_posture()` to check `SECURITY DEFINER` views (coverage, nothing to find); 3 fritz functions have grant lockdown but body guards deferred (low-priority defence-in-depth); the `gauntlet_*` client RPCs still carry the advisory (by-design, scrapped feature).
+- **NEXT: pick the next system.** Per the sequencing, that's **System 3 (Daily modes)** — not started. **System 4 (Everything else)** after that. Both need the full audit → invariants → design → refactor → tests cycle. The human chooses when to start.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -473,10 +478,10 @@ state-machine work, per the human's instruction).
 
 Audit-first, one system at a time:
 
-1. **Tournament** ← in progress
-2. **Multiplayer rooms**
-3. **Daily modes** (Daily Fritz / Puzzle Rush / Daily Puzzle Ladder)
-4. **Everything else** (legacy league/tournament, social, ranking, spectator…)
+1. **Tournament** ← CLOSED (Steps 1–5)
+2. **Multiplayer rooms** ← passed through Tiers A–E; Tier-A/B fixed + live, C/D/E deferred-until-scale
+3. **Daily modes** (Daily Fritz / Puzzle Rush / Daily Puzzle Ladder) ← NEXT, not started
+4. **Everything else** (legacy league/tournament, social, ranking, spectator…) ← not started
 
 **Do not start refactoring a system until its audit (steps 1–3 below) is written
 down and its invariants are ratified with the human.** We never fix based on
