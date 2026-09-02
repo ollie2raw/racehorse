@@ -43,7 +43,11 @@ focus" line, then the section for the system in progress.
   `2026-09-01_gameover_sideeffect_idempotency.sql`) **applied to prod
   2026-09-01 and verified** — posture advisory cleared for both room tables,
   anon write → grant-layer `42501`, both idempotency indexes built clean.
-  **MP-G1 / MP-G2 / MP-G4 CLOSED; MP-G3 deploys with the next release.**
+  **MP-G1 / MP-G2 / MP-G4 CLOSED.** Code pushed + **deployed to Render
+  2026-09-01 (prod release `907435df`, `/ready` confirmed).** **MP-G3 verified
+  live in prod** — unauthenticated `room:spectate` → `auth_required`;
+  authenticated `room:spectate` on a private room → `not_spectatable`
+  (smoke-tested, throwaway room, cleaned up). **MP-G3 CLOSED.**
   `tsc -b` clean; full server suite 204 files / 1173 tests pass; new
   idempotency + spectate-gate unit tests; server lint no new problems.
   Deferred as designed: the retry-from-step-1 structure, the private-room
@@ -1899,9 +1903,12 @@ no action)}.
 
 ### Tier A — real bug, fix in Step 3
 
-**Status 2026-09-01: all three CLOSED.** MP-G1/MP-G2/MP-G4 — code `e2ad401b` +
-both migrations applied to prod and verified. MP-G3 — code `e2ad401b`, deploys
-next release.
+**Status 2026-09-01: all three CLOSED and LIVE IN PROD.** MP-G1/MP-G2/MP-G4 —
+code `37054fda` + both migrations applied to prod and verified. MP-G3 — code
+`37054fda`, **deployed to Render 2026-09-01 (prod release `907435df`) and
+verified live**: an unauthenticated `room:spectate` returns `auth_required`, an
+authenticated `room:spectate` on a private room returns `not_spectatable`
+(smoke-tested against prod, throwaway room, cleaned up).
 
 
 | ID | Gap | Location | Severity | Likelihood (1 instance) | Blast radius | Verdict | Protects |
@@ -2207,7 +2214,8 @@ latch (MP-G5, Tier C) is out of scope.
 
 ### 2.4.6 Step-4 — what shipped (2026-09-01)
 
-Implemented exactly as designed above. **No prod migration applied.**
+Implemented exactly as designed above. **Both migrations applied to prod; code
+deployed to Render (prod release `907435df`); MP-G3 smoke-verified live.**
 
 | Gap | Files | Change |
 |---|---|---|
@@ -2235,17 +2243,20 @@ structure / a per-match side-effects checkpoint; the private-room
 
 ## 2.5 Refactor plan
 
-**Tier-A slice CLOSED 2026-09-01 (see §2.4.6).** MP-G1, MP-G2, MP-G3, MP-G4
-implemented + tested; **both migrations applied to prod 2026-09-01 and verified**
-(`assert_security_posture()` no longer flags the room tables; anon writes get a
-grant-layer `42501`; both idempotency indexes built clean — `matches` had no
-`roomMatchId` duplicates). MP-G3 is code-only and deploys with the next release.
+**Tier-A slice CLOSED + LIVE 2026-09-01 (see §2.4.6).** MP-G1, MP-G2, MP-G3,
+MP-G4 implemented + tested; **both migrations applied to prod 2026-09-01 and
+verified** (`assert_security_posture()` no longer flags the room tables; anon
+writes get a grant-layer `42501`; both idempotency indexes built clean —
+`matches` had no `roomMatchId` duplicates); **code pushed + deployed to Render
+(prod release `907435df`)**; **MP-G3 smoke-verified live in prod.**
 The rest of §2.5 (Tiers B–E, deeper concurrency) is a later pass.
 
-- [x] **MP-G3 — CLOSED (code).** Spectate room-kind gate + auth requirement —
-  `e2ad401b`. Deploys with the next release (no migration).
+- [x] **MP-G3 — CLOSED + LIVE.** Spectate room-kind gate + auth requirement —
+  `37054fda`, deployed 2026-09-01 (prod release `907435df`). Smoke-tested against
+  prod: unauth `room:spectate` → `auth_required`; authed `room:spectate` on a
+  private room → `not_spectatable`.
 - [x] **MP-G4 — CLOSED.** Idempotent game-over side-effect sinks (4 helpers +
-  `2026-09-01_gameover_sideeffect_idempotency.sql`) — code `e2ad401b`; migration
+  `2026-09-01_gameover_sideeffect_idempotency.sql`) — code `37054fda`; migration
   **applied to prod 2026-09-01** (self-assert passed; `matches` had 0 duplicate
   `roomMatchId` values, so `matches_room_match_id_uidx` built clean).
 - [x] **MP-G1 + MP-G2 — CLOSED.** `2026-09-01_room_tables_schema_and_grant_lockdown.sql`
@@ -2355,12 +2366,13 @@ The rest of §2.5 (Tiers B–E, deeper concurrency) is a later pass.
   room-kind gate (private blocked outright, auth required); MP-G4 → every
   game-over side-effect sink idempotent on `sourceMatchId`, per-helper.
 - [x] **Step 4 — Refactor (§2.5, Tier-A slice) — DONE 2026-09-01 (§2.4.6).**
-  MP-G3 + MP-G4 code shipped (7 files, `e2ad401b`). `tsc -b` clean; full server
+  MP-G3 + MP-G4 code shipped (7 files, `37054fda`). `tsc -b` clean; full server
   suite 204/1173 pass; new idempotency + spectate-gate unit tests; server lint
   no new problems. **Both SQL migrations applied to prod 2026-09-01 and
   verified** (posture advisory cleared; anon write → grant-layer 42501; both
-  idempotency indexes built clean). **MP-G1 / MP-G2 / MP-G4 CLOSED.** MP-G3
-  deploys with the next release.
+  idempotency indexes built clean). **Code pushed + deployed to Render
+  2026-09-01 (prod release `907435df`); MP-G3 smoke-verified live in prod
+  (`auth_required` / `not_spectatable`). All 4 Tier-A gaps CLOSED + LIVE.**
 - [ ] Step 5 — Tests prove closure (§2.6)
 
 ---
@@ -2433,5 +2445,6 @@ registry.
 | 2026-09-01 | **System 2 Step 2 verification pass (§2.3.2) — 3 claims checked against code/prod before sign-off; 2 verdicts changed.** (1) **MP-G3** — CONFIRMED in code: ranked eligibility is `a.userId && b.userId && !fritzActivityCtx` in `persistGameOverOnce` only — no matchmaking-origin / room-kind gate — so a 2-authed-user private room is fully rated (Glicko + `ranked_games`), and `room:spectate` has no room-kind check and accepts an unauthenticated spectator. Correction: my "no rate limit" claim was wrong (`room:spectate` 30/min + 5-failed-lookup block) — likelihood medium→low–medium, vector is a leaked code not a scan; severity (competitive-integrity) + verdict (FIX NOW / Tier A) stand. (2) **MP-G5** — NOT measurable from here: `mp_authority_events` (`2026-08-20_mp_authority_events.sql`) is `PGRST205`/unapplied to prod (new MP-G6 sub-finding), funnel is stdout-only, and a `room_match_logs` scan for `abandoned`+`gameOver=true` = 0 rows against ~88 human matches. Likelihood medium→low, **Tier A → Tier C (REVISIT IF SCALE)**. (3) **MP-G9** — restarts are deploy-driven and frequent (`main` commits on 20/21 days, up to 58/day; prod uptime ~5.6 h, ≥1 restart today; free-tier idle spin-down mitigated but deploy restarts not; Render crash logs not visible here). Residual = stranded `room_live_sessions` rows with no reaper; tournament covered by System 1's reconciler. **ACCEPT → REVISIT IF SCALE**; Step 3 add a periodic stale-live-session reaper. Tier A is now MP-G1/MP-G3/MP-G4. §2.3.2, the MP-G3/G5/G6/G9 rows, Current focus, and §2.7 updated. **Sign-off still pending.** |
 | 2026-09-01 | **System 2 Step 2 SIGNED OFF (Decisions D-9) + Step 3 started (§2.4, Tier-A scope).** Human ratified MP-INV-1..19 and MP-G1..MP-G17 (incl. the §2.3.2 changes) line-by-line. D-9 records residuals: MP-INV-2 has an unclosed guest-reconnect gap (MP-G13); MP-INV-19 is a posture decision, not a hard invariant (move-log verification stays non-blocking; add alert + per-user tracking = MP-G14). §2.2 / §2.3 status flipped CANDIDATE→RATIFIED. **Step 3 §2.4 written for the 3 Tier-A gaps only** (MP-G1, MP-G3, MP-G4; MP-G2 folded into MP-G1): §2.4.1 the only real concurrency is the `persistGameOverOnce` 4-attempt retry (verified: steps 4/5/6 re-run ungated; step 8 `insertRankedGameIdempotent` already gates Glicko + game-over-path `recordMatchEnd`); §2.4.2 **wrote** `supabase/migrations/2026-09-01_room_tables_schema_and_grant_lockdown.sql` (codifies the `supabase/*.sql` DDL for both room tables, `revoke insert/update/delete/truncate ... from anon, authenticated` + `revoke select` on `room_live_sessions`, keeps `authenticated` SELECT on `room_match_logs` for `room_match_logs_select_own` / MP-G17, self-asserting; DDL+policy parts already live in prod, the grant revoke is the only real change and is NOT yet applied); §2.4.3 MP-G3 decision — **private rooms blocked from spectate outright** (no participant-relationship infra, no evidence of use; revisit via an opt-in `RoomConfig.spectatable` flag) **+ spectate requires auth** — concrete `roomKind`-based gate + ack codes `auth_required`/`not_spectatable` specified; §2.4.4 MP-G4 — one rule (*every game-over side-effect idempotent on `sourceMatchId`*): `appendMatch` stable-id + dedup-on-read (+ note: the JSONL file is ephemeral, a table would be better — later stats pass), `recordPublicOnlineMatch` partial unique index on `metadata->>'roomMatchId'` + `resolution=ignore-duplicates`, `writeMatchActivity` new `activity_feed.dedupe_key` column + partial unique index + `${sourceMatchId}:${userId}:${type}` key, `recordMatchEnd` conditional PATCH `status=eq.in_progress` (first-terminal-wins — also fixes the matchmaking half of MP-G5). MP-G3/G4 code + the sibling `…_gameover_sideeffect_idempotency.sql` migration are Step 4. **No application code changed.** Current focus + §2.7 updated. |
 | 2026-09-01 | **System 2 Step 4 — Tier-A code shipped (§2.4.6). No prod migration applied.** Implemented §2.4.3/§2.4.4 exactly as designed, 7 files: **MP-G3** — `registerRoomSpectateHandlers.ts` gate (`auth_required` before `leaveExistingSocketRooms`; `not_spectatable` via `roomKind` after the `abandonedAt` check — private blocked unless `config.spectatable`, which was added to `RoomConfig`; failed-lookup limiter untouched, asserted). **MP-G4** — `appendMatch` (caller passes `id: sourceMatchId`; returns existing entry on dup; `computeWeeklyAwards` dedup backstop), `recordPublicOnlineMatch` (`Prefer: resolution=ignore-duplicates`, SELECT kept as fast-path), `writeActivity`/`writeMatchActivity` (optional `dedupeKey` → `dedupe_key` body field + ignore-duplicates; `sourceMatchId` threaded from `gameOverPersistence.ts`) **+ `writeForfeitActivity`** (same-family 1-line extension, flagged), `recordMatchEnd` (conditional PATCH `?id=eq.<id>&status=eq.in_progress` — first-terminal-wins, fixes matchmaking half of MP-G5). **Migration** `supabase/migrations/2026-09-01_gameover_sideeffect_idempotency.sql` (`matches_room_match_id_uidx` partial unique on `(metadata->>'roomMatchId')`; `activity_feed.dedupe_key` + `activity_feed_dedupe_key_uidx`; self-asserting) — **pg16-verified** (applies clean + idempotent; `ON CONFLICT DO NOTHING` dedups both tables; null keys unconstrained), same as the room-tables migration earlier. `tsc -b` clean (server+client); **full server suite 204 files / 1173 tests pass**; new tests: `matchLog.test.ts`, `recordPublicMatch.test.ts`, `matchmaking/recordMatchEnd.test.ts`, `activityWriter.test.ts` +2; updated `registerRoomSpectateHandlers.test.ts` (+4 gate tests), `spectateSeatPreservation.test.ts`; server lint identical (74 pre-existing errors, 0 new). §2.4 status DESIGN→IMPLEMENTED, §2.4.6 added, §2.5 opened with the "apply in prod" checklist item, §2.7 Steps 3+4 checked, Current focus updated. **Neither migration applied to prod — MP-G1/MP-G2/MP-G4 close only after the human runs them in the SQL editor.** |
-| 2026-09-01 | **System 2 — both Tier-A migrations applied to prod (human, SQL editor). MP-G1 / MP-G2 / MP-G4 CLOSED.** Both returned "Success. No rows returned" (self-assert `do` blocks passed → no `raise exception`). Agent verified read-only: `assert_security_posture()` → `hard_fail_count:0` and the `client_write_grant_rls_on` advisory **no longer lists** `public.room_live_sessions` or `public.room_match_logs` (both were flagged before); anon `INSERT` into `room_match_logs` → `HTTP 401 / 42501 permission denied for table` (grant-layer denial, was RLS-layer). Migration 2's `create unique index matches_room_match_id_uidx` built without error ⇒ **`public.matches` had zero duplicate `metadata->>'roomMatchId'` values** — the pre-fix double-write never actually occurred in prod (consistent with MP-G5's 0-evidence finding). §2.3 Tier-A header + MP-G2 row + §2.5 + §2.7 Step 4 + Current focus updated to CLOSED. **MP-G3 is code-only (`e2ad401b`) and deploys with the next release.** Remaining System 2: Step 5 (tests prove closure); MP-G6 (Tier B); Tiers C–E. |
+| 2026-09-01 | **System 2 — both Tier-A migrations applied to prod (human, SQL editor). MP-G1 / MP-G2 / MP-G4 CLOSED.** Both returned "Success. No rows returned" (self-assert `do` blocks passed → no `raise exception`). Agent verified read-only: `assert_security_posture()` → `hard_fail_count:0` and the `client_write_grant_rls_on` advisory **no longer lists** `public.room_live_sessions` or `public.room_match_logs` (both were flagged before); anon `INSERT` into `room_match_logs` → `HTTP 401 / 42501 permission denied for table` (grant-layer denial, was RLS-layer). Migration 2's `create unique index matches_room_match_id_uidx` built without error ⇒ **`public.matches` had zero duplicate `metadata->>'roomMatchId'` values** — the pre-fix double-write never actually occurred in prod (consistent with MP-G5's 0-evidence finding). §2.3 Tier-A header + MP-G2 row + §2.5 + §2.7 Step 4 + Current focus updated to CLOSED. **MP-G3 is code-only (`37054fda`) and deploys with the next release.** Remaining System 2: Step 5 (tests prove closure); MP-G6 (Tier B); Tiers C–E. |
+| 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
