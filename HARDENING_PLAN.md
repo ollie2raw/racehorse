@@ -17,51 +17,41 @@ focus" line, then the section for the system in progress.
 - **System 1 (Tournament) → CLOSED.** Steps 1–5 complete; residual accepted-risk / cosmetic items only (T-10, T-13–T-15, T-18, T-19 — see §1.7).
 - **System 2 (Multiplayer rooms) → fully passed through, Tiers A–E.** Steps 1–5 done. **Tier A + Tier B gaps CLOSED + LIVE in prod:** MP-G1/MP-G2 (room-table schema + grant lockdown), MP-G3 (spectate room-kind gate + auth), MP-G4 (game-over side-effect idempotency), MP-G6 (`room_command_receipts` + `mp_authority_events` applied). MP-INV-6 + MP-INV-15 proven by the §2.6 harness. **Tiers C/D/E verified 2026-09-02 (§2.3.3), all REVISIT-IF-SCALE / ACCEPT** — nothing escalated; MP-G12 moved C→E (fix already shipped). Remaining System-2 work is all deferred-until-scale (§2.3 Tier C/D) + the §2.6.4 harness passes for the not-yet-covered invariants.
 - **Cross-cutting security sweep (§ before "# System 1") → done.** `fritz_challenge_*` / daily-fritz command RPC anon-execute gap (8th drift instance) — `2026-09-02_fritz_challenge_rpc_lockdown.sql` applied to prod, all 10 functions verified locked. `handle_new_user` + posture (b)/(c)/(d) all confirmed safe/closed. Residual: extend `assert_security_posture()` to check `SECURITY DEFINER` views (coverage, nothing to find); 3 fritz functions have grant lockdown but body guards deferred (low-priority defence-in-depth); the `gauntlet_*` client RPCs still carry the advisory (by-design, scrapped feature).
-- **System 3 (Daily modes) → Step 1 (current-state audit §3.1) WRITTEN
-  2026-09-02, scope-corrected 2026-09-02 — awaiting human review before Step 2.**
-  **Active modes are Daily Fritz and Puzzle Rush only.** Daily Puzzle Ladder was
-  **retired ~2026-08-20** ("Puzzle Rush becomes the Daily Puzzle" migration) —
-  see §3.1.4 / reconciliation block in §3.1. Key findings: **Puzzle Rush is
-  clean** (server-authoritative, RLS+grants deny clients, engine-replay verdict;
-  now the live Daily Puzzle). **Daily Fritz** is heavily engineered
-  (event-sourced + transactional-command RPCs + engine-transcript verification)
-  but **verification is non-blocking and doesn't gate the speed leaderboard**
-  (DF-CAND-2, MP-G14 analogue). **Retired Daily Puzzle Ladder — DECOMMISSIONED
-  2026-09-02 (DF-CAND-1 closed).** One commit: removed `/api/daily-puzzle/*`
-  routes + the nightly ladder warm job (server), removed `/daily` +
-  `/daily/leaderboard` client routes and the Home fetch of `/api/daily-puzzle/today`,
-  and `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` drops
-  the `insert_own`/`update_own` policies + revokes client write grants on
-  `daily_puzzle_attempts` / `_slot_results` (kept in `public` as read-only
-  historical — `socialProfile.ts` + `homeCompletionDates.ts` still read them).
-  pg16-verified. **Migration NOT applied to prod DB yet — human runs it.** Small
-  follow-up DF-CAND-1b: delete the now-inert `route: 'daily'` Home branches +
-  `client/src/dailyPuzzle/**`.
-- **System 3 (Daily modes) → Step 2 RATIFIED (D-10) + Step 3 IMPLEMENTED
-  2026-09-02, awaiting review.** §3.2 DM-INV-1..18 + §3.3 DF-G1..DF-G5 signed
-  off "as written". Two Step-3 code-trace corrections folded in (§3.2 header):
-  DF-G1's async-verify path is **dead code** → the real gap is a stranded
-  `status='started'` set with no reaper; DF-G2's alert **already exists** → the
-  residual is per-user aggregation + the streak filter.
-  **Step 3 code (the Step-3 commit, NOT pushed):**
-  - **DF-G1** — `recoverStrandedDailyFritzAttempts` (`server/src/dailyFritzStrandedRecovery.ts`):
-    boot sweep (20 s after listen) + 15-min reaper, wired in `index.ts`. Finds
-    `status='started'` attempts whose `started_at` is > **30 min** old, and — if
-    the set is complete — finalizes them through the shared
-    `applyDailyFritzAttemptFinalization` (extracted from `/complete`,
-    behaviour-preserving). Mid-set attempts and `rejected` runs are never
-    promoted (DM-INV-11); idempotent under `withDailyFritzAttemptLock`.
-  - **DF-G2** — `getDailyFritzStreak` now selects + filters `result` through
-    `isDailyFritzAttemptStreakEligible` (drops `rejected` / `unverified_hands`;
-    **keeps `legacy_unverified`** so real streaks aren't retroactively zeroed).
-    The existing `verification_bypassed` Sentry alert gains per-user context via
-    `countRecentDailyFritzVerificationFailures` — escalates `warning`→`error` +
-    `verification_bypassed_repeat` at ≥3 failures / 7 days. Verification stays
-    non-blocking for `status='completed'` (the D-10 POSTURE).
-  - 18 new tests; full suite green (server 1200, client 1482), `tsc -b` clean.
-  **Also pending human action:** apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.
+- **System 3 (Daily modes) → CLOSED 2026-09-02.** Active modes: **Daily Fritz +
+  Puzzle Rush**. Steps 1–3 done; §3.2 DM-INV-1..18 + §3.3 DF-G1..DF-G5 RATIFIED
+  (D-10). **Shipped (pushed `f717b851`, CI green):**
+  - **DF-CAND-1 — Daily Puzzle Ladder decommissioned.** `/api/daily-puzzle/*`
+    routes + nightly warm job + `/daily` client routes removed; Home no longer
+    fetches the ladder. `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql`
+    drops the `insert_own`/`update_own` policies + revokes client write grants
+    (tables kept `public` read-only for `socialProfile.ts` /
+    `homeCompletionDates.ts`). pg16-verified. **Migration NOT yet applied to
+    prod DB — human runs it.**
+  - **DF-G1 — stranded-set reaper.** `recoverStrandedDailyFritzAttempts`
+    (`server/src/dailyFritzStrandedRecovery.ts`): boot sweep 20 s after listen +
+    15-min reaper, wired in `index.ts`; finalizes `status='started'` attempts
+    with a complete set older than 30 min via the shared
+    `applyDailyFritzAttemptFinalization` (extracted from `/complete`). Mirrors
+    `recoverTournamentMatches`; never promotes a `rejected` run (DM-INV-11).
+    **Open: confirm live after the next Render deploy** (a `daily-fritz-recovery`
+    boot-sweep log line, or a `recovery_succeeded`/`recovery_failed` event).
+  - **DF-G2 — streak filter + per-user alert.** `getDailyFritzStreak` filters
+    through `isDailyFritzAttemptStreakEligible` (drops `rejected` /
+    `unverified_hands`, keeps `legacy_unverified`); the existing
+    `verification_bypassed` Sentry alert gains per-user aggregation
+    (`countRecentDailyFritzVerificationFailures` → `warning`→`error` at ≥3/7d).
+    Verification stays non-blocking for `status='completed'` (D-10 POSTURE).
+  - **Corrections from a Step-3 code trace (recorded with D-10, §3.2 header):**
+    DF-G1's "async re-verification lost on restart" was based on **dead code**
+    (`scheduleDailyFritzRecordGameVerification`, zero callers); DF-G2's "no
+    alert" was wrong (the alert already existed).
+  - **Parked, not integrity work:** DF-G3 / DF-G4 (REVISIT IF SCALE), DF-G5
+    (ACCEPT), DF-CAND-1b (delete dead `route:'daily'` Home branches +
+    `client/src/dailyPuzzle/**`), DF-CAND-3 / DF-CAND-4 (legacy
+    `daily_puzzle_scores*` tables; stale `admin@example.com` policy on
+    `daily_puzzles`).
 
-- **NEXT after System 3: System 4 (Everything else)** — legacy league/tournament
+- **NEXT: System 4 (Everything else)** — legacy league/tournament
   (keep/wall-off/delete decision), social/activity writer, Glicko idempotency,
   spectator registry. Not started.
 
@@ -526,7 +516,7 @@ Audit-first, one system at a time:
 
 1. **Tournament** ← CLOSED (Steps 1–5)
 2. **Multiplayer rooms** ← passed through Tiers A–E; Tier-A/B fixed + live, C/D/E deferred-until-scale
-3. **Daily modes** (active: Daily Fritz + Puzzle Rush; Daily Puzzle Ladder retired ~2026-08-20, still reachable) ← Step 1 audit written + scope-corrected (§3.1), awaiting review
+3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — Steps 1–3 done, D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT
 4. **Everything else** (legacy league/tournament, social, ranking, spectator…) ← not started
 
 **Do not start refactoring a system until its audit (steps 1–3 below) is written
@@ -3502,16 +3492,32 @@ can silently vanish from the board across a restart).
 - [x] Audit claims re-verified against code (DM-3 leaderboard filter; DF-CAND-6 outbox trigger vs async-verify) — §3.2 / §3.3
 - [x] DM-INV-1..18 + DF-G1..DF-G5 reviewed line-by-line and signed off — **Decisions D-10 (2026-09-02)**
 - [x] Step 3 scope agreed — DF-G1 + DF-G2 (FIX NOW); DF-G3/G4/G5 not Step-3 work
-- [~] Step-3 code-trace: DF-G1 async-verify path is dead code → corrected to a
+- [x] Step-3 code-trace: DF-G1 async-verify path is dead code → corrected to a
   stranded-completed-set reaper; DF-G2 alert already exists → corrected to
   per-user aggregation + streak filter (§3.2 header; DF-G1/DF-G2 rows updated)
 
-### Step 3 — Design + implement
-- [x] DF-G1 — `recoverStrandedDailyFritzAttempts` boot sweep + 15-min reaper (`dailyFritzStrandedRecovery.ts`), wired at `index.ts` listen; shared `applyDailyFritzAttemptFinalization` extracted from `/complete` (behaviour-preserving); N = 30 min since `started_at` (rationale in the module) — closed by the Step-3 commit
-- [x] DF-G2 — `isDailyFritzAttemptStreakEligible` + `getDailyFritzStreak` selects+filters `result`; `countRecentDailyFritzVerificationFailures` + per-user escalation on the existing `verification_bypassed` alert (`warning`→`error` + `verification_bypassed_repeat` tag at ≥3/7d)
+### Step 3 — Design + implement — **DONE (pushed `f717b851`, 2026-09-02)**
+- [x] DF-G1 — `recoverStrandedDailyFritzAttempts` boot sweep + 15-min reaper (`dailyFritzStrandedRecovery.ts`), wired at `index.ts` listen; shared `applyDailyFritzAttemptFinalization` extracted from `/complete` (behaviour-preserving); N = 30 min since `started_at` (rationale in the module) — `f717b851`
+- [x] DF-G2 — `isDailyFritzAttemptStreakEligible` + `getDailyFritzStreak` selects+filters `result`; `countRecentDailyFritzVerificationFailures` + per-user escalation on the existing `verification_bypassed` alert (`warning`→`error` + `verification_bypassed_repeat` tag at ≥3/7d) — `f717b851`
 - [x] Tests: `dailyFritzStrandedRecovery.test.ts` (7 — finalize / mid-set skip / rejected→legacy_unverified / idempotent / raced-`/complete` / transactional path), `dailyFritzStreakFilter.test.ts` (8), `dailyFritzVerificationRepeatOffenderAlert.test.ts` (3)
 - [x] Full suite (server 1200/1200, client 1482/1482) + `tsc -b` clean; server lint unchanged (71 pre-existing errors), client lint at budget
-- [ ] Human review of the Step-3 implementation → Step 4 or close System 3
+- [x] Pushed to `origin/main` (`f717b851`); CI green
+
+### Step 4/5 — not needed as separate steps
+DF-G1/DF-G2 are the whole Step-3 scope and shipped with tests; there is no
+refactor tranche. **System 3 is closed** except:
+- **Deploy check (open):** confirm the reaper is live after the next Render
+  deploy — a `daily-fritz-recovery` boot-sweep log line, or a
+  `recovery_succeeded` / `recovery_failed` event / `attempt_completed` metric
+  bump. (Boot sweep runs 20 s after listen; periodic every 15 min.)
+- **Parked, not System-3 integrity work:** DF-G3 (`withDailyFritzAttemptLock`
+  in-process only — CAS holds; REVISIT IF SCALE), DF-G4 (2 daily-fritz command
+  RPCs body-guard-deferred — grant lockdown holds; REVISIT IF SCALE), DF-G5
+  (Puzzle Rush `/complete` no lock — deterministic replay; ACCEPT), DF-CAND-1b
+  (delete dead `route:'daily'` Home branches + `client/src/dailyPuzzle/**`),
+  DF-CAND-3/DF-CAND-4 (legacy `daily_puzzle_scores*` tables; stale
+  `admin@example.com` policy on `daily_puzzles`).
+- **Pending human DB action:** apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.
 
 ---
 
