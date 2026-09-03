@@ -12,7 +12,7 @@ focus" line, then the section for the system in progress.
 
 ## Current focus
 
-**As of 2026-09-02:**
+**As of 2026-09-03:**
 
 - **System 1 (Tournament) → CLOSED.** Steps 1–5 complete; residual accepted-risk / cosmetic items only (T-10, T-13–T-15, T-18, T-19 — see §1.7).
 - **System 2 (Multiplayer rooms) → fully passed through, Tiers A–E.** Steps 1–5 done. **Tier A + Tier B gaps CLOSED + LIVE in prod:** MP-G1/MP-G2 (room-table schema + grant lockdown), MP-G3 (spectate room-kind gate + auth), MP-G4 (game-over side-effect idempotency), MP-G6 (`room_command_receipts` + `mp_authority_events` applied). MP-INV-6 + MP-INV-15 proven by the §2.6 harness. **Tiers C/D/E verified 2026-09-02 (§2.3.3), all REVISIT-IF-SCALE / ACCEPT** — nothing escalated; MP-G12 moved C→E (fix already shipped). Remaining System-2 work is all deferred-until-scale (§2.3 Tier C/D) + the §2.6.4 harness passes for the not-yet-covered invariants.
@@ -51,9 +51,18 @@ focus" line, then the section for the system in progress.
     `daily_puzzle_scores*` tables; stale `admin@example.com` policy on
     `daily_puzzles`).
 
-- **NEXT: System 4 (Everything else)** — legacy league/tournament
-  (keep/wall-off/delete decision), social/activity writer, Glicko idempotency,
-  spectator registry. Not started.
+- **Plan restructured 2026-09-03 (D-11).** The old "System 4: Everything else"
+  catch-all is dissolved into leverage-ordered **Systems 5–13** (scaffolds
+  written; each starts at its own Step 1 when reached). Latent/dev-only surfaces
+  → the Appendix. Ordering rationale + the full inventory are in D-11 + the
+  System 5–13 scope blocks. See **"Continuing this plan"** at the end of this
+  file — it is written for a fresh session with no prior context.
+
+- **NEXT: System 5 — Legacy League / Legacy Tournament.** Step 1 = confirm the
+  2026-09-03 inventory read (**looks DEAD in prod** — no `league_*` writes since
+  April 2026, no client emitter, routes+handlers still registered) against the
+  live route table + a fresh write-recency check, then decide **decommission
+  (mirror the Ladder playbook) vs. real audit.** Not started.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -512,16 +521,27 @@ state-machine work, per the human's instruction).
 
 ### Sequencing (do not reorder)
 
-Audit-first, one system at a time:
+Audit-first, one system at a time. **The next system to work is the first below
+that is not CLOSED.** Systems 5–13 are scaffolds only (D-11) — each starts at its
+own Step 1 when work reaches it. There is no System 4.
 
-1. **Tournament** ← CLOSED (Steps 1–5)
-2. **Multiplayer rooms** ← passed through Tiers A–E; Tier-A/B fixed + live, C/D/E deferred-until-scale
-3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — Steps 1–3 done, D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT
-4. **Everything else** (legacy league/tournament, social, ranking, spectator…) ← not started
+1. **Tournament** ← **CLOSED** (Steps 1–5)
+2. **Multiplayer rooms** ← **passed through Tiers A–E**; Tier-A/B fixed + live, C/D/E deferred-until-scale
+3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *Pending human: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.*
+4. *(dissolved — see 5–13, D-11)*
+5. **Legacy League / Legacy Tournament** — decommission decision (looks dead in prod; needs confirmation) ← **NEXT**
+6. **Auth / session + rate limiting** (cross-cutting) ← scaffold
+7. **`@racehorse/game-core`** — shared score oracle ← scaffold
+8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
+10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
+11. **Social / stats / account** ← scaffold
+12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
+13. **Remaining cross-cutting / infra** (un-audited RLS, admin endpoints, telemetry, deploy posture) ← scaffold
 
 **Do not start refactoring a system until its audit (steps 1–3 below) is written
 down and its invariants are ratified with the human.** We never fix based on
-vibes or memory.
+vibes or memory. **Latent/dev-only surfaces** are in the Appendix, not this list.
 
 ### Per-system structure
 
@@ -575,8 +595,9 @@ The 8-player single-elimination bracket that runs on a fixed 30-minute cadence.
 > Not in scope for this section: the **legacy** round-robin "league" tournament
 > (`server/src/tournament/tournament.ts`, `server/src/legacyTournament/`,
 > `server/src/http/routes/league.ts`). It is a separate socketId-based system.
-> Deferred to System 4. Flagged here only so a future agent does not confuse the
-> two — `types.ts` even carries a comment about it.
+> Deferred to **System 5** (Legacy League decommission — looks dead in prod).
+> Flagged here only so a future agent does not confuse the two — `types.ts` even
+> carries a comment about it.
 
 ## 1.1 Current-state map
 
@@ -955,8 +976,8 @@ verified.
 
 > Side note (out of scope, logged for later): `/ready` also shows
 > `ADMIN_SECRET`, `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET` unset in prod. Not
-> part of this system's work; worth a look during System 4 / a general
-> env-hygiene pass.
+> part of this system's work; worth a look during **System 13** (cross-cutting /
+> infra) / a general env-hygiene pass.
 
 ## 1.4 State machine / concurrency design
 
@@ -1496,7 +1517,7 @@ move-log verification, spectator attach.
 
 > Not in scope for this section: the **bracket** side of scheduled tournaments
 > (System 1, closed) — §2.1 covers only the room→bracket handoff. The legacy
-> league (`server/src/league/**`, `legacyTournament/`) is System 4; §2.1 notes
+> league (`server/src/league/**`, `legacyTournament/`) is **System 5**; §2.1 notes
 > where the game-over path still branches into it but does not audit it.
 
 > **Structural note — this system is not DB-authoritative.** Unlike System 1
@@ -1610,7 +1631,7 @@ advancement — see the loud comment there and §1.3 T-12.
 | `room_live_sessions` (`/rest/v1/room_live_sessions`) | **NONE — unmanaged schema** | hydration shell + full unmasked snapshot for reconnect/restart recovery. Debounced upsert on `room_code` while the room is live; deleted on terminal finalize | `room_code`, `match_id`, `status` (`lobby\|playing\|hand_over\|game_over\|abandoned`), `source_type` (`private\|matchmaking\|tournament`), `game_state` (jsonb, **unmasked** — `assertUnmaskedGameStateForPersistence`), `game_state_sequence`, `room_shell` (jsonb, incl. `durabilityCommit` fence), `engine_seat_ids`, `roster` (jsonb, **incl. `userId`**), `events` (jsonb), `last_event_sequence`, `participant_user_ids`, `matchmaking_match_id`, `scheduled_tournament_id`, `scheduled_tournament_match_id`, `started_at`/`updated_at`/`created_at` | **RLS ON, anon reads nothing (verified live 2026-09-01)** — `assert_security_posture()` `hard_fail_count:0` (RLS enabled); anon `SELECT` → HTTP 200 `content-range: */0` against 2458 rows. **Residual:** `assert_security_posture()` lists this table under `client_write_grant_rls_on` (anon+authenticated hold INSERT/UPDATE/DELETE grants, RLS-gated only — the same advisory carried by 44 tables incl. `profiles` / `ranked_games`, not a hard fail); and the **authenticated-role `SELECT` policy is unread** — if a participant can read their own live row they get the *unmasked* `game_state` = the opponent's hand. Still no migration ⇒ 3rd instance of the "unmanaged schema / no posture check" pattern. |
 | `room_match_logs` (`/rest/v1/room_match_logs`) | **NONE — unmanaged schema** | terminal archive (one row per finished/abandoned match); read for terminal-join routing and match history | `match_id` (PK, `on_conflict=match_id`), `room_code`, `status` (`completed\|abandoned`), `event_log_version`, `last_event_sequence`, `event_count`, `started_at`, `archived_at`, `participant_user_ids`, `participants`, `summary` (jsonb, incl. `rankingOutcome`), `state_snapshot`, `events` | **RLS ON, anon reads nothing (verified live 2026-09-01)** — anon `SELECT` → HTTP 200 `*/0` against 1236 rows. Same residuals as `room_live_sessions` (write-grant advisory; authenticated-role `SELECT` policy unread — a terminal transcript is less sensitive than a live hand but still per-match private data). |
 | `room_command_receipts` (`/rest/v1/room_command_receipts`) | `2026-08-01_room_command_receipts.sql` ✔ | `game:action` idempotency receipts (survive shell trimming; multi-writer diagnostics) | PK `(room_code, player_seat_id, request_id)`, `ack` jsonb, `expires_at`, `match_id` | ✔ RLS enabled, `for all to authenticated using(false) with check(false)` — **service-role writes only, verified in migration.** |
-| `matchmaking_matches` | `2026-05-13_matchmaking.sql` ✔ | matchmaking pairing + outcome; `recordMatchEnd` writes `status`/`winner_id`/rating deltas on game-end/forfeit | (see migration) | (verify in Step 1 follow-up alongside System 4 matchmaking) |
+| `matchmaking_matches` | `2026-05-13_matchmaking.sql` ✔ | matchmaking pairing + outcome; `recordMatchEnd` writes `status`/`winner_id`/rating deltas on game-end/forfeit | (see migration) | (verify alongside **System 10** matchmaking) |
 
 **Tables the game-over path *also* writes** (shared, not room-owned — enumerated
 in §2.1.6): `scheduled_tournament_matches` (via System 1's RPC),
@@ -2836,8 +2857,9 @@ per day, an anti-cheat verification model per mode.
 
 > Not in scope: the **Fritz Challenge** friend-vs-friend feature
 > (`fritz_challenges*`, `server/src/http/stores/fritzChallenge*`) — a separate
-> head-to-head system, deferred to System 4. Its RPCs were locked down in the
-> 2026-09-02 cross-cutting sweep; that is not this audit.
+> head-to-head system, deferred to **System 10** (individual game modes). Its
+> RPCs were locked down in the 2026-09-02 cross-cutting sweep; that is not this
+> audit.
 
 ## 3.1 Current-state map
 
@@ -3521,12 +3543,418 @@ refactor tranche. **System 3 is closed** except:
 
 ---
 
-# System 4: Everything else
+# System 4 — dissolved
 
-**Not started.** Legacy league/tournament (`server/src/tournament/`,
-`legacyTournament/`, `http/routes/league.ts` — decide: keep, wall off, or
-delete), social/activity writer, ranking (Glicko) idempotency, spectator
-registry.
+The original "Everything else" catch-all was broken out into nine
+leverage-ordered systems (5–13) after the **2026-09-02/03 codebase inventory
+pass** (the authoritative map of every server/client area, every `index.ts`
+registration, and every prod table's live/dead status as of that date — its
+findings are folded into the System 5–13 scope descriptions and the Appendix).
+There is no System 4. Order is leverage-first: kill dead weight, then de-risk the
+shared spine every mode depends on, then work outward to individual features,
+lowest-risk last (Decisions **D-11**).
+
+---
+
+# System 5: Legacy League / Legacy Tournament — decommission decision
+
+Scope: `server/src/league/**` (7 files, ~2.1k LOC), `server/src/legacyTournament/registerLegacyTournamentHandlers.ts`,
+`server/src/http/routes/league.ts` (`/league/*`), `supabase/league.sql`
+(`leagues`, `league_members`, `fixtures`, `fixture_match_results`,
+`player_league_history`, `league_bots`), the admin jobs
+`/league/run-{forfeits,rollover}` + `/league/generate-fixtures` and the functions
+behind them (`generateLeagueFixtures`, `runLeagueSundayRollover`,
+`runLeagueForfeitJob`), and the legacy socket handlers
+`tournament:{create,join,add_bot,remove_bot,start}` (**distinct** from System 1's
+scheduled-tournament `tournament:{register,get_bracket,attach_assigned_match,withdraw}`).
+
+**In scope:** confirm dead / live / partial for real (against prod write-recency +
+route registration + client emitters), then either **decommission** — mirror the
+Daily Puzzle Ladder playbook (§3.1.1 reconciliation + a
+`2026-09-XX_..._decommission.sql`) — or, if it has unexpected live use, convert
+this section into a real Step-1 audit.
+**Out of scope:** the *scheduled* tournament engine (System 1 — CLOSED);
+`client/src/tournament/**` (drives the scheduled engine only —
+`tournament:{attach,bracket,hub,hydrate,postgame,recovery,complete,exit}`).
+
+**Status (2026-09-03 inventory check — needs human confirmation before any
+decommission):** looks **DEAD in prod**, same shape as the Ladder —
+- Prod writes: `fixtures` / `leagues` / `league_members` last **2026-04-29**;
+  `fixture_match_results` last **2026-04-05**; `league_bots` last **2026-04-01**;
+  `player_league_history` **0 rows**. Nothing since April.
+- Client: **no** `/league/*` HTTP call and **no** league / `tournament:create` /
+  `tournament:join` socket emitter anywhere in `client/src` (non-test).
+- Server: routes + socket handlers + admin jobs are all still **registered** in
+  `index.ts`, but the legacy `tournament:*` handlers have no client emitter, and
+  `finalizeTournamentMatchHook` only fires for a room with a legacy
+  `cfg.tournamentId` — which nothing creates.
+- No scheduler: `generateLeagueFixtures` / `runLeagueSundayRollover` /
+  `runLeagueForfeitJob` are reachable **only** via the admin HTTP endpoints; no
+  `setInterval` / cron keeps a league alive.
+- Git: last *feature* commit to `league/` / `legacyTournament/` predates the
+  April 2026 architecture overhaul; every touch since is mechanical
+  (`chore(types)`, `refactor eliminate any`, token cleanup).
+
+Likely outcome: decommission (drop the routes + legacy socket handlers + admin
+jobs; archive or drop the 6 `league_*` tables — human's call which, as with the
+Ladder). `client/src/tournament/**` stays untouched.
+
+## 5.1 Current-state map
+**Not started.** Step 1 — re-verify the dead-in-prod signal against the live route
+table + a fresh prod write-recency check; confirm nothing outside `league/` /
+`legacyTournament/` reads the `league_*` tables or depends on the hook.
+
+## 5.2 Invariants
+**Not started.** Step 2 — likely N/A if decommissioned; if live, same shape as
+Systems 1–3.
+
+## 5.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 5.4 Checklist
+- [ ] Step 1 — route/socket/job registration confirmed; prod write-recency
+      re-checked on all 6 `league_*` tables; client-emitter search (HTTP + socket)
+      confirms zero; cross-references checked; **verdict: decommission vs. audit**
+- [ ] Step 2+ — depends on the Step 1 verdict
+
+---
+
+# System 6: Auth / session + rate limiting (cross-cutting)
+
+Scope: server `platform/auth/supabaseAuth.ts` (Bearer→uid validation, sha256-keyed
+TTL cache w/ 1000-entry ceiling + in-flight dedup), `social/socialAuth.ts`
+(`requireAuth`), `platform/auth/adminSecret.ts` (`ADMIN_SECRET` header gate),
+`rateLimit.ts` + `middleware/rateLimiter.ts` (`InMemoryRateLimiter` — per-process,
+lost on restart) + the ~15 `app.use` rate-limit rules in `index.ts`; client
+`auth/**` (16 files — Supabase auth modal, `sessionToken.ts`,
+`authTimeoutSessionFallback.ts`, password/email change, `recoveryHash.ts`,
+`e2eDevAuth.ts`, `isAdminUser.ts` via `VITE_ADMIN_EMAIL`).
+
+**In scope:** how identity is established on every HTTP request + socket
+connection; token-cache correctness under rotation / expiry / revocation;
+admin-gate strength + per-endpoint blast radius; the in-memory rate limiter's
+single-instance caveat (same class as System 2's in-memory locks — §2.1.1) and
+its restart behaviour; client session lifecycle (refresh, the timeout fallback,
+recovery-hash handling, the e2e dev-auth path never reaching prod).
+**Out of scope:** Supabase's own auth service internals; each feature's own
+`getAuthenticatedUserId` usage (covered by that feature's audit).
+
+**Status:** **LIVE** — every authenticated route depends on it; `client/src/auth/`
+had 18 commits in the last 60 days (most-touched client area).
+
+## 6.1 Current-state map
+**Not started.** Step 1.
+
+## 6.2 Invariants
+**Not started.** Step 2.
+
+## 6.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 6.4 Checklist
+- [ ] Step 1 — auth/session/rate-limit current-state map
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 7: `@racehorse/game-core` — the shared score oracle
+
+Scope: the `packages/game-core` workspace — the domino engine (`applyMove`,
+`getLegalMoves`, hand/game/set lifecycle), the Fritz AI policy
+(`isOptimalOfficialFritzPlayForVersion`, `FRITZ_POLICY_VERSION`), every verifier
+(`dailyFritzVerifier` re-play + Fritz-optimality, ghost `verifyPlayerMoveLog`,
+puzzle-rush grading re-play), the deterministic deal generators, and the shared
+DTO contracts (`dtoContracts` — re-exported by `server/src/{rooms,dailyPuzzle,dailyFritz}.ts`
+and their client counterparts; `contractsDriftTypes.ts` is the compile-time drift
+guard).
+
+**In scope:** engine correctness + **determinism** (same inputs → same outputs,
+client and server); version-pinning discipline — how a `GAME_RULES_VERSION` /
+`FRITZ_POLICY_VERSION` / verifier bump is rolled out without retroactively
+invalidating in-flight or historical attempts; the verifiers as the trusted score
+oracle every mode relies on.
+**Out of scope:** each mode's *use* of the engine (their own audits).
+
+**Status:** **LIVE, load-bearing** — Ghost, Bot, Fritz Challenge, Daily Fritz,
+Puzzle Rush, League and Matchmaking all trust its output. Highest leverage: one
+audit benefits every mode built on top of it.
+
+## 7.1 Current-state map
+**Not started.** Step 1.
+
+## 7.2 Invariants
+**Not started.** Step 2.
+
+## 7.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 7.4 Checklist
+- [ ] Step 1 — engine + verifier + version-contract current-state map
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 8: Ranking / Glicko-2 (cross-cutting integrity spine)
+
+Scope: `server/src/ranking/**` — `glicko2.ts` (rating math), `periodService.ts` +
+`cron.ts` (`startRankingCron` — rating-period processing), `insertRankedGameIdempotent.ts`
+(the dedup pattern System 1 already reuses), `rankedGamePayload.ts`;
+`http/routes/ranking.ts` (`/api/ranking/{profile,leaderboard,history,process}`);
+the `commit_glicko` RPC (grant-locked in the 2026-09-01 sweep); `ranked_games`
+(475 rows); client `ranking/` (Rating History) + `predictFritzGlickoUpdate.ts`.
+
+**In scope:** the rating computation (correctness, determinism,
+recomputability from `ranked_games` alone); the rating-period cron's
+single-instance / restart behaviour; idempotency of `ranked_games` inserts (one
+game → exactly one rating delta, ever); how every mode's game-over feeds it (via
+`realtime/gameOverPersistence.ts`); the provisional-rating window.
+**Out of scope:** each mode's decision of *whether* a game is ranked (their own
+audits); the `commit_glicko` grant lockdown (done).
+
+**Status:** **LIVE** — feeds every competitive mode's outcome; `ranking/` had 7
+server commits in the last 60 days.
+
+## 8.1 Current-state map
+**Not started.** Step 1.
+
+## 8.2 Invariants
+**Not started.** Step 2.
+
+## 8.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 8.4 Checklist
+- [ ] Step 1 — rating math + cron + `ranked_games` idempotency current-state map
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 9: Match runtime layer
+
+Scope: `client/src/modules/**` (144 files, ~18.5k LOC — `bot-turn`, `player-turn`,
+`replay`, `review`, `fritz`, `ghost`, `guided`, `match`, `daily` orchestration),
+`client/src/match/**` (52 files, ~8.2k LOC — live-match UI, `preGameDraw`,
+`recovery`, `session`, board rendering), `server/src/rooms.ts` +
+`server/src/roomEvents.ts` + `server/src/realtime/gameOverPersistence.ts`; the
+gameplay socket events (`game:action`, `game:start`, `game:rematch`,
+`game:pregame_draw_pick`, `hand:ready`, `player:{ready,dragging}`).
+
+**In scope:** the shared turn-execution / move-application / hand-transition /
+game-over path that **every** match type runs through — client-side move
+authoring, server-side `actUnlocked` / `withRoomGameplayLock`, the pre-game draw,
+in-match recovery/hydration, `modules/` orchestration correctness.
+**Already covered (do NOT re-audit):** System 1 (tournament game-over routing +
+`roomKind`), System 2 (in-memory `Room` authority, seat binding, `game:action`
+lock, disconnect grace, MP-1..MP-8 windows, MP-G4 game-over idempotency), System 3
+(Daily Fritz command RPCs + verifier). **This system covers the remainder** — the
+non-tournament / non-MP-specific runtime: bot-turn scheduling, the replay/review
+engines, `modules/` orchestration, `rooms.ts` engine integration outside the
+already-mapped MP windows. **Step 1 starts by drawing the covered-vs-remainder
+line.**
+
+**Status:** **LIVE, largest single code mass.** Partially de-risked by Systems
+1–3.
+
+## 9.1 Current-state map
+**Not started.** Step 1 (start with the covered-vs-untouched map).
+
+## 9.2 Invariants
+**Not started.** Step 2.
+
+## 9.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 9.4 Checklist
+- [ ] Step 1 — covered-vs-remainder map, then current-state of the remainder
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 10: Individual game modes not yet covered
+
+Scope: **Ghost Mode** (`server/src/ghost/**`, `http/routes/ghost.ts` `/api/ghost/*`,
+`ghost.sql`, `ghost_games` 406 rows — **LIVE**), **Play vs Fritz / bot**
+(`server/src/bot/**`, `http/routes/botMatches.ts` `/bot-matches/local/*`,
+`client/src/bot/**` — **LIVE**, flagship SP mode), **Fritz Challenge**
+(`server/src/fritzChallenge.ts`, `http/routes/fritzChallenges.ts`,
+`http/stores/fritzChallenge*`, `fritz_challenges.sql` — 17 challenges / 9
+attempts, last 2026-08-04, **LOW USE**; RPCs already locked down in the sweep),
+**Matchmaking / Quick Match** (`server/src/matchmaking/**` — the queue / pairing /
+sim-bot-fallback logic, `queue:*` socket events — **LIVE**; `matchmaking_matches`
+partly hardened by MP-G4/G5), **No Brainer / Practice Lab**
+(`server/src/noBrainer/validator.ts`, `client/src/practice/**`, `/practice` route
+— **SEMI-DEAD**, localStorage only, server untouched since 2026-02-26).
+
+**In scope:** each mode's score authority + one-attempt/one-run semantics +
+idempotent recovery + authz, same shape as Systems 1–3 — but **cheaper now**
+because Systems 6–9 will have verified the auth / engine / ranking / runtime
+underneath. Group or split into sub-audits (10a Ghost, 10b Bot, 10c Fritz
+Challenge, 10d Matchmaking, 10e No Brainer) as makes sense in flight.
+**Out of scope:** the shared spine (Systems 6–9).
+
+**Status:** mixed — Ghost / Bot / Matchmaking LIVE, Fritz Challenge low-use, No
+Brainer semi-dead. Each medium scope.
+
+## 10.1 Current-state map
+**Not started.** Step 1.
+
+## 10.2 Invariants
+**Not started.** Step 2.
+
+## 10.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 10.4 Checklist
+- [ ] Step 1 — per-mode current-state maps (decide sub-split here)
+- [ ] Step 2 — invariants + gap lists → ratify (D-N, possibly one per sub-mode)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 11: Social / stats / account
+
+Scope: `server/src/social/**` (11 files — feed, friends, presence, rivals, per-mode
++ global + weekly leaderboards, public profiles, `activityWriter.ts`),
+`/api/social/*` + `/api/profile/*` routers, socket `presence:*` + `friend:invite`;
+`server/src/stats/**` (`matchLog.ts`, `recordPublicMatch.ts`, `recordUserMatch.ts`,
+`onlineWinStreak.ts`, `dedupeMatchRows.ts`), `http/routes/stats.ts`
+(`/api/stats/record-match`, `/api/home/daily-summary`, `/api/mp-stats`);
+`server/src/account/routes.ts` (`DELETE /api/account`); the shared
+`realtime/gameOverPersistence.ts` game-over pipeline (Glicko + stats + activity +
+matchmaking outcome); client `social/` + `friends/` + `stats/` + `screens/Settings*`.
+
+**In scope:** activity-feed write idempotency + authz; the friends-request state
+machine; presence correctness (stale `online`, `in_game` accuracy);
+leaderboard-query integrity across `matches` / `ranked_games` / per-mode;
+`matches` + the `data/matches.jsonl` match-log write idempotency (partly done —
+MP-G4; the JSONL file is ephemeral on Render — §2.4.4); account-deletion cascade
+completeness + what deliberately survives (`account/routes.ts` header); the
+game-over pipeline's ordering / idempotency for its **non-MP** callers.
+**Already covered:** MP-G4 (game-over side-effect idempotency for the MP path).
+
+**Status:** **LIVE** — `activity_feed` 1041 rows (last 2026-09-02), `friends` 7
+rows; `social/` had 6 server + 6 client commits in the last 60 days.
+
+## 11.1 Current-state map
+**Not started.** Step 1.
+
+## 11.2 Invariants
+**Not started.** Step 2.
+
+## 11.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 11.4 Checklist
+- [ ] Step 1 — social / stats / account / game-over-pipeline current-state map
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + tests
+
+---
+
+# System 12: Progression & learning (client-only, low risk)
+
+Scope: `client/src/journey/**` (64 files — Racehorse Journey campaign,
+localStorage), `client/src/learn/**` + `client/src/learning/**` +
+`client/src/training/**` (lessons, the how-to-play article, guided-match
+recorder/annotator, the in-match coaching overlay — bundled content + localStorage
+authoring), `client/src/analyzer/**` (GameReviewer post-game analysis —
+localStorage).
+
+**In scope:** a **light-touch pass only** — confirm there is genuinely no shared
+server state and no competitive-integrity surface; spot-check the localStorage
+schemas for corruption / migration hazards; note anything that unexpectedly
+writes to Supabase or feeds a leaderboard.
+**Out of scope:** deep correctness of the coaching / analysis logic (low-risk, not
+integrity-bearing) — **do not over-invest relative to the actual risk.**
+
+**Status:** **LIVE**, all client-only, no server routes, no shared state. Lowest
+risk in the plan.
+
+## 12.1 Current-state map
+**Not started.** Step 1 (light).
+
+## 12.2 Invariants
+**Not started.** Likely a short list, or "none — client-only, no shared state".
+
+## 12.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 12.4 Checklist
+- [ ] Step 1 — light current-state pass (confirm no server state / no leaderboard feed)
+- [ ] Step 2 — short invariant list + any gaps → ratify (D-N)
+- [ ] Step 3 — fixes if any
+
+---
+
+# System 13: Remaining cross-cutting / infra
+
+Scope: Supabase schema areas not yet RLS/grant-audited (`profiles`, `matches`,
+`activity_feed`, `friends`, `ghost_profiles` / `ghost_games`, `verified_matches`,
+plus whatever `league_*` survives System 5); admin/ops endpoints
+(`/api/daily-fritz/{generate,invalidate,reset-attempt,metrics,health,events}`,
+`/api/ranking/process`, `/league/run-*`, `/bot-matches/cleanup-stale` — each
+`ADMIN_SECRET`-gated; `client/src/admin/`); telemetry / observability
+(`operationalTelemetry.ts`, `sentryScrubbers.ts`, `client/src/debug/`, the
+per-mode metrics tables); deploy / infra (Render free tier — spin-down + single
+instance; Vercel client + prerender + `vercel.json` rewrites; `platform/health` +
+`/ready` + `/ping`; `platform/gracefulShutdown.ts`).
+
+**In scope:** run the anon + authenticated-role RLS probe (D-8 technique) against
+every un-audited `public` table; confirm the admin-secret gate on every admin
+endpoint + assess blast radius per endpoint; verify `assert_security_posture()`
+coverage; make the Render / Vercel deploy posture explicit and system-wide
+(currently only in System 1's T-17..T-19 accepted-risk notes).
+**Out of scope:** each feature's own RLS (that feature's audit); the in-memory
+rate limiter (System 6).
+
+**Status:** partial — the `assert_security_posture()` weekly cron exists; several
+core tables' RLS/grants are unverified.
+
+## 13.1 Current-state map
+**Not started.** Step 1.
+
+## 13.2 Invariants
+**Not started.** Step 2.
+
+## 13.3 Gap list (risk-ranked)
+**Not started.** Step 2.
+
+## 13.4 Checklist
+- [ ] Step 1 — RLS probe of every un-audited `public` table; admin-endpoint gate map; telemetry + deploy-posture map
+- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [ ] Step 3 — fixes + migrations (human applies)
+
+---
+
+# Appendix: Latent / dev-only — skip unless it becomes relevant
+
+Not given a numbered system — the audit weight is not justified. Revisit only if
+one becomes live or blocks a numbered system.
+
+- **Spectator / Live Now** (`server/src/spectator/**` ~72 LOC, `client/src/live/**`,
+  `LiveNowRoute`, socket `spectator:{join,leave,list}`) — feature-flagged **OFF**
+  (`ENABLE_SPECTATOR_MODE` / `VITE_ENABLE_SPECTATOR_MODE` must be `'true'`; both
+  default off). **Distinct from** `room:spectate` (the MP-G3 gap, System 2 — that
+  one is always-on and was fixed). If spectator mode is ever enabled, it needs its
+  own Step-1 audit first.
+- **`client/src/devtools/**`** (10 files, ~3k LOC — calibration / fairness / tier
+  / "feels rigged" audits, benchmarks) — dev-scratch, no shipped route, no commit
+  since 2026-06-22. Delete or ignore.
+- **E2E / debug routes** — `http/routes/e2eInspectRoute.ts` (`E2E_INSPECT=1`,
+  hard-disabled in production), `http/routes/dailyFritzDebugDate.ts`,
+  `server/src/testing/**`. Test-only, no prod surface. (`client/src/debug/` —
+  global error handler / render profiler / web-vitals — is shipped infra, keep;
+  it belongs to System 13's telemetry pass.)
+- **Retired Daily Puzzle Ladder leftovers** — `server/src/dailyPuzzle*.ts`,
+  `seedDailyPuzzleLadder.ts` / `checkDailyPuzzleLadder.ts` / `generatePuzzles.ts`,
+  `client/src/dailyPuzzle/**`, `.github/workflows/gen-puzzles.yml`. Decommissioned
+  (System 3, `56c0bb67`); tracked as DF-CAND-1b / DF-CAND-3 / DF-CAND-4. **`seedPuzzlePool.ts`**
+  (backfills Puzzle Rush's `puzzle_pool` from `daily_puzzles`) is a real
+  Puzzle-Rush dependency — do **not** delete it with the Ladder cleanup.
 
 ---
 
@@ -3545,6 +3973,7 @@ registry.
 | D-9 | 2026-09-01 | **System 2 Step 2 RATIFIED — §2.2 (MP-INV-1..19) + §2.3 (MP-G1..MP-G17, including the §2.3.2 verification-pass updates) as written.** The human reviewed the invariant list and the tiered gap list line-by-line and signed off. What is ratified: **19 invariants** across 8 domains (seat/identity 1–3, room-kind ACL 4–6, state authority & ordering 7–9, persistence/recovery 10–13, game-over integrity 14–17, disconnect/grace 18, anti-cheat posture 19), each with rule / enforcing-mechanism-today-or-`UNENFORCED` / failure-mode and grounded in an MP-1..MP-8 window or a §2.1.7 authz row; **17 gaps** tiered A (fix now: **MP-G1** unmanaged room-table schema, **MP-G3** `room:spectate` no room-kind check on a ranked-eligible private room, **MP-G4** game-over side-effect idempotency) / B (verify: MP-G6 `room_command_receipts`+`mp_authority_events` unapplied, MP-G2 grant revoke) / C (revisit if scale: MP-G5, MP-G7–MP-G13) / D (posture: MP-G14) / E (accept: MP-G15–MP-G17). **Residual notes recorded with the sign-off:** (a) **MP-INV-2** carries a known unclosed gap — two *guest* seats (`userId=null`) are distinguishable on reconnect only by username/hold, so a second guest with the room code + the first's display name can reclaim the seat; scoped to private-unranked play, tracked as **MP-G13 (Tier C)**, not blocking. (b) **MP-INV-19 is a posture decision, not a hard invariant** — move-log verification stays non-blocking for the match result; the ratified direction is to *add* a structured alert + per-user failure tracking in a later step (**MP-G14**), not to gate results on verification. (c) **MP-INV-12** holds (RLS confirmed, D-8) but the client write-grant revoke (**MP-G2**) and the unmanaged-schema fix (**MP-G1**) are still open — folded into one Step 3 migration. (d) **MP-G5** and **MP-G9** verdicts were changed by the §2.3.2 verification pass (G5 A→C on zero evidence + no measurement path; G9 ACCEPT→REVISIT on deploy-restart frequency) and are ratified as changed. **Step 3 scope (agreed):** Tier-A only — MP-G1, MP-G3, MP-G4 (MP-G2 folded into MP-G1). | The human reviewed the list line-by-line, same as D-3 for System 1. Recording the residual notes so a cold session does not treat MP-INV-2 / MP-INV-19 as fully closed, and does not re-litigate the G5/G9 downgrades. The Step-3 scope is deliberately narrow — the other tiers wait for their own pass. |
 | D-10 | 2026-09-02 | **System 3 Step 2 RATIFIED — §3.2 (DM-INV-1..18) + §3.3 (DF-G1..DF-G5) as written.** The human signed off "as written — no changes". What is ratified: **18 invariants** across 6 domains (score authority 1–5, one-attempt/run-per-day 6–7, idempotent recovery & ordering 8–13, content integrity 14–16, authz 17–18), each rule / mechanism-today-or-`UNENFORCED`/`PARTIAL` / failure, grounded in a DM-1..DM-7 window or a §3.1.5 authz row; **5 gaps** — **DF-G1 + DF-G2 FIX NOW**, DF-G3/DF-G4 REVISIT IF SCALE, DF-G5 ACCEPT. Scope = the 2 active modes (Daily Fritz, Puzzle Rush); the retired Ladder is out (decommissioned, §3.1.4). **Two `verified-against-code` corrections already folded into §3.2/§3.3:** the Daily Fritz speed board **is** verification-gated (`isDailyFritzAttemptLeaderboardEligible`), and `daily_fritz_outbox` is projected by a **DB trigger**, not a Node drainer. **Residual notes recorded with the sign-off (Step-3 code trace, 2026-09-03):** (a) **DF-G1's mechanism was wrong** — `scheduleDailyFritzRecordGameVerification` has zero production callers (dead code from the reverted `b0a0a93c` advance-first design, caller removed in `d027d30d`); the record/next-hand routes verify synchronously and refuse-to-advance on transient failure. The real gap is a **stranded `status='started'` attempt with a complete set** (client crash / restart mid-`/complete`, no reaper). DF-G1's fix is a stranded-set boot sweep + periodic reaper (mirror `recoverTournamentMatches`), NOT re-running the dead async path, and it must never un-`reject` a hand (DM-INV-11). (b) **DF-G2's alert already exists** (`recordDailyFritzAdvanceWithoutVerification` → `Sentry.captureMessage(..., daily_fritz_alert:'verification_bypassed')`); the real residuals are per-user aggregation on that alert + `getDailyFritzStreak` not being verification-filtered. (c) **DF-G2 streak filter must keep `legacy_unverified` (pre-protocol) completions counting** — applying the full leaderboard predicate would retroactively zero real streaks; the filter only drops `rejected` / non-empty-`unverified_hands`. (d) **The POSTURE decision** (same as D-9 MP-INV-19): Daily Fritz verification stays non-blocking for `status='completed'` — a failed hand is `rejected` (off the board) but never blocks the player finishing. **Step 3 scope (agreed):** DF-G1 + DF-G2 only. | Human reviewed the list line-by-line, same as D-3 / D-9. Recording the Step-3 corrections so a cold session does not build a reaper around dead code or a duplicate alert, and does not apply the streak filter in a way that breaks legacy streaks. |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
+| D-11 | 2026-09-03 | **The "Everything else" catch-all (old System 4) is dissolved into leverage-ordered Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Order: **5** Legacy League decommission (kill dead weight first) → **6** Auth/session + rate limiting → **7** `@racehorse/game-core` → **8** Ranking/Glicko → **9** Match runtime layer (the shared spine — de-risk before the modes on top of it) → **10** individual game modes (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) → **11** Social/stats/account → **12** Progression & learning (client-only, light-touch) → **13** remaining cross-cutting/infra. Latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) go in an Appendix, not a numbered system. There is no System 4. | Leverage-first: a bug in the shared auth / engine / ranking / runtime layer costs once to fix and benefits every mode; a bug in one feature costs once and benefits one. Killing the dead League surface first removes ~2.5k LOC + a socket-handler set + 6 tables from every later system's blast-radius reasoning. The client-only progression/learning surfaces have no shared state and are explicitly de-prioritised so they don't absorb audit effort disproportionate to their risk. |
 
 ---
 
@@ -3598,3 +4027,45 @@ registry.
 | 2026-09-02 | **System 3 Step 2 RATIFIED (D-10) + Step 3 IMPLEMENTED (DF-G1 + DF-G2). Not pushed.** Human signed off §3.2 / §3.3 "as written". **Two mechanism corrections from a full call-site trace, recorded with D-10 (§3.2 header):** (1) `scheduleDailyFritzRecordGameVerification` / `runDailyFritzRecordGameVerification` have **zero production callers** — dead code from the reverted `b0a0a93c` advance-first design (caller removed in `d027d30d`). Nothing schedules async re-verification; the record/next-hand routes verify synchronously and refuse-to-advance on transient infra failure. DF-G1's real gap: a **stranded `status='started'` attempt with a complete set** (client crash / restart mid-`/complete`, no reaper). (2) DF-G2's `verification_failed` alert **already exists** (`recordDailyFritzAdvanceWithoutVerification` → `Sentry.captureMessage(..., daily_fritz_alert:'verification_bypassed')`); the residuals are per-user aggregation + the streak filter. **DF-G1 fix:** `server/src/dailyFritzStrandedRecovery.ts` — `recoverStrandedDailyFritzAttempts()` (boot sweep 20 s after listen + 15-min `setInterval`, wired in `index.ts`), mirrors `recoverTournamentMatches`. Lists `daily_fritz_attempts?status=eq.started&started_at=lt.<now-30min>` (bounded 100), and per attempt under `withDailyFritzAttemptLock`: re-fetch, skip if not `started` (raced) or set not complete (mid-play), else finalize via the new shared **`applyDailyFritzAttemptFinalization`** (extracted verbatim from `/complete` — `dailyFritzAttemptFinalize.ts`; `/complete` now calls it, behaviour-preserving). Transactional attempts use `commitDailyFritzAttemptCommand('finalize_verified_attempt')`; non-transactional `upsertDailyFritzAttempt` + a journaled `attempt_completed`. Always journals `recovery_succeeded` / `recovery_failed`, `invalidateDailyFritzLeaderboard`, `incrementDailyFritzMetric('attempt_completed')`. Idempotent; never promotes a `rejected` run (writes `legacy_unverified`). **N = 30 min**: a best-of-3 set is ~5–15 min and the client fires `/complete` at set end; the reaper only touches attempts whose set is already complete, so 30 min is a wide margin around the client's own retry loop (seconds), not a guard against an active player. **DF-G2 fix:** `getDailyFritzStreak` selects `result` and filters through new `isDailyFritzAttemptStreakEligible` (drops `rejected` + non-empty `unverified_hands`; **keeps `legacy_unverified`** so pre-protocol streaks aren't retroactively zeroed — deliberately weaker than the leaderboard predicate). New `countRecentDailyFritzVerificationFailures(userId, {days:7})` in the event store; `recordDailyFritzAdvanceWithoutVerification` includes `userRecentVerificationFailures` in the existing Sentry alert and escalates `warning`→`error` + tag `verification_bypassed_repeat` at ≥ `DAILY_FRITZ_VERIFICATION_REPEAT_OFFENDER_THRESHOLD` (3). Verification stays non-blocking for `status='completed'` (D-10 POSTURE). **Tests (18 new):** `dailyFritzStrandedRecovery.test.ts` (7), `dailyFritzStreakFilter.test.ts` (8), `dailyFritzVerificationRepeatOffenderAlert.test.ts` (3); + `countRecent…` mock added to the 2 full-replacement `dailyFritzEventStore` mocks. **Full suite green: server 207 files / 1200 tests, client 216 / 1482; `tsc -b` clean (client + server); server lint unchanged (71 pre-existing errors, 0 new); client lint at budget.** §3.2 / §3.3 status → RATIFIED; §3.4 Step-3 boxes checked; D-10 logged; Current focus updated. **Not pushed — awaiting human review of the Step-3 implementation; also still pending: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.** DF-G3 / DF-G4 (REVISIT IF SCALE) and DF-G5 (ACCEPT) not touched. |
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
+| 2026-09-03 | **Plan restructured (D-11).** Old "System 4: Everything else" dissolved into leverage-ordered **Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Scaffolds written for each (scope in/out, live-vs-dead status from the inventory, empty §X.1/§X.2/§X.3 + a §X.4 checklist stub). New **Appendix** for latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) — "skip unless relevant". New **"Continuing this plan"** section at the end (workflow, house rules, deploy facts, ambiguity resolution) written for a cold session. Sequencing list expanded to 1–13; Current focus + D-11 added. **System 5 (Legacy League) live/dead check (this pass, needs human confirmation):** looks **DEAD in prod** — `fixtures`/`leagues`/`league_members` last written 2026-04-29, `fixture_match_results` 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows; **no** `client/src` HTTP call to `/league/*` and **no** league / `tournament:create` / `tournament:join` socket emitter; routes + legacy `tournament:*` socket handlers + admin `/league/run-*` jobs all still registered in `index.ts` but unreachable from the client; `finalizeTournamentMatchHook` only fires for a room with a legacy `cfg.tournamentId`, which nothing creates; no scheduler keeps a league alive; last *feature* commit predates the April 2026 overhaul. Likely: decommission (mirror the Ladder). No code changed — planning only. |
+
+---
+
+# Continuing this plan
+
+*Written for a fresh agent session with no prior context. Read this, then `## Current focus`, then the Sequencing list.*
+
+## 1. Where you are
+
+- **`## Current focus`** (top of this file) is kept accurate at all times — read it first.
+- The **Sequencing list** (§"How to use this document") is the running order. **The next system to work is the first one in that list not marked CLOSED / passed-through.** Systems 1–3 are done. System 4 does not exist (dissolved — D-11). Systems 5–13 are **scaffolds only**: scope + in/out + a live-vs-dead status guess from the 2026-09-02/03 inventory + empty §X.1/§X.2/§X.3. Each begins at its own **Step 1** when work reaches it.
+- Do **not** skip ahead or work several systems at once. One system, one step, then stop.
+
+## 2. The workflow every system follows
+
+1. **Step 1 — Current-state map** (`§X.1`). Read-only. Map every state read/write, every authz check (present *or missing*), every concurrency window, every recovery/reconnect path, and any existing idempotency prior art that's reusable. **No fixes. No invariants.** Write it into `§X.1`. **Stop and wait for the human to review it.**
+2. **Step 2 — Invariants + risk-ranked gap list** (`§X.2` / `§X.3`). Each invariant: *rule / the mechanism that enforces it today (or `UNENFORCED` / `PARTIAL`) / the failure mode if it breaks* — grounded in a specific window or authz row, not a vague area. Then risk-rank every gap: severity (`data-corruption` > `competitive-integrity` > `auth-bypass` > `player-visible-bug` > `cosmetic`) × likelihood **judged for the single Render instance** × blast radius; verdict ∈ **FIX NOW** / **VERIFY** / **POSTURE** / **REVISIT IF SCALE** / **ACCEPT**. **Stop.** The human reviews line-by-line and **ratifies as a Decision `D-N`** (mirror D-3 / D-9 / D-10 — record residual notes so a later session does not re-litigate settled points).
+3. **Step 3 — Fix** the agreed scope (usually the FIX-NOW gaps only). Design first if the change is structural (a §X.4 state-machine section, like §1.4 / §2.4). **Add tests that prove each invariant the fix protects** — "looks fixed" is never done.
+4. **Commit.** Reference the commit / PR / test file in the checklist item. **Do not push** unless the human explicitly tells you to — committing locally is the default. **Never apply a database migration to prod:** write it, verify it on a throwaway local pg16 (`scripts/tournament-db-verify/` shim + apply twice for idempotency), and hand it to the human to run in the Supabase SQL editor.
+5. **Report back plainly** — what shipped, what's still open, what the human must do next (migrations to apply, pushes to authorise). No hedging; if tests failed, say so with the output.
+
+## 3. House rules (these have held through Systems 1–3 — keep them)
+
+- **Audit-first, no fixes** until Step 1–2 are written down and the invariants are ratified with the human.
+- **Verify every claim against the actual code and against prod** — never trust a function name, a comment, or an earlier section of this doc. System 3 found *two ratified gap mechanisms were wrong* on a full call-site trace (`scheduleDailyFritzRecordGameVerification` was dead code with zero callers; the `verification_bypassed` Sentry alert already existed). Both were corrected openly.
+- **Correct the record openly.** When an earlier claim turns out wrong, say so — in Current focus, in the section, or as a dated correction note (see the §3.2 header, §3.1.1 "Scope correction", the D-10 residual notes). Do **not** quietly rework around a wrong claim.
+- **Prod database writes are the human's.** The agent writes + pg16-verifies migrations; the human applies them. This exists because there is **no CI migration runner** — the recurring "drift" bug (8 instances found: T-1, ghost tables, `commit_glicko`, content-lifecycle RPCs, room tables, `room_command_receipts`, `mp_authority_events`, fritz RPCs) is *reviewed lockdown SQL that was written in-repo but never applied to prod*. Always verify a migration's **live** state; never assume file == reality.
+- **Never push** without an explicit instruction.
+- **Prod probing is read-only.** Service-role REST key (`server/.env`) for row counts / recency / OpenAPI membership; the **D-8 technique** (mint a throwaway `authenticated`-role JWT via the service-key `/auth/v1/admin` API, probe, `DELETE` the user) for authenticated-role RLS checks. `pg_policies` / `pg_catalog` are unreachable via PostgREST — those need the human's SQL editor.
+
+## 4. When scope is ambiguous
+
+The **2026-09-02/03 codebase inventory pass** is the source of truth for *what exists* — every server/client top-level area, every `index.ts` route / socket handler / scheduler, every prod table's live-or-dead status as of that date. It is summarised across the System 5–13 scope blocks and the Appendix. If a system's Step 1 turns up something the inventory missed or got wrong, that's expected — note the correction and adjust the scope (the "investigation reveals the scope was wrong — say so, don't quietly expand" rule).
+
+## 5. Deploy / prod facts a cold session needs
+
+- **Render free tier, structurally single-instance** ($0, 0.1 CPU, 512 MB — no scaling on free tier). Spins down at 15 min idle; mitigated by an UptimeRobot HTTP ping on `/ping` @ 5 min (T-17, D-4). **Deploy restarts are frequent.** Everything held in process memory — the rate limiter, all in-memory locks (`withRoomGameplayLock`, `withDailyFritzAttemptLock`), the `Room` maps, any fire-and-forget task — is **lost on restart**. This is the single most recurring gap class; DB constraints (CAS, partial unique indexes, advisory locks inside RPCs) are the real cross-restart guard.
+- **Prod app:** `https://racehorse.onrender.com`. `GET /ready` reports the release commit + `uptimeSeconds`. Render auto-deploys on a push that changes server or client code (doc-only pushes do not trigger a deploy).
+- **Supabase** project `fisfadjqllojdzibcdfx`. PostgREST exposes the `public` + `graphql_public` schemas only. `PGRST205` ≈ table absent; `PGRST202` ≈ function-signature mismatch; `42501` ≈ permission denied (grant layer) or RLS-policy violation.
+- **CI:** GitHub Actions on push to `main` — Server Validation + Client Validation (typecheck / lint / vitest / Playwright e2e) + an MP soak + a prod smoke test. Run vitest from `client/` and `server/` separately (root has no config). Client lint fails a `--max-warnings` budget (currently 401), not on errors. `tsc -b` is the real client typecheck (not `-p client/tsconfig.json`).
+- **`assert_security_posture()`** — a service-role RPC + weekly GH Actions cron (`security-posture.yml`, Mondays) that flags RLS-disabled `public` tables and SECURITY DEFINER functions with mutable `search_path`. Check its output when doing any RLS work.
