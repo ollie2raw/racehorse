@@ -73,10 +73,25 @@ focus" line, then the section for the system in progress.
   `roomKind.ts`'s inert `legacy_league` classification is parked. **Pending
   human: apply the migration.**
 
-- **NEXT: System 6 — Auth / session + rate limiting.** Scaffold only (§6.1–§6.4).
-  Starts at its own Step 1 — current-state map of `platform/auth/supabaseAuth.ts`
-  (token→uid cache), `social/socialAuth.ts`, `adminSecret.ts`, the in-memory
-  `InMemoryRateLimiter` + the ~13 remaining `app.use` rules, and `client/src/auth/**`.
+- **System 6 (Auth / session + rate limiting) → Step 1 audit written (§6.1)
+  2026-09-03, awaiting human review.** Maps **three divergent server auth impls**
+  (`supabaseAuth.ts` cached / `socialAuth.ts` uncached / `tournamentAuth.ts`
+  uncached — all hitting `/auth/v1/user`); cache **A**'s **≤60 s revocation lag**
+  (a `signOut` doesn't revoke the access-token JWT at all); the **signature-
+  unverified sync JWT decode** (`getUserIdFromAuthHeaderSync`) used for rate-limit
+  keys → forged `sub` bypasses per-user limits on record-match / account-delete /
+  daily-fritz; **`ADMIN_SECRET` is unset in prod** (`/ready` confirms) → all admin
+  endpoints fail-closed today, but the design is a single static secret with
+  `?admin_key=` query transport on 3 GETs + `localStorage` in the admin UI;
+  `InMemoryRateLimiter` with **no eviction ceiling** + **no `trust proxy`** →
+  every IP-keyed limit bypassable via `X-Forwarded-For`; socket auth is per-action
+  not per-connection. `e2eDevAuth` confirmed dead in prod (two gates). CORS allows
+  **any `*.vercel.app`**. `/ready` discloses env-presence + load telemetry + the
+  release SHA. **8 windows AU-1..AU-8** parked for Step 2 ranking. No fixes.
+  **Stop — await human review of §6.1 before Step 2.**
+
+- **NEXT after review: System 6 Step 2** — invariants + risk-ranked gap list
+  (AU-1..AU-8) → ratify as a Decision.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -544,7 +559,7 @@ own Step 1 when work reaches it. There is no System 4.
 3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *Pending human: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.*
 4. *(dissolved — see 5–13, D-11)*
 5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Pending human: apply the migration.*
-6. **Auth / session + rate limiting** (cross-cutting) ← **NEXT** (scaffold — starts at Step 1)
+6. **Auth / session + rate limiting** (cross-cutting) ← **Step 1 audit written (§6.1) 2026-09-03**, awaiting review before Step 2
 7. **`@racehorse/game-core`** — shared score oracle ← scaffold
 8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
 9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
@@ -3651,21 +3666,335 @@ recovery-hash handling, the e2e dev-auth path never reaching prod).
 **Out of scope:** Supabase's own auth service internals; each feature's own
 `getAuthenticatedUserId` usage (covered by that feature's audit).
 
-**Status:** **LIVE** — every authenticated route depends on it; `client/src/auth/`
-had 18 commits in the last 60 days (most-touched client area).
+**Status:** **LIVE** — every authenticated route depends on it. **Step 1 (§6.1)
+written 2026-09-03**, awaiting human review before Step 2.
 
 ## 6.1 Current-state map
-**Not started.** Step 1.
+
+Status: **written 2026-09-03, Step 1.** Read-only. No fixes, no invariants —
+this maps what exists. §6.2 / §6.3 not started.
+
+Prod facts used below (verified live via `GET /ready`, 2026-09-03): `nodeEnv:
+production`; `checks.recommendedEnv` → **`ADMIN_SECRET: false`**, `CLIENT_URL:
+false`, `CORS_ALLOWED_ORIGINS: true`, `DAILY_PUZZLE_CRON_SECRET: false`,
+`SERVER_URL: true`; `requiredEnv` → `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` true.
+
+### 6.1.1 There are **three** server-side auth implementations
+
+All three answer the same question — "what verified `userId` does this
+`Authorization: Bearer <jwt>` belong to?" — by calling the same upstream
+(`GET <SUPABASE_URL>/auth/v1/user` with `apikey: <service key>` + the caller's
+`Authorization`). They do **not** share a cache or a code path.
+
+| # | File / fn | Caches? | Timeout | Extra checks | Callers |
+|---|---|---|---|---|---|
+| **A** | `platform/auth/supabaseAuth.ts` — `getAuthenticatedUserId(req)` → `getAuthenticatedUserIdFromToken(token)` | **yes** — `Map<sha256(token) → {userId, expiresAt}>`, 60 s TTL on success / 10 s on upstream 4xx / **not cached** on timeout or thrown error; + in-flight dedup (`authenticatedUserIdInFlight`) so a 9-request page fan-out validates once | 12 s `AbortController` → returns `null` on abort | a **non-production** e2e bypass: `token === 'e2e-daily-fritz'` → id from `x-e2e-daily-fritz-user` header or `E2E_DAILY_FRITZ_USER_ID` env (§6.1.8) | daily-fritz routes, puzzle-rush, ghost, stats, bot-matches, `resolveSocketIdentity` (socket identity), daily-fritz checkpoint |
+| **B** | `social/socialAuth.ts` — `requireAuth(req, res)` | **no** — every call is an upstream round-trip | none (inherits `supabaseFetch`'s default) | none | `/api/social/*` + `/api/profile/*` (`social/routes.ts`, `socialFriends.ts`, `socialFeed.ts`, `socialProfile.ts`), `/api/account` (`account/routes.ts`) |
+| **C** | `scheduledTournament/tournamentAuth.ts` — `requireAuthUserId(req, res, {allowAnonymous?})` → `getUserIdFromBearerToken(token)` | **no** | none | `isValidUuid` on the returned id; `rejectMismatchedPayloadUserId(authUserId, body.userId)` (a client-sent `userId` must equal the token's) | `/api/tournaments/*` (`scheduledTournament/routes.ts`) — System 1 |
+
+Consequence: **B and C pay a full upstream `/auth/v1/user` call on every request**
+(latency + Supabase quota + a DoS-amplification factor — one social request → one
+upstream auth call); **A** is the only one that survives an upstream blip and that
+dedups a fan-out — but **A** is also the only one with a **revocation lag**
+(§6.1.2).
+
+There is also a **synchronous, signature-unverified** identity read — §6.1.3.
+
+### 6.1.2 The token→uid cache (`supabaseAuth.ts`) — size, eviction, revocation
+
+- **Key:** `createHash('sha256').update(token).digest('base64url')` — the raw
+  bearer token is never stored (good).
+- **Value:** `{ userId: string | null, expiresAt: number }`.
+- **TTL:** `AUTHENTICATED_USER_ID_TTL_MS = 60_000` on a successful validation;
+  `10_000` on an upstream **non-OK** response (a 401/403 is cached as
+  `userId: null` for 10 s); on an `AbortError` (12 s timeout) → returns `null`
+  **without caching**; on any other thrown error → the promise rejects, nothing
+  cached, `authenticatedUserIdInFlight` cleared in `.finally`.
+- **Ceiling:** `AUTHENTICATED_USER_ID_MAX_ENTRIES = 1_000`. `pruneAuthenticatedUserIdCache(now)`
+  runs on every write: first deletes all `expiresAt <= now` entries, then evicts
+  **oldest-by-Map-insertion-order** until `size <= 1000`. So the cache is bounded
+  (this was a fix — the comment notes it "grew without bound" before).
+- **In-flight dedup:** `authenticatedUserIdInFlight: Map<key → Promise>` — a
+  concurrent second request for the same token returns the pending promise;
+  cleared in `.finally`.
+- **Revocation lag (the window):** a Supabase access token is a self-contained
+  JWT valid until its own `exp` (~1 h default). Client `signOut()` revokes the
+  **refresh** token, not the access token — `/auth/v1/user` keeps returning the
+  user for a signed-out-but-unexpired access token. On top of that, cache **A**
+  returns `cached.userId` for up to **60 s** after the last successful upstream
+  check **without re-validating**. Net: a leaked/stolen access token is honoured
+  by the server for `min(JWT exp, last-check + 60 s)` — worst case ~1 h from a
+  fresh token, and a user "signing out" does not shorten it. A Supabase-side
+  **ban** (`/auth/v1/user` → 403) propagates on the next upstream check, i.e.
+  after the ≤60 s cache entry expires. Caches **B** and **C** have **no**
+  revocation lag (uncached) but also no protection against upstream unavailability.
+
+### 6.1.3 `getUserIdFromAuthHeaderSync` — the unverified JWT decode
+
+`supabaseAuth.ts:55` — splits the bearer token on `.`, base64-decodes
+`parts[1]`, `JSON.parse`, returns `payload.sub` **with no signature check and no
+`exp` check.** Anyone can mint `{"sub":"<anything>"}` as the middle segment.
+
+Callers (all in `index.ts`, all **rate-limit keying only**):
+- `dailySubmitLimit` (`/api/daily-fritz/{next-hand,record-game,complete}` — 90/5min)
+- `recordMatchLimit` (`/api/stats/record-match` — 20/5min)
+- `dailyFritzInitLimit` (`/api/daily-fritz/{today,start}` — 20/60s)
+- `accountDeleteLimit` (`/api/account` — 10/10min)
+
+The forged `sub` is **not** used for authorization — the route handlers call auth
+impl **A/B/C**, which validate upstream. But the rate-limit *bucket key* becomes
+`${scope}:user:${forged-sub}`, so **an attacker rotates the `sub` and gets a fresh
+per-user bucket on every request** → the per-user rate limits on those four
+endpoints provide no protection against an unauthenticated attacker. The only
+backstop is `restApiLimit` (`/api`, IP-keyed — §6.1.5, also bypassable).
+
+### 6.1.4 Admin-secret gate (`platform/auth/adminSecret.ts`)
+
+- `constantTimeEqualSecret(provided, expected)` — returns `false` unless
+  `typeof provided === 'string'` and `expected` truthy; then `Buffer.from(x.trim())`
+  both sides, **early-returns `false` on a length mismatch** (necessary —
+  `timingSafeEqual` throws on unequal lengths — but it does leak secret length
+  via timing), then `timingSafeEqual`. `isAdminSecret(v) = constantTimeEqualSecret(v, process.env.ADMIN_SECRET)`.
+- **`ADMIN_SECRET` is unset in prod** (`/ready` → `recommendedEnv.ADMIN_SECRET:
+  false`, confirmed live). `expected` is `undefined` → `!expected` →
+  `constantTimeEqualSecret` returns `false` for **every** input →
+  **every admin endpoint is fail-closed / un-callable in prod right now.**
+- **Transport is inconsistent across the admin endpoints:**
+  | Endpoint | Secret read from | Guards | Blast radius if the secret were set + leaked |
+  |---|---|---|---|
+  | `POST /api/daily-fritz/generate` | `req.body.adminKey` (JSON body) | `isAdminSecret` | force-generate a Daily Fritz run |
+  | `POST /api/daily-fritz/invalidate` | `req.body.adminKey` | `isAdminSecret` | invalidate a published challenge mid-day |
+  | `POST /api/daily-fritz/reset-attempt` | `req.body.adminKey` | `isAdminSecret` | wipe any user's Daily Fritz attempt (competitive-integrity) |
+  | `GET /api/daily-fritz/metrics` | `x-admin-secret` header **or `?admin_key=` query** | `isAdminSecret` | telemetry read |
+  | `GET /api/daily-fritz/health` | `x-admin-secret` **or `?admin_key=`** | `isAdminSecret` | health read |
+  | `GET /api/daily-fritz/events/:attemptId` | `x-admin-secret` **or `?admin_key=`** | `isAdminSecret` | per-attempt event log incl. `user_id`s (info disclosure) |
+  | `POST /api/ranking/process/:userId` | `req.body.adminKey` | `isAdminSecret` | force a Glicko rating-period recompute for any user |
+  | `POST /bot-matches/cleanup-stale` | `req.body.adminKey` | `isAdminSecret` | force-forfeit any user's >30-min-idle pending bot match (rating hit) |
+  - The `?admin_key=` query-string option (3 GET endpoints) puts the secret in
+    access logs / browser history / `Referer` / proxy logs. `client/src/admin/DailyFritzHealthAdminScreen.tsx`
+    already **migrates a legacy `?admin_key=` out of the URL** and uses the
+    `x-admin-secret` header — but the server still accepts the query param.
+  - Single shared static secret; no IP allowlist, no per-admin identity, no
+    second factor. The client admin screen holds the entered secret in React
+    state (`resolveInitialAdminKey` — check whether it persists to
+    `localStorage`; if so, XSS on the admin's browser = secret theft).
+  - `rateLimit adminLimit` = 20 req / 10 min, **IP-keyed** (§6.1.5 — bypassable),
+    so it does not meaningfully bound a brute-force; `timingSafeEqual` + a strong
+    random secret is the only real protection, and the secret is currently unset.
+- **Dead:** `isAuthorizedDailyPuzzleCronRequest` + `handleDailyPuzzleLadderCronWarm`
+  (`dailyPuzzleStore.ts`) check `DAILY_PUZZLE_CRON_SECRET` (also unset) — the
+  route that used them was deleted in System 3. Appendix / DF-CAND leftover.
+
+### 6.1.5 Rate limiting
+
+**`InMemoryRateLimiter`** (`rateLimit.ts`) — `Map<key → {count, resetAt}>`.
+`take()` starts/reuses a bucket; an expired bucket (`resetAt <= now`) is
+**overwritten**, never proactively deleted; **there is no size ceiling and no
+sweep** — every distinct key is a permanent Map entry until process restart or a
+full `.clear()`. (Contrast cache **A**, which at least prunes to 1000.) So the
+limiter map grows by one entry per distinct rate-limit key ever seen — and a
+key is `${scope}:ip:<ip>` or `${scope}:user:<uid>`, both attacker-influenceable
+(below). A slow memory leak; a fast one under a spoofed-key flood.
+
+**Key derivation** (`createRateLimitMiddleware`): `getUserId?.(req)` non-null →
+`${scope}:user:${userId}`, else `${scope}:ip:${requestIp(req)}`. `requestIp`
+takes `x-forwarded-for.split(',')[0]` when present, else `req.ip`. **There is no
+`app.set('trust proxy', …)`** — so `req.ip` is the Render proxy, and
+`x-forwarded-for[0]` is **fully client-controlled** (Render *prepends* the real
+IP but a client can send its own `X-Forwarded-For: 1.2.3.4` and that becomes
+`[0]`). Every IP-keyed HTTP limit is therefore bypassable by rotating a spoofed
+leftmost `X-Forwarded-For`; every per-user limit whose `getUserId` is
+`getUserIdFromAuthHeaderSync` is bypassable by rotating a forged `sub` (§6.1.3).
+
+**HTTP rules** (all on one shared `restRateLimiter`, `5min/600` default; order =
+`app.use` order in `index.ts`):
+
+| Rule | Path(s) | Window / max | Key | Protects |
+|---|---|---|---|---|
+| `cronLimit` | `/api/cron` | 10min / 20 | IP | (the `/api/cron/*` routes — the daily-puzzle one was deleted; none left?) — verify in Step 2 |
+| `leaderboardLimit` | `/api/daily-fritz/leaderboard`, `/api/ranking/leaderboard` | 60s / 30 | IP | unbounded DB leaderboard scans from a single poller |
+| `recordMatchLimit` | `/api/stats/record-match` | 5min / 20 | **sync sub** | rating computation on every match record |
+| `dailyFritzInitLimit` | `/api/daily-fritz/{today,start}` | 60s / 20 | **sync sub** | Daily Fritz init polling abuse |
+| `dailySubmitLimit` | `/api/daily-fritz/{next-hand,record-game,complete}` | 5min / 90 | **sync sub** | Daily Fritz submit spam |
+| `adminLimit` | `/api/daily-fritz/{generate,invalidate,reset-attempt,metrics,health,events}`, `/api/ranking/process`, `/bot-matches/cleanup-stale` | 10min / 20 | IP | admin-secret brute-force (weak — see §6.1.4) |
+| `accountDeleteLimit` | `/api/account` | 10min / 10 | **sync sub** | repeated irreversible account deletion |
+| `restApiLimit` | `/api`, `/bot-matches` | 5min / 600 | IP | catch-all |
+
+*(the `/league/*` rules — `run-forfeits`, `run-rollover`, the `/league`
+`restApiLimit` — were removed with System 5.)*
+
+**Socket rules** (`installSocketRateLimit`, `socket.use` per packet, on a
+separate `socketRateLimiter` 60s/600 default): a `SOCKET_EVENT_LIMITS` table
+(`room:create/join/spectate`, `queue:join`, `friend:invite(:decline)`,
+`room:chat:send`, `room:emote:send`, `game:action` 240/min, `hand:ready`,
+`player:ready` — all env-tunable via `LIMIT_*_MAX`), default `limitDefaultMax`
+600. Key = `socketRateLimitKey(socket)` = `socket.data.userId ??
+socket.handshake.address ?? socket.id`. `socket.data.userId` is set **only after**
+a handler runs (`registerPresenceHandlers`, `roomSocketAttach`,
+`registerRoomLifecycleHandlers`, `registerRoomSpectateHandlers`) — so the first
+packets key on `handshake.address` (the Render proxy, shared across all
+unauthenticated sockets) or `socket.id` (unique per connection → a reconnect =
+a fresh bucket). Plus `failedRoomLookupLimiter` (5 failed `room:join`/`room:spectate`
+lookups / 60 s — the MP-G3 backstop, System 2).
+
+**`middleware/rateLimiter.ts`** (`express-rate-limit`-based `apiGeneralLimiter`,
+skips localhost) — **defined, imported nowhere. Dead code.** ("for future route
+modules" — never adopted.)
+
+**Restart caveat:** both limiter maps + cache **A** + `authenticatedUserIdInFlight`
++ `sessionToken.ts`'s client cache are **process-local, lost on every deploy /
+crash / OOM.** Same class as System 2's in-memory `Room` maps and gameplay locks
+(§2.1.1) and System 3's `withDailyFritzAttemptLock` — Render is structurally
+single-instance and restarts are frequent (§2.3.2 evidence: ≥1/day). On restart:
+all rate-limit counters reset to zero (a burst timed across a deploy gets 2×
+budget); all token validations must re-hit Supabase (a cold-cache thundering herd
+right when the instance is slowest).
+
+### 6.1.6 Socket connection auth
+
+The only `io.use` connection middleware rejects connections during graceful
+shutdown. **There is no auth at socket connect.** Any client connects
+unauthenticated; identity is established **per action** — the client passes an
+`authToken` field in `room:join` / `room:create` / `presence:online` payloads →
+`resolveSocketIdentity` → `getAuthenticatedUserIdFromToken` (cache **A**). No
+token, or an invalid one → `userId: null` (guest); a client-claimed
+**non-UUID-shaped** `userId` without a token is kept (smoke tests / guest flows),
+a **UUID-shaped** claim without a token is rejected (`isUuidLike`). `getSocketUserId`
+(tournament) additionally requires `isValidUuid(socket.data.userId)`.
+
+### 6.1.7 Client session lifecycle
+
+- **Supabase client** (`lib/supabase.ts`): `persistSession: true` (→ `localStorage`
+  `sb-<ref>-auth-token`, holding **both access + refresh tokens**),
+  `autoRefreshToken: true`, `detectSessionInUrl: false` (recovery handled
+  manually — §6.1.7 recovery). Standard SPA posture; the **localStorage token
+  pair means any XSS = full account takeover** (see §6.1.9 CSP notes).
+- **`sessionToken.ts`** — an in-memory `{ token, userId }` cache. Authoritative
+  source is `onAuthStateChange` (`setCachedSession` on `SIGNED_IN` /
+  `TOKEN_REFRESHED` / `USER_UPDATED`; `clearCachedSession` on `SIGNED_OUT` / no
+  session). `getCachedSession(loadSession)` falls back to one shared
+  `getSession()` on a cold read. Motivation: `getSession()` acquires a lock +
+  may refresh, and a 9-request fan-out was paying it 9×.
+- **`getAuthHeaders` / `apiFetch`** (`api/client.ts`): attaches
+  `Authorization: Bearer <cached token>`; `credentials: 'include'`; 15 s timeout.
+  On `401` (attempt 1 only): `refreshSession()` → retry once with the new token;
+  if refresh fails **and** the request carried a token → dispatch
+  `rh:session-expired` (pops the sign-in modal). e2e path (`import.meta.env.DEV`
+  only) short-circuits to `Bearer e2e-daily-fritz`.
+- **`signOut`** (`useAuth.ts:649`): **`clearCachedSession()` immediately** (so the
+  token stops being attached before the network call), then
+  `supabase.auth.signOut()` raced against a timeout → on timeout,
+  `signOut({ scope: 'local' })`. `clearLocalSupabaseAuthTokens()` removes
+  `sb-*auth-token*` from `localStorage`. Note: this kills the **client's** use of
+  the token; the **access token JWT stays valid upstream until its `exp`** (see
+  §6.1.2).
+- **Timeout fallback** (`authTimeoutSessionFallback.ts`): when a sign-in/up
+  request hits `AUTH_REQUEST_TIMEOUT_MS = 15000`, a `getSession()` probe may be
+  accepted as success **only if `session.user.email` matches the submitted
+  email** (case-insensitive). Guards the "timed-out request silently adopts a
+  *previous* user's stale session" failure. `email_mismatch` → `Sentry.captureMessage`
+  `level: error`, tag `auth_timeout_stale_session`; `no_session` → console warn
+  only. Reports lengths/booleans, never emails/tokens.
+- **Recovery hash** (`recoveryHash.ts`): parses `#access_token=…&refresh_token=…&type=recovery`
+  from the URL fragment (before BrowserRouter starts), calls `supabase.auth.setSession`,
+  and **clears the hash only after `setSession` succeeds** (clearing first burned
+  one-shot links on transient failure). Failure → `Sentry` `level: error`, tag
+  `recovery_set_session_failed`, lengths only. **Window:** a full valid
+  `{access_token, refresh_token}` pair sits in `window.location.hash` until
+  `setSession` resolves — readable by any script on the page during that window
+  (standard implicit-flow exposure).
+- **Password change** (`passwordChange.ts`): `MIN_PASSWORD_LENGTH = 6` (Supabase's
+  own floor). **Email change** (`emailChange.ts`): validation only; notes
+  Supabase "secure email change" (dual confirmation) is the default.
+- **Redirects** (`authRedirect.ts`): `getAuthEmailRedirectTo()` forces the
+  canonical `https://playracehorse.com` for `*.vercel.app` preview URLs + legacy
+  origins so recovery/confirm links always land on an allowlisted URL.
+- **Admin UI gate** (`isAdminUser.ts`): `email === VITE_ADMIN_EMAIL`
+  (case-insensitive). `VITE_ADMIN_EMAIL` is **baked into the client bundle** —
+  publicly readable → the admin's email is not secret. This is **UI-visibility
+  only**; the real gate is the server `ADMIN_SECRET` (§6.1.4).
+
+### 6.1.8 `e2eDevAuth` — confirmed dead in prod (two independent gates)
+
+- **Client** (`auth/e2eDevAuth.ts`): `readE2eDevAuth()` returns `null` unless
+  `import.meta.env.DEV` — `false` in a production build, dead-code-eliminated.
+- **Server** (`supabaseAuth.ts:76`): the `token === 'e2e-daily-fritz'` branch is
+  gated on `process.env.NODE_ENV !== 'production'` — prod is `nodeEnv: production`
+  (confirmed live).
+- Same posture as System 5's `ENABLE_LEGACY_TOURNAMENTS` check and the
+  `e2eInspectRoute` (`E2E_INSPECT=1` + `NODE_ENV !== 'production'`). Two gates,
+  both closed in prod.
+
+### 6.1.9 CORS, security headers, health-endpoint disclosure
+
+- **CORS** (`index.ts` `corsOptions`): `origin` reflects the request origin when
+  `isAllowedOrigin(origin)`, with `credentials: true`. `isAllowedOrigin`: `!origin
+  → true`; the canonical prod origins; `CLIENT_URL` (unset in prod); `CORS_ALLOWED_ORIGINS`
+  (set); and `allowedOriginPatterns` — which includes **`/^https:\/\/.*\.vercel\.app$/i`**,
+  i.e. **any `*.vercel.app` subdomain** gets a reflected `Access-Control-Allow-Origin`
+  + `Access-Control-Allow-Credentials: true`. Practical impact is limited by the
+  Bearer-token model (a cross-origin page can't read the victim's `localStorage`
+  token, and the API doesn't use cookies), so this is a *wider-than-necessary
+  allowlist* rather than an account-takeover vector — but it lets any
+  vercel-hosted page call the API cross-origin and read responses.
+- **Server security headers** (every response): `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` (geo/mic/cam off), CSP `default-src 'none'; connect-src
+  'self' <supabase> <sentry>`, HSTS in prod. Tight — the API only serves JSON.
+- **Client CSP** (`client/public/_headers`): `script-src 'self' 'unsafe-inline'
+  https://*.i.posthog.com`; `img-src 'self' data: https:`; `connect-src … wss:
+  https:` (the trailing `wss:`/`https:` make the connect-src allowlist
+  effectively open). **`'unsafe-inline'` + a localStorage token pair + open
+  `img-src https:` = an XSS can exfiltrate the session** via an image beacon.
+  (Belongs to §13 telemetry/CSP too — noted here because auth is the asset.)
+- **Health endpoints, all unauthenticated:** `/health`, `/ping` (release commit
+  SHA); `/healthz` (+ DB probe); **`/ready`** discloses `pid`, `uptimeSeconds`,
+  `connectedSockets`, `roomCount`, `gamesInProgress`, the exact `release` commit
+  (→ exact source, public repo), Supabase latency, the daily-puzzle ladder
+  internal state, and **which recommended env vars are set** (`ADMIN_SECRET`,
+  `CLIENT_URL`, `DAILY_PUZZLE_CRON_SECRET`, …). Recon aid; the env-presence map in
+  particular tells an attacker the admin surface is currently disabled (or, once
+  a secret is set, when to start probing).
+
+### 6.1.10 Concurrency / authz windows
+
+| # | Window | Where | Current behaviour |
+|---|---|---|---|
+| **AU-1** | **Token-cache revocation lag.** A token revoked/expired/banned at Supabase is still honoured by cache **A** for up to 60 s after the last successful check (and a client `signOut` doesn't revoke the access-token JWT at all — valid to its `exp`). | `supabaseAuth.ts` cache **A** | ≤60 s stale-accept window; auth impls **B**/**C** have none. No push-invalidation. |
+| **AU-2** | **Rate-limiter reset on deploy restart.** All `InMemoryRateLimiter` counters + cache **A** + `authenticatedUserIdInFlight` reset to zero on every restart (frequent). | `rateLimit.ts`, `supabaseAuth.ts` | a burst straddling a deploy gets ~2× budget; a cold-cache auth thundering herd hits Supabase right when the instance is slowest (§1.3 T-18 class). |
+| **AU-3** | **IP-key spoof.** No `trust proxy`; `x-forwarded-for[0]` is client-set → every IP-keyed HTTP limit (incl. `adminLimit`, `restApiLimit`, `leaderboardLimit`) is bypassed by rotating the header. | `rateLimit.ts` `requestIp` | IP limits are advisory only against a deliberate attacker. |
+| **AU-4** | **Forged-`sub` rate-limit-key bypass.** `getUserIdFromAuthHeaderSync` reads `sub` from an unsigned JWT → per-user limits on `record-match`, `account-delete`, daily-fritz init/submit are bypassed by rotating `sub`. Not an authz bypass (handlers re-validate) — a rate-limit bypass. | `supabaseAuth.ts:55`, `index.ts` limit wiring | those 4 endpoints have effectively only the (also-bypassable) IP catch-all. |
+| **AU-5** | **`socket.data.userId` unset on first packets.** Early socket events key the socket limiter on `handshake.address` (shared Render-proxy IP for all unauth sockets) or `socket.id` (fresh per reconnect). | `index.ts` `installSocketRateLimit`, `socketRateLimitKey` | either one abusive socket throttles all unauth sockets, or a reconnect loop resets the bucket. |
+| **AU-6** | **Admin secret unset → admin surface disabled; if later set, a single static shared secret** with query-string transport on 3 GETs, `localStorage` storage in the admin UI, and only an IP-keyed (spoofable) brute-force limit. A leak = Daily Fritz content control + `reset-attempt` on any user + `ranking/process` on any user + per-attempt info disclosure. | `adminSecret.ts`, `dailyFritzAdminRoutes.ts`, `ranking.ts`, `botMatches.ts` | fail-closed today; brittle if activated as-is. |
+| **AU-7** | **Recovery-token exposure window.** A full `{access,refresh}` pair in `location.hash` until `setSession` resolves. | `recoveryHash.ts` | standard implicit-flow exposure; mitigated by `detectSessionInUrl: false` + immediate manual consume + post-success clear. |
+| **AU-8** | **Three divergent auth impls.** A fix / hardening (e.g. shorten the revocation window, add a nonce check, handle a Supabase outage) has to be made in three places or they drift — `socialAuth`/`tournamentAuth` already lack the cache, timeout, and e2e-bypass that `supabaseAuth` has. | §6.1.1 | latent drift; inconsistent DoS-amplification and outage-resilience per route family. |
+
+### 6.1.11 Existing prior art / good patterns (reusable)
+
+- **sha256-keyed token cache with a hard ceiling + expiry-then-oldest eviction +
+  in-flight dedup** (`supabaseAuth.ts`) — the right shape; just needs a
+  revocation story and to be the *only* impl.
+- **`timingSafeEqual` for the admin secret** (`adminSecret.ts`) — constant-time
+  compare, fail-closed on unset.
+- **Email-match gate on the auth-timeout fallback** (`authTimeoutSessionFallback.ts`)
+  — closes the "adopt a stale session" hole; alerts the dangerous branch.
+- **Consume-then-clear ordering on the recovery hash** (`recoveryHash.ts`) — clear
+  only after success so a transient failure doesn't burn a one-shot link.
+- **Immediate `clearCachedSession()` on sign-out intent** (`useAuth.ts`) — token
+  stops being attached before the network round-trip.
+- **Structured auth alerts** (`auth_timeout_stale_session`, `recovery_set_session_failed`)
+  — the System 1 D-3 / System 3 DF-G2 alert pattern, already applied here.
 
 ## 6.2 Invariants
 **Not started.** Step 2.
 
 ## 6.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+**Not started.** Step 2 — candidates surfaced in §6.1.10 (AU-1..AU-8) will be
+risk-ranked there.
 
 ## 6.4 Checklist
-- [ ] Step 1 — auth/session/rate-limit current-state map
-- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [x] Step 1 — auth/session/rate-limit current-state map — §6.1 (three auth impls, cache A revocation lag, unverified sync JWT decode, admin secret unset + transport inconsistency, in-memory limiter + spoofable keys, socket per-action auth, client session lifecycle, `e2eDevAuth` dead in prod, CORS `*.vercel.app`, health-endpoint disclosure, AU-1..AU-8) — **written 2026-09-03, awaiting human review**
+- [ ] Step 2 — invariants + risk-ranked gap list (AU-1..AU-8) → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
 ---
@@ -4041,6 +4370,7 @@ one becomes live or blocks a numbered system.
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
 | 2026-09-03 | **Plan restructured (D-11).** Old "System 4: Everything else" dissolved into leverage-ordered **Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Scaffolds written for each (scope in/out, live-vs-dead status from the inventory, empty §X.1/§X.2/§X.3 + a §X.4 checklist stub). New **Appendix** for latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) — "skip unless relevant". New **"Continuing this plan"** section at the end (workflow, house rules, deploy facts, ambiguity resolution) written for a cold session. Sequencing list expanded to 1–13; Current focus + D-11 added. **System 5 (Legacy League) live/dead check (this pass, needs human confirmation):** looks **DEAD in prod** — `fixtures`/`leagues`/`league_members` last written 2026-04-29, `fixture_match_results` 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows; **no** `client/src` HTTP call to `/league/*` and **no** league / `tournament:create` / `tournament:join` socket emitter; routes + legacy `tournament:*` socket handlers + admin `/league/run-*` jobs all still registered in `index.ts` but unreachable from the client; `finalizeTournamentMatchHook` only fires for a room with a legacy `cfg.tournamentId`, which nothing creates; no scheduler keeps a league alive; last *feature* commit predates the April 2026 overhaul. Likely: decommission (mirror the Ladder). No code changed — planning only. |
 | 2026-09-03 | **System 5 (Legacy League / Legacy Tournament) — CLOSED (decommissioned). Not pushed.** Step 1 re-verified the dead-in-prod read (§5.1): all 6 `league_*` tables untouched since April 2026 (`fixture_match_results` last 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows, no fixture ever `completed`, no `live_room_code` ever set); **zero** client HTTP calls to `/league/*` and **zero** client `tournament:{create,join,add_bot,remove_bot,start}` socket emitters; the legacy handlers were already gated behind `ENABLE_LEGACY_TOURNAMENTS` (default `false`, off in prod → `finalizeTournamentMatchHook` permanently `null`); no other system depends on the hook (System 1's scheduled-tournament path explicitly does not route through it); no FK from outside the `league_*` cluster; the 9 league imports in `index.ts` were already dead (imported, not wired). **Removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers` + `finalizeTournamentMatchHook` + the 2 `initRoomSession` dep wirings + the 3 `/league` rate-limit `app.use` mounts (`index.ts`); deleted `server/src/league/**` (forfeit/history/results/rollover/schedule/service/state), `server/src/legacyTournament/**` (handler + test), `server/src/http/routes/league.ts`, `supabase/league.sql`; removed the `gameOverPersistence.ts` live-fixture branch (`recordLeagueLiveResult` import + the per-game-over `/rest/v1/fixtures?live_room_code=eq.<code>` query — always empty in prod) + its 2 tests + the `mpInvariantHarness.test.ts` league mock; removed `config.enableLegacyTournaments`; updated the now-inert `legacy_league` comments in `roomLivePersistence.ts` / `roomSession.ts`. **Parked:** `roomKind.ts`'s `'legacy_league'` classification + `isLegacyLeagueRoom` + the `!legacyLeagueRoom` / `case 'legacy_league':` guards — System 1/2 ratified (D-9 / PR #102), permanently unreachable (nothing sets `config.tournamentId`), safe to strip later. **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** all 6 `league_*` tables `cascade` (**not** archived: zero remaining readers in `server/src` + `client/src`, ~200 rows of abandoned test-season state, no display surface — contrast the Ladder which was archived because live paths still read `daily_puzzle_attempts`). Self-asserting `to_regclass` check; **pg16-verified** (apply `league.sql` → migration drops all 6 → self-assert passes; pass 2 idempotent no-op). **NOT applied to prod DB — human runs it.** Full suite green: **server 206 files / 1188 tests, client 216 / 1482**; `tsc -b` clean (client + server); client lint at budget; **server lint 233→217 problems / 71→68 errors** (deleting `league/` removed pre-existing lint errors; 0 new). §5.1–§5.4 filled in, System 5 marked CLOSED in Current focus + Sequencing. **Next: System 6 (Auth / session + rate limiting) Step 1.** |
+| 2026-09-03 | **System 6 (Auth / session + rate limiting) Step 1 — current-state map §6.1 written (no fixes). Not pushed.** 11 subsections: (6.1.1) **three divergent server auth impls** — `supabaseAuth.ts` (cached 60 s, in-flight dedup, 12 s timeout, non-prod e2e bypass; used by daily-fritz/puzzle-rush/ghost/stats/bot-matches/socket), `social/socialAuth.ts` `requireAuth` (uncached, per-request upstream call; `/api/social/*` + `/api/profile/*` + `/api/account`), `scheduledTournament/tournamentAuth.ts` (uncached + uuid check + payload-userId-match; `/api/tournaments/*`) — all hit `GET /auth/v1/user`. (6.1.2) cache **A** — sha256(token) key, 1000-entry ceiling (expiry-then-oldest eviction), **≤60 s revocation lag**; a client `signOut()` revokes only the refresh token, the access-token JWT stays valid upstream to its `exp` (~1 h). (6.1.3) **`getUserIdFromAuthHeaderSync` decodes the JWT `sub` with NO signature/exp check** — used only for rate-limit keys, so a forged `sub` bypasses the per-user limits on `record-match` / `account-delete` / daily-fritz init+submit (not an authz bypass — handlers re-validate). (6.1.4) **`ADMIN_SECRET` is unset in prod** (`/ready` → `recommendedEnv.ADMIN_SECRET: false`) → `isAdminSecret` fail-closed → **every admin endpoint un-callable today**; design is a single static secret, `timingSafeEqual` compare, but `?admin_key=` query transport on 3 GETs + entered-secret in the admin-UI React state; blast radius per endpoint tabulated (Daily Fritz `reset-attempt`/`invalidate`/`generate`, `ranking/process`, `bot-matches/cleanup-stale`, per-attempt event disclosure). (6.1.5) **`InMemoryRateLimiter` — no size ceiling, no sweep** (slow leak per distinct key); **no `app.set('trust proxy')`** → `x-forwarded-for[0]` client-controlled → every IP-keyed HTTP limit bypassable; full HTTP + socket rule tables mapped (post-System-5); `middleware/rateLimiter.ts` `apiGeneralLimiter` is dead code. (6.1.6) **no socket connect-time auth** — identity per-action via a client `authToken` field. (6.1.7) client session lifecycle — Supabase client (`persistSession`/`autoRefreshToken`, tokens in `localStorage`), `sessionToken.ts` in-memory cache, `apiFetch` 401→refresh→retry-once, `signOut` clears the cached token first, `authTimeoutSessionFallback` email-match gate, `recoveryHash` consume-then-clear + the `location.hash` token window, `isAdminUser` = `VITE_ADMIN_EMAIL` (UI-only). (6.1.8) **`e2eDevAuth` confirmed dead in prod** — client gate `import.meta.env.DEV` + server gate `NODE_ENV !== 'production'` (prod is `production`), same posture as System 5's `ENABLE_LEGACY_TOURNAMENTS`. (6.1.9) CORS reflects **any `*.vercel.app`** with `credentials:true` (impact limited by the Bearer-token model); server CSP tight, client CSP has `'unsafe-inline'` + open `img-src`/`connect-src`; `/ready` discloses env-presence + load telemetry + the release SHA. (6.1.10) **8 windows AU-1..AU-8** (revocation lag / restart-resets-limiter / IP-key spoof / forged-sub / socket-key / admin-secret brittleness / recovery-hash window / three-impl drift). (6.1.11) reusable prior art. §6 status + Sequencing + Current focus updated. **Stop — await human review of §6.1 before Step 2.** |
 
 ---
 
