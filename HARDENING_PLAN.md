@@ -90,8 +90,24 @@ focus" line, then the section for the system in progress.
   release SHA. **8 windows AU-1..AU-8** parked for Step 2 ranking. No fixes.
   **Stop — await human review of §6.1 before Step 2.**
 
-- **NEXT after review: System 6 Step 2** — invariants + risk-ranked gap list
-  (AU-1..AU-8) → ratify as a Decision.
+- **System 6 Step 2 (§6.2 invariants + §6.3 gap list) — CANDIDATE, written
+  2026-09-03, awaiting sign-off (→ D-13).** **AU-INV-1..8**; **AU-1..AU-8**
+  risk-ranked. **FIX NOW:** **AU-3 + AU-4** — no `trust proxy` + a
+  signature-unverified JWT `sub` used as a rate-limit key means **the entire
+  rate-limit layer is bypassable by anyone reading the (public) source** —
+  including account-deletion abuse and Daily-Fritz-verifier load amplification on
+  a 0.1-CPU box; fix is `app.set('trust proxy', 1)` + `requestIp → req.ip` +
+  drop the unverified key (~1 day). **AU-8** — consolidate the two uncached auth
+  impls (`socialAuth`, `tournamentAuth`) onto the cached one (`supabaseAuth`):
+  removes a per-request `/auth/v1/user` round-trip on the most-polled routes and
+  is the prerequisite for any AU-1 fix. **POSTURE:** **AU-1** (revocation lag —
+  cut cache TTL 60→15 s now; Supabase JWT-expiry setting + a denylist are
+  human-action / scale-gated; `signOut` doesn't revoke the JWT at all) and
+  **AU-6** (`ADMIN_SECRET` is unset → admin surface fail-closed today; a concrete
+  "before you ever set it" checklist — starting with deleting server-side
+  `?admin_key=` query-param acceptance). **REVISIT IF SCALE:** AU-5, AU-2.
+  **ACCEPT:** AU-7. No fixes yet. **Stop — await human sign-off on §6.2 / §6.3
+  before Step 3.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -559,7 +575,7 @@ own Step 1 when work reaches it. There is no System 4.
 3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *Pending human: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.*
 4. *(dissolved — see 5–13, D-11)*
 5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Pending human: apply the migration.*
-6. **Auth / session + rate limiting** (cross-cutting) ← **Step 1 audit written (§6.1) 2026-09-03**, awaiting review before Step 2
+6. **Auth / session + rate limiting** (cross-cutting) ← **Step 1 RATIFIED (D-12); Step 2 (§6.2/§6.3) CANDIDATE 2026-09-03**, awaiting sign-off (D-13) before Step 3. FIX-NOW: AU-3/AU-4 (rate-limit bypass) + AU-8 (consolidate auth impls); POSTURE: AU-1, AU-6
 7. **`@racehorse/game-core`** — shared score oracle ← scaffold
 8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
 9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
@@ -3667,7 +3683,8 @@ recovery-hash handling, the e2e dev-auth path never reaching prod).
 `getAuthenticatedUserId` usage (covered by that feature's audit).
 
 **Status:** **LIVE** — every authenticated route depends on it. **Step 1 (§6.1)
-written 2026-09-03**, awaiting human review before Step 2.
+RATIFIED D-12; Step 2 (§6.2 / §6.3) CANDIDATE 2026-09-03**, awaiting sign-off
+(→ D-13) before Step 3.
 
 ## 6.1 Current-state map
 
@@ -3986,16 +4003,167 @@ a **UUID-shaped** claim without a token is rejected (`isUuidLike`). `getSocketUs
   — the System 1 D-3 / System 3 DF-G2 alert pattern, already applied here.
 
 ## 6.2 Invariants
-**Not started.** Step 2.
+
+Status: **CANDIDATE — written 2026-09-03, awaiting human line-by-line sign-off
+(→ Decisions D-13, mirroring D-3 / D-9 / D-10).** §6.1 is ratified (D-12).
+
+Framing mirrors §1.2 / §2.2 / §3.2: each invariant states **the rule**, **the
+mechanism that enforces it today** (or `UNENFORCED` / `PARTIAL`), and **the
+failure mode**. Grounded in a §6.1 subsection and tied to the AU-window(s) it
+protects. Precondition for all: the **single Render instance** (§2.1.1) — a
+cross-instance failure is the revisit trigger, not a gap.
+
+**AU-INV-1 — The actor on an authenticated route is resolved from a
+signature-verified token, never a client claim.**
+*Enforced by:* `getAuthenticatedUserId` (A) / `requireAuth` (B) /
+`requireAuthUserId` (C) all call `GET /auth/v1/user`, which verifies the JWT
+signature + `exp` upstream; C additionally `isValidUuid`-checks the result and
+`rejectMismatchedPayloadUserId` rejects a client-sent `userId ≠` the token's.
+Socket: `resolveSocketIdentity` verifies `authToken`; a UUID-shaped `userId`
+claim without a token → `null`. `getUserIdFromAuthHeaderSync` (unverified `sub`
+decode) is used **only** for rate-limit keys, never authz.
+*Failure mode:* acting as another user. **HOLDS** — the load-bearing assumption
+is that `getUserIdFromAuthHeaderSync` is never wired into an authz decision;
+AU-8's three-impl drift is the risk that a future change forgets which impl a
+route uses.
+
+**AU-INV-2 — A revoked, expired, or banned token stops being accepted within a
+bounded, known window.**
+*Enforced by:* `/auth/v1/user` rejects an expired/banned token on the next
+upstream check. Cache **A** re-checks upstream at most every 60 s; **B**/**C**
+re-check every request.
+*`PARTIAL` / failure mode (AU-1):* (a) a client `signOut()` revokes only the
+**refresh** token — the access-token JWT stays valid upstream until its own
+`exp` (~1 h default), so "sign out" does not bound a *captured* token at all;
+(b) cache **A**'s ≤60 s stale-accept stacks on top for A's route families
+(daily-fritz, puzzle-rush, ghost, stats, bot-matches, socket). There is no
+push-invalidation and no server-side denylist.
+
+**AU-INV-3 — The admin surface is unreachable without the admin secret, and
+fail-closed when the secret is unset.**
+*Enforced by:* `isAdminSecret(v)` → `constantTimeEqualSecret(v, process.env.ADMIN_SECRET)`
+→ `false` for every input when `ADMIN_SECRET` is falsy; `timingSafeEqual` for the
+compare when it is set. **`ADMIN_SECRET` is unset in prod** → every
+`isAdminSecret`-guarded endpoint returns 401 today.
+*`POSTURE` residual (AU-6):* the *design* if the secret is ever set — `?admin_key=`
+query-string transport still accepted on 3 GET endpoints, entered-secret held in
+`sessionStorage` in the admin UI, one static shared secret, and only a spoofable
+IP rate limit bounding brute-force.
+
+**AU-INV-4 — Every rate limit bounds a deliberate actor, not just an honest
+client.**
+*Enforced by:* `InMemoryRateLimiter` per `${scope}:{user|ip}:<key>`.
+*`UNENFORCED against a deliberate actor` / failure mode (AU-3 + AU-4 + AU-5):*
+- **No `app.set('trust proxy')`** + `requestIp()` reads `x-forwarded-for.split(',')[0]`
+  (leftmost, client-settable) → **every IP-keyed HTTP limit is bypassed** by
+  rotating the header: `restApiLimit` (`/api` catch-all), `leaderboardLimit`,
+  `adminLimit` (the admin brute-force bound), `cronLimit`.
+- `getUserIdFromAuthHeaderSync` forges `sub` → **every per-user HTTP limit is
+  bypassed**: `accountDeleteLimit` (10/10 min — irreversible account deletion),
+  `dailySubmitLimit` (Daily Fritz submit spam → verifier load), `recordMatchLimit`
+  (→ Glicko recompute on every record), `dailyFritzInitLimit`.
+- Socket: `socket.data.userId` is unset on the first packets → they key on the
+  shared Render-proxy `handshake.address` (one abuser throttles all unauth
+  sockets) or per-connection `socket.id` (a reconnect resets the bucket).
+So the app's entire rate-limit layer is **advisory only** against anyone who
+reads the source (it's a public repo).
+
+**AU-INV-5 — Auth-cache and rate-limiter memory is bounded.**
+*Enforced by:* cache **A** — 1000-entry ceiling, prune-expired-then-evict-oldest
+on every write. **HOLDS.**
+*`UNENFORCED` / failure mode (AU-3):* `InMemoryRateLimiter` has **no ceiling and
+no sweep** — an expired bucket is overwritten only if the same key recurs;
+otherwise it lives until process restart. Grows by one entry per distinct
+`{ip|user}` key ever seen — a slow leak normally, a fast one under the
+spoofed-key flood that AU-3/AU-4 make trivial (unbounded distinct keys → OOM on
+512 MB).
+
+**AU-INV-6 — Auth degrades predictably during a Supabase outage — it does not
+fail every request open, and it does not amplify the outage.**
+*Enforced by:* cache **A** rides out a blip (60 s cached uid), returns `null`
+(not throw) on its 12 s timeout, and the in-flight dedup collapses a 9-request
+page fan-out to one upstream call.
+*`PARTIAL` / failure mode (AU-2 + AU-8):* **B**/**C** are uncached with **no
+circuit-breaker on the auth path** (`requireAuth` / `getUserIdFromBearerToken`
+don't pass `circuitBreakable`) → during a Supabase slowdown every `/api/social/*`
++ `/api/profile/*` + `/api/account` + `/api/tournaments/*` request makes its own
+`/auth/v1/user` call and 401s — a thundering herd against Supabase exactly when
+it is slow. A deploy restart empties cache **A** → the same cold-start herd for
+A's routes (§1.3 T-18 class).
+
+**AU-INV-7 — The client attaches a token only while the user intends to be
+signed in, and a timed-out login never silently adopts another session.**
+*Enforced by:* `signOut` calls `clearCachedSession()` **before** the network
+round-trip + `clearLocalSupabaseAuthTokens()`; `apiFetch` on 401 refreshes once
+then dispatches `rh:session-expired`; `authTimeoutSessionFallback` accepts a
+post-timeout `getSession()` **only if `session.user.email` matches the submitted
+email**, and alerts (`auth_timeout_stale_session`, `level: error`) on a mismatch.
+*Failure mode:* a stale token attached after sign-out, or a login timeout
+adopting a previous user's session. **HOLDS.**
+
+**AU-INV-8 — There is one auth code path, so a change to token handling
+(revocation window, outage behaviour, a nonce check) applies everywhere at once.**
+*Enforced by:* nothing — **UNENFORCED (AU-8).** Three impls (A/B/C) with
+divergent caching, timeout, circuit-breaker, and e2e-bypass behaviour.
+*Failure mode:* a fix to AU-1 / AU-6 / AU-INV-6 made in one impl silently leaves
+the other route families on the old behaviour; new routes pick an impl by
+copy-paste. **§6.3 recommends consolidating B + C onto A.**
+
+### Notes for Step 3
+
+- **HOLDS today:** AU-INV-1, AU-INV-3 (fail-closed), AU-INV-5 (cache A only),
+  AU-INV-7.
+- **The real exposure is AU-INV-4** — the whole rate-limit layer is bypassable,
+  and the fix (§6.3 AU-3/AU-4) is cheap.
+- **AU-INV-2 / AU-INV-6 / AU-INV-8** are entangled — see the AU-1 / AU-8
+  write-ups in §6.3.
 
 ## 6.3 Gap list (risk-ranked)
-**Not started.** Step 2 — candidates surfaced in §6.1.10 (AU-1..AU-8) will be
-risk-ranked there.
+
+Status: **CANDIDATE — written 2026-09-03, awaiting sign-off (→ D-13).**
+
+**Scoring** (same axes as §1.3 / §2.3 / §3.3). *Severity* ∈ {data-corruption,
+competitive-integrity, auth-bypass, player-visible-bug, cosmetic} — **plus
+`abuse-enabling`** for this system (a control that fails to bound a deliberate
+actor but is not itself an authz or integrity break). *Likelihood* is for the
+**single Render instance** and current pre-marketing traffic. *Verdict* ∈
+{**FIX NOW**, **POSTURE** (a design decision + a pre-conditions checklist, no
+code now), **REVISIT IF SCALE**, **ACCEPT**}.
+
+| ID | Gap | §6.1 ref | Severity | Likelihood (1 instance) | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **AU-3** | **No `trust proxy` → every IP-keyed rate limit is bypassable.** `requestIp()` reads `x-forwarded-for.split(',')[0]` (leftmost = client-settable; Render *prepends* the real IP but the client's spoofed value is still `[0]`). Affects `restApiLimit` (`/api` catch-all), `leaderboardLimit` (unbounded DB scans), **`adminLimit`** (the only bound on admin-secret brute-force), `cronLimit`. Also feeds AU-INV-5 — a spoofed-key flood grows the limiter map without bound. | §6.1.5, §6.1.10 AU-3 | **abuse-enabling** (→ competitive-integrity via unbounded leaderboard scans; → weakens admin brute-force bound; → memory) | **high** — one HTTP header, and the source is public | app-wide: every IP-keyed limit + the limiter's memory bound | **FIX NOW** — `app.set('trust proxy', 1)` (**Step 3: confirm Render is exactly 1 proxy hop first** — it normally is) + rewrite `requestIp()` to `return req.ip` (Express then resolves it past the client's spoofed prefix). ~5 lines + a test. | AU-INV-4, AU-INV-5 |
+| **AU-4** | **`getUserIdFromAuthHeaderSync` decodes an unsigned JWT `sub` for rate-limit keys → every per-user limit is bypassable** by rotating a forged `{"sub":"<random>"}`. Endpoints: `accountDeleteLimit` (10/10 min on **irreversible account deletion**), `dailySubmitLimit` (Daily Fritz submit spam → `dailyFritzVerifier` CPU on a 0.1-CPU instance), `recordMatchLimit` (→ a Glicko rating-period recompute per call), `dailyFritzInitLimit`. **Not an authz bypass** — the handlers re-validate via impl A/B/C — but the protective intent of those four limits is fully defeated. | §6.1.3, §6.1.10 AU-4 | **abuse-enabling** (account-deletion abuse; verifier/DB load amplification on a tiny instance) | **high** — forging a JWT middle segment is trivial | the 4 per-user-keyed endpoints; on a 0.1-CPU / 512 MB box the daily-fritz + record-match amplification is a real availability risk | **FIX NOW** (bundle with AU-3) — after `trust proxy`, either (a) drop the `getUserId` arg on those four → key on `req.ip` (simple; the limits are generous enough that shared-NAT users are unaffected), or (b) make `createRateLimitMiddleware` `async` and key on the **verified** `getAuthenticatedUserId(req)` (falls back to IP for anon; reuses cache A which is already warm for authed traffic, so ~free). Prefer (b) for true per-user fairness; (a) if the async change is deemed too invasive. Delete `getUserIdFromAuthHeaderSync` once it has no callers. | AU-INV-4 |
+| **AU-8** | **Three divergent server auth impls** (§6.1.1). B/C are uncached (a full `/auth/v1/user` round-trip per social / tournament / account request — latency + Supabase quota + outage amplification, AU-INV-6) and lack A's in-flight dedup, 12 s timeout, and e2e bypass. Any future change to token handling must be made 3× or the families drift; new routes copy whichever impl the author saw first. | §6.1.1, §6.1.10 AU-8 | **latent drift** → player-visible-bug (inconsistent outage behaviour) + abuse-amplification (B/C hammer upstream) | **medium** — a drift is realised the next time auth logic changes (AU-1, AU-INV-6) | inconsistent enforcement + outage behaviour across route families; blocks a clean AU-1 fix | **FIX NOW (Step 3) — consolidate B and C onto A.** *Recommendation, stated plainly:* extract A's core as `verifyBearerToken(token): Promise<string|null>` (cache + dedup + timeout), and: rewrite `socialAuth.requireAuth` as a thin `res`-writing wrapper over it; rewrite `tournamentAuth.getUserIdFromBearerToken` / `requireAuthUserId` as a wrapper that adds the `isValidUuid` check, keeping `rejectMismatchedPayloadUserId` / `getSocketUserId` at the call sites unchanged. **Why consolidate, not leave separate:** (1) it is the prerequisite for any AU-1 fix (a shortened TTL or a denylist must apply to social/tournament/account too, or those become the soft underbelly); (2) it removes B/C's per-request upstream call — measurable Supabase-quota + latency + outage-herd reduction on the most-polled routes (social feed, friends-with-presence, tournament hub); (3) A's e2e bypass is `NODE_ENV !== 'production'`-gated → harmless to extend. **Why the 60 s cache lag on the new B/C paths is acceptable:** social routes (feed/friends/presence) — immaterial; account-deletion — the user can only delete *their own* account and deletion is already the irreversible self-service action; tournament — System 1's `authorizeMatchParticipant` re-reads the match row and is the real gate there. ~10 call sites, mechanical. | AU-INV-6, AU-INV-8, AU-INV-2 |
+| **AU-1** | **Token revocation lag.** (a) A client `signOut()` does **not** revoke the access-token JWT — a *captured* token works until its `exp` (~1 h, Supabase project default) regardless of sign-out; (b) cache A adds ≤60 s on top for A's route families. No push-invalidation, no denylist. | §6.1.2, §6.1.10 AU-1 | **auth-bypass** (a leaked/captured token has a longer useful life than a user expects) — **but requires a prior compromise** (XSS, shared device, the user's `localStorage`) | **low–medium** — no leak vector in-app today (HSTS, tight server CSP); the client CSP `'unsafe-inline'` + localStorage tokens is the realistic path, tracked for §13 | one account per captured token, for ≤ `min(JWT exp, last-check + 60 s)` | **POSTURE.** No live exposure to *fix* (needs a prior token compromise), but the window is longer than necessary. **Recommendation:** (1) cut cache A's success TTL **60 s → 15 s** (one constant; ~4× more upstream checks on a warm cache, still dedup'd — cheap, halves-plus the server-side lag); (2) **human action:** lower the Supabase project **JWT expiry** from 3600 s to e.g. 900 s (bounds the "signed-out token still works" window platform-wide; the client auto-refreshes, so no UX cost); (3) a server-side token **denylist** (populated on sign-out via a client `POST /auth/logout` + checked in `verifyBearerToken`) is the complete fix — **scale-gated**, only worth it once (2) isn't enough. Contingent on **AU-8** (the TTL cut + any denylist must land in the consolidated impl or B/C/account stay on the old behaviour). | AU-INV-2 |
+| **AU-6** | **Admin-secret design (fail-closed today).** `ADMIN_SECRET` unset in prod → every admin endpoint 401s now. The design if it is ever set: `?admin_key=` query transport still accepted on `GET /api/daily-fritz/{metrics,health,events/:attemptId}` (→ access logs / `Referer` / history); POSTs read `req.body.adminKey`; the admin UI persists the entered secret to `sessionStorage`; one static shared secret; only the (spoofable, AU-3) `adminLimit` bounds brute-force. Blast radius if set + leaked: `reset-attempt` (wipe any user's Daily Fritz run), `invalidate` (kill a published challenge mid-day), `generate`, `ranking/process` (force a rating recompute for any user), `bot-matches/cleanup-stale` (force-forfeit any idle bot match), per-attempt event/user-id disclosure. | §6.1.4, §6.1.10 AU-6 | **auth-bypass** (of the admin boundary) — **but zero live exposure** (secret unset) | **n/a today**; the risk is a future operator setting a weak secret + the brittle transport | full Daily Fritz content control + cross-user rating/attempt manipulation + info disclosure | **POSTURE — "before you ever set `ADMIN_SECRET` in prod" checklist:** (1) **remove server-side `?? req.query.admin_key`** from the 3 GET endpoints — the client (`DailyFritzHealthAdminScreen`) already sends only the `x-admin-secret` header and migrates legacy `?admin_key=` out of the URL, so this is safe to delete outright (Step 3 can do just this part — it's a pure removal, testable, no behaviour change for the real client); (2) move the POST endpoints from `req.body.adminKey` to the same `x-admin-secret` header for one transport; (3) admin UI: **drop the `sessionStorage` persistence** — hold the entered secret in React state only, re-enter per session (one screen, infrequent use); (4) generate `ADMIN_SECRET` as ≥ 32 bytes of CSPRNG output; (5) consider whether these endpoints should be reachable from the public internet at all vs. an IP allowlist / a separate ops surface — the integrity-affecting ones (`reset-attempt`, `invalidate`, `ranking/process`) especially. | AU-INV-3 |
+| **AU-5** | **Socket rate-limit key before auth.** First packets on a connection key on `handshake.address` (the shared Render-proxy IP for all unauthenticated sockets → one abuser trips the limit for everyone) or `socket.id` (unique per connection → a reconnect loop resets the bucket). `socket.data.userId` is only set after a handler runs. | §6.1.5, §6.1.10 AU-5 | **player-visible-bug** (a shared-bucket false 429, or a bypass via reconnect) | **medium** — needs a deliberate reconnect flood or a noisy shared-IP neighbour | pre-auth socket events (`room:create`, `room:join`, `presence:online`); gameplay events already require an authed + joined room | **REVISIT IF SCALE** — the pre-auth events have their own `failedRoomLookupLimiter` (MP-G3) and are cheap; the fix (a socket.io `trust proxy`-aware address, or always keying pre-auth packets on `socket.id`) is not urgent at current concurrency (`connectedSockets: 0` on `/ready`). Bundle with a future socket-scaling pass. | AU-INV-4 |
+| **AU-2** | **Deploy restart resets every limiter + empties cache A.** A rate-limit burst timed across a deploy gets ~2× budget; cache A cold-starts a `/auth/v1/user` herd for authed traffic. | §6.1.5, §6.1.10 AU-2 | **cosmetic / minor player-visible-bug** | **high** (every deploy — ≥1/day per §2.3.2) but **immaterial** at current traffic | a few-second 2× window per deploy; a small cold-auth burst | **REVISIT IF SCALE** — a shared store (Redis / Upstash) for the limiter + token cache is the fix, and that is an upgrade-time change (same class as §2.1.1 / D-2 addendum / T-18 — everything in-process is lost on restart on the free tier). No action now. | AU-INV-5, AU-INV-6 |
+| **AU-7** | **Recovery-token URL-fragment window.** A full `{access_token, refresh_token}` pair sits in `window.location.hash` between `parseSupabaseAuthHash` and `setSession` resolving — readable by any script on the page during that window. | §6.1.7, §6.1.10 AU-7 | **auth-bypass** (one account) — needs a malicious/compromised script already on the page during a ~sub-second window on a recovery-link click | **low** — `detectSessionInUrl: false` + immediate manual consume + clear-only-after-success already minimise it; requires an XSS coinciding with a password-recovery flow | one account | **ACCEPT** — standard OAuth-implicit-flow exposure, already well-mitigated; the residual is inherent to Supabase recovery-link handling. *(Improvement path, not now: `createClient({ auth: { flowType: 'pkce' }})` moves recovery to a code-exchange with no tokens in the URL — flag for a later client-auth pass if the client CSP hardening in §13 doesn't already reduce the XSS surface enough.)* | AU-INV-7 |
+
+### Tier summary
+
+- **FIX NOW (Step 3):** **AU-3 + AU-4** (`trust proxy` + drop the unverified-JWT
+  rate-limit key — the whole rate-limit layer is currently advisory against a
+  deliberate actor, and the fix is ~1 day) and **AU-8** (consolidate B+C onto A —
+  removes the per-request upstream call on the most-polled routes and unblocks
+  AU-1).
+- **POSTURE (decision + pre-conditions, no code beyond the safe removals):**
+  **AU-1** (cut cache TTL 60→15 s now; Supabase JWT-expiry + denylist are
+  human-action / scale-gated) and **AU-6** (the "before you set `ADMIN_SECRET`"
+  checklist; the `?admin_key=` query-param removal is a safe standalone Step-3
+  item).
+- **REVISIT IF SCALE:** AU-5, AU-2.
+- **ACCEPT:** AU-7.
+
+Nothing here is a live authz break. The one thing that is *currently* exploitable
+by anyone reading the (public) source is the rate-limit bypass (AU-3/AU-4) —
+which is why it is the FIX-NOW priority.
 
 ## 6.4 Checklist
-- [x] Step 1 — auth/session/rate-limit current-state map — §6.1 (three auth impls, cache A revocation lag, unverified sync JWT decode, admin secret unset + transport inconsistency, in-memory limiter + spoofable keys, socket per-action auth, client session lifecycle, `e2eDevAuth` dead in prod, CORS `*.vercel.app`, health-endpoint disclosure, AU-1..AU-8) — **written 2026-09-03, awaiting human review**
-- [ ] Step 2 — invariants + risk-ranked gap list (AU-1..AU-8) → ratify (D-N)
-- [ ] Step 3 — fixes + tests
+- [x] Step 1 — auth/session/rate-limit current-state map — §6.1 — **RATIFIED D-12 (2026-09-03)**
+- [x] Step 2 — invariants (§6.2 AU-INV-1..8) + risk-ranked gap list (§6.3 AU-1..AU-8) — **CANDIDATE, written 2026-09-03, awaiting sign-off → D-13**
+- [ ] Step 3 — fixes + tests. Proposed scope: **AU-3 + AU-4** (`trust proxy` + rate-limit-key fix), **AU-8** (consolidate B/C onto A), **AU-6 partial** (delete server `?admin_key=` acceptance), **AU-1 partial** (cache A TTL 60→15 s). Human-action items surfaced separately: Supabase JWT expiry, `ADMIN_SECRET` provisioning checklist.
 
 ---
 
@@ -4314,6 +4482,7 @@ one becomes live or blocks a numbered system.
 | D-9 | 2026-09-01 | **System 2 Step 2 RATIFIED — §2.2 (MP-INV-1..19) + §2.3 (MP-G1..MP-G17, including the §2.3.2 verification-pass updates) as written.** The human reviewed the invariant list and the tiered gap list line-by-line and signed off. What is ratified: **19 invariants** across 8 domains (seat/identity 1–3, room-kind ACL 4–6, state authority & ordering 7–9, persistence/recovery 10–13, game-over integrity 14–17, disconnect/grace 18, anti-cheat posture 19), each with rule / enforcing-mechanism-today-or-`UNENFORCED` / failure-mode and grounded in an MP-1..MP-8 window or a §2.1.7 authz row; **17 gaps** tiered A (fix now: **MP-G1** unmanaged room-table schema, **MP-G3** `room:spectate` no room-kind check on a ranked-eligible private room, **MP-G4** game-over side-effect idempotency) / B (verify: MP-G6 `room_command_receipts`+`mp_authority_events` unapplied, MP-G2 grant revoke) / C (revisit if scale: MP-G5, MP-G7–MP-G13) / D (posture: MP-G14) / E (accept: MP-G15–MP-G17). **Residual notes recorded with the sign-off:** (a) **MP-INV-2** carries a known unclosed gap — two *guest* seats (`userId=null`) are distinguishable on reconnect only by username/hold, so a second guest with the room code + the first's display name can reclaim the seat; scoped to private-unranked play, tracked as **MP-G13 (Tier C)**, not blocking. (b) **MP-INV-19 is a posture decision, not a hard invariant** — move-log verification stays non-blocking for the match result; the ratified direction is to *add* a structured alert + per-user failure tracking in a later step (**MP-G14**), not to gate results on verification. (c) **MP-INV-12** holds (RLS confirmed, D-8) but the client write-grant revoke (**MP-G2**) and the unmanaged-schema fix (**MP-G1**) are still open — folded into one Step 3 migration. (d) **MP-G5** and **MP-G9** verdicts were changed by the §2.3.2 verification pass (G5 A→C on zero evidence + no measurement path; G9 ACCEPT→REVISIT on deploy-restart frequency) and are ratified as changed. **Step 3 scope (agreed):** Tier-A only — MP-G1, MP-G3, MP-G4 (MP-G2 folded into MP-G1). | The human reviewed the list line-by-line, same as D-3 for System 1. Recording the residual notes so a cold session does not treat MP-INV-2 / MP-INV-19 as fully closed, and does not re-litigate the G5/G9 downgrades. The Step-3 scope is deliberately narrow — the other tiers wait for their own pass. |
 | D-10 | 2026-09-02 | **System 3 Step 2 RATIFIED — §3.2 (DM-INV-1..18) + §3.3 (DF-G1..DF-G5) as written.** The human signed off "as written — no changes". What is ratified: **18 invariants** across 6 domains (score authority 1–5, one-attempt/run-per-day 6–7, idempotent recovery & ordering 8–13, content integrity 14–16, authz 17–18), each rule / mechanism-today-or-`UNENFORCED`/`PARTIAL` / failure, grounded in a DM-1..DM-7 window or a §3.1.5 authz row; **5 gaps** — **DF-G1 + DF-G2 FIX NOW**, DF-G3/DF-G4 REVISIT IF SCALE, DF-G5 ACCEPT. Scope = the 2 active modes (Daily Fritz, Puzzle Rush); the retired Ladder is out (decommissioned, §3.1.4). **Two `verified-against-code` corrections already folded into §3.2/§3.3:** the Daily Fritz speed board **is** verification-gated (`isDailyFritzAttemptLeaderboardEligible`), and `daily_fritz_outbox` is projected by a **DB trigger**, not a Node drainer. **Residual notes recorded with the sign-off (Step-3 code trace, 2026-09-03):** (a) **DF-G1's mechanism was wrong** — `scheduleDailyFritzRecordGameVerification` has zero production callers (dead code from the reverted `b0a0a93c` advance-first design, caller removed in `d027d30d`); the record/next-hand routes verify synchronously and refuse-to-advance on transient failure. The real gap is a **stranded `status='started'` attempt with a complete set** (client crash / restart mid-`/complete`, no reaper). DF-G1's fix is a stranded-set boot sweep + periodic reaper (mirror `recoverTournamentMatches`), NOT re-running the dead async path, and it must never un-`reject` a hand (DM-INV-11). (b) **DF-G2's alert already exists** (`recordDailyFritzAdvanceWithoutVerification` → `Sentry.captureMessage(..., daily_fritz_alert:'verification_bypassed')`); the real residuals are per-user aggregation on that alert + `getDailyFritzStreak` not being verification-filtered. (c) **DF-G2 streak filter must keep `legacy_unverified` (pre-protocol) completions counting** — applying the full leaderboard predicate would retroactively zero real streaks; the filter only drops `rejected` / non-empty-`unverified_hands`. (d) **The POSTURE decision** (same as D-9 MP-INV-19): Daily Fritz verification stays non-blocking for `status='completed'` — a failed hand is `rejected` (off the board) but never blocks the player finishing. **Step 3 scope (agreed):** DF-G1 + DF-G2 only. | Human reviewed the list line-by-line, same as D-3 / D-9. Recording the Step-3 corrections so a cold session does not build a reaper around dead code or a duplicate alert, and does not apply the streak filter in a way that breaks legacy streaks. |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
+| D-12 | 2026-09-03 | **System 6 §6.1 (Auth / session + rate limiting — current-state map) RATIFIED as written.** The human reviewed §6.1's 11 subsections and signed off "as written — no changes". What is ratified as an accurate map of what exists: **three divergent server auth impls** (`supabaseAuth.ts` A — cached 60 s + in-flight dedup + 12 s timeout + non-prod e2e bypass; `social/socialAuth.ts` B — uncached; `scheduledTournament/tournamentAuth.ts` C — uncached + uuid + payload-userId-match), all hitting `GET /auth/v1/user`; cache A's **1000-entry ceiling + ≤60 s revocation lag**; a client `signOut()` revokes only the refresh token (the access-token JWT lives to its `exp`); the **signature-unverified `getUserIdFromAuthHeaderSync`** used only for rate-limit keys; **`ADMIN_SECRET` unset in prod** (`/ready`-confirmed) → all admin endpoints fail-closed today; `InMemoryRateLimiter` with **no eviction ceiling** + **no `app.set('trust proxy')`**; socket auth per-action not per-connection; `e2eDevAuth` dead in prod (client `import.meta.env.DEV` + server `NODE_ENV !== 'production'`, both closed); CORS reflects any `*.vercel.app` with `credentials:true`; `/ready` discloses env-presence + load telemetry + release SHA. The **8 windows AU-1..AU-8** in §6.1.10 are the agreed candidate set for Step 2 ranking. Step 2 (§6.2 invariants + §6.3 gap list) proceeds. | Human reviewed §6.1 line-by-line, same as D-3 / D-9 / D-10 for the prior systems' Step-1/Step-2 sign-offs. Recording so a cold session treats §6.1 as the settled baseline and does not re-investigate. |
 | D-11 | 2026-09-03 | **The "Everything else" catch-all (old System 4) is dissolved into leverage-ordered Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Order: **5** Legacy League decommission (kill dead weight first) → **6** Auth/session + rate limiting → **7** `@racehorse/game-core` → **8** Ranking/Glicko → **9** Match runtime layer (the shared spine — de-risk before the modes on top of it) → **10** individual game modes (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) → **11** Social/stats/account → **12** Progression & learning (client-only, light-touch) → **13** remaining cross-cutting/infra. Latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) go in an Appendix, not a numbered system. There is no System 4. | Leverage-first: a bug in the shared auth / engine / ranking / runtime layer costs once to fix and benefits every mode; a bug in one feature costs once and benefits one. Killing the dead League surface first removes ~2.5k LOC + a socket-handler set + 6 tables from every later system's blast-radius reasoning. The client-only progression/learning surfaces have no shared state and are explicitly de-prioritised so they don't absorb audit effort disproportionate to their risk. |
 
 ---
@@ -4371,6 +4540,7 @@ one becomes live or blocks a numbered system.
 | 2026-09-03 | **Plan restructured (D-11).** Old "System 4: Everything else" dissolved into leverage-ordered **Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Scaffolds written for each (scope in/out, live-vs-dead status from the inventory, empty §X.1/§X.2/§X.3 + a §X.4 checklist stub). New **Appendix** for latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) — "skip unless relevant". New **"Continuing this plan"** section at the end (workflow, house rules, deploy facts, ambiguity resolution) written for a cold session. Sequencing list expanded to 1–13; Current focus + D-11 added. **System 5 (Legacy League) live/dead check (this pass, needs human confirmation):** looks **DEAD in prod** — `fixtures`/`leagues`/`league_members` last written 2026-04-29, `fixture_match_results` 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows; **no** `client/src` HTTP call to `/league/*` and **no** league / `tournament:create` / `tournament:join` socket emitter; routes + legacy `tournament:*` socket handlers + admin `/league/run-*` jobs all still registered in `index.ts` but unreachable from the client; `finalizeTournamentMatchHook` only fires for a room with a legacy `cfg.tournamentId`, which nothing creates; no scheduler keeps a league alive; last *feature* commit predates the April 2026 overhaul. Likely: decommission (mirror the Ladder). No code changed — planning only. |
 | 2026-09-03 | **System 5 (Legacy League / Legacy Tournament) — CLOSED (decommissioned). Not pushed.** Step 1 re-verified the dead-in-prod read (§5.1): all 6 `league_*` tables untouched since April 2026 (`fixture_match_results` last 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows, no fixture ever `completed`, no `live_room_code` ever set); **zero** client HTTP calls to `/league/*` and **zero** client `tournament:{create,join,add_bot,remove_bot,start}` socket emitters; the legacy handlers were already gated behind `ENABLE_LEGACY_TOURNAMENTS` (default `false`, off in prod → `finalizeTournamentMatchHook` permanently `null`); no other system depends on the hook (System 1's scheduled-tournament path explicitly does not route through it); no FK from outside the `league_*` cluster; the 9 league imports in `index.ts` were already dead (imported, not wired). **Removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers` + `finalizeTournamentMatchHook` + the 2 `initRoomSession` dep wirings + the 3 `/league` rate-limit `app.use` mounts (`index.ts`); deleted `server/src/league/**` (forfeit/history/results/rollover/schedule/service/state), `server/src/legacyTournament/**` (handler + test), `server/src/http/routes/league.ts`, `supabase/league.sql`; removed the `gameOverPersistence.ts` live-fixture branch (`recordLeagueLiveResult` import + the per-game-over `/rest/v1/fixtures?live_room_code=eq.<code>` query — always empty in prod) + its 2 tests + the `mpInvariantHarness.test.ts` league mock; removed `config.enableLegacyTournaments`; updated the now-inert `legacy_league` comments in `roomLivePersistence.ts` / `roomSession.ts`. **Parked:** `roomKind.ts`'s `'legacy_league'` classification + `isLegacyLeagueRoom` + the `!legacyLeagueRoom` / `case 'legacy_league':` guards — System 1/2 ratified (D-9 / PR #102), permanently unreachable (nothing sets `config.tournamentId`), safe to strip later. **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** all 6 `league_*` tables `cascade` (**not** archived: zero remaining readers in `server/src` + `client/src`, ~200 rows of abandoned test-season state, no display surface — contrast the Ladder which was archived because live paths still read `daily_puzzle_attempts`). Self-asserting `to_regclass` check; **pg16-verified** (apply `league.sql` → migration drops all 6 → self-assert passes; pass 2 idempotent no-op). **NOT applied to prod DB — human runs it.** Full suite green: **server 206 files / 1188 tests, client 216 / 1482**; `tsc -b` clean (client + server); client lint at budget; **server lint 233→217 problems / 71→68 errors** (deleting `league/` removed pre-existing lint errors; 0 new). §5.1–§5.4 filled in, System 5 marked CLOSED in Current focus + Sequencing. **Next: System 6 (Auth / session + rate limiting) Step 1.** |
 | 2026-09-03 | **System 6 (Auth / session + rate limiting) Step 1 — current-state map §6.1 written (no fixes). Not pushed.** 11 subsections: (6.1.1) **three divergent server auth impls** — `supabaseAuth.ts` (cached 60 s, in-flight dedup, 12 s timeout, non-prod e2e bypass; used by daily-fritz/puzzle-rush/ghost/stats/bot-matches/socket), `social/socialAuth.ts` `requireAuth` (uncached, per-request upstream call; `/api/social/*` + `/api/profile/*` + `/api/account`), `scheduledTournament/tournamentAuth.ts` (uncached + uuid check + payload-userId-match; `/api/tournaments/*`) — all hit `GET /auth/v1/user`. (6.1.2) cache **A** — sha256(token) key, 1000-entry ceiling (expiry-then-oldest eviction), **≤60 s revocation lag**; a client `signOut()` revokes only the refresh token, the access-token JWT stays valid upstream to its `exp` (~1 h). (6.1.3) **`getUserIdFromAuthHeaderSync` decodes the JWT `sub` with NO signature/exp check** — used only for rate-limit keys, so a forged `sub` bypasses the per-user limits on `record-match` / `account-delete` / daily-fritz init+submit (not an authz bypass — handlers re-validate). (6.1.4) **`ADMIN_SECRET` is unset in prod** (`/ready` → `recommendedEnv.ADMIN_SECRET: false`) → `isAdminSecret` fail-closed → **every admin endpoint un-callable today**; design is a single static secret, `timingSafeEqual` compare, but `?admin_key=` query transport on 3 GETs + entered-secret in the admin-UI React state; blast radius per endpoint tabulated (Daily Fritz `reset-attempt`/`invalidate`/`generate`, `ranking/process`, `bot-matches/cleanup-stale`, per-attempt event disclosure). (6.1.5) **`InMemoryRateLimiter` — no size ceiling, no sweep** (slow leak per distinct key); **no `app.set('trust proxy')`** → `x-forwarded-for[0]` client-controlled → every IP-keyed HTTP limit bypassable; full HTTP + socket rule tables mapped (post-System-5); `middleware/rateLimiter.ts` `apiGeneralLimiter` is dead code. (6.1.6) **no socket connect-time auth** — identity per-action via a client `authToken` field. (6.1.7) client session lifecycle — Supabase client (`persistSession`/`autoRefreshToken`, tokens in `localStorage`), `sessionToken.ts` in-memory cache, `apiFetch` 401→refresh→retry-once, `signOut` clears the cached token first, `authTimeoutSessionFallback` email-match gate, `recoveryHash` consume-then-clear + the `location.hash` token window, `isAdminUser` = `VITE_ADMIN_EMAIL` (UI-only). (6.1.8) **`e2eDevAuth` confirmed dead in prod** — client gate `import.meta.env.DEV` + server gate `NODE_ENV !== 'production'` (prod is `production`), same posture as System 5's `ENABLE_LEGACY_TOURNAMENTS`. (6.1.9) CORS reflects **any `*.vercel.app`** with `credentials:true` (impact limited by the Bearer-token model); server CSP tight, client CSP has `'unsafe-inline'` + open `img-src`/`connect-src`; `/ready` discloses env-presence + load telemetry + the release SHA. (6.1.10) **8 windows AU-1..AU-8** (revocation lag / restart-resets-limiter / IP-key spoof / forged-sub / socket-key / admin-secret brittleness / recovery-hash window / three-impl drift). (6.1.11) reusable prior art. §6 status + Sequencing + Current focus updated. **Stop — await human review of §6.1 before Step 2.** |
+| 2026-09-03 | **System 6 §6.1 RATIFIED (D-12) + Step 2 (§6.2 invariants / §6.3 gap list) written — CANDIDATE, no code.** **§6.2: AU-INV-1..8** — verified-identity (HOLDS, rests on `getUserIdFromAuthHeaderSync` never being wired to authz), bounded revocation (PARTIAL — AU-1), admin fail-closed (HOLDS today — AU-6), limits-bound-a-deliberate-actor (**UNENFORCED** — AU-3/AU-4/AU-5), bounded memory (cache A HOLDS, limiter UNENFORCED — AU-3), outage resilience (PARTIAL — B/C uncached + no circuit breaker — AU-2/AU-8), client attaches token only when intended (HOLDS), one auth code path (**UNENFORCED** — AU-8). **§6.3: AU-1..AU-8** risk-ranked with an added `abuse-enabling` severity band. **FIX NOW: AU-3** (`app.set('trust proxy', 1)` — confirm Render's hop count first — + `requestIp → req.ip`; every IP-keyed limit is currently spoofable via `X-Forwarded-For`) **+ AU-4** (drop the unsigned-JWT-`sub` rate-limit key → key on `req.ip` or an async verified-uid; every per-user limit — incl. account-deletion, Daily-Fritz-verifier-load — is bypassable by forging `sub`; ~1 day combined) **+ AU-8** (consolidate `socialAuth` B + `tournamentAuth` C onto `supabaseAuth` A via a shared `verifyBearerToken`, keeping C's uuid/payload-match wrapper — removes a per-request `/auth/v1/user` round-trip on the most-polled routes and is the prerequisite for any AU-1 fix; ~10 mechanical call sites). **POSTURE: AU-1** (cut cache A TTL 60→15 s now — one constant; the "signed-out JWT still works ~1 h" part needs a Supabase project JWT-expiry change [human] + optionally a server denylist [scale-gated]) **+ AU-6** (admin surface fail-closed today; concrete "before you ever set `ADMIN_SECRET`" checklist — (1) delete server-side `?? req.query.admin_key` on the 3 GET endpoints [safe standalone Step-3 removal — client already header-only], (2) one header transport, (3) drop the admin-UI `sessionStorage` persistence, (4) ≥32-byte CSPRNG secret, (5) consider IP allowlist for the integrity-affecting endpoints). **REVISIT IF SCALE: AU-5** (socket key before `socket.data.userId` is set), **AU-2** (restart resets limiter/cache — needs a shared store, upgrade-time). **ACCEPT: AU-7** (recovery-token URL-fragment window — already well-mitigated; PKCE flow is the improvement path). §6.4 updated; D-12 logged; §6 status + Sequencing + Current focus updated. **Awaiting human line-by-line sign-off on §6.2 / §6.3 → D-13. Step 3 does not start until then.** |
 
 ---
 
