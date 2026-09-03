@@ -2,7 +2,6 @@ import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { completeGhostGame } from '../ghost/service';
 import { verifyPlayerMoveLog } from '../ghost/verifier';
-import { recordLeagueLiveResult } from '../league/results';
 import { appendMatch } from '../stats/matchLog';
 import { recordPublicOnlineMatch } from '../stats/recordPublicMatch';
 import { writeMatchActivity } from '../social/activityWriter';
@@ -365,49 +364,10 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   } else {
     room.rankingOutcome = rankingOutcomeEligibleNotApplied();
   }
-
-  const linkedFixtureRows = await supabaseFetch<any[]>(
-    `/rest/v1/fixtures?select=id,status,home_member_id,away_member_id,live_room_code&live_room_code=eq.${room.code}&limit=1`,
-  );
-  const linkedFixture = linkedFixtureRows?.[0];
-  if (linkedFixture && linkedFixture.status !== 'completed' && linkedFixture.status !== 'forfeit') {
-    const fixtureMembers = await supabaseFetch<any[]>(
-      `/rest/v1/league_members?select=id,player_user_id&id=in.("${linkedFixture.home_member_id}","${linkedFixture.away_member_id}")`,
-    );
-    const homeMember = fixtureMembers.find((member) => member?.id === linkedFixture.home_member_id) ?? null;
-    const awayMember = fixtureMembers.find((member) => member?.id === linkedFixture.away_member_id) ?? null;
-    const livePlayers = [a, b];
-    const homePlayer = livePlayers.find((player) => player.userId === homeMember?.player_user_id) ?? null;
-    const awayPlayer = livePlayers.find((player) => player.userId === awayMember?.player_user_id) ?? null;
-
-    if (homeMember && awayMember && homePlayer && awayPlayer) {
-      const homeScore = homePlayer.id === a.id ? scoreA : scoreB;
-      const awayScore = awayPlayer.id === a.id ? scoreA : scoreB;
-      await recordLeagueLiveResult({
-        fixtureId: linkedFixture.id,
-        playerMemberId: homeMember.id,
-        opponentMemberId: awayMember.id,
-        homeScore,
-        awayScore,
-        sourceUserId: a.userId ?? b.userId ?? null,
-        roomCode: room.code,
-        metadata: { via: 'live-room-auto-finalize' },
-      });
-      log.info({
-        fixtureId: linkedFixture.id,
-        roomCode: room.code,
-      }, 'Live fixture finalized');
-    } else {
-      log.warn({
-        fixtureId: linkedFixture.id,
-        roomCode: room.code,
-        hasHomeMember: !!homeMember,
-        hasAwayMember: !!awayMember,
-        hasHomePlayer: !!homePlayer,
-        hasAwayPlayer: !!awayPlayer,
-      }, 'Skipping live fixture finalization — player mapping missing');
-    }
-  }
+  // The legacy weekly-league live-fixture auto-finalize branch was removed with
+  // the Legacy League decommission (System 5) — `fixtures.live_room_code` was
+  // never set in prod, so this only ever ran a wasted `/rest/v1/fixtures` query
+  // per game-over.
 }
 
 function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string, err: unknown): void {

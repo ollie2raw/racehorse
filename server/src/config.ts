@@ -13,7 +13,6 @@ export interface Config {
   corsAllowedOrigins: string;
   clientUrl: string | null;
   serverUrl: string | null;
-  enableLegacyTournaments: boolean;
   /**
    * Boot-time singleton gate for the scheduled-tournament scheduler tick +
    * no-show reconciler (D-7 / HARDENING_PLAN.md §1.4.6). Default true. Set
@@ -103,7 +102,6 @@ export function validateAndLoadConfig(): Config {
     corsAllowedOrigins: getEnv('CORS_ALLOWED_ORIGINS') ?? '',
     clientUrl: getEnv('CLIENT_URL'),
     serverUrl: getEnv('SERVER_URL'),
-    enableLegacyTournaments: getEnvBool('ENABLE_LEGACY_TOURNAMENTS', false),
     tournamentSchedulerEnabled: getEnvBool('TOURNAMENT_SCHEDULER_ENABLED', true),
     matchmakingDebug: getEnvBool('MATCHMAKING_DEBUG', false),
     matchmakingDevMode: getEnv('MATCHMAKING_DEV_MODE'),

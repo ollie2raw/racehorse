@@ -58,11 +58,25 @@ focus" line, then the section for the system in progress.
   System 5–13 scope blocks. See **"Continuing this plan"** at the end of this
   file — it is written for a fresh session with no prior context.
 
-- **NEXT: System 5 — Legacy League / Legacy Tournament.** Step 1 = confirm the
-  2026-09-03 inventory read (**looks DEAD in prod** — no `league_*` writes since
-  April 2026, no client emitter, routes+handlers still registered) against the
-  live route table + a fresh write-recency check, then decide **decommission
-  (mirror the Ladder playbook) vs. real audit.** Not started.
+- **System 5 (Legacy League) → CLOSED 2026-09-03 (decommissioned).** Confirmed
+  dead: no `league_*` writes since April 2026, zero client HTTP/socket emitters,
+  legacy handlers already gated off (`ENABLE_LEGACY_TOURNAMENTS` default false),
+  no cross-system dependency on `finalizeTournamentMatchHook`, no external FK
+  into the tables. **Removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers`
+  + the hook + rate-limit mounts; `server/src/league/**` (7 files) +
+  `server/src/legacyTournament/**` (2) + `http/routes/league.ts`; the wasted
+  `gameOverPersistence.ts` live-fixture query (a DB round-trip per game-over);
+  `config.enableLegacyTournaments`; `supabase/league.sql`. **Migration**
+  `2026-09-03_legacy_league_decommission.sql` — **DROPs** all 6 `league_*` tables
+  (not archived — zero remaining readers, unlike the Ladder). pg16-verified.
+  Suite green (server 1188, client 1482); server lint 233→217 problems.
+  `roomKind.ts`'s inert `legacy_league` classification is parked. **Pending
+  human: apply the migration.**
+
+- **NEXT: System 6 — Auth / session + rate limiting.** Scaffold only (§6.1–§6.4).
+  Starts at its own Step 1 — current-state map of `platform/auth/supabaseAuth.ts`
+  (token→uid cache), `social/socialAuth.ts`, `adminSecret.ts`, the in-memory
+  `InMemoryRateLimiter` + the ~13 remaining `app.use` rules, and `client/src/auth/**`.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -529,8 +543,8 @@ own Step 1 when work reaches it. There is no System 4.
 2. **Multiplayer rooms** ← **passed through Tiers A–E**; Tier-A/B fixed + live, C/D/E deferred-until-scale
 3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *Pending human: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.*
 4. *(dissolved — see 5–13, D-11)*
-5. **Legacy League / Legacy Tournament** — decommission decision (looks dead in prod; needs confirmation) ← **NEXT**
-6. **Auth / session + rate limiting** (cross-cutting) ← scaffold
+5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Pending human: apply the migration.*
+6. **Auth / session + rate limiting** (cross-cutting) ← **NEXT** (scaffold — starts at Step 1)
 7. **`@racehorse/game-core`** — shared score oracle ← scaffold
 8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
 9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
@@ -3556,66 +3570,64 @@ lowest-risk last (Decisions **D-11**).
 
 ---
 
-# System 5: Legacy League / Legacy Tournament — decommission decision
+# System 5: Legacy League / Legacy Tournament — **CLOSED 2026-09-03 (decommissioned)**
 
 Scope: `server/src/league/**` (7 files, ~2.1k LOC), `server/src/legacyTournament/registerLegacyTournamentHandlers.ts`,
 `server/src/http/routes/league.ts` (`/league/*`), `supabase/league.sql`
 (`leagues`, `league_members`, `fixtures`, `fixture_match_results`,
 `player_league_history`, `league_bots`), the admin jobs
-`/league/run-{forfeits,rollover}` + `/league/generate-fixtures` and the functions
-behind them (`generateLeagueFixtures`, `runLeagueSundayRollover`,
-`runLeagueForfeitJob`), and the legacy socket handlers
-`tournament:{create,join,add_bot,remove_bot,start}` (**distinct** from System 1's
-scheduled-tournament `tournament:{register,get_bracket,attach_assigned_match,withdraw}`).
+`/league/run-{forfeits,rollover}` + `/league/generate-fixtures`, and the legacy
+socket handlers `tournament:{create,join,add_bot,remove_bot,start}` (**distinct**
+from System 1's scheduled-tournament events).
+**Out of scope (untouched):** the scheduled tournament engine (System 1);
+`client/src/tournament/**`; `roomKind.ts`'s `legacy_league` classification
+(System 1/2 ratified — left inert, parked).
 
-**In scope:** confirm dead / live / partial for real (against prod write-recency +
-route registration + client emitters), then either **decommission** — mirror the
-Daily Puzzle Ladder playbook (§3.1.1 reconciliation + a
-`2026-09-XX_..._decommission.sql`) — or, if it has unexpected live use, convert
-this section into a real Step-1 audit.
-**Out of scope:** the *scheduled* tournament engine (System 1 — CLOSED);
-`client/src/tournament/**` (drives the scheduled engine only —
-`tournament:{attach,bracket,hub,hydrate,postgame,recovery,complete,exit}`).
+## 5.1 Current-state map — dead/live verdict (Step 1, 2026-09-03)
 
-**Status (2026-09-03 inventory check — needs human confirmation before any
-decommission):** looks **DEAD in prod**, same shape as the Ladder —
-- Prod writes: `fixtures` / `leagues` / `league_members` last **2026-04-29**;
-  `fixture_match_results` last **2026-04-05**; `league_bots` last **2026-04-01**;
-  `player_league_history` **0 rows**. Nothing since April.
-- Client: **no** `/league/*` HTTP call and **no** league / `tournament:create` /
-  `tournament:join` socket emitter anywhere in `client/src` (non-test).
-- Server: routes + socket handlers + admin jobs are all still **registered** in
-  `index.ts`, but the legacy `tournament:*` handlers have no client emitter, and
-  `finalizeTournamentMatchHook` only fires for a room with a legacy
-  `cfg.tournamentId` — which nothing creates.
-- No scheduler: `generateLeagueFixtures` / `runLeagueSundayRollover` /
-  `runLeagueForfeitJob` are reachable **only** via the admin HTTP endpoints; no
-  `setInterval` / cron keeps a league alive.
-- Git: last *feature* commit to `league/` / `legacyTournament/` predates the
-  April 2026 architecture overhaul; every touch since is mechanical
-  (`chore(types)`, `refactor eliminate any`, token cleanup).
+**Verdict: DEAD in prod. Decommissioned.** Every signal, re-verified against the
+live code + prod:
 
-Likely outcome: decommission (drop the routes + legacy socket handlers + admin
-jobs; archive or drop the 6 `league_*` tables — human's call which, as with the
-Ladder). `client/src/tournament/**` stays untouched.
-
-## 5.1 Current-state map
-**Not started.** Step 1 — re-verify the dead-in-prod signal against the live route
-table + a fresh prod write-recency check; confirm nothing outside `league/` /
-`legacyTournament/` reads the `league_*` tables or depends on the hook.
+| Check | Finding |
+|---|---|
+| Prod write-recency (all 6 tables) | `leagues` / `league_members` / `fixtures` last **2026-04-29**; `fixture_match_results` **2026-04-05**; `league_bots` **2026-04-01**; `player_league_history` **0 rows**. No fixture ever reached `status='completed'`; no `fixtures.live_room_code` was ever set. The `status='active'` leagues / `status='scheduled'` fixtures are abandoned March–May test-season state. |
+| Client HTTP emitters into `/league/*` | **zero** — no `fetch` / api call anywhere in `client/src` (non-test). |
+| Client socket emitters for `tournament:{create,join,add_bot,remove_bot,start}` | **zero**. The client only emits/listens for scheduled-tournament events (`tournament:attach_assigned_match`, `tournament:{bracket_generated,completed,match_completed,match_ready,match_updated,registration_open,registration_updated}`). |
+| Legacy socket handler registration | already gated behind `config.enableLegacyTournaments` (`ENABLE_LEGACY_TOURNAMENTS`, **default `false`**) — off in prod, so `registerLegacyTournamentHandlers` never ran and `finalizeTournamentMatchHook` was permanently `null`. |
+| `finalizeTournamentMatchHook` legacy branch — other-system dependency | **none.** `roomSession.ts` / `registerGameplayActionHandlers.ts` call `deps.finalizeTournamentMatch?.(room)` / `maybeFinalizeTournamentMatch?.(room)` — both were `finalizeTournamentMatchHook?.(room)` (null in prod). The scheduled-tournament path (System 1) explicitly does **not** route through it (`roomSession.ts:740` comment); it only fired for a `legacyLeagueRoom` = a room with `config.tournamentId`, which only the deleted `tournament:create` handler set. |
+| `league_*` table readers outside `league/` | **one, dead:** `gameOverPersistence.ts` ran `/rest/v1/fixtures?live_room_code=eq.<room.code>` on every game-over — always empty in prod (no fixture ever had a `live_room_code`) → `recordLeagueLiveResult` never called. A wasted DB round-trip per game-over. |
+| `index.ts` league imports | all 9 (`assignPlayerToLeague`, `generateLeagueFixtures`, …) were **already dead imports** — imported but not passed to `registerLeagueRoutes` (which only got `getAuthenticatedUserId`/`supabaseFetch`/`isAdminSecret`/`socketsByUserId`); the route file imported them directly. |
+| FKs into `league_*` from other tables | **none.** The `league_*` tables reference each other + `auth.users`; nothing outside the cluster references in. `league.sql` has no functions / triggers / views. |
+| Git | last *feature* commit to `league/` / `legacyTournament/` predates the April 2026 architecture overhaul (`d9e82c8e`, `9b69def8 overhaulapr3`); every touch since is mechanical. |
 
 ## 5.2 Invariants
-**Not started.** Step 2 — likely N/A if decommissioned; if live, same shape as
-Systems 1–3.
+**N/A — decommissioned.** No invariants; the feature is removed.
 
 ## 5.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+**N/A — decommissioned.** The pre-decommission surface (12 RLS-gated tables via
+routes + an unauth-gated legacy socket handler set) is removed, not hardened.
 
-## 5.4 Checklist
-- [ ] Step 1 — route/socket/job registration confirmed; prod write-recency
-      re-checked on all 6 `league_*` tables; client-emitter search (HTTP + socket)
-      confirms zero; cross-references checked; **verdict: decommission vs. audit**
-- [ ] Step 2+ — depends on the Step 1 verdict
+## 5.4 Checklist — **DONE (this System-5 commit, not pushed)**
+- [x] Step 1 — dead/live verified (§5.1): zero client emitters, handlers gated off in prod, no `league_*` writes since April, no cross-system dependency on the hook, no external FK into the tables
+- [x] **Server removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers` + `finalizeTournamentMatchHook` + the 3 `/league` rate-limit mounts + the 2 `initRoomSession` dep wirings; deleted `server/src/league/**` (7 files), `server/src/legacyTournament/**` (2 files), `server/src/http/routes/league.ts`; removed the `gameOverPersistence.ts` live-fixture branch (+ its import + 2 tests); removed `config.enableLegacyTournaments`; `mpInvariantHarness.test.ts` league mock removed; `roomLivePersistence.ts` / `roomSession.ts` comments updated (branches left inert — parked)
+- [x] **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** (not archive; see below) all 6 `league_*` tables `cascade`; self-asserting `to_regclass` check; pg16-verified clean + idempotent (`league.sql` applied → all 6 dropped → none remain; pass 2 no-ops). Deleted `supabase/league.sql` (dead schema file; preserved in git history). **NOT applied to prod DB — human runs it.**
+- [x] Full suite: server **206 files / 1188 tests**, client **216 / 1482**; `tsc -b` clean (client + server); client lint at budget; **server lint 217 problems / 68 errors — down from 233 / 71** (deleting `league/` removed pre-existing lint errors; 0 new)
+- [ ] Human applies `2026-09-03_legacy_league_decommission.sql`
+
+**DROP, not archive** (contrast with the Daily Puzzle Ladder — §3.1.4 — which was
+archived read-only because `socialProfile.ts` + `homeCompletionDates.ts` still
+read `daily_puzzle_attempts`): the `league_*` tables have **zero remaining
+readers** after the decommission (confirmed by grep of `server/src` + `client/src`),
+and the ~200 rows are abandoned March–April 2026 test-season state with no display
+surface. `supabase/league.sql` is preserved in git history if the feature is ever
+revived.
+
+**Parked (not integrity work):** `roomKind.ts`'s `'legacy_league'` classification
++ `isLegacyLeagueRoom` + the inert `case 'legacy_league':` / `!legacyLeagueRoom`
+guards in `roomLivePersistence.ts` / `roomSession.ts` — System 1/2 ratified code
+(D-9 / PR #102); `config.tournamentId` is still a valid `RoomConfig` field but
+nothing sets it, so these branches are permanently unreachable. Safe to strip in
+a later cleanup.
 
 ---
 
@@ -4028,6 +4040,7 @@ one becomes live or blocks a numbered system.
 | 2026-09-01 | **System 2 Tier-A code DEPLOYED to prod + MP-G3 smoke-verified live.** Prod was 3 commits behind `origin/main` and 10 behind local `main` (prod release `a93eea1e`). `origin/main` had also advanced 1 (PR #107, puzzle-rush client CSS) — rebased the 10 local commits onto it (clean, disjoint files; hashes changed, code commit `e2ad401b`→`37054fda`, HEAD `1eca7d83`→`907435df`), `tsc -b` re-checked clean, pushed `origin main adfd3836..907435df`. Note: the 10 pushed commits include **2 pre-session HARDENING_PLAN.md-only doc commits** (`6e0e8fb6`/`abd6976e`, ex-`b8bf3754`/`b0e14411`) — git can't push the session range without its ancestors; no code, no build impact. Render auto-deployed within ~1 min; `/ready` confirms `release: 907435df`, `uptimeSeconds` reset. **MP-G3 smoke-tested against live prod** via a `socket.io-client` script (repo `node_modules`): (1) unauth `room:spectate` → `{ok:false, error:"auth_required"}`; (2) `room:create` a throwaway private room (non-UUID smoke userId), authed `room:spectate` on it → `{ok:false, error:"not_spectatable"}`; (3) unauth `room:spectate` on the real room → `auth_required` (auth check is first). Cleanup: service-key `DELETE room_live_sessions?room_code=eq.<code>` (204, the room had persisted a `lobby` row with empty `participant_user_ids` since the smoke userId isn't a uuid) + `room_match_logs` (204), verified gone. **MP-G3 CLOSED + LIVE.** All 4 Tier-A gaps (MP-G1/G2/G3/G4) are now closed in prod. Current focus / §2.3 / §2.5 / §2.7 updated. Next: System 2 Step 5 or MP-G6. |
 | 2026-08-31 | **Step 3 sub-task: RPC surface decided (D-5) — three functions** (`complete` / `promote` / `generate`) + 3 helpers, not one dispatcher. §1.4.3 written with signatures, lock targets, callers, and the rationale. Also surfaced that **T-INV-6 is over-strict as ratified** — bracket correctness needs a match's two direct feeders complete, not the whole previous round; and that's already structurally enforced by `complete_tournament_match`'s conditional advancement. Reworded proposal in §1.4.3 flagged for human re-ratification (not silently changed). Next sub-task (authz layer shape) NOT started — stopping for human review. |
 | 2026-09-03 | **Plan restructured (D-11).** Old "System 4: Everything else" dissolved into leverage-ordered **Systems 5–13**, based on the 2026-09-02/03 codebase inventory pass. Scaffolds written for each (scope in/out, live-vs-dead status from the inventory, empty §X.1/§X.2/§X.3 + a §X.4 checklist stub). New **Appendix** for latent/dev-only surfaces (spectator flag-off mode, `devtools/`, e2e-inspect routes, retired Ladder files) — "skip unless relevant". New **"Continuing this plan"** section at the end (workflow, house rules, deploy facts, ambiguity resolution) written for a cold session. Sequencing list expanded to 1–13; Current focus + D-11 added. **System 5 (Legacy League) live/dead check (this pass, needs human confirmation):** looks **DEAD in prod** — `fixtures`/`leagues`/`league_members` last written 2026-04-29, `fixture_match_results` 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows; **no** `client/src` HTTP call to `/league/*` and **no** league / `tournament:create` / `tournament:join` socket emitter; routes + legacy `tournament:*` socket handlers + admin `/league/run-*` jobs all still registered in `index.ts` but unreachable from the client; `finalizeTournamentMatchHook` only fires for a room with a legacy `cfg.tournamentId`, which nothing creates; no scheduler keeps a league alive; last *feature* commit predates the April 2026 overhaul. Likely: decommission (mirror the Ladder). No code changed — planning only. |
+| 2026-09-03 | **System 5 (Legacy League / Legacy Tournament) — CLOSED (decommissioned). Not pushed.** Step 1 re-verified the dead-in-prod read (§5.1): all 6 `league_*` tables untouched since April 2026 (`fixture_match_results` last 2026-04-05, `league_bots` 2026-04-01, `player_league_history` 0 rows, no fixture ever `completed`, no `live_room_code` ever set); **zero** client HTTP calls to `/league/*` and **zero** client `tournament:{create,join,add_bot,remove_bot,start}` socket emitters; the legacy handlers were already gated behind `ENABLE_LEGACY_TOURNAMENTS` (default `false`, off in prod → `finalizeTournamentMatchHook` permanently `null`); no other system depends on the hook (System 1's scheduled-tournament path explicitly does not route through it); no FK from outside the `league_*` cluster; the 9 league imports in `index.ts` were already dead (imported, not wired). **Removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers` + `finalizeTournamentMatchHook` + the 2 `initRoomSession` dep wirings + the 3 `/league` rate-limit `app.use` mounts (`index.ts`); deleted `server/src/league/**` (forfeit/history/results/rollover/schedule/service/state), `server/src/legacyTournament/**` (handler + test), `server/src/http/routes/league.ts`, `supabase/league.sql`; removed the `gameOverPersistence.ts` live-fixture branch (`recordLeagueLiveResult` import + the per-game-over `/rest/v1/fixtures?live_room_code=eq.<code>` query — always empty in prod) + its 2 tests + the `mpInvariantHarness.test.ts` league mock; removed `config.enableLegacyTournaments`; updated the now-inert `legacy_league` comments in `roomLivePersistence.ts` / `roomSession.ts`. **Parked:** `roomKind.ts`'s `'legacy_league'` classification + `isLegacyLeagueRoom` + the `!legacyLeagueRoom` / `case 'legacy_league':` guards — System 1/2 ratified (D-9 / PR #102), permanently unreachable (nothing sets `config.tournamentId`), safe to strip later. **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** all 6 `league_*` tables `cascade` (**not** archived: zero remaining readers in `server/src` + `client/src`, ~200 rows of abandoned test-season state, no display surface — contrast the Ladder which was archived because live paths still read `daily_puzzle_attempts`). Self-asserting `to_regclass` check; **pg16-verified** (apply `league.sql` → migration drops all 6 → self-assert passes; pass 2 idempotent no-op). **NOT applied to prod DB — human runs it.** Full suite green: **server 206 files / 1188 tests, client 216 / 1482**; `tsc -b` clean (client + server); client lint at budget; **server lint 233→217 problems / 71→68 errors** (deleting `league/` removed pre-existing lint errors; 0 new). §5.1–§5.4 filled in, System 5 marked CLOSED in Current focus + Sequencing. **Next: System 6 (Auth / session + rate limiting) Step 1.** |
 
 ---
 

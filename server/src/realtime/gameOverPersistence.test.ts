@@ -17,7 +17,6 @@ const {
   completeGhostGameMock,
   processRealtimeMultiplayerGameMock,
   recordMatchEndMock,
-  recordLeagueLiveResultMock,
   isRankedGameSourceColumnsEnabledMock,
   logWarnMock,
   verifyPlayerMoveLogMock,
@@ -35,7 +34,6 @@ const {
   completeGhostGameMock: vi.fn(),
   processRealtimeMultiplayerGameMock: vi.fn(),
   recordMatchEndMock: vi.fn(),
-  recordLeagueLiveResultMock: vi.fn(),
   isRankedGameSourceColumnsEnabledMock: vi.fn(),
   logWarnMock: vi.fn(),
   verifyPlayerMoveLogMock: vi.fn(),
@@ -87,10 +85,6 @@ vi.mock('../ranking/periodService', () => ({
 
 vi.mock('../matchmaking/persistence', () => ({
   recordMatchEnd: (...args: unknown[]) => recordMatchEndMock(...args),
-}));
-
-vi.mock('../league/results', () => ({
-  recordLeagueLiveResult: (...args: unknown[]) => recordLeagueLiveResultMock(...args),
 }));
 
 vi.mock('../ranking/rankedGamePayload', () => ({
@@ -182,7 +176,6 @@ describe('createGameOverPersistScheduler', () => {
     insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
     verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
     processRealtimeMultiplayerGameMock.mockResolvedValue({ playerA: { delta: 1 }, playerB: { delta: -1 } });
-    recordLeagueLiveResultMock.mockResolvedValue(undefined);
   });
 
   it('sets matchLogged only after a successful persist attempt', async () => {
@@ -478,72 +471,6 @@ describe('createGameOverPersistScheduler', () => {
         sourceMatchId: 'match-1',
       }),
       'Skipping real-time update — duplicate or missing ranked insert',
-    );
-  });
-
-  it('calls recordLeagueLiveResult when fixture is active and player mapping is complete', async () => {
-    supabaseFetchMock.mockImplementation(async (path: string) => {
-      if (path.startsWith('/rest/v1/fixtures')) {
-        return [{
-          id: 'fixture-1',
-          status: 'active',
-          home_member_id: 'home-m',
-          away_member_id: 'away-m',
-          live_room_code: 'ROOM1',
-        }];
-      }
-      if (path.startsWith('/rest/v1/league_members')) {
-        return [
-          { id: 'home-m', player_user_id: 'user-a' },
-          { id: 'away-m', player_user_id: 'user-b' },
-        ];
-      }
-      return [];
-    });
-
-    await runPersist(buildInput());
-
-    expect(recordLeagueLiveResultMock).toHaveBeenCalledWith({
-      fixtureId: 'fixture-1',
-      playerMemberId: 'home-m',
-      opponentMemberId: 'away-m',
-      homeScore: 30,
-      awayScore: 10,
-      sourceUserId: 'user-a',
-      roomCode: 'ROOM1',
-      metadata: { via: 'live-room-auto-finalize' },
-    });
-  });
-
-  it('skips recordLeagueLiveResult with warn when player mapping is incomplete', async () => {
-    supabaseFetchMock.mockImplementation(async (path: string) => {
-      if (path.startsWith('/rest/v1/fixtures')) {
-        return [{
-          id: 'fixture-1',
-          status: 'active',
-          home_member_id: 'home-m',
-          away_member_id: 'away-m',
-          live_room_code: 'ROOM1',
-        }];
-      }
-      if (path.startsWith('/rest/v1/league_members')) {
-        return [{ id: 'home-m', player_user_id: 'user-a' }];
-      }
-      return [];
-    });
-
-    await runPersist(buildInput());
-
-    expect(recordLeagueLiveResultMock).not.toHaveBeenCalled();
-    expect(logWarnMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fixtureId: 'fixture-1',
-        hasHomeMember: true,
-        hasAwayMember: false,
-        hasHomePlayer: true,
-        hasAwayPlayer: false,
-      }),
-      'Skipping live fixture finalization — player mapping missing',
     );
   });
 

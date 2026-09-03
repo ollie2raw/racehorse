@@ -221,9 +221,9 @@ export function inferLiveSessionSourceType(room: Room): RoomLiveSessionSourceTyp
   switch (roomKind(room)) {
     case 'scheduled_tournament':
     case 'legacy_league':
-      // Previously legacy-league rooms fell through to 'private' here — a
-      // latent mismatch with resolveMpAuthoritySourceType. Now consistent.
-      // (ENABLE_LEGACY_TOURNAMENTS is off in prod, so this changes no live data.)
+      // `legacy_league` is now unreachable — Legacy League was decommissioned
+      // (System 5); nothing sets `config.tournamentId` any more. The case is
+      // kept for exhaustiveness / the `roomKind` contract.
       return 'tournament';
     case 'matchmaking':
       return 'matchmaking';

@@ -955,9 +955,11 @@ export function broadcastStateUpdate(roomCode: string): void {
   if (room.state.gameOver) {
     const finRoom = room;
     const finCode = roomCode;
-    // Legacy league only — `finalizeTournamentMatchHook` is wired solely under
-    // ENABLE_LEGACY_TOURNAMENTS. Scheduled-tournament rooms finalize via the
-    // game-over branch above, not here.
+    // `deps.finalizeTournamentMatch` was the Legacy League finalizer — removed
+    // with the System 5 decommission; `legacyLeagueRoom` is now always false
+    // (nothing sets `config.tournamentId`). Scheduled-tournament rooms finalize
+    // via the game-over branch above, not here. Kept inert for the roomKind
+    // contract.
     const shouldFinalizeTour = legacyLeagueRoom;
     setImmediate(() => {
       if (shouldFinalizeTour) deps.finalizeTournamentMatch?.(finRoom);

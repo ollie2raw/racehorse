@@ -22,17 +22,6 @@ import {
   getGhostProfileSummary,
   getGhostProfileSummaryByUsername,
 } from './ghost/service';
-import { assignPlayerToLeague } from './league/service';
-import { generateLeagueFixtures } from './league/schedule';
-import {
-  recordLeagueAsyncResult,
-  recordLeagueFixtureResult,
-  openLeagueFixtureLiveRoom,
-} from './league/results';
-import { runLeagueForfeitJob } from './league/forfeit';
-import { runLeagueSundayRollover } from './league/rollover';
-import { getLeagueStateForPlayer } from './league/state';
-import { getLeagueHistoryForPlayer } from './league/history';
 
 import { computeWeeklyAwards } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
@@ -159,7 +148,6 @@ import {
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
 } from './multiplayer/disconnectGrace';
-import { registerLegacyTournamentHandlers } from './legacyTournament/registerLegacyTournamentHandlers';
 import {
   cancelRoomCleanup,
   clearReconnectSeatsForSocket,
@@ -284,7 +272,6 @@ import {
 import { registerStatsRoutes } from './http/routes/stats';
 import { registerRankingRoutes } from './http/routes/ranking';
 import { registerGhostRoutes } from './http/routes/ghost';
-import { registerLeagueRoutes } from './http/routes/league';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
@@ -460,11 +447,8 @@ app.use('/api/daily-fritz/metrics', adminLimit);
 app.use('/api/daily-fritz/health', adminLimit);
 app.use('/api/daily-fritz/events', adminLimit);
 app.use('/api/ranking/process', adminLimit);
-app.use('/league/run-forfeits', adminLimit);
-app.use('/league/run-rollover', adminLimit);
 app.use('/bot-matches/cleanup-stale', adminLimit);
 app.use('/api', restApiLimit);
-app.use('/league', restApiLimit);
 app.use('/bot-matches', restApiLimit);
 app.use('/api/account', accountDeleteLimit);
 app.use('/api/account', accountRouter);
@@ -580,13 +564,6 @@ registerGhostRoutes(app, {
   supabaseFetch,
 });
 
-registerLeagueRoutes(app, {
-  getAuthenticatedUserId,
-  supabaseFetch,
-  isAdminSecret,
-  socketsByUserId,
-});
-
 registerBotMatchesRoutes(app, {
   getAuthenticatedUserId,
   getAuthenticatedUserIdFromToken,
@@ -664,9 +641,6 @@ function installSocketRateLimit(socket: Socket): void {
   });
 }
 
-let finalizeTournamentMatchHook: ((room: Room) => void) | null = null;
-
-
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   return raw || 'Guest';
@@ -728,7 +702,6 @@ async function onAfterMatchStarted(room: Room): Promise<void> {
 initRoomSession(io, {
   persistRoomMatchLog,
   onGameOver: createGameOverPersistScheduler(io),
-  finalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
   resolveSocketIdentity,
   normalizeUsername,
   normalizeUserId,
@@ -739,7 +712,6 @@ initRoomSession(io, {
   },
   onAfterMatchStarted,
   notifyRoomPlayersInGame,
-  maybeFinalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
 });
 
 io.on('connection', (socket: Socket) => {
@@ -806,16 +778,6 @@ io.on('connection', (socket: Socket) => {
 
 
   log.debug({ socketId: socket.id }, 'socket handlers registered');
-
-  // TOURNAMENT_HELPERS
-  const ENABLE_LEGACY_TOURNAMENTS = config.enableLegacyTournaments;
-  if (ENABLE_LEGACY_TOURNAMENTS) {
-    finalizeTournamentMatchHook = registerLegacyTournamentHandlers(socket, {
-      io,
-      normalizeUsername,
-      normalizeUserId,
-    });
-  }
 
 
 
