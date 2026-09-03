@@ -25,6 +25,7 @@ vi.mock('@sentry/node', () => ({
 
 vi.mock('../stores/dailyFritzEventStore', () => ({
   recordDailyFritzEvent: vi.fn().mockResolvedValue(undefined),
+  countRecentDailyFritzVerificationFailures: vi.fn().mockResolvedValue(0),
 }));
 
 const RUN_DATE = '2026-08-01';

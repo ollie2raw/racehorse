@@ -125,6 +125,7 @@ import {
   scheduleDailyFritzWarmup,
   scheduleStartupDailyWarmups,
 } from './scheduled/dailyWarmup';
+import { scheduleStrandedDailyFritzRecovery } from './dailyFritzStrandedRecovery';
 import { getLeaderboard, processRatingPeriod } from './ranking/periodService';
 
 import {
@@ -949,4 +950,5 @@ server.listen(PORT, () => {
   startRankingCron();
   scheduleDailyFritzWarmup();
   scheduleStartupDailyWarmups();
+  scheduleStrandedDailyFritzRecovery();
 });

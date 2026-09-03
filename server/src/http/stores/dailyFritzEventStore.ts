@@ -115,6 +115,31 @@ export async function listDailyFritzEvents(
   }));
 }
 
+/**
+ * DF-G2 — per-user `verification_failed` aggregation for the ops alert. Counts a
+ * user's `verification_failed` events in a recent window so a serial
+ * transcript-tamperer shows up as a pattern rather than a string of one-offs.
+ * Best-effort: returns 0 on any failure (the alert still fires without the
+ * count).
+ */
+export async function countRecentDailyFritzVerificationFailures(
+  userId: string,
+  options: { days?: number; cap?: number } = {},
+): Promise<number> {
+  const days = Math.max(1, Math.min(90, Math.floor(options.days ?? 7)));
+  const cap = Math.max(1, Math.min(200, Math.floor(options.cap ?? 50)));
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  try {
+    const rows = await supabaseFetch<Array<{ id: string }>>(
+      `/rest/v1/daily_fritz_events?select=id&event_type=eq.verification_failed&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(since)}&limit=${cap}`,
+      { method: 'GET', timeoutMs: 2_500, circuitBreakable: true },
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function listDailyFritzPersistedMetrics(): Promise<DailyFritzPersistedMetricRow[]> {
   const rows = await supabaseFetch<Array<Record<string, unknown>>>(
     '/rest/v1/daily_fritz_event_metrics?select=event_type,verifier_code,total',

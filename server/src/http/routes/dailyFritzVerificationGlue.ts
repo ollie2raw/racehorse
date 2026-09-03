@@ -28,7 +28,11 @@ import {
   writeDailyFritzAuthorityContract,
   type VerifiedDailyFritzGameRecord,
 } from './dailyFritzVerificationPolicy';
-import { recordDailyFritzEvent, type DailyFritzEventInput } from '../stores/dailyFritzEventStore';
+import {
+  countRecentDailyFritzVerificationFailures,
+  recordDailyFritzEvent,
+  type DailyFritzEventInput,
+} from '../stores/dailyFritzEventStore';
 import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { resolveDailyFritzPublishedGameAuthority } from './dailyFritzPublishedAuthority';
 import type { DailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
@@ -442,6 +446,15 @@ export function isDailyFritzGameEndingScore(
   return leader >= winningScore && you !== fritz;
 }
 
+/**
+ * DF-G2 — number of `verification_failed` events for one user (in the default
+ * 7-day window) at or above which the ops alert escalates from `warning` to
+ * `error` and is tagged `verification_bypassed_repeat`. One or two failures can
+ * be a genuine verifier edge case; three in a week is a pattern worth a human
+ * looking at the account.
+ */
+export const DAILY_FRITZ_VERIFICATION_REPEAT_OFFENDER_THRESHOLD = 3;
+
 export async function recordDailyFritzAdvanceWithoutVerification(input: {
   attemptId: string;
   runDate: string;
@@ -497,10 +510,16 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
   // chase the bug without waiting for a player report. Infrastructure failures
   // use a distinct alert tag so they are never confused with cheat rejection.
   if (!infrastructureFailure) {
+    // DF-G2 — per-user aggregation. An honest client effectively never fails a
+    // verdict; a run of failures for one account is a tamper pattern, not a
+    // string of one-offs. This event has already been journaled above, so the
+    // count includes it.
+    const userRecentVerificationFailures = await countRecentDailyFritzVerificationFailures(input.userId);
+    const repeatOffender = userRecentVerificationFailures >= DAILY_FRITZ_VERIFICATION_REPEAT_OFFENDER_THRESHOLD;
     Sentry.captureMessage('[daily-fritz] verification bypassed — run advanced unranked', {
-      level: 'warning',
+      level: repeatOffender ? 'error' : 'warning',
       tags: {
-        daily_fritz_alert: 'verification_bypassed',
+        daily_fritz_alert: repeatOffender ? 'verification_bypassed_repeat' : 'verification_bypassed',
         verifier_code: input.verifierCode,
         operation: input.operation,
       },
@@ -512,6 +531,8 @@ export async function recordDailyFritzAdvanceWithoutVerification(input: {
         handIndex: input.handIndex,
         message: input.message,
         transcriptDigest: evidence.transcriptDigest,
+        userRecentVerificationFailures,
+        repeatOffenderThreshold: DAILY_FRITZ_VERIFICATION_REPEAT_OFFENDER_THRESHOLD,
         ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
       },
     });

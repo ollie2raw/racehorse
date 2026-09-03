@@ -1,26 +1,18 @@
-import { createHash } from 'crypto';
 import type { Application } from 'express';
-import { getDailyFritzPublishedSetScore } from '../../dailyFritzSkunk';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import {
   getVerifiedSinglePlayerMatch,
   persistVerifiedSinglePlayerMatch,
 } from '../../shared/verifiedSinglePlayerMatch';
 import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
-import {
-  DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-  getDailyFritzVerificationStatus,
-  hasCompleteDailyFritzGameAuthority,
-  readAuthorityLedger,
-} from './dailyFritzVerificationPolicy';
+import { getDailyFritzVerificationStatus } from './dailyFritzVerificationPolicy';
+import { applyDailyFritzAttemptFinalization } from './dailyFritzAttemptFinalize';
 import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostics';
 import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import {
   buildDailyFritzLeaderboard,
   getDailyFritzAttemptById,
   getDailyFritzRun,
-  getDailyFritzSetPointDiff,
-  normalizeDailyFritzSetResult,
   upsertDailyFritzAttempt,
 } from '../stores/dailyFritzStore';
 import { commitDailyFritzAttemptCommand } from '../stores/dailyFritzCommandStore';
@@ -107,62 +99,12 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
       return;
     }
 
-    const setResult = normalizeDailyFritzSetResult(attempt.result);
-    if (!setResult?.setWinner) {
+    const finalization = applyDailyFritzAttemptFinalization(attempt, runDate);
+    if (!finalization) {
       res.status(400).json({ error: 'Daily Fritz set is not complete.' });
       return;
     }
-    const ledger = readAuthorityLedger(attempt.result);
-    // A run that advanced any hand without a receipt stays unranked, even if
-    // every other game produced a complete authority record.
-    const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
-      && hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
-    const completionVerificationStatus = isVerified ? 'verified' : 'legacy_unverified';
-    // A completed set always finalizes. Verification state is recorded on the
-    // attempt for observability, but it never blocks a player from finishing.
-    const { finalScore, opponentScore } = getDailyFritzPublishedSetScore(setResult);
-    const won = setResult.setWinner === 'player';
-    const movesUsed = ledger.hands.reduce((sum, hand) => sum + hand.actionCount, 0);
-    const handsPlayed = ledger.hands.length;
-    const pointDiff = getDailyFritzSetPointDiff(setResult) ?? 0;
-    const serverReceipt = createHash('sha256')
-      .update(`${attempt.id}:${ledger.hands.map((hand) => hand.transcriptDigest).join(':')}`)
-      .digest('hex');
-    attempt.status = 'completed';
-    attempt.completedAt = new Date().toISOString();
-    attempt.completionHash = serverReceipt;
-    attempt.finalScore = Math.round(finalScore);
-    attempt.opponentScore = Math.round(opponentScore);
-    attempt.pointDiff = Math.round(pointDiff);
-    attempt.won = won;
-    attempt.movesUsed = Math.round(movesUsed);
-    attempt.handsPlayed = Math.round(handsPlayed);
-    attempt.result = setResult
-      ? {
-          ...setResult,
-          authority: ledger,
-          verification_status: isVerified ? 'verified' : 'legacy_unverified',
-          verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-          run_date: runDate,
-          final_score: attempt.finalScore,
-          opponent_score: attempt.opponentScore,
-          point_diff: attempt.pointDiff,
-          won,
-          moves_used: attempt.movesUsed,
-          hands_played: attempt.handsPlayed,
-        }
-      : {
-          authority: ledger,
-          verification_status: isVerified ? 'verified' : 'legacy_unverified',
-          verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
-          run_date: runDate,
-          final_score: attempt.finalScore,
-          opponent_score: attempt.opponentScore,
-          point_diff: attempt.pointDiff,
-          won,
-          moves_used: attempt.movesUsed,
-          hands_played: attempt.handsPlayed,
-        };
+    const { setResult, isVerified, completionVerificationStatus, serverReceipt } = finalization;
     const transactionalCompletion = Boolean(
       attempt.challengeId && DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED,
     );

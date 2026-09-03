@@ -33,6 +33,7 @@ const { recordEventMock } = vi.hoisted(() => ({
 
 vi.mock('../stores/dailyFritzEventStore', () => ({
   recordDailyFritzEvent: recordEventMock,
+  countRecentDailyFritzVerificationFailures: vi.fn().mockResolvedValue(0),
 }));
 
 import { recordDailyFritzAdvanceWithoutVerification } from './dailyFritzVerificationGlue';

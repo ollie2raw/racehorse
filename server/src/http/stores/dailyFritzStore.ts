@@ -30,6 +30,7 @@ import {
   memoryGetRun,
   memoryListAttemptsForDate,
   memoryListAttemptsForUser,
+  memoryListStrandedAttempts,
   memoryUpsertAttempt,
   memoryUpsertRun,
 } from './dailyFritzMemoryStore';
@@ -643,6 +644,27 @@ export async function listDailyFritzAttemptsForDate(runDate: string): Promise<Da
   return rows.map(toDailyFritzAttemptRecord);
 }
 
+/**
+ * DF-G1 — attempts still `status='started'` whose `started_at` is older than the
+ * cutoff. Candidates for the stranded-set reaper (`recoverStrandedDailyFritzAttempts`):
+ * a set the player finished but whose `/complete` never landed. The reaper
+ * re-checks `status` under the per-attempt lock and only finalizes when the set
+ * is actually complete, so `started_at` here is a coarse pre-filter, not the
+ * safety guard.
+ */
+export async function listStrandedDailyFritzAttempts(
+  startedBeforeIso: string,
+  limit = 100,
+): Promise<DailyFritzAttemptRecord[]> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryListStrandedAttempts(startedBeforeIso, limit);
+  const bounded = Math.max(1, Math.min(500, Math.floor(limit)));
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&status=eq.started&started_at=lt.${encodeURIComponent(startedBeforeIso)}&order=started_at.asc&limit=${bounded}`,
+    { method: 'GET', circuitBreakable: true },
+  );
+  return rows.map(toDailyFritzAttemptRecord);
+}
+
 export async function listDailyFritzAttemptsForUser(userId: string, limit = 10): Promise<DailyFritzAttemptRecord[]> {
   const bounded = Math.max(1, Math.min(30, Math.floor(limit)));
   if (isDailyFritzMemoryStoreEnabled()) return memoryListAttemptsForUser(userId, bounded);
@@ -787,6 +809,27 @@ export function isDailyFritzAttemptLeaderboardEligible(
   return !Array.isArray(unverifiedHands) || unverifiedHands.length === 0;
 }
 /**
+ * Streak eligibility (DF-G2). A completed run counts toward the daily streak
+ * unless a hand advanced without a verification receipt — a `rejected` run, or
+ * one whose `unverified_hands` is populated, is not the honest completion the
+ * streak is meant to reward.
+ *
+ * Deliberately weaker than `isDailyFritzAttemptLeaderboardEligible`: it does NOT
+ * require a modern `verification_protocol_version`. Pre-protocol
+ * (`legacy_unverified`) completions are genuine finishes from before the
+ * verifier existed — applying the leaderboard predicate here would retroactively
+ * zero real players' streaks.
+ */
+export function isDailyFritzAttemptStreakEligible(
+  attempt: Pick<DailyFritzAttemptRecord, 'status' | 'result'>,
+): boolean {
+  if (attempt.status !== 'completed') return false;
+  if (getDailyFritzVerificationStatus(attempt.result) === 'rejected') return false;
+  const unverifiedHands = attempt.result?.unverified_hands;
+  return !Array.isArray(unverifiedHands) || unverifiedHands.length === 0;
+}
+
+/**
  * Upper bound on a reported streak. Long enough that no realistic player is
  * truncated, short enough that the query stays small.
  */
@@ -797,13 +840,14 @@ export async function getDailyFritzStreak(userId: string, todayRunDate: string):
   // A streak is a run of consecutive days ending today, so only the most recent
   // rows can ever contribute — the first gap terminates the count. 365 rows were
   // fetched per /today request to compute one integer.
-  const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
-    `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=${DAILY_FRITZ_STREAK_SCAN_LIMIT}`,
+  const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus; result: Record<string, unknown> | null }>>(
+    `/rest/v1/daily_fritz_attempts?select=run_date,status,result&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=${DAILY_FRITZ_STREAK_SCAN_LIMIT}`,
     { method: 'GET' },
   );
   const dates = Array.from(
     new Set(
       rows
+        .filter((row) => isDailyFritzAttemptStreakEligible({ status: row.status, result: row.result ?? null }))
         .map((row) => row.run_date)
         .filter((value): value is string => typeof value === 'string' && value.length > 0),
     ),
