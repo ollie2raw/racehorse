@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Socket } from 'socket.io';
-import { supabaseFetch } from '../supabaseUtils';
+import { verifyBearerToken } from '../platform/auth/supabaseAuth';
 import { fetchMatchById, fetchMatchByRoomCode, isValidUuid } from './persistence';
 import { isTournamentRoomCode } from './tournamentRoomCode';
 import type { MatchRow } from './types';
@@ -10,20 +10,15 @@ export type TournamentAuthError =
   | 'user_mismatch'
   | 'invalid_user';
 
-/** Resolve user id from Bearer token (no response side effects). */
+/**
+ * Resolve user id from a Bearer token (no response side effects).
+ * AU-8 (HARDENING_PLAN §6.3): routes through the canonical cached
+ * `verifyBearerToken`, then keeps this module's extra `isValidUuid` gate —
+ * tournament ids must be UUIDs, and a non-UUID here is treated as unauthenticated.
+ */
 export async function getUserIdFromBearerToken(token: string | null | undefined): Promise<string | null> {
-  if (!token) return null;
-  try {
-    const userData = await supabaseFetch<{ id?: string }>(
-      '/auth/v1/user',
-      { headers: { Authorization: `Bearer ${token}` } } as RequestInit,
-    );
-    const userId = userData?.id ?? null;
-    if (!isValidUuid(userId)) return null;
-    return userId.trim();
-  } catch {
-    return null;
-  }
+  const userId = await verifyBearerToken(token ?? null);
+  return userId && isValidUuid(userId) ? userId.trim() : null;
 }
 
 export async function requireAuthUserId(

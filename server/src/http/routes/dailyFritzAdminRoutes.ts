@@ -99,7 +99,10 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
   });
 
   app.get('/api/daily-fritz/metrics', async (req, res) => {
-  const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+  // AU-6 (HARDENING_PLAN §6.3): header-only. The admin UI already sends the
+  // secret exclusively via `x-admin-secret`; accepting it as a `?admin_key=`
+  // query param leaked it into access logs, browser history, and Referer.
+  const suppliedAdminSecret = req.get('x-admin-secret');
   if (!isAdminSecret(suppliedAdminSecret)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
@@ -121,7 +124,8 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
   });
 
   app.get('/api/daily-fritz/health', async (req, res) => {
-    const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+    // AU-6 (HARDENING_PLAN §6.3): header-only — see /metrics above.
+    const suppliedAdminSecret = req.get('x-admin-secret');
     if (!isAdminSecret(suppliedAdminSecret)) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -159,7 +163,8 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
   });
 
   app.get('/api/daily-fritz/events/:attemptId', async (req, res) => {
-  const suppliedAdminSecret = req.get('x-admin-secret') ?? req.query.admin_key;
+  // AU-6 (HARDENING_PLAN §6.3): header-only — see /metrics above.
+  const suppliedAdminSecret = req.get('x-admin-secret');
   if (!isAdminSecret(suppliedAdminSecret)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;

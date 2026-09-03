@@ -1,22 +1,19 @@
 import type { Request, Response } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
+import { verifyBearerToken } from '../platform/auth/supabaseAuth';
 
+/**
+ * AU-8 (HARDENING_PLAN §6.3): thin `res`-writing wrapper over the canonical
+ * `verifyBearerToken` (cached + in-flight-deduped + timeout). Previously did its
+ * own uncached `/auth/v1/user` round-trip on every `/api/social/*`,
+ * `/api/profile/*`, and `/api/account` request.
+ */
 export async function requireAuth(req: Request, res: Response): Promise<string | null> {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-  try {
-    const userData = await supabaseFetch<{ id?: string }>(
-      `/auth/v1/user`,
-      { headers: { Authorization: `Bearer ${token}` } } as RequestInit,
-    );
-    const userId = (userData as { id?: string })?.id ?? null;
-    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-    return userId;
-  } catch {
-    res.status(401).json({ error: 'Unauthorized' });
-    return null;
-  }
+  const userId = await verifyBearerToken(token);
+  if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return null; }
+  return userId;
 }
 
 export type AcceptedFriendRow = { id: string; user_id: string; friend_user_id: string };

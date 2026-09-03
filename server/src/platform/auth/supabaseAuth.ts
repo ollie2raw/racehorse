@@ -3,7 +3,16 @@ import type express from 'express';
 import { config } from '../../config';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
-const AUTHENTICATED_USER_ID_TTL_MS = 60_000;
+/**
+ * AU-1 (HARDENING_PLAN §6.3): a successful `/auth/v1/user` result is trusted for
+ * this long before re-checking upstream. This is the server-side half of the
+ * token-revocation lag — a token banned/expired at Supabase keeps working for
+ * up to this window. Cut 60s → 15s. The remaining revocation gap ("a client
+ * `signOut()` does not revoke the access-token JWT — it lives to its `exp`") is
+ * bounded only by the Supabase project's JWT-expiry setting (human action) or a
+ * server-side denylist (scale-gated).
+ */
+const AUTHENTICATED_USER_ID_TTL_MS = 15_000;
 /**
  * Hard ceiling on cached tokens. Entries carried a TTL but were never evicted,
  * so the map grew by one entry per token the process ever saw — and tokens
@@ -52,23 +61,6 @@ export function authenticatedUserIdCacheSize(): number {
   return authenticatedUserIdCache.size;
 }
 
-export function getUserIdFromAuthHeaderSync(req: express.Request): string | null {
-  const authHeader = typeof req.headers.authorization === 'string'
-    ? req.headers.authorization.trim() : '';
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  const token = match?.[1]?.trim();
-  if (!token) return null;
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf-8');
-    const payload = JSON.parse(payloadJson) as { sub?: unknown };
-    return typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -80,6 +72,18 @@ export async function getAuthenticatedUserId(req: express.Request): Promise<stri
     const fromEnv = process.env.E2E_DAILY_FRITZ_USER_ID?.trim();
     if (fromEnv) return fromEnv;
   }
+  return getAuthenticatedUserIdFromToken(token ?? null);
+}
+
+/**
+ * AU-8 (HARDENING_PLAN §6.3): the single canonical "verify a Bearer token →
+ * verified user id (or null)" entry point. Cached (`AUTHENTICATED_USER_ID_TTL_MS`),
+ * in-flight-deduped, 12s upstream timeout. `social/socialAuth.ts` and
+ * `scheduledTournament/tournamentAuth.ts` were each hitting `/auth/v1/user`
+ * directly (uncached, per-request) — they now route through this. Callers that
+ * need extra checks (tournament's `isValidUuid` + payload-userId-match) wrap it.
+ */
+export async function verifyBearerToken(token: string | null | undefined): Promise<string | null> {
   return getAuthenticatedUserIdFromToken(token ?? null);
 }
 

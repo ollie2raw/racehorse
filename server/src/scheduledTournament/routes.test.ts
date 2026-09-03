@@ -22,6 +22,16 @@ vi.mock('../supabaseUtils', () => ({
   supabaseFetch: (...args: unknown[]) => mocks.supabaseFetch(...args),
 }));
 
+// AU-8 (HARDENING_PLAN §6.3): tournamentAuth now resolves the Bearer token
+// through the canonical `verifyBearerToken`. Keep the existing test contract
+// (`mocks.supabaseFetch` resolving `{ id }`) by adapting it here.
+vi.mock('../platform/auth/supabaseAuth', () => ({
+  verifyBearerToken: async () => {
+    const result = (await mocks.supabaseFetch()) as { id?: string } | null;
+    return result && typeof result.id === 'string' ? result.id : null;
+  },
+}));
+
 vi.mock('./persistence', async () => {
   const actual = await vi.importActual<typeof import('./persistence')>('./persistence');
   return {

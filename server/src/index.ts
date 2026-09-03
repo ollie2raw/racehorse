@@ -218,7 +218,6 @@ import { constantTimeEqualSecret, isAdminSecret } from './platform/auth/adminSec
 import {
   getAuthenticatedUserId,
   getAuthenticatedUserIdFromToken,
-  getUserIdFromAuthHeaderSync,
 } from './platform/auth/supabaseAuth';
 import { getPacificDateKey } from './shared/pacificDate';
 import { childLogger } from './logger';
@@ -359,6 +358,16 @@ const corsOptions: CorsOptions = {
 };
 
 const app = express();
+// AU-3 (HARDENING_PLAN §6.3): Render serves this app behind a single load
+// balancer that appends the real client IP to `X-Forwarded-For`. Trusting
+// exactly 1 hop makes `req.ip` the address Render recorded (the rightmost XFF
+// entry) — a client can prepend spoofed entries but cannot append, so `req.ip`
+// is no longer forgeable. Without this, `requestIp()` read the client-settable
+// leftmost XFF entry and every IP-keyed rate limit was bypassable by rotating
+// the header (confirmed live 2026-09-03). Verify post-deploy via the
+// `rate limited` warn log (`reqIp` must be the real client IP, not a spoofed
+// prefix); bump this value only if that check fails.
+app.set('trust proxy', 1);
 app.use(cors(corsOptions));
 /**
  * gzip every JSON response above the default 1 KB threshold.
@@ -397,20 +406,23 @@ app.use((_req, res, next) => {
 const restRateLimiter = new InMemoryRateLimiter({ windowMs: 5 * 60_000, max: 600 });
 const socketRateLimiter = new InMemoryRateLimiter({ windowMs: 60_000, max: 600 });
 const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api');
+// AU-4 (HARDENING_PLAN §6.3): these limits were keyed on `getUserIdFromAuthHeaderSync`,
+// which decoded the JWT `sub` WITHOUT verifying the signature — so a forged
+// `{"sub":"<random>"}` gave an unlimited supply of fresh per-user buckets.
+// Now keyed on `req.ip` (trustworthy since AU-3's `trust proxy`). The budgets
+// are generous enough that users sharing one NAT/egress IP are unaffected.
 const dailySubmitLimit = createRateLimitMiddleware(
   restRateLimiter,
   { windowMs: 5 * 60_000, max: 90 },
   'rest:daily',
-  getUserIdFromAuthHeaderSync,
 );
 const adminLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:admin');
-// Account deletion is irreversible and per-user. A handful of attempts is a
-// user correcting a typed confirmation; more than that is not a person.
+// Account deletion is irreversible. A handful of attempts is a user correcting a
+// typed confirmation; more than that is not a person. (Keyed on `req.ip` — AU-4.)
 const accountDeleteLimit = createRateLimitMiddleware(
   restRateLimiter,
   { windowMs: 10 * 60_000, max: 10 },
   'rest:account-delete',
-  getUserIdFromAuthHeaderSync,
 );
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 // Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
@@ -425,15 +437,13 @@ const recordMatchLimit = createRateLimitMiddleware(
   restRateLimiter,
   { windowMs: 5 * 60_000, max: 20 },
   'rest:record-match',
-  getUserIdFromAuthHeaderSync,
 );
 app.use('/api/stats/record-match', recordMatchLimit);
-// Tighter per-user budget on Daily Fritz init paths — 20 req/60s prevents polling abuse
+// Tighter budget on Daily Fritz init paths — 20 req/60s prevents polling abuse. (Keyed on `req.ip` — AU-4.)
 const dailyFritzInitLimit = createRateLimitMiddleware(
   restRateLimiter,
   { windowMs: 60_000, max: 20 },
   'rest:daily-fritz-init',
-  getUserIdFromAuthHeaderSync,
 );
 app.use('/api/daily-fritz/today', dailyFritzInitLimit);
 app.use('/api/daily-fritz/start', dailyFritzInitLimit);

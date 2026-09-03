@@ -1,4 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
+import { childLogger } from './logger';
+
+const log = childLogger('rate-limit');
 
 export type RateLimitRule = {
   windowMs: number;
@@ -86,11 +89,15 @@ function retryAfterSeconds(retryAfterMs: number): string {
   return String(Math.max(1, Math.ceil(retryAfterMs / 1000)));
 }
 
+/**
+ * AU-3 (HARDENING_PLAN §6.3): use Express's resolved `req.ip`. With
+ * `app.set('trust proxy', 1)` this is the rightmost `X-Forwarded-For` entry —
+ * the address Render's load balancer recorded — which a client cannot forge
+ * (they can only prepend). Previously this read `x-forwarded-for.split(',')[0]`
+ * (the client-settable leftmost entry), so rotating that header gave an
+ * unlimited supply of fresh rate-limit buckets.
+ */
 function requestIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return forwarded.split(',')[0]?.trim() || req.ip || 'unknown';
-  }
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
@@ -112,6 +119,14 @@ export function createRateLimitMiddleware(
       next();
       return;
     }
+    // AU-3 verification hook: after `trust proxy` is set, `reqIp` must be the
+    // real client IP, not a value from a client-supplied `X-Forwarded-For`
+    // prefix. If it ever shows a spoofed prefix, the trust-proxy hop count is
+    // wrong.
+    log.warn(
+      { scope, key, reqIp: req.ip, xffRaw: req.headers['x-forwarded-for'] ?? null },
+      'rate limited',
+    );
     res.setHeader('Retry-After', retryAfterSeconds(result.retryAfterMs));
     res.status(429).json({ error: 'rate_limited', retryAfterMs: result.retryAfterMs });
   };
