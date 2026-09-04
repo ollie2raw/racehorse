@@ -36,6 +36,8 @@ export type GhostMoveLogEntry = {
   hand_before: string[];
   score_delta: number;
   forced_draw?: boolean;
+  /** Tile drawn on branch `draw`; used to reconstruct hand continuity server-side. */
+  drawn_tile?: string | null;
 };
 
 export type GhostCompositeCandidate = {

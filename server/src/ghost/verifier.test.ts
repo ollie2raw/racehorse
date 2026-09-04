@@ -203,6 +203,131 @@ describe('verifyPlayerMoveLog', () => {
     expect(verifyPlayerMoveLog(atOrAboveBase)).toEqual({ ok: true });
   });
 
+  // ─────────────────────────────────────────────────────────────────────
+  // RT-2 (HARDENING_PLAN §9.3): a multi-draw turn collapsed into a single
+  // GhostMoveLogEntry (the pre-fix client behavior — one entry standing in
+  // for the whole draw sequence, using the stale pre-sequence hand_before)
+  // leaves the tracked hand short by every draw beyond the first. Root
+  // cause traced to playerGhostSync.ts / botGhostSync.ts's draw builders,
+  // called exactly once per turn regardless of how many tiles were really
+  // drawn — fixed to loop once per real draw. These two tests pin the
+  // exact asymmetry that let the bug through unnoticed (lenient mode's
+  // "unlogged boneyard draws" tolerance silently accepted the collapsed
+  // shape) and confirm the fixed (looped) shape verifies under strict mode
+  // with no tolerance needed.
+  // ─────────────────────────────────────────────────────────────────────
+  it('a two-draw turn collapsed into one entry (the pre-fix shape) is accepted leniently but rejected strictly', () => {
+    const tile1 = { low: 3, high: 3 };
+    const boardAfter1 = simulatePlacement(null, tile1, 'left');
+    const score1 = computePlayScore(boardAfter1, DEFAULT_CONFIG);
+    const boardAfter2 = simulatePlacement(boardAfter1, { low: 3, high: 6 }, 'left');
+    const score2 = computePlayScore(boardAfter2, DEFAULT_CONFIG);
+
+    // Real turn shape: play 3|3, then two real draws (0|4, then 3|6) before
+    // a legal play appears, then play 3|6. Collapsed into ONE draw entry
+    // using the hand as it stood BEFORE either draw (the bug) instead of
+    // one entry per real draw.
+    const collapsedLog: GhostMoveLogEntry[] = [
+      {
+        turn: 1,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(null),
+        tile_played: '3|3',
+        branch: 'left',
+        hand_before: ['3|3', '1|2', '2|2'],
+        score_delta: score1,
+      },
+      {
+        turn: 2,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(boardAfter1),
+        tile_played: null,
+        branch: 'draw',
+        // Bug: stands in for BOTH real draws, using the hand as it stood
+        // before either one — never updated per step.
+        hand_before: ['1|2', '2|2'],
+        score_delta: 0,
+      },
+      {
+        turn: 3,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(boardAfter1),
+        tile_played: '3|6',
+        branch: 'left',
+        // The REAL hand after both draws.
+        hand_before: ['1|2', '2|2', '0|4', '3|6'],
+        score_delta: score2,
+      },
+    ];
+
+    const lenient = verifyPlayerMoveLog(collapsedLog);
+    expect(lenient).toEqual({ ok: true });
+
+    const strict = verifyPlayerMoveLog(collapsedLog, { strictHandContinuity: true });
+    expect(strict.ok).toBe(false);
+    if (!strict.ok) {
+      expect(strict.reason).toMatch(/hand_before is not consistent/);
+    }
+  });
+
+  it('the same turn logged one entry per real draw (the fixed shape) verifies cleanly under strict mode', () => {
+    const tile1 = { low: 3, high: 3 };
+    const boardAfter1 = simulatePlacement(null, tile1, 'left');
+    const score1 = computePlayScore(boardAfter1, DEFAULT_CONFIG);
+    const boardAfter2 = simulatePlacement(boardAfter1, { low: 3, high: 6 }, 'left');
+    const score2 = computePlayScore(boardAfter2, DEFAULT_CONFIG);
+
+    const fixedLog: GhostMoveLogEntry[] = [
+      {
+        turn: 1,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(null),
+        tile_played: '3|3',
+        branch: 'left',
+        hand_before: ['3|3', '1|2', '2|2'],
+        score_delta: score1,
+      },
+      {
+        turn: 2,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(boardAfter1),
+        tile_played: null,
+        branch: 'draw',
+        hand_before: ['1|2', '2|2'],
+        drawn_tile: '0|4',
+        score_delta: 0,
+      },
+      {
+        turn: 3,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(boardAfter1),
+        tile_played: null,
+        branch: 'draw',
+        hand_before: ['1|2', '2|2', '0|4'],
+        drawn_tile: '3|6',
+        score_delta: 0,
+      },
+      {
+        turn: 4,
+        hand_number: 1,
+        actor: 'you',
+        board_state: serializeBoard(boardAfter1),
+        tile_played: '3|6',
+        branch: 'left',
+        hand_before: ['1|2', '2|2', '0|4', '3|6'],
+        score_delta: score2,
+      },
+    ];
+
+    expect(verifyPlayerMoveLog(fixedLog, { strictHandContinuity: true })).toEqual({ ok: true });
+  });
+
   it('ignores ghost-actor entries entirely', () => {
     const moveLog: GhostMoveLogEntry[] = [
       {

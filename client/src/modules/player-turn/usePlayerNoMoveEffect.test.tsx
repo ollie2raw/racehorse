@@ -161,3 +161,89 @@ describe('usePlayerNoMoveEffect local-run ownership', () => {
     expect(runDrawSequence).not.toHaveBeenCalled();
   });
 });
+
+describe('usePlayerNoMoveEffect Ghost mode draw logging (RT-2, HARDENING_PLAN §9.3)', () => {
+  it('logs one GhostMoveLogEntry per real draw in a multi-draw turn, each with its own hand_before and drawn_tile — not one entry for the whole sequence', async () => {
+    const baseMatch = createFixedBotHand(
+      { you: 0, bot: 0 },
+      1,
+      60,
+      7,
+      {
+        player_tiles: [{ low: 1, high: 2 }, { low: 2, high: 2 }],
+        fritz_tiles: [{ low: 0, high: 1 }],
+        boneyard: [{ low: 0, high: 4 }, { low: 3, high: 6 }],
+        locked: [],
+      },
+      'you',
+    );
+
+    // Two real draws before a legal play: 0|4 first, then 3|6.
+    const afterDraw1 = {
+      ...baseMatch,
+      boneyard: [{ low: 3, high: 6 }],
+      players: {
+        ...baseMatch.players,
+        you: { ...baseMatch.players.you, hand: [...baseMatch.players.you.hand, { low: 0, high: 4 }] },
+      },
+    };
+    const afterDraw2 = {
+      ...afterDraw1,
+      boneyard: [],
+      players: {
+        ...afterDraw1.players,
+        you: { ...afterDraw1.players.you, hand: [...afterDraw1.players.you.hand, { low: 3, high: 6 }] },
+      },
+    };
+
+    const runDrawSequence = vi.fn(async (_liveMatch, _player, _token, onStep) => {
+      onStep({
+        actionKind: 'draw',
+        beforeState: baseMatch,
+        result: { state: afterDraw1, drew: { player: 'you', tile: { low: 0, high: 4 } } },
+      });
+      onStep({
+        actionKind: 'draw',
+        beforeState: afterDraw1,
+        result: { state: afterDraw2, drew: { player: 'you', tile: { low: 3, high: 6 } } },
+      });
+      return { state: afterDraw2, drew: { player: 'you', tile: { low: 3, high: 6 } } };
+    });
+
+    const stable = makeStablePorts({
+      runDrawSequence,
+      ghost: { isGhostMode: true },
+      localRun: {
+        beginLocalRun: vi.fn(() => ({ id: 1, lifecycleVersion: 0, kind: 'player-draw' as const })),
+        isLocalRunCurrent: vi.fn(() => true),
+        hasActiveLocalRun: vi.fn(() => false),
+        finishLocalRun: vi.fn(),
+      },
+    });
+
+    renderHook(() => usePlayerNoMoveEffect({ ...stable, match: baseMatch } as never));
+    await waitFor(() => expect(runDrawSequence).toHaveBeenCalledOnce());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const ghostDrawCalls = stable.ports.appendGhostMove.mock.calls
+      .map(([entry]) => entry)
+      .filter((entry: { branch: string | null }) => entry.branch === 'draw');
+
+    // The bug this fixes: exactly ONE entry would have been logged here
+    // (standing in for both real draws, using the pre-sequence snapshot).
+    expect(ghostDrawCalls).toHaveLength(2);
+    expect(ghostDrawCalls[0]).toMatchObject({
+      hand_before: expect.arrayContaining(['1|2', '2|2']),
+      drawn_tile: '0|4',
+    });
+    expect(ghostDrawCalls[1]).toMatchObject({
+      hand_before: expect.arrayContaining(['1|2', '2|2', '0|4']),
+      drawn_tile: '3|6',
+    });
+    // The two entries must NOT share the same hand_before — that collapse
+    // (both using the stale pre-sequence snapshot) is exactly the bug.
+    expect(ghostDrawCalls[0].hand_before).not.toEqual(ghostDrawCalls[1].hand_before);
+  });
+});

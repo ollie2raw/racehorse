@@ -46,3 +46,30 @@ jobs:
             exit 1
           fi
           echo "security posture clean (${adv} advisories)"
+
+  policy-manifest:
+    # Guardrail #1 (ENGINEERING_GUARDRAILS.md). assert_security_posture()
+    # above checks RLS-enabled / grant-level posture; it deliberately does
+    # NOT inspect individual policy predicates, which is exactly the gap
+    # RK-0 (a policy named for service_role but scoped to public) slipped
+    # through. This job diffs the live pg_policies rows for every pinned
+    # table against supabase/policy-manifest.json.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check RLS policy manifest against prod
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: npm run check:policy-manifest --prefix server

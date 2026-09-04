@@ -194,7 +194,13 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(400).json({ error: 'ghost scoring log exceeds opponentScore.' });
         return;
       }
-      const moveLogVerification = verifyPlayerMoveLog(trainingMoveLog);
+      // RT-2 (HARDENING_PLAN §9.3): strict, matching the live-room path
+      // (gameOverPersistence.ts). Root cause of the historical lenient-only
+      // failures fixed client-side (playerGhostSync.ts / botGhostSync.ts —
+      // a multi-draw turn now logs one entry per real draw instead of one
+      // entry standing in for the whole sequence), so this no longer needs
+      // the "unlogged boneyard draws" tolerance going forward.
+      const moveLogVerification = verifyPlayerMoveLog(trainingMoveLog, { strictHandContinuity: true });
       if (!moveLogVerification.ok) {
         res.status(400).json({
           error: `Invalid move log: ${moveLogVerification.reason}`,

@@ -10,7 +10,7 @@ import { asPlayMoves } from '../../game/tileUtils.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
 import { buildBotGhostDrawEntry, buildBotGhostPassEntry } from './botGhostSync.ts';
 import { executeBotPlayMove, resolveBotMoveChoice } from './botMoveResolution.ts';
-import type { BotTurnSnapshot } from './botMoveSnapshot.ts';
+import { collectBotTurnSnapshot, type BotTurnSnapshot } from './botMoveSnapshot.ts';
 import type { BotTurnPorts } from './types.ts';
 import { BOT_POST_DRAW_PLAY_DELAY_MS, waitMs } from './botTurnGuards.ts';
 
@@ -59,6 +59,8 @@ export async function runBotDrawPassSequence(input: {
   let drawCount = 0;
   let onStepDrawCount = 0;
   const boneyardBefore = working.boneyard.length;
+  const drawSnapshots: BotTurnSnapshot[] = [];
+  const drawnTiles: ({ low: number; high: number } | null)[] = [];
 
   input.ports.setDrawSequenceActiveBoth(true);
   const drawPass = await input.runDrawSequence(
@@ -69,6 +71,8 @@ export async function runBotDrawPassSequence(input: {
       if (step.actionKind === 'draw') {
         drawCount += 1;
         onStepDrawCount += 1;
+        drawSnapshots.push(collectBotTurnSnapshot(step.beforeState));
+        drawnTiles.push(step.result.drew?.tile ?? null);
       }
       input.ports.captureGuidedMatchCandidateAction(
         'fritz',
@@ -99,14 +103,23 @@ export async function runBotDrawPassSequence(input: {
 
   if (drawPass.drew) {
     if (input.isGhostMode) {
-      input.ports.appendGhostMove(
-        buildBotGhostDrawEntry({
-          turn: input.moveCounter,
-          handNumber: input.matchHandNumber,
-          boardStateKey: input.snapshot.ghostBoardStateKey,
-          handBefore: input.snapshot.ghostHandBefore,
-        }),
-      );
+      // Same per-draw discipline as playerGhostSync.ts's buildGhostDrawMoveLogEntry
+      // (RT-2, HARDENING_PLAN §9.3) — one entry per real draw this turn, using
+      // that step's own before-state, never the single pre-sequence snapshot
+      // standing in for a whole multi-draw sequence.
+      const ghostDrawLogCount = Math.min(drawCount, drawSnapshots.length);
+      for (let index = 0; index < ghostDrawLogCount; index += 1) {
+        const stepSnapshot = drawSnapshots[index] ?? input.snapshot;
+        input.ports.appendGhostMove(
+          buildBotGhostDrawEntry({
+            turn: input.moveCounter,
+            handNumber: input.matchHandNumber,
+            boardStateKey: stepSnapshot.ghostBoardStateKey,
+            handBefore: stepSnapshot.ghostHandBefore,
+            drawnTile: drawnTiles[index] ?? null,
+          }),
+        );
+      }
     }
   }
 

@@ -55,6 +55,15 @@ export function buildGhostDrawMoveLogEntry(input: {
   handNumber: number;
   snapshot: PlayerMoveSnapshot;
   useTupleHandFormat?: boolean;
+  /**
+   * The tile actually drawn on this specific step, when known. Populates
+   * `drawn_tile` so verifyPlayerMoveLog's hand-continuity check can track
+   * the expected hand precisely instead of falling back to
+   * inferLegacyDrawnTile. RT-2 (HARDENING_PLAN §9.3): a multi-draw turn
+   * must log one entry per real draw, each carrying its own drawn tile —
+   * never one entry standing in for the whole sequence.
+   */
+  drawnTile?: Tile | null;
 }): GhostMoveLogEntry {
   return {
     turn: input.moveCounter,
@@ -66,6 +75,7 @@ export function buildGhostDrawMoveLogEntry(input: {
     hand_before: ghostHandBeforeForSnapshot(input.snapshot, Boolean(input.useTupleHandFormat)),
     score_delta: 0,
     forced_draw: false,
+    drawn_tile: input.drawnTile ? toTileKey(input.drawnTile) : null,
   };
 }
 

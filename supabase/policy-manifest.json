@@ -1,0 +1,88 @@
+{
+  "$schema": "informal — see server/src/scripts/checkPolicyManifest.ts",
+  "_read_me": [
+    "Guardrail #1 (ENGINEERING_GUARDRAILS.md): checked-in expected RLS policy",
+    "shape for tables where a live drift has already caused, or could cause,",
+    "the RK-0 class of bug (a policy named for one role but scoped to",
+    "another). checkPolicyManifest.ts diffs this against the live database",
+    "(via list_rls_policy_manifest(), 2026-09-04_policy_manifest_rpc.sql) in CI.",
+    "",
+    "PARTIAL COVERAGE BY DESIGN, not by oversight: only tables listed under",
+    "\"tables\" below are diffed exactly (extra/missing/mismatched policy on a",
+    "LISTED table fails the build). A table NOT listed here is reported as",
+    "\"unpinned\" (visible in CI output) but does not fail the build — this is",
+    "an honest incremental-coverage design, not a claim that every table is",
+    "covered. Do not treat an empty diff as \"the whole schema is clean\";",
+    "check the unpinned-table count in the run output too.",
+    "",
+    "Every entry below was seeded from a live, human-run `pg_policies` query",
+    "or from a decisions-log-recorded live confirmation this session (D-8,",
+    "RK-0) — never guessed or reconstructed from migration-file intent alone",
+    "(that would just re-commit the exact migration-drift error this",
+    "guardrail exists to catch). Extend this file the same way: run",
+    "`select schemaname, tablename, policyname, roles, cmd, qual, with_check",
+    "from pg_policies where schemaname = 'public' order by tablename` for real",
+    "and paste the actual result in, one table at a time.",
+    "",
+    "roles is the exact `roles` array pg_policies returns — order matters for",
+    "the diff (Postgres returns it in a stable order per policy, not",
+    "re-sorted here)."
+  ],
+  "tables": {
+    "ranked_games": {
+      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Human dropped and recreated this policy scoped to service_role after finding it was `to public`.",
+      "policies": [
+        {
+          "policyname": "Service role can insert ranked games",
+          "cmd": "INSERT",
+          "roles": ["service_role"],
+          "qual": null,
+          "with_check": "true"
+        }
+      ]
+    },
+    "rating_periods": {
+      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Same fix as ranked_games.",
+      "policies": [
+        {
+          "policyname": "Service role can insert rating periods",
+          "cmd": "INSERT",
+          "roles": ["service_role"],
+          "qual": null,
+          "with_check": "true"
+        }
+      ]
+    },
+    "room_live_sessions": {
+      "_source": "D-8 (HARDENING_PLAN.md decisions log) — human ran `select policyname, cmd, roles, qual, with_check from pg_policies where tablename in ('room_live_sessions','room_match_logs')` on 2026-09-01 and confirmed the exact rows below live. No SELECT policy exists on this table at all — that absence is itself load-bearing (deny-by-default for reads), not an omission from this manifest.",
+      "policies": [
+        {
+          "policyname": "room_live_sessions_no_client_write",
+          "cmd": "ALL",
+          "roles": ["authenticated"],
+          "qual": "false",
+          "with_check": null
+        }
+      ]
+    },
+    "room_match_logs": {
+      "_source": "D-8 (HARDENING_PLAN.md decisions log), same 2026-09-01 confirmation as room_live_sessions.",
+      "policies": [
+        {
+          "policyname": "room_match_logs_select_own",
+          "cmd": "SELECT",
+          "roles": ["public"],
+          "qual": "(auth.uid() = ANY (participant_user_ids))",
+          "with_check": null
+        },
+        {
+          "policyname": "room_match_logs_no_client_write",
+          "cmd": "ALL",
+          "roles": ["public"],
+          "qual": "false",
+          "with_check": null
+        }
+      ]
+    }
+  }
+}

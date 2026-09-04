@@ -319,6 +319,46 @@ focus" line, then the section for the system in progress.
   now has 7 of its original 9 items still deferred (down from 9). §9.1.14,
   §9.2 (RT-INV-10), §9.3 (RT-2 added, awaiting ranking review) updated.
   **Report-back only — no fixes proposed, per instruction.**
+  **Update (same session) — RT-2 ratified FIX NOW, shipped root-cause-first
+  (§9.1.15), not flipped-then-hoped.** Caveat check (a read-only replay of
+  the 500 most recent `ghost_games` rows through the real verifier under
+  both strictness options) found **26 of 299 recent completions would
+  break under strict mode**, spanning 2026-04-30 through 2026-07-09 — real,
+  still-recurring reliance, not the "legacy-only" pattern the leniency's
+  own doc comment claimed. Held per instruction rather than flipping
+  anyway. **Root-caused**: `usePlayerNoMoveEffect.ts`'s Ghost-mode draw
+  logging called its builder exactly once per turn regardless of real
+  draw count — RT-1's exact bug shape, in a sibling code path RT-1 never
+  touched. The symmetric bot-side bug was confirmed **verifier-inert**
+  (`'ghost'`-actor entries are skipped by `verifyPlayerMoveLog` entirely)
+  — fixed anyway for symmetry, not itself the cause. **Fixed**: both
+  builders now loop once per real draw with correct per-step
+  `hand_before`/`drawn_tile`; `ghost.ts` now passes `strictHandContinuity:
+  true`, matching the live-room path. Tests: `verifier.test.ts` pins the
+  exact pre-fix-collapsed-shape / post-fix-looped-shape pair reproducing
+  the real failure reason found live; `usePlayerNoMoveEffect.test.tsx`
+  drives the real fixed hook through a mocked two-draw sequence. Server
+  213/1248 green (was 212/1242), client 217/1484 green (was 217/1483);
+  `tsc -b` clean; lint at baseline. **Committed, not pushed.**
+  **`ENGINEERING_GUARDRAILS.md` started** (repo root, new sibling doc to
+  this one) — 5 guardrails seeded from this session's findings (RK-0,
+  GC-3b/RK-3/RT-2's shared-logic-drift class, RK-1/RK-2, RT-2's
+  verification-parity class, staging/canary). **Guardrail #1 (RLS/policy
+  assertions) built for real**, not just documented: a new RPC
+  (`list_rls_policy_manifest()`,
+  `supabase/migrations/2026-09-04_policy_manifest_rpc.sql`, **not yet
+  applied to prod — human action required**), a diff script
+  (`server/scripts/checkPolicyManifest.ts`) against a checked-in manifest
+  (`supabase/policy-manifest.json`, seeded from 4 tables with real,
+  session-verified `pg_policies` data — `ranked_games`, `rating_periods`,
+  `room_live_sessions`, `room_match_logs` — explicitly partial coverage,
+  not a claim of exhaustive schema coverage), wired into
+  `security-posture.yml` as a new scheduled job, with a real negative test
+  (`checkPolicyManifestDiff.test.ts`) reproducing the exact RK-0 drift
+  shape and confirming the diff catches it. **The other 4 guardrails are
+  marked NOT YET BUILT — no enforcement exists for them yet, stated
+  plainly rather than implied.** Not started on System 9's remaining 7
+  deferred §9.1.12 items yet, per instruction — that's next.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -775,6 +815,13 @@ state-machine work, per the human's instruction).
 
 ## How to use this document
 
+This document records what we found and decided, system by system.
+**`ENGINEERING_GUARDRAILS.md`** (repo root) is its sibling: it records what
+now actually *prevents* the same bug classes from recurring — a real CI
+check, lint rule, or test, not just a decision. Every finding here that
+produces a durable, automatic guardrail (not just a one-time fix) should
+get a section there, citing back to the finding that proved it necessary.
+
 ### Sequencing (do not reorder)
 
 Audit-first, one system at a time. **The next system to work is the first below
@@ -789,7 +836,7 @@ own Step 1 when work reaches it. There is no System 4.
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
 7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–3 done + PUSHED (§7.1 reviewed; §7.2/§7.3 RATIFIED D-14; Step 3 `d8bed8ca` deployed, CI green).** GC-1+GC-9 (buildStamp + `/ready.gameCore` + smoke — confirmed `consistent: true` live), GC-6+GC-8 (`localeCompare`→code-unit; **`FRITZ_POLICY_VERSION` 3**; `sortLegalMoves` pinned), GC-3a (leaf-type `expectTypeOf` guard), GC-4 (`/bot` subpath + verifier import boundary), **GC-5 (re-ranked FIX NOW same-day on a live incident — 12 confirmed false-positive leaderboard demotions since 2026-08-01 — fixed, deployed, and 3 historical attempts retroactively restored to `verified`)**. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout, human-action). REVISIT: GC-3b. ACCEPT: GC-7.
 8. **Ranking / Glicko-2** (cross-cutting) ← **Steps 1–3 done + PUSHED (§8.1 audit; §8.2/§8.3 RATIFIED D-15; RK-1/RK-2/RK-4 + RLS migration file `368ec526`, deployed, CI green).** **RK-0** (live exploitable RLS INSERT-policy gap, found + fixed same day, outside normal cadence) closed. RK-1+RK-2 (Fritz `ranked_games` inserts now idempotent), RK-4 (`isProvisional()` de-duplicated). **RK-7** (Fritz rematch/`bot_match_pending` gap) investigated — **ACCEPT/DORMANT, not reachable today**. REVISIT IF SCALE: RK-3, RK-5, RK-6.
-9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.1.14/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped + pushed). NOT fully closed** — 7 of §9.1.12's original 9 deferred items (`modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond persistence, composed session hooks, `roomEvents.ts` consumers, review hooks) were never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are; the other 2 (`modules/ghost/` client feed, `rooms.ts` deal-generation) are resolved as of §9.1.14.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, shipped); pre-game-draw reload **confirmed safe**. §9.1.14 resolved 2 more, risk-sequenced ahead of the rest: the Ghost verifier's client-side feed (traced 3 distinct pipelines; found a live but bounded-severity asymmetry — RT-2, `strictHandContinuity` omitted for standalone-mode submissions, cannot touch the competitive Glicko rating); `rooms.ts`'s deal-generation (confirmed fully server-only, zero client input — RT-INV-10, no gap). 10 invariants (§9.2); a **partial** gap list (§9.3, RT-1 shipped + RT-2 awaiting ranking review) — remaining 7 §9.1.12 items stay deferred.
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.1.14/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped + pushed). NOT fully closed** — 7 of §9.1.12's original 9 deferred items (`modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond persistence, composed session hooks, `roomEvents.ts` consumers, review hooks) were never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are; the other 2 (`modules/ghost/` client feed, `rooms.ts` deal-generation) are resolved as of §9.1.14.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, shipped); pre-game-draw reload **confirmed safe**. §9.1.14 resolved 2 more, risk-sequenced ahead of the rest: the Ghost verifier's client-side feed (traced 3 distinct pipelines; found a live but bounded-severity asymmetry — RT-2, `strictHandContinuity` omitted for standalone-mode submissions, cannot touch the competitive Glicko rating); `rooms.ts`'s deal-generation (confirmed fully server-only, zero client input — RT-INV-10, no gap). 10 invariants (§9.2); a **partial** gap list (§9.3, **RT-1 + RT-2 both shipped** — RT-2 root-caused before flipping `strictHandContinuity`, per §9.1.15) — remaining 7 §9.1.12 items stay deferred. **`ENGINEERING_GUARDRAILS.md`** started this same session, seeded with 5 guardrails (1 fully built — the RLS/policy-manifest CI diff, closing RK-0's class; 4 documented as NOT YET BUILT).
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
 11. **Social / stats / account** ← scaffold
 12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
@@ -5876,6 +5923,94 @@ mechanism — `generateSingleDailyFritzGameHand`, seeded per
 §7.1.4 — not conflated with the `Math.random()` path here, which is for
 ordinary multiplayer rooms only.)
 
+### 9.1.15 RT-2 — caveat check, root cause, fix, and the strict flip
+
+Before shipping RT-2 (flip `strictHandContinuity` to `true` at the
+`ghost.ts` call site), the human asked for the exact caveat §9.1.14 itself
+flagged to be checked first: does any current live traffic rely on the
+lenient allowance the flag was gating?
+
+**Caveat check — found real, still-recurring reliance, not just historical
+legacy data.** A read-only script (fetched the 500 most recent
+`ghost_games` rows via service-role, replayed each stored `move_log`
+through the real unmodified `verifyPlayerMoveLog` under both strict and
+lenient options, deleted after use, never committed) found: of 299 rows
+with a move log, 238 fail under both options (pre-existing data outside
+this gate's scope entirely — plausibly live-room-originated, which never
+passes through `ghost.ts`'s gate at all), 35 pass under both, and **26
+pass lenient but fail strict** — every one on the reason "hand_before is
+not consistent with the prior move in this hand," spanning
+**2026-04-30 through 2026-07-09** — not a one-time historical batch, a
+pattern still active two months before this investigation. This
+contradicted the leniency's own doc comment ("legacy-only"). **The flip
+was NOT shipped naively** — held per the human's explicit instruction to
+report back rather than force it.
+
+**Root cause, traced precisely.** `usePlayerNoMoveEffect.ts`'s Ghost-mode
+branch (`client/src/modules/player-turn/`) called
+`buildGhostDrawMoveLogEntry` **exactly once per turn**, regardless of how
+many tiles were actually drawn in a multi-draw sequence (drawing until a
+legal play appears) — using the single pre-sequence snapshot for
+`hand_before` every time, unlike the parallel `MoveEntry`/Daily-Fritz
+logging a few lines below it in the same function, which already
+correctly looped once per real draw (the RT-1-fixed path). The symmetric
+bot-side builder (`botDrawPassHandler.ts` → `botGhostSync.ts`'s
+`buildBotGhostDrawEntry`) had the identical single-call bug — but traced
+via `verifyPlayerMoveLog`'s main loop (`if (entry.actor === 'ghost')
+continue;`, the very first line) to be **verifier-inert**: `'ghost'`-actor
+entries are skipped entirely, so the bot-side collapsing never contributed
+to any of the 26 failures. **This is exactly RT-1's bug shape, confirmed
+by the human's own hypothesis** — a multi-draw sequence collapsed into one
+log entry — just in the dedicated Ghost move-log builders instead of the
+Daily Fritz transcript builder, and never given the equivalent fix when
+RT-1 was.
+
+Mechanically, why this produces "hand_before is not consistent": the
+verifier tracks the expected hand forward from each draw entry as
+`hand_before + drawn_tile` (one tile). A single collapsed entry can only
+ever advance the tracked hand by one tile, however many were really drawn;
+the next logged entry's `hand_before` reflects every real draw, so the two
+diverge by (real draws − 1) tiles. Lenient mode's "unlogged boneyard
+draws" tolerance (`handAllowsLegacyUnloggedDraws`, a pure-superset check)
+was built for exactly this shape and silently absorbed it — masking the
+gap rather than surfacing it.
+
+**Fixable, not inherent — fixed.** `playerGhostSync.ts`'s
+`buildGhostDrawMoveLogEntry` and `botGhostSync.ts`'s
+`buildBotGhostDrawEntry` gained an optional `drawnTile` param, populating
+`GhostMoveLogEntry.drawn_tile` (a field the type — both server- and
+client-side copies, the client one was missing it entirely — already
+declared but neither builder ever set). `usePlayerNoMoveEffect.ts` and
+`botDrawPassHandler.ts` now loop once per real draw
+(`Math.min(drawCount, drawSnapshots.length)` — the same
+never-fabricate-beyond-real-per-step-observations principle as
+`capDailyFritzDrawLogCount`, applied here directly rather than reusing
+that function, since its `isDailyFritzMode`-only gate is wrong for Ghost
+mode — Ghost mode has its own server-side replay verifier too, a
+related, narrower finding folded into the fix rather than filed
+separately), using each step's own captured snapshot and drawn tile
+instead of the single stale pre-sequence one. `http/routes/ghost.ts` then
+flips to `verifyPlayerMoveLog(trainingMoveLog, { strictHandContinuity:
+true })`, matching the live-room path.
+
+**Tests** (matching RT-1's before/after pattern): `server/src/ghost/
+verifier.test.ts` gained two cases building the exact two-real-draw
+scenario from the actual failure reason found live — the pre-fix
+collapsed shape (accepted leniently, rejected strictly, reproducing
+"hand_before is not consistent") and the fixed looped shape (verifies
+cleanly under strict). `usePlayerNoMoveEffect.test.tsx` gained a
+hook-level test driving the real (now-fixed) code through a mocked
+two-step `runDrawSequence`, asserting `appendGhostMove` is called exactly
+twice — once per real draw — with distinct, correctly incremental
+`hand_before`/`drawn_tile` values, not the same stale snapshot reused
+twice. The bot-side fix was made for symmetry/hygiene (confirmed
+verifier-inert, so not itself covered by a dedicated test this pass).
+
+**Verify:** server suite 213 files / 1248 tests green (was 212/1242),
+client 217/1484 green (was 217/1483); `tsc -b` clean both sides; lint
+unchanged (server 217/68, client 401/401 baselines). Committed, not
+pushed.
+
 ## 9.2 Invariants
 
 The properties that must hold for the match runtime layer (client
@@ -5971,7 +6106,9 @@ multi-draw turn, model the boneyard-delta upward-correction bug directly
 multi-draw turn), and assert both directions — capped: the hand still
 verifies; uncapped: the hand fails with `DailyFritzVerificationError`,
 proving the fix is load-bearing, not inert). **RT-2 added 2026-09-04**
-(§9.1.14, item 1) — awaiting ranking review; not yet fixed.
+(§9.1.14, item 1). **Ratified FIX NOW, small — root-caused before
+shipping (§9.1.15), fixed, and `strictHandContinuity: true` flipped
+2026-09-04.**
 
 **Scoring** (same axes as §1.3 / §6.3 / §7.3 / §8.3). *Severity* ∈
 {**integrity-oracle** (a move or evidence can be forged, misapplied, or
@@ -6005,7 +6142,7 @@ remaining seven before treating System 9 as closed.
 - [x] Step 2 — invariants + partial gap list → ratified **D-16** (2026-09-04), explicitly PARTIAL — does not close out §9.1.12
 - [x] Step 3 — RT-1 shipped (test added, committed, not pushed)
 - [x] §9.1.12 follow-up (§9.1.14, this session): `modules/ghost/` client-feed traced → RT-2 (new gap, awaiting ranking review) + confirmed the Ghost-verifier-vs-deal-snapshot-replay split; `rooms.ts` deal-generation bodies traced → RT-INV-10 (confirmed-good, no gap)
-- [ ] RT-2 — awaiting ranking review / Step 3 (not yet fixed)
+- [x] RT-2 — root-caused (§9.1.15), fixed, `strictHandContinuity: true` flipped, tested, committed 2026-09-04
 - [ ] Remainder of §9.1.12 (guided/, daily-puzzle/, board/, preGameDraw/ beyond persistence, the composed session hooks, roomEvents.ts consumers, review hooks — 7 of the original 9 items) — **deferred, not yet triaged into ranked gaps. System 9 is NOT fully closed until this is explicitly re-opened.**
 
 ---
@@ -6209,6 +6346,7 @@ one becomes live or blocks a numbered system.
 | D-9 | 2026-09-01 | **System 2 Step 2 RATIFIED — §2.2 (MP-INV-1..19) + §2.3 (MP-G1..MP-G17, including the §2.3.2 verification-pass updates) as written.** The human reviewed the invariant list and the tiered gap list line-by-line and signed off. What is ratified: **19 invariants** across 8 domains (seat/identity 1–3, room-kind ACL 4–6, state authority & ordering 7–9, persistence/recovery 10–13, game-over integrity 14–17, disconnect/grace 18, anti-cheat posture 19), each with rule / enforcing-mechanism-today-or-`UNENFORCED` / failure-mode and grounded in an MP-1..MP-8 window or a §2.1.7 authz row; **17 gaps** tiered A (fix now: **MP-G1** unmanaged room-table schema, **MP-G3** `room:spectate` no room-kind check on a ranked-eligible private room, **MP-G4** game-over side-effect idempotency) / B (verify: MP-G6 `room_command_receipts`+`mp_authority_events` unapplied, MP-G2 grant revoke) / C (revisit if scale: MP-G5, MP-G7–MP-G13) / D (posture: MP-G14) / E (accept: MP-G15–MP-G17). **Residual notes recorded with the sign-off:** (a) **MP-INV-2** carries a known unclosed gap — two *guest* seats (`userId=null`) are distinguishable on reconnect only by username/hold, so a second guest with the room code + the first's display name can reclaim the seat; scoped to private-unranked play, tracked as **MP-G13 (Tier C)**, not blocking. (b) **MP-INV-19 is a posture decision, not a hard invariant** — move-log verification stays non-blocking for the match result; the ratified direction is to *add* a structured alert + per-user failure tracking in a later step (**MP-G14**), not to gate results on verification. (c) **MP-INV-12** holds (RLS confirmed, D-8) but the client write-grant revoke (**MP-G2**) and the unmanaged-schema fix (**MP-G1**) are still open — folded into one Step 3 migration. (d) **MP-G5** and **MP-G9** verdicts were changed by the §2.3.2 verification pass (G5 A→C on zero evidence + no measurement path; G9 ACCEPT→REVISIT on deploy-restart frequency) and are ratified as changed. **Step 3 scope (agreed):** Tier-A only — MP-G1, MP-G3, MP-G4 (MP-G2 folded into MP-G1). | The human reviewed the list line-by-line, same as D-3 for System 1. Recording the residual notes so a cold session does not treat MP-INV-2 / MP-INV-19 as fully closed, and does not re-litigate the G5/G9 downgrades. The Step-3 scope is deliberately narrow — the other tiers wait for their own pass. |
 | D-10 | 2026-09-02 | **System 3 Step 2 RATIFIED — §3.2 (DM-INV-1..18) + §3.3 (DF-G1..DF-G5) as written.** The human signed off "as written — no changes". What is ratified: **18 invariants** across 6 domains (score authority 1–5, one-attempt/run-per-day 6–7, idempotent recovery & ordering 8–13, content integrity 14–16, authz 17–18), each rule / mechanism-today-or-`UNENFORCED`/`PARTIAL` / failure, grounded in a DM-1..DM-7 window or a §3.1.5 authz row; **5 gaps** — **DF-G1 + DF-G2 FIX NOW**, DF-G3/DF-G4 REVISIT IF SCALE, DF-G5 ACCEPT. Scope = the 2 active modes (Daily Fritz, Puzzle Rush); the retired Ladder is out (decommissioned, §3.1.4). **Two `verified-against-code` corrections already folded into §3.2/§3.3:** the Daily Fritz speed board **is** verification-gated (`isDailyFritzAttemptLeaderboardEligible`), and `daily_fritz_outbox` is projected by a **DB trigger**, not a Node drainer. **Residual notes recorded with the sign-off (Step-3 code trace, 2026-09-03):** (a) **DF-G1's mechanism was wrong** — `scheduleDailyFritzRecordGameVerification` has zero production callers (dead code from the reverted `b0a0a93c` advance-first design, caller removed in `d027d30d`); the record/next-hand routes verify synchronously and refuse-to-advance on transient failure. The real gap is a **stranded `status='started'` attempt with a complete set** (client crash / restart mid-`/complete`, no reaper). DF-G1's fix is a stranded-set boot sweep + periodic reaper (mirror `recoverTournamentMatches`), NOT re-running the dead async path, and it must never un-`reject` a hand (DM-INV-11). (b) **DF-G2's alert already exists** (`recordDailyFritzAdvanceWithoutVerification` → `Sentry.captureMessage(..., daily_fritz_alert:'verification_bypassed')`); the real residuals are per-user aggregation on that alert + `getDailyFritzStreak` not being verification-filtered. (c) **DF-G2 streak filter must keep `legacy_unverified` (pre-protocol) completions counting** — applying the full leaderboard predicate would retroactively zero real streaks; the filter only drops `rejected` / non-empty-`unverified_hands`. (d) **The POSTURE decision** (same as D-9 MP-INV-19): Daily Fritz verification stays non-blocking for `status='completed'` — a failed hand is `rejected` (off the board) but never blocks the player finishing. **Step 3 scope (agreed):** DF-G1 + DF-G2 only. | Human reviewed the list line-by-line, same as D-3 / D-9. Recording the Step-3 corrections so a cold session does not build a reaper around dead code or a duplicate alert, and does not apply the streak filter in a way that breaks legacy streaks. |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
+| D-17 | 2026-09-04 | **RT-2: root-cause-first, not flip-and-hope.** The human directed a caveat check before shipping RT-2's originally-planned fix (flip `strictHandContinuity` to `true`) — did any live traffic rely on the lenient allowance? It did: 26 of 299 recent `ghost_games` completions would break under strict mode, spanning 2026-04-30 through 2026-07-09, contradicting the leniency's own "legacy-only" doc comment. Per the human's explicit instruction, the flip was **held**, not shipped anyway, and reported back. **Decision: root-cause the actual client-side cause, fix it, THEN flip strict mode — same pattern as RT-1** (fix the mechanism producing the divergent evidence, don't just widen the tolerance further or narrow the check without fixing the producer). Root-caused to `usePlayerNoMoveEffect.ts`'s Ghost-mode draw logging calling its builder once per turn regardless of real draw count (§9.1.15) — fixed, tested, `strictHandContinuity: true` shipped alongside the fix. Also directed: start `ENGINEERING_GUARDRAILS.md` as a new sibling document to this one, and build guardrail #1 (RLS/policy assertions) for real as the first entry, not just documented. | Establishes a standing preference, not just a one-off: when tightening a verification check reveals live traffic depends on the leniency being removed, the default move is root-cause-and-fix (matching RT-1's precedent), not "widen the fix's scope to also cover the newly-found traffic" or "leave the check loose." Recording so a future similar finding doesn't need to re-litigate which path to take. |
 | D-16 | 2026-09-04 | **System 9 §9.2 (RT-INV-1..9) RATIFIED as written. §9.3 RATIFIED as an explicitly PARTIAL gap list (RT-1 only) — NOT a close-out of §9.1.12's deferred remainder.** The human reviewed the invariant list and signed off on both, with one explicit distinction recorded: §9.3 covers only the three items §9.1.13 investigated (RT-1 ranked, two confirmed-fine); the rest of §9.1.12 (`modules/guided/`, the `modules/ghost/` client half, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond `preGameDrawPersistence.ts`, `useLiveMatchSession.ts`'s composed hooks, `roomEvents.ts`'s consumers beyond the write side, the review hooks, and `startGame`/`nextHand`/`readyForNextHand`'s deal-generation bodies) was **never triaged into invariants or gaps at all** — it stays exactly where §9.1.12 left it. **System 9 is therefore ratified for what it covers, not closed the way Systems 1–8 are** — a future session must explicitly re-open and triage §9.1.12's remainder before treating System 9 as fully audited; ratifying §9.2/§9.3 must not be read as having done that. **Step 3 scope (agreed): RT-1 only** — add the missing test exercising the real interrupted-draw-sequence trigger path for `capDailyFritzDrawLogCount`, extending `dailyFritzTranscriptFidelity.test.ts`. | Human reviewed line-by-line, same as D-3 / D-9 / D-10 / D-12 / D-13 / D-14 / D-15 — with an explicit scope caveat this time, recorded verbatim so a cold read of the plan does not mistake "ratified" for "exhaustively triaged" for this particular system. |
 | D-15 | 2026-09-04 | **System 8 §8.2 (RK-INV-1..8) + §8.3 (RK-1..RK-6) RATIFIED as written.** The human reviewed the invariant list and the risk-ranked gap list line-by-line and signed off. What is ratified: **8 invariants** — rating-math correctness/determinism (HOLDS), one-game-one-delta (PARTIAL — HOLDS for multiplayer, **DOES NOT HOLD** for the two Fritz-branch inserts, RK-1/RK-2), server-only write access (**DID NOT HOLD until RK-0's same-day fix**, HOLDS now), bounded-time rating application (PARTIAL — inline HOLDS, the weekly cron sweep has no boot catch-up, RK-6), single rating algorithm (PARTIAL — server is single-implementation; a client prediction-only copy has drifted on forfeit-outcome handling, RK-3), single provisional-threshold source (**AT RISK** — a duplicated literal, not yet diverged, RK-4), duplicate-audit-never-double-rates (HOLDS), admin-fail-closed with no fallback transport (HOLDS). **6 gaps** verdicts: **FIX NOW** — RK-1 (`fritzMatchLifecycle.ts:229` → route through `insertRankedGameIdempotent()`, with the noted caveat that a stable `sourceMatchId` must be added for non-local-room Fritz matches, which resolve to `null` today), RK-2 (`ghost/service.ts:1077`, same pattern, `sourceMatchId` already available at both known call sites), RK-4 (replace the duplicated `< 20` literal with a call to `isProvisional()`); **REVISIT IF SCALE** — RK-3 (client rating-prediction UI's forfeit-outcome omission — prediction-only, no live rating ever affected), RK-5 (`ghost/service.ts`'s duplicated local `supabaseFetch` — process/cosmetic), RK-6 (cron sweep's missing boot-time catch-up). **RK-0 stays recorded as closed** (decisions log, §8.1.7) — not re-opened or re-ranked by this ratification. **One addition (human direction) before Step 3 starts:** write a migration file capturing RK-0's already-applied RLS policy correction (`to service_role` on both `ranked_games`/`rating_periods` INSERT policies) — a no-op against current prod state, closing the migration-drift risk §8.1.7 flagged; not applied (already live). **Step 3 scope (agreed):** RK-1 + RK-2 + RK-4 + the RLS migration file. RK-3/RK-5/RK-6 untouched. Tests required: a duplicate-insert attempt (same `sourceMatchId`) at both RK-1 and RK-2's call sites is a no-op, not a double rating application. | Human reviewed line-by-line, same as D-3 / D-9 / D-10 / D-12 / D-13 / D-14. Before implementing RK-1, the human asked for a specific pre-check — whether `${roomCode}:forfeit` is actually unique per forfeit event (a rematch in the same room, or a reused room code, could produce two genuine forfeit events sharing a room code) — rather than accepting the originally-sized fix at face value; recording this so a cold session sees why RK-1's fix is not simply RK-2's fix repeated. |
 | RK-0 | 2026-09-04 | **CONFIRMED LIVE, FOUND AND FIXED SAME DAY — the first genuinely-exploitable score-oracle bypass found across Systems 1–8, not diagnostics-only, not theoretical.** During System 8 Step 1's `assert_security_posture()` follow-up, the human queried `pg_policies` directly and found both `ranked_games` and `rating_periods` carried an INSERT policy named `"Service role can insert..."` whose actual `roles` clause was `{public}` with `with_check: true` — the name claimed `service_role`-only, but the `to` clause had never been set, so it silently applied to every role including `anon`. Any unauthenticated caller with the project's public anon key could POST an arbitrary row into `ranked_games` — a forged win against any `player_id`, at any score, feeding straight into `commit_glicko_game_update` on the next cron sweep or the next time that row's `rating_after` was read — a direct rating-inflation / leaderboard-forgery path with no authentication required. **Root cause:** the same migration-drift shape already documented for the `2026-08-11`/`2026-09-01` table-grant history (§8.1.4) — a policy whose *name* was never a guarantee of its *predicate*. **Fixed:** the human dropped and recreated both policies scoped `to service_role`, applied directly in the Supabase SQL editor (not via a migration file — **flagged as its own migration-drift risk**: if this project is ever reset from migrations, the wide-open policy silently returns; a migration file capturing the corrected policy is recommended so schema-as-code matches prod, even though the fix is already live). **Verified safe before/after:** traced every writer of `ranked_games` — `server/src/ranking/*.ts` and `server/src/shared/fritzMatchLifecycle.ts` (via the shared `supabaseUtils.ts` `supabaseFetch`) and `server/src/ghost/service.ts` (via its own locally-duplicated `supabaseFetch`) all authenticate with `SUPABASE_SERVICE_KEY`; that key's JWT payload was decoded locally (no key material or network call involved) and its `role` claim confirmed literally `"service_role"`, matching the project ref — the fix does not break any legitimate write path. **Ranked as already-closed** in §8.3 (not an open gap to prioritize) — audit trail only. | House rule: verify claims against actual code/prod and correct/record the finding openly, same treatment as the D-14 correction (GC-5) — a new row, not a rewrite of §8.1's original text. This is the sharpest finding of the whole plan to date: everything through System 7 was either already-mitigated, diagnostics-only, or theoretical; this one was a live, unauthenticated, zero-skill exploit path sitting in prod. |

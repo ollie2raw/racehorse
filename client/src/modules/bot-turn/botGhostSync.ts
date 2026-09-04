@@ -6,6 +6,11 @@ export function buildBotGhostDrawEntry(input: {
   handNumber: number;
   boardStateKey: string;
   handBefore: string[];
+  /** See buildGhostDrawMoveLogEntry (player-turn/playerGhostSync.ts) — same
+   * per-draw entry discipline, kept symmetric for consistency even though
+   * verifyPlayerMoveLog currently skips actor:'ghost' entries entirely, so
+   * this side never caused RT-2's verification failures on its own. */
+  drawnTile?: { low: number; high: number } | null;
 }): GhostMoveLogEntry {
   return {
     turn: input.turn,
@@ -17,6 +22,7 @@ export function buildBotGhostDrawEntry(input: {
     hand_before: input.handBefore,
     score_delta: 0,
     forced_draw: false,
+    drawn_tile: input.drawnTile ? toTileKey(input.drawnTile) : null,
   };
 }
 

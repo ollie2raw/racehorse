@@ -29,6 +29,7 @@ import {
 } from './playerMoveLogEntries.ts';
 import { collectPlayerMoveSnapshot, type PlayerMoveSnapshot } from './playerMoveSnapshot.ts';
 import type { UsePlayerTurnOrchestrationArgs } from './types.ts';
+import type { Tile } from '../../types.ts';
 
 type UsePlayerNoMoveEffectArgs = Pick<
   UsePlayerTurnOrchestrationArgs,
@@ -186,10 +187,12 @@ export function usePlayerNoMoveEffect({
 
         let drawCount = 0;
         const drawSnapshots: PlayerMoveSnapshot[] = [];
+        const drawnTiles: (Tile | null)[] = [];
         const result = await runDrawSequence(match, 'you', runToken, (step) => {
           if (step.actionKind === 'draw') {
             drawCount += 1;
             drawSnapshots.push(collectPlayerMoveSnapshot(step.beforeState, []));
+            drawnTiles.push(step.result.drew?.tile ?? null);
           }
           captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
         });
@@ -204,14 +207,28 @@ export function usePlayerNoMoveEffect({
 
         if (result.drew) {
           if (isGhostMode) {
-            appendGhostMove(
-              buildGhostDrawMoveLogEntry({
-                moveCounter: moveCounterRef.current,
-                handNumber: match.handNumber,
-                snapshot,
-                useTupleHandFormat: true,
-              }),
-            );
+            // RT-2 (HARDENING_PLAN §9.3): one GhostMoveLogEntry per REAL draw
+            // this turn, never a single entry standing in for a multi-draw
+            // sequence — a collapsed single entry leaves the ghost verifier's
+            // tracked hand short by every draw beyond the first, which then
+            // fails hand-continuity on the very next logged action. Capped at
+            // drawSnapshots.length — the real, positively-observed per-step
+            // count — same never-fabricate-beyond-observed principle as
+            // capDailyFritzDrawLogCount, but this cap must apply for Ghost
+            // mode too (it has its own server-side replay verifier), not
+            // only isDailyFritzMode.
+            const ghostDrawLogCount = Math.min(drawCount, drawSnapshots.length);
+            for (let index = 0; index < ghostDrawLogCount; index += 1) {
+              appendGhostMove(
+                buildGhostDrawMoveLogEntry({
+                  moveCounter: moveCounterRef.current,
+                  handNumber: match.handNumber,
+                  snapshot: drawSnapshots[index] ?? snapshot,
+                  useTupleHandFormat: true,
+                  drawnTile: drawnTiles[index] ?? null,
+                }),
+              );
+            }
           }
           // Never log more 'draw' transcript actions than we have real, positively
           // observed per-step snapshots for — see capDailyFritzDrawLogCount for why an

@@ -16,6 +16,7 @@
     "soak:fritz-challenge-authority": "tsx scripts/fritzChallengeAuthoritySoak.ts",
     "soak:daily-puzzle-authority": "tsx scripts/dailyPuzzleAuthoritySoak.ts",
     "backtest:human-move-log": "tsx scripts/backtestHumanMoveLogVerification.ts",
+    "check:policy-manifest": "tsx scripts/checkPolicyManifest.ts",
     "chaos:multiplayer-restart": "tsx scripts/multiplayerProcessRestartChaos.ts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
