@@ -179,6 +179,36 @@ focus" line, then the section for the system in progress.
   human-action note (rollout shape in §7.1.13). **REVISIT IF SCALE:** GC-3b.
   **ACCEPT:** GC-7. **Next: System 8.**
 
+- **System 8 (Ranking / Glicko-2) → Step 1 audit written (§8.1) 2026-09-04,
+  awaiting human review.** Maps the rating math + provisional window
+  (`isProvisional` confirmed **dead code**, zero server callers; client
+  "provisional" badges not yet confirmed to use the same `< 20` threshold),
+  the hand-maintained client-side duplicate of the rating math
+  (`client/src/ranking/glicko2.ts`, not yet diffed line-by-line — same
+  pattern as GC-3b), the two application paths (inline multiplayer via
+  `insertRankedGameIdempotent` — confirmed safe; weekly `node-cron` sweep
+  over `rating_after=is.null` — no boot-time catch-up, single point of
+  failure). **Confirmed gap:** `fritzMatchLifecycle.ts:229` (Fritz
+  disconnect-loss sweep) and `ghost/service.ts:1077` (`completeGhostGame`'s
+  Fritz branch) both POST directly to `ranked_games`, bypassing
+  `insertRankedGameIdempotent()`'s dedup entirely — and the Fritz branch is
+  reachable not just from standalone Bot/Fritz, but from
+  `gameOverPersistence.ts`'s room game-over path, which wraps the *whole*
+  `persistGameOverOnce()` in a retry-on-any-throw loop, so a Fritz insert
+  that already succeeded can be silently re-run by a later, unrelated
+  failure in the same call. Not yet reproduced live. **Confirmed live via
+  `assert_security_posture()`:** `ranked_games` + `rating_periods` both
+  still carry full anon+authenticated write GRANTs (RLS enabled, but the
+  underlying grant never revoked) — the same migration-drift pattern the
+  2026-09-01 RPC lockdown's own comment names; the exact RLS POLICY
+  predicate (deny-all vs permissive) could not be confirmed by any
+  available read-only method — a live anon-key INSERT probe was attempted
+  and correctly blocked by the safety classifier as an outward-facing,
+  hard-to-reverse action against prod. **Biggest open question carried into
+  Step 2.** `/api/ranking/process/:userId` re-checked clean (admin-key only,
+  no query-param fallback, unlike AU-6). **Audit only — no fixes made.
+  Awaiting human review before Step 2.**
+
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
   seat/identity binding (§2.1.4), concurrency windows MP-1..MP-8 (§2.1.5),
@@ -4830,7 +4860,190 @@ audits); the `commit_glicko` grant lockdown (done).
 server commits in the last 60 days.
 
 ## 8.1 Current-state map
-**Not started.** Step 1.
+
+### 8.1.1 Rating math (`glicko2.ts`, 211 LOC server + 160 LOC client)
+
+`computeGlicko2()` implements the standard Glicko-2 algorithm (steps 3–6:
+mu/phi scale conversion, iterative volatility solve via Illinois-method
+bisection, rating/RD update). It is a pure function taking a player and a
+`games` array, but **every call site in this codebase passes a single-game
+array** — there is no true batched rating-period application. Each call
+sequentially mutates the "current" rating before the next call (if any) in
+the same processing pass sees it. `isProvisional(gamesPlayed) = gamesPlayed
+< 20` also lives here.
+
+**`isProvisional` is dead code outside its own test file** — grepped for
+callers across `server/src` and found none. Nothing gates matchmaking,
+leaderboard eligibility, or UI messaging on it server-side. Client-side
+"provisional" badges (`identity/`, `stats/`, `social/LeaderboardScreen.tsx`
+all reference "provisional" concepts) appear to be computed independently
+client-side from `gamesPlayed`, not fed from this function — **not yet
+confirmed to use the same `< 20` threshold**, flagged for Step 2.
+
+**A second, hand-maintained copy of the rating math lives at
+`client/src/ranking/glicko2.ts`** (160 LOC), used only for client-side
+rating-prediction UI (`predictFritzGlickoUpdate.ts`, 58 LOC — projects "what
+would my rating become" before a Fritz match). Its own file header says
+`/** Client copy of server ranking math — keep in sync with
+server/src/ranking/glicko2.ts */` — an explicit, manually-maintained
+duplication with no drift guard (no shared package, no test asserting
+numeric parity). A drift here only miscalibrates a client-side *prediction*
+UI, not the authoritative server-computed rating — low severity, but a
+structurally identical pattern to GC-3b (System 7), not yet diffed line by
+line.
+
+### 8.1.2 Two ranked-game application paths
+
+**(a) Inline/synchronous** — `realtime/gameOverPersistence.ts`
+(`persistGameOverOnce`) calls `insertRankedGameIdempotent()` for
+human-vs-human multiplayer, then `processRealtimeMultiplayerGame()`
+(`periodService.ts`) applies both players' Glicko updates atomically via the
+`commit_glicko_game_update` RPC — but only when **both** inserts came back
+`isNew: true`; if either was a duplicate, the whole update is skipped and
+`room.rankingOutcome` is marked `duplicate`/`eligibleNotApplied` instead
+(lines ~304–366). This is the confirmed-safe path (System 2 MP-G4).
+
+**(b) Deferred/cron-swept** — `startRankingCron()` (`cron.ts`) runs
+`processAllPendingRatingGames()` weekly (Sundays 00:00 UTC, via `node-cron`,
+an in-process JS timer — **not** `pg_cron`, **not** a Render Cron Job) over
+`ranked_games?rating_after=is.null`, i.e. any row a synchronous path failed
+to finish processing. **No boot-time catch-up sweep** — unlike other reapers
+elsewhere in this codebase that explicitly run once at boot plus on a
+frequent interval (per prior-session findings). A row inserted between two
+Sundays sits `rating_after: null` (unranked-looking, though the row exists)
+for up to 7 days if the inline path didn't finish it. Also a **single point
+of failure**: if the process restarts mid-week, nothing re-triggers the
+sweep until the next scheduled Sunday — not yet confirmed whether a crash
+mid-`processAllPendingRatingGames()` leaves partially-processed rows in a
+safe state (each row's own RPC call is presumably atomic per-row; the sweep
+loop's atomicity *across* rows is not yet confirmed).
+
+### 8.1.3 `ranked_games` insert idempotency — confirmed gap for Bot/Fritz and Ghost paths
+
+`insertRankedGameIdempotent()` (70 LOC) does the correct thing: when
+`RANKED_GAMES_SOURCE_COLUMNS_ENABLED=true` (confirmed live in prod via a
+recent-row sample) **and** the caller supplies a non-empty
+`source.sourceMatchId`, it POSTs with
+`?on_conflict=player_id,source_match_id` +
+`Prefer: resolution=ignore-duplicates` — a real dedup guard. Absent either
+condition, it silently falls through to a plain unconditional POST with
+**zero** dedup (`hasIdempotentSource()` gate, lines 27–30).
+
+Grepping every writer of `/rest/v1/ranked_games` found **two call sites that
+bypass this wrapper entirely**, POSTing directly via `supabaseFetch` with no
+`on_conflict`, no `Prefer: resolution=ignore-duplicates`, and no dedup guard
+of any kind — even though both pass a `source` object into
+`buildRankedGameInsertPayload()` (so the row itself carries
+`source_type`/`source_match_id`, just with nothing enforcing uniqueness on
+insert):
+
+- **`server/src/shared/fritzMatchLifecycle.ts:229`** —
+  `recordPendingFritzDisconnectLoss()`. Records a Fritz loss-by-abandon when
+  the stale-match sweep finds a disconnected local Fritz match with a
+  server-derived score. If this function runs twice for the same match (the
+  sweep re-triggers, or a retry), it inserts a second `ranked_games` row for
+  the same game — a genuine double-rating risk, not just theoretical: it is
+  triggered off a sweep, not off a single guaranteed-once game-over event.
+
+- **`server/src/ghost/service.ts:1077`** — inside `completeGhostGame()`'s
+  Fritz branch. Called for every Play-vs-Fritz game (both the standalone
+  Bot/Fritz mode **and**, confirmedly, the Fritz-as-room-opponent path
+  reached from `gameOverPersistence.ts:290` — see below).
+
+**Sharper concrete failure scenario, found while reading
+`gameOverPersistence.ts`**: `createGameOverPersistScheduler()` wraps the
+*entire* `persistGameOverOnce()` function in a bounded retry loop
+(`GAME_OVER_PERSIST_MAX_ATTEMPTS`, exponential-ish delays) that re-runs the
+**whole function from the top** on any thrown error. `persistGameOverOnce()`
+calls `completeGhostGame()` (and therefore the unguarded `ranked_games`
+insert above) for any room where the opponent is Fritz, *before* several
+later steps that can themselves throw (the non-Fritz
+`insertRankedGameIdempotent` call for the human side,
+`processRealtimeMultiplayerGame`, `recordMatchEnd`). If the Fritz insert
+succeeds and a **later** step in the same call throws, the retry re-invokes
+`persistGameOverOnce()` from scratch — re-running the already-successful,
+non-idempotent Fritz `ranked_games` insert a second time for the same
+sourceMatchId. `appendMatch({ id: sourceMatchId })` earlier in the function
+is idempotency-keyed (MP-G4) and presumably safe to re-run, but the Fritz
+ranked-game insert is not protected by the same mechanism. **This means the
+gap isn't confined to standalone Bot/Fritz or Ghost modes — it's reachable
+through the room-based retry-on-failure game-over path whenever the
+opponent is Fritz.** Not yet reproduced live; this is a code-level finding,
+not yet confirmed via prod incident evidence the way GC-5 was.
+
+`multiplayer/roomForfeit.ts` was re-checked and confirmed to correctly use
+the wrapper with `sourceMatchId` (no gap there).
+
+### 8.1.4 RLS / grant posture on `ranked_games` and `rating_periods` — confirmed live gap
+
+`assert_security_posture()` (service-role RPC, `2026-09-01_assert_security_posture_rpc.sql`)
+was called live and returned `hard_fail_count: 0`, `advisory_count: 52`, with
+`public.ranked_games` and `public.rating_periods` **both** listed under
+`client_write_grant_rls_on` — meaning RLS is enabled on both tables (not a
+hard fail), but **both still carry full anon+authenticated
+INSERT/UPDATE/DELETE/TRUNCATE grants at the Postgres GRANT level**, live in
+prod, checked at `2026-09-04T17:52:51`. This is the advisory tier
+specifically because RLS being on doesn't guarantee the *policies* actually
+deny those grants — the table-level GRANT is stale regardless.
+
+This directly contradicts the System 8 scaffold's framing of "the
+`commit_glicko` grant lockdown (done)" as having settled table security —
+that phrasing refers only to the `commit_glicko_game_update` RPC, not the
+underlying tables. `2026-09-01_commit_glicko_rpc_lockdown.sql`'s own comment
+states the `2026-08-11_authoritative_ranking_and_bot_pending.sql`
+migration's table-level revokes for `ranked_games`/`rating_periods` were
+part of the same "migration drift" pattern (a checked-in, reviewed migration
+that never actually executed against live prod) — this session's live query
+independently reconfirms that drift is still present today, three weeks
+after the 08-11 migration was merged.
+
+**What is confirmed:** RLS is enabled; the stale GRANT exists.
+**What is NOT confirmed:** the exact RLS POLICY predicate on either table
+(deny-all vs something permissive). An anon-key SELECT probe returned
+`200 []` for both tables, which is consistent with either "RLS correctly
+denies anon reads" or "table is simply empty of anon-visible rows" — not
+discriminating. A live anon-key **INSERT** probe (the one test that would
+have discriminated definitively) was attempted and **blocked by the Claude
+Code safety classifier** as an outward-facing, hard-to-reverse action
+against prod; it was not completed and not routed around. **This is the
+single largest open question for Step 2's severity ranking** — the true
+exploitability of the stale grant hinges entirely on whether a
+correctly-restrictive RLS policy is actually in place, which cannot be
+confirmed by any read-only method tried so far. Resolving it needs either
+`pg_policies` read via the Supabase SQL editor (per the established
+[[authenticated-rls-probe-technique]]) or an explicit human go-ahead to
+attempt the live INSERT probe.
+
+### 8.1.5 `commit_glicko_game_update` RPC — atomicity
+
+Single-transaction Postgres function (`2026-06-30_commit_glicko_game_update_rpc.sql`)
+doing three things atomically: UPDATE `profiles` (rating/rd), UPDATE the
+specific `ranked_games` row by id (`rating_after`/`rd_after`/`delta` — this
+is what marks a row "processed" and excludes it from future
+`rating_after=is.null` cron sweeps), INSERT into `rating_periods`. The
+`rating_periods` insert has no idempotency guard of its own, but this is
+low-severity: it's an audit-log table, and a duplicate insert there doesn't
+double-apply a rating (the `profiles`/`ranked_games` writes are idempotent
+absolute-value overwrites, not increments) — only duplicates the audit
+trail if the whole RPC somehow ran twice for the same game, which the
+upstream `ranked_games` idempotency (where present — see 8.1.3) is what
+actually prevents.
+
+### 8.1.6 Not yet covered / carried into Step 2 as open items
+
+- Exact RLS POLICY predicate on `ranked_games`/`rating_periods` (8.1.4).
+- Line-by-line diff of `client/src/ranking/glicko2.ts` vs the server
+  original, to confirm or rule out numeric drift (8.1.1).
+- Whether client-side "provisional" UI badges use the same `< 20` threshold
+  as the (currently uncalled) server `isProvisional()` (8.1.1).
+- Cron sweep's cross-row atomicity on a mid-sweep process restart (8.1.2).
+- `/api/ranking/{profile,leaderboard,history,process}` (`http/routes/ranking.ts`,
+  163 LOC): `/api/ranking/process/:userId` (POST) is gated by
+  `isAdminSecret(req.body?.adminKey)` only — checked, and unlike the AU-6
+  finding on Daily Fritz admin routes (System 6), there is **no**
+  fallback to `req.query.admin_key`; this endpoint is clean.
+  `profile`/`leaderboard`/`history` are public reads, not yet checked for
+  unbounded/expensive queries.
 
 ## 8.2 Invariants
 **Not started.** Step 2.
@@ -4839,7 +5052,7 @@ server commits in the last 60 days.
 **Not started.** Step 2.
 
 ## 8.4 Checklist
-- [ ] Step 1 — rating math + cron + `ranked_games` idempotency current-state map
+- [x] Step 1 — rating math + cron + `ranked_games` idempotency current-state map (§8.1)
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
