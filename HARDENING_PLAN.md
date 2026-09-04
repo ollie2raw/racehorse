@@ -229,6 +229,50 @@ focus" line, then the section for the system in progress.
   own fresh `bot_match_pending` row per attempt instead. **RK-7 ranked
   ACCEPT/DORMANT — not reachable today** (§8.3), not fixed.
 
+- **System 9 (Match runtime layer) → Step 1 audit written (§9.1) 2026-09-04,
+  awaiting human review.** Scope: `client/src/modules/**` (144 files),
+  `client/src/match/**` (52 files), server `rooms.ts`/`roomEvents.ts`/
+  `gameOverPersistence.ts`. **The covered-vs-remainder line (§9.1.1):**
+  System 2's §2.1.5 pass over `rooms.ts` was concurrency-only (what
+  `withRoomGameplayLock` serializes + the MP-1..MP-8 races outside it) —
+  it never described what `act()` actually does; that, plus the entire
+  client-side turn-execution layer (no System-2 counterpart at all), is
+  System 9's remainder. A **sampling pass**, not exhaustive (144+52 files;
+  matches System 7's depth for a comparably large scope) — files not
+  reached are listed explicitly (§9.1.12) for Step 2 triage. **Findings:**
+  a third shared package not previously inventoried,
+  `@racehorse/match-protocol` (140 LOC, pure types, client-only, no server
+  usage); `modules/match/match-turn-stack/` confirmed as a genuine
+  ports-and-adapters composition hub wiring bot-turn/player-turn/guided/
+  daily together (not ad hoc prop-drilling); `handLifecycleRules.ts`'s
+  `shouldApplyBotActionResult` is the client-local stale-async-result
+  guard (compare-and-discard, not a lock — appropriate since there's no
+  concurrent writer to serialize, only a stale-timer race against the
+  single local session moving on). **Confirmed-good:** the Daily Fritz
+  `authorityPreStateDigest` client call site already routes through the
+  real `@racehorse/game-core` function (not a local reimplementation), so
+  it inherited GC-5's fix automatically — the class of bug GC-5 fixed
+  cannot recur here. **A known, already-mitigated sharp edge documented
+  precisely:** `capDailyFritzDrawLogCount` exists because the server
+  verifier self-heals a *missing* draw transcript entry but has no
+  recovery for an *extra* one (asymmetric self-heal — the exact shape of
+  bug this plan looks for, here already handled by design). Bot-turn's
+  `LocalRunToken`/`isLocalRunCurrent` is a generation-counter guard against
+  stale-callback races in the `setTimeout`-heavy bot pipeline. Traced
+  System 2's MP-INV-2/MP-G13 guest-identity gap to its concrete client
+  origin (`matchRecovery.ts`'s `getOrCreateGuestIdentityId`) — not a new
+  finding, just closing the loop. `boardSnapshotGuards.ts` confirmed as a
+  real fail-closed defense-in-depth boundary: malformed authoritative
+  broadcasts are rejected outright (`null`), not best-effort coerced.
+  Read server `act()`/`actUnlocked()` in full: **legality is delegated
+  entirely to the game-core engine** (`applyMove`), not re-implemented in
+  `rooms.ts` — a confirmed-good instance of GC-INV-1
+  (single-engine-of-record); every commit path funnels through one
+  `commitResolvedGameState()` gate (the same invariant-checker GC-9
+  flagged with a prod off-switch — not re-litigated, just confirmed as
+  the call site). **Audit only — no fixes, no invariants/gap-ranking yet.
+  Awaiting human review before Step 2.**
+
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
   seat/identity binding (§2.1.4), concurrency windows MP-1..MP-8 (§2.1.5),
@@ -697,8 +741,8 @@ own Step 1 when work reaches it. There is no System 4.
 5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Migration APPLIED to prod by human 2026-09-04.*
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
 7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–3 done + PUSHED (§7.1 reviewed; §7.2/§7.3 RATIFIED D-14; Step 3 `d8bed8ca` deployed, CI green).** GC-1+GC-9 (buildStamp + `/ready.gameCore` + smoke — confirmed `consistent: true` live), GC-6+GC-8 (`localeCompare`→code-unit; **`FRITZ_POLICY_VERSION` 3**; `sortLegalMoves` pinned), GC-3a (leaf-type `expectTypeOf` guard), GC-4 (`/bot` subpath + verifier import boundary), **GC-5 (re-ranked FIX NOW same-day on a live incident — 12 confirmed false-positive leaderboard demotions since 2026-08-01 — fixed, deployed, and 3 historical attempts retroactively restored to `verified`)**. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout, human-action). REVISIT: GC-3b. ACCEPT: GC-7.
-8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
-9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
+8. **Ranking / Glicko-2** (cross-cutting) ← **Steps 1–3 done + PUSHED (§8.1 audit; §8.2/§8.3 RATIFIED D-15; RK-1/RK-2/RK-4 + RLS migration file `368ec526`, deployed, CI green).** **RK-0** (live exploitable RLS INSERT-policy gap, found + fixed same day, outside normal cadence) closed. RK-1+RK-2 (Fritz `ranked_games` inserts now idempotent), RK-4 (`isProvisional()` de-duplicated). **RK-7** (Fritz rematch/`bot_match_pending` gap) investigated — **ACCEPT/DORMANT, not reachable today**. REVISIT IF SCALE: RK-3, RK-5, RK-6.
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Step 1 done (§9.1 written 2026-09-04, awaiting human review).** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`).
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
 11. **Social / stats / account** ← scaffold
 12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
@@ -5274,7 +5318,295 @@ line.**
 1–3.
 
 ## 9.1 Current-state map
-**Not started.** Step 1 (start with the covered-vs-untouched map).
+
+### 9.1.1 Scope recap and the covered-vs-remainder line
+
+Per the scaffold: Systems 1–3 already own tournament game-over routing,
+`withRoomGameplayLock` + the MP-1..MP-8 concurrency windows (§2.1.5), and
+the Daily Fritz command RPCs + server verifier. Confirmed by re-reading
+§2.1.5: System 2's pass was **concurrency-only** — it maps what
+`withRoomGameplayLock` serializes and the eight races that happen outside
+it, but does not describe what `act()` actually *does* once it holds the
+lock. **That gap — the real move-application logic inside `act()`, plus
+the entire client-side turn-execution/orchestration layer that has no
+System-2 counterpart at all (client has no lock; its correctness burden is
+different: stale-async races, not concurrent writers) — is System 9's.**
+This map is scoped to that remainder.
+
+Given the scope (144 client `modules/` files + 52 client `match/` files +
+`rooms.ts` at 1,428 LOC), this is a **sampling pass over the load-bearing
+files**, not an exhaustive per-file read — matching the depth prior systems
+used for comparably large scopes (System 7 sampled ~19 of game-core's files
+by the same logic). Files not reached are listed explicitly in §9.1.12 for
+Step 2 triage rather than silently skipped.
+
+### 9.1.2 A third shared package, not previously inventoried: `@racehorse/match-protocol`
+
+Neither System 7's `@racehorse/game-core` audit nor any prior system
+mentions this package. `packages/match-protocol/src/*` (140 LOC, 7 files:
+`primitives.ts`, `matchMode.ts`, `lifecycle.ts`, `events.ts`, `commands.ts`,
+`spectator.ts`, `index.ts`) is a **pure types-and-constants package** —
+`HandLifecyclePhase`, `MatchDomainEvent`, `MatchCommand`,
+`MatchCapabilities`, etc. Grepped for server usage: **none** — it is
+client-only, consumed across `modules/match/`, `modules/bot-turn/`,
+`modules/player-turn/`. It carries no logic and no I/O, so it is not itself
+an integrity risk, but it establishes the shared vocabulary the whole
+orchestration layer below is built on — worth naming so a future session
+doesn't rediscover it as if new.
+
+### 9.1.3 Client orchestration topology — `modules/match/match-turn-stack` as the composition hub
+
+`modules/match/match-turn-stack/` (17 files) is where `modules/bot-turn`,
+`modules/player-turn`, `modules/guided`, and `modules/daily` get wired
+together into one match session — `assembleMatchTurnStackResult.ts` is a
+pure view-model assembler (confirmed by reading it in full: no branching
+logic, just re-exporting fields from `guidedRuntime`/`handLifecycle`/
+`playerTurn`/`botTurn` sub-results into one flat object for the screen
+layer). The `buildXArgs.ts` / `buildXPorts.ts` files in this folder
+(`buildBotTurnArgs`, `buildBotTurnPorts`, `buildPlayerTurnArgs`,
+`buildHandLifecycleArgs`, `buildHandLifecyclePorts`,
+`buildGuidedRuntimeArgs`, `buildGuidedCommandEffectsArgs`,
+`buildDailyFritzDiagnosticsArgs`) are the dependency-injection seam between
+this hub and each mode's own orchestration hook — a genuine "ports and
+adapters" structure, not ad hoc prop-drilling. `modules/match/controllers/
+MatchLifecycleController.ts` (70 LOC) owns the single `HandLifecyclePhase`
+state machine (`'playing' → ... → 'resolving-hand'`, etc.) and emits it
+onto `MatchEventBus` — one phase-tracking authority, not scattered refs
+(per its own doc comment, this replaced an earlier scattered-ref pattern).
+
+### 9.1.4 Hand-lifecycle race-safety — `modules/match/hand-lifecycle/handLifecycleRules.ts`
+
+This file (204 LOC, read in full) is the single place holding the
+client-side stale-async-result guards for local (non-multiplayer, i.e.
+Bot/Fritz and Daily Fritz) matches:
+
+- **`shouldApplyBotActionResult(live, result)`** — drops a bot-turn async
+  result if the live match ref has already moved past it: a hand-number
+  mismatch, or the live state is already `gameOver`/`handOver` while the
+  incoming result isn't. This is the client-local analogue of the
+  server's `withRoomGameplayLock` FIFO serialization, but implemented as a
+  **compare-and-discard on apply** rather than a queue — appropriate here
+  because there is no concurrent writer to serialize against (single
+  browser tab, one bot "thread"), only a stale-timer/stale-promise race
+  against the user having moved the match forward (e.g. via a fast
+  game-over) before an in-flight bot action's `setTimeout` chain resolves.
+- **`canApplyNextHand`**, **`shouldAllowBotAction`** — the single gates for
+  "may local state accept a dealt next hand" / "may Fritz act right now".
+- **`resolveDailyFritzNextHandCache`** — dedupes the next-hand server
+  fetch: prefer an already-settled prefetch, await an in-flight one, only
+  issue a fresh request on a **rejected** prefetch or a cold start. Its own
+  comment states why a fresh request on retry is safe: "the server path is
+  idempotent (replayed/ignored responses)" — this is a claim about
+  server-side behavior made from the client; **not independently verified
+  in this pass** (worth cross-checking against the Daily Fritz
+  next-hand route in Step 2, since a wrong assumption here would only
+  surface as a rare double-request, not a visible bug).
+
+### 9.1.5 Daily Fritz evidence authoring — the client half of System 3/7's verification protocol
+
+`modules/match/hand-lifecycle/dailyFritzHandService.ts` (181 LOC, read in
+full) is where the client builds the transcript evidence the server
+verifier (System 3, `dailyFritzVerifier.ts`) checks. Two findings:
+
+- **`authorityPreStateDigest` is computed via the real shared function**,
+  not a local reimplementation: `botActionCompletion.ts`'s
+  `logBotPlaceMove` calls `getDailyFritzAuthorityStateDigest(toCoreGameState(...))`
+  imported directly from `@racehorse/game-core` — the exact function
+  GC-5 (System 7) fixed for canonical key-order independence. Confirmed:
+  this call site automatically inherited GC-5's fix with no separate
+  client-side patch needed, because it was never a duplicated
+  implementation. **This is a positive finding** — the class of bug GC-5
+  fixed cannot recur here specifically because this call site was already
+  routed through the shared package before this audit, not because of
+  anything new found this pass.
+- **A known, already-mitigated asymmetric-rejection edge**:
+  `dailyFritzDrawTranscript.ts`'s `capDailyFritzDrawLogCount` (read in
+  full, with its own detailed comment) exists specifically because the
+  draw-count correction elsewhere in this same file is "deliberately
+  corrected UPWARD from a boneyard-length delta" to avoid
+  under-reporting an interrupted draw sequence — but an over-correction
+  with no matching per-step snapshot would fabricate a transcript 'draw'
+  entry the server verifier cannot self-heal past. The verifier
+  (`dailyFritzVerifier.ts`'s `applyOmittedMandatoryDraws`, per this
+  comment) heals a **missing** draw action by inserting it during replay,
+  but has **no equivalent recovery for an extra one** — a fabricated draw
+  entry replays as a real draw command, `canDraw` goes false, and the
+  verifier rejects with `illegal_action` — unrecoverable, not
+  self-healing. `capDailyFritzDrawLogCount` closes this by capping the
+  logged count at the number of positively-observed per-step draw
+  snapshots. **This is design-as-found, not a new gap** — flagging it here
+  because it is exactly the shape of bug this whole plan looks for
+  (asymmetric self-heal, only one direction covered), and it's already
+  handled; worth a Step 2 test-coverage check (does a test actually pin
+  the cap against a real over-count scenario, or just the shape of the
+  function in isolation?).
+
+### 9.1.6 Bot-turn — scheduling, execution, completion (`modules/bot-turn/`, 30 files)
+
+- **`botTurnGuards.ts`**: `shouldScheduleBotTurn()` is the single gate
+  deciding whether to schedule Fritz's next move — checked against
+  `handOver`/`gameOver`/`drawSequenceActive`/`botTurnInFlight`/
+  `preGameDrawActive`/Daily-Fritz-set-terminal/guided-mode flags. One
+  function, not scattered conditionals across call sites (read in full,
+  106 LOC).
+- **`botTurnExecutor.ts`** (`executeBotTurn`/`finalizeBotTurnExecution`,
+  204 LOC, read in full): resolves Fritz's move via
+  `getLegalMoves`/`resolveBotMoveChoice` (delegating choice logic to
+  `fritz/botHeuristics.ts` and, per §7.1.5, `fritzPolicy.ts` for Daily
+  Fritz specifically), then commits through `finalizeBotTurnExecution` →
+  `completeBotTurnAction` (`botActionCompletion.ts`) which is gated by
+  `shouldApplyBotActionResult` (§9.1.4) before it touches any state.
+- **Race-token guard**: `LocalRunToken` / `isLocalRunCurrent(token)` /
+  `cancelled()` are threaded through `executeBotTurn`'s draw-sequence path
+  — a local match "run" gets a token at start, and any in-flight bot
+  action checks it's still current before applying, discarding results
+  from an abandoned/restarted run. This is the client-local equivalent of
+  a generation counter, guarding against exactly the class of bug a
+  `setTimeout`-heavy async pipeline is prone to (a stale callback from a
+  previous match landing on the new one). Not yet stress-tested for gaps
+  in this pass — the token exists and is threaded consistently everywhere
+  sampled, but its coverage was not exhaustively traced to every async
+  boundary in the 30-file folder.
+
+### 9.1.7 Player-turn (`modules/player-turn/`, 20 files)
+
+Smaller and more mechanical than bot-turn (Fritz's move-selection is the
+complex half; the player-turn side is mostly "apply what the human already
+chose"). `playerPlacementGuards.ts`'s `getPlacementClickBlockReason` (read
+in full, 26 LOC) is a single, explicit UI-enablement gate — purely
+advisory for the local-mode UX (`current-player-not-you` /
+`placement-in-flight` / `hand-over` / `game-over` / `no-matching-move`);
+the actual legality authority is the engine (`applyMove`, §9.1.11), same
+split as multiplayer's client-suggests / server-decides split covered in
+System 2. `applyPlayerActionResult.ts`'s `mergePlayerDrawPassTracking`
+maintains `opponentPassedOnEnds`/`opponentDrawCount` — client-local
+"fairness" bookkeeping surfaced via `fairnessLog`, used for post-hoc
+analysis/debugging, not gameplay authority.
+
+### 9.1.8 Reconnect persistence and guest identity (`client/src/match/recovery/`)
+
+`matchRecovery.ts` (100 LOC, read in full) holds `localStorage`-backed
+reconnect state (`LAST_ROOM_STORAGE_KEY`) and — notably —
+`getOrCreateGuestIdentityId()` / `getOrCreateGuestDisplayName()`: the
+actual generator for the guest identity System 2's MP-INV-2 residual gap
+(§2.2/§2.3, MP-G13, Tier C — "two guest seats distinguishable on reconnect
+only by username/hold") depends on. Confirmed this is the same mechanism,
+not a new one — no new finding here, just tracing the previously-flagged
+gap to its concrete client-side origin. `shouldPersistLastRoomCode` is a
+small explicit predicate (won't persist a terminal/tournament/
+prevent-auto-rejoin room) — reads correctly gated on a first pass.
+
+### 9.1.9 Live multiplayer session hook + defensive snapshot parsing
+
+`client/src/match/session/useLiveMatchSession.ts` (409 LOC) is the client
+counterpart to server `rooms.ts` — holds `GameState`, sequence tracking
+(`maxSequenceRef`), and resync buffering (`resyncInFlightRef`/
+`resyncBufferedUpdateRef`/`resyncFlushRef`) for reconciling authoritative
+broadcasts. It composes `useTransientRoomUi`, `useLiveMatchActions`,
+`useTileSelection`, `useHandRevealSequence`, `useLiveMatchViewModel` (not
+individually read this pass — carried to §9.1.12).
+
+**`client/src/multiplayer/boardSnapshotGuards.ts`** (107 LOC, read in
+full) is a genuine defense-in-depth boundary: `projectMultiplayerGameState`
+validates the *shape* of every authoritative server broadcast (playerIds
+array, players object, board's `mainLine`/`hubDoubles`/branch-arm
+structure) before it is allowed into React state at all, returning `null`
+(not a best-effort coercion) on anything malformed. This means a
+malformed or truncated broadcast fails closed on the client (state simply
+doesn't update / an error surfaces) rather than rendering a corrupted
+board — a real, load-bearing guard, not just type decoration, since the
+input here is network data the client does not otherwise validate before
+this point.
+
+### 9.1.10 Replay and review (`modules/replay/`, `modules/review/`)
+
+Small (4 + 3 files). `ReplayRecorder.ts` (47 LOC, read in full) is the
+canonical client-side move-log timeline — owns move numbering
+(`nextMoveNumber`), single writer (`recordMove`/`replaceLog`), observable
+via `subscribe`. This is the object every `appendMove` call in bot-turn/
+player-turn ultimately writes through, and what later gets serialized into
+a `dailyFritzTranscript` (§9.1.5) or a Ghost move log (System 10 territory
+— `ghost/verifier.ts` is already covered there). `usePostGamePivotalReview.ts`
+/ `useReviewRuntime.ts` (186 + 86 LOC) were located but not read this pass
+— carried to §9.1.12.
+
+### 9.1.11 Server `rooms.ts`: `act()` — the move-application core System 2 didn't map
+
+System 2's §2.1.5 mapped what `withRoomGameplayLock` serializes and the
+races outside it; it did not describe `act()`'s body. Read `act()` +
+`actUnlocked()` in full (§1101–1395 of `rooms.ts`, ~300 LOC) plus
+`commitResolvedGameState`:
+
+- **Legality is delegated entirely to the engine, not re-implemented in
+  `rooms.ts`.** `applyMove(state, playerSeatId, move)` (the game-core
+  engine function, per System 7 §7.1.2's `applyGameCommand`/engine
+  reducer) is the sole legality authority for MOVE and PASS; `act()`
+  trusts its thrown errors (`"It's not your turn."`, boneyard-locked, no
+  legal play) rather than duplicating turn/legality checks itself — this
+  is a **confirmed-good instance of System 7's GC-INV-1
+  single-engine-of-record invariant**, not a new gap.
+- **Every commit path runs through one function**:
+  `commitResolvedGameState()` calls `finalizeMandatoryAutoPasses`, then
+  `assertTileCountInvariant` + `assertValidGameState` (the same invariant
+  checker System 7's GC-9 found has a `SOFT_GAME_INVARIANTS` prod
+  off-switch — not re-litigated here, just confirmed this is the actual
+  call site) — before `room.state` is ever assigned. There is no path in
+  `act()` that mutates `room.state` without passing through this gate.
+  DRAW and MOVE-with-forced-draw both route through
+  `resolveDrawUntilPlayableAtomically` / `resolveForcedDrawAtomically`
+  before committing — draw-until-legal is engine-computed, not
+  hand-rolled in `rooms.ts`.
+- **Ghost move-log entries are appended inline, synchronously, inside
+  `act()`** (`appendGhostMove`/`appendGhostDrawSteps`) — before the
+  commit, using `state` (pre-action), not `room.state` (post-commit) as
+  the "board_state" field. This is the server-side half of the Ghost
+  verifier's input (`ghost/verifier.ts`, System 10 territory) — confirmed
+  it is captured turn-by-turn as the authoritative action happens, not
+  reconstructed after the fact.
+- **`appendRoomEvent`/`appendResolutionEvents` fire per sub-step** (each
+  draw step, the pass, the play) — this is the `roomEvents.ts` event log
+  (`RoomMatchEvent`, `room.matchId`, referenced by RK-1's investigation
+  last session) being populated; not re-audited for its own consumers here
+  (spectator/replay-of-events reconstruction), carried to §9.1.12.
+
+### 9.1.12 Not yet covered / carried into Step 2
+
+- `modules/guided/` (18 files — the Guided/Lesson-V2 mode, referenced
+  throughout §9.1.3 as a composed sub-runtime but not read directly).
+- `modules/daily/` (20 files) beyond `dailyFritzHandService.ts` and
+  `dailyFritzDrawTranscript.ts` — e.g. `dailyFritzContracts.ts`,
+  `dailyFritzMatchDiagnostics.ts` referenced but not read in full.
+- `modules/ghost/` (9 files) — deliberately deferred; the server-side
+  Ghost verifier is System 10 scope, but the client-side move-log capture
+  this system's `act()` (§9.1.11) and bot-turn (§9.1.6) feed into wasn't
+  traced end-to-end.
+- `modules/daily-puzzle/` (2 files) — likely dead/legacy per System 3's
+  DF-CAND-1b (Daily Puzzle Ladder decommission); not confirmed dead here,
+  just not read.
+- `client/src/match/board/` (board rendering) — explicitly listed in
+  scope, not sampled this pass; pure rendering is lower integrity risk but
+  not zero (e.g. a rendering bug misleading a player about legal moves).
+- `client/src/match/preGameDraw/` (12 files) — the pre-game tile-draw
+  mechanic; `usePreGameDraw.ts`/`preGameDrawLogic.ts` not read, though
+  `preGameDrawPersistence.ts`'s existence suggests a durability question
+  (does an interrupted pre-game draw survive a reload?) worth a Step 2
+  look.
+- `useLiveMatchSession.ts`'s composed hooks (`useTransientRoomUi`,
+  `useLiveMatchActions`, `useTileSelection`, `useHandRevealSequence`,
+  `useLiveMatchViewModel`) — named in §9.1.9, not individually read.
+- `resolveDailyFritzNextHandCache`'s "server path is idempotent" claim
+  (§9.1.4) — a client-side assumption about server behavior, not verified
+  against the actual Daily Fritz next-hand route in this pass.
+- `roomEvents.ts`'s consumers beyond the write side already covered in
+  §9.1.11 and RK-1's prior investigation (spectator reconstruction,
+  replay-from-event-log, if any) — not traced.
+- `usePostGamePivotalReview.ts` / `useReviewRuntime.ts` — located, not
+  read.
+- `startGame`/`nextHand`/`readyForNextHand` in `rooms.ts` — System 2
+  covered their *coalescing* (MP-5, MP-6); their actual deal-generation /
+  engine-integration bodies (does dealing route through game-core's
+  `pregameDraw.ts`/deterministic RNG per §7.1.4, server-side only?) were
+  not read this pass.
 
 ## 9.2 Invariants
 **Not started.** Step 2.
@@ -5283,7 +5615,7 @@ line.**
 **Not started.** Step 2.
 
 ## 9.4 Checklist
-- [ ] Step 1 — covered-vs-remainder map, then current-state of the remainder
+- [x] Step 1 — covered-vs-remainder map (§9.1.1), then current-state of the remainder (§9.1.2–§9.1.11), written 2026-09-04 — **awaiting human review**
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
