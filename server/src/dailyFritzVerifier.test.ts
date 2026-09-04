@@ -155,6 +155,26 @@ describe('Daily Fritz server replay verifier', () => {
     }
   });
 
+  it('GC-5: a transcript pinned to the legacy v1 digest still verifies against a v1-computed digest, not the current default', () => {
+    const initial = state('bot');
+    const legacyPinned = {
+      ...transcript([{
+        sequence: 0,
+        actor: 'fritz',
+        kind: 'play',
+        tile: { low: 0, high: 5 },
+        position: 'left',
+        // Computed the OLD way — what an in-flight client bundle pinned to v1
+        // (loaded before the GC-5 fix shipped) would still send.
+        preStateDigest: getDailyFritzAuthorityStateDigest(initial, 1),
+      }]),
+      fritzPolicyContract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
+      stateDigestVersion: 1 as const,
+    };
+    expect(getDailyFritzAuthorityStateDigest(initial, 1)).not.toBe(getDailyFritzAuthorityStateDigest(initial, 2));
+    expect(verify(legacyPinned, initial, { requireStateDigests: true }).result.winner).toBe('fritz');
+  });
+
   it('rejects missing state evidence and deployment-skewed policy contracts', () => {
     const initial = state('bot');
     const evidence = {

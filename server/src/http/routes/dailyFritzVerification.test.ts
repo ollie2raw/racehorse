@@ -36,7 +36,9 @@ describe('Daily Fritz competitive verification boundary', () => {
     const base = {
       transcriptProtocolVersions: [1, 2],
       gameRulesVersion: contract.gameRulesVersion,
-      stateDigestVersions: [1],
+      // GC-5: a real client advertises every supported digest version (1 and
+      // the current 2), not just the version its own in-flight attempt used.
+      stateDigestVersions: [1, 2],
     };
     expect(clientSupportsDailyFritzAuthorityContract(contract, {
       ...base,

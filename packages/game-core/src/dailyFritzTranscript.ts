@@ -6,6 +6,10 @@ import {
   isSupportedFritzPolicyVersion,
   type FritzPolicyVersion,
 } from './fritzPolicy';
+import {
+  isSupportedDailyFritzAuthorityStateDigestVersion,
+  type DailyFritzAuthorityStateDigestVersion,
+} from './dailyFritzAuthority';
 
 export const DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION = 2 as const;
 export const DAILY_FRITZ_VERIFIER_VERSION = 2 as const;
@@ -26,7 +30,12 @@ export type DailyFritzTranscript = {
    */
   fritzPolicyVersion: FritzPolicyVersion;
   fritzPolicyContract?: string;
-  stateDigestVersion?: 1;
+  /**
+   * Any supported digest version (currently 1–2) stays parseable so an
+   * in-flight attempt pinned to an older digest algorithm survives a
+   * `DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION` bump (GC-5).
+   */
+  stateDigestVersion?: DailyFritzAuthorityStateDigestVersion;
   clientRelease?: string;
   challengeId: string;
   attemptId: string;
@@ -61,7 +70,7 @@ function parsePosition(value: unknown): PlacementPosition | null {
 }
 
 function validStateDigest(value: unknown): value is string {
-  return typeof value === 'string' && /^df-state-v1:[0-9a-f]{8}$/.test(value);
+  return typeof value === 'string' && /^df-state-v[12]:[0-9a-f]{8}$/.test(value);
 }
 
 export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript {
@@ -84,7 +93,7 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
   ) {
     throw new Error('Fritz policy contract does not match its version.');
   }
-  if (value.stateDigestVersion != null && value.stateDigestVersion !== 1) {
+  if (value.stateDigestVersion != null && !isSupportedDailyFritzAuthorityStateDigestVersion(value.stateDigestVersion)) {
     throw new Error('Unsupported authority state digest version.');
   }
   if (value.clientRelease != null && (typeof value.clientRelease !== 'string' || value.clientRelease.length > 120)) {
@@ -119,7 +128,9 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
       ? value.fritzPolicyVersion
       : FRITZ_POLICY_VERSION,
     ...(typeof value.fritzPolicyContract === 'string' ? { fritzPolicyContract: value.fritzPolicyContract } : {}),
-    ...(value.stateDigestVersion === 1 ? { stateDigestVersion: 1 as const } : {}),
+    ...(isSupportedDailyFritzAuthorityStateDigestVersion(value.stateDigestVersion)
+      ? { stateDigestVersion: value.stateDigestVersion }
+      : {}),
     ...(typeof value.clientRelease === 'string' ? { clientRelease: value.clientRelease } : {}),
     challengeId: value.challengeId,
     attemptId: value.attemptId,

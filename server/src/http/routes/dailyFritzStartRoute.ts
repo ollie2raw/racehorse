@@ -1,4 +1,5 @@
 import {
+  DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   DAILY_FRITZ_VERIFIER_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
@@ -114,7 +115,7 @@ export function registerDailyFritzStartRoute(app: Application): void {
       && requestedRules === GAME_RULES_VERSION
       && requestedFritz === FRITZ_POLICY_VERSION
       && requestedPolicyContract === getFritzPolicyContract(FRITZ_POLICY_VERSION)
-      && requestedStateDigestVersion === 1;
+      && requestedStateDigestVersion === DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION;
 
     const runDate = requestedDebugDate || getPacificDateKey();
     log.info({ userId: authenticatedUserId, date: runDate }, '[daily-fritz:init] request');

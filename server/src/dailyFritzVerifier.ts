@@ -10,6 +10,7 @@ import {
   getDailyFritzAuthorityStateDigest,
   getFritzPolicyContract,
   isOptimalOfficialFritzPlayForVersion,
+  isSupportedDailyFritzAuthorityStateDigestVersion,
   parseDailyFritzTranscript,
   type DailyFritzTranscript,
   type FritzDecision,
@@ -302,7 +303,7 @@ export function verifyDailyFritzHand(input: {
       'fritz_policy_contract_mismatch',
     );
   }
-  if (input.requireStateDigests && transcript.stateDigestVersion !== 1) {
+  if (input.requireStateDigests && !isSupportedDailyFritzAuthorityStateDigestVersion(transcript.stateDigestVersion)) {
     throw new DailyFritzVerificationError(
       'Daily Fritz evidence is missing its authority state digest contract.',
       'missing_fritz_state_digest',
@@ -382,7 +383,15 @@ export function verifyDailyFritzHand(input: {
       state = applyOmittedMandatoryDraws(state, action.actor, action.sequence);
     }
     if (action.actor === 'fritz') {
-      const authorityStateDigest = getDailyFritzAuthorityStateDigest(state);
+      // GC-5: compare against the digest ALGORITHM the transcript is pinned to
+      // (absent means an older client that predates the field — implicitly v1,
+      // matching what this comparison always did before v2 existed), never the
+      // server's current default. Comparing a v1 client digest against a v2
+      // server recompute is exactly the false-positive this fix closes.
+      const authorityStateDigest = getDailyFritzAuthorityStateDigest(
+        state,
+        transcript.stateDigestVersion ?? 1,
+      );
       // Policy parity only depends on Fritz play decisions. Draw/pass actions
       // are deterministic engine commands and older clients do not log a
       // decision snapshot for them.

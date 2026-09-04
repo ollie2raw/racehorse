@@ -496,7 +496,9 @@ export async function startDailyFritz(options?: {
         version,
         contract: core.getFritzPolicyContract(version),
       })),
-      supported_state_digest_versions: [core.DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION],
+      // GC-5 (HARDENING_PLAN §7.3): advertise every supported digest version so
+      // a client updated post-fix can still resume an attempt pinned to v1.
+      supported_state_digest_versions: [1, 2],
       client_release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
     }, options?.timeoutMs ?? DAILY_FRITZ_INIT_TIMEOUT_MS),
   );

@@ -3,7 +3,9 @@ import {
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
   GAME_RULES_VERSION,
   getFritzPolicyContract,
+  isSupportedDailyFritzAuthorityStateDigestVersion,
   isSupportedFritzPolicyVersion,
+  type DailyFritzAuthorityStateDigestVersion,
   type FritzPolicyVersion,
 } from '@racehorse/game-core';
 import type { DailyFritzSetGameNumber, DailyFritzSetGameResult } from '../../dailyFritz';
@@ -39,7 +41,7 @@ export type DailyFritzAttemptAuthorityContract = {
   gameRulesVersion: number;
   fritzPolicyVersion: FritzPolicyVersion;
   fritzPolicyContract: string;
-  stateDigestVersion: 1;
+  stateDigestVersion: DailyFritzAuthorityStateDigestVersion;
   stateDigestRequired: boolean;
   challengeId: string;
   runFingerprint: string;
@@ -81,7 +83,10 @@ export function readDailyFritzAuthorityContract(
     || rec.gameRulesVersion !== GAME_RULES_VERSION
     || !isSupportedFritzPolicyVersion(rec.fritzPolicyVersion)
     || rec.fritzPolicyContract !== getFritzPolicyContract(rec.fritzPolicyVersion)
-    || rec.stateDigestVersion !== DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION
+    // GC-5: a stored contract may be pinned to any *supported* digest version —
+    // the verifier dispatches per-version (see dailyFritzVerifier.ts), so a v2
+    // deploy must not fail to read a v1-pinned in-flight attempt.
+    || !isSupportedDailyFritzAuthorityStateDigestVersion(rec.stateDigestVersion)
     || typeof rec.stateDigestRequired !== 'boolean'
     || typeof rec.challengeId !== 'string'
     || typeof rec.runFingerprint !== 'string'
@@ -92,7 +97,10 @@ export function readDailyFritzAuthorityContract(
     gameRulesVersion: rec.gameRulesVersion,
     fritzPolicyVersion: rec.fritzPolicyVersion,
     fritzPolicyContract: rec.fritzPolicyContract,
-    stateDigestVersion: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
+    // Preserve the ACTUAL pinned version — do not overwrite with the server's
+    // current default (that was the bug: it silently promoted every stored
+    // contract to "current", defeating the whole point of pinning).
+    stateDigestVersion: rec.stateDigestVersion,
     stateDigestRequired: rec.stateDigestRequired,
     challengeId: rec.challengeId,
     runFingerprint: rec.runFingerprint,
