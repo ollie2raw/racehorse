@@ -25,8 +25,8 @@ focus" line, then the section for the system in progress.
     fetches the ladder. `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql`
     drops the `insert_own`/`update_own` policies + revokes client write grants
     (tables kept `public` read-only for `socialProfile.ts` /
-    `homeCompletionDates.ts`). pg16-verified. **Migration NOT yet applied to
-    prod DB — human runs it.**
+    `homeCompletionDates.ts`). pg16-verified. **Migration APPLIED to prod DB by
+    human, 2026-09-04.**
   - **DF-G1 — stranded-set reaper.** `recoverStrandedDailyFritzAttempts`
     (`server/src/dailyFritzStrandedRecovery.ts`): boot sweep 20 s after listen +
     15-min reaper, wired in `index.ts`; finalizes `status='started'` attempts
@@ -70,8 +70,8 @@ focus" line, then the section for the system in progress.
   `2026-09-03_legacy_league_decommission.sql` — **DROPs** all 6 `league_*` tables
   (not archived — zero remaining readers, unlike the Ladder). pg16-verified.
   Suite green (server 1188, client 1482); server lint 233→217 problems.
-  `roomKind.ts`'s inert `legacy_league` classification is parked. **Pending
-  human: apply the migration.**
+  `roomKind.ts`'s inert `legacy_league` classification is parked. **Migration
+  APPLIED to prod DB by human, 2026-09-04.**
 
 - **System 6 (Auth / session + rate limiting) → Step 1 audit written (§6.1)
   2026-09-03, awaiting human review.** Maps **three divergent server auth impls**
@@ -108,10 +108,12 @@ focus" line, then the section for the system in progress.
   `auth/consolidatedAuthPath.test.ts`, `http/routes/dailyFritzAdminHeaderOnly.test.ts`.
   Full suite green (server 209 files / client 216), `tsc -b` clean both sides,
   lint unchanged (server 68 pre-existing errors, client at the 401-warning budget).
-  **Still human-action:** AU-1 Supabase project JWT-expiry (3600→~900 s); AU-6
-  remaining checklist (one POST header transport; drop admin-UI `sessionStorage`;
-  ≥32-byte CSPRNG secret; IP-allowlist consideration) — before `ADMIN_SECRET` is
-  ever set. AU-2 / AU-5 (REVISIT IF SCALE) + AU-7 (ACCEPT) untouched.
+  **AU-1 Supabase project JWT-expiry lowered 3600→900 s by human, 2026-09-04 —
+  AU-1 now CLOSED** (cache-A TTL cut + JWT expiry both done; the server denylist
+  stays scale-gated, not needed). **Still human-action:** AU-6 remaining
+  checklist (one POST header transport; drop admin-UI `sessionStorage`; ≥32-byte
+  CSPRNG secret; IP-allowlist consideration) — before `ADMIN_SECRET` is ever set.
+  AU-2 / AU-5 (REVISIT IF SCALE) + AU-7 (ACCEPT) untouched.
 
 - **System 6 Step 3 — AU-3 CORRECTION (2026-09-04, committed + pushed).** Live
   logs after the `5e5931b3` deploy showed the rate-limit key landing on Render's
@@ -131,7 +133,21 @@ focus" line, then the section for the system in progress.
   `log.warn` now logs `keyIp` / `peer` / `cfConnectingIp`. Tests:
   `trustedProxy.test.ts` + expanded `rateLimitBypassClosed.test.ts` (spoofed
   `CF-Connecting-IP` on an untrusted peer is ignored; honoured behind a real CF
-  edge). **Next: System 7.**
+  edge).
+
+- **System 7 (`@racehorse/game-core` — shared score oracle) → Step 1 map §7.1
+  written 2026-09-04, awaiting human review.** Pure dependency-free engine +
+  scoring + Fritz policy + 5 verifiers + version contracts. Key findings:
+  (a) **resolution asymmetry** — server prod runs game-core `dist/` (git-ignored,
+  build-step dependent), the client bundle + all tests run `src/`; (b) **only
+  Daily Fritz has a real `GAME_RULES_VERSION` pin** — Ghost / Puzzle Rush / Daily
+  Puzzle / Review replay against the deployed engine, and `parseDailyFritzTranscript`
+  hard-rejects a rules mismatch with no grace; (c) **no drift guard for the core
+  engine types** — `client/src/types.ts` + `client/src/game/openEndsGeometry.ts`
+  + the `botEngine.ts` "second engine" are independent of core (guards cover wire
+  DTOs only); (d) verified paths are integer-only by design, the one float
+  (`estimateDrawCostFromPublicInfo`) is bot-only by convention not enforcement.
+  **GC-1..GC-8** parked for Step 2. No fixes. **Stop — await human review of §7.1.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -596,11 +612,11 @@ own Step 1 when work reaches it. There is no System 4.
 
 1. **Tournament** ← **CLOSED** (Steps 1–5)
 2. **Multiplayer rooms** ← **passed through Tiers A–E**; Tier-A/B fixed + live, C/D/E deferred-until-scale
-3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *Pending human: apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.*
+3. **Daily modes** (active: Daily Fritz + Puzzle Rush) ← **CLOSED 2026-09-02** — D-10 ratified, DF-CAND-1 decommissioned + DF-G1/DF-G2 shipped (`f717b851`); DF-G3/G4 REVISIT-IF-SCALE, DF-G5 ACCEPT. *`2026-09-02_daily_puzzle_ladder_decommission.sql` APPLIED to prod by human 2026-09-04.*
 4. *(dissolved — see 5–13, D-11)*
-5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Pending human: apply the migration.*
-6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. AU-1/AU-6 partials shipped. *Pending human: lower Supabase JWT expiry (AU-1); AU-6 pre-`ADMIN_SECRET` checklist.*
-7. **`@racehorse/game-core`** — shared score oracle ← scaffold
+5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Migration APPLIED to prod by human 2026-09-04.*
+6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
+7. **`@racehorse/game-core`** — shared score oracle ← **Step 1 map §7.1 written 2026-09-04, awaiting human review before Step 2.** GC-1..GC-8 candidate seams parked.
 8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
 9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
@@ -3144,8 +3160,8 @@ Parked as a gap candidate (§3.1.8).
 > fetches the ladder. `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql`
 > drops the `insert_own`/`update_own` policies + revokes client write grants on
 > both tables (kept in `public` read-only for the two historical readers).
-> pg16-verified. Migration pending human apply. See §3.1.8 DF-CAND-1 and the
-> 2026-09-02 changelog entry.
+> pg16-verified. **Migration APPLIED to prod DB by human, 2026-09-04.** See
+> §3.1.8 DF-CAND-1 and the 2026-09-02 changelog entry.
 
 ### 3.1.5 Authorization map (all three modes)
 
@@ -3193,12 +3209,13 @@ Parked as a gap candidate (§3.1.8).
 ### 3.1.8 Parked gap candidates (not risk-ranked — that is Step 2)
 
 - **DF-CAND-1 — retired Daily Puzzle Ladder score tables were client-writable
-  → DECOMMISSIONED (code merged-pending, migration pending human apply).**
+  → DECOMMISSIONED (code shipped `f717b851`; migration APPLIED to prod by human
+  2026-09-04).**
   `daily_puzzle_attempts` / `daily_puzzle_slot_results` `insert_own` /
   `update_own` RLS ⇒ an authenticated client `POST`s an arbitrary `total_score`
   directly, bypassing the server engine-replay; confirmed live (HTTP 201). Same
-  class as T-1. **Decommission (2026-09-02, one commit, not yet applied to prod
-  DB):**
+  class as T-1. **Decommission (2026-09-02, one commit; migration applied to prod
+  by human 2026-09-04):**
   - **Server:** removed `registerDailyPuzzleRoutes` + the 3 `/api/daily-puzzle/*`
     rate-limit mounts + the nightly `scheduleDailyPuzzleLadderWarmup` job;
     deleted `server/src/http/routes/dailyPuzzle.ts` (took `/api/cron/daily-puzzle-ladder-warm`
@@ -3608,7 +3625,7 @@ refactor tranche. **System 3 is closed** except:
   (delete dead `route:'daily'` Home branches + `client/src/dailyPuzzle/**`),
   DF-CAND-3/DF-CAND-4 (legacy `daily_puzzle_scores*` tables; stale
   `admin@example.com` policy on `daily_puzzles`).
-- **Pending human DB action:** apply `2026-09-02_daily_puzzle_ladder_decommission.sql`.
+- **DB migration `2026-09-02_daily_puzzle_ladder_decommission.sql` — APPLIED to prod by human, 2026-09-04.**
 
 ---
 
@@ -3665,9 +3682,9 @@ routes + an unauth-gated legacy socket handler set) is removed, not hardened.
 ## 5.4 Checklist — **DONE (this System-5 commit, not pushed)**
 - [x] Step 1 — dead/live verified (§5.1): zero client emitters, handlers gated off in prod, no `league_*` writes since April, no cross-system dependency on the hook, no external FK into the tables
 - [x] **Server removed:** `registerLeagueRoutes` + `registerLegacyTournamentHandlers` + `finalizeTournamentMatchHook` + the 3 `/league` rate-limit mounts + the 2 `initRoomSession` dep wirings; deleted `server/src/league/**` (7 files), `server/src/legacyTournament/**` (2 files), `server/src/http/routes/league.ts`; removed the `gameOverPersistence.ts` live-fixture branch (+ its import + 2 tests); removed `config.enableLegacyTournaments`; `mpInvariantHarness.test.ts` league mock removed; `roomLivePersistence.ts` / `roomSession.ts` comments updated (branches left inert — parked)
-- [x] **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** (not archive; see below) all 6 `league_*` tables `cascade`; self-asserting `to_regclass` check; pg16-verified clean + idempotent (`league.sql` applied → all 6 dropped → none remain; pass 2 no-ops). Deleted `supabase/league.sql` (dead schema file; preserved in git history). **NOT applied to prod DB — human runs it.**
+- [x] **Migration** `supabase/migrations/2026-09-03_legacy_league_decommission.sql` — **DROP** (not archive; see below) all 6 `league_*` tables `cascade`; self-asserting `to_regclass` check; pg16-verified clean + idempotent (`league.sql` applied → all 6 dropped → none remain; pass 2 no-ops). Deleted `supabase/league.sql` (dead schema file; preserved in git history). **APPLIED to prod DB by human, 2026-09-04.**
 - [x] Full suite: server **206 files / 1188 tests**, client **216 / 1482**; `tsc -b` clean (client + server); client lint at budget; **server lint 217 problems / 68 errors — down from 233 / 71** (deleting `league/` removed pre-existing lint errors; 0 new)
-- [ ] Human applies `2026-09-03_legacy_league_decommission.sql`
+- [x] Human applied `2026-09-03_legacy_league_decommission.sql` (2026-09-04)
 
 **DROP, not archive** (contrast with the Daily Puzzle Ladder — §3.1.4 — which was
 archived read-only because `socialProfile.ts` + `homeCompletionDates.ts` still
@@ -3710,9 +3727,10 @@ recovery-hash handling, the e2e dev-auth path never reaching prod).
 + PUSHED (§6.1 RATIFIED D-12; §6.2 / §6.3 RATIFIED D-13; `5e5931b3` 2026-09-03 +
 AU-3 correction 2026-09-04; deployed, CI green).** AU-3 (range-based `trust
 proxy` + infra-gated `CF-Connecting-IP` — the initial `trust proxy: 1` was one
-hop short of the Cloudflare→Render chain and was corrected), AU-4, AU-8 fixed;
-AU-1/AU-6 partials shipped; AU-1 Supabase JWT-expiry + the AU-6
-pre-`ADMIN_SECRET` checklist remain human-action.
+hop short of the Cloudflare→Render chain and was corrected), AU-4, AU-8 fixed.
+**AU-1 CLOSED** (cache-A TTL 60→15 s in `5e5931b3` + Supabase project JWT expiry
+lowered 3600→900 s by human 2026-09-04; server denylist stays scale-gated).
+AU-6 partial shipped; the AU-6 pre-`ADMIN_SECRET` checklist remains human-action.
 
 ## 6.1 Current-state map
 
@@ -4152,9 +4170,11 @@ Status: **RATIFIED D-13 (2026-09-03). Step 3 DONE + PUSHED (`5e5931b3`
 2026-09-03; AU-3 corrected + pushed 2026-09-04):** AU-3 ✅ **(corrected — see
 below)**, AU-4 ✅ (`getUserIdFromAuthHeaderSync` deleted; 4 endpoints rekeyed on
 the client IP — option (a) taken), AU-8 ✅ (B + C consolidated onto A via
-`verifyBearerToken`), AU-1 partial ✅ (cache A TTL 60→15 s; Supabase JWT-expiry
-still human-action), AU-6 partial ✅ (server `?admin_key=` query acceptance
-removed from the 3 GET endpoints; rest of the checklist still human-action).
+`verifyBearerToken`), **AU-1 ✅ CLOSED** (cache A TTL 60→15 s in `5e5931b3` +
+Supabase project JWT expiry lowered 3600→900 s by human 2026-09-04; server
+denylist stays scale-gated, not needed), AU-6 partial ✅ (server `?admin_key=`
+query acceptance removed from the 3 GET endpoints; rest of the checklist still
+human-action).
 AU-2 / AU-5 / AU-7 unchanged. Tests: `rateLimitBypassClosed.test.ts`,
 `trustedProxy.test.ts`, `auth/consolidatedAuthPath.test.ts`,
 `http/routes/dailyFritzAdminHeaderOnly.test.ts`.
@@ -4186,7 +4206,7 @@ code now), **REVISIT IF SCALE**, **ACCEPT**}.
 | **AU-3** | **No `trust proxy` → every IP-keyed rate limit is bypassable.** `requestIp()` reads `x-forwarded-for.split(',')[0]` (leftmost = client-settable; Render *prepends* the real IP but the client's spoofed value is still `[0]`). Affects `restApiLimit` (`/api` catch-all), `leaderboardLimit` (unbounded DB scans), **`adminLimit`** (the only bound on admin-secret brute-force), `cronLimit`. Also feeds AU-INV-5 — a spoofed-key flood grows the limiter map without bound. | §6.1.5, §6.1.10 AU-3 | **abuse-enabling** (→ competitive-integrity via unbounded leaderboard scans; → weakens admin brute-force bound; → memory) | **high** — one HTTP header, and the source is public | app-wide: every IP-keyed limit + the limiter's memory bound | **FIX NOW — DONE (`5e5931b3` + correction 2026-09-04).** *Original plan said `app.set('trust proxy', 1)` "confirm Render is exactly 1 proxy hop first — it normally is". **That was wrong** — prod logs proved Render fronts the app with its platform Cloudflare AND an internal LB = 2 hops (`xffRaw` = `<client>, <cloudflare>, <render-internal>`), so `trust proxy: 1` resolved `req.ip` to a shared Render `10.x` LB IP → cross-user false 429s.* **Shipped:** `trustedProxy.ts` with a **range-based** `trust proxy` (Cloudflare v4/v6 CIDRs + private ranges) — resolves `req.ip` to the real client regardless of hop count — and `requestIp()` prefers `CF-Connecting-IP` gated on `isTrustedInfraPeer(peer)`. | AU-INV-4, AU-INV-5 |
 | **AU-4** | **`getUserIdFromAuthHeaderSync` decodes an unsigned JWT `sub` for rate-limit keys → every per-user limit is bypassable** by rotating a forged `{"sub":"<random>"}`. Endpoints: `accountDeleteLimit` (10/10 min on **irreversible account deletion**), `dailySubmitLimit` (Daily Fritz submit spam → `dailyFritzVerifier` CPU on a 0.1-CPU instance), `recordMatchLimit` (→ a Glicko rating-period recompute per call), `dailyFritzInitLimit`. **Not an authz bypass** — the handlers re-validate via impl A/B/C — but the protective intent of those four limits is fully defeated. | §6.1.3, §6.1.10 AU-4 | **abuse-enabling** (account-deletion abuse; verifier/DB load amplification on a tiny instance) | **high** — forging a JWT middle segment is trivial | the 4 per-user-keyed endpoints; on a 0.1-CPU / 512 MB box the daily-fritz + record-match amplification is a real availability risk | **FIX NOW** (bundle with AU-3) — after `trust proxy`, either (a) drop the `getUserId` arg on those four → key on `req.ip` (simple; the limits are generous enough that shared-NAT users are unaffected), or (b) make `createRateLimitMiddleware` `async` and key on the **verified** `getAuthenticatedUserId(req)` (falls back to IP for anon; reuses cache A which is already warm for authed traffic, so ~free). Prefer (b) for true per-user fairness; (a) if the async change is deemed too invasive. Delete `getUserIdFromAuthHeaderSync` once it has no callers. | AU-INV-4 |
 | **AU-8** | **Three divergent server auth impls** (§6.1.1). B/C are uncached (a full `/auth/v1/user` round-trip per social / tournament / account request — latency + Supabase quota + outage amplification, AU-INV-6) and lack A's in-flight dedup, 12 s timeout, and e2e bypass. Any future change to token handling must be made 3× or the families drift; new routes copy whichever impl the author saw first. | §6.1.1, §6.1.10 AU-8 | **latent drift** → player-visible-bug (inconsistent outage behaviour) + abuse-amplification (B/C hammer upstream) | **medium** — a drift is realised the next time auth logic changes (AU-1, AU-INV-6) | inconsistent enforcement + outage behaviour across route families; blocks a clean AU-1 fix | **FIX NOW (Step 3) — consolidate B and C onto A.** *Recommendation, stated plainly:* extract A's core as `verifyBearerToken(token): Promise<string|null>` (cache + dedup + timeout), and: rewrite `socialAuth.requireAuth` as a thin `res`-writing wrapper over it; rewrite `tournamentAuth.getUserIdFromBearerToken` / `requireAuthUserId` as a wrapper that adds the `isValidUuid` check, keeping `rejectMismatchedPayloadUserId` / `getSocketUserId` at the call sites unchanged. **Why consolidate, not leave separate:** (1) it is the prerequisite for any AU-1 fix (a shortened TTL or a denylist must apply to social/tournament/account too, or those become the soft underbelly); (2) it removes B/C's per-request upstream call — measurable Supabase-quota + latency + outage-herd reduction on the most-polled routes (social feed, friends-with-presence, tournament hub); (3) A's e2e bypass is `NODE_ENV !== 'production'`-gated → harmless to extend. **Why the 60 s cache lag on the new B/C paths is acceptable:** social routes (feed/friends/presence) — immaterial; account-deletion — the user can only delete *their own* account and deletion is already the irreversible self-service action; tournament — System 1's `authorizeMatchParticipant` re-reads the match row and is the real gate there. ~10 call sites, mechanical. | AU-INV-6, AU-INV-8, AU-INV-2 |
-| **AU-1** | **Token revocation lag.** (a) A client `signOut()` does **not** revoke the access-token JWT — a *captured* token works until its `exp` (~1 h, Supabase project default) regardless of sign-out; (b) cache A adds ≤60 s on top for A's route families. No push-invalidation, no denylist. | §6.1.2, §6.1.10 AU-1 | **auth-bypass** (a leaked/captured token has a longer useful life than a user expects) — **but requires a prior compromise** (XSS, shared device, the user's `localStorage`) | **low–medium** — no leak vector in-app today (HSTS, tight server CSP); the client CSP `'unsafe-inline'` + localStorage tokens is the realistic path, tracked for §13 | one account per captured token, for ≤ `min(JWT exp, last-check + 60 s)` | **POSTURE.** No live exposure to *fix* (needs a prior token compromise), but the window is longer than necessary. **Recommendation:** (1) cut cache A's success TTL **60 s → 15 s** (one constant; ~4× more upstream checks on a warm cache, still dedup'd — cheap, halves-plus the server-side lag); (2) **human action:** lower the Supabase project **JWT expiry** from 3600 s to e.g. 900 s (bounds the "signed-out token still works" window platform-wide; the client auto-refreshes, so no UX cost); (3) a server-side token **denylist** (populated on sign-out via a client `POST /auth/logout` + checked in `verifyBearerToken`) is the complete fix — **scale-gated**, only worth it once (2) isn't enough. Contingent on **AU-8** (the TTL cut + any denylist must land in the consolidated impl or B/C/account stay on the old behaviour). | AU-INV-2 |
+| **AU-1** | **Token revocation lag.** (a) A client `signOut()` does **not** revoke the access-token JWT — a *captured* token works until its `exp` regardless of sign-out; (b) cache A adds its TTL on top for A's route families. No push-invalidation, no denylist. | §6.1.2, §6.1.10 AU-1 | **auth-bypass** (a leaked/captured token has a longer useful life than a user expects) — **but requires a prior compromise** (XSS, shared device, the user's `localStorage`) | **low–medium** — no leak vector in-app today (HSTS, tight server CSP); the client CSP `'unsafe-inline'` + localStorage tokens is the realistic path, tracked for §13 | one account per captured token, for ≤ `min(JWT exp, last-check + TTL)` | **POSTURE → DONE (2026-09-04).** (1) ✅ cache A's success TTL cut **60 s → 15 s** (`5e5931b3`). (2) ✅ **human action done:** Supabase project **JWT expiry lowered 3600 → 900 s** — bounds the captured/signed-out-token window platform-wide; client auto-refreshes, no UX cost. The captured-token window is now ≤ `min(900 s, last-check + 15 s)`. (3) a server-side token **denylist** (client `POST /auth/logout` + checked in `verifyBearerToken`) remains the complete fix — **scale-gated, not needed** at 900 s expiry. | AU-INV-2 |
 | **AU-6** | **Admin-secret design (fail-closed today).** `ADMIN_SECRET` unset in prod → every admin endpoint 401s now. The design if it is ever set: `?admin_key=` query transport still accepted on `GET /api/daily-fritz/{metrics,health,events/:attemptId}` (→ access logs / `Referer` / history); POSTs read `req.body.adminKey`; the admin UI persists the entered secret to `sessionStorage`; one static shared secret; only the (spoofable, AU-3) `adminLimit` bounds brute-force. Blast radius if set + leaked: `reset-attempt` (wipe any user's Daily Fritz run), `invalidate` (kill a published challenge mid-day), `generate`, `ranking/process` (force a rating recompute for any user), `bot-matches/cleanup-stale` (force-forfeit any idle bot match), per-attempt event/user-id disclosure. | §6.1.4, §6.1.10 AU-6 | **auth-bypass** (of the admin boundary) — **but zero live exposure** (secret unset) | **n/a today**; the risk is a future operator setting a weak secret + the brittle transport | full Daily Fritz content control + cross-user rating/attempt manipulation + info disclosure | **POSTURE — "before you ever set `ADMIN_SECRET` in prod" checklist:** (1) **remove server-side `?? req.query.admin_key`** from the 3 GET endpoints — the client (`DailyFritzHealthAdminScreen`) already sends only the `x-admin-secret` header and migrates legacy `?admin_key=` out of the URL, so this is safe to delete outright (Step 3 can do just this part — it's a pure removal, testable, no behaviour change for the real client); (2) move the POST endpoints from `req.body.adminKey` to the same `x-admin-secret` header for one transport; (3) admin UI: **drop the `sessionStorage` persistence** — hold the entered secret in React state only, re-enter per session (one screen, infrequent use); (4) generate `ADMIN_SECRET` as ≥ 32 bytes of CSPRNG output; (5) consider whether these endpoints should be reachable from the public internet at all vs. an IP allowlist / a separate ops surface — the integrity-affecting ones (`reset-attempt`, `invalidate`, `ranking/process`) especially. | AU-INV-3 |
 | **AU-5** | **Socket rate-limit key before auth.** First packets on a connection key on `handshake.address` (the shared Render-proxy IP for all unauthenticated sockets → one abuser trips the limit for everyone) or `socket.id` (unique per connection → a reconnect loop resets the bucket). `socket.data.userId` is only set after a handler runs. | §6.1.5, §6.1.10 AU-5 | **player-visible-bug** (a shared-bucket false 429, or a bypass via reconnect) | **medium** — needs a deliberate reconnect flood or a noisy shared-IP neighbour | pre-auth socket events (`room:create`, `room:join`, `presence:online`); gameplay events already require an authed + joined room | **REVISIT IF SCALE** — the pre-auth events have their own `failedRoomLookupLimiter` (MP-G3) and are cheap; the fix (a socket.io `trust proxy`-aware address, or always keying pre-auth packets on `socket.id`) is not urgent at current concurrency (`connectedSockets: 0` on `/ready`). Bundle with a future socket-scaling pass. | AU-INV-4 |
 | **AU-2** | **Deploy restart resets every limiter + empties cache A.** A rate-limit burst timed across a deploy gets ~2× budget; cache A cold-starts a `/auth/v1/user` herd for authed traffic. | §6.1.5, §6.1.10 AU-2 | **cosmetic / minor player-visible-bug** | **high** (every deploy — ≥1/day per §2.3.2) but **immaterial** at current traffic | a few-second 2× window per deploy; a small cold-auth burst | **REVISIT IF SCALE** — a shared store (Redis / Upstash) for the limiter + token cache is the fix, and that is an upgrade-time change (same class as §2.1.1 / D-2 addendum / T-18 — everything in-process is lost on restart on the free tier). No action now. | AU-INV-5, AU-INV-6 |
@@ -4200,10 +4220,10 @@ code now), **REVISIT IF SCALE**, **ACCEPT**}.
   removes the per-request upstream call on the most-polled routes and unblocks
   AU-1).
 - **POSTURE (decision + pre-conditions, no code beyond the safe removals):**
-  **AU-1** (cut cache TTL 60→15 s now; Supabase JWT-expiry + denylist are
-  human-action / scale-gated) and **AU-6** (the "before you set `ADMIN_SECRET`"
-  checklist; the `?admin_key=` query-param removal is a safe standalone Step-3
-  item).
+  **AU-1 — DONE 2026-09-04** (cache TTL 60→15 s in `5e5931b3`; Supabase JWT expiry
+  lowered 3600→900 s by human; denylist scale-gated, not needed) and **AU-6** (the
+  "before you set `ADMIN_SECRET`" checklist; the `?admin_key=` query-param removal
+  is a safe standalone Step-3 item — done).
 - **REVISIT IF SCALE:** AU-5, AU-2.
 - **ACCEPT:** AU-7.
 
@@ -4214,8 +4234,9 @@ which is why it is the FIX-NOW priority.
 ## 6.4 Checklist
 - [x] Step 1 — auth/session/rate-limit current-state map — §6.1 — **RATIFIED D-12 (2026-09-03)**
 - [x] Step 2 — invariants (§6.2 AU-INV-1..8) + risk-ranked gap list (§6.3 AU-1..AU-8) — **RATIFIED D-13 (2026-09-03)**
-- [x] Step 3 — fixes + tests — **DONE + PUSHED (`5e5931b3` 2026-09-03; AU-3 correction pushed 2026-09-04).** **AU-3** `trustedProxy.ts`: range-based `trust proxy` (Cloudflare CIDRs + private ranges) + `requestIp()` prefers infra-gated `CF-Connecting-IP`, else `req.ip`; 429 `log.warn` logs `keyIp`/`peer`/`cfConnectingIp`. *(Superseded the initial `trust proxy: 1`, which was one hop short of the real Cloudflare→Render chain and caused cross-user false 429s in prod.)* **AU-4** deleted `getUserIdFromAuthHeaderSync`; the 4 endpoints rekeyed on the client IP. **AU-8** `socialAuth` + `tournamentAuth` consolidated onto `supabaseAuth.verifyBearerToken` (tournamentAuth keeps its uuid/payload-match wrapper). **AU-1 partial** cache A TTL 60→15 s. **AU-6 partial** server `?? req.query.admin_key` removed from the 3 GET admin endpoints. Tests: `rateLimitBypassClosed.test.ts`, `trustedProxy.test.ts`, `auth/consolidatedAuthPath.test.ts`, `http/routes/dailyFritzAdminHeaderOnly.test.ts`. Full suite green; `tsc -b` clean; lint unchanged.
-- [ ] **Human-action (not code):** AU-1 — lower Supabase project JWT expiry 3600→~900 s. AU-6 — before ever setting `ADMIN_SECRET`: one POST header transport, drop admin-UI `sessionStorage` persistence, ≥32-byte CSPRNG secret, consider an IP allowlist for the integrity-affecting endpoints.
+- [x] Step 3 — fixes + tests — **DONE + PUSHED (`5e5931b3` 2026-09-03; AU-3 correction pushed 2026-09-04).** **AU-3** `trustedProxy.ts`: range-based `trust proxy` (Cloudflare CIDRs + private ranges) + `requestIp()` prefers infra-gated `CF-Connecting-IP`, else `req.ip`; 429 `log.warn` logs `keyIp`/`peer`/`cfConnectingIp`. *(Superseded the initial `trust proxy: 1`, which was one hop short of the real Cloudflare→Render chain and caused cross-user false 429s in prod.)* **AU-4** deleted `getUserIdFromAuthHeaderSync`; the 4 endpoints rekeyed on the client IP. **AU-8** `socialAuth` + `tournamentAuth` consolidated onto `supabaseAuth.verifyBearerToken` (tournamentAuth keeps its uuid/payload-match wrapper). **AU-1** cache A TTL 60→15 s. **AU-6 partial** server `?? req.query.admin_key` removed from the 3 GET admin endpoints. Tests: `rateLimitBypassClosed.test.ts`, `trustedProxy.test.ts`, `auth/consolidatedAuthPath.test.ts`, `http/routes/dailyFritzAdminHeaderOnly.test.ts`. Full suite green; `tsc -b` clean; lint unchanged.
+- [x] **AU-1 CLOSED (2026-09-04):** human lowered the Supabase project JWT expiry **3600 → 900 s** in the dashboard. Combined with the cache-A TTL cut, the captured/signed-out-token window is ≤ `min(900 s, last-check + 15 s)`. Server denylist stays scale-gated.
+- [ ] **Human-action, still open — AU-6:** before ever setting `ADMIN_SECRET`: one POST header transport, drop admin-UI `sessionStorage` persistence, ≥32-byte CSPRNG secret, consider an IP allowlist for the integrity-affecting endpoints. (No `ADMIN_SECRET` set today → admin surface fail-closed.)
 
 ---
 
@@ -4238,11 +4259,314 @@ oracle every mode relies on.
 **Out of scope:** each mode's *use* of the engine (their own audits).
 
 **Status:** **LIVE, load-bearing** — Ghost, Bot, Fritz Challenge, Daily Fritz,
-Puzzle Rush, League and Matchmaking all trust its output. Highest leverage: one
-audit benefits every mode built on top of it.
+Puzzle Rush, Daily Puzzle (historical), Matchmaking and the Review analyzer all
+trust its output. (Legacy League is decommissioned — System 5.) Highest leverage:
+one audit benefits every mode built on top of it.
 
 ## 7.1 Current-state map
-**Not started.** Step 1.
+
+Status: **written 2026-09-04, Step 1.** Read-only map of what exists — no
+invariants, no gap ranking, no fixes. Prod facts: `GAME_RULES_VERSION` has been
+`1` since inception; `FRITZ_POLICY_VERSION` went `1 → 2` (min-supported kept at
+`1`); `DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION` / `DAILY_FRITZ_VERIFIER_VERSION`
+= `2`; `GAME_COMMAND_VERSION` = `1`; Puzzle Rush `config.version` = `4`.
+
+### 7.1.1 Package topology & how each consumer resolves it
+
+`packages/game-core` (`@racehorse/game-core`, `"type": "commonjs"`, ~3,900 LOC
+across 19 `src/*.ts`). `src/index.ts` `export *`s all 15 leaf modules; the
+`package.json` `exports` map also exposes `./engine`, `./scoring`,
+`./invariants`, `./open-ends`, `./review`, `./types` subpaths. Sibling package
+`packages/match-protocol` is **out of scope** (System 9).
+
+**Resolution is asymmetric — this is the core seam of §7.1:**
+
+| Consumer | How `@racehorse/game-core` resolves | Compiled by |
+|---|---|---|
+| **Server runtime** (`node dist/index.js` in prod) | workspace symlink `node_modules/@racehorse/game-core → packages/game-core`, `main: ./dist/index.js` | `tsc -p tsconfig.build.json` — **must be pre-built**; `server`'s `prebuild` + CI's "Build game-core" step do this |
+| **Server `tsc` build** | `types: ./dist/index.d.ts` | needs `dist/*.d.ts` present (prebuild) |
+| **Client bundle** (Vite) | `vite.config.ts` alias → `packages/game-core/src/index.ts` | esbuild (transpile-only, no type gate) |
+| **Client `tsc`** | `tsconfig.app.json` `paths` → `../packages/game-core/src/*` | `tsc -b` |
+| **All vitest** (root + `server/vitest.config.ts`) | alias → `packages/game-core/src/index.ts` | vitest/esbuild |
+
+So: **every test path and the client bundle run game-core *source*; only the
+compiled server prod runtime runs game-core `dist/`.** `dist/` is git-ignored
+(`**/dist/`), so a stale `dist` never ships from the repo — but a deploy whose
+build step skipped the game-core build, or an incremental `tsc` that under-built,
+would run old engine code in prod while every test stayed green. CI mitigates
+with three "Build game-core" steps + a `node -e "require('@racehorse/game-core')"`
+smoke + a "Verify server dist can load game-core" step.
+
+**Server-side re-export shims** (no logic): `server/src/game/{engine,scoring,types,openEndsGeometry}.ts`
+are one-line `export * from '@racehorse/game-core'`. `server/src/game/invariants.ts`
+adds a thin server wrapper (`assertValidGameState` with a `SOFT_GAME_INVARIANTS=true`
+opt-out — otherwise throws). `server/src/bot/publicDrawCost.ts`,
+`server/src/ghost/rankedDealAuthority.ts`, etc. import the package directly. 42
+non-test files across `server/src` + `client/src` import `@racehorse/game-core`.
+
+### 7.1.2 The engine (`engine.ts`, 701 LOC) — pure reducer
+
+Stateless, dependency-free (imports only `types`, `scoring`). Every export takes
+`GameState` + args and returns a new `GameState` (or a `{state, …}` tuple); no
+I/O, no `Date.now`, no module state.
+
+- `createInitialState(players, config?)` — 2–4 players, merges `DEFAULT_CONFIG`
+  (`maxPips 6`, `tilesPerPlayer 7`, `deadTileCount 2`, `scoringMultiple 5`,
+  `blockedHandRule 'lowestPips'`, `endHandBonus 'sumOpponentPenalties'`,
+  `winningScore 60`), `validateConfig` rejects impossible deals.
+- `startNewHand(state, customDeck?, startingPlayerId?)` — **the one
+  non-determinism source:** without `customDeck` it calls `shuffle()` which uses
+  `Math.random()` (engine.ts:37). Starter rotation: explicit id → `handStarters`
+  alternation → `(handNumber-1) % n`. Deals `tilesPerPlayer` per seat in
+  `playerIds` order; boneyard = remainder; `deadTiles` = last `deadTileCount` of
+  boneyard.
+- `getLegalMoves(state, playerId)` — asserts current player; closed hand ⇒ only
+  doubles or scoring opens; open hand ⇒ tiles matching an open end (main
+  left/right via `endpointMatchFromOrientation`, plus crossed-hub branch arms);
+  `pass` only when zero plays **and** `getDrawableBoneyardCount === 0`. Output is
+  sorted (`sortLegalMoves`: canonical tile id, then position key) — **the sort is
+  load-bearing for determinism** (verifier & Fritz policy consume this order).
+- `canDraw` — turn + zero legal plays + drawable (non-dead) boneyard > 0. No
+  discretionary draw.
+- `drawOne` / `drawUntilPlayableOrEmpty` — FIFO (`const [drawn, ...rest] = boneyard`),
+  throws if a legal play exists.
+- `applyMove(state, playerId, move)` — validates against `getLegalMoves`; on a
+  **scoring play or double** the turn is kept and the **entire post-score
+  forced-draw chain + terminal auto-pass is resolved inside the call** (engine.ts
+  ~648–677) so a transcript needn't log recovery draws; `newHand.length === 0` ⇒
+  `resolveGoOut` (bonus = `computeGoOutBonusPoints` = `Math.round(Σopp pips / 5)`);
+  all-passed ⇒ `resolveBlockedHand` (`lowestPips` winner or tie→none;
+  `noScore` variant just checks game winner). `checkForGameWinner` — a lone
+  leader `>= winningScore`.
+- `finalizeMandatoryAutoPasses` — drains forced passes (cap 32 steps).
+
+### 7.1.3 Scoring & board geometry (`scoring.ts` 489 LOC, `openEndsGeometry.ts` 532 LOC)
+
+- `computePlayScore(board, config)` = `sum % 5 === 0 ? sum/5 : 0` where `sum =
+  computeOpenEndsSum(board)` (integer).
+- `computeHandPenalty` / `computeGoOutBonusPoints` = `Math.round(Σpips / 5)` —
+  the only rounding in the package; `Σpips` is an integer ≤ ~168, `/5` and
+  `Math.round` (half-up, toward +∞) are IEEE-754/spec deterministic across V8 and
+  JSC.
+- `simulatePlacement(board, tile, position)` — pure board transition: first
+  tile, main-line prepend/append (with hub index shift on left-prepend), or
+  branch-arm placement (`placeTileOnBranch`, requires `hub.isCrossed`, max 2
+  arms). Doubles register as hubs; crossing marks `isCrossed`.
+- `openEndsGeometry.ts` — hub/branch open-end derivation + a family of
+  board-metadata audits/reconcilers (`auditOpenEndsBoard`,
+  `reconcileBoardOpenEndsMetadata`, `hydrateBoardForOpenEnds`,
+  `sanitizeBoardBranchSlots`, `warnOpenEndsBoardIssues`). No floats, no RNG,
+  no dates.
+
+### 7.1.4 Determinism story
+
+- **Verified paths are integer-only.** `fritzPolicy.scoreOfficialMove` explicitly
+  keeps pure-integer weights "so client (Safari) and server (Node) never diverge
+  on float ties" (fritzPolicy.ts:124). Scoring is `÷5` on multiples-of-5 (exact)
+  or `Math.round`.
+- **The one float in the package** is `botHeuristics.estimateDrawCostFromPublicInfo`
+  (division, `* 0.4`, `Math.min`). Consumers: `server/src/bot/serverBot.ts` (the
+  bot opponent — **not** a verified path) and `client/src/modules/fritz/*` (the
+  client's *local* Fritz renderer). The Daily Fritz **verifier** never calls it:
+  Fritz draw/pass is fully determined by the engine (`chooseOfficialFritzDecisionForVersion`
+  returns `draw` only when `legalPlays.length === 0 && canDraw`), and
+  `sameDecision` compares only `kind` for non-plays. So the float is structurally
+  outside the score oracle — but nothing enforces that boundary.
+- **`random.ts`** — an FNV-seeded `Math.imul` LCG (`createDeterministicRandom`),
+  `shuffleDeterministically` (Fisher–Yates), and `createDeterministicDoubleSixDeal({seed})`
+  → `{playerTiles, opponentTiles, boneyard, deadTiles}`. This is how Daily Fritz
+  (`server/src/dailyFritz.ts`), ghost ranked deals (`ghost/rankedDealAuthority.ts`)
+  and the review fixture corpus derive reproducible deals.
+- **`Math.random()` reachability** — `engine.startNewHand` (no `customDeck`) and
+  `pregameDraw.shuffleTiles` (default `rng`). In multiplayer rooms
+  (`server/src/rooms.ts:811`) the server shuffles authoritatively and broadcasts
+  the dealt state, so there is no client-vs-server deal comparison. Daily Fritz /
+  ghost / puzzle modes always pass a deterministic or DB-sourced deck.
+
+### 7.1.5 Fritz AI policy (`fritzPolicy.ts`, 230 LOC)
+
+- `FRITZ_POLICY_VERSION = 2`, `FRITZ_POLICY_MIN_SUPPORTED_VERSION = 1`,
+  `FRITZ_POLICY_CONTRACTS = {1:'fritz-policy-v1-seeded-top-score',
+  2:'fritz-policy-v2-deterministic-canonical-ties'}`.
+- `scoreOfficialMove` — integer strategic score:
+  `immediate·100 000 + mobility·(8+tierWeight)·1 000 + doubleSupport·4 000 +
+  unload·1 000 + openEndsSum`. `tierWeight` ∈ {rookie 1, standard 2, elite 3,
+  master 4}.
+- **v1 vs v2 differ only in tie handling**, not in what scores top:
+  - v1: `createDeterministicRandom(getOfficialFritzDecisionSeed(state))` (seed
+    `daily-fritz:{handNumber}:{sequence}`) picks among tied top-score plays.
+  - v2: `collapseSymmetricEmptyBranchPlays` (drop the higher empty sibling arm),
+    then take `scored[0]` after a canonical `localeCompare` tie-break — no RNG.
+- `listOptimalOfficialFritzPlays` / `isOptimalOfficialFritzPlay[ForVersion]` —
+  return/accept **any** play sharing the top score, so historical v1 RNG picks
+  and sibling-arm transcripts still verify under v2. `isOptimalOfficialFritzPlayForVersion`
+  deliberately ignores `version` (both versions share the integer score; only
+  selection changed) and calls the version-agnostic checker.
+- `chooseOfficialFritzDecision[ForVersion]` — the actual mover (client local
+  Fritz + verifier recovery of an omitted Fritz turn).
+
+### 7.1.6 The verifiers (the trusted score oracle)
+
+| Verifier | File | Replays with | Version pin |
+|---|---|---|---|
+| **Daily Fritz** | `server/src/dailyFritzVerifier.ts` (467) | `applyGameCommand` per transcript action; reconstructs omitted mandatory forced-draws (`applyOmittedMandatoryDraws`) and **one** omitted official Fritz turn (`applyOmittedOfficialFritzTurn`); checks `preStateDigest` (`getDailyFritzAuthorityStateDigest`) and Fritz-play policy parity (`sameDecision` → `isOptimalOfficialFritzPlayForVersion`) | **full** — see §7.1.7 |
+| **Ghost** | `server/src/ghost/verifier.ts` (347) | `getLegalMoves` + `simulatePlacement` + `computePlayScore` over `GhostMoveLogEntry[]`; tolerates legacy unlogged draws unless `strictHandContinuity` | **none** — replays against the currently-deployed engine |
+| **Puzzle Rush grading** | `server/src/puzzleRush/grading.ts` (232) → `dailyPuzzleSubmissionValidation.ts` (209, `applyMove`/`getLegalMoves`) | engine replay of the submitted line vs `DailyPuzzleSlot` objective | run records `config_version` (scoring/timing only), **no `GAME_RULES_VERSION`** |
+| **Daily Puzzle submission** | `server/src/dailyPuzzleSubmissionValidation.ts` | engine replay | **none** (mode is historical — System 3) |
+| **Review analyzer** | `packages/game-core/src/reviewContracts.ts` (422) + `reviewFixtureCorpus.ts` (337) | `applyGameCommand` replay + `createReviewPositionSnapshotV2` | own constants `REVIEW_POSITION_SNAPSHOT_VERSION 2` / `REVIEW_EVALUATION_VERSION 1` / `REVIEW_STATE_DIGEST_VERSION 1` / `REVIEW_ENGINE_CONTRACT_VERSION 'review-engine-v1'` |
+
+**Daily Fritz evidence provenance** (`dailyFritzJournal.ts` + memory
+`daily-fritz-evidence-journal`): the transcript is built from the **engine
+journal** (`appendDailyFritzJournalAction`, recorded when the engine accepts a
+command), *not* the React UI move log — a deliberate fix for reconstruction
+drift. Never-strand fallback lives in the record-game route (System 3).
+
+`canonicalizeDailyFritzAuthorityState` (`dailyFritzAuthority.ts`) hashes a
+canonical projection (per-seat sorted hands + scores, raw `board`, boneyard in
+draw order, dead tiles sorted, cursor, `handNumber`, flags, `winnerIndex`,
+`consecutivePasses`, `sequence`) with FNV → `df-state-v1:xxxxxxxx`. It **omits
+`handStarters`** and embeds `state.board` via `JSON.stringify` (key-order
+sensitive — a board object built with different key insertion order on one
+runtime would digest differently). "Integrity fingerprint, not a security
+boundary — transcript verification remains authoritative."
+
+### 7.1.7 Version-pinning discipline
+
+- **`versions.ts`**: `GAME_RULES_VERSION = 1`, `GAME_COMMAND_VERSION = 1`
+  (two-line file).
+- **Daily Fritz is the only mode with a real pinning contract stack.** At
+  `/api/daily-fritz/start` the client advertises `supported_transcript_protocol_versions`,
+  `supported_fritz_policies` (list of `{version, contract}`),
+  `supported_state_digest_versions`; the server pins one
+  `DailyFritzAuthorityContract` into the attempt row
+  (`buildDailyFritzAuthorityContract`), and a resume checks
+  `clientSupportsDailyFritzAuthorityContract` → **`426 authority_contract_unsupported`**
+  if the updated client can't honour the attempt's pinned contract. A brand-new
+  attempt on a client that doesn't support the current verifier contract gets
+  `426` too (`supportsVerifier` gate, dailyFritzStartRoute.ts:113–117).
+- **`parseDailyFritzTranscript` hard-rejects `rulesVersion !== GAME_RULES_VERSION`**
+  (`dailyFritzTranscript.ts:73`, `throw 'Unsupported rules version.'`) — **no
+  grace window**. It accepts `protocolVersion ∈ {1, 2}` and
+  `fritzPolicyVersion ∈ {FRITZ_POLICY_MIN_SUPPORTED_VERSION, FRITZ_POLICY_VERSION}`
+  = `{1, 2}`. The verifier keeps historical v1 Fritz evidence valid via
+  `isOptimalOfficialFritzPlayForVersion` (any top-score play passes).
+- **Ghost, Puzzle Rush, Daily Puzzle, Review all replay against whatever engine
+  is currently deployed** — none gate on `GAME_RULES_VERSION`. A future rules
+  bump would silently re-judge historical move logs / submitted lines / saved
+  reviews in those modes, and (for Daily Fritz) strand every in-flight attempt
+  at the moment of deploy.
+- `GAME_COMMAND_VERSION` — `commands.validateCommandEnvelope` hard-rejects a
+  mismatch, but the only producers are server-side (verifier, review), so a bump
+  is atomic.
+
+### 7.1.8 DTO contracts & drift guards
+
+- `dtoContracts.ts` (172 LOC) — `RoomGameActionPayload` (MOVE/PASS/DRAW wire
+  message, intentionally loose + legacy `move.end` fallback); `DailyFritzSetResult`
+  / `DailyFritzSetGameResult` / `DailyFritzDrawWinner`; and **the full Daily
+  Puzzle ladder DTO set** (`DailyPuzzleSlot`, `DailyPuzzleAttempt`,
+  `DailyPuzzleLeaderboardEntry`, `DAILY_PUZZLE_SLOT_COUNT`, …) — still exported
+  though the ladder is decommissioned (System 3; `contractsDriftTypes.ts` still
+  asserts them).
+- **Server drift guard:** `server/src/contractsDriftTypes.ts` — `expectTypeOf<Server…>().toEqualTypeOf<Core…>()`
+  for 8 shapes. Deliberately **not** named `*.test.ts` so `server`'s
+  `tsc -p tsconfig.json` (the `npm run build` step) type-checks it directly
+  (the build tsconfig excludes `**/*.test.ts`). `contractsDrift.test.ts` also
+  imports it for vitest.
+- **Client drift guard:** `client/src/multiplayer/roomTransportContractsDrift.test.ts`
+  — `expectTypeOf` for the same DTO *payloads* (`GameActionPayload`,
+  `DailyFritzSetResult`, `DailyPuzzleLeaderboardRow`), but it **is** a `.test.ts`.
+- **No drift guard exists for the core engine types.** `client/src/types.ts`
+  (108 LOC) independently declares `Tile` / `Move` / `BoardState` / `PlacedTile`
+  etc.; nothing asserts `ClientTile ≡ CoreTile`. `client/src/game/openEndsGeometry.ts`
+  (554 LOC) is an independent implementation of the same geometry as
+  `packages/game-core/src/openEndsGeometry.ts` (532 LOC).
+
+### 7.1.9 The second-engine seam (client)
+
+`client/src/modules/match/runtime/botEngine.ts` (571 LOC) re-implements
+`simulatePlacement`, `computePlayScore`, `getOpenEnds`, `getMatchableOpenEnds`,
+`getPlacementTargetsForTile`, `shuffle`, `isDouble`, `tileMatchesEnd`,
+`createDealtHand`, `dealFromRankedSeed`, hand-lifecycle helpers — over
+`client/src/game/openEndsGeometry.ts` + `client/src/types.ts`. It is used by
+bot matches, Play-vs-Fritz, and the **Daily Fritz client runtime**
+(`modules/daily/*` build `BotMatchState` from `createDailyFritzOfficialMatch`).
+
+**Actual command application, however, routes through `gameCoreAdapter.ts`**
+(418 LOC) → game-core `applyGameCommand` / `getLegalMoves` / `simulatePlacement`
+/ `chooseOfficialFritzDecision`. So the score/lifecycle authority on the client
+*is* game-core; `botEngine`'s local geometry drives move-target enumeration and
+rendering. If `botEngine.getPlacementTargetsForTile` and core `getLegalMoves`
+disagree about a legal placement, the client offers a move core (and the server
+verifier) then reject.
+
+`docs/fritz-trust-guardrails.md` (2026-06-12) names "dual engines
+(`botEngine.ts` vs `engine.ts`)" as a standing **P1** drift risk and is
+partially stale (`server/src/game/engineParity.test.ts` cited there now lives at
+`packages/game-core/src/__tests__/engineParity.test.ts`).
+
+### 7.1.10 Tests & CI
+
+- **game-core suite** (10 files, aliased to `src` everywhere): `engine.test.ts`
+  (1,761 LOC), `invariants.test.ts` (532), `racehorse-invariants.test.ts` (436),
+  `engineParity.test.ts` (356, golden `parity-*` scenarios mirrored in
+  `client/src/bot/engineParity.behaviorTests.ts`), `openEndsGeometry.test.ts`
+  (273), `fritzPolicy.test.ts` (181), `reviewContracts.test.ts` (129),
+  `deterministicSimulation.test.ts` (72, asserts `applyGameCommand` is a pure
+  function + monotone scores over a seeded playout), `dailyFritzTranscript.test.ts`
+  (68), `dailyFritzAuthority.test.ts` (50).
+- **CI** (`.github/workflows/ci.yml`): "Build game-core" runs in 3 jobs before
+  the dependent steps; a `node -e "require('@racehorse/game-core')"` resolve
+  smoke; a "Verify server dist can load game-core" step. `server`'s `prebuild`
+  builds game-core; Render's build does too (via the same chain).
+- No **cross-runtime** (Node-vs-JSC / bundled-vs-source) determinism test exists
+  — parity is asserted source-to-source in Node only.
+
+### 7.1.11 Concurrency / authz surface
+
+**None inside the package** — it is a pure, synchronous, dependency-free library:
+no I/O, no clock, no module-level mutable state, no randomness except the two
+`Math.random()` shuffles in §7.1.4. The trust boundary is entirely at the
+callers: *"the server replays authoritatively; the client-supplied transcript /
+move log / submitted line is untrusted input."* The verifiers' schedulers,
+never-strand fallbacks and rate limits are System 3 (Daily modes) / System 10
+territory, already audited or scaffolded.
+
+### 7.1.12 Windows / seams (candidates for Step 2 — not yet risk-ranked)
+
+- **GC-1** — server prod runs game-core `dist/` (git-ignored, build-step
+  dependent); all tests + the client run `src`. A missed/partial build ships a
+  stale engine to prod with a green test suite. CI has three guards; no
+  post-deploy assertion that `dist` matches `src`.
+- **GC-2** — `GAME_RULES_VERSION` bump has no rollout path: `parseDailyFritzTranscript`
+  hard-rejects a mismatch (strands in-flight Daily Fritz attempts on deploy);
+  Ghost / Puzzle Rush / Daily Puzzle / Review carry no rules gate at all and
+  would retroactively re-judge historical evidence.
+- **GC-3** — `client/src/types.ts` (`Tile`/`Move`/`BoardState`…) and
+  `client/src/game/openEndsGeometry.ts` are independent of game-core with **no
+  structural drift guard** (the existing guards cover only wire DTOs). The
+  `botEngine.ts` "second engine" (`docs/fritz-trust-guardrails.md` P1) is the
+  same seam.
+- **GC-4** — the one non-integer computation in the package
+  (`estimateDrawCostFromPublicInfo`) is structurally kept out of verified paths
+  by convention only; no test or type boundary prevents a future verifier from
+  importing it.
+- **GC-5** — `getDailyFritzAuthorityStateDigest` embeds `state.board` via raw
+  `JSON.stringify` (key-order sensitive) and omits `handStarters`; a board object
+  assembled with a different key order across runtimes would digest-mismatch even
+  on identical game state (currently only a warning path, not a rejection —
+  `fritz_state_mismatch` diagnostics, System 3 §3.2).
+- **GC-6** — no cross-runtime determinism test (Node vs the browser JS engine
+  actually used); parity is Node-source-to-Node-source only. `Math.imul` LCG and
+  integer scoring make divergence unlikely, unverified.
+- **GC-7** — `dtoContracts.ts` still ships decommissioned Daily Puzzle ladder
+  DTOs + `contractsDriftTypes.ts` still asserts them (dead surface, low risk).
+- **GC-8** — `sortLegalMoves` order is load-bearing for verifier + Fritz-policy
+  determinism but is an implementation detail of `engine.ts` with no invariant
+  stated; a refactor that changed it would silently change Fritz tie-selection
+  under policy v1 and every replay's move enumeration.
+
+**§7.1 done — stop for human review before Step 2.**
 
 ## 7.2 Invariants
 **Not started.** Step 2.
@@ -4251,8 +4575,8 @@ audit benefits every mode built on top of it.
 **Not started.** Step 2.
 
 ## 7.4 Checklist
-- [ ] Step 1 — engine + verifier + version-contract current-state map
-- [ ] Step 2 — invariants + gap list → ratify (D-N)
+- [x] Step 1 — engine + verifier + version-contract current-state map — §7.1 written 2026-09-04 (§7.1.1–§7.1.12). **Awaiting human review before Step 2.**
+- [ ] Step 2 — invariants + gap list (GC-1..GC-8 risk-ranked) → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
 ---
@@ -4597,6 +4921,8 @@ one becomes live or blocks a numbered system.
 | 2026-09-03 | **System 6 §6.2 / §6.3 RATIFIED as written (D-13) + Step 3 fixes + tests — committed, not pushed.** **AU-3:** `app.set('trust proxy', 1)` in `index.ts` (hop count confirmed by an empirical prod probe — 33 requests with a rotating `X-Forwarded-For` prefix each got a fresh `rest:leaderboard` bucket, proving the pre-fix key was the client-controlled leftmost XFF value) + `requestIp()` rewritten to `req.ip || req.socket.remoteAddress` + a `log.warn` (`scope`/`key`/`reqIp`/`xffRaw`) on the 429 path as the post-deploy verification hook. **AU-4:** deleted `getUserIdFromAuthHeaderSync` (the unsigned-JWT-`sub` decoder); the 4 endpoints that used it as a rate-limit key (`recordMatchLimit`, `accountDeleteLimit`, `dailySubmitLimit`, `dailyFritzInitLimit`) drop the `getUserId` arg → key on `req.ip` (option (a) from §6.3). **AU-8:** added `verifyBearerToken(token)` as the canonical entry point in `supabaseAuth.ts`; `social/socialAuth.ts` `requireAuth` and `scheduledTournament/tournamentAuth.ts` `getUserIdFromBearerToken` are now thin wrappers over it (tournamentAuth keeps `isValidUuid` + `rejectMismatchedPayloadUserId`); their `supabaseFetch`-based `/auth/v1/user` round-trips are gone. **AU-1 (partial):** cache A success TTL `60_000 → 15_000`. **AU-6 (partial):** removed `?? req.query.admin_key` from `GET /api/daily-fritz/{metrics,health,events/:attemptId}` — header-only. **Tests:** `rateLimitBypassClosed.test.ts` (rotating XFF prefix / rotating forged Bearer both fail to reset the bucket; distinct real IPs still independent), `auth/consolidatedAuthPath.test.ts` (social + tournament both route through `verifyBearerToken`; tournament's uuid gate + payload-match still enforced), `http/routes/dailyFritzAdminHeaderOnly.test.ts` (`?admin_key=` → 401 on all 3 GETs). Updated `scheduledTournament/routes.test.ts` to mock the new auth path. **Verification:** server suite 209 files / 1206 tests green, client 216 / 1482 green, `tsc -b` clean both sides, lint unchanged (server 68 pre-existing errors — 0 new; client at the 401-warning budget). **Human-action, not code:** AU-1 lower the Supabase project JWT expiry 3600→~900 s; AU-6 remaining checklist (one POST header transport, drop admin-UI `sessionStorage`, ≥32-byte CSPRNG secret, IP-allowlist consideration) before `ADMIN_SECRET` is ever set. AU-2 / AU-5 (REVISIT IF SCALE) + AU-7 (ACCEPT) untouched. §6 status + §6.3 + §6.4 + Sequencing + Current focus updated. **System 6 Steps 1–3 done. Next: System 7.** |
 | 2026-09-03 | **System 6 Step 3 pushed (`f38be278..5e5931b3`).** CI green (Server + Client Validation, MP Private Authority Soak, Smoke Test — Production). Render auto-deployed `5e5931b3`. |
 | 2026-09-04 | **AU-3 corrected — `trust proxy` hop count was wrong; range-based fix pushed.** Post-deploy live verification of `5e5931b3` found the rate-limit key landing on Render's internal LB IP (`10.199.46.133` / `10.194.193.7`), not the client. The 429 `log.warn` `xffRaw` showed a **3-entry** chain `<real client>, <Cloudflare edge>, <Render internal>` — confirming **two** proxy hops (Render's platform Cloudflare + Render's internal LB), so `app.set('trust proxy', 1)` from `5e5931b3` was one hop short and distinct users bucketed onto ~2 shared internal-IP keys → **cross-user false 429s, confirmed in prod logs.** Not a re-opened spoof (the rightmost XFF entries are infra-appended, not attacker-controlled). **Fix (`server/src/trustedProxy.ts`, new):** `TRUSTED_PROXY` is a **range list** — `['loopback','linklocal','uniquelocal', …15 Cloudflare v4 CIDRs, …7 v6 CIDRs]` (from cloudflare.com/ips, synced 2026-09-04) — passed to `app.set('trust proxy', …)`, so Express walks `X-Forwarded-For` past every infra hop to the real client regardless of the exact count, and a client-prepended entry is never selected (it sits left of the Cloudflare-appended client entry). `rateLimit.ts` `requestIp()` now prefers `CF-Connecting-IP` (Cloudflare sets it to the verified client and strips any client value) **but only when `isTrustedInfraPeer(req.socket.remoteAddress)`** — a raw non-Cloudflare origin request cannot get its self-declared `CF-Connecting-IP` honoured (falls back to `req.ip`). 429 `log.warn` extended: `keyIp` (the bucket key's IP), `peer`, `cfConnectingIp`. **Tests:** `trustedProxy.test.ts` (`isTrustedInfraPeer` table incl. `::ffff:`-mapped + a real Express server proving `req.ip` resolves past a spoof prefix for 1/2/3-hop chains); `rateLimitBypassClosed.test.ts` expanded — a rotating client-set `CF-Connecting-IP` on an untrusted peer does not yield fresh buckets; `CF-Connecting-IP` IS honoured (distinct real clients → distinct buckets) behind a real Cloudflare edge. **Verify:** server 210 files / 1225 tests green, client 216 / 1482 green, `tsc -b` clean both sides, lint unchanged (server 68 pre-existing errors — 0 new; client at 401-warning budget). §6 status + §6.3 (AU-3 row + status header) + §6.4 + Sequencing + Current focus + Changelog updated. |
+| 2026-09-04 | **Three pending human actions applied outside the repo — no repo/SQL work.** Human reports: (1) `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` applied directly in the Supabase SQL editor (drops the `insert_own`/`update_own` policies + revokes client write grants on `daily_puzzle_attempts` / `_slot_results`; tables kept `public` read-only for `socialProfile.ts` / `homeCompletionDates.ts`). (2) `supabase/migrations/2026-09-03_legacy_league_decommission.sql` applied — the 6 `league_*` tables DROPped `cascade`. (3) Supabase project **JWT expiry lowered 3600 → 900 s** in the dashboard. Effect on the plan: **System 3 / DF-CAND-1** and **System 5** DB decommissions are now fully live (were "code shipped, migration pending"); **System 6 AU-1 is CLOSED** — the cache-A TTL cut (`5e5931b3`) + the 900 s JWT expiry bound the captured/signed-out-token window to ≤ `min(900 s, last-check + 15 s)`; the scale-gated server denylist is not needed. **Still open (System 6):** the AU-6 pre-`ADMIN_SECRET` checklist (no secret set today). Current focus + Sequencing + §3 / §5 / §6 bodies + §6.3 AU-1 row + §6.4 updated. **Next: System 7 Step 1.** |
+| 2026-09-04 | **System 7 (`@racehorse/game-core` — shared score oracle) Step 1 — current-state map §7.1 written (no fixes). Not pushed.** 12 subsections. (7.1.1) **Resolution asymmetry** — server prod runtime runs game-core `dist/` (git-ignored, build-step dependent); the client bundle + *every* test path alias to `src/`; `server/src/game/*` are one-line re-export shims. (7.1.2) engine = pure dependency-free reducer; the only non-determinism is `Math.random()` in `startNewHand`'s shuffle when no `customDeck` (unreachable in verified modes; MP rooms shuffle server-authoritatively). (7.1.3) scoring is integer `÷5` / `Math.round(Σpips/5)` — spec-deterministic across V8/JSC. (7.1.4) determinism: verified paths integer-only by design; the single float (`estimateDrawCostFromPublicInfo`) is bot-only and structurally outside the verifier, by convention not enforcement; `random.ts` FNV+`Math.imul` LCG feeds `createDeterministicDoubleSixDeal`. (7.1.5) Fritz policy `v2` (min-supported `1`) — v1/v2 differ only in tie-break (v1 seeded-RNG, v2 canonical empty-arm collapse), not top-score; `isOptimalOfficialFritzPlayForVersion` accepts any top-score play so historical evidence stays valid. (7.1.6) five verifiers — **only Daily Fritz has a real version pin**; Ghost / Puzzle Rush / Daily Puzzle / Review replay against the currently-deployed engine with no `GAME_RULES_VERSION` gate; DF transcript is built from the engine journal, not the UI move log. (7.1.7) `parseDailyFritzTranscript` **hard-rejects** `rulesVersion !== GAME_RULES_VERSION` (no grace → strands in-flight attempts on a bump); DF start negotiates a pinned authority contract (`426` on incompat resume). (7.1.8) drift guards: `contractsDriftTypes.ts` (server-vs-core, compile-time) + a client `.test.ts` cover **wire DTOs only** — `client/src/types.ts` + `client/src/game/openEndsGeometry.ts` are independent of core with **no engine-type drift guard**. (7.1.9) the `botEngine.ts` (571 LOC) "second engine" seam — command application routes through `gameCoreAdapter` → core, but local geometry drives move enumeration + rendering; `docs/fritz-trust-guardrails.md` (2026-06-12, partly stale) flags this P1. (7.1.10) game-core has 10 test files (engine 1,761 LOC), CI builds it 3× + resolve smoke; no cross-runtime (Node-vs-browser-JS) determinism test. (7.1.11) zero concurrency/authz surface inside the package (pure lib). (7.1.12) **GC-1..GC-8** candidate seams parked for Step 2: dist-freshness (GC-1), `GAME_RULES_VERSION` rollout path (GC-2), client engine-type drift / dual engine (GC-3), the float boundary (GC-4), the authority-digest `JSON.stringify(board)` + omitted `handStarters` (GC-5), no cross-runtime determinism proof (GC-6), dead Daily-Puzzle DTOs (GC-7), unstated `sortLegalMoves` invariant (GC-8). §7 status + §7.4 + Current focus + Sequencing updated. **Stop — await human review of §7.1 before Step 2.** |
 
 ---
 
