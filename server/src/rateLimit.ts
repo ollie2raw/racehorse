@@ -1,5 +1,7 @@
+import { isIP } from 'net';
 import type { NextFunction, Request, Response } from 'express';
 import { childLogger } from './logger';
+import { isTrustedInfraPeer } from './trustedProxy';
 
 const log = childLogger('rate-limit');
 
@@ -90,14 +92,27 @@ function retryAfterSeconds(retryAfterMs: number): string {
 }
 
 /**
- * AU-3 (HARDENING_PLAN §6.3): use Express's resolved `req.ip`. With
- * `app.set('trust proxy', 1)` this is the rightmost `X-Forwarded-For` entry —
- * the address Render's load balancer recorded — which a client cannot forge
- * (they can only prepend). Previously this read `x-forwarded-for.split(',')[0]`
- * (the client-settable leftmost entry), so rotating that header gave an
- * unlimited supply of fresh rate-limit buckets.
+ * The client address a rate-limit bucket is keyed on.
+ *
+ * AU-3 (HARDENING_PLAN §6.3), corrected 2026-09-04. Prefer `CF-Connecting-IP` —
+ * Cloudflare (Render's platform edge) sets it to the verified immediate client
+ * and strips any client-supplied value — but only when the request actually
+ * transited trusted infra (`isTrustedInfraPeer`): a raw origin request can send
+ * that header itself, so on an untrusted peer it is ignored and we fall back to
+ * Express's `req.ip` (resolved via the range-based `trust proxy` in
+ * `trustedProxy.ts`, which walks `X-Forwarded-For` past every infra hop to the
+ * real client — a value the client cannot forge).
+ *
+ * The earlier `trust proxy: 1` + bare `req.ip` was one hop short of the real
+ * Cloudflare→Render chain, so distinct clients bucketed onto shared
+ * Render-internal `10.x` keys and hit cross-user false 429s.
  */
 function requestIp(req: Request): string {
+  if (isTrustedInfraPeer(req.socket.remoteAddress)) {
+    const header = req.headers['cf-connecting-ip'];
+    const cfIp = (typeof header === 'string' ? header : Array.isArray(header) ? header[0] ?? '' : '').trim();
+    if (cfIp && isIP(cfIp)) return cfIp;
+  }
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
@@ -119,12 +134,19 @@ export function createRateLimitMiddleware(
       next();
       return;
     }
-    // AU-3 verification hook: after `trust proxy` is set, `reqIp` must be the
-    // real client IP, not a value from a client-supplied `X-Forwarded-For`
-    // prefix. If it ever shows a spoofed prefix, the trust-proxy hop count is
-    // wrong.
+    // AU-3 verification hook: `keyIp` (what the bucket is keyed on) must be a
+    // real, distinct client address — not a shared Render-internal `10.x` hop
+    // and not a client-supplied `X-Forwarded-For` / `CF-Connecting-IP` value.
     log.warn(
-      { scope, key, reqIp: req.ip, xffRaw: req.headers['x-forwarded-for'] ?? null },
+      {
+        scope,
+        key,
+        keyIp: requestIp(req),
+        reqIp: req.ip,
+        peer: req.socket.remoteAddress ?? null,
+        cfConnectingIp: req.headers['cf-connecting-ip'] ?? null,
+        xffRaw: req.headers['x-forwarded-for'] ?? null,
+      },
       'rate limited',
     );
     res.setHeader('Retry-After', retryAfterSeconds(result.retryAfterMs));

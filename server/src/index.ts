@@ -208,6 +208,7 @@ import {
   failedRoomLookupLimiter,
   type RateLimitRule,
 } from './rateLimit';
+import { TRUSTED_PROXY } from './trustedProxy';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
 import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
@@ -358,16 +359,16 @@ const corsOptions: CorsOptions = {
 };
 
 const app = express();
-// AU-3 (HARDENING_PLAN §6.3): Render serves this app behind a single load
-// balancer that appends the real client IP to `X-Forwarded-For`. Trusting
-// exactly 1 hop makes `req.ip` the address Render recorded (the rightmost XFF
-// entry) — a client can prepend spoofed entries but cannot append, so `req.ip`
-// is no longer forgeable. Without this, `requestIp()` read the client-settable
-// leftmost XFF entry and every IP-keyed rate limit was bypassable by rotating
-// the header (confirmed live 2026-09-03). Verify post-deploy via the
-// `rate limited` warn log (`reqIp` must be the real client IP, not a spoofed
-// prefix); bump this value only if that check fails.
-app.set('trust proxy', 1);
+// AU-3 (HARDENING_PLAN §6.3), corrected 2026-09-04. Render fronts this app with
+// its platform Cloudflare AND an internal load balancer — the real chain is two
+// hops (`X-Forwarded-For` = `<client>, <cloudflare>, <render-internal>`), not
+// one. `trust proxy: 1` was one hop short: `req.ip` resolved to a shared
+// Render-internal `10.x` address and distinct clients collided onto ~2
+// rate-limit keys (cross-user false 429s, confirmed in prod logs). `TRUSTED_PROXY`
+// is range-based (Cloudflare + private ranges), so `req.ip` resolves to the
+// real client regardless of the exact hop count; `requestIp()` additionally
+// prefers the Cloudflare-verified `CF-Connecting-IP`.
+app.set('trust proxy', TRUSTED_PROXY);
 app.use(cors(corsOptions));
 /**
  * gzip every JSON response above the default 1 KB threshold.
