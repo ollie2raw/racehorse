@@ -217,7 +217,17 @@ focus" line, then the section for the system in progress.
   sites is a no-op, not a double rating application. **REVISIT IF SCALE
   (untouched, per ratification):** RK-3, RK-5, RK-6. Full suite green
   (server 212/1238, client 217/1483); `tsc -b` clean; lint unchanged
-  (server 217/68, client 401/401 — both at baseline). **Not pushed.**
+  (server 217/68, client 401/401 — both at baseline). **Pushed.**
+  **Update (same day):** the rematch/`bot_match_pending` observation
+  surfaced during RK-1's fix was formalized as **RK-7** and investigated —
+  every `bot:fritz:` seat in the codebase traces to exactly one origin
+  (`scheduledTournament/engine.ts`'s bracket bye-fill), and tournament
+  rooms unconditionally block `game:rematch` before any ready-tracking runs
+  — so the one Fritz-in-room mode with a live `Room` can never reach
+  rematch, and the one Fritz mode that *can* rematch (standalone
+  Play-vs-Fritz) never touches that live-Room mechanism at all, issuing its
+  own fresh `bot_match_pending` row per attempt instead. **RK-7 ranked
+  ACCEPT/DORMANT — not reachable today** (§8.3), not fixed.
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -5171,7 +5181,11 @@ RK-4 ✅ (`periodService.ts` calls `isProvisional()` instead of a duplicated
 `< 20` literal, both write sites). RLS migration file ✅
 (`supabase/migrations/2026-09-04_ranked_games_insert_policy_lockdown.sql`,
 no-op against prod — RK-0 already applied live). **REVISIT IF SCALE
-(untouched):** RK-3, RK-5, RK-6.
+(untouched):** RK-3, RK-5, RK-6. **RK-7** (the rematch/`bot_match_pending`
+observation surfaced during RK-1's fix) investigated post-Step-3 and found
+**not reachable today — ACCEPT/DORMANT**, recorded for re-check if
+tournament-rematch policy, matchmaking bot-fallback, or bot-seat-ID minting
+ever changes.
 
 **RK-1's fix required one more step than RK-2's — recorded because the human
 asked for it before implementation, not found unprompted.** The originally
@@ -5197,8 +5211,8 @@ called on initial match start (`onAfterMatchStarted`), not on rematch — a
 second `bot_match_pending` row is not created for a Fritz rematch in the
 same room, so a rematch-game forfeit today likely finds no unresolved
 pending row and silently records nothing at all (neither the old bug nor
-the new fix apply to it). This is a distinct, not-yet-ranked availability
-gap for a future pass, not folded into RK-1.
+the new fix apply to it). **Formalized and investigated as RK-7 below —
+found NOT reachable today; see that row for the evidence.**
 
 **Scoring** (same axes as §1.3 / §6.3 / §7.3). *Severity* ∈
 {**integrity-oracle** (a rating can be forged, double-applied, or made
@@ -5220,6 +5234,7 @@ authentication required) had it still been open.
 | **RK-4** | **The provisional-rating threshold is duplicated, not shared.** `periodService.ts:170` writes `profiles.provisional` from a hardcoded `newGamesPlayed < 20` literal, independent of the `isProvisional()` function in `glicko2.ts` that exists for exactly this purpose and is otherwise dead code (zero other callers). The two agree today (`< 20` both places) — this is a latent divergence risk, not a live one. | §8.1.1, §8.1.8 | **latent-drift** | **low** today, **certain to matter** the first time the provisional window is retuned | every profile's `provisional` flag (badge, leaderboard-eligibility framing) on the next threshold change | **FIX NOW (trivial)** — replace the literal at `periodService.ts:170` with a call to `isProvisional(newGamesPlayed)`. ~5 min. | RK-INV-6 |
 | **RK-5** | **`ghost/service.ts` maintains its own local `supabaseFetch`, duplicating `supabaseUtils.ts`'s shared helper.** Same request shape (`apikey` + `Authorization: Bearer`, `SUPABASE_SERVICE_KEY`), independently wired, confirmed while verifying RK-0's fix didn't break this path. No behavioral gap today (verified via RK-0's investigation that it authenticates identically as `service_role`) — this is a code-hygiene / single-source-of-truth finding, not a security or correctness one. | §8.1.3 (RK-0 verification) | **process** | n/a — cosmetic/maintenance, not risk-scored | none today; a future divergence (e.g. a timeout or circuit-breaker change made to `supabaseUtils.ts`'s version but not mirrored here) would silently apply only to non-ghost writers | **REVISIT IF SCALE** — consolidate `ghost/service.ts` onto the shared `supabaseUtils.ts` `supabaseFetch`, low urgency, no live risk today. | — |
 | **RK-6** | **The deferred rating-period cron has no boot-time catch-up sweep and an unconfirmed restart story.** `startRankingCron()` runs weekly (Sundays 00:00 UTC) via in-process `node-cron`; unlike other reapers in this codebase (boot sweep + frequent interval), nothing re-triggers `processAllPendingRatingGames()` between scheduled runs, and the sweep loop's atomicity across rows on a mid-sweep process restart was not confirmed this session. | §8.1.2 | **availability** | **low-medium** — Render free tier restarts are not rare; any row inserted between Sundays that missed the inline path sits `rating_after: null` (unranked-looking) for up to 7 days | any ranked game whose inline processing failed, until the next Sunday | **REVISIT IF SCALE** — add a boot-time catch-up sweep mirroring the pattern used elsewhere (`recoverStrandedDailyFritzAttempts`, `recoverTournamentMatches`); confirm/document per-row atomicity on restart. Not urgent at current single-instance, low-volume scale, but cheap to fix and matches an established pattern — candidate for bundling into RK-1/RK-2's Step 3 pass rather than its own effort. | RK-INV-4 |
+| **RK-7** | **`insertPendingFritzMatch()` is only called on initial match start (`onAfterMatchStarted`), not on rematch — investigated for reachability, found NOT reachable today.** Traced every place a `bot:fritz:*` seat ID is minted in the codebase: the **only** call site is `scheduledTournament/engine.ts`'s `BOT_ID_PREFIX` (a tournament-bracket bye-fill, a no-show slot filled by Fritz). Every other reference (`roomSession.ts`, `fritzMatchLifecycle.ts`, `gameOverPersistence.ts`) reacts to a seat ID created there — none of them mint one. `registerRematchPregameHandlers.ts`'s `game:rematch` handler unconditionally rejects a rematch request on `isAnyTournamentRoom(room)` **before any ready-tracking logic runs** — so the one room type that can ever contain a live-Room `bot:fritz:` seat is exactly the room type where a same-room rematch is already blocked outright, independent of this gap. Separately, matchmaking's "sim-bot-fallback" (`matchmaking/index.ts`) never mints a `bot:fritz:` seat in a live `Room` at all — it just signals `queue:timeout { fallbackOffered: true }`, and the client's actual fallback is the **standalone** Play-vs-Fritz screen (client-simulated, no live server `Room`). That screen's "Rematch"/"Try Again" button (`BotMatchModalLayer.tsx` → `navigation.startFreshMatch`) never touches a live Room or `game:rematch` either — it generates a fresh `localMatchId` and calls `/api/bot-matches/local/start` again, which inserts its **own** new `bot_match_pending` row directly (`botMatches.ts:130`), entirely independent of `insertPendingFritzMatch`/`onAfterMatchStarted`. Net: there is no live code path today where a human rematches a Fritz opponent inside the *same* `Room` that `insertPendingFritzMatch`/`bot_match_pending`'s room-code lookup depends on — sizing the failure (silent vs. compensated) is therefore moot; there is nothing to size. (One additional, separate observation surfaced while tracing this, **not itself ranked**: if a Fritz-in-room `game:rematch` were ever reachable, `room.players.every(playerId => room.rematchReady.has(playerId))` has no bot-seat skip anywhere, unlike other readiness checks in `roomSession.ts` which explicitly `continue` past a `bot:fritz:` seat — so it would hang at "Rematch Requested" forever rather than silently misbehave. Not a gap today since the room type is unreachable for rematch either way.) | §8.1.3 (RK-1 investigation) | **latent-drift** (would be **availability** if it ever became reachable) | **none — not reachable in the current codebase** | none today | **ACCEPT — DORMANT.** No code change; recorded so a future change to tournament-rematch policy, matchmaking bot-fallback, or the bot-seat-ID minting site re-opens this specific question rather than silently reintroducing the gap unnoticed. Re-check this row's reachability evidence before shipping any of those three changes. | RK-INV-2 (conditionally, if ever reachable) |
 
 ## 8.4 Checklist
 - [x] Step 1 — rating math + cron + `ranked_games` idempotency current-state map (§8.1)
@@ -5227,6 +5242,7 @@ authentication required) had it still been open.
 - [x] Step 2 — invariants (§8.2, RK-INV-1..8) + risk-ranked gap list (§8.3, RK-1..RK-6) written 2026-09-04
 - [x] Step 2 — invariants + gap list → ratified **D-15** (2026-09-04)
 - [x] Step 3 — FIX-NOW tier (RK-1, RK-2, RK-4) + RLS migration file, committed 2026-09-04, not pushed
+- [x] RK-7 — Fritz rematch/`bot_match_pending` gap formalized, investigated, found not reachable today (ACCEPT/DORMANT), recorded 2026-09-04
 - [ ] RK-3 / RK-5 / RK-6 — REVISIT IF SCALE, untouched
 
 ---
