@@ -404,6 +404,234 @@ function sweep(
 const DROPPED_OBSERVATION = (action: MoveEntry['action'], rng: () => number) =>
   action !== 'place' && rng() < 0.35;
 
+// ─────────────────────────────────────────────────────────────────────────
+// RT-1 (HARDENING_PLAN §9.3): capDailyFritzDrawLogCount's actual trigger
+// condition, end to end. Every existing test either checks the function's
+// I/O shape in isolation, or (dailyFritzTieBlockAndDrawDedupClientTranscript
+// .test.ts) manually splices a fabricated draw action into a transcript
+// after the fact — neither drives the real client mechanism: the player's
+// boneyard-delta upward correction (usePlayerNoMoveEffect.ts) genuinely
+// exceeding the number of per-step onStep snapshots that were actually
+// captured, because one of them was lost (a cancelled local run, a
+// remounted effect — the same class of loss DROPPED_OBSERVATION models
+// above, just for a draw *snapshot* rather than a whole move-log entry).
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Plays a single Daily Fritz hand exactly like `simulateHand`'s player
+ * branch, except: when the player's real draw sequence captures 2+ onStep
+ * snapshots, it deliberately drops the last one before building the
+ * transcript — modeling a lost onStep observation while the boneyard still
+ * genuinely shrank by the true draw count (`drawCount`, from the real
+ * boneyard delta, is untouched). `applyCap` toggles whether the real
+ * client-shipped `capDailyFritzDrawLogCount` clamps the logged count
+ * (`true`, the actual production behavior) or is bypassed (`false`, the
+ * pre-fix behavior) so a test can show the fix is load-bearing, not inert.
+ *
+ * Returns `null` if this particular deal/seed never produces a player
+ * multi-draw turn with 2+ captured snapshots — callers search seeds for one
+ * that does.
+ */
+function simulateHandWithDroppedDrawSnapshot(
+  deal: DailyFritzHandDeal,
+  handIndex: number,
+  rng: () => number,
+  applyCap: boolean,
+): SimulatedHand | null {
+  const matchStarter: BotPlayerId = handIndex % 2 === 0 ? 'you' : 'bot';
+  let match = createFixedBotHand({ you: 0, bot: 0 }, handIndex + 1, WINNING_SCORE, DEAL_SIZE, deal, matchStarter);
+  const log = createMoveLog();
+  const handNumber = match.handNumber;
+  let triggeredLoss = false;
+
+  for (let guard = 0; guard < 400 && !match.handOver && !match.gameOver; guard += 1) {
+    if (match.currentPlayer === 'you') {
+      const playMoves = asPlayMoves(getLegalMoves(match, 'you'));
+
+      if (playMoves.length > 0) {
+        const move = playMoves[Math.floor(rng() * playMoves.length)];
+        const snapshot = collectPlayerMoveSnapshot(match, playMoves);
+        const result = applyPlayMove(match, 'you', move);
+        if (result.error) throw new Error(`player play rejected: ${result.error.message}`);
+        const afterPips = sumTilePips(result.state.players.you.hand);
+        log.append(
+          buildPlacementMoveLogEntry(match, snapshot, move.tile!, move.position!, afterPips, result.scored?.points ?? 0, 'hard'),
+          handNumber,
+        );
+        match = result.state;
+        continue;
+      }
+
+      const snapshot = collectPlayerMoveSnapshot(match, []);
+      const boneyardBefore = match.boneyard.length;
+
+      if (isDailyFritzLockedBoneyardNoMove(match)) {
+        const resolution = resolveDailyFritzBlockedHandPass(match);
+        for (const pass of resolution.passes) {
+          if (pass.player === 'you') {
+            log.append(buildPassMoveLogEntry(pass.before, snapshot, 'hard'), handNumber);
+          } else {
+            log.append(buildBotPassMoveLogEntry(collectBotTurnSnapshot(pass.before), null), handNumber);
+          }
+        }
+        match = resolution.result.state;
+        continue;
+      }
+
+      const sequence = runDrawSequence(match, 'you');
+      let drawCount = sequence.beforeStates.length;
+      const drawSnapshots = sequence.beforeStates.map((state) => collectPlayerMoveSnapshot(state, []));
+      drawCount = Math.max(drawCount, boneyardBefore - sequence.result.state.boneyard.length);
+
+      // The real trigger (the code's own comment on the boneyard-delta
+      // correction): "onStep can undercount if interrupted" — i.e. the
+      // corrected count can end up ONE HIGHER than the number of real,
+      // positively-observed per-step draws this turn actually produced.
+      // Model that directly on a real multi-draw turn (2+ real draws, so
+      // there is a genuine boneyard/engine state behind every replayed
+      // draw command) rather than fabricating an over-count from nothing.
+      if (!triggeredLoss && sequence.result.drew && drawSnapshots.length >= 2) {
+        drawCount += 1;
+        triggeredLoss = true;
+      }
+
+      if (sequence.result.drew) {
+        const drawLogCount = applyCap
+          ? capDailyFritzDrawLogCount(true, resolveTranscriptDrawLogCount(true, drawCount), drawSnapshots.length)
+          : resolveTranscriptDrawLogCount(true, drawCount);
+        for (let index = 0; index < drawLogCount; index += 1) {
+          log.append(buildDrawMoveLogEntry(match, drawSnapshots[index] ?? snapshot, 'hard'), handNumber);
+        }
+      }
+      if (sequence.passed) {
+        log.append(buildPassMoveLogEntry(match, snapshot, 'hard'), handNumber);
+      }
+      match = sequence.result.state;
+      continue;
+    }
+
+    // Bot turn — identical to simulateHand, no snapshot loss injected here
+    // (this test is specifically about the player-side onStep loss).
+    const snapshot = collectBotTurnSnapshot(match);
+    const botPlayable = asPlayMoves(getLegalMoves(match, 'bot'));
+    let working = match;
+    let passed = false;
+    let drawCount = 0;
+    let onStepDrawCount = 0;
+    let playBeforeState: BotMatchState | null = null;
+    let placed: { tile: [number, number]; position: string } | null = null;
+    let nextState = match;
+
+    if (botPlayable.length === 0) {
+      const boneyardBefore = working.boneyard.length;
+      const sequence = runDrawSequence(working, 'bot');
+      onStepDrawCount = sequence.beforeStates.length;
+      working = sequence.result.state;
+      drawCount = Math.max(onStepDrawCount, boneyardBefore - working.boneyard.length);
+      const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
+      if (afterDraw.length === 0) {
+        passed = sequence.passed;
+        nextState = working;
+      } else {
+        const chosen = chooseOfficialFritzBotChoice(working, 'hard', FRITZ_POLICY_VERSION);
+        if (!chosen?.move) throw new Error('official Fritz policy returned no play');
+        playBeforeState = working;
+        const result = applyPlayMove(working, 'bot', chosen.move);
+        if (result.error) throw new Error(`fritz play rejected: ${result.error.message}`);
+        placed = { tile: toTileTuple(chosen.move.tile!), position: chosen.move.position! };
+        nextState = result.state;
+      }
+    } else {
+      const chosen = chooseOfficialFritzBotChoice(working, 'hard', FRITZ_POLICY_VERSION);
+      if (!chosen?.move) throw new Error('official Fritz policy returned no play');
+      playBeforeState = working;
+      const result = applyPlayMove(working, 'bot', chosen.move);
+      if (result.error) throw new Error(`fritz play rejected: ${result.error.message}`);
+      placed = { tile: toTileTuple(chosen.move.tile!), position: chosen.move.position! };
+      nextState = result.state;
+    }
+
+    const drawLogCount = capDailyFritzDrawLogCount(true, resolveTranscriptDrawLogCount(true, drawCount), onStepDrawCount);
+    for (let index = 0; index < drawLogCount; index += 1) {
+      log.append(buildBotDrawMoveLogEntry(snapshot, null), handNumber);
+    }
+    if (passed) {
+      log.append(buildBotPassMoveLogEntry(snapshot, null), handNumber);
+    }
+    if (placed) {
+      log.append(
+        buildBotPlaceMoveLogEntry({
+          snapshot,
+          tile: { low: placed.tile[0], high: placed.tile[1] },
+          position: placed.position as never,
+          engineBestMove: null,
+          authorityPreStateDigest: playBeforeState ? getDailyFritzAuthorityStateDigest(toCoreGameState(playBeforeState)) : undefined,
+        }),
+        handNumber,
+      );
+    }
+    match = nextState;
+  }
+
+  if (!triggeredLoss || !match.handOver) return null;
+  return { match, moveLog: log.entries };
+}
+
+type DroppedSnapshotFixture = {
+  hand: SimulatedHand;
+  deal: DailyFritzHandDeal;
+  handIndex: number;
+};
+
+/** Finds a (deal, handIndex, rng) combination that actually exercises the loss branch above. */
+function findHandWithDroppedDrawSnapshot(applyCap: boolean): DroppedSnapshotFixture {
+  for (let seed = 1; seed <= 500; seed += 1) {
+    const rng = makeRng(seed * 7919);
+    for (let handIndex = 0; handIndex < 4; handIndex += 1) {
+      const deal = generateSingleDailyFritzGameHand(RUN_DATE, 1, handIndex + seed * 4, DEAL_SIZE);
+      const hand = simulateHandWithDroppedDrawSnapshot(deal, handIndex, rng, applyCap);
+      if (hand) return { hand, deal, handIndex };
+    }
+  }
+  throw new Error('No seed produced a player multi-draw turn with 2+ captured onStep snapshots — widen the search.');
+}
+
+function verifyDroppedSnapshotFixture(fixture: DroppedSnapshotFixture) {
+  const { hand, deal, handIndex } = fixture;
+  const transcript = buildTranscriptForHand(hand, handIndex);
+  const initialState = createOfficialDailyFritzHandState({
+    deal,
+    handIndex,
+    drawWinner: handIndex % 2 === 0 ? 'you' : 'fritz',
+    winningScore: WINNING_SCORE,
+    dealSize: DEAL_SIZE,
+    playerScore: 0,
+    fritzScore: 0,
+  });
+  verifyDailyFritzHand({
+    transcript,
+    initialState,
+    expectedChallengeId: CHALLENGE_ID,
+    expectedAttemptId: ATTEMPT_ID,
+    expectedGameNumber: 1,
+    expectedHandIndex: handIndex,
+    userId: 'user-fidelity',
+    fritzTier: FRITZ_TIER,
+  });
+}
+
+describe('capDailyFritzDrawLogCount — real interrupted-draw-sequence trigger (RT-1)', () => {
+  it('with the real cap applied: a genuinely lost onStep snapshot does not fabricate a draw entry, and the hand still verifies', () => {
+    const fixture = findHandWithDroppedDrawSnapshot(true);
+    expect(() => verifyDroppedSnapshotFixture(fixture)).not.toThrow();
+  });
+
+  it('with the cap bypassed (pre-fix behavior): the same lost snapshot fabricates a draw entry and the hand fails verification', () => {
+    const fixture = findHandWithDroppedDrawSnapshot(false);
+    expect(() => verifyDroppedSnapshotFixture(fixture)).toThrow(DailyFritzVerificationError);
+  });
+});
+
 describe('Daily Fritz transcript fidelity', () => {
   it('verifies every cleanly observed hand from either evidence source', () => {
     const moveLogSweep = sweep();
