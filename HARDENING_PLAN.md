@@ -270,8 +270,24 @@ focus" line, then the section for the system in progress.
   (single-engine-of-record); every commit path funnels through one
   `commitResolvedGameState()` gate (the same invariant-checker GC-9
   flagged with a prod off-switch — not re-litigated, just confirmed as
-  the call site). **Audit only — no fixes, no invariants/gap-ranking yet.
-  Awaiting human review before Step 2.**
+  the call site). **Update (same day) — Steps 1 follow-up + 2 done, §9.2/
+  §9.3 written, awaiting human ratification.** Resolved 3 specific
+  §9.1.12 open items before Step 2 (§9.1.13): (1) the Daily Fritz
+  next-hand route's idempotency claim **confirmed true** — a real
+  per-attempt FIFO lock + explicit replay-vs-conflict branching, not just
+  an assumption (RT-INV-6); (2) `capDailyFritzDrawLogCount`'s test
+  coverage **confirmed thin** — three tiers of test exist, none drive the
+  real interrupted-draw-sequence trigger condition end-to-end, ranked
+  **RT-1 (FIX NOW, small — add one test)**; (3) `preGameDrawPersistence.ts`
+  **confirmed NOT a stranding risk** — the draw winner is server-scripted
+  and re-derivable, and the real hard-refresh durability for match state
+  is a separate, genuine `localStorage` mechanism
+  (`persistDailyFritzSnapshot`) already built for that purpose; the
+  in-memory Map's misleading name is a minor, unranked note. §9.2 has **9
+  invariants** (RT-INV-1..9); §9.3 is an explicit **partial** gap list
+  (RT-1 only) — the rest of §9.1.12 stays deferred, not yet triaged, same
+  precedent as System 8's §8.1.6 residual. **Audit and rank only — no
+  Step 3 fixes. Awaiting human ratification.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -742,7 +758,7 @@ own Step 1 when work reaches it. There is no System 4.
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
 7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–3 done + PUSHED (§7.1 reviewed; §7.2/§7.3 RATIFIED D-14; Step 3 `d8bed8ca` deployed, CI green).** GC-1+GC-9 (buildStamp + `/ready.gameCore` + smoke — confirmed `consistent: true` live), GC-6+GC-8 (`localeCompare`→code-unit; **`FRITZ_POLICY_VERSION` 3**; `sortLegalMoves` pinned), GC-3a (leaf-type `expectTypeOf` guard), GC-4 (`/bot` subpath + verifier import boundary), **GC-5 (re-ranked FIX NOW same-day on a live incident — 12 confirmed false-positive leaderboard demotions since 2026-08-01 — fixed, deployed, and 3 historical attempts retroactively restored to `verified`)**. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout, human-action). REVISIT: GC-3b. ACCEPT: GC-7.
 8. **Ranking / Glicko-2** (cross-cutting) ← **Steps 1–3 done + PUSHED (§8.1 audit; §8.2/§8.3 RATIFIED D-15; RK-1/RK-2/RK-4 + RLS migration file `368ec526`, deployed, CI green).** **RK-0** (live exploitable RLS INSERT-policy gap, found + fixed same day, outside normal cadence) closed. RK-1+RK-2 (Fritz `ranked_games` inserts now idempotent), RK-4 (`isProvisional()` de-duplicated). **RK-7** (Fritz rematch/`bot_match_pending` gap) investigated — **ACCEPT/DORMANT, not reachable today**. REVISIT IF SCALE: RK-3, RK-5, RK-6.
-9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Step 1 done (§9.1 written 2026-09-04, awaiting human review).** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`).
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–2 done (§9.1 + §9.1.13 + §9.2/§9.3 written 2026-09-04, awaiting human ratification).** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, FIX NOW small); pre-game-draw reload **confirmed safe** (real durability is a separate `localStorage` mechanism). 9 invariants (§9.2); a deliberately **partial** gap list (§9.3, RT-1 only) — rest of §9.1.12 stays deferred.
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
 11. **Social / stats / account** ← scaffold
 12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
@@ -5586,17 +5602,13 @@ races outside it; it did not describe `act()`'s body. Read `act()` +
 - `client/src/match/board/` (board rendering) — explicitly listed in
   scope, not sampled this pass; pure rendering is lower integrity risk but
   not zero (e.g. a rendering bug misleading a player about legal moves).
-- `client/src/match/preGameDraw/` (12 files) — the pre-game tile-draw
-  mechanic; `usePreGameDraw.ts`/`preGameDrawLogic.ts` not read, though
-  `preGameDrawPersistence.ts`'s existence suggests a durability question
-  (does an interrupted pre-game draw survive a reload?) worth a Step 2
-  look.
+- `client/src/match/preGameDraw/` (12 files) beyond
+  `preGameDrawPersistence.ts` (resolved, §9.1.13) — `usePreGameDraw.ts`'s
+  broader logic / `preGameDrawLogic.ts` / `preGameDrawScatter.ts` not read
+  beyond what §9.1.13 needed to answer the reload question.
 - `useLiveMatchSession.ts`'s composed hooks (`useTransientRoomUi`,
   `useLiveMatchActions`, `useTileSelection`, `useHandRevealSequence`,
   `useLiveMatchViewModel`) — named in §9.1.9, not individually read.
-- `resolveDailyFritzNextHandCache`'s "server path is idempotent" claim
-  (§9.1.4) — a client-side assumption about server behavior, not verified
-  against the actual Daily Fritz next-hand route in this pass.
 - `roomEvents.ts`'s consumers beyond the write side already covered in
   §9.1.11 and RK-1's prior investigation (spectator reconstruction,
   replay-from-event-log, if any) — not traced.
@@ -5608,16 +5620,207 @@ races outside it; it did not describe `act()`'s body. Read `act()` +
   `pregameDraw.ts`/deterministic RNG per §7.1.4, server-side only?) were
   not read this pass.
 
+### 9.1.13 Three open items from §9.1.12, resolved before Step 2
+
+**1. `resolveDailyFritzNextHandCache`'s "the server path is idempotent"
+claim — CONFIRMED TRUE.** Read `dailyFritzNextHandRoute.ts`
+(`/api/daily-fritz/next-hand`) in full. Two independent mechanisms make a
+resend genuinely safe, not just probably-fine:
+
+- **`withDailyFritzAttemptLock(attemptId, ...)`** (read in full, 23 LOC)
+  is a real per-attempt-id in-process FIFO promise-chain mutex — a second
+  request for the same `attemptId` that arrives *while the first is still
+  in flight* (a genuine concurrent double-request, not just a sequential
+  retry) queues and waits for the first to fully complete, including its
+  DB write, before it runs at all.
+- Once that second request runs, it sees the already-advanced
+  `attempt.currentHandIndex` and takes an explicit **replay** branch
+  (`attempt.currentHandIndex === completedHandIndex + 1` →
+  `respondWithCurrentHand(..., { replayed: true })`, or a matching
+  `existingHand` digest → the same replay path) rather than reprocessing
+  the hand. A digest **mismatch** on retry (evidence differs from what was
+  already verified) is correctly treated as a real conflict (409
+  `verified_hand_conflict`), not silently replayed — so this isn't "always
+  return success," it's a genuine idempotent-retry-of-the-same-request
+  contract.
+
+**Caveat, not new:** the lock is in-process only — already flagged as
+DF-CAND-5 in System 3's Step 1 (`withDailyFritzAttemptLock` in-process
+only). Doesn't undermine this finding under the current verified
+single-Render-instance topology (D-2), same scope boundary System 2's
+concurrency analysis uses throughout. **Confirmed-fine — no new gap.**
+
+**2. `capDailyFritzDrawLogCount` test coverage — CONFIRMED THIN, as
+suspected.** Three tiers of test exist, and none of them drive the actual
+trigger condition end-to-end:
+
+- `dailyFritzDrawTranscript.test.ts` — pure unit tests of the function's
+  input/output shape in isolation (`capDailyFritzDrawLogCount(true, 3, 2)
+  === 2`, etc.). Real, but proves nothing about whether the real draw
+  pipeline ever produces those inputs correctly.
+- `dailyFritzTranscriptFidelity.test.ts` — a full-simulation,
+  real-HTTP-verified harness that **reuses the real capping call inline**,
+  but its `drawCount` (boneyard-delta-corrected) and `drawSnapshots.length`
+  (onStep-collected) are both derived from the *same* uninterrupted
+  simulation run, so they always naturally agree — the cap is exercised
+  only in its no-op passthrough branch across every test in this file,
+  never its actual clamping branch.
+- `dailyFritzTieBlockAndDrawDedupClientTranscript.test.ts`'s
+  "REPRODUCTION" test — proves the **server's** rejection behavior for a
+  spurious extra draw is real and permanent (valuable, a genuine
+  regression guard), but it manually **splices a fabricated draw action
+  directly into the transcript's action list** after the fact — it never
+  drives the real client trigger path (`usePlayerNoMoveEffect.ts`'s
+  boneyard-delta upward correction under a genuinely interrupted/
+  undercounted `onStep` sequence) that `capDailyFritzDrawLogCount` exists
+  to guard against in production.
+
+**No test starts from a real interrupted-draw-sequence scenario in the
+actual client code path, confirms `capDailyFritzDrawLogCount` (wired into
+that real pipeline) prevents the fabricated entry, and confirms the
+resulting transcript verifies cleanly.** The fix itself is correct by
+inspection (§9.1.5) and by its own isolated-unit-test contract — this is a
+coverage gap, not a live bug. Ranked **RT-1** in §9.3.
+
+**3. `preGameDrawPersistence.ts` reload/reconnect behavior — CONFIRMED
+FINE, not a stranding risk, but the file's naming is misleading.** Its
+`snapshots = new Map()` is **plain in-memory module state** — not
+`localStorage`, not a server call — so it does not survive an actual page
+reload despite the "persist"/"snapshot"/"restore" naming; only the
+real durability mechanism matters for that. Traced the actual reload
+story:
+
+- The pre-game-draw **winner is server-scripted, not a client-decided
+  random draw**: `usePreGameDraw`'s `scriptedWinner` comes from
+  `dailyFritzPackage.draw_winner`, deterministically computed server-side
+  from `runDate`/`gameNumber` (`resolveDailyFritzDrawWinner`) and
+  re-derivable at any time. A reload mid-animation restarts the (purely
+  cosmetic) tile-flip from scratch and lands on the **same correct
+  winner** — nothing of consequence is lost because nothing consequential
+  had been committed yet at that phase.
+- The **actual match state** (once a hand is in progress) has its own,
+  genuinely durable mechanism: `persistDailyFritzSnapshot`/
+  `discardDailyFritzSnapshot` (`dailyFritzStorageKey`, real `localStorage`)
+  — its own code comment states the purpose explicitly: "seed the local
+  write buffer from server authority... after a hard refresh." On
+  bootstrap, `preGameDrawCompleted` initializes to
+  `Boolean(resumablePersistedDailyFritzMatch)` — a resumed match with a
+  playable persisted snapshot skips the draw screen entirely and resumes
+  the hand directly, correctly.
+- So `preGameDrawPersistence.ts`'s in-memory Map is not the reload-survival
+  path at all — by elimination, its actual purpose is smoothing a
+  same-page-load **React remount** (e.g. dev StrictMode double-invoke)
+  so the draw animation doesn't visibly restart, a narrower and different
+  job than its naming implies.
+
+**Confirmed-fine for the reload/stranding question asked** — no gap
+ranked for the behavior. The naming-vs-actual-purpose mismatch is a minor
+process finding, noted but not ranked as its own row (too small to be
+worth a table entry; a comment clarifying the file's real scope would be
+a good cheap Step-3 addition if RT-1 is ever touched in the same pass).
+
 ## 9.2 Invariants
-**Not started.** Step 2.
+
+The properties that must hold for the match runtime layer (client
+turn-execution + server `act()`) to be trustworthy. Status: **HOLDS**
+(enforced/true today) / **PARTIAL** / **AT RISK** / **DOES NOT HOLD**.
+
+- **RT-INV-1 — Client-local turn execution discards stale async results.**
+  A bot-turn (or hand-lifecycle) callback that resolves after the live
+  match has already moved past it (hand number changed, game/hand already
+  over) must not mutate state. *HOLDS —
+  `shouldApplyBotActionResult`(§9.1.4) is the single gate every bot-turn
+  completion passes through (`completeBotTurnAction`, §9.1.6); the
+  `LocalRunToken`/`isLocalRunCurrent`/`cancelled` triple additionally
+  guards the async draw-sequence path against a stale/abandoned local
+  "run" — confirmed threaded consistently everywhere sampled, not
+  exhaustively traced to every async boundary in the 30-file `bot-turn`
+  folder.*
+- **RT-INV-2 — Server move legality is engine-delegated, never
+  re-implemented in `rooms.ts`.** *HOLDS — read `act()`/`actUnlocked()` in
+  full (§9.1.11): MOVE/PASS legality is entirely `applyMove`'s
+  responsibility (the game-core engine function); `act()` trusts its
+  thrown errors rather than duplicating turn/legality checks. Reinforces
+  System 7's GC-INV-1 (single-engine-of-record) with a second confirmed
+  instance, not a new invariant in substance.*
+- **RT-INV-3 — Every server state commit passes through one
+  invariant-checked gate.** *HOLDS — `commitResolvedGameState()` (§9.1.11)
+  is the only path that assigns `room.state`; it always runs
+  `assertTileCountInvariant` + `assertValidGameState` first. Carries
+  forward System 7's GC-9 caveat unchanged (a `SOFT_GAME_INVARIANTS` prod
+  off-switch downgrades a violation to a log line) — not re-litigated
+  here, just confirmed this is the actual call site that caveat applies
+  to.*
+- **RT-INV-4 — Authoritative multiplayer broadcasts are shape-validated
+  before entering client state; malformed input fails closed.** *HOLDS —
+  `boardSnapshotGuards.ts`'s `projectMultiplayerGameState` (§9.1.9)
+  returns `null` (not a best-effort coercion) on anything that doesn't
+  match the `BoardState` contract exactly.*
+- **RT-INV-5 — Daily Fritz transcript evidence-authoring cannot fabricate
+  an over-counted draw action.** *HOLDS in code, THIN on proof —
+  `capDailyFritzDrawLogCount` correctly caps the logged draw count at the
+  number of positively-observed per-step snapshots (§9.1.5/§9.1.13
+  investigation 2), but no test drives the actual interrupted-draw-sequence
+  trigger condition end-to-end and confirms the cap engages under it — see
+  RT-1.*
+- **RT-INV-6 — A resent/duplicate Daily Fritz next-hand request is a safe
+  no-op, never a double-processed hand.** *HOLDS — confirmed via
+  §9.1.13 investigation 1: `withDailyFritzAttemptLock` serializes genuine
+  concurrent requests; digest-matched retries replay rather than
+  reprocess; a genuine digest mismatch is a real 409 conflict, not a
+  silent replay. Carries forward System 3's DF-CAND-5 (the lock is
+  in-process only) unchanged — scoped the same way System 2's concurrency
+  analysis is (single verified Render instance, D-2).*
+- **RT-INV-7 — Interrupting a local match during the pre-game-draw phase
+  never loses game state or strands the player.** *HOLDS — confirmed via
+  §9.1.13 investigation 3: the draw winner is server-scripted and
+  re-derivable, not a client-owned random outcome; nothing consequential
+  is committed before the draw completes, so a reload just restarts a
+  cosmetic animation that lands on the same correct winner.*
+- **RT-INV-8 — Local Daily Fritz match state surviving a hard refresh is
+  a real, server-authority-seeded mechanism.** *HOLDS —
+  `persistDailyFritzSnapshot`/`discardDailyFritzSnapshot`
+  (`dailyFritzStorageKey`, real `localStorage`), confirmed via §9.1.13 —
+  explicitly built and commented for hard-refresh survival, distinct from
+  (and not to be confused with) `preGameDrawPersistence.ts`'s ephemeral
+  in-memory Map, which is a same-remount smoother only.*
+- **RT-INV-9 — Client evidence/digest computation reuses the shared
+  `@racehorse/game-core` package rather than a local reimplementation.**
+  *HOLDS for the one call site checked — `authorityPreStateDigest`
+  (§9.1.5) calls `getDailyFritzAuthorityStateDigest` from the real
+  package, so it inherited GC-5's canonical-serialization fix
+  automatically. **Not exhaustively checked** for every other piece of
+  client-side evidence construction in the transcript-authoring path
+  (`dailyFritzTranscript.ts`, §9.1.12 territory) — carried to Step 2/a
+  future pass rather than asserted universally from one confirmed
+  instance.*
 
 ## 9.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+
+**Scoring** (same axes as §1.3 / §6.3 / §7.3 / §8.3). *Severity* ∈
+{**integrity-oracle** (a move or evidence can be forged, misapplied, or
+made unverifiable), **availability** (a legitimate match strands or a
+player loses progress), **latent-drift**, **process**, **cosmetic**}.
+*Verdict* ∈ {**FIX NOW**, **POSTURE**, **REVISIT IF SCALE**, **ACCEPT**}.
+
+This is a **partial gap list** — scoped to the three items §9.1.13
+investigated per explicit instruction, plus RT-INV-9's carve-out. The
+remainder of §9.1.12's "not yet covered" list stays deferred (not yet
+triaged into ranked gaps), consistent with how System 8's §8.1.6 residual
+items were carried past its own Step 2 ratification. A future revisit of
+this system should re-open §9.1.12 before treating it as closed.
+
+| ID | Gap | §9.1 ref | Severity | Likelihood | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **RT-1** | **No test drives the real interrupted-draw-sequence trigger condition for `capDailyFritzDrawLogCount` end-to-end.** The fix that prevents a fabricated 'draw' transcript entry (and the unrecoverable `illegal_action` server rejection it causes — a real, previously-occurred production incident per the existing test's own comment) is correct by code inspection and by isolated unit test, but nothing exercises the actual client trigger path (`usePlayerNoMoveEffect.ts`'s boneyard-delta upward correction under a genuinely undercounted `onStep` sequence) and confirms the cap engages and the resulting transcript still verifies. A future refactor of the draw-sequence code could silently break the cap's wiring — same input/output contract, wrong call site — with no test catching it. | §9.1.5, §9.1.13 (item 2) | **latent-drift** (would become **availability** — a stuck Hand-Over screen, the exact prior incident — if the wiring ever broke) | **low** today (the fix is correct and has held since it shipped) but **the regression would be silent** — no test would fail | any Daily Fritz player whose local draw sequence is genuinely interrupted (network hiccup, backgrounded tab, slow device) at the exact moment `onStep` under-fires relative to the boneyard delta | **FIX NOW (small)** — add one test that drives `usePlayerNoMoveEffect.ts`'s (or `runBotDrawPassSequence`'s) real boneyard-delta-correction path with a deliberately short/interrupted `onStep` snapshot sequence, confirms `capDailyFritzDrawLogCount` clamps the logged count, and confirms the resulting transcript verifies cleanly through the real HTTP path (extending the existing `dailyFritzTranscriptFidelity.test.ts` harness is the natural home — it already wires the real capping call). ~2–3 h. | RT-INV-5 |
 
 ## 9.4 Checklist
-- [x] Step 1 — covered-vs-remainder map (§9.1.1), then current-state of the remainder (§9.1.2–§9.1.11), written 2026-09-04 — **awaiting human review**
+- [x] Step 1 — covered-vs-remainder map (§9.1.1), then current-state of the remainder (§9.1.2–§9.1.11), written 2026-09-04
+- [x] Step 1 follow-up — three §9.1.12 open items resolved (§9.1.13): idempotency claim confirmed true (RT-INV-6), draw-log-count test coverage confirmed thin (RT-1), pre-game-draw reload confirmed safe (RT-INV-7/8)
+- [x] Step 2 — invariants (§9.2, RT-INV-1..9) + partial risk-ranked gap list (§9.3, RT-1) written 2026-09-04 — **awaiting human ratification**
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + tests
+- [ ] Remainder of §9.1.12 (guided/, ghost/ client half, daily-puzzle/, board/, preGameDraw/ beyond persistence, the composed session hooks, roomEvents.ts consumers, review hooks, deal-generation bodies) — deferred, not yet triaged into ranked gaps
 
 ---
 
