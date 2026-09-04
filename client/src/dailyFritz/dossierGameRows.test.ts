@@ -14,15 +14,16 @@ describe('buildDossierGameRows', () => {
     expect(rows[2]).toEqual({ gameNumber: 3, played: false });
   });
 
-  it('fills the bar with the winner’s share of the points', () => {
+  it('tones a won game green regardless of margin — the bar no longer scales to score', () => {
     const [row] = buildDossierGameRows([g(1, 65, 33)]);
-    // 65 of 98 points.
-    expect(row).toMatchObject({ sharePercent: 66, side: 'player' });
+    expect(row).toMatchObject({ tone: 'win', score: '65–33' });
+    expect(row).not.toHaveProperty('sharePercent');
+    expect(row).not.toHaveProperty('side');
   });
 
-  it('anchors a lost game to Fritz’s side', () => {
+  it('tones a lost game red, however close the margin', () => {
     const [row] = buildDossierGameRows([g(1, 49, 60)]);
-    expect(row).toMatchObject({ side: 'fritz', tone: 'loss', sharePercent: 55 });
+    expect(row).toMatchObject({ tone: 'loss', score: '49–60' });
   });
 
   it('tones a won skunk gold, but never a lost one', () => {
@@ -30,7 +31,7 @@ describe('buildDossierGameRows', () => {
     expect(buildDossierGameRows([g(1, 12, 60, true)])[0]).toMatchObject({ tone: 'loss' });
   });
 
-  it('halves a scoreless game rather than dividing by zero', () => {
-    expect(buildDossierGameRows([g(1, 0, 0)])[0]).toMatchObject({ sharePercent: 50 });
+  it('scores a 0–0 game as a loss (not won), even though there is nothing to compare', () => {
+    expect(buildDossierGameRows([g(1, 0, 0)])[0]).toMatchObject({ tone: 'loss', score: '0–0' });
   });
 });

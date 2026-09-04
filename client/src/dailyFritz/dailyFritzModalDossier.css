@@ -98,27 +98,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * One bar per game, full width always — the score margin does not drive
+ * width or anchor at all (the score text next to the bar carries that).
+ * Only the outcome drives the color.
+ */
 .dfd__track {
-  position: relative;
   flex: 1;
   height: 2px;
+  border-radius: 1px;
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* The fill is the winner's share of the points, anchored to their side. */
-.dfd__fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-}
-
-.dfd__fill--win { left: 0; background: var(--dfd-win); }
-.dfd__fill--skunk {
-  left: 0;
+.dfd__track--win { background: var(--dfd-win); }
+.dfd__track--loss { background: rgba(240, 160, 168, 0.75); }
+.dfd__track--skunk {
   background: var(--dfd-accent);
   box-shadow: 0 0 10px 0 rgba(231, 182, 74, 0.7);
 }
-.dfd__fill--loss { right: 0; background: rgba(240, 160, 168, 0.75); }
 
 .dfd__game-score {
   min-width: 58px;

@@ -10,19 +10,16 @@ export type DossierGameRow =
       played: true;
       score: string;
       tone: 'win' | 'loss' | 'skunk';
-      /** The winner's share of the points, as a percentage of the track. */
-      sharePercent: number;
-      /** Which edge the fill is anchored to. */
-      side: 'player' | 'fritz';
     };
 
 /**
  * Builds the three fixed game rows on a dossier card.
  *
  * All three are always present — an unplayed decider is greyed rather than
- * dropped, so the card keeps one shape whatever happened. The bar carries the
- * winner's share of that game's points, which is why a shutout reads as a near
- * full bar and a tight game as a near half.
+ * dropped, so the card keeps one shape whatever happened. The bar is a solid
+ * color keyed to `tone` only — it does not scale to the score margin (the
+ * score text next to it carries that), so every row is the same full-width
+ * shape regardless of how close the game was.
  */
 export function buildDossierGameRows(
   games: DailyFritzSetOverlayViewModel['games'],
@@ -35,17 +32,13 @@ export function buildDossierGameRows(
 
     const player = Math.max(0, game.playerScore);
     const fritz = Math.max(0, game.fritzScore);
-    const total = player + fritz;
     const playerWon = player > fritz;
-    const winnerShare = total === 0 ? 50 : ((playerWon ? player : fritz) / total) * 100;
 
     return {
       gameNumber,
       played: true as const,
       score: `${player}–${fritz}`,
       tone: game.skunk && playerWon ? ('skunk' as const) : playerWon ? ('win' as const) : ('loss' as const),
-      sharePercent: Math.round(winnerShare),
-      side: playerWon ? ('player' as const) : ('fritz' as const),
     };
   });
 }

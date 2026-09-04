@@ -48,14 +48,9 @@ export function DailyFritzFinalResultOverlay({
                 className={`dfd__game${row.played ? '' : ' dfd__game--empty'}`}
               >
                 <span className="dfd__game-no">G{row.gameNumber}</span>
-                <span className="dfd__track">
-                  {row.played ? (
-                    <span
-                      className={`dfd__fill dfd__fill--${row.tone}`}
-                      style={{ width: `${row.sharePercent}%` }}
-                    />
-                  ) : null}
-                </span>
+                <span
+                  className={`dfd__track${row.played ? ` dfd__track--${row.tone}` : ''}`}
+                />
                 {row.played && row.tone === 'skunk' ? (
                   <span className="dfd__game-tag">Skunk</span>
                 ) : null}
