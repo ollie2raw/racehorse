@@ -237,7 +237,7 @@ function freshClientStartRequestBody() {
     fritz_policy_contract: getFritzPolicyContract(FRITZ_POLICY_VERSION),
     state_digest_version: DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
     supported_transcript_protocol_versions: [1, DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION],
-    supported_fritz_policies: ([1, 2] as const).map((version) => ({
+    supported_fritz_policies: ([1, 2, 3] as const).map((version) => ({
       version,
       contract: getFritzPolicyContract(version),
     })),

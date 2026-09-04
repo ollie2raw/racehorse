@@ -209,6 +209,7 @@ import {
   type RateLimitRule,
 } from './rateLimit';
 import { TRUSTED_PROXY } from './trustedProxy';
+import { getGameCoreConsistency } from './platform/gameCoreConsistency';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
 import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
@@ -883,6 +884,25 @@ registerHealthRoutes({
 
 server.listen(PORT, () => {
   log.info({ port: PORT }, 'server listening');
+  // GC-1 / GC-9 (HARDENING_PLAN §7.3): assert the game-core `dist/` this process
+  // loaded was built from the committed `src/`, and surface the invariant-guard
+  // posture. `consistent: false` means prod is running a stale engine.
+  {
+    const gc = getGameCoreConsistency();
+    if (gc.consistent === false) {
+      log.error({ ...gc }, 'game-core dist does NOT match committed src — prod may be running a stale engine');
+      Sentry.captureException(
+        new Error(`game-core consistency: dist ${gc.distSrcSha256} != src ${gc.srcSha256}`),
+      );
+    } else if (gc.consistent === 'unverifiable') {
+      log.warn({ reason: gc.reason }, 'game-core dist/src consistency unverifiable');
+    } else {
+      log.info({ srcSha256: gc.srcSha256?.slice(0, 12), builtAt: gc.builtAt }, 'game-core dist matches committed src');
+    }
+    if (gc.softInvariants && process.env.NODE_ENV === 'production') {
+      log.warn({}, 'SOFT_GAME_INVARIANTS=true in production — game-state corruption is logged, not blocked');
+    }
+  }
   bootstrapScheduledTournamentInfrastructure(io, app);
   void probeRoomMatchLogsTable()
     .then((ok) => {

@@ -158,7 +158,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       return {
         ...rec,
         branches,
-      } as BoardState['hubDoubles'][number];
+      } as unknown as BoardState['hubDoubles'][number];
     });
   };
 

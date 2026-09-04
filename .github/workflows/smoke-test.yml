@@ -27,6 +27,27 @@ jobs:
           fi
           echo "OK: /healthz db=ok"
 
+      - name: /ready — game-core dist matches the deployed src (GC-1)
+        run: |
+          RESPONSE=$(curl -s --max-time 15 https://racehorse.onrender.com/ready)
+          GC=$(echo "$RESPONSE" | jq -c '.gameCore // empty')
+          echo "gameCore: $GC"
+          if [ -z "$GC" ]; then
+            echo "ERROR: /ready has no gameCore field — either the deploy has not landed yet (re-run) or the field regressed"
+            exit 1
+          fi
+          CONSISTENT=$(echo "$GC" | jq -r '.consistent')
+          if [ "$CONSISTENT" != "true" ]; then
+            echo "ERROR: /ready gameCore.consistent is '$CONSISTENT' — prod may be running a stale engine (GC-1). reason=$(echo "$GC" | jq -r '.reason')"
+            exit 1
+          fi
+          SOFT=$(echo "$GC" | jq -r '.softInvariants')
+          if [ "$SOFT" = "true" ]; then
+            echo "ERROR: SOFT_GAME_INVARIANTS=true in production — corruption is logged, not blocked (GC-9)"
+            exit 1
+          fi
+          echo "OK: game-core dist == src, invariants fail-closed"
+
       - name: /api/daily-fritz/today — returns 401 for unauthenticated (not 500 or HTML)
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://racehorse.onrender.com/api/daily-fritz/today)

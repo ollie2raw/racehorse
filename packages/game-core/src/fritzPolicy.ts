@@ -5,15 +5,38 @@ import { computeOpenEndsSum, computePlayScore, getOpenEnds, simulatePlacement } 
 import type { GameState, Move, PlacementPosition, Tile } from './types';
 import { tileEquals } from './types';
 
-/** Bumped when official Fritz selection/scoring semantics change (deterministic ties, empty-arm collapse). */
-export const FRITZ_POLICY_VERSION = 2 as const;
+/**
+ * Bumped when official Fritz selection/scoring semantics change (deterministic
+ * ties, empty-arm collapse).
+ *
+ * v3 (GC-6, HARDENING_PLAN §7.3): the strategic-score tie-break switched from
+ * `String.localeCompare` — which has no locale argument and is therefore
+ * host/locale-dependent, so the "deterministic canonical ties" of v2 were not
+ * actually runtime-deterministic — to a pure UTF-16 code-unit comparison. The
+ * top-scoring set is unchanged, so `FRITZ_POLICY_MIN_SUPPORTED_VERSION` stays 1
+ * and every historical v1/v2 transcript still verifies (the verifier accepts any
+ * top-score play). The bump is the record of the behaviour change, per the
+ * project's policy-versioning standard.
+ */
+export const FRITZ_POLICY_VERSION = 3 as const;
 /** Oldest policy version the verifier still accepts on historical transcripts. */
 export const FRITZ_POLICY_MIN_SUPPORTED_VERSION = 1 as const;
-export type FritzPolicyVersion = 1 | 2;
+export type FritzPolicyVersion = 1 | 2 | 3;
 export const FRITZ_POLICY_CONTRACTS = {
   1: 'fritz-policy-v1-seeded-top-score',
   2: 'fritz-policy-v2-deterministic-canonical-ties',
+  3: 'fritz-policy-v3-code-unit-canonical-ties',
 } as const satisfies Record<FritzPolicyVersion, string>;
+
+/**
+ * Total order on strings by UTF-16 code unit — the comparison `Array#sort` uses
+ * by default, and (unlike `localeCompare`) identical on every JS engine and
+ * under every host locale. GC-6: the Fritz strategic-score tie-break MUST use
+ * this, never `localeCompare`.
+ */
+export function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 export type FritzTier = 'rookie' | 'standard' | 'elite' | 'master';
 export type FritzDecision =
   | { kind: 'play'; tile: Tile; position: PlacementPosition }
@@ -137,7 +160,9 @@ function scoreSortedPlays(
 ): Array<{ move: PlayMove; score: number }> {
   return plays
     .map((move) => ({ move, score: scoreOfficialMove(state, participantId, move, tier) }))
-    .sort((left, right) => right.score - left.score || canonicalMoveKey(left.move).localeCompare(canonicalMoveKey(right.move)));
+    .sort((left, right) =>
+      right.score - left.score
+      || compareCodeUnits(canonicalMoveKey(left.move), canonicalMoveKey(right.move)));
 }
 
 export function getFritzPolicyContract(version: FritzPolicyVersion): string {
@@ -145,7 +170,7 @@ export function getFritzPolicyContract(version: FritzPolicyVersion): string {
 }
 
 export function isSupportedFritzPolicyVersion(value: unknown): value is FritzPolicyVersion {
-  return value === 1 || value === 2;
+  return value === 1 || value === 2 || value === 3;
 }
 
 /**
@@ -185,10 +210,11 @@ export function isOptimalOfficialFritzPlayForVersion(input: {
   tile: Tile;
   position: PlacementPosition;
 }): boolean {
-  // Policy v1 and v2 use the same integer strategic score. V2 changed tie
-  // selection and symmetric empty-arm canonicalization, not what counts as a
-  // top-scoring play. Historical v1 evidence can therefore be verified without
-  // executing the mutable current-policy wrapper.
+  // Policy v1, v2 and v3 use the same integer strategic score. V2 changed tie
+  // selection + symmetric empty-arm canonicalization; v3 (GC-6) changed only the
+  // tie-break comparator (`localeCompare` → code-unit). None changed what counts
+  // as a top-scoring play, so historical v1/v2 evidence verifies against the
+  // version-agnostic checker.
   return isOptimalOfficialFritzPlay(input);
 }
 
@@ -212,6 +238,10 @@ export function chooseOfficialFritzDecisionForVersion(input: {
     ].move;
     return { kind: 'play', tile: selected.tile, position: selected.position };
   }
+  // v2 and v3: identical selection (collapse symmetric empty arms, then take the
+  // canonical top-scoring play). v3's tie-break comparator is code-unit; a v2
+  // transcript replayed here therefore resolves the same way, and the verifier
+  // accepts any top-score play regardless.
   const plays = collapseSymmetricEmptyBranchPlays(input.state, legalPlays);
   const scored = scoreSortedPlays(input.state, input.participantId, input.tier, plays);
   const selected = scored[0].move;

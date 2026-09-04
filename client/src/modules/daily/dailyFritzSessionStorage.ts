@@ -3,7 +3,7 @@ import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { BotHandReveal } from '../match/types.ts';
 import type { DailyFritzStartResponse } from './dailyFritzContracts.ts';
 import { createDailyFritzChallengeIdentity, isDailyFritzChallengeCurrent, type DailyFritzChallengeIdentity } from '../../dailyFritz/dailyFritzChallengeIdentity.ts';
-import type { DailyFritzTranscript } from '@racehorse/game-core';
+import { isSupportedFritzPolicyVersion, type DailyFritzTranscript, type FritzPolicyVersion } from '@racehorse/game-core';
 import { canonicalizeDailyFritzMoveLog } from '../../dailyFritz/dailyFritzMoveEvidence.ts';
 import type { DailyFritzAuthorityCursor, DailyFritzMatchSession } from './dailyFritzMatchSession.ts';
 import { isCoherentDailyFritzSession } from './dailyFritzMatchSession.ts';
@@ -57,7 +57,7 @@ export type DailyFritzPersistedSnapshot = {
   checkpointRevision: number;
   /** Protocol used to encode the persisted move log. Missing means legacy v1. */
   transcriptProtocolVersion?: 1 | 2;
-  fritzPolicyVersion?: 1 | 2;
+  fritzPolicyVersion?: FritzPolicyVersion;
   fritzPolicyContract?: string;
 };
 
@@ -209,7 +209,7 @@ function parseCheckpointEnvelope(value: Record<string, unknown>, now: Date): Par
 
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
-  if (value.fritzPolicyVersion != null && value.fritzPolicyVersion !== 1 && value.fritzPolicyVersion !== 2) return null;
+  if (value.fritzPolicyVersion != null && !isSupportedFritzPolicyVersion(value.fritzPolicyVersion)) return null;
   if (value.fritzPolicyContract != null && typeof value.fritzPolicyContract !== 'string') return null;
 
   return {
@@ -231,8 +231,8 @@ function parseCheckpointEnvelope(value: Record<string, unknown>, now: Date): Par
     lastTransitionAt: String(value.lastTransitionAt),
     checkpointRevision: Number(value.checkpointRevision),
     transcriptProtocolVersion,
-    ...(value.fritzPolicyVersion === 1 || value.fritzPolicyVersion === 2
-      ? { fritzPolicyVersion: value.fritzPolicyVersion as 1 | 2 }
+    ...(isSupportedFritzPolicyVersion(value.fritzPolicyVersion)
+      ? { fritzPolicyVersion: value.fritzPolicyVersion }
       : {}),
     ...(typeof value.fritzPolicyContract === 'string'
       ? { fritzPolicyContract: value.fritzPolicyContract }

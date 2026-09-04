@@ -41,6 +41,27 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": [
+        "src/dailyFritzVerifier.ts",
+        "src/ghost/verifier.ts",
+        "src/dailyPuzzleSubmissionValidation.ts",
+        "src/puzzleRush/grading.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@racehorse/game-core/bot",
+                "message": "Verifiers must not import bot heuristics (GC-4): estimateDrawCostFromPublicInfo is the only non-integer computation in game-core."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

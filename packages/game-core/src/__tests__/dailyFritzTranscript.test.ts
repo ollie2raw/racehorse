@@ -34,6 +34,14 @@ describe('Daily Fritz transcript parser', () => {
     }).fritzPolicyVersion).toBe(1);
   });
 
+  it('accepts a policy version 2 transcript so an in-flight attempt survives the v3 bump (GC-6)', () => {
+    expect(parseDailyFritzTranscript({
+      ...valid(),
+      fritzPolicyVersion: 2,
+      fritzPolicyContract: getFritzPolicyContract(2),
+    }).fritzPolicyVersion).toBe(2);
+  });
+
   it('rejects a policy contract that does not match its implementation version', () => {
     expect(() => parseDailyFritzTranscript({
       ...valid(),

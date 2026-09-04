@@ -1,5 +1,6 @@
 import { applyGameCommand, type GameCommand } from './commands';
 import { canDraw, getLegalMoves } from './engine';
+import { compareCodeUnits } from './fritzPolicy';
 import { collectGameStateViolations } from './invariants';
 import { createDeterministicDoubleSixDeal } from './random';
 import { computePlayScore, getOpenEnds } from './scoring';
@@ -222,7 +223,7 @@ function chooseFixtureCommand(state: GameState, strategy: FixtureStrategy): Game
       })
       .sort((a, b) =>
         b.strategyScore - a.strategyScore
-        || a.move.position.localeCompare(b.move.position)
+        || compareCodeUnits(a.move.position, b.move.position)
         || a.move.tile.low - b.move.tile.low
         || a.move.tile.high - b.move.tile.high,
       );

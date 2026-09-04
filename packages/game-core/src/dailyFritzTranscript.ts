@@ -1,7 +1,6 @@
 import type { PlacementPosition, Tile } from './types';
 import { GAME_RULES_VERSION } from './versions';
 import {
-  FRITZ_POLICY_MIN_SUPPORTED_VERSION,
   FRITZ_POLICY_VERSION,
   getFritzPolicyContract,
   isSupportedFritzPolicyVersion,
@@ -20,8 +19,12 @@ export type DailyFritzTranscriptAction =
 export type DailyFritzTranscript = {
   protocolVersion: 1 | 2;
   rulesVersion: typeof GAME_RULES_VERSION;
-  /** Client-reported policy version; 1 transcripts remain parseable for Retry after the v2 bump. */
-  fritzPolicyVersion: typeof FRITZ_POLICY_MIN_SUPPORTED_VERSION | typeof FRITZ_POLICY_VERSION;
+  /**
+   * Client-reported policy version. Any supported version (currently 1–3) stays
+   * parseable so historical transcripts and in-flight attempts pinned to an
+   * older policy survive a `FRITZ_POLICY_VERSION` bump.
+   */
+  fritzPolicyVersion: FritzPolicyVersion;
   fritzPolicyContract?: string;
   stateDigestVersion?: 1;
   clientRelease?: string;
@@ -71,13 +74,10 @@ export function parseDailyFritzTranscript(value: unknown): DailyFritzTranscript 
   }
   if (value.protocolVersion !== 1 && value.protocolVersion !== 2) throw new Error('Unsupported transcript version.');
   if (value.rulesVersion !== GAME_RULES_VERSION) throw new Error('Unsupported rules version.');
-  if (
-    value.fritzPolicyVersion !== FRITZ_POLICY_MIN_SUPPORTED_VERSION
-    && value.fritzPolicyVersion !== FRITZ_POLICY_VERSION
-  ) {
+  if (!isSupportedFritzPolicyVersion(value.fritzPolicyVersion)) {
     throw new Error('Unsupported Fritz policy version.');
   }
-  const policyVersion = value.fritzPolicyVersion as FritzPolicyVersion;
+  const policyVersion: FritzPolicyVersion = value.fritzPolicyVersion;
   if (
     value.fritzPolicyContract != null
     && value.fritzPolicyContract !== getFritzPolicyContract(policyVersion)

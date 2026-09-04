@@ -31,6 +31,9 @@ jobs:
       - name: Verify game-core resolves under Node
         run: node -e "require('@racehorse/game-core'); console.log('game-core ok')"
 
+      - name: game-core tests
+        run: npm run test -w @racehorse/game-core
+
       - name: Server tests
         env:
           TZ: America/Los_Angeles

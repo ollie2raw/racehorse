@@ -489,7 +489,10 @@ export async function startDailyFritz(options?: {
       fritz_policy_contract: core.getFritzPolicyContract(core.FRITZ_POLICY_VERSION),
       state_digest_version: core.DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
       supported_transcript_protocol_versions: [1, core.DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION],
-      supported_fritz_policies: ([1, 2] as const).map((version) => ({
+      // GC-6 (HARDENING_PLAN §7.3): advertise every supported policy version, not
+      // just the current one, so a client updated to v3 can still resume an
+      // in-flight attempt pinned to an older policy.
+      supported_fritz_policies: ([1, 2, 3] as const).map((version) => ({
         version,
         contract: core.getFritzPolicyContract(version),
       })),

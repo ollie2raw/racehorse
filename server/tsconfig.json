@@ -13,7 +13,13 @@
     "ignoreDeprecations": "6.0",
 
     "resolveJsonModule": true,
-    "sourceMap": true
+    "sourceMap": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@racehorse/game-core/bot": ["../packages/game-core/dist/botHeuristics"],
+      "@racehorse/game-core/build-stamp": ["../packages/game-core/dist/buildStamp"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "src/game/**tests**", "**/*.test.ts", "**/*.spec.ts"]

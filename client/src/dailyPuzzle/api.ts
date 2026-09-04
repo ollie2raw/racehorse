@@ -2,7 +2,7 @@ import { track } from '../lib/analytics';
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import { apiGet, apiPost } from '../api/client';
 import { logger } from '../utils/logger';
-import type { BoardState, Tile, TileOrientation } from '../types';
+import type { BoardState, BranchArm, PlacedTile, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
 import type {
   CuratedDailyPuzzle,
@@ -130,11 +130,11 @@ function isBoardState(value: unknown): value is BoardState {
       (hub) =>
         Array.isArray(hub.branches) &&
         hub.branches.every(
-          (branch) =>
+          (branch: BranchArm | null) =>
             !branch ||
             (Array.isArray(branch.tiles) &&
               branch.tiles.every(
-                (placement) =>
+                (placement: PlacedTile) =>
                   Boolean(placement) &&
                   isTile(placement.tile) &&
                   typeof placement.orientation === 'string',

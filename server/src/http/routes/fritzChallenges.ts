@@ -3,6 +3,7 @@ import {
   DAILY_FRITZ_VERIFIER_VERSION,
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
+  type FritzPolicyVersion,
 } from '@racehorse/game-core';
 import {
   FritzChallengeError,
@@ -420,7 +421,7 @@ export function registerFritzChallengeRoutes(
         expectedHandIndex: handIndex,
         userId,
         fritzTier: challenge.config.fritzTier,
-        expectedFritzPolicyVersion: challenge.versions.fritzPolicyVersion as 1 | 2,
+        expectedFritzPolicyVersion: challenge.versions.fritzPolicyVersion as FritzPolicyVersion,
       });
       if (verified.terminalState.gameOver) {
         res.status(409).json({ error: 'Challenge game is complete; finalize the game.' }); return;
@@ -528,7 +529,7 @@ export function registerFritzChallengeRoutes(
         expectedHandIndex: terminalHandIndex,
         userId,
         fritzTier: challenge.config.fritzTier,
-        expectedFritzPolicyVersion: challenge.versions.fritzPolicyVersion as 1 | 2,
+        expectedFritzPolicyVersion: challenge.versions.fritzPolicyVersion as FritzPolicyVersion,
       });
       if (!terminalVerified.terminalState.gameOver) {
         const previousHands = Array.isArray(attempt.result?.authority_hands) ? attempt.result.authority_hands : [];

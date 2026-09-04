@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export default defineConfig({
   resolve: {
     alias: {
+      '@racehorse/game-core/bot': path.resolve(root, 'packages/game-core/src/botHeuristics.ts'),
+      '@racehorse/game-core/build-stamp': path.resolve(root, 'packages/game-core/src/buildStamp.ts'),
       '@racehorse/game-core': path.resolve(root, 'packages/game-core/src/index.ts'),
     },
   },

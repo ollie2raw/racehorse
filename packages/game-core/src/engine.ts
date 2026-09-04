@@ -98,6 +98,17 @@ function positionSortKey(position: PlacementPosition): [number, number, number] 
   return [2, parsed.hubIndex, parsed.armIndex];
 }
 
+/**
+ * GC-8 (HARDENING_PLAN §7.3): the output order of `getLegalMoves` is a
+ * **load-bearing contract**, not a cosmetic nicety. It determines:
+ *  - which tied top-scoring play Fritz policy **v1** selects (the RNG indexes
+ *    into `scoreSortedPlays`'s tied set, whose order derives from this one), and
+ *  - the order every verifier / replay walks candidate moves.
+ * The ordering is: plays first (by canonical tile id via UTF-16 code-unit
+ * `<`/`>`, then position class left→right→branch, then hub index, then arm),
+ * then passes. Do not change it without a `FRITZ_POLICY_VERSION` bump and a
+ * review of every replay path. Pinned by `engine.sortLegalMoves.test.ts`.
+ */
 function sortLegalMoves(moves: Move[]): Move[] {
   const plays = moves.filter((m): m is PlayMove => m.type === 'play');
   const passes = moves.filter((m) => m.type === 'pass');

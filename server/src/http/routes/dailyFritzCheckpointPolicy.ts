@@ -1,3 +1,4 @@
+import { isSupportedFritzPolicyVersion, type FritzPolicyVersion } from '@racehorse/game-core';
 import type { DailyFritzAttemptRecord } from '../stores/dailyFritzStore';
 import { getCurrentDailyFritzGameNumber } from '../stores/dailyFritzStore';
 
@@ -30,7 +31,7 @@ export type DailyFritzServerCheckpoint = {
   verificationPhase: 'collecting' | 'pending';
   startedAt: string;
   transcriptProtocolVersion?: 1 | 2;
-  fritzPolicyVersion?: 1 | 2;
+  fritzPolicyVersion?: FritzPolicyVersion;
   fritzPolicyContract?: string;
   challenge?: {
     challengeDate: string;
@@ -132,7 +133,7 @@ export function parseDailyFritzServerCheckpoint(value: unknown): DailyFritzServe
   if (Number(match.handNumber) !== Number(value.currentHandIndex) + 1) return null;
   const verificationPhase = value.verificationPhase === 'pending' ? 'pending' : 'collecting';
   const transcriptProtocolVersion = value.transcriptProtocolVersion === 2 ? 2 : 1;
-  if (value.fritzPolicyVersion != null && value.fritzPolicyVersion !== 1 && value.fritzPolicyVersion !== 2) {
+  if (value.fritzPolicyVersion != null && !isSupportedFritzPolicyVersion(value.fritzPolicyVersion)) {
     return null;
   }
   if (value.fritzPolicyContract != null && typeof value.fritzPolicyContract !== 'string') return null;
@@ -154,7 +155,7 @@ export function parseDailyFritzServerCheckpoint(value: unknown): DailyFritzServe
     verificationPhase,
     startedAt: String(value.startedAt),
     transcriptProtocolVersion,
-    fritzPolicyVersion: value.fritzPolicyVersion === 1 || value.fritzPolicyVersion === 2
+    fritzPolicyVersion: isSupportedFritzPolicyVersion(value.fritzPolicyVersion)
       ? value.fritzPolicyVersion
       : undefined,
     fritzPolicyContract: typeof value.fritzPolicyContract === 'string' ? value.fritzPolicyContract : undefined,

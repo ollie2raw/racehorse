@@ -56,23 +56,21 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
         rightEnd: first.tile.high,
         leftEndIsDouble: isDouble(first.tile),
         rightEndIsDouble: isDouble(first.tile),
-        hubDoubles: []
+        hubDoubles: isDouble(first.tile)
+          ? [{
+              hubId: 0,
+              laneType: 'mainline',
+              laneRef: 'mainline',
+              tileIndex: 0,
+              mainlineIndex: 0,
+              hubValue: first.tile.high,
+              isCrossed: false,
+              leftSideFilled: false,
+              rightSideFilled: false,
+              branches: [],
+            }]
+          : [],
       };
-
-      if (isDouble(first.tile)) {
-        state.board.hubDoubles.push({
-          hubId: 0,
-          laneType: 'mainline',
-          laneRef: 'mainline',
-          tileIndex: 0,
-          mainlineIndex: 0,
-          hubValue: first.tile.high,
-          isCrossed: false,
-          leftSideFilled: false,
-          rightSideFilled: false,
-          branches: [],
-        });
-      }
 
       // Add subsequent tiles using standard simulation
       for (let i = 1; i < scenario.setup.boardTiles.length; i++) {

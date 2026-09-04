@@ -1,9 +1,15 @@
 // client/src/types.ts
-// Shared types for the client
+// Shared types for the client.
+//
+// GC-3a (HARDENING_PLAN §7.3): the value types below (`Tile` .. `BoardState`,
+// `PlacementPosition`, `TileOrientation`) MUST stay structurally identical to
+// `@racehorse/game-core`'s — they cross the client/server verification boundary.
+// `client/src/game/coreTypeContracts.ts` is a compile-time `expectTypeOf` guard:
+// if these drift from core again, `tsc -b` fails. Keep them `readonly` to match.
 
 export interface Tile {
-  high: number;
-  low: number;
+  readonly high: number;
+  readonly low: number;
 }
 
 export type TileOrientation =
@@ -15,37 +21,37 @@ export type TileOrientation =
 export type PlacementPosition = 'left' | 'right' | `branch-${number}-${number}`;
 
 export interface PlacedTile {
-  tile: Tile;
-  orientation: TileOrientation;
+  readonly tile: Tile;
+  readonly orientation: TileOrientation;
 }
 
 export interface BranchArm {
-  tiles: PlacedTile[];
-  openEnd: number;
-  openEndIsDouble: boolean;
+  readonly tiles: readonly PlacedTile[];
+  readonly openEnd: number;
+  readonly openEndIsDouble: boolean;
 }
 
 export interface HubDouble {
-  hubId?: number;
-  laneType?: 'mainline' | 'branch';
-  laneRef?: string;
-  branchDepth?: number;
-  tileIndex: number;
-  mainlineIndex?: number;
-  hubValue: number;
-  leftSideFilled?: boolean;
-  rightSideFilled?: boolean;
-  isCrossed: boolean;
-  branches: (BranchArm | null)[];
+  readonly hubId?: number;
+  readonly laneType?: 'mainline' | 'branch';
+  readonly laneRef?: string;
+  readonly branchDepth?: number;
+  readonly tileIndex: number;
+  readonly mainlineIndex?: number;
+  readonly hubValue: number;
+  readonly leftSideFilled?: boolean;
+  readonly rightSideFilled?: boolean;
+  readonly isCrossed: boolean;
+  readonly branches: readonly (BranchArm | null)[];
 }
 
 export interface BoardState {
-  mainLine: PlacedTile[];
-  leftEnd: number;
-  rightEnd: number;
-  leftEndIsDouble: boolean;
-  rightEndIsDouble: boolean;
-  hubDoubles: HubDouble[];
+  readonly mainLine: readonly PlacedTile[];
+  readonly leftEnd: number;
+  readonly rightEnd: number;
+  readonly leftEndIsDouble: boolean;
+  readonly rightEndIsDouble: boolean;
+  readonly hubDoubles: readonly HubDouble[];
 }
 
 export interface GameState {

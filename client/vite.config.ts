@@ -43,6 +43,7 @@ const devApiProxy = {
 export default defineConfig({
   resolve: {
     alias: {
+      '@racehorse/game-core/bot': path.resolve(repoRoot, '../packages/game-core/src/botHeuristics.ts'),
       '@racehorse/game-core': path.resolve(repoRoot, '../packages/game-core/src/index.ts'),
       '@racehorse/match-protocol': path.resolve(repoRoot, '../packages/match-protocol/src/index.ts'),
     },

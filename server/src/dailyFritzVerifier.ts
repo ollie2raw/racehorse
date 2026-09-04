@@ -13,6 +13,7 @@ import {
   parseDailyFritzTranscript,
   type DailyFritzTranscript,
   type FritzDecision,
+  type FritzPolicyVersion,
   type GameCommand,
   type GameState,
   type Tile,
@@ -35,7 +36,7 @@ export type VerifiedDailyFritzHandRecord = {
   playerScoreAfter: number;
   fritzScoreAfter: number;
   actionCount: number;
-  fritzPolicyVersion: 1 | 2;
+  fritzPolicyVersion: FritzPolicyVersion;
   fritzPolicyContract: string;
   lastAuthorityStateDigest: string | null;
   verifiedAt: string;
@@ -154,7 +155,7 @@ function sameDecision(
   action: DailyFritzTranscript['actions'][number],
   decision: FritzDecision,
   tier: DailyFritzTier,
-  policyVersion: 1 | 2,
+  policyVersion: FritzPolicyVersion,
 ): boolean {
   if (action.kind !== decision.kind) return false;
   if (action.kind !== 'play' || decision.kind !== 'play') return true;
@@ -219,7 +220,7 @@ function applyOmittedMandatoryDraws(
 function applyOmittedOfficialFritzTurn(
   state: GameState,
   transcriptSequence: number,
-  policyVersion: 1 | 2,
+  policyVersion: FritzPolicyVersion,
   tier: DailyFritzTier,
 ): GameState {
   let current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
@@ -261,7 +262,7 @@ export function verifyDailyFritzHand(input: {
   expectedHandIndex: number;
   userId: string;
   fritzTier: DailyFritzTier;
-  expectedFritzPolicyVersion?: 1 | 2;
+  expectedFritzPolicyVersion?: FritzPolicyVersion;
   expectedFritzPolicyContract?: string;
   requireStateDigests?: boolean;
   now?: () => string;

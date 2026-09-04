@@ -5,6 +5,7 @@ import {
   FRITZ_POLICY_VERSION,
   GAME_RULES_VERSION,
   getFritzPolicyContract,
+  isSupportedFritzPolicyVersion,
 } from '@racehorse/game-core';
 import {
   dailyFritzDrawTilesMatchWinner,
@@ -168,8 +169,14 @@ export function assertValidDailyFritzPublishedChallenge(
     || challenge.gameRulesVersion !== GAME_RULES_VERSION
     || challenge.transcriptProtocolVersion !== DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION
     || challenge.verifierVersion !== DAILY_FRITZ_VERIFIER_VERSION
-    || challenge.fritzPolicyVersion !== FRITZ_POLICY_VERSION
-    || challenge.fritzPolicyContract !== getFritzPolicyContract(FRITZ_POLICY_VERSION)
+    // GC-6 (HARDENING_PLAN §7.3): a stored challenge may be pinned to any
+    // *supported* Fritz policy version (its own contract must match its own
+    // version) — the verifier handles per-version verification and accepts any
+    // top-score play, so a v3 deploy must not fail to read a v2 challenge and
+    // strand an in-flight attempt. New challenges are still published at the
+    // current `FRITZ_POLICY_VERSION` (see `buildDailyFritzPublishedChallenge`).
+    || !isSupportedFritzPolicyVersion(challenge.fritzPolicyVersion)
+    || challenge.fritzPolicyContract !== getFritzPolicyContract(challenge.fritzPolicyVersion)
     || challenge.rankingVersion !== DAILY_FRITZ_RANKING_VERSION
   ) {
     throw new Error('Daily Fritz challenge versions are incompatible with this publisher.');

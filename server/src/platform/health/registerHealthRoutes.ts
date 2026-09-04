@@ -12,6 +12,7 @@ import {
   isPastLadderReadinessGracePt,
 } from '../../dailyPuzzleLadderReadiness';
 import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlot } from '../../dailyPuzzle';
+import { gameCoreReadyReport } from '../gameCoreConsistency';
 
 const READY_REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'] as const;
 const READY_RECOMMENDED_ENV_VARS = [
@@ -226,6 +227,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         dailyFritzAuthority,
         dailyPuzzleLadder,
       },
+      gameCore: gameCoreReadyReport(),
     });
   });
 }
