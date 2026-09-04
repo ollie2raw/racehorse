@@ -297,10 +297,28 @@ focus" line, then the section for the system in progress.
   directly on it, and asserts both directions (capped → verifies,
   uncapped → `DailyFritzVerificationError`), proving the existing fix is
   load-bearing. Server suite 212/1240 green, `tsc -b` clean (client +
-  server), lint unchanged (217/68 baseline). **Committed, not pushed. Per
-  the human's request: a full 9-system status rollup follows before
-  deciding whether to go deeper on System 9's deferred remainder or move
-  to System 10.**
+  server), lint unchanged (217/68 baseline). **Pushed (`ed000363`,
+  alongside `368ec526`/`c2f92a9a`/`7ef13b56`) — CI/smoke confirmation
+  pending, see Changelog for the outcome once it lands.**
+  **Update (same session) — §9.1.14: two more §9.1.12 items resolved, risk-
+  sequenced ahead of the rest per the human's request.** (1)
+  `modules/ghost/`'s client-side move-log feed traced in full: three
+  distinct pipelines exist (live-room = server-authored, zero client
+  submission, strict verification; standalone Ghost/Fritz = client-
+  submitted via two converging builders, lenient verification). Found a
+  live asymmetry — the standalone REST route's `verifyPlayerMoveLog` call
+  omits `strictHandContinuity: true` unlike the live-room path — ranked
+  **RT-2**, bounded severity (confirmed it cannot touch the competitive
+  Glicko rating, only Ghost-mode's own training rating). Also confirmed a
+  documented past bug in the move-log-format conversion
+  (`moveEntriesToGhostMoveLog`) is already fixed. (2) `rooms.ts`'s
+  deal-generation traced across all three entry points
+  (start/rematch/next-hand): confirmed server-only, `Math.random()`-based,
+  zero client-suppliable input anywhere — recorded as new **RT-INV-10**,
+  no gap. Neither finding revises any of the ratified RT-INV-1..9. §9.1.12
+  now has 7 of its original 9 items still deferred (down from 9). §9.1.14,
+  §9.2 (RT-INV-10), §9.3 (RT-2 added, awaiting ranking review) updated.
+  **Report-back only — no fixes proposed, per instruction.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -771,7 +789,7 @@ own Step 1 when work reaches it. There is no System 4.
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
 7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–3 done + PUSHED (§7.1 reviewed; §7.2/§7.3 RATIFIED D-14; Step 3 `d8bed8ca` deployed, CI green).** GC-1+GC-9 (buildStamp + `/ready.gameCore` + smoke — confirmed `consistent: true` live), GC-6+GC-8 (`localeCompare`→code-unit; **`FRITZ_POLICY_VERSION` 3**; `sortLegalMoves` pinned), GC-3a (leaf-type `expectTypeOf` guard), GC-4 (`/bot` subpath + verifier import boundary), **GC-5 (re-ranked FIX NOW same-day on a live incident — 12 confirmed false-positive leaderboard demotions since 2026-08-01 — fixed, deployed, and 3 historical attempts retroactively restored to `verified`)**. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout, human-action). REVISIT: GC-3b. ACCEPT: GC-7.
 8. **Ranking / Glicko-2** (cross-cutting) ← **Steps 1–3 done + PUSHED (§8.1 audit; §8.2/§8.3 RATIFIED D-15; RK-1/RK-2/RK-4 + RLS migration file `368ec526`, deployed, CI green).** **RK-0** (live exploitable RLS INSERT-policy gap, found + fixed same day, outside normal cadence) closed. RK-1+RK-2 (Fritz `ranked_games` inserts now idempotent), RK-4 (`isProvisional()` de-duplicated). **RK-7** (Fritz rematch/`bot_match_pending` gap) investigated — **ACCEPT/DORMANT, not reachable today**. REVISIT IF SCALE: RK-3, RK-5, RK-6.
-9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped, not pushed). NOT fully closed** — §9.1.12's deferred remainder (`modules/guided/`, `modules/ghost/` client half, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond persistence, composed session hooks, `roomEvents.ts` consumers, review hooks, deal-generation bodies) was never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, FIX NOW small); pre-game-draw reload **confirmed safe** (real durability is a separate `localStorage` mechanism). 9 invariants (§9.2); a deliberately **partial** gap list (§9.3, RT-1 only) — rest of §9.1.12 stays deferred.
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.1.14/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped + pushed). NOT fully closed** — 7 of §9.1.12's original 9 deferred items (`modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond persistence, composed session hooks, `roomEvents.ts` consumers, review hooks) were never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are; the other 2 (`modules/ghost/` client feed, `rooms.ts` deal-generation) are resolved as of §9.1.14.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, shipped); pre-game-draw reload **confirmed safe**. §9.1.14 resolved 2 more, risk-sequenced ahead of the rest: the Ghost verifier's client-side feed (traced 3 distinct pipelines; found a live but bounded-severity asymmetry — RT-2, `strictHandContinuity` omitted for standalone-mode submissions, cannot touch the competitive Glicko rating); `rooms.ts`'s deal-generation (confirmed fully server-only, zero client input — RT-INV-10, no gap). 10 invariants (§9.2); a **partial** gap list (§9.3, RT-1 shipped + RT-2 awaiting ranking review) — remaining 7 §9.1.12 items stay deferred.
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
 11. **Social / stats / account** ← scaffold
 12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
@@ -5605,10 +5623,11 @@ races outside it; it did not describe `act()`'s body. Read `act()` +
 - `modules/daily/` (20 files) beyond `dailyFritzHandService.ts` and
   `dailyFritzDrawTranscript.ts` — e.g. `dailyFritzContracts.ts`,
   `dailyFritzMatchDiagnostics.ts` referenced but not read in full.
-- `modules/ghost/` (9 files) — deliberately deferred; the server-side
-  Ghost verifier is System 10 scope, but the client-side move-log capture
-  this system's `act()` (§9.1.11) and bot-turn (§9.1.6) feed into wasn't
-  traced end-to-end.
+- ~~`modules/ghost/` (9 files) — the client-side move-log feed into the
+  Ghost verifier~~ **resolved, §9.1.14 item 1 → RT-2.** (The server-side
+  Ghost verifier's own correctness, and the `rankedDealAuthority.ts`
+  deal-snapshot replay mechanism, remain System 10 scope — only the
+  client-feed tracing was this system's job.)
 - `modules/daily-puzzle/` (2 files) — likely dead/legacy per System 3's
   DF-CAND-1b (Daily Puzzle Ladder decommission); not confirmed dead here,
   just not read.
@@ -5627,11 +5646,11 @@ races outside it; it did not describe `act()`'s body. Read `act()` +
   replay-from-event-log, if any) — not traced.
 - `usePostGamePivotalReview.ts` / `useReviewRuntime.ts` — located, not
   read.
-- `startGame`/`nextHand`/`readyForNextHand` in `rooms.ts` — System 2
-  covered their *coalescing* (MP-5, MP-6); their actual deal-generation /
-  engine-integration bodies (does dealing route through game-core's
-  `pregameDraw.ts`/deterministic RNG per §7.1.4, server-side only?) were
-  not read this pass.
+- ~~`startGame`/`nextHand`/`readyForNextHand`'s deal-generation bodies in
+  `rooms.ts`~~ **resolved, §9.1.14 item 2 → RT-INV-10.** Confirmed
+  server-only across all three entry points, `Math.random()`-based, no
+  client-suppliable input. (System 2's coalescing coverage, MP-5/MP-6,
+  was already separately confirmed — unrelated to this.)
 
 ### 9.1.13 Three open items from §9.1.12, resolved before Step 2
 
@@ -5732,6 +5751,131 @@ process finding, noted but not ranked as its own row (too small to be
 worth a table entry; a comment clarifying the file's real scope would be
 a good cheap Step-3 addition if RT-1 is ever touched in the same pass).
 
+### 9.1.14 Two risk-sequenced items from §9.1.12's deferred remainder
+
+**1. How `modules/ghost/`'s client-side move-log capture feeds the Ghost
+verifier — traced fully; the picture is more layered than "one verifier,
+one feed."**
+
+There are **three distinct move-log pipelines**, not one:
+
+- **(a) Live-room Fritz-in-room matches** — the move log is built
+  **entirely server-side**, inline inside `act()` (`appendGhostMove`/
+  `appendGhostDrawSteps`, §9.1.11), from the server's own authoritative
+  state transitions. **No client submission at all.** Verified at
+  game-over via `gameOverPersistence.ts`'s `verifySeatMoveLog` →
+  `verifyPlayerMoveLog(moveLog, { strictHandContinuity: true })` — the
+  **strict** variant. This is the strongest-integrity path: there is
+  nothing for a client to fabricate, because the client never gets to
+  submit anything.
+- **(b) Standalone Ghost Mode** (client-simulated, REST-submitted) — two
+  client-side builders converge into `completeGhostGame`'s payload:
+  `botGhostSync.ts`/`playerGhostSync.ts` (the dedicated `GhostMoveLogEntry`
+  builders, called from the already-covered bot-turn/player-turn
+  completion pipeline, §9.1.6/§9.1.7, gated `if (isGhostMode)`) populate a
+  dedicated `ghostMoveLog` accumulator; if that accumulator is empty,
+  `useGhostMatchCompletion.ts` falls back to `moveEntriesToGhostMoveLog()`
+  — a **conversion** of the generic `MoveEntry[]` transcript log (the same
+  `ReplayRecorder`-owned log Daily Fritz's transcript is built from,
+  §9.1.10) into the `GhostMoveLogEntry` shape.
+- **(c) Standalone Play-vs-Fritz** (non-ghost, the common case) — always
+  uses the (b) conversion path (`genericGhostCompatibleMoveLog`), since
+  the dedicated ghost-sync builders are gated off when `isGhostMode` is
+  false.
+
+**The (b)/(c) conversion (`ghostMatchHelpers.ts`'s
+`moveEntriesToGhostMoveLog`) has a documented history of exactly the class
+of bug this plan looks for, already fixed.** Its own code comment
+describes a past incident: reconstructing a move's board position from the
+pre-move `boardState` snapshot (rather than trusting `MoveEntry.position`,
+which is recorded directly from the move handed to `applyPlayMove`)
+silently degraded every placement to `'left'` and caused the server's
+ranked replay to reject the match with "Illegal move: ... does not match
+the board." **Confirmed fixed**: `placementBranchForEntry` now uses
+`entry.position` when present (which it always is for anything created
+after the fix) and falls back to the old (buggy) reconstruction only for
+genuinely legacy entries with no recorded position. Not a live gap —
+recorded because it's directly on-point for what this audit looks for and
+was found already handled.
+
+**A newer, currently-live asymmetry found while tracing the actual
+verification call sites**, not previously documented anywhere:
+`http/routes/ghost.ts`'s REST route calls `verifyPlayerMoveLog(trainingMoveLog)`
+with **no options** — i.e. `strictHandContinuity` defaults to `false` —
+for every client-submitted standalone-mode completion, while (a)'s
+live-room path explicitly passes `{ strictHandContinuity: true }`. Read
+`assertHandContinuity` in full: the lenient (`false`) mode tolerates a
+submitted hand that is a **superset** of what the engine replay expects
+(extra, unlogged tiles) as a legacy allowance for "unlogged boneyard
+draws" — i.e. a client can submit a move log whose claimed hand contents
+don't fully reconcile with the logged actions, and the server accepts it
+rather than rejecting. The doc comments on both the strict flag ("only
+exact hand chains pass — post-capture-fix live completions") and the
+leniency ("legacy live-room logs may omit per-tile draw steps") make clear
+this tolerance was written to accommodate **old, already-captured
+live-room data** from before some historical capture fix — but the same
+default now transparently applies to **every new standalone-mode
+submission going forward**, not just old rows, because nothing at the
+`ghost.ts` call site was ever tightened the way the live-room call site
+was. **Bounded severity, confirmed via §9.1.5/prior System-8 work**: this
+verification path only gates `!isFritzMatch` (Ghost-vs-Ghost training)
+completions — a genuine ranked Fritz completion through this same route is
+gated by an entirely separate mechanism (`isSafeRankedMoveSequence` /
+`replayRankedMoveLog`, a deal-snapshot replay — System 10 territory, not
+re-audited here) that this leniency does not touch at all. So this cannot
+manipulate the competitive Glicko rating; it can, at most, let a
+Ghost-mode training completion's `ghost_rating`/move history pass
+verification with an unreconciled hand. Whether `ghost_rating` itself
+carries any public/competitive weight (leaderboard, social display) is
+outside this system's audit boundary (System 10/11 territory) — flagged as
+an open question, not resolved here. Ranked **RT-2** in §9.3.
+
+**Does this change any ratified RT-INV?** No. None of RT-INV-1..9 made a
+claim this contradicts — RT-INV-9's game-core-reuse claim is about digest
+computation specifically, a different mechanism than this move-log-shape
+conversion/verification-strictness finding. This fills in previously
+uncovered territory rather than revising anything already ratified.
+
+**2. `startGame`/`rematch`/`nextHand`'s deal-generation — confirmed
+server-only, no client involvement, across every entry point.**
+
+Traced the actual tile-shuffle call in all three paths:
+
+- **`startGameUnlocked`** (initial match start) → `startNewHand(state0,
+  options.customDeck, ...)`. Traced every caller of `startGame`/
+  `startGameUnlocked` for a non-empty `customDeck` argument: exactly two
+  exist, both server-generated — `ghost/rankedDealAuthority.ts`'s
+  `customDeckFromDeal(handDealForNumber(snapshot, ...))` (a server-created,
+  stored `RankedHandDeal` snapshot reused for later ranked-hand dealing —
+  System 10 territory, not re-audited here) and
+  `registerRematchPregameHandlers.ts`'s rematch flow, which passes the
+  **server's own pre-game-draw tile set** (`finalDraw.tiles`, itself
+  `shuffleTiles(generateDoubleSixSet())` from `@racehorse/game-core`,
+  called inside `initMultiplayerPregameDraw` — a server-only file,
+  `server/src/multiplayer/preGameDraw.ts`). **No caller anywhere passes a
+  client-supplied deck.**
+- **`nextHand`** (subsequent hands in an ongoing game) → `startNewHand(room.state)`
+  — read in full: **no `customDeck` parameter accepted at this call site
+  at all**, unconditionally a fresh shuffle every time.
+- The actual shuffle, traced to its source: `shuffle()` in
+  `packages/game-core/src/engine.ts` — plain `Math.random()`-based
+  Fisher-Yates, no seed, no client-suppliable input of any kind. This code
+  only ever executes server-side for these three entry points (confirmed —
+  `rooms.ts`, `preGameDraw.ts`, and `rankedDealAuthority.ts` are all
+  server-only files; the client bundle never calls `startNewHand` for a
+  live-room match).
+
+**This is a genuine, confirmed-good integrity property, not previously
+stated as an invariant.** Recorded as **RT-INV-10** in §9.2 (new,
+addition — does not revise any existing RT-INV, since none of RT-INV-1..9
+made a claim about deal fairness). No gap.
+
+(Daily Fritz's deal generation is a deliberately different, already-covered
+mechanism — `generateSingleDailyFritzGameHand`, seeded per
+`runDate`+`gameNumber`+`handIndex` for cross-player reproducibility, per
+§7.1.4 — not conflated with the `Math.random()` path here, which is for
+ordinary multiplayer rooms only.)
+
 ## 9.2 Invariants
 
 The properties that must hold for the match runtime layer (client
@@ -5807,6 +5951,14 @@ turn-execution + server `act()`) to be trustworthy. Status: **HOLDS**
   (`dailyFritzTranscript.ts`, §9.1.12 territory) — carried to Step 2/a
   future pass rather than asserted universally from one confirmed
   instance.*
+- **RT-INV-10 — Tile dealing (match start, rematch, next hand) is
+  server-only; no client-suppliable input can influence what tiles get
+  dealt.** *HOLDS — confirmed via §9.1.14 (item 2): every `customDeck`
+  override traced to a server-only origin (a stored ranked-deal snapshot,
+  or the server's own pre-game-draw shuffle); `nextHand` accepts no deck
+  override at all; the underlying shuffle is `Math.random()`-based with no
+  seed and runs only in server-side files. New invariant — §9.1's original
+  pass didn't state this; does not revise any of RT-INV-1..9.*
 
 ## 9.3 Gap list (risk-ranked)
 
@@ -5818,7 +5970,8 @@ multi-draw turn, model the boneyard-delta upward-correction bug directly
 (`drawCount += 1` beyond the true captured-snapshot count on a real
 multi-draw turn), and assert both directions — capped: the hand still
 verifies; uncapped: the hand fails with `DailyFritzVerificationError`,
-proving the fix is load-bearing, not inert).
+proving the fix is load-bearing, not inert). **RT-2 added 2026-09-04**
+(§9.1.14, item 1) — awaiting ranking review; not yet fixed.
 
 **Scoring** (same axes as §1.3 / §6.3 / §7.3 / §8.3). *Severity* ∈
 {**integrity-oracle** (a move or evidence can be forged, misapplied, or
@@ -5826,16 +5979,24 @@ made unverifiable), **availability** (a legitimate match strands or a
 player loses progress), **latent-drift**, **process**, **cosmetic**}.
 *Verdict* ∈ {**FIX NOW**, **POSTURE**, **REVISIT IF SCALE**, **ACCEPT**}.
 
-This is a **partial gap list** — scoped to the three items §9.1.13
-investigated per explicit instruction, plus RT-INV-9's carve-out. The
-remainder of §9.1.12's "not yet covered" list stays deferred (not yet
-triaged into ranked gaps), consistent with how System 8's §8.1.6 residual
-items were carried past its own Step 2 ratification. A future revisit of
-this system should re-open §9.1.12 before treating it as closed.
+This is a **partial gap list** — scoped to the three §9.1.13 items, plus
+the two §9.1.14 items (the `modules/ghost/` client-feed trace and the
+deal-generation fairness check), plus RT-INV-9's carve-out. **Two of
+§9.1.12's original nine deferred items are now resolved** (the `ghost/`
+client half → RT-2 + RT-INV-10; the `rooms.ts` deal-generation bodies →
+RT-INV-10). **Seven remain deferred, not yet triaged**: `modules/guided/`,
+`modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond
+`preGameDrawPersistence.ts`, `useLiveMatchSession.ts`'s composed hooks,
+`roomEvents.ts`'s consumers beyond the write side, and the review hooks
+(`usePostGamePivotalReview.ts`/`useReviewRuntime.ts`) — consistent with
+how System 8's §8.1.6 residual items were carried past its own Step 2
+ratification. A future revisit of this system should re-open the
+remaining seven before treating System 9 as closed.
 
 | ID | Gap | §9.1 ref | Severity | Likelihood | Blast radius | Verdict | Protects |
 |---|---|---|---|---|---|---|---|
 | **RT-1** | **No test drives the real interrupted-draw-sequence trigger condition for `capDailyFritzDrawLogCount` end-to-end.** The fix that prevents a fabricated 'draw' transcript entry (and the unrecoverable `illegal_action` server rejection it causes — a real, previously-occurred production incident per the existing test's own comment) is correct by code inspection and by isolated unit test, but nothing exercises the actual client trigger path (`usePlayerNoMoveEffect.ts`'s boneyard-delta upward correction under a genuinely undercounted `onStep` sequence) and confirms the cap engages and the resulting transcript still verifies. A future refactor of the draw-sequence code could silently break the cap's wiring — same input/output contract, wrong call site — with no test catching it. | §9.1.5, §9.1.13 (item 2) | **latent-drift** (would become **availability** — a stuck Hand-Over screen, the exact prior incident — if the wiring ever broke) | **low** today (the fix is correct and has held since it shipped) but **the regression would be silent** — no test would fail | any Daily Fritz player whose local draw sequence is genuinely interrupted (network hiccup, backgrounded tab, slow device) at the exact moment `onStep` under-fires relative to the boneyard delta | **FIX NOW (small)** — add one test that drives `usePlayerNoMoveEffect.ts`'s (or `runBotDrawPassSequence`'s) real boneyard-delta-correction path with a deliberately short/interrupted `onStep` snapshot sequence, confirms `capDailyFritzDrawLogCount` clamps the logged count, and confirms the resulting transcript verifies cleanly through the real HTTP path (extending the existing `dailyFritzTranscriptFidelity.test.ts` harness is the natural home — it already wires the real capping call). ~2–3 h. | RT-INV-5 |
+| **RT-2** | **`http/routes/ghost.ts`'s standalone-mode move-log verification omits `strictHandContinuity: true`, unlike the live-room path.** `verifyPlayerMoveLog(trainingMoveLog)` is called with no options (defaults to lenient) for every client-submitted Ghost-vs-Ghost training completion, while `gameOverPersistence.ts`'s live-room path explicitly passes the strict variant. The lenient mode tolerates a submitted hand claiming extra, unlogged tiles ("unlogged boneyard draws") — a documented allowance for pre-fix legacy live-room data that, because the `ghost.ts` call site was never tightened alongside the live-room one, now transparently applies to every new standalone submission too, not just old rows. | §9.1.14 (item 1) | **integrity-oracle**, narrowly scoped — confirmed this path gates only `!isFritzMatch` (Ghost-vs-Ghost training) completions; ranked Fritz completions through the same route are gated by a separate deal-snapshot-replay mechanism this leniency does not touch, so the competitive Glicko rating cannot be manipulated through it | **low-medium** — requires a deliberately constructed client move log; not confirmed exploited, and the downstream stakes of a manipulated `ghost_rating` (whether it carries any public/competitive weight) were not resolved in this pass — System 10/11 territory | a Ghost-mode training completion's own `ghost_rating`/move history; confirmed NOT the ranked Glicko rating | **FIX NOW (small)** — pass `{ strictHandContinuity: true }` at the `ghost.ts` call site, matching the live-room path; confirm no currently-legitimate in-flight submission relies on the legacy leniency (the doc comments suggest it was for already-captured old rows, not new traffic, but this should be verified before flipping it, not assumed). ~1–2 h including verification. | — (new gap; not gated by RT-INV-1..9, which didn't cover verification-strictness parity across call sites) |
 
 ## 9.4 Checklist
 - [x] Step 1 — covered-vs-remainder map (§9.1.1), then current-state of the remainder (§9.1.2–§9.1.11), written 2026-09-04
@@ -5843,7 +6004,9 @@ this system should re-open §9.1.12 before treating it as closed.
 - [x] Step 2 — invariants (§9.2, RT-INV-1..9) + partial risk-ranked gap list (§9.3, RT-1) written 2026-09-04
 - [x] Step 2 — invariants + partial gap list → ratified **D-16** (2026-09-04), explicitly PARTIAL — does not close out §9.1.12
 - [x] Step 3 — RT-1 shipped (test added, committed, not pushed)
-- [ ] Remainder of §9.1.12 (guided/, ghost/ client half, daily-puzzle/, board/, preGameDraw/ beyond persistence, the composed session hooks, roomEvents.ts consumers, review hooks, deal-generation bodies) — **deferred, not yet triaged into ranked gaps. System 9 is NOT fully closed until this is explicitly re-opened.**
+- [x] §9.1.12 follow-up (§9.1.14, this session): `modules/ghost/` client-feed traced → RT-2 (new gap, awaiting ranking review) + confirmed the Ghost-verifier-vs-deal-snapshot-replay split; `rooms.ts` deal-generation bodies traced → RT-INV-10 (confirmed-good, no gap)
+- [ ] RT-2 — awaiting ranking review / Step 3 (not yet fixed)
+- [ ] Remainder of §9.1.12 (guided/, daily-puzzle/, board/, preGameDraw/ beyond persistence, the composed session hooks, roomEvents.ts consumers, review hooks — 7 of the original 9 items) — **deferred, not yet triaged into ranked gaps. System 9 is NOT fully closed until this is explicitly re-opened.**
 
 ---
 
