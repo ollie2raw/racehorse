@@ -135,19 +135,25 @@ focus" line, then the section for the system in progress.
   `CF-Connecting-IP` on an untrusted peer is ignored; honoured behind a real CF
   edge).
 
-- **System 7 (`@racehorse/game-core` — shared score oracle) → Step 1 map §7.1
-  written 2026-09-04, awaiting human review.** Pure dependency-free engine +
-  scoring + Fritz policy + 5 verifiers + version contracts. Key findings:
-  (a) **resolution asymmetry** — server prod runs game-core `dist/` (git-ignored,
-  build-step dependent), the client bundle + all tests run `src/`; (b) **only
-  Daily Fritz has a real `GAME_RULES_VERSION` pin** — Ghost / Puzzle Rush / Daily
-  Puzzle / Review replay against the deployed engine, and `parseDailyFritzTranscript`
-  hard-rejects a rules mismatch with no grace; (c) **no drift guard for the core
-  engine types** — `client/src/types.ts` + `client/src/game/openEndsGeometry.ts`
-  + the `botEngine.ts` "second engine" are independent of core (guards cover wire
-  DTOs only); (d) verified paths are integer-only by design, the one float
-  (`estimateDrawCostFromPublicInfo`) is bot-only by convention not enforcement.
-  **GC-1..GC-8** parked for Step 2. No fixes. **Stop — await human review of §7.1.**
+- **System 7 (`@racehorse/game-core` — shared score oracle) → Steps 1–2 written
+  2026-09-04, §7.1 human-reviewed; §7.2 / §7.3 CANDIDATE awaiting sign-off (→ D-N).**
+  §7.1 map (§7.1.1–§7.1.13) + §7.2 (GC-INV-1..12) + §7.3 (GC-1..GC-9 risk-ranked).
+  **FIX NOW:** **GC-1** (server prod runs game-core `dist/` with no assertion it
+  matches the reviewed `src/` — add a `buildStamp` sha + `/ready.gameCore`
+  boot-check + smoke assertion), **GC-6** (`fritzPolicy` breaks policy-v2 ties
+  with locale-dependent `localeCompare` → not runtime-deterministic; the lenient
+  verifier masks it but two browsers see different Fritz lines — swap to
+  code-unit compare), **GC-3a** (no drift guard on the 7 wire-identical core leaf
+  types — already drifted `readonly`; add `expectTypeOf` + align), **GC-4** (the
+  one float `estimateDrawCostFromPublicInfo` is in the public API — move behind a
+  subpath / import boundary), **GC-9** + **GC-8** (surface `SOFT_GAME_INVARIANTS`
+  posture; pin the `sortLegalMoves` contract — bundle). **POSTURE:** **GC-2**
+  ("before you bump `GAME_RULES_VERSION`" checklist — DF hard-rejects in-flight
+  transcripts, Ghost/Rush/Puzzle/Review carry no version stamp; rollout shape in
+  §7.1.13). **REVISIT IF SCALE:** GC-5 (authority digest is `JSON.stringify`-order
+  sensitive — diagnostics-only today), GC-3b (client `GameState`/`Move` unification
+  + retire `botEngine.ts` second engine — own effort). **ACCEPT:** GC-7 (dead
+  Daily Puzzle DTOs). No fixes yet. **Stop — await human sign-off on §7.2 / §7.3.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -616,7 +622,7 @@ own Step 1 when work reaches it. There is no System 4.
 4. *(dissolved — see 5–13, D-11)*
 5. **Legacy League / Legacy Tournament** ← **CLOSED 2026-09-03 (decommissioned)** — confirmed dead in prod, server code + 6 `league_*` tables removed (`2026-09-03_legacy_league_decommission.sql`). *Migration APPLIED to prod by human 2026-09-04.*
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
-7. **`@racehorse/game-core`** — shared score oracle ← **Step 1 map §7.1 written 2026-09-04, awaiting human review before Step 2.** GC-1..GC-8 candidate seams parked.
+7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–2 written 2026-09-04 (§7.1 human-reviewed; §7.2 GC-INV-1..12 + §7.3 GC-1..GC-9 CANDIDATE, awaiting sign-off → D-N).** FIX-NOW: GC-1 (deployed-engine assertion), GC-6 (`localeCompare` in Fritz v2 ties), GC-3a (leaf-type drift guard), GC-4 (float import boundary), GC-8/GC-9. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout). REVISIT: GC-5, GC-3b. ACCEPT: GC-7.
 8. **Ranking / Glicko-2** (cross-cutting) ← scaffold
 9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← scaffold
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
@@ -4534,6 +4540,10 @@ territory, already audited or scaffolded.
 
 ### 7.1.12 Windows / seams (candidates for Step 2 — not yet risk-ranked)
 
+> Superseded by §7.2 / §7.3 (Step 2), which risk-rank these and add **GC-9**
+> (the `SOFT_GAME_INVARIANTS` prod off-switch) and refine **GC-6** to the
+> concrete `localeCompare` finding. Kept here as the Step-1 record.
+
 - **GC-1** — server prod runs game-core `dist/` (git-ignored, build-step
   dependent); all tests + the client run `src`. A missed/partial build ships a
   stale engine to prod with a green test suite. CI has three guards; no
@@ -4566,18 +4576,177 @@ territory, already audited or scaffolded.
   stated; a refactor that changed it would silently change Fritz tie-selection
   under policy v1 and every replay's move enumeration.
 
-**§7.1 done — stop for human review before Step 2.**
+### 7.1.13 §7.1 review addendum (2026-09-04)
+
+Human reviewed §7.1 and asked three scoping questions before Step 2; the answers
+are folded into the §7.3 recommendations below and summarised here:
+
+- **GC-1 concrete check (→ FIX NOW):** game-core `postbuild` writes
+  `dist/buildStamp.js` = `{ srcSha256, builtAt }` (sha256 over the sorted
+  `src/*.ts` contents). The server, at boot, recomputes the same hash from
+  `packages/game-core/src` **on disk** (present in the Render git checkout — the
+  build does not prune source) and compares it to the value baked into `dist`.
+  Mismatch ⇒ `log.error` + Sentry + `/ready` reports `gameCore.consistent:false`;
+  the existing **prod smoke-test** CI job asserts `gameCore.consistent === true`
+  post-deploy. If `src` is ever absent at runtime (a future Docker multi-stage),
+  it degrades to `gameCore.consistent:'unverifiable'` rather than false-alarm.
+  The same `/ready.gameCore` block also surfaces `srcSha256` and
+  `softInvariants` (whether `SOFT_GAME_INVARIANTS=true` — see GC-9). ~half a day.
+- **GC-2 rollout shape (→ POSTURE, "before you bump `GAME_RULES_VERSION`"
+  checklist):** the common primitive is a `SUPPORTED_GAME_RULES_VERSIONS` array
+  + a version-parameterised engine entrypoint (`applyGameCommandForRulesVersion`).
+  **Daily Fritz** is the cheap case — the authority contract *already persists
+  `gameRulesVersion` per attempt* and negotiates client capabilities; the only
+  code changes are the two exact-equality checks
+  (`readDailyFritzAuthorityContract` L81, `clientSupportsDailyFritzAuthorityContract`
+  L61) → set membership, plus the verifier dispatching on the attempt's pinned
+  version; and `parseDailyFritzTranscript` accepting any `SUPPORTED_` version
+  instead of hard-rejecting. DF attempts are single-Pacific-day, so old-version
+  support is dropped ~48 h after a bump. **Ghost / Puzzle Rush / Daily Puzzle /
+  Review** are the expensive case — their evidence persists indefinitely and
+  carries no version stamp. The rollout there is: stamp `game_rules_version` on
+  the record at write time + freeze the verdict/score at write time (already
+  largely true for Ghost/Rush grades); re-verification reads the stamp and
+  replays under a frozen engine copy, or — once a version is retired — treats the
+  stored verdict as final. Cost is dominated by whether a rules change needs a
+  frozen v1 engine copy or an in-hot-path `if (rulesVersion === 1)` branch —
+  decide that when a concrete rules change is on the table, not now.
+- **GC-3 sizing:** the leaf value types have **already drifted** — `client/src/types.ts`
+  is mutable where core is `readonly`, `Move` is a loose `{type, tile?, position?}`
+  where core is a `PlayMove | PassMove` discriminated union, `GameState.config`
+  is 2 fields where core is the full 9-field `Config`, and client adds
+  `handCounts` / omits `handStarters`. So a blanket
+  `expectTypeOf<ClientGameState>().toEqualTypeOf<CoreGameState>()` **fails today**
+  by design. Split: **GC-3a** (guard `Tile`/`PlacedTile`/`BranchArm`/`HubDouble`/
+  `BoardState`/`PlacementPosition`/`TileOrientation` — the wire-identical leaves —
+  after aligning `readonly` and fixing the ~2 client mutation sites) is
+  **Step-3-sized, ~1–2 days**. **GC-3b** (unify `GameState`/`Move`/`Config`
+  onto core via `export type … from '@racehorse/game-core'` + a thin
+  `ClientGameState & { handCounts }` extension, and retire `botEngine.ts`'s
+  local geometry) ripples through ~100 client files and every client-side
+  in-place mutation — **a deliberate refactor / its own mini-effort, not a
+  Step-3 line item.**
 
 ## 7.2 Invariants
-**Not started.** Step 2.
+
+The properties that must hold for the score oracle to be trustworthy. Status:
+**HOLDS** (enforced/true today) / **PARTIAL** / **AT RISK** / **DOES NOT HOLD**.
+
+- **GC-INV-1 — Single engine of record.** Every score / legality / lifecycle
+  outcome a mode trusts is produced by exactly one implementation
+  (`@racehorse/game-core`), replayed server-side. *HOLDS server-side (the
+  `server/src/game/*` shims are one-line re-exports); **PARTIAL** client-side —
+  `botEngine.ts` re-implements move-target enumeration + board geometry over
+  `client/src/game/openEndsGeometry.ts` (GC-3).*
+- **GC-INV-2 — Deployed engine = reviewed engine.** The game-core running in
+  prod is the build of the committed source that passed CI. ***DOES NOT HOLD
+  (unverifiable)** — server prod runs `dist/`, nothing asserts it matches `src/`
+  (GC-1).*
+- **GC-INV-3 — Determinism: same inputs → same outputs, on every runtime.**
+  `applyGameCommand` / `getLegalMoves` / scoring / Fritz policy are pure and
+  produce identical results under Node and the browser JS engine. ***AT RISK** —
+  `fritzPolicy.scoreSortedPlays` breaks ties with `String.localeCompare` (no
+  locale arg → implementation/locale-dependent), feeding the live policy-v2
+  `chooseOfficialFritzDecision`; `reviewFixtureCorpus` too (GC-6). Everything
+  else is integer-only / code-unit sort. The one float
+  (`estimateDrawCostFromPublicInfo`) is outside verified paths by convention only
+  (GC-4).*
+- **GC-INV-4 — Replay purity.** Replaying a transcript / move-log / submitted
+  line never mutates its input and never reads wall-clock, RNG or ambient state.
+  *HOLDS — `deterministicSimulation.test.ts` asserts input immutability;
+  `Math.random` lives only in `startNewHand`, which no verifier calls.*
+- **GC-INV-5 — Historical evidence stays verifiable across a version bump.** A
+  record created under engine/policy version N verifies after the code moves to
+  N+1 (frozen verdict, or the versioned path still reachable). *HOLDS for Fritz
+  **policy** (min-supported = 1, "any top-score play" acceptance); **DOES NOT
+  HOLD for `GAME_RULES_VERSION`** — DF `parseDailyFritzTranscript` hard-rejects a
+  mismatch; Ghost / Rush / Puzzle / Review replay against the deployed engine
+  with no stamp or pin (GC-2).*
+- **GC-INV-6 — In-flight attempts survive a deploy.** A Daily Fritz attempt
+  started before a deploy can be finished and verified after it. *HOLDS for
+  protocol / policy / digest bumps (contract negotiation + `426`); **DOES NOT
+  HOLD for a `GAME_RULES_VERSION` bump** — the transcript parse hard-reject
+  strands every open attempt (GC-2).*
+- **GC-INV-7 — Client and server agree on legality.** Any move the client UI
+  offers is accepted by the server verifier, and vice versa. *PARTIAL — command
+  application is core on both sides, but client move enumeration is
+  `botEngine.ts` local geometry; a divergence surfaces as a client-offered move
+  the verifier rejects (GC-3).*
+- **GC-INV-8 — Wire-shared shapes cannot drift silently.** Types crossing the
+  client/server boundary fail the build if they diverge. *HOLDS for the DTO
+  payloads (`contractsDriftTypes.ts` compile-time + a client `.test.ts`);
+  **DOES NOT HOLD for the core engine value types** — no guard, and `Tile` /
+  `Move` / `BoardState` / `GameState` have already drifted (GC-3).*
+- **GC-INV-9 — Move-enumeration order is a stable contract.** `sortLegalMoves`
+  output order is fixed — Fritz policy-v1 tie selection and every replay's
+  enumeration depend on it. *HOLDS in code; **not asserted** by any test as an
+  invariant, and undocumented as load-bearing (GC-8).*
+- **GC-INV-10 — The authority digest is a total function of game state.**
+  `getDailyFritzAuthorityStateDigest` returns the same value for two equal
+  `GameState`s however each was built. ***AT RISK** — embeds `state.board` via
+  raw `JSON.stringify` (key-order sensitive) and omits `handStarters`; today
+  only a diagnostics signal, not a reject path (GC-5).*
+- **GC-INV-11 — The package has no ambient authority.** game-core holds no I/O,
+  clock, network or mutable module state. *HOLDS (§7.1.11).*
+- **GC-INV-12 — The oracle's structural self-check is fail-closed.** Tile-
+  accounting / game-state-violation checks abort the mutation rather than
+  continue on corruption. *PARTIAL — `packages/game-core/src/invariants.ts`
+  always throws, but the server wrapper `server/src/game/invariants.ts` downgrades
+  to `console.error` when `SOFT_GAME_INVARIANTS=true`, and prod posture for that
+  flag is not surfaced anywhere (GC-9).*
 
 ## 7.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+
+Status: **CANDIDATE — written 2026-09-04, awaiting sign-off (→ D-N).**
+
+**Scoring** (same axes as §1.3 / §6.3). *Severity* ∈ {**integrity-oracle** (the
+score oracle can be wrong, bypassed, or unverifiable), **availability** (a
+legitimate attempt strands / cannot complete), **latent-drift**, **process**,
+**cosmetic**}. *Likelihood* is for the single Render instance + current
+pre-marketing traffic, and — because `GAME_RULES_VERSION` has never moved — also
+notes whether the risk is *latent* (only bites on a future change). *Verdict* ∈
+{**FIX NOW**, **POSTURE** (a design decision + a pre-conditions checklist, no
+code now), **REVISIT IF SCALE**, **ACCEPT**}.
+
+| ID | Gap | §7.1 ref | Severity | Likelihood | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **GC-1** | **No assertion that prod runs the reviewed engine.** Server prod runtime loads game-core `dist/` (git-ignored, produced by a `tsc` build step); the client bundle and every test path run `src/`. A deploy whose game-core build silently under-built or was skipped runs stale engine code in prod with a fully green CI suite — and there is no boot check, `/ready` field, or smoke assertion that would catch it. | §7.1.1, §7.1.12 | **integrity-oracle** (silent — every score in every mode could be graded by the wrong engine) | **low** (CI builds game-core in 3 jobs + `server` prebuild + Render prebuild) but **unbounded dwell time** if it ever happens | app-wide, every mode, until a human notices a scoring anomaly | **FIX NOW** — `dist/buildStamp.js` (`srcSha256` over sorted `src/*.ts`) written at build; server boot recomputes from `packages/game-core/src` on disk and compares; `/ready.gameCore = { srcSha256, consistent, builtAt, softInvariants }`; prod smoke-test CI asserts `consistent === true`. Graceful `'unverifiable'` if src is absent. ~½ day. | GC-INV-2 |
+| **GC-6** | **`localeCompare` in the Fritz policy-v2 tie-break is not runtime-deterministic.** `fritzPolicy.scoreSortedPlays` (`fritzPolicy.ts:140`) breaks equal-strategic-score ties with `canonicalMoveKey(a).localeCompare(canonicalMoveKey(b))` — no locale argument, so the ordering is implementation- and host-locale-dependent (Node default vs Safari `de-DE`, etc.). This feeds `chooseOfficialFritzDecisionForVersion` **v2** → `scored[0].move`, i.e. the actual "official" Fritz move the client plays locally. `reviewFixtureCorpus.ts:225` has the same pattern. | §7.1.5 | **integrity-oracle** (the "deterministic canonical ties" that policy v2 is *named for* aren't) — mitigated in practice because the **verifier accepts any top-score play**, so a divergent client-local pick still passes; the realised effect is **two players on different browsers see different Fritz lines from the same position** (fairness/consistency), not a rejected attempt | **medium** — tie positions are common in the midgame; whether two engines actually diverge depends on their locale/ICU build (often they agree by luck on pure-ASCII keys) | every Daily Fritz / Play-vs-Fritz game's exact Fritz line among equally-optimal plays | **FIX NOW (small)** — replace both `localeCompare` calls with a pure code-unit comparison (`a < b ? -1 : a > b ? 1 : 0`). Historical transcripts still verify unchanged (the verifier already accepts any top-score play); only future client-local Fritz picks shift, among equally-optimal moves — **no `FRITZ_POLICY_VERSION` bump strictly required**, but a bump to v3 (min-supported kept at 1) is the clean record of the change. Add a cross-engine or locale-forced determinism test. Bundle GC-8. ~½ day. | GC-INV-3, GC-INV-9 |
+| **GC-3a** | **No structural drift guard on the wire-identical core value types.** `Tile` / `PlacedTile` / `BranchArm` / `HubDouble` / `BoardState` / `PlacementPosition` / `TileOrientation` are re-declared in `client/src/types.ts` independent of game-core; the only drift guards (`contractsDriftTypes.ts` + the client `roomTransportContractsDrift.test.ts`) cover the higher-level DTO payloads, not these. They have already partially drifted (`readonly` on core, mutable on client). | §7.1.8, §7.1.9, §7.1.12 | **latent-drift → integrity-oracle** (a client that builds a board core then reads differently) | **medium** — no live incident, but there is nothing to catch the next drift; the last one (mutable vs readonly) already happened | any position the client constructs then submits for verification | **FIX NOW (small)** — add `readonly` to the `client/src/types.ts` leaf types, fix the ~2 client mutation sites (`botEngine.ts`, geometry) or wrap, and add an `expectTypeOf<ClientX>().toEqualTypeOf<CoreX>()` block for the 7 leaves. ~1–2 days. | GC-INV-8, GC-INV-1 |
+| **GC-2** | **No rollout path for a `GAME_RULES_VERSION` bump.** `parseDailyFritzTranscript` hard-rejects `rulesVersion !== GAME_RULES_VERSION` with no grace window (`dailyFritzTranscript.ts:73`) — a bump strands every in-flight Daily Fritz attempt at the instant of deploy. Ghost / Puzzle Rush / Daily Puzzle / Review carry **no** `game_rules_version` stamp on their persisted evidence and replay against whatever engine is deployed — a bump silently re-judges historical move logs / submitted lines / saved reviews. | §7.1.6, §7.1.7 | **integrity-oracle + availability** | **n/a today** (`GAME_RULES_VERSION` = 1 since inception) — **latent**; certain to bite the first time engine *rules* (not just Fritz policy) change | on a bump: every open DF attempt strands; every later re-verification in the other four modes changes verdict | **POSTURE — "before you ever bump `GAME_RULES_VERSION`" checklist.** No code now (nothing to roll out). (1) introduce `SUPPORTED_GAME_RULES_VERSIONS` + a version-parameterised engine entrypoint. (2) DF: switch the two exact-equality checks (`readDailyFritzAuthorityContract` L81, `clientSupportsDailyFritzAuthorityContract` L61) + `parseDailyFritzTranscript` to set-membership; verifier dispatches on the attempt's already-persisted `gameRulesVersion`; drop old-version support ~48 h post-bump (attempts are single-day). (3) Ghost/Rush/Puzzle/Review: stamp `game_rules_version` at write + freeze the verdict at write; re-verification replays under the stamp (frozen engine copy) or treats a retired-version record's stored verdict as final. (4) decide frozen-copy vs in-hot-path branch when a concrete rules change exists. | GC-INV-5, GC-INV-6 |
+| **GC-4** | **The one non-integer computation in the package sits in the public API surface.** `botHeuristics.estimateDrawCostFromPublicInfo` (float division, `* 0.4`, `Math.min`) is `export *`-ed from `index.ts`. It is bot-only today and no verifier imports it, but nothing structurally prevents a future verifier / policy change from pulling it into a graded path, where Node/JSC float divergence could flip a verdict. | §7.1.4 | **integrity-oracle** (potential — not realised) | **low** — needs a future author to import it into a verified path | whichever verified decision imported it | **FIX NOW (trivial)** — move `botHeuristics.ts` behind a `@racehorse/game-core/bot` subpath (not re-exported from the root `index.ts`), or add an ESLint `no-restricted-imports` boundary forbidding the verifier files from importing it. ~½ day. | GC-INV-3 |
+| **GC-9** | **The oracle's structural self-check has a silent prod off-switch.** `server/src/game/invariants.ts` downgrades a tile-accounting / game-state violation from `throw` to `console.error` when `SOFT_GAME_INVARIANTS=true`. It is fail-closed by default and (per §6.1 `/ready` audit) not currently set, but there is no surface that reports whether it is set in prod, and the game-core `assertValidGameState` it wraps is the oracle's own corruption guard. | §7.1.12 | **integrity-oracle** (a mis-set flag lets a corrupted game state persist / broadcast) | **low** — off by default, requires a deliberate env var | any room / attempt whose state is corrupt while the flag is on | **FIX NOW (trivial, bundle with GC-1)** — surface `softInvariants` in the `/ready.gameCore` block; optionally alert once at boot if it is `true` in `NODE_ENV=production`. | GC-INV-12 |
+| **GC-5** | **`getDailyFritzAuthorityStateDigest` is construction-sensitive.** It embeds `state.board` via raw `JSON.stringify` (object-key-order dependent) and omits `handStarters`. Two structurally-equal `GameState`s built with a different key insertion order on different runtimes would digest differently. | §7.1.6, §7.1.12 | **integrity-oracle** — but today only a **diagnostics** signal (`fritz_state_mismatch` carries a structured diff; it is *not* a hard reject — System 3 §3.2 POSTURE), so the realised effect is noise in the divergence telemetry, not a rejected attempt | **low** — client + server both build the board through core `simulatePlacement`, so key order is consistent in practice | the fidelity of the DF divergence signal | **REVISIT IF SCALE (small)** — canonicalise the board inside `canonicalizeDailyFritzAuthorityState` (recursively sort keys, or project to a fixed tuple) instead of raw `JSON.stringify`; confirm `handStarters` feeds no downstream decision (it does not feed scoring) and either include it or document the omission; bump `DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION` to 2, keep v1 acceptance. ~1 day. Not urgent while it is diagnostics-only. | GC-INV-10 |
+| **GC-8** | **`sortLegalMoves` order is an undeclared load-bearing contract.** The move-enumeration order out of `getLegalMoves` determines Fritz policy-v1 tie selection and the order every replay walks; it is an implementation detail of `engine.ts` with no invariant stated and no test pinning it. A refactor that changed the sort would silently change Fritz v1 behaviour and replay enumeration. | §7.1.2 | **latent-drift → integrity-oracle** | **low** — nobody is editing the sort | Fritz v1 historical replays; any future consumer relying on the order | **REVISIT IF SCALE (trivial, bundle with GC-6)** — add a comment in `engine.ts` declaring the order load-bearing + a test that pins `sortLegalMoves` output for a fixed board. ~1 h. | GC-INV-9 |
+| **GC-3b** | **`GameState` / `Move` / `Config` drift + the `botEngine.ts` second engine.** `client/src/types.ts` `GameState` (mutable, 2-field `config`, `handCounts`, no `handStarters`) and loose non-discriminated `Move` diverge from core by design; `client/src/modules/match/runtime/botEngine.ts` (571 LOC) + `client/src/game/openEndsGeometry.ts` (554 LOC) re-implement geometry / lifecycle. `docs/fritz-trust-guardrails.md` (2026-06-12) flags "dual engines" as **P1**; `parity-*` golden tests are the current guardrail. | §7.1.9, §7.1.12 | **latent-drift** (rule divergence caught by parity tests; the risk is a gap the golden scenarios miss) | **low–medium** | client-side legality / rendering vs the server verifier | **REVISIT — own effort, not a Step-3 line item.** Unifying `client/src/types.ts` onto core (`export type … from '@racehorse/game-core'` + a `ClientGameState & { handCounts }` extension) and retiring `botEngine.ts`'s local geometry ripples through ~100 client files + every client in-place mutation. Interim cheaper guard: a client↔core `getLegalMoves` **differential test** (same states in, assert identical move sets). Full unification is a deliberate future pass. | GC-INV-1, GC-INV-7 |
+| **GC-7** | **Decommissioned Daily Puzzle ladder DTOs still shipped + asserted.** `dtoContracts.ts` still exports `DailyPuzzleSlot` / `DailyPuzzleAttempt` / `DailyPuzzleLeaderboardEntry` / `DAILY_PUZZLE_SLOT_COUNT` etc. and `contractsDriftTypes.ts` still asserts them, though the ladder is decommissioned (System 3, migration applied 2026-09-04). | §7.1.8 | **cosmetic / process** (~90 LOC dead type surface) | n/a | none | **ACCEPT** (delete opportunistically alongside System 3's parked **DF-CAND-1b**, which already covers `client/src/dailyPuzzle/**`). | — |
+
+### Tier summary
+
+- **FIX NOW:** **GC-1** (deployed-engine assertion — the user asked for this in
+  the FIX-NOW tier and the check is genuinely cheap), **GC-6** (`localeCompare`
+  in the live Fritz policy-v2 tie-break — the one real cross-runtime
+  nondeterminism), **GC-3a** (drift guard on the 7 wire-identical leaf types +
+  `readonly` alignment), **GC-4** (move the float behind a subpath / import
+  boundary), **GC-9** (surface `SOFT_GAME_INVARIANTS` posture — bundle with
+  GC-1), **GC-8** (pin the `sortLegalMoves` contract — bundle with GC-6).
+- **POSTURE:** **GC-2** (the "before you bump `GAME_RULES_VERSION`" checklist —
+  no code now; the shape is in §7.1.13 / the GC-2 row).
+- **REVISIT IF SCALE:** **GC-5** (canonicalise the authority digest — small, not
+  urgent while diagnostics-only), **GC-3b** (client type unification / retire the
+  second engine — a deliberate future pass; add the differential-test interim
+  guard).
+- **ACCEPT:** **GC-7** (dead Daily Puzzle DTOs — delete with DF-CAND-1b).
+
+Nothing here is a *currently-exploitable* score-oracle bypass. The two live
+issues are **GC-6** (Fritz's "deterministic" policy isn't, though the lenient
+verifier masks it) and **GC-1** (the reviewed-engine guarantee is unverifiable) —
+which is why both are FIX-NOW.
 
 ## 7.4 Checklist
-- [x] Step 1 — engine + verifier + version-contract current-state map — §7.1 written 2026-09-04 (§7.1.1–§7.1.12). **Awaiting human review before Step 2.**
-- [ ] Step 2 — invariants + gap list (GC-1..GC-8 risk-ranked) → ratify (D-N)
-- [ ] Step 3 — fixes + tests
+- [x] Step 1 — engine + verifier + version-contract current-state map — §7.1 (§7.1.1–§7.1.13). **Human-reviewed 2026-09-04** (3 scoping questions → §7.1.13).
+- [x] Step 2 — invariants (§7.2 GC-INV-1..12) + risk-ranked gap list (§7.3 GC-1..GC-9) — **CANDIDATE, written 2026-09-04, awaiting sign-off → D-N.**
+- [ ] Step 3 — fixes + tests. Proposed scope: **GC-1 + GC-9** (deployed-engine assertion + `/ready.gameCore`), **GC-6 + GC-8** (`localeCompare` → code-unit + pin `sortLegalMoves`), **GC-3a** (leaf-type drift guard), **GC-4** (float import boundary). **POSTURE:** GC-2 checklist. **Deferred:** GC-5 (REVISIT IF SCALE), GC-3b (own effort), GC-7 (ACCEPT — with DF-CAND-1b).
 
 ---
 
@@ -4923,6 +5092,7 @@ one becomes live or blocks a numbered system.
 | 2026-09-04 | **AU-3 corrected — `trust proxy` hop count was wrong; range-based fix pushed.** Post-deploy live verification of `5e5931b3` found the rate-limit key landing on Render's internal LB IP (`10.199.46.133` / `10.194.193.7`), not the client. The 429 `log.warn` `xffRaw` showed a **3-entry** chain `<real client>, <Cloudflare edge>, <Render internal>` — confirming **two** proxy hops (Render's platform Cloudflare + Render's internal LB), so `app.set('trust proxy', 1)` from `5e5931b3` was one hop short and distinct users bucketed onto ~2 shared internal-IP keys → **cross-user false 429s, confirmed in prod logs.** Not a re-opened spoof (the rightmost XFF entries are infra-appended, not attacker-controlled). **Fix (`server/src/trustedProxy.ts`, new):** `TRUSTED_PROXY` is a **range list** — `['loopback','linklocal','uniquelocal', …15 Cloudflare v4 CIDRs, …7 v6 CIDRs]` (from cloudflare.com/ips, synced 2026-09-04) — passed to `app.set('trust proxy', …)`, so Express walks `X-Forwarded-For` past every infra hop to the real client regardless of the exact count, and a client-prepended entry is never selected (it sits left of the Cloudflare-appended client entry). `rateLimit.ts` `requestIp()` now prefers `CF-Connecting-IP` (Cloudflare sets it to the verified client and strips any client value) **but only when `isTrustedInfraPeer(req.socket.remoteAddress)`** — a raw non-Cloudflare origin request cannot get its self-declared `CF-Connecting-IP` honoured (falls back to `req.ip`). 429 `log.warn` extended: `keyIp` (the bucket key's IP), `peer`, `cfConnectingIp`. **Tests:** `trustedProxy.test.ts` (`isTrustedInfraPeer` table incl. `::ffff:`-mapped + a real Express server proving `req.ip` resolves past a spoof prefix for 1/2/3-hop chains); `rateLimitBypassClosed.test.ts` expanded — a rotating client-set `CF-Connecting-IP` on an untrusted peer does not yield fresh buckets; `CF-Connecting-IP` IS honoured (distinct real clients → distinct buckets) behind a real Cloudflare edge. **Verify:** server 210 files / 1225 tests green, client 216 / 1482 green, `tsc -b` clean both sides, lint unchanged (server 68 pre-existing errors — 0 new; client at 401-warning budget). §6 status + §6.3 (AU-3 row + status header) + §6.4 + Sequencing + Current focus + Changelog updated. |
 | 2026-09-04 | **Three pending human actions applied outside the repo — no repo/SQL work.** Human reports: (1) `supabase/migrations/2026-09-02_daily_puzzle_ladder_decommission.sql` applied directly in the Supabase SQL editor (drops the `insert_own`/`update_own` policies + revokes client write grants on `daily_puzzle_attempts` / `_slot_results`; tables kept `public` read-only for `socialProfile.ts` / `homeCompletionDates.ts`). (2) `supabase/migrations/2026-09-03_legacy_league_decommission.sql` applied — the 6 `league_*` tables DROPped `cascade`. (3) Supabase project **JWT expiry lowered 3600 → 900 s** in the dashboard. Effect on the plan: **System 3 / DF-CAND-1** and **System 5** DB decommissions are now fully live (were "code shipped, migration pending"); **System 6 AU-1 is CLOSED** — the cache-A TTL cut (`5e5931b3`) + the 900 s JWT expiry bound the captured/signed-out-token window to ≤ `min(900 s, last-check + 15 s)`; the scale-gated server denylist is not needed. **Still open (System 6):** the AU-6 pre-`ADMIN_SECRET` checklist (no secret set today). Current focus + Sequencing + §3 / §5 / §6 bodies + §6.3 AU-1 row + §6.4 updated. **Next: System 7 Step 1.** |
 | 2026-09-04 | **System 7 (`@racehorse/game-core` — shared score oracle) Step 1 — current-state map §7.1 written (no fixes). Not pushed.** 12 subsections. (7.1.1) **Resolution asymmetry** — server prod runtime runs game-core `dist/` (git-ignored, build-step dependent); the client bundle + *every* test path alias to `src/`; `server/src/game/*` are one-line re-export shims. (7.1.2) engine = pure dependency-free reducer; the only non-determinism is `Math.random()` in `startNewHand`'s shuffle when no `customDeck` (unreachable in verified modes; MP rooms shuffle server-authoritatively). (7.1.3) scoring is integer `÷5` / `Math.round(Σpips/5)` — spec-deterministic across V8/JSC. (7.1.4) determinism: verified paths integer-only by design; the single float (`estimateDrawCostFromPublicInfo`) is bot-only and structurally outside the verifier, by convention not enforcement; `random.ts` FNV+`Math.imul` LCG feeds `createDeterministicDoubleSixDeal`. (7.1.5) Fritz policy `v2` (min-supported `1`) — v1/v2 differ only in tie-break (v1 seeded-RNG, v2 canonical empty-arm collapse), not top-score; `isOptimalOfficialFritzPlayForVersion` accepts any top-score play so historical evidence stays valid. (7.1.6) five verifiers — **only Daily Fritz has a real version pin**; Ghost / Puzzle Rush / Daily Puzzle / Review replay against the currently-deployed engine with no `GAME_RULES_VERSION` gate; DF transcript is built from the engine journal, not the UI move log. (7.1.7) `parseDailyFritzTranscript` **hard-rejects** `rulesVersion !== GAME_RULES_VERSION` (no grace → strands in-flight attempts on a bump); DF start negotiates a pinned authority contract (`426` on incompat resume). (7.1.8) drift guards: `contractsDriftTypes.ts` (server-vs-core, compile-time) + a client `.test.ts` cover **wire DTOs only** — `client/src/types.ts` + `client/src/game/openEndsGeometry.ts` are independent of core with **no engine-type drift guard**. (7.1.9) the `botEngine.ts` (571 LOC) "second engine" seam — command application routes through `gameCoreAdapter` → core, but local geometry drives move enumeration + rendering; `docs/fritz-trust-guardrails.md` (2026-06-12, partly stale) flags this P1. (7.1.10) game-core has 10 test files (engine 1,761 LOC), CI builds it 3× + resolve smoke; no cross-runtime (Node-vs-browser-JS) determinism test. (7.1.11) zero concurrency/authz surface inside the package (pure lib). (7.1.12) **GC-1..GC-8** candidate seams parked for Step 2: dist-freshness (GC-1), `GAME_RULES_VERSION` rollout path (GC-2), client engine-type drift / dual engine (GC-3), the float boundary (GC-4), the authority-digest `JSON.stringify(board)` + omitted `handStarters` (GC-5), no cross-runtime determinism proof (GC-6), dead Daily-Puzzle DTOs (GC-7), unstated `sortLegalMoves` invariant (GC-8). §7 status + §7.4 + Current focus + Sequencing updated. **Stop — await human review of §7.1 before Step 2.** |
+| 2026-09-04 | **System 7 §7.1 human-reviewed + Step 2 (§7.2 invariants / §7.3 gap list) written — CANDIDATE, no code.** Human asked 3 scoping questions before Step 2 (→ §7.1.13): GC-1 gets a concrete cheap check (`dist/buildStamp.js` sha of sorted `src/*.ts` + server boot recompute from the on-disk src in the Render checkout + `/ready.gameCore.consistent` + smoke assertion) — **FIX NOW**; GC-2 rollout shape sketched (`SUPPORTED_GAME_RULES_VERSIONS` + versioned engine entrypoint; DF is cheap — the authority contract already persists `gameRulesVersion` per attempt, only the two exact-equality checks + the transcript-parse reject need widening; Ghost/Rush/Puzzle/Review need a write-time version stamp + frozen verdict) — **POSTURE**; GC-3 split into GC-3a (guard the 7 wire-identical leaf types + `readonly` alignment — Step-3-sized ~1–2 d) and GC-3b (unify `GameState`/`Move`/`Config` + retire `botEngine.ts` local geometry — own effort, ~100 client files). **§7.2: GC-INV-1..12.** **§7.3: GC-1..GC-9 risk-ranked** with an `integrity-oracle` severity band. **New live finding surfaced in Step 2:** **GC-6** — `fritzPolicy.scoreSortedPlays` (`fritzPolicy.ts:140`) breaks policy-**v2** ties with `String.localeCompare` (no locale arg) → the "deterministic canonical ties" policy is **not** runtime-deterministic; masked because the verifier accepts any top-score play, but two browsers get different Fritz lines. **FIX-NOW tier:** GC-1, GC-6, GC-3a, GC-4, GC-8, GC-9. **POSTURE:** GC-2. **REVISIT IF SCALE:** GC-5 (authority-digest `JSON.stringify` order), GC-3b. **ACCEPT:** GC-7 (dead Daily Puzzle DTOs — with DF-CAND-1b). §7 status + §7.4 + Current focus + Sequencing updated. **Awaiting human sign-off on §7.2 / §7.3 → D-N. Step 3 does not start until then.** |
 
 ---
 
