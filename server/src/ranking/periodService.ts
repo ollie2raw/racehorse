@@ -1,5 +1,5 @@
 
-import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, type MatchOutcome } from './glicko2';
+import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, isProvisional, type MatchOutcome } from './glicko2';
 import { supabaseFetch } from '../supabaseUtils';
 import { fetchAllPages } from '../supabasePagination';
 
@@ -167,7 +167,7 @@ async function commitProcessedGame(
       p_glicko_rd: result.newRD,
       p_glicko_vol: result.newVol,
       p_glicko_last_period: processedAt,
-      p_provisional: newGamesPlayed < 20,
+      p_provisional: isProvisional(newGamesPlayed),
       p_peak_rating: newPeakRating,
       p_ranked_games_played: newGamesPlayed,
       p_game_id: game.id,
@@ -185,7 +185,7 @@ async function commitProcessedGame(
       glicko_rd: result.newRD,
       glicko_vol: result.newVol,
       glicko_last_period: processedAt,
-      provisional: newGamesPlayed < 20,
+      provisional: isProvisional(newGamesPlayed),
       peak_rating: newPeakRating,
       ranked_games_played: newGamesPlayed,
     },

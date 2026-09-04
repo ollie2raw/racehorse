@@ -817,7 +817,11 @@ io.on('connection', (socket: Socket) => {
           await finalizeFritzForfeit({
             userId: verifiedUserId,
             fritzTier: pending.fritz_tier,
-            source: { roomCode },
+            // RK-1: anchor sourceMatchId to this bot_match_pending row's own
+            // PK, not the roomCode — a rematch in the same room reuses
+            // roomCode, so a roomCode-derived id would collide across two
+            // genuinely distinct forfeit events.
+            source: { roomCode, verifiedMatchId: `bot-match-pending:${pending.id}:forfeit` },
             youScore: scores?.youScore ?? null,
             botScore: scores?.botScore ?? null,
             verifiedScores: scores,

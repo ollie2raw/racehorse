@@ -1,7 +1,7 @@
 import { childLogger } from '../logger';
 import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
-import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
+import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { getLegalMoves } from '../game/engine';
 import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
 import { parseBranchPosition } from '../game/types';
@@ -1074,29 +1074,38 @@ export async function completeGhostGame(params: {
     if (isRatingEligible && params.applyGlicko !== false) {
       const now = new Date().toISOString();
       const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
-      await supabaseFetch(`/rest/v1/ranked_games`, {
-        method: 'POST',
-        body: JSON.stringify([
-          buildRankedGameInsertPayload({
-            playerId: params.userId,
-            opponentId: fritzId,
-            playerScore: Math.round(params.finalScore),
-            opponentScore: Math.round(params.opponentScore),
-            gameType: 'fritz',
-            playedAt: now,
-            ratingBefore: rankingProfile.glicko_rating,
-            rdBefore: rankingProfile.glicko_rd,
-            ratingAfter: null,
-            source: params.matchId
-              ? { sourceType: 'verified_single_player', sourceMatchId: params.matchId }
-              : null,
-          }),
-        ]),
+      // RK-2 (HARDENING_PLAN §8.3): route through the idempotent insert —
+      // this branch is reachable from gameOverPersistence.ts's retry-on-
+      // any-throw wrapper around persistGameOverOnce(), where a later,
+      // unrelated failure in the same call can re-invoke this insert for an
+      // already-recorded match.
+      const insertResult = await insertRankedGameIdempotent({
+        playerId: params.userId,
+        opponentId: fritzId,
+        playerScore: Math.round(params.finalScore),
+        opponentScore: Math.round(params.opponentScore),
+        gameType: 'fritz',
+        playedAt: now,
+        ratingBefore: rankingProfile.glicko_rating,
+        rdBefore: rankingProfile.glicko_rd,
+        ratingAfter: null,
+        source: params.matchId
+          ? { sourceType: 'verified_single_player', sourceMatchId: params.matchId }
+          : null,
       });
 
-      const ratingResult = await processRatingPeriod(params.userId);
-      glickoRating = ratingResult.newRating;
-      glickoDelta = ratingResult.delta;
+      if (!insertResult.isNew) {
+        log.info(
+          { userId: params.userId, matchId: params.matchId },
+          'ghost/fritz ranked game already recorded for this sourceMatchId — skipping duplicate rating application',
+        );
+        glickoRating = rankingProfile.glicko_rating;
+        glickoDelta = 0;
+      } else {
+        const ratingResult = await processRatingPeriod(params.userId);
+        glickoRating = ratingResult.newRating;
+        glickoDelta = ratingResult.delta;
+      }
     } else {
       glickoRating = rankingProfile.glicko_rating;
       glickoDelta = 0;

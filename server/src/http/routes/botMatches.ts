@@ -64,7 +64,14 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
         await finalizeFritzForfeit({
           userId: row.user_id,
           fritzTier: row.fritz_tier,
-          source: { roomCode: typeof row.room_code === 'string' ? row.room_code : null },
+          // RK-1: a roomCode alone is not per-match-unique (a rematch reuses
+          // the same room code), so anchor the ranked-game sourceMatchId to
+          // this bot_match_pending row's own PK instead — one row per Fritz
+          // match, guaranteed distinct even after the in-memory Room is gone.
+          source: {
+            roomCode: typeof row.room_code === 'string' ? row.room_code : null,
+            verifiedMatchId: `bot-match-pending:${row.id}:forfeit`,
+          },
         });
         processed += 1;
       }

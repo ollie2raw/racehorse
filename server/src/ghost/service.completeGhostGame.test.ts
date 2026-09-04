@@ -159,3 +159,121 @@ describe('completeGhostGame — Fritz branch ghost_rating (training profile) sid
     expect(finalUpsert.games_played).toBe(5);
   });
 });
+
+describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HARDENING_PLAN §8.3)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let rankedGamesCalls: Array<{ path: string; body: Record<string, unknown> }>;
+
+  function stub(rankedGamesResponse: unknown[]) {
+    rankedGamesCalls = [];
+    fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (url.includes('/rest/v1/ghost_profiles') && method === 'GET') {
+        return jsonResponse([
+          { user_id: USER_ID, ghost_rating: 800, last_updated: null, composite_log: null, style_profile: null, games_played: 5 },
+        ]);
+      }
+      if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
+        return jsonResponse([JSON.parse(String(init?.body))[0]]);
+      }
+      if (url.includes('/rest/v1/ghost_games') && method === 'POST') {
+        return jsonResponse([{ id: 'game-1', xmax: '0' }]);
+      }
+      if (url.includes('/rest/v1/ghost_games') && method === 'GET') {
+        return jsonResponse([]);
+      }
+      if (url.includes('/rest/v1/profiles') && method === 'GET') {
+        // Non-legacy shape (ranked_games_played/peak_rating already set) so
+        // periodService's normalizeLegacyStartingProfile doesn't fire an
+        // extra PATCH this stub doesn't otherwise handle.
+        return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
+      }
+      if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
+        rankedGamesCalls.push({ path: url, body: JSON.parse(String(init?.body)) });
+        return jsonResponse(rankedGamesResponse);
+      }
+      if (url.includes('/rest/v1/ranked_games') && method === 'GET') {
+        // processRatingPeriod's getPendingGames sweep. Only a genuinely new
+        // insert (rankedGamesResponse non-empty) has anything pending.
+        return jsonResponse(
+          rankedGamesResponse.length > 0
+            ? rankedGamesResponse.map((row) => ({
+                id: (row as { id: string }).id,
+                player_id: USER_ID,
+                opponent_id: FRITZ_ELITE_ID,
+                player_score: 60,
+                opponent_score: 10,
+                played_at: new Date().toISOString(),
+              }))
+            : [],
+        );
+      }
+      if (url.includes('/rest/v1/rpc/')) {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('routes the Fritz ranked_games insert through insertRankedGameIdempotent (on_conflict + ignore-duplicates), not a bare POST', async () => {
+    const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
+    try {
+      stub([{ id: 'rg-1', player_id: USER_ID, source_match_id: 'match-1' }]);
+
+      const result = await completeGhostGame({
+        userId: USER_ID,
+        opponentUserId: FRITZ_ELITE_ID,
+        finalScore: 60,
+        opponentScore: 10,
+        moveLog: [],
+        matchId: 'match-1',
+        applyGlicko: true,
+      });
+
+      expect(rankedGamesCalls).toHaveLength(1);
+      expect(rankedGamesCalls[0]!.path).toContain('on_conflict=player_id,source_match_id');
+      expect(rankedGamesCalls[0]!.body).toMatchObject({ source_match_id: 'match-1' });
+      // A genuinely new row → the rating actually applied.
+      expect(result.glickoDelta).not.toBe(0);
+    } finally {
+      if (OLD_ENV === undefined) delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+      else process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
+    }
+  });
+
+  it('a duplicate matchId (ignore-duplicates yields no row) is a no-op — no second rating application', async () => {
+    const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
+    try {
+      // PostgREST's ignore-duplicates response for a conflicting row: [].
+      stub([]);
+
+      const result = await completeGhostGame({
+        userId: USER_ID,
+        opponentUserId: FRITZ_ELITE_ID,
+        finalScore: 60,
+        opponentScore: 10,
+        moveLog: [],
+        matchId: 'match-1',
+        applyGlicko: true,
+      });
+
+      expect(rankedGamesCalls).toHaveLength(1);
+      // No second write anywhere, and the returned delta reflects "no change
+      // applied" rather than a second computed rating.
+      expect(result.glickoDelta).toBe(0);
+      expect(result.glickoRating).toBe(1500);
+    } finally {
+      if (OLD_ENV === undefined) delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+      else process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
+    }
+  });
+});

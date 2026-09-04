@@ -14,10 +14,10 @@ import {
 } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
 import {
-  buildRankedGameInsertPayload,
   isRankedGameSourceColumnsEnabled,
   type RankedGameSource,
 } from '../ranking/rankedGamePayload';
+import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 import type { ProfileRow } from '../supabaseTypes';
 import { writeForfeitActivity } from '../social/activityWriter';
@@ -226,21 +226,31 @@ export async function recordPendingFritzDisconnectLoss(
   const { fritzId, gameType } = getFritzIdentityForTier(fritzTier);
   const rankedSource = await resolveLocalFritzAbandonRankedSource(userId, source);
 
-  await supabaseFetch('/rest/v1/ranked_games', {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(buildRankedGameInsertPayload({
-      playerId: userId,
-      opponentId: fritzId,
-      playerScore: verifiedScores.youScore,
-      opponentScore: verifiedScores.botScore,
-      gameType,
-      ratingBefore: profile.glicko_rating ?? 0,
-      rdBefore: profile.glicko_rd ?? 0,
-      playedAt: new Date().toISOString(),
-      source: rankedSource,
-    })),
+  // RK-1 (HARDENING_PLAN §8.3): route through the idempotent insert so a
+  // re-triggered stale-match sweep or retry cannot double-apply this loss.
+  // Requires rankedSource to actually carry a per-match-unique
+  // sourceMatchId — see resolveLocalFritzAbandonRankedSource's callers for
+  // how that id is derived; a roomCode alone is NOT safe here (a rematch in
+  // the same room reuses room.code, so `${roomCode}:forfeit` would collide
+  // across two genuinely distinct forfeit events).
+  const insertResult = await insertRankedGameIdempotent({
+    playerId: userId,
+    opponentId: fritzId,
+    playerScore: verifiedScores.youScore,
+    opponentScore: verifiedScores.botScore,
+    gameType,
+    ratingBefore: profile.glicko_rating ?? 0,
+    rdBefore: profile.glicko_rd ?? 0,
+    playedAt: new Date().toISOString(),
+    source: rankedSource,
   });
+  if (!insertResult.isNew) {
+    log.info(
+      { userId, fritzTier, source: rankedSource },
+      'fritz disconnect loss already recorded for this sourceMatchId — skipping duplicate rating application',
+    );
+    return;
+  }
 
   await processRatingPeriod(userId);
 }
