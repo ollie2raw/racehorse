@@ -179,35 +179,36 @@ focus" line, then the section for the system in progress.
   human-action note (rollout shape in §7.1.13). **REVISIT IF SCALE:** GC-3b.
   **ACCEPT:** GC-7. **Next: System 8.**
 
-- **System 8 (Ranking / Glicko-2) → Step 1 audit written (§8.1) 2026-09-04,
-  awaiting human review.** Maps the rating math + provisional window
-  (`isProvisional` confirmed **dead code**, zero server callers; client
-  "provisional" badges not yet confirmed to use the same `< 20` threshold),
-  the hand-maintained client-side duplicate of the rating math
-  (`client/src/ranking/glicko2.ts`, not yet diffed line-by-line — same
-  pattern as GC-3b), the two application paths (inline multiplayer via
-  `insertRankedGameIdempotent` — confirmed safe; weekly `node-cron` sweep
-  over `rating_after=is.null` — no boot-time catch-up, single point of
-  failure). **Confirmed gap:** `fritzMatchLifecycle.ts:229` (Fritz
-  disconnect-loss sweep) and `ghost/service.ts:1077` (`completeGhostGame`'s
-  Fritz branch) both POST directly to `ranked_games`, bypassing
-  `insertRankedGameIdempotent()`'s dedup entirely — and the Fritz branch is
-  reachable not just from standalone Bot/Fritz, but from
-  `gameOverPersistence.ts`'s room game-over path, which wraps the *whole*
-  `persistGameOverOnce()` in a retry-on-any-throw loop, so a Fritz insert
-  that already succeeded can be silently re-run by a later, unrelated
-  failure in the same call. Not yet reproduced live. **Confirmed live via
-  `assert_security_posture()`:** `ranked_games` + `rating_periods` both
-  still carry full anon+authenticated write GRANTs (RLS enabled, but the
-  underlying grant never revoked) — the same migration-drift pattern the
-  2026-09-01 RPC lockdown's own comment names; the exact RLS POLICY
-  predicate (deny-all vs permissive) could not be confirmed by any
-  available read-only method — a live anon-key INSERT probe was attempted
-  and correctly blocked by the safety classifier as an outward-facing,
-  hard-to-reverse action against prod. **Biggest open question carried into
-  Step 2.** `/api/ranking/process/:userId` re-checked clean (admin-key only,
-  no query-param fallback, unlike AU-6). **Audit only — no fixes made.
-  Awaiting human review before Step 2.**
+- **System 8 (Ranking / Glicko-2) → Steps 1–2 done (§8.1 audit + §8.2/§8.3
+  written 2026-09-04, awaiting human ratification). RK-0 (live exploitable
+  RLS gap) found and fixed same day, outside the normal Step cadence.**
+  **RK-0:** `pg_policies` showed both `ranked_games` and `rating_periods`
+  had an INSERT policy named `"Service role can insert..."` actually scoped
+  `roles={public}, with_check:true` — a confirmed, unauthenticated,
+  zero-skill score-oracle bypass (forge a win, inflate any player's rating),
+  the first genuinely-live exploit found across Systems 1–8. **Fixed by the
+  human directly in the Supabase SQL editor** (both policies dropped and
+  recreated `to service_role`) — flagged as its own migration-drift risk
+  (no migration file captures the correction yet). Verified every
+  legitimate `ranked_games` writer (`ranking/*.ts` + `fritzMatchLifecycle.ts`
+  via the shared `supabaseUtils.ts` helper; `ghost/service.ts` via its own
+  duplicated local `supabaseFetch`) authenticates with `SUPABASE_SERVICE_KEY`
+  whose JWT `role` claim was decoded and confirmed `"service_role"` — the
+  fix breaks nothing legitimate. Recorded as decisions-log **RK-0**, closed,
+  not risk-ranked in §8.3. §8.2 has **8 invariants** (RK-INV-1..8); §8.3 has
+  **6 open gaps**: **FIX NOW** — RK-1 + RK-2 (`fritzMatchLifecycle.ts:229` +
+  `ghost/service.ts:1077` both bypass `insertRankedGameIdempotent()`'s dedup;
+  RK-2's fix is a clean wrapper-swap, RK-1's needs an added fallback
+  `sourceMatchId` for non-local-room Fritz matches, which resolve to a
+  `null` source today), RK-4 (`profiles.provisional` written from a
+  duplicated `< 20` literal instead of calling the already-dead-code
+  `isProvisional()` — trivial fix); **REVISIT IF SCALE** — RK-3 (client
+  rating-prediction UI omits the server's forfeit-outcome override — a
+  confirmed but prediction-only drift), RK-5 (`ghost/service.ts`'s
+  duplicated local `supabaseFetch` vs the shared helper — process/cosmetic,
+  low urgency), RK-6 (weekly `node-cron` sweep has no boot-time catch-up,
+  unlike this codebase's other reapers). **Audit + rank only — no Step 3
+  fixes started. Awaiting human ratification.**
 
 - **System 2 Step 1** (§2.1): audit written. 10 subsections — topology-as-fact
   (§2.1.1), in-memory `Room` + 4 backing tables (§2.1.2), state writes (§2.1.3),
@@ -5031,11 +5032,6 @@ actually prevents.
 
 ### 8.1.6 Not yet covered / carried into Step 2 as open items
 
-- Exact RLS POLICY predicate on `ranked_games`/`rating_periods` (8.1.4).
-- Line-by-line diff of `client/src/ranking/glicko2.ts` vs the server
-  original, to confirm or rule out numeric drift (8.1.1).
-- Whether client-side "provisional" UI badges use the same `< 20` threshold
-  as the (currently uncalled) server `isProvisional()` (8.1.1).
 - Cron sweep's cross-row atomicity on a mid-sweep process restart (8.1.2).
 - `/api/ranking/{profile,leaderboard,history,process}` (`http/routes/ranking.ts`,
   163 LOC): `/api/ranking/process/:userId` (POST) is gated by
@@ -5045,14 +5041,145 @@ actually prevents.
   `profile`/`leaderboard`/`history` are public reads, not yet checked for
   unbounded/expensive queries.
 
+### 8.1.7 §8.1.4's open question RESOLVED — RK-0, a confirmed live exploit, found and fixed the same day
+
+**§8.1.4 above is left as originally written** (not edited) — the finding
+below supersedes its "single largest open question" framing; recorded as an
+addition, the same treatment §7's "D-14 correction" row got for GC-5.
+
+The human queried `pg_policies` directly (the SQL-editor half of the
+[[authenticated-rls-probe-technique]] that §8.1.4 named as the way to
+resolve this) and found the actual predicate: both `ranked_games` and
+`rating_periods` carried an INSERT policy literally named `"Service role
+can insert..."` whose `roles` clause was `{public}` with `with_check:
+true` — the name asserted `service_role`-only, the `to` clause was never
+set, so it silently applied to `public`, anon included. This was **not**
+the "RLS enabled but a stale table-level GRANT sitting behind a correct
+policy" case §8.1.4 left open as the optimistic reading — it was the
+pessimistic one: a genuinely wide-open write path, confirmed exploitable
+(forge a win for any `player_id`, at any score, no authentication). See
+decisions log **RK-0** for the full root cause, fix, and verification that
+every legitimate `ranked_games` writer authenticates as `service_role` and
+is unaffected by the fix. **Closed same day — not carried into §8.3 as an
+open gap.**
+
+### 8.1.8 Resolved this session — client/server rating-math diff + provisional-badge threshold
+
+**`client/src/ranking/glicko2.ts` vs `server/src/ranking/glicko2.ts` —
+diffed line-by-line. The core math is byte-identical**: `toGlicko2` /
+`fromGlicko2` / `g()` / `E()` / the full `computeGlicko2` step-3-through-6
+body (bisection search, volatility solve, rating/RD update), `SCALE`,
+`TAU`, `EPSILON`, `DEFAULT_RATING`/`RD`/`VOL`, every `FRITZ_*` id and
+rating value — all match. **One real behavioral drift found:** the server
+`GlickoResult` carries an optional `outcome?: MatchOutcome` field and a
+`scoreOutcome()` helper — when a match ends by forfeit, the *authoritative*
+result (win/loss/draw) is used for Glicko's `s_j` term instead of the raw
+score comparison, because "the abandoning player can be ahead on points at
+the moment they quit" (server code comment). **The client copy has no
+`outcome` field at all** — it always derives `s_j` from
+`score > opponentScore` inline, with no forfeit override. This means the
+client-side rating *prediction* UI (`predictFritzGlickoUpdate.ts`) computes
+the wrong provisional `s_j` for a forfeit-decided match — low severity
+(prediction-only, never the rating of record — the server always computes
+the real value), but a genuine, not-hypothetical drift, structurally the
+same class of bug as GC-3b. Carried into §8.3 as a gap.
+
+**Provisional-badge threshold — confirmed NOT diverged, but found a second
+duplicated-literal risk.** `profiles.provisional` (the column the client
+badges read via `/api/ranking/profile`/`leaderboard`) is written by
+`periodService.ts:170` as `p_provisional: newGamesPlayed < 20` — a
+**second, independent hardcoded `< 20` literal**, not a call to the
+`isProvisional()` function in `glicko2.ts` (confirmed dead code, §8.1.1).
+Today both copies of the threshold agree (`< 20` in both places), so
+client badges are accurate — but nothing enforces they stay in sync; a
+future tune of the provisional window only needs one of the two edited to
+silently diverge. Carried into §8.3 as a gap (low severity, same "duplicated
+constant" shape flagged elsewhere in this plan).
+
 ## 8.2 Invariants
-**Not started.** Step 2.
+
+The properties that must hold for the rating spine to be trustworthy. Status:
+**HOLDS** (enforced/true today) / **PARTIAL** / **AT RISK** / **DOES NOT HOLD**.
+
+- **RK-INV-1 — The rating math is correct and deterministic.**
+  `computeGlicko2()` implements the standard Glicko-2 algorithm and is a
+  pure function of its inputs. *HOLDS.*
+- **RK-INV-2 — One game produces exactly one rating delta, ever.** No
+  sequence of retries, sweeps, or duplicate calls double-applies a game's
+  rating change. *PARTIAL — **HOLDS** for human-vs-human multiplayer
+  (`insertRankedGameIdempotent` + `on_conflict=player_id,source_match_id`,
+  gated on both inserts being `isNew`); **DOES NOT HOLD** for Fritz
+  disconnect-loss (`fritzMatchLifecycle.ts:229`) and any Fritz game routed
+  through `completeGhostGame` (`ghost/service.ts:1077`, standalone and
+  room-based) — both bypass the dedup wrapper entirely (§8.1.3, RK-1/RK-2).*
+- **RK-INV-3 — Only the server (as `service_role`) can write a rated
+  result.** No client, anon or otherwise-authenticated, can insert or alter
+  a `ranked_games` / `rating_periods` row directly. ***DID NOT HOLD until
+  fixed same-day (RK-0)*** — both tables carried an INSERT policy scoped
+  `to public` with `with_check: true` despite being named for
+  `service_role`; **HOLDS now**, confirmed by the corrected policy +
+  confirmation every legitimate writer already authenticates as
+  `service_role` (§8.1.7).
+- **RK-INV-4 — A ranked game is eventually rated within a bounded time.**
+  Any `ranked_games` row with `rating_after: null` gets processed —
+  immediately if the inline path succeeds, otherwise by the deferred sweep
+  within a known ceiling. *PARTIAL — inline path is HOLDS; the deferred
+  sweep is `node-cron`, weekly only, **no boot-time catch-up** (unlike other
+  reapers in this codebase), so a row that misses the inline path can sit
+  unranked for up to 7 days, and a mid-week process restart's effect on an
+  in-progress sweep is unconfirmed (§8.1.2, RK-7).*
+- **RK-INV-5 — There is exactly one rating algorithm, and the client cannot
+  diverge from it.** *PARTIAL — the **authoritative** computation is
+  server-only and single-implementation (HOLDS for the rating of record);
+  a second, hand-maintained client copy exists for prediction UI only and
+  has already drifted on forfeit-outcome handling (§8.1.8, RK-3) — same
+  shape as game-core's GC-3b, lower stakes because it's prediction-only,
+  never the rating of record.*
+- **RK-INV-6 — The provisional-rating threshold is a single source of
+  truth.** *AT RISK (not yet violated) — `periodService.ts` writes
+  `profiles.provisional` from a second, independent hardcoded `< 20`
+  literal; the function meant to own this value (`isProvisional()`) is
+  dead code with zero callers. Both copies agree today; nothing prevents
+  them silently diverging on a future tune (§8.1.8, RK-4).*
+- **RK-INV-7 — A duplicate audit-log write never double-applies a rating.**
+  *HOLDS — `commit_glicko_game_update`'s `rating_periods` insert has no
+  idempotency guard of its own, but the `profiles`/`ranked_games` writes in
+  the same transaction are idempotent absolute-value overwrites, not
+  increments, so a duplicate RPC call (which RK-INV-2's gaps make possible
+  for Fritz games) duplicates the audit trail, not the rating effect.*
+- **RK-INV-8 — Admin-only ranking operations are inaccessible without the
+  admin secret, with no fallback transport.** *HOLDS —
+  `/api/ranking/process/:userId` checks `req.body?.adminKey` only, no
+  `req.query.admin_key` fallback (unlike the AU-6 finding on Daily Fritz
+  admin routes).*
 
 ## 8.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+
+**Scoring** (same axes as §1.3 / §6.3 / §7.3). *Severity* ∈
+{**integrity-oracle** (a rating can be forged, double-applied, or made
+unverifiable), **availability** (a legitimate game strands unrated),
+**latent-drift**, **process**, **cosmetic**}. *Verdict* ∈ {**FIX NOW**,
+**POSTURE**, **REVISIT IF SCALE**, **ACCEPT**}.
+
+**RK-0 is CLOSED, not risk-ranked below** — it was found and fixed live the
+same day this audit was written (decisions log RK-0, §8.1.7). Recorded here
+only for cross-reference: it would have been the single highest-severity
+row in this table (**integrity-oracle**, confirmed live exploit, no
+authentication required) had it still been open.
+
+| ID | Gap | §8.1 ref | Severity | Likelihood | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **RK-1** | **`fritzMatchLifecycle.ts:229`'s Fritz disconnect-loss insert bypasses `insertRankedGameIdempotent()`.** `recordPendingFritzDisconnectLoss()` POSTs directly to `ranked_games` with no `on_conflict`, no `Prefer: resolution=ignore-duplicates`. Triggered off the stale-match sweep, not a single guaranteed-once event — a re-triggered sweep or retry inserts a second row for the same forfeited match, double-applying the rating loss. | §8.1.3 | **integrity-oracle** | **low-medium** — requires the sweep to re-fire for an already-recorded disconnect; not yet observed live, but the sweep's own re-trigger conditions were not audited for exclusivity | the affected player's rating, once per duplicate sweep firing | **FIX NOW** — route through `insertRankedGameIdempotent()`. **Caveat found while sizing this fix, not yet resolved:** `resolveLocalFritzAbandonRankedSource()` returns `null` (no `sourceMatchId`) unless an explicit `verifiedMatchId` is supplied or `source.roomCode` is `local:`-prefixed — a **genuine multiplayer-room-hosted** Fritz match (a real room code, not a local-practice one) does not get a `local:` prefix, so `rankedSource` is `null` for it today, and swapping the insert call alone would leave `insertRankedGameIdempotent()`'s own `hasIdempotentSource()` gate false → still no dedup for that case. The fix must also give this path a stable fallback `sourceMatchId` (e.g. the `${roomCode}:forfeit` shape `writeFritzForfeitActivityFeed` already uses a few lines above it) so the guard actually applies universally, not only to local-practice matches. | RK-INV-2 |
+| **RK-2** | **`ghost/service.ts:1077`'s Fritz-branch insert (`completeGhostGame`) bypasses `insertRankedGameIdempotent()` — and is reachable through a retry-on-any-throw wrapper, not just standalone Bot/Fritz.** Confirmed both known callers (`gameOverPersistence.ts:290`, `http/routes/ghost.ts`'s verified-match route) always supply a non-empty `matchId` → `source.sourceMatchId`, so **unlike RK-1, a stable id is already available at every call site** — this is a pure "route it through the wrapper" fix, no extra id-derivation needed. The sharper failure path: `gameOverPersistence.ts`'s `createGameOverPersistScheduler` wraps the **entire** `persistGameOverOnce()` in a bounded retry loop that re-runs the whole function from the top on any thrown error; `persistGameOverOnce()` calls `completeGhostGame()` (this unguarded insert) for a Fritz-opponent room *before* several later steps that can themselves throw (the human-side `insertRankedGameIdempotent` call, `processRealtimeMultiplayerGame`, `recordMatchEnd`). A Fritz insert that already succeeded gets silently re-run if any of those later steps fails once. | §8.1.3 | **integrity-oracle** | **low** — needs a partial-success-then-later-failure inside one `persistGameOverOnce()` call; not yet reproduced live | the affected player's rating for that game, once per retry that re-enters this branch | **FIX NOW** — route through `insertRankedGameIdempotent()` with the already-available `sourceMatchId`. Bundle with RK-1 (same target function family, same fix shape). | RK-INV-2 |
+| **RK-3** | **Client-side rating-prediction math (`client/src/ranking/glicko2.ts`) omits the server's forfeit-outcome override.** Confirmed via line-by-line diff (§8.1.8): the core Glicko-2 math is byte-identical; the one real drift is that the server's `GlickoResult.outcome` field lets a forfeit's *authoritative* result override a possibly-misleading in-progress score for the `s_j` term, and the client copy has no such field — it always derives `s_j` from a raw score comparison. | §8.1.1, §8.1.8 | **latent-drift** (prediction-UI only — the rating of record is always server-computed; this cannot itself corrupt a rating) | **low-medium** — any forfeit-decided match shown in the client's "predicted rating change" UI mispredicts the outcome term | one player's pre-match rating-change preview, forfeit-decided matches only | **REVISIT IF SCALE** — cosmetic-adjacent (mispredicts a number nobody currently relies on for anything but curiosity), but flagged rather than ACCEPTed because it is the same *class* of dual-implementation drift risk this plan has repeatedly found to be more dangerous than it first looks (GC-3b) — worth a follow-up pass once `predictFritzGlickoUpdate.ts`'s actual UI prominence is assessed. | RK-INV-5 |
+| **RK-4** | **The provisional-rating threshold is duplicated, not shared.** `periodService.ts:170` writes `profiles.provisional` from a hardcoded `newGamesPlayed < 20` literal, independent of the `isProvisional()` function in `glicko2.ts` that exists for exactly this purpose and is otherwise dead code (zero other callers). The two agree today (`< 20` both places) — this is a latent divergence risk, not a live one. | §8.1.1, §8.1.8 | **latent-drift** | **low** today, **certain to matter** the first time the provisional window is retuned | every profile's `provisional` flag (badge, leaderboard-eligibility framing) on the next threshold change | **FIX NOW (trivial)** — replace the literal at `periodService.ts:170` with a call to `isProvisional(newGamesPlayed)`. ~5 min. | RK-INV-6 |
+| **RK-5** | **`ghost/service.ts` maintains its own local `supabaseFetch`, duplicating `supabaseUtils.ts`'s shared helper.** Same request shape (`apikey` + `Authorization: Bearer`, `SUPABASE_SERVICE_KEY`), independently wired, confirmed while verifying RK-0's fix didn't break this path. No behavioral gap today (verified via RK-0's investigation that it authenticates identically as `service_role`) — this is a code-hygiene / single-source-of-truth finding, not a security or correctness one. | §8.1.3 (RK-0 verification) | **process** | n/a — cosmetic/maintenance, not risk-scored | none today; a future divergence (e.g. a timeout or circuit-breaker change made to `supabaseUtils.ts`'s version but not mirrored here) would silently apply only to non-ghost writers | **REVISIT IF SCALE** — consolidate `ghost/service.ts` onto the shared `supabaseUtils.ts` `supabaseFetch`, low urgency, no live risk today. | — |
+| **RK-6** | **The deferred rating-period cron has no boot-time catch-up sweep and an unconfirmed restart story.** `startRankingCron()` runs weekly (Sundays 00:00 UTC) via in-process `node-cron`; unlike other reapers in this codebase (boot sweep + frequent interval), nothing re-triggers `processAllPendingRatingGames()` between scheduled runs, and the sweep loop's atomicity across rows on a mid-sweep process restart was not confirmed this session. | §8.1.2 | **availability** | **low-medium** — Render free tier restarts are not rare; any row inserted between Sundays that missed the inline path sits `rating_after: null` (unranked-looking) for up to 7 days | any ranked game whose inline processing failed, until the next Sunday | **REVISIT IF SCALE** — add a boot-time catch-up sweep mirroring the pattern used elsewhere (`recoverStrandedDailyFritzAttempts`, `recoverTournamentMatches`); confirm/document per-row atomicity on restart. Not urgent at current single-instance, low-volume scale, but cheap to fix and matches an established pattern — candidate for bundling into RK-1/RK-2's Step 3 pass rather than its own effort. | RK-INV-4 |
 
 ## 8.4 Checklist
 - [x] Step 1 — rating math + cron + `ranked_games` idempotency current-state map (§8.1)
+- [x] RK-0 — live exploitable RLS grant on `ranked_games`/`rating_periods` found + fixed same day (decisions log, §8.1.7)
+- [x] Step 2 — invariants (§8.2, RK-INV-1..8) + risk-ranked gap list (§8.3, RK-1..RK-6) written 2026-09-04 — **awaiting human ratification**
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
@@ -5299,6 +5426,7 @@ one becomes live or blocks a numbered system.
 | D-9 | 2026-09-01 | **System 2 Step 2 RATIFIED — §2.2 (MP-INV-1..19) + §2.3 (MP-G1..MP-G17, including the §2.3.2 verification-pass updates) as written.** The human reviewed the invariant list and the tiered gap list line-by-line and signed off. What is ratified: **19 invariants** across 8 domains (seat/identity 1–3, room-kind ACL 4–6, state authority & ordering 7–9, persistence/recovery 10–13, game-over integrity 14–17, disconnect/grace 18, anti-cheat posture 19), each with rule / enforcing-mechanism-today-or-`UNENFORCED` / failure-mode and grounded in an MP-1..MP-8 window or a §2.1.7 authz row; **17 gaps** tiered A (fix now: **MP-G1** unmanaged room-table schema, **MP-G3** `room:spectate` no room-kind check on a ranked-eligible private room, **MP-G4** game-over side-effect idempotency) / B (verify: MP-G6 `room_command_receipts`+`mp_authority_events` unapplied, MP-G2 grant revoke) / C (revisit if scale: MP-G5, MP-G7–MP-G13) / D (posture: MP-G14) / E (accept: MP-G15–MP-G17). **Residual notes recorded with the sign-off:** (a) **MP-INV-2** carries a known unclosed gap — two *guest* seats (`userId=null`) are distinguishable on reconnect only by username/hold, so a second guest with the room code + the first's display name can reclaim the seat; scoped to private-unranked play, tracked as **MP-G13 (Tier C)**, not blocking. (b) **MP-INV-19 is a posture decision, not a hard invariant** — move-log verification stays non-blocking for the match result; the ratified direction is to *add* a structured alert + per-user failure tracking in a later step (**MP-G14**), not to gate results on verification. (c) **MP-INV-12** holds (RLS confirmed, D-8) but the client write-grant revoke (**MP-G2**) and the unmanaged-schema fix (**MP-G1**) are still open — folded into one Step 3 migration. (d) **MP-G5** and **MP-G9** verdicts were changed by the §2.3.2 verification pass (G5 A→C on zero evidence + no measurement path; G9 ACCEPT→REVISIT on deploy-restart frequency) and are ratified as changed. **Step 3 scope (agreed):** Tier-A only — MP-G1, MP-G3, MP-G4 (MP-G2 folded into MP-G1). | The human reviewed the list line-by-line, same as D-3 for System 1. Recording the residual notes so a cold session does not treat MP-INV-2 / MP-INV-19 as fully closed, and does not re-litigate the G5/G9 downgrades. The Step-3 scope is deliberately narrow — the other tiers wait for their own pass. |
 | D-10 | 2026-09-02 | **System 3 Step 2 RATIFIED — §3.2 (DM-INV-1..18) + §3.3 (DF-G1..DF-G5) as written.** The human signed off "as written — no changes". What is ratified: **18 invariants** across 6 domains (score authority 1–5, one-attempt/run-per-day 6–7, idempotent recovery & ordering 8–13, content integrity 14–16, authz 17–18), each rule / mechanism-today-or-`UNENFORCED`/`PARTIAL` / failure, grounded in a DM-1..DM-7 window or a §3.1.5 authz row; **5 gaps** — **DF-G1 + DF-G2 FIX NOW**, DF-G3/DF-G4 REVISIT IF SCALE, DF-G5 ACCEPT. Scope = the 2 active modes (Daily Fritz, Puzzle Rush); the retired Ladder is out (decommissioned, §3.1.4). **Two `verified-against-code` corrections already folded into §3.2/§3.3:** the Daily Fritz speed board **is** verification-gated (`isDailyFritzAttemptLeaderboardEligible`), and `daily_fritz_outbox` is projected by a **DB trigger**, not a Node drainer. **Residual notes recorded with the sign-off (Step-3 code trace, 2026-09-03):** (a) **DF-G1's mechanism was wrong** — `scheduleDailyFritzRecordGameVerification` has zero production callers (dead code from the reverted `b0a0a93c` advance-first design, caller removed in `d027d30d`); the record/next-hand routes verify synchronously and refuse-to-advance on transient failure. The real gap is a **stranded `status='started'` attempt with a complete set** (client crash / restart mid-`/complete`, no reaper). DF-G1's fix is a stranded-set boot sweep + periodic reaper (mirror `recoverTournamentMatches`), NOT re-running the dead async path, and it must never un-`reject` a hand (DM-INV-11). (b) **DF-G2's alert already exists** (`recordDailyFritzAdvanceWithoutVerification` → `Sentry.captureMessage(..., daily_fritz_alert:'verification_bypassed')`); the real residuals are per-user aggregation on that alert + `getDailyFritzStreak` not being verification-filtered. (c) **DF-G2 streak filter must keep `legacy_unverified` (pre-protocol) completions counting** — applying the full leaderboard predicate would retroactively zero real streaks; the filter only drops `rejected` / non-empty-`unverified_hands`. (d) **The POSTURE decision** (same as D-9 MP-INV-19): Daily Fritz verification stays non-blocking for `status='completed'` — a failed hand is `rejected` (off the board) but never blocks the player finishing. **Step 3 scope (agreed):** DF-G1 + DF-G2 only. | Human reviewed the list line-by-line, same as D-3 / D-9. Recording the Step-3 corrections so a cold session does not build a reaper around dead code or a duplicate alert, and does not apply the streak filter in a way that breaks legacy streaks. |
 | D-4 | 2026-08-31 | **RESOLVED — external uptime monitor on `/ping` every 5 min; stay on Render free tier for now.** No existing pinger was found or recoverable, so the human is setting up a **new** one (UptimeRobot or similar) → `https://racehorse.onrender.com/ping` at 5-min intervals. No code change: verified the scheduler's `setInterval` runs independently once the process is alive, so keeping the process warm is the whole fix. **`/internal/tick` stays unbuilt and unneeded** unless a future D-4 revision moves the scheduler off the web process (options b/c/e below, not chosen). The human is also setting `SERVER_URL=https://racehorse.onrender.com` in Render (confirmed currently unset via `GET /ready`) so the dormant internal 10-min self-ping activates as a redundant second signal. Rejected for now: (b) Render Cron Job / GH Actions cron, (c) `/internal/tick` + cron, (d) paid always-on plan, (e) split worker dyno — all revisited at upgrade time. **Outcome (2026-08-31):** an UptimeRobot monitor already existed but was mis-typed as ICMP Ping (Render doesn't answer ICMP → 6.5 % uptime, useless). Re-typed to HTTP(s) → `/ping` @ 5 min; human verified 100 % uptime / no gaps over the observation window → **T-17 CLOSED**. `SERVER_URL` set + redeployed; human confirmed `GET /ready` → `SERVER_URL: true`, self-ping now active as a second signal. | Cheapest option that fully addresses the "process is asleep" problem at current scale. The residual risk (a crash/deploy/OOM leaves the process down until the next ≤5-min monitor hit) is accepted. |
+| RK-0 | 2026-09-04 | **CONFIRMED LIVE, FOUND AND FIXED SAME DAY — the first genuinely-exploitable score-oracle bypass found across Systems 1–8, not diagnostics-only, not theoretical.** During System 8 Step 1's `assert_security_posture()` follow-up, the human queried `pg_policies` directly and found both `ranked_games` and `rating_periods` carried an INSERT policy named `"Service role can insert..."` whose actual `roles` clause was `{public}` with `with_check: true` — the name claimed `service_role`-only, but the `to` clause had never been set, so it silently applied to every role including `anon`. Any unauthenticated caller with the project's public anon key could POST an arbitrary row into `ranked_games` — a forged win against any `player_id`, at any score, feeding straight into `commit_glicko_game_update` on the next cron sweep or the next time that row's `rating_after` was read — a direct rating-inflation / leaderboard-forgery path with no authentication required. **Root cause:** the same migration-drift shape already documented for the `2026-08-11`/`2026-09-01` table-grant history (§8.1.4) — a policy whose *name* was never a guarantee of its *predicate*. **Fixed:** the human dropped and recreated both policies scoped `to service_role`, applied directly in the Supabase SQL editor (not via a migration file — **flagged as its own migration-drift risk**: if this project is ever reset from migrations, the wide-open policy silently returns; a migration file capturing the corrected policy is recommended so schema-as-code matches prod, even though the fix is already live). **Verified safe before/after:** traced every writer of `ranked_games` — `server/src/ranking/*.ts` and `server/src/shared/fritzMatchLifecycle.ts` (via the shared `supabaseUtils.ts` `supabaseFetch`) and `server/src/ghost/service.ts` (via its own locally-duplicated `supabaseFetch`) all authenticate with `SUPABASE_SERVICE_KEY`; that key's JWT payload was decoded locally (no key material or network call involved) and its `role` claim confirmed literally `"service_role"`, matching the project ref — the fix does not break any legitimate write path. **Ranked as already-closed** in §8.3 (not an open gap to prioritize) — audit trail only. | House rule: verify claims against actual code/prod and correct/record the finding openly, same treatment as the D-14 correction (GC-5) — a new row, not a rewrite of §8.1's original text. This is the sharpest finding of the whole plan to date: everything through System 7 was either already-mitigated, diagnostics-only, or theoretical; this one was a live, unauthenticated, zero-skill exploit path sitting in prod. |
 | D-14 | 2026-09-04 | **System 7 §7.2 (GC-INV-1..12) + §7.3 (GC-1..GC-9 risk-ranked) RATIFIED as written — with one addition.** The human reviewed the invariant list + the tiered gap list line-by-line and signed off "as written". What is ratified: **12 invariants** — single-engine-of-record (PARTIAL client-side, GC-3), deployed=reviewed (**DOES NOT HOLD**, GC-1), cross-runtime determinism (**AT RISK**, GC-6), replay purity (HOLDS), historical-evidence-survives-a-bump (HOLDS for Fritz policy / **DOES NOT HOLD for `GAME_RULES_VERSION`**, GC-2), in-flight-attempts-survive-a-deploy (same split, GC-2), client/server legality agreement (PARTIAL, GC-3), wire-shape drift guard (HOLDS for DTOs / **DOES NOT HOLD for engine value types**, GC-3), stable move-enumeration order (HOLDS, unasserted — GC-8), authority-digest totality (**AT RISK**, GC-5), no-ambient-authority (HOLDS), invariant-check-fail-closed (PARTIAL — `SOFT_GAME_INVARIANTS` off-switch, GC-9); an added **`integrity-oracle`** severity band. **9 gaps** verdicts: **FIX NOW** — GC-1 (`dist/buildStamp` + boot recompute + `/ready.gameCore` + smoke assertion), GC-6 (`localeCompare` → code-unit in the Fritz tie-break), GC-3a (drift guard on the 7 wire-identical leaf types + `readonly` alignment), GC-4 (move `botHeuristics` off the root barrel behind `@racehorse/game-core/bot` + verifier import boundary), GC-8 (pin `sortLegalMoves`), GC-9 (surface `SOFT_GAME_INVARIANTS` in `/ready`); **POSTURE** — GC-2 (the "before you bump `GAME_RULES_VERSION`" checklist — no code now; rollout shape in §7.1.13); **REVISIT IF SCALE** — GC-5 (canonicalise the authority digest), GC-3b (unify client `GameState`/`Move` + retire `botEngine.ts` local geometry — own effort); **ACCEPT** — GC-7 (dead Daily Puzzle DTOs — delete with DF-CAND-1b). **The one addition (human direction):** GC-6 also **bumps `FRITZ_POLICY_VERSION` 2 → 3** (contract `fritz-policy-v3-code-unit-canonical-ties`), even though the `localeCompare` → code-unit change is not strictly version-breaking (the verifier accepts any top-score play, so historical v1/v2 evidence is unaffected and `FRITZ_POLICY_MIN_SUPPORTED_VERSION` stays 1) — the bump is the record of the behaviour change, consistent with how this system holds every other policy change to that standard. | Human reviewed line-by-line, same as D-12 / D-13, and signed off as written. The one addition (the v3 bump) is recorded here so a later session does not treat it as accidental scope creep or try to revert it — it is a deliberate application of the project's policy-versioning discipline. |
 | D-14 correction | 2026-09-04 | **GC-5's ratified likelihood call was wrong — corrected same-day, on live evidence, not re-litigated by re-review.** D-14 ratified GC-5 (authority-digest construction-sensitivity) as REVISIT IF SCALE on the stated reasoning "client + server both build the board through core `simulatePlacement`, so key order is consistent in practice — low likelihood." Hours after ratification, a live incident (a completed, won Daily Fritz set landing "Finished, but unranked") led to pulling the actual prod event log, which shows `fritz_state_mismatch` fired **12 times since 2026-08-01** across **8 attempts and 5 distinct players** — not low-likelihood, not theoretical. Re-ranked **FIX NOW** and fixed same session (§7.3 GC-5 row, §7.4). This is not a re-opening of D-14's human sign-off (the invariant/gap *structure* D-14 ratified stands) — it is the plan's own stated practice of correcting a claim against prod when the record turns out to be wrong, applied to a verdict the human had no way to know was wrong at ratification time (the incident hadn't happened yet). | House rule: verify claims against actual code/prod and correct the record openly rather than let a stale verdict stand. Recording this as its own row (not a silent edit to D-14) so a cold session sees both what was ratified and why it changed. |
 | D-13 | 2026-09-03 | **System 6 §6.2 (AU-INV-1..8) + §6.3 (AU-1..AU-8 risk-ranked) RATIFIED as written.** The human reviewed the invariant list + the tiered gap list line-by-line and signed off "as written — no changes". What is ratified: **8 invariants** — verified-identity (HOLDS), bounded-revocation (PARTIAL, AU-1), admin-fail-closed (HOLDS today, AU-6), limits-bound-a-deliberate-actor (**UNENFORCED**, AU-3/4/5), bounded-memory (limiter UNENFORCED, AU-3), outage-resilience (PARTIAL, AU-2/8), client-token-attach-when-intended (HOLDS), one-auth-code-path (**UNENFORCED**, AU-8); an added **`abuse-enabling`** severity band for controls that fail to bound a deliberate actor without being an authz/integrity break. **8 gaps** verdicts: **FIX NOW** — AU-3 (`app.set('trust proxy', 1)` + `requestIp → req.ip`), AU-4 (drop the unsigned-JWT-`sub` rate-limit key), AU-8 (consolidate `socialAuth` B + `tournamentAuth` C onto `supabaseAuth` A via a shared `verifyBearerToken`, keeping C's uuid/payload-match wrapper); **POSTURE** — AU-1 (cut cache A TTL 60→15 s now; the Supabase JWT-expiry change is human-action; a server denylist is scale-gated), AU-6 (the "before you ever set `ADMIN_SECRET`" checklist — the server-side `?admin_key=` query-param removal is a safe standalone Step-3 item); **REVISIT IF SCALE** — AU-5, AU-2; **ACCEPT** — AU-7. **Step 3 scope (agreed):** AU-3 + AU-4 + AU-8 (FIX NOW) + the two safe standalone removals (delete server `?admin_key=` acceptance on the 3 GET admin endpoints; cut cache A TTL 60→15 s). AU-1's Supabase JWT-expiry setting + AU-6's remaining checklist items stay as **human-action notes**, not code. AU-2/AU-5/AU-7 untouched. | Human reviewed line-by-line, same as D-3 / D-9 / D-10 / D-12. Recording the residual split (which AU items are code vs. human-action vs. deferred) so a later session does not re-scope Step 3 or re-litigate the ACCEPT / REVISIT verdicts. |
