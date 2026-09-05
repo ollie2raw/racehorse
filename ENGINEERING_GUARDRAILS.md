@@ -272,15 +272,46 @@ matches the `strict*`/`*Continuity` boolean-option shape today — a
 full-repo scan of every exported `verify*` function turned up no other.
 `verifyDailyFritzHand.requireStateDigests`
 (`server/src/dailyFritzVerifier.ts`) is the RT-2-adjacent sibling flagged
-in Guardrail #2's write-up, but it is a different shape (`require*`, not
-`strict*`/`*Continuity`) **and** flipping its default is not
-behaviour-neutral: `fritzChallenges.ts`'s two call sites omit it (lenient)
-while `dailyFritzVerificationGlue.ts` sets it from an authority contract.
-Inverting that default would silently start requiring state digests on the
-`fritzChallenges` paths for real traffic — a live decision, not a
-mechanical edit (D-17 precedent). Left untouched and flagged for a
-deliberate call; add it to `STRICT_DEFAULT_VERIFIERS` if/when that
-decision is made.
+in Guardrail #2's write-up. It is a different shape (`require*`, not
+`strict*`/`*Continuity`) and it is **deliberately not added to
+`STRICT_DEFAULT_VERIFIERS`** — investigated to conclusion 2026-09-05:
+
+- **The asymmetry is real and RT-2-shaped.** `fritzChallenges.ts:407` and
+  `:515` call `verifyDailyFritzHand` with no `requireStateDigests`; the
+  Daily Fritz path pins it to `true` via the authority contract it writes
+  at `/start` (`dailyFritzStartRoute.ts`, read back in
+  `dailyFritzVerificationGlue.ts:640`). Root cause is a **copy-paste** —
+  the Fritz-Challenge routes reuse the verifier but never ported the
+  contract mechanism — not a considered "challenges don't need digests"
+  decision. Nothing in the code justifies the gap.
+- **Zero live exposure.** The Fritz-Challenge feature has never shipped
+  past challenge-link generation: 17 `fritz_challenges` rows all `open`, 9
+  `fritz_challenge_attempts` all `started` with `result: null`, one test
+  account, last activity 2026-08-04. No hand has ever been verified through
+  `:407`/`:515` in production. There is no "26/299"-style number to report
+  because the denominator is zero.
+- **Not independently exploitable even if activated as-is.** The server
+  reconstructs authoritative state from `initialState` + transcript and
+  enforces engine legality (`applyGameCommand`), Fritz policy parity
+  (`chooseOfficialFritzDecisionForVersion` + `sameDecision`), actor
+  ownership and mandatory-draw reconstruction regardless of digests, and
+  derives the score from its own terminal state. `requireStateDigests` is
+  defence-in-depth (earlier, cleaner `fritz_state_mismatch` diagnostics),
+  not the sole gate. A present `preStateDigest` is still checked against
+  the server recompute unconditionally (`dailyFritzVerifier.ts:404`).
+- **Flipping the shared default is still wrong** regardless: Daily Fritz
+  has deliberate lenient paths (`dailyFritzStartRoute.ts:294`
+  `stateDigestRequired: !hasExistingEvidence`;
+  `dailyFritzVerificationGlue.ts:293` `stateDigestRequired: false` in
+  `pinAuthorityContractFromVerifiedTranscript`) for attempts that predate
+  the authority contract. An unconditional `?? true` would strict-fail
+  those resumes for real traffic (D-17 precedent).
+
+Tracked as the sixth parked pool in `HARDENING_PLAN.md`'s "actual
+remaining work" list. Fix when the feature is next touched: pass
+`requireStateDigests: true` at the two call sites (justified by that
+route's own hard current-client gate at `fritzChallenges.ts:281`), or port
+the authority-contract pinning into its `/start`.
 
 ---
 
