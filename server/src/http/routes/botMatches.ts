@@ -43,7 +43,9 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
   } = deps;
 
   app.post('/bot-matches/cleanup-stale', async (req, res) => {
-    if (!isAdminSecret(req.body?.adminKey)) {
+    // AU-6 (HARDENING_PLAN §6.3 / §13.1.6): header-only, matching the
+    // already-hardened daily-fritz admin routes.
+    if (!isAdminSecret(req.get('x-admin-secret'))) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }

@@ -142,7 +142,9 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
 
   app.post('/api/ranking/process/:userId', async (req, res) => {
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
-    if (!isAdminSecret(req.body?.adminKey)) {
+    // AU-6 (HARDENING_PLAN §6.3 / §13.1.6): header-only, matching the
+    // already-hardened daily-fritz admin routes.
+    if (!isAdminSecret(req.get('x-admin-secret'))) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }

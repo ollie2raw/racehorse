@@ -211,7 +211,10 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/generate', async (req, res) => {
-  if (!isAdminSecret(req.body?.adminKey)) {
+  // AU-6 (HARDENING_PLAN §6.3 / §13.1.6): header-only, matching /metrics,
+  // /health, and /events above — a body-param secret was the one remaining
+  // inconsistency across this file's admin routes.
+  if (!isAdminSecret(req.get('x-admin-secret'))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -265,7 +268,8 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/invalidate', async (req, res) => {
-  if (!isAdminSecret(req.body?.adminKey)) {
+  // AU-6 (HARDENING_PLAN §6.3 / §13.1.6): header-only, same as /generate above.
+  if (!isAdminSecret(req.get('x-admin-secret'))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -308,7 +312,8 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
 });
 
   app.post('/api/daily-fritz/reset-attempt', async (req, res) => {
-  if (!isAdminSecret(req.body?.adminKey)) {
+  // AU-6 (HARDENING_PLAN §6.3 / §13.1.6): header-only, same as /generate above.
+  if (!isAdminSecret(req.get('x-admin-secret'))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
