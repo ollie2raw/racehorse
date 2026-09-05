@@ -56,8 +56,21 @@ human ran a manual `select * from pg_policies` in the SQL editor.
   asserts the diff reports it — plus missing-policy, unexpected-policy,
   and role-order-doesn't-spuriously-fail cases.
 
+**`matches` added 2026-09-05 as a direct result of a System 13 finding**
+(`HARDENING_PLAN.md` §13.1.2): `matches_insert_participant`'s live
+`with_check` permitted a registered-vs-registered win/loss forgery — a
+policy that looked correctly scoped (require the caller to be a named
+participant) and wasn't (nothing stopped a full forged claim against a
+real other user), the exact RK-0 failure shape this guardrail exists to
+catch structurally. Fixed same day
+(`supabase/migrations/2026-09-05_matches_insert_guest_only.sql`,
+pg16-verified) and pinned immediately rather than left to a future
+manual pass — closing the loop this guardrail is meant to close: the
+next accidental widening of this exact policy now fails CI automatically
+instead of requiring another RK-0-style manual audit to catch it.
+
 **Known limitation, stated plainly:** `supabase/policy-manifest.json`
-currently pins 4 tables (`ranked_games`, `rating_periods`,
+currently pins 5 tables (`matches`, `ranked_games`, `rating_periods`,
 `room_live_sessions`, `room_match_logs`) — every entry seeded from a
 live, human-run `pg_policies` query or a decisions-log-recorded live
 confirmation (D-8, RK-0), never guessed. The rest of the schema's policies

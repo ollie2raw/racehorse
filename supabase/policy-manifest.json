@@ -79,6 +79,25 @@
         }
       ]
     },
+    "matches": {
+      "_source": "System 13 finding (HARDENING_PLAN.md §13.1.2): matches_insert_participant's live with_check permitted a registered-vs-registered win/loss forgery, confirmed by live reproduction and fixed same day (supabase/migrations/2026-09-05_matches_insert_guest_only.sql) — the exact RK-0-class failure mode ('a policy that looked correctly scoped and wasn't') this guardrail exists to catch structurally, so this table is pinned as a direct result. `matches_select_participant` is the pre-existing, unchanged, confirmed-correct live row. `matches_insert_participant`'s with_check below is the POST-FIX shape — pg16-verified exact text (pg_get_expr against a real applied copy of the migration; see §13.1.2's local-Postgres verification), staged ahead of prod application per explicit instruction, not yet the live text at the time this entry was written (prod still carries the pre-fix policy until the migration is applied via the SQL editor). Re-run this CI job after that application to confirm it matches exactly, the same way GM-1's fix was reconfirmed live afterward.",
+      "policies": [
+        {
+          "policyname": "matches_insert_participant",
+          "cmd": "INSERT",
+          "roles": ["authenticated"],
+          "qual": null,
+          "with_check": "(((auth.uid() = winner_user_id) OR (auth.uid() = loser_user_id)) AND ((winner_user_id IS NULL) OR (loser_user_id IS NULL)))"
+        },
+        {
+          "policyname": "matches_select_participant",
+          "cmd": "SELECT",
+          "roles": ["authenticated"],
+          "qual": "((auth.uid() = winner_user_id) OR (auth.uid() = loser_user_id))",
+          "with_check": null
+        }
+      ]
+    },
     "room_match_logs": {
       "_source": "D-8 (HARDENING_PLAN.md decisions log), same 2026-09-01 confirmation as room_live_sessions. with_check corrected 2026-09-04, same reason as room_live_sessions above: `supabase/room_match_logs.sql` declares `with check (false)` explicitly for room_match_logs_no_client_write.",
       "policies": [
