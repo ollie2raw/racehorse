@@ -6556,7 +6556,34 @@ integrity-bearing) — **do not over-invest relative to the actual risk.**
 risk in the plan.
 
 ## 12.1 Current-state map
-**Not started.** Step 1 (light).
+
+**The "client-only, low risk" scoping note was verified, not assumed.** Before treating this system as light-touch, checked directly whether any of it reads from or writes to Supabase: grepped all four scoped directories (`journey/`, `learn/`, `learning/`, `training/`) for any Supabase client import, any `fetch`/`apiFetch`/`apiPost`/`/api/` call, and cross-checked the server side (`server/src` and the full `supabase/*.sql`/`migrations/*.sql` schema) for any table or route mentioning "journey," "lesson_progress," or "guided_progress." **Zero hits on the server side, and exactly one non-server `fetch()` call on the client side** (a static bundled-asset load, not an API call — see §12.1.3). This is a confirmed fact now, not an inherited assumption — if a server surface had turned out to exist here, it would have gotten System 9–11-grade live-reproduction treatment; none did, so this stays a genuinely light Step 1.
+
+### 12.1.1 Journey campaign progress (`client/src/journey/`, 75 files)
+
+`journeyStorage.ts` is the single source of truth for all progression state — `localStorage` key `rh_journey_progress_v1`, versioned (`v1`→`v2` migration handled explicitly on load, `sanitizeProgress`/`sanitizeChapterProgress` filter any node/chapter id that doesn't exist in the current content set before trusting it). Read the full read/write/migrate path: it's genuinely well-built for a client-only store — corrupt or unparseable JSON falls back to a fresh default rather than throwing, unknown node ids from a stale save can't corrupt chapter-completion logic, and completion/celebration state is tracked separately so a chapter can't silently "re-celebrate."
+
+**One real, worth-naming fact, not a bug:** journey progress is **not tied to the player's account at all** — it lives purely in `window.localStorage`, keyed by nothing but the browser/device. Confirmed by reading every write path (`saveJourneyProgress`, `markJourneyNodeCompleted`, `setJourneyActiveChapter`, `acknowledgeChapterCompletion`) — none accept or reference a `userId`. Clearing site data, using a different browser, or switching devices loses all campaign progress with no recovery path, and two different accounts sharing a browser would also share (and silently overwrite each other's) progress. Worth having on record as a real product-completeness gap for whenever cross-device sync is prioritized — not a security or integrity finding, since nothing here is competitive or shared between players.
+
+### 12.1.2 Learning coach profile (`client/src/learning/`, 14 files)
+
+`learningStore.ts` is the active implementation — its own header states it plainly ("Phase 6 — Lightweight localStorage-backed learning profile store"), namespaced under `racehorse:learn:`, schema-versioned, "never throws." Confirmed wired into real usage via `useLearningCoach.ts` (imported by `CoachPanel.tsx`, the in-match coaching overlay CLAUDE.md names as active).
+
+**Found dead/aspirational scaffolding, not a live gap:** `profileProgress.ts` — a sibling file in the same directory — defines a `LearningProfileStore` interface (`load`/`save`/`reset`, all `Promise`-returning) explicitly designed so profile logic could be "agnostic to whether storage is localStorage, IndexedDB, Supabase, etc.," with its own docstring saying `"PHASE 1: Types and interfaces only. No implementation logic"` and "Persisted between sessions (localStorage or server-side, TBD)." Grepped every file in the codebase for an implementer of this interface — **none exists**; `learningStore.ts` (the real, shipped implementation) doesn't use this interface at all, it just borrows the plain `LearningProfile` type from the same file. This is inert, forward-looking scaffolding from an earlier planning phase, not a half-built server integration — recorded so a future session doesn't mistake the interface's existence for evidence that server persistence was ever wired up.
+
+### 12.1.3 Lessons, guided-match tooling, and authoring (`client/src/learn/`, 87 files)
+
+Confirmed `guidedAuthoring.ts` (the authoring-session/frozen-lesson/coached-transcript persistence layer for Guided Lesson authoring, referenced elsewhere in this plan's System 9 tracing) is exhaustively `localStorage`-based — every read/write path uses `window.localStorage` with a try/catch defaulting to "unavailable" rather than throwing, same defensive shape as `journeyStorage.ts`.
+
+**The one non-server network call found in this entire system's scope:** `guidedMatch/guidedMatchLessonLoader.ts` calls `fetch(canonicalLessonUrl)` — traced this to a bundled static JSON asset (a Vite-resolved import URL for a checked-in lesson file), not an API endpoint. No server round-trip, no Supabase, no `/api/` path. Confirmed by reading the surrounding code, not just the function name.
+
+### 12.1.4 Post-game review (`client/src/training/pivotalReview/`, 15 files) and analysis (`client/src/analyzer/`)
+
+Both confirmed `localStorage`-only (`pivotalReviewStorage.ts` for review sessions; `analyzer/` has zero Supabase/fetch/`/api/` references at all). `pivotalReview/` is the client-side half of what System 9 named as a still-parked item (`usePostGamePivotalReview.ts`/`useReviewRuntime.ts`, in `client/src/modules/match/` — a different directory than this one) — noted as a cross-reference, not re-investigated here: this system's `training/pivotalReview/` is the review-content/storage layer, while the parked System 9 item is the hook wiring that surfaces it inside a live match session. The two are related but distinct audit surfaces; closing System 9's parked item later should not be assumed to also cover this directory, and vice versa.
+
+### 12.1.5 Net assessment
+
+Every write path across all four directories terminates in `window.localStorage`, confirmed by direct code reading, not inference from the plan's own scoping note. No Supabase client import, no `/api/` call, no shared/competitive state anywhere in this system's scope. The one real fact worth carrying into Step 2 is §12.1.1's account-detachment (journey progress isn't tied to a user id) — everything else is either a clean, defensively-written store or (§12.1.2) inert scaffolding with no live effect. No live-prod reproduction was needed or performed, per the verified absence of any server-touching surface.
 
 ## 12.2 Invariants
 **Not started.** Likely a short list, or "none — client-only, no shared state".
@@ -6565,7 +6592,7 @@ risk in the plan.
 **Not started.** Step 2.
 
 ## 12.4 Checklist
-- [ ] Step 1 — light current-state pass (confirm no server state / no leaderboard feed)
+- [x] Step 1 — current-state map written 2026-09-05 (§12.1.1–§12.1.5). **"Client-only, low risk" verified, not assumed**: grepped all four scoped directories for any Supabase import/`fetch`/`/api/` call and cross-checked the full server schema for "journey"/"lesson_progress"/"guided_progress" — zero server-side hits, one non-server `fetch()` (a bundled static asset, confirmed by reading the code). No live-prod reproduction needed. One real fact recorded for Step 2: journey progress is not tied to a user account at all (pure `localStorage`, device/browser-local). Also found inert, unused scaffolding (`learning/profileProgress.ts`'s `LearningProfileStore` interface — no implementer exists).
 - [ ] Step 2 — short invariant list + any gaps → ratify (D-N)
 - [ ] Step 3 — fixes if any
 
