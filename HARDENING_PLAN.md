@@ -836,7 +836,7 @@ own Step 1 when work reaches it. There is no System 4.
 6. **Auth / session + rate limiting** (cross-cutting) ← **Steps 1–3 DONE + PUSHED (D-12, D-13; `5e5931b3` + AU-3 correction 2026-09-04; deployed, CI green).** AU-3 rate-limit key now range-based `trust proxy` + infra-gated `CF-Connecting-IP` (initial `trust proxy: 1` was one hop short → cross-user false 429s, corrected). AU-4 forged-sub key dropped. AU-8 auth impls consolidated onto `verifyBearerToken`. **AU-1 CLOSED** (cache-A TTL cut + Supabase JWT expiry lowered 3600→900 s by human 2026-09-04). AU-6 partial shipped. *Pending human: AU-6 pre-`ADMIN_SECRET` checklist.*
 7. **`@racehorse/game-core`** — shared score oracle ← **Steps 1–3 done + PUSHED (§7.1 reviewed; §7.2/§7.3 RATIFIED D-14; Step 3 `d8bed8ca` deployed, CI green).** GC-1+GC-9 (buildStamp + `/ready.gameCore` + smoke — confirmed `consistent: true` live), GC-6+GC-8 (`localeCompare`→code-unit; **`FRITZ_POLICY_VERSION` 3**; `sortLegalMoves` pinned), GC-3a (leaf-type `expectTypeOf` guard), GC-4 (`/bot` subpath + verifier import boundary), **GC-5 (re-ranked FIX NOW same-day on a live incident — 12 confirmed false-positive leaderboard demotions since 2026-08-01 — fixed, deployed, and 3 historical attempts retroactively restored to `verified`)**. POSTURE: GC-2 (`GAME_RULES_VERSION` rollout, human-action). REVISIT: GC-3b. ACCEPT: GC-7.
 8. **Ranking / Glicko-2** (cross-cutting) ← **Steps 1–3 done + PUSHED (§8.1 audit; §8.2/§8.3 RATIFIED D-15; RK-1/RK-2/RK-4 + RLS migration file `368ec526`, deployed, CI green).** **RK-0** (live exploitable RLS INSERT-policy gap, found + fixed same day, outside normal cadence) closed. RK-1+RK-2 (Fritz `ranked_games` inserts now idempotent), RK-4 (`isProvisional()` de-duplicated). **RK-7** (Fritz rematch/`bot_match_pending` gap) investigated — **ACCEPT/DORMANT, not reachable today**. REVISIT IF SCALE: RK-3, RK-5, RK-6.
-9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.1.14/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped + pushed). NOT fully closed** — 7 of §9.1.12's original 9 deferred items (`modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond persistence, composed session hooks, `roomEvents.ts` consumers, review hooks) were never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are; the other 2 (`modules/ghost/` client feed, `rooms.ts` deal-generation) are resolved as of §9.1.14.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, shipped); pre-game-draw reload **confirmed safe**. §9.1.14 resolved 2 more, risk-sequenced ahead of the rest: the Ghost verifier's client-side feed (traced 3 distinct pipelines; found a live but bounded-severity asymmetry — RT-2, `strictHandContinuity` omitted for standalone-mode submissions, cannot touch the competitive Glicko rating); `rooms.ts`'s deal-generation (confirmed fully server-only, zero client input — RT-INV-10, no gap). 10 invariants (§9.2); a **partial** gap list (§9.3, **RT-1 + RT-2 both shipped** — RT-2 root-caused before flipping `strictHandContinuity`, per §9.1.15) — remaining 7 §9.1.12 items stay deferred. **`ENGINEERING_GUARDRAILS.md`** started this same session, seeded with 5 guardrails (1 fully built — the RLS/policy-manifest CI diff, closing RK-0's class; 4 documented as NOT YET BUILT).
+9. **Match runtime layer** (`modules/` + `match/` + server rooms/realtime) ← **Steps 1–3 done for the audited scope only (§9.1/§9.1.13/§9.1.14/§9.1.16/§9.2/§9.3 RATIFIED D-16 — explicitly PARTIAL; RT-1 shipped + pushed). NOT fully closed** — 6 of §9.1.12's original 9 deferred items (`modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, composed session hooks, `roomEvents.ts` consumers, review hooks) were never triaged and must be explicitly re-opened before this system is considered done the way Systems 1–8 are; the other 3 (`modules/ghost/` client feed, `rooms.ts` deal-generation, `preGameDraw/` beyond persistence) are resolved as of §9.1.14/§9.1.16.** Covered-vs-remainder line drawn against System 2's concurrency-only pass; sampling pass over the load-bearing files (144+52 client files + `rooms.ts`). Found a third shared package (`@racehorse/match-protocol`, client-only types); confirmed `act()` delegates legality entirely to the game-core engine (GC-INV-1 holds here); confirmed the Daily Fritz digest call site already routes through the real shared function (immune to GC-5's class of bug); documented an already-mitigated asymmetric self-heal edge (`capDailyFritzDrawLogCount`). §9.1.13 resolved 3 open items: Daily Fritz next-hand idempotency **confirmed true**; `capDailyFritzDrawLogCount` test coverage **confirmed thin** (RT-1, shipped); pre-game-draw reload **confirmed safe**. §9.1.14 resolved 2 more, risk-sequenced ahead of the rest: the Ghost verifier's client-side feed (traced 3 distinct pipelines; found a live but bounded-severity asymmetry — RT-2, `strictHandContinuity` omitted for standalone-mode submissions, cannot touch the competitive Glicko rating); `rooms.ts`'s deal-generation (confirmed fully server-only, zero client input — RT-INV-10, no gap). §9.1.16 resolved 1 more: `preGameDraw/`'s remaining logic (confirmed the client-manipulable fallback deck can never reach the rating pipeline — the `verifiedMatchId` gate excludes it structurally — RT-INV-11, no gap). 11 invariants (§9.2); a **partial** gap list (§9.3, **RT-1 + RT-2 both shipped** — RT-2 root-caused before flipping `strictHandContinuity`, per §9.1.15) — remaining 6 §9.1.12 items stay deferred. **`ENGINEERING_GUARDRAILS.md`** started 2026-09-04, seeded with 5 guardrails (1 fully built — the RLS/policy-manifest CI diff, closing RK-0's class; 4 documented as NOT YET BUILT); its policy manifest extended 2026-09-04/05 to pin 2 previously-unseeded read policies and correct a `with_check` seeding mistake on `room_live_sessions`/`room_match_logs`, confirmed green against live prod via GitHub Actions (not just locally).
 10. **Individual game modes** (Ghost, Bot, Fritz Challenge, Matchmaking, No Brainer) ← scaffold
 11. **Social / stats / account** ← scaffold
 12. **Progression & learning** (Journey, Learn, Analyzer — client-only, light-touch) ← scaffold
@@ -5681,10 +5681,12 @@ races outside it; it did not describe `act()`'s body. Read `act()` +
 - `client/src/match/board/` (board rendering) — explicitly listed in
   scope, not sampled this pass; pure rendering is lower integrity risk but
   not zero (e.g. a rendering bug misleading a player about legal moves).
-- `client/src/match/preGameDraw/` (12 files) beyond
-  `preGameDrawPersistence.ts` (resolved, §9.1.13) — `usePreGameDraw.ts`'s
-  broader logic / `preGameDrawLogic.ts` / `preGameDrawScatter.ts` not read
-  beyond what §9.1.13 needed to answer the reload question.
+- ~~`client/src/match/preGameDraw/` (12 files) beyond
+  `preGameDrawPersistence.ts` (resolved, §9.1.13)~~ **resolved, §9.1.16 →
+  RT-INV-11.** `usePreGameDraw.ts`'s broader logic / `preGameDrawLogic.ts`
+  / `preGameDrawScatter.ts` traced — client-manipulable draw randomness
+  confirmed structurally excluded from the rating pipeline via the
+  `verifiedMatchId` gate.
 - `useLiveMatchSession.ts`'s composed hooks (`useTransientRoomUi`,
   `useLiveMatchActions`, `useTileSelection`, `useHandRevealSequence`,
   `useLiveMatchViewModel`) — named in §9.1.9, not individually read.
@@ -6011,6 +6013,73 @@ client 217/1484 green (was 217/1483); `tsc -b` clean both sides; lint
 unchanged (server 217/68, client 401/401 baselines). Committed, not
 pushed.
 
+### 9.1.16 `preGameDraw/` beyond `preGameDrawPersistence.ts` — traced, no gap
+
+Risk-sequenced ahead of the other six remaining §9.1.12 items for the same
+reason §9.1.14 picked its two: this is a **third** distinct draw-sequence
+code path in a codebase where the first two (RT-1's Daily Fritz
+boneyard-delta undercounting, RT-2's Ghost-mode collapsed multi-draw
+entries) both turned out to be real, shipped bugs. Same hypothesis worth
+testing here — does client-side draw-sequence state reach anything the
+server trusts?
+
+Traced `preGameDrawLogic.ts`, `preGameDrawEligibility.ts`,
+`preGameDrawScatter.ts`, and `usePreGameDraw.ts` (the files
+`preGameDrawPersistence.ts` alone didn't cover in §9.1.13's reload-safety
+check) end to end, following the pre-game-draw's output all the way into
+whatever consumes it.
+
+**The 28-tile scatter genuinely is shuffled with a local, unseeded
+`Math.random()`** — real client-controlled randomness, no server tie-in
+for *positions*. But the two "drawn" tiles are always resolved by **tile
+identity** (`findScriptedFritzSlotId`, `applyScriptedPlayerPick`), not by
+board position — so in every mode where the draw outcome matters, the
+actual winner and drawn tiles are dictated server-side; the local shuffle
+only decides where the tiles sit on screen during the animation.
+
+Followed the three consumers of a completed draw
+(`usePreGameDraw`'s `onComplete` payload, wired in
+`useDailyFritzRuntime.ts`'s `handlePreGameDrawComplete`):
+
+- **Daily Fritz** — ignores the locally-shuffled `remainingDeck` for the
+  real deal entirely; deals from `dailyFritzPackage.first_hand`
+  (server-authoritative). No exposure.
+- **Standalone Fritz (rated)** — the happy path deals from a server-issued
+  deterministic seed (`useStandaloneFritzRatingSession.ts`,
+  `createDeterministicDoubleSixDeal`), also ignoring the local shuffle.
+  The client-shuffled deck (`pendingDrawDeck`) is used **only** as a
+  fallback, and only if `startVerifiedSinglePlayerMatch` fails. In that
+  failure branch `verifiedMatchId` is never set. Traced the completion
+  gate directly: `useGhostMatchCompletion.ts`'s effect (used generically
+  for both Ghost and standalone-Fritz completion) hard-checks
+  `if (!verifiedMatchId)` before calling `completeGhostGame` (the
+  rating-submission call) and returns early with `'Rating session was not
+  verified. Match result saved locally.'` instead. A player who
+  deliberately forced that start request to fail — to get a
+  client-manipulable deck instead of the server-seeded one — could not get
+  the resulting game rated: the fallback path is structurally excluded
+  from the rating pipeline by this gate, not just discouraged by it.
+- **Plain (non-rated) bot mode** — uses the local shuffle directly, but
+  this path was never rated or verified in the first place; no stakes to
+  manipulate.
+
+`preGameDrawScatter.ts` is pure visual-layout math (golden-angle spiral
+positions from a tile-id hash) — no state or fairness implications.
+
+**Verdict: no gap, unlike RT-1/RT-2.** The difference from those two: this
+module never lets client-side draw randomness reach anything the server
+trusts for rating or verification. Every path that matters is either
+server-dictated (Daily Fritz, the standalone-Fritz happy path) or
+excluded from rating altogether by the `verifiedMatchId` gate (the
+fallback path). Test coverage across the four files looked adequate on
+inspection (custom `*.behaviorTests.ts` runner files for
+`preGameDrawEligibility`/`preGameDrawLogic`/`preGameDrawScatter`/
+`usePreGameDraw`, plus a vitest `preGameDrawLogic.test.ts`) — not
+re-run/re-audited in this pass beyond confirming they exist and exercise
+the relevant functions.
+
+New invariant from this trace: **RT-INV-11** (§9.2).
+
 ## 9.2 Invariants
 
 The properties that must hold for the match runtime layer (client
@@ -6094,6 +6163,19 @@ turn-execution + server `act()`) to be trustworthy. Status: **HOLDS**
   override at all; the underlying shuffle is `Math.random()`-based with no
   seed and runs only in server-side files. New invariant — §9.1's original
   pass didn't state this; does not revise any of RT-INV-1..9.*
+- **RT-INV-11 — A client-manipulable pre-game-draw fallback deck can never
+  reach the rating pipeline.** *HOLDS — confirmed via §9.1.16:
+  `usePreGameDraw`'s local, unseeded shuffle only ever supplies real hand
+  tiles when `startVerifiedSinglePlayerMatch` has failed and
+  `verifiedMatchId` was therefore never set; `useGhostMatchCompletion.ts`
+  hard-gates the rating-submission call (`completeGhostGame`) on
+  `verifiedMatchId` being non-null, so that fallback deal is structurally
+  excluded from rating rather than merely unlikely to be used. Every path
+  where the draw outcome is actually rated (Daily Fritz, the
+  standalone-Fritz happy path) is server-dictated already, covered by
+  RT-INV-10. New invariant — narrower than RT-INV-10 (covers the
+  fallback/failure branch RT-INV-10 didn't need to address) but does not
+  revise it.*
 
 ## 9.3 Gap list (risk-ranked)
 
@@ -6118,13 +6200,14 @@ player loses progress), **latent-drift**, **process**, **cosmetic**}.
 
 This is a **partial gap list** — scoped to the three §9.1.13 items, plus
 the two §9.1.14 items (the `modules/ghost/` client-feed trace and the
-deal-generation fairness check), plus RT-INV-9's carve-out. **Two of
+deal-generation fairness check), plus RT-INV-9's carve-out. **Three of
 §9.1.12's original nine deferred items are now resolved** (the `ghost/`
 client half → RT-2 + RT-INV-10; the `rooms.ts` deal-generation bodies →
-RT-INV-10). **Seven remain deferred, not yet triaged**: `modules/guided/`,
-`modules/daily-puzzle/`, `client/src/match/board/`, `preGameDraw/` beyond
-`preGameDrawPersistence.ts`, `useLiveMatchSession.ts`'s composed hooks,
-`roomEvents.ts`'s consumers beyond the write side, and the review hooks
+RT-INV-10; `preGameDraw/` beyond persistence → RT-INV-11, §9.1.16, no
+gap). **Six remain deferred, not yet triaged**: `modules/guided/`,
+`modules/daily-puzzle/`, `client/src/match/board/`,
+`useLiveMatchSession.ts`'s composed hooks, `roomEvents.ts`'s consumers
+beyond the write side, and the review hooks
 (`usePostGamePivotalReview.ts`/`useReviewRuntime.ts`) — consistent with
 how System 8's §8.1.6 residual items were carried past its own Step 2
 ratification. A future revisit of this system should re-open the
@@ -6143,7 +6226,8 @@ remaining seven before treating System 9 as closed.
 - [x] Step 3 — RT-1 shipped (test added, committed, not pushed)
 - [x] §9.1.12 follow-up (§9.1.14, this session): `modules/ghost/` client-feed traced → RT-2 (new gap, awaiting ranking review) + confirmed the Ghost-verifier-vs-deal-snapshot-replay split; `rooms.ts` deal-generation bodies traced → RT-INV-10 (confirmed-good, no gap)
 - [x] RT-2 — root-caused (§9.1.15), fixed, `strictHandContinuity: true` flipped, tested, committed 2026-09-04
-- [ ] Remainder of §9.1.12 (guided/, daily-puzzle/, board/, preGameDraw/ beyond persistence, the composed session hooks, roomEvents.ts consumers, review hooks — 7 of the original 9 items) — **deferred, not yet triaged into ranked gaps. System 9 is NOT fully closed until this is explicitly re-opened.**
+- [x] §9.1.12 follow-up (§9.1.16, this session): `preGameDraw/` beyond persistence traced → RT-INV-11 (confirmed-good, no gap — client-manipulable fallback deck excluded from rating by the `verifiedMatchId` gate)
+- [ ] Remainder of §9.1.12 (guided/, daily-puzzle/, board/, the composed session hooks, roomEvents.ts consumers, review hooks — 6 of the original 9 items) — **deferred, not yet triaged into ranked gaps. System 9 is NOT fully closed until this is explicitly re-opened.**
 
 ---
 
@@ -6421,6 +6505,7 @@ one becomes live or blocks a numbered system.
 | 2026-09-04 | **System 7 §7.2 / §7.3 RATIFIED as written (D-14) + Step 3 FIX-NOW tier — committed, not pushed.** One addition per human direction: GC-6 also bumps `FRITZ_POLICY_VERSION` 2→3. **GC-1 + GC-9:** `packages/game-core/scripts/write-build-stamp.mjs` (`postbuild`) writes `dist/buildStamp.data.js` = `{ srcSha256, builtAt }` (sha256 over sorted top-level `src/*.ts`); `packages/game-core/src/buildStamp.ts` exports `readGameCoreBuildStamp()` (ambient `require`, null-safe, browser-safe); `server/src/platform/gameCoreConsistency.ts` recomputes the same hash from `packages/game-core/src` on disk and compares — `consistent: true | false | 'unverifiable'`; wired into the `server.listen` callback (`log.error` + `Sentry.captureException` on `false`; `log.warn` if `SOFT_GAME_INVARIANTS=true` in prod) and into `/ready` as `gameCore: { consistent, srcSha256, builtAt, softInvariants }`; `.github/workflows/smoke-test.yml` asserts `consistent === true`. **GC-6:** `fritzPolicy.compareCodeUnits` (pure UTF-16) replaces `String.localeCompare` in `scoreSortedPlays` and `reviewFixtureCorpus`; `FRITZ_POLICY_VERSION = 3`, `FRITZ_POLICY_CONTRACTS[3] = 'fritz-policy-v3-code-unit-canonical-ties'`, `FritzPolicyVersion = 1|2|3`, `isSupportedFritzPolicyVersion` + `parseDailyFritzTranscript` + ~6 server/client `1 | 2` call sites widened so a v2-pinned in-flight attempt still verifies and resumes; `client/src/dailyFritz/api.ts` advertises `supported_fritz_policies: [1,2,3]`; `assertValidDailyFritzPublishedChallenge` accepts any supported version whose contract matches its own version (new publishes still emit v3). Historical v1/v2 evidence is unaffected — the verifier accepts any top-score play and `FRITZ_POLICY_MIN_SUPPORTED_VERSION` stays 1. **GC-8:** `sortLegalMoves` carries a load-bearing-contract comment + `engineSortLegalMoves.test.ts` pins the order. **GC-3a:** `client/src/types.ts` `Tile`/`PlacedTile`/`BranchArm`/`HubDouble`/`BoardState` aligned `readonly` to core; `client/src/game/coreTypeContracts.ts` (`expectTypeOf`, non-`.test.ts` → checked by `tsc -b`); 3 client mutation sites fixed (`LearnScenarioScreen`, `dailyPuzzle/api`, `DailyPuzzleAdminScreen`). **GC-4:** `index.ts` no longer re-exports `botHeuristics`; `@racehorse/game-core/bot` subpath added (`package.json` exports + server tsconfig `paths` + client/vitest aliases); `server/src/bot/publicDrawCost.ts` + `client/src/modules/fritz/publicDrawCost.ts` updated; ESLint `no-restricted-imports` on the 4 verifier files forbids `@racehorse/game-core/bot`. **CI:** added a `game-core tests` step + `packages/game-core/vitest.config.ts` (scoped) — the game-core suite was not running in CI. **Tests:** `platform/gameCoreConsistency.test.ts` (6 — incl. hand-corrupted stamp → `consistent: false`), `__tests__/fritzPolicyDeterminism.test.ts` (`localeCompare` sabotaged → decision unchanged; `spy` not called; golden vector), `__tests__/engineSortLegalMoves.test.ts`, `game/coreTypeContracts.test.ts`, + a v2-transcript-survives case in `dailyFritzTranscript.test.ts`; updated 2 DF route test fixtures to advertise `[1,2,3]`. **Verify:** server 211 files / 1231 tests, client 217 / 1483, game-core 12 / 186 — all green; `tsc -b` clean (game-core + server + client); server lint 217 problems / 68 errors (unchanged), client at the 401-warning budget. **Human-action, GC-2 (not code):** the `GAME_RULES_VERSION` rollout path. **Not touched:** GC-5, GC-3b (REVISIT IF SCALE), GC-7 (ACCEPT). §7 status + §7.3 + §7.4 + D-14 + Sequencing + Current focus updated. **System 7 Steps 1–3 done. Next: System 8.** |
 | 2026-09-04 | **GC-5 re-ranked FIX NOW + fixed, same day — live incident, not a re-review.** Hours after D-14 ratified GC-5 as REVISIT IF SCALE ("low likelihood"), a completed, won Daily Fritz set landed "Finished, but unranked." Investigation (`daily_fritz_events` where `verifier_code=fritz_state_mismatch`, service-role read-only): **12 events since 2026-08-01, across 8 distinct `daily_fritz_attempts`, 5 distinct players** — every one exactly one hand of an otherwise cleanly-verifying run (the signature of a construction-order digest artifact, not real state corruption or tampering). D-14's "low likelihood" reasoning is recorded as **corrected, not re-litigated** (new decisions-log row "D-14 correction"). **Root cause confirmed mechanically, not just by inspection:** each flagged event's *actual archived transcript* (present in `daily_fritz_events.payload.transcript` for events after the diagnostics-payload was added) was replayed through the **unmodified** `verifyDailyFritzHand`, with only `preStateDigest` stripped from every action — i.e. every check ran except the buggy digest comparison. **7 of 7 checkable events verified cleanly** (move legality, Fritz-policy parity, hand completion — all passed) via a temporary read-only script (`server/src/scratch_investigateMismatches.ts`, deleted after use, never committed). **Fix (`packages/game-core/src/dailyFritzAuthority.ts`):** the projection object construction is unchanged; only the final serialization changed — `canonicalizeDailyFritzAuthorityStateV1` (raw `JSON.stringify`, kept only for in-flight v1-pinned attempts) vs new `canonicalizeDailyFritzAuthorityStateV2` (recursive key-sort via a new `canonicalStringify`; array order preserved — it's semantically meaningful throughout `GameState`). `DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION` 1→2, `_MIN_SUPPORTED_VERSION` stays 1; `getDailyFritzAuthorityStateDigest(state, version?)` now takes an explicit version (defaults to current). **Ripple, same shape as the GC-6 policy-version bump:** `dailyFritzTranscript.ts` (game-core) `stateDigestVersion` type + `validStateDigest` regex + the version-mismatch throw widened to accept `{1,2}`; `dailyFritzVerifier.ts` now computes the comparison digest using `transcript.stateDigestVersion ?? 1` (never the server's current default) — this is the actual bug-within-the-bug the ripple exists to prevent: comparing a v1 client digest against a v2 server recompute would be a guaranteed mismatch for every in-flight attempt the instant this deployed; `dailyFritzVerificationPolicy.ts` `readDailyFritzAuthorityContract` widened from exact-match to `isSupportedDailyFritzAuthorityStateDigestVersion` **and stopped silently overwriting the stored pinned version with the current default** (a second latent bug found while fixing the first — the old code always returned `DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION` regardless of what was actually stored, defeating the pin); `dailyFritzStartRoute.ts`'s new-attempt gate now compares against the dynamic constant instead of a hardcoded `1`; client `api.ts` advertises `supported_state_digest_versions: [1,2]`. **Retroactive re-verification** (read-only investigation, then a dry-run-only diff script — NOT applied): of the 8 distinct attempts, 1 never completed (`542c08d6…`, moot), 2 already self-healed to `verified` on their own (`a09833c8…`, `8c1076cb…`), 1 predates the transcript-archival instrumentation and cannot be mechanically re-checked (`272dd33b…`, 2026-08-19), 1 was **deliberately excluded** — `538bfeb1…` (2026-08-21) carries a 4-entry `unverified_hands` cascade (1 `fritz_state_mismatch` + 3 derivative `missing_hand_start_progress`, per `dailyFritzVerificationGlue.ts`'s own comment on that cascade), and only the first entry was mechanically checked, so it needs its own pass before any status change — and **3 mechanically verify clean and are queued**: `3a23cb9b…` (2026-08-24, `legacy_unverified`→`verified`), `91fadc29…` (2026-08-26, `in_progress`→`verified`), `6eba765e…` (2026-09-04, `legacy_unverified`→`verified`, the incident that surfaced this). The diff (scratchpad `gc5-retro-reverify.ts`, dry-run only, includes an audit-trail field per row) was shown in-session; **not applied — awaiting explicit go-ahead**, consistent with never applying a prod data change without it being seen first. Confirmed via a Postgres read that Daily Fritz `verification_status` feeds only leaderboard eligibility + (already-unaffected) streak eligibility — no Glicko/ranked-match pipeline reads it, so the blast radius of the eventual fix is confined to the Daily Fritz leaderboard. **Tests:** `dailyFritzAuthorityCanonicalization.test.ts` (game-core) — two structurally-equal `GameState`s built via reversed key insertion order at every nesting level (tile, placed-tile, branch, hub, board) produce **different** v1 digests (proving the historical bug) and the **same** v2 digest (proving the fix), plus a v1/v2 digest-format and real-difference-still-detected check; `dailyFritzVerifier.test.ts` gained a case proving a v1-pinned transcript verifies against a v1-computed digest, not the current default. One pre-existing test fixture (`dailyFritzVerification.test.ts`) updated — it hardcoded `stateDigestVersions: [1]`, which is now what a real client would never send alone. **Verify:** server 211/1232, client 217/1483, game-core 13/193 — all green; `tsc -b` clean ×3; lint unchanged (server 217/68 baseline, client at 401-warning budget). §7 status + §7.3 GC-5 row/tier-summary + §7.4 + Sequencing + Current focus + a new decisions-log row ("D-14 correction") updated. Not pushed. |
 | 2026-09-04 | **GC-5 fix pushed + deployed; 3-attempt retroactive fix applied — both on explicit human go-ahead, same day as the incident.** Pushed `3484c93a..d8bed8ca` (carrying both the System 7 Step 3 FIX-NOW tier and the GC-5 fix — deliberately not held for a review cycle, per the human: "this is a live bug affecting real players' rankings on an ongoing basis"). CI green (Server + Client Validation, MP Private Authority Soak, Smoke Test — Production). Render deployed `d8bed8ca`; confirmed live via `/ready.gameCore` → `{ consistent: true, reason: 'match', softInvariants: false }` — **GC-1's own deployed-engine assertion validating itself on its first real deploy.** Then ran `gc5-retro-reverify.ts --apply` against prod for exactly the 3 human-approved attempts (`3a23cb9b…`, `91fadc29…`, `6eba765e…`); read the rows back from Postgres afterward (not just trusted the script's own echo) — all 3 confirmed `verification_status: 'verified'`, each carrying its `gc5_retroactive_reverification` audit field. The two parked items (`538bfeb1…`'s 4-entry cascade, the unconfirmable 2026-08-19 event) were left untouched, as directed — no decision made on them. §7 status + §7.3 + §7.4 + Sequencing + Current focus updated. **Next: System 8, as originally planned.** |
+| 2026-09-04/05 | **Guardrail #1's policy-manifest CI job (added but not yet pushed as of the prior entry) actually run against live prod for the first time — 4 real drift findings, all resolved; then `preGameDraw/`'s remaining §9.1.12 territory traced (no gap).** First `workflow_dispatch` of `security-posture.yml` ran GitHub's stale copy of the workflow (the commit adding the `policy-manifest` job, `8f5ac326`, hadn't been pushed yet — its own message said so) — looked instantly green but only the pre-existing `posture` job had actually run. Pushed, re-ran: `policy-manifest` genuinely executed and **failed** — 4 pinned tables checked (`ranked_games`, `rating_periods`, `room_live_sessions`, `room_match_logs`), 44 unpinned tables reported (expected, non-blocking by design), and **4 drift findings**, all investigated against live data rather than assumed: (1)/(2) `ranked_games`/`rating_periods` each had a live `"Users can read own ranked/rating games"` SELECT policy (`auth.uid() = player_id`) pulled fresh via `list_rls_policy_manifest()` — legitimate, just never seeded into the manifest when it was written from RK-0's fix alone; added to the manifest, not diffed away. (3)/(4) `room_live_sessions`/`room_match_logs`'s `no_client_write` policies showed live `with_check: "false"` against a manifest expecting `null` — checked the canonical DDL (`supabase/room_live_sessions.sql`, `supabase/room_match_logs.sql`) rather than assuming either side was right: both explicitly declare `with check (false)` alongside `using (false)`, deliberate fail-closed-on-writes — the manifest's `null` was the seeding mistake, corrected to match. Verified locally clean (`npm run check:policy-manifest`), committed (`57bbc24b`), then — per explicit instruction not to consider it resolved on local verification alone, the exact standard this guardrail exists to enforce — pushed and re-ran on GitHub Actions: **confirmed green** (run `33931873458`, `policy-manifest` job: "policy manifest check clean — no drift on any pinned table"). Then risk-sequenced the next §9.1.12 item the same way as §9.1.14 (integrity/availability stakes, not raw coverage): `preGameDraw/`'s remaining logic, chosen because it's a third distinct draw-sequence code path after RT-1 and RT-2 (both real bugs in the same failure family — a multi-step draw not logged/replayed faithfully). Traced fully (§9.1.16): the 28-tile scatter genuinely shuffles client-side with unseeded `Math.random()`, but every path where the draw outcome is actually rated is server-dictated (Daily Fritz's `first_hand`, standalone-Fritz's deterministic seed) or, in the one fallback branch that does use the local shuffle, structurally excluded from rating by the `verifiedMatchId` gate in `useGhostMatchCompletion.ts`. **No gap** — recorded as new invariant **RT-INV-11**, unlike RT-1/RT-2. §9.1.12/§9.1.16/§9.2 (RT-INV-11)/§9.3/§9.4 + the System 9 summary line updated; policy-manifest.json pushed. **Six of §9.1.12's original nine items now remain untriaged** (was seven): `modules/guided/`, `modules/daily-puzzle/`, `client/src/match/board/`, `useLiveMatchSession.ts`'s composed hooks, `roomEvents.ts`'s consumers, the review hooks. |
 
 ---
 
