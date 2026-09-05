@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findDriftedRatingConstants,
+  findLenientDefaultStrictnessOptions,
   findNonIdempotentRankedGamesWrites,
   findUnguardedFloatingImports,
   isSuspiciousDailyFritzScoreAccess,
@@ -209,5 +210,48 @@ describe('INV-17 idempotent ranked_games writes', () => {
       await supabaseFetch('/auth/v1/admin/users/' + userId, { method: 'DELETE' });
     `;
     expect(findNonIdempotentRankedGamesWrites('server/src/account/routes.ts', prose)).toEqual([]);
+  });
+});
+
+
+/**
+ * INV-18 — Strict-by-default verifier options (ENGINEERING_GUARDRAILS.md §4).
+ * A verifier's `strict*` / `*Continuity` knob must default to true, so an
+ * omitted option means strict and leniency is a visible opt-out. RT-2 was a
+ * call site that silently omitted the option and inherited leniency.
+ */
+describe('INV-18 strict-by-default verifier options', () => {
+  const spec = [
+    { file: 'server/src/ghost/verifier.ts', fn: 'verifyPlayerMoveLog', option: 'strictHandContinuity' },
+  ];
+
+  it('accepts a `?? true` strict default', () => {
+    const strict = `const strictHandContinuity = options.strictHandContinuity ?? true;`;
+    expect(findLenientDefaultStrictnessOptions(strict, spec)).toEqual([]);
+  });
+
+  it('accepts a `{ strictHandContinuity = true }` destructure default', () => {
+    const strict = `function verify({ strictHandContinuity = true }: Options) {}`;
+    expect(findLenientDefaultStrictnessOptions(strict, spec)).toEqual([]);
+  });
+
+  it('flags a `?? false` lenient default (the pre-Guardrail-#4 shape)', () => {
+    const lenient = `const strictHandContinuity = options.strictHandContinuity ?? false;`;
+    expect(findLenientDefaultStrictnessOptions(lenient, spec)).toHaveLength(1);
+    expect(findLenientDefaultStrictnessOptions(lenient, spec)[0]).toMatch(/lenient default/);
+  });
+
+  it('flags an option that is read with no explicit default at all (implicitly lenient)', () => {
+    const implicit = `if (options.strictHandContinuity) { requireExactChain(); }`;
+    expect(findLenientDefaultStrictnessOptions(implicit, spec)).toHaveLength(1);
+    expect(findLenientDefaultStrictnessOptions(implicit, spec)[0]).toMatch(/no explicit strict default/);
+  });
+
+  it('is not fooled by a `{ strictHandContinuity: false }` opt-out in a doc comment', () => {
+    const withCommentedOptOut = `
+      // A call site that needs legacy behaviour opts out with { strictHandContinuity: false }.
+      const strictHandContinuity = options.strictHandContinuity ?? true;
+    `;
+    expect(findLenientDefaultStrictnessOptions(withCommentedOptOut, spec)).toEqual([]);
   });
 });

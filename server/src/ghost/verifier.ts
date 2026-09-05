@@ -50,7 +50,18 @@ function handAllowsLegacyUnloggedDraws(expected: string[], actual: string[]): bo
 }
 
 export type VerifyPlayerMoveLogOptions = {
-  /** When true, only exact hand chains pass (post-capture-fix live completions). */
+  /**
+   * Only exact hand chains pass — no tolerance for unlogged boneyard draws
+   * bridging one move's hand_after to the next move's hand_before.
+   *
+   * **Defaults to `true`.** A call site that needs the lenient legacy
+   * behaviour must opt out *visibly* with `{ strictHandContinuity: false }`.
+   * This inversion is Guardrail #4 (ENGINEERING_GUARDRAILS.md §4): RT-2 was
+   * a call site that silently omitted this option and got leniency it never
+   * meant to ask for. Omission now means strict; leniency is a deliberate,
+   * reviewable act. INV-18 in `check:architecture` fails CI if this default
+   * is ever flipped back.
+   */
   strictHandContinuity?: boolean;
 };
 
@@ -201,7 +212,9 @@ export function verifyPlayerMoveLog(
   moveLog: GhostMoveLogEntry[],
   options: VerifyPlayerMoveLogOptions = {},
 ): GhostMoveLogVerificationResult {
-  const strictHandContinuity = options.strictHandContinuity ?? false;
+  // Guardrail #4: defaults to strict. Lenient is opt-out only — see
+  // VerifyPlayerMoveLogOptions. INV-18 pins this `?? true`.
+  const strictHandContinuity = options.strictHandContinuity ?? true;
   let previousHand: string[] | null = null;
   let previousHandNumber: number | null = null;
   let previousTilePlayed: string | null = null;

@@ -1204,6 +1204,91 @@ function checkIdempotentRankedGamesWrites(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 18. Strict-by-default verifier options (ENGINEERING_GUARDRAILS.md §4)
+// ---------------------------------------------------------------------------
+// Guardrail #4: a verifier's strictness knob (`strictHandContinuity` and any
+// sibling `strict*` / `*Continuity` boolean on the same verifier) must default
+// to `true`, so a call site that omits it gets strict verification, and
+// leniency is a visible, reviewable `{ strictHandContinuity: false }` opt-out.
+// RT-2 was a call site that silently omitted the option and inherited a
+// lenient default it never meant to ask for — with a doc comment ("legacy-
+// only") that was simply wrong. A comment-requiring lint rule would only have
+// forced RT-2 to keep writing that wrong comment; inverting the default fixes
+// the asymmetry instead of documenting it.
+//
+// This check is the enforcement: the default alone is a convention a future
+// refactor could quietly flip back. INV-18 fails CI if the strict-default
+// expression is weakened.
+
+type StrictDefaultVerifierSpec = {
+  file: string;
+  fn: string;
+  option: string;
+};
+
+const STRICT_DEFAULT_VERIFIERS: StrictDefaultVerifierSpec[] = [
+  { file: 'server/src/ghost/verifier.ts', fn: 'verifyPlayerMoveLog', option: 'strictHandContinuity' },
+];
+
+/**
+ * For each spec, the file must resolve the option to a strict default —
+ * `options.<opt> ?? true` or a `{ <opt> = true }` destructure — and must NOT
+ * contain a lenient default (`?? false` / `= false`) for that option. Returns
+ * a human-readable reason per violation.
+ */
+export function findLenientDefaultStrictnessOptions(
+  source: string,
+  specs: StrictDefaultVerifierSpec[],
+): string[] {
+  const violations: string[] = [];
+  for (const spec of specs) {
+    const opt = spec.option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const strictDefault = new RegExp(`${opt}\\s*(?:\\?\\?|=)\\s*true\\b`);
+    const lenientDefault = new RegExp(`${opt}\\s*(?:\\?\\?|=)\\s*false\\b`);
+
+    if (lenientDefault.test(source)) {
+      violations.push(
+        `${spec.file}: ${spec.fn}'s "${spec.option}" resolves to a lenient default (\`?? false\` / \`= false\`) — ` +
+        `Guardrail #4 requires it default to true (leniency must be an explicit opt-out)`,
+      );
+    } else if (!strictDefault.test(source)) {
+      violations.push(
+        `${spec.file}: ${spec.fn}'s "${spec.option}" has no explicit strict default (\`?? true\` / \`= true\`) — ` +
+        `an omitted option must mean strict, not implicitly lenient (Guardrail #4)`,
+      );
+    }
+  }
+  return violations;
+}
+
+function checkStrictDefaultVerifiers(): void {
+  const errors: string[] = [];
+
+  for (const spec of STRICT_DEFAULT_VERIFIERS) {
+    const absolute = path.join(REPO_ROOT, spec.file);
+    if (!fs.existsSync(absolute)) {
+      errors.push(`Strict-default verifier file missing: ${spec.file}`);
+      continue;
+    }
+    const source = fs.readFileSync(absolute, 'utf8');
+    if (!new RegExp(`\\b${spec.fn}\\b`).test(source)) {
+      errors.push(`${spec.file} no longer defines ${spec.fn} — update STRICT_DEFAULT_VERIFIERS`);
+      continue;
+    }
+    errors.push(...findLenientDefaultStrictnessOptions(source, [spec]));
+  }
+
+  addResult({
+    id: 'INV-18',
+    name: 'Strict-by-Default Verifier Options',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { verifiersPinned: STRICT_DEFAULT_VERIFIERS.length },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1243,6 +1328,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Godfile LOC Caps', 'line count vs cap', 'check:architecture'],
     ['Shared Rating-Constant Parity', 'client vs server glicko2 export const diff', 'check:architecture'],
     ['Idempotent ranked_games Writes', 'server-wide POST /rest/v1/ranked_games scan', 'check:architecture'],
+    ['Strict-by-Default Verifier Options', 'strict* default-value assertion on pinned verifiers', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -1324,6 +1410,7 @@ function main(): void {
   checkFloatingImports();
   checkRatingConstantParity();
   checkIdempotentRankedGamesWrites();
+  checkStrictDefaultVerifiers();
 
   printReport(manifest);
 }

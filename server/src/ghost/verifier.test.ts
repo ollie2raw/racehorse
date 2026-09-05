@@ -263,7 +263,9 @@ describe('verifyPlayerMoveLog', () => {
       },
     ];
 
-    const lenient = verifyPlayerMoveLog(collapsedLog);
+    // Guardrail #4 (INV-18): strict is the default now, so a test that means
+    // to exercise the legacy lenient path must opt out visibly.
+    const lenient = verifyPlayerMoveLog(collapsedLog, { strictHandContinuity: false });
     expect(lenient).toEqual({ ok: true });
 
     const strict = verifyPlayerMoveLog(collapsedLog, { strictHandContinuity: true });

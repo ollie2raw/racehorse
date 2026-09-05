@@ -227,19 +227,60 @@ tightened. The leniency's own doc comment claimed "legacy-only," which a
 live-traffic replay check (root-causing RT-2) proved false — the gap was
 still producing real, current mismatches.
 
-**Enforcement — NOT YET BUILT.** No mechanism currently catches a
-verifier function being called with different strictness options from
-different call sites without an accompanying comment explaining why. A
-real mechanism would need to be specific to this shape — e.g. an ESLint
-rule requiring every call to a function whose signature includes an
-"options" bag with a `strict*`/`*Continuity`-style boolean to be
-accompanied by an inline comment, or (cheaper, and arguably more honest)
-a single source-of-truth default: make `strictHandContinuity` the
-function's default (`= true`) rather than an opt-in per call site, so a
-new call site is strict *unless it deliberately opts out* — inverting who
-carries the burden of "did anyone remember to keep these in sync." Not
-designed or built yet; worth deciding which of these two shapes before
-either is built.
+**Design decision — the inverted default, not the comment rule.** Of the
+two shapes this section weighed, the comment-requiring lint rule only
+forces an asymmetry to be *documented*, not *corrected* — and a
+rubber-stamp comment satisfies it while explaining nothing. RT-2 already
+carried a doc comment ("legacy-only") and it was simply wrong. Inverting
+the default flips who carries the burden: a call site is strict unless it
+*visibly, deliberately* opts out with `{ strictHandContinuity: false }`,
+which is a far more reviewable act than silently omitting an options bag.
+
+**Enforcement — BUILT:**
+- **The default is inverted.** `verifyPlayerMoveLog`
+  (`server/src/ghost/verifier.ts`) now resolves
+  `options.strictHandContinuity ?? true` — an omitted option means strict.
+  `VerifyPlayerMoveLogOptions`'s doc comment states the inversion and that
+  leniency is opt-out only. Both production call sites
+  (`gameOverPersistence.ts`, `http/routes/ghost.ts`) already passed
+  `{ strictHandContinuity: true }` explicitly, so this is behaviour-neutral
+  for live traffic (RT-2's fix had already tightened the lagging call
+  site). One test that deliberately exercises the legacy lenient path
+  (`verifier.test.ts`, "collapsed two-draw turn") was updated to pass
+  `{ strictHandContinuity: false }` explicitly — making its intent visible,
+  which is the whole point.
+- `client/scripts/checkArchitectureInvariants.ts`'s **INV-18 —
+  Strict-by-Default Verifier Options**. A pure helper
+  (`findLenientDefaultStrictnessOptions`) reads each pinned verifier file
+  (`STRICT_DEFAULT_VERIFIERS`, currently just `verifyPlayerMoveLog`) and
+  fails the build if the option resolves to a lenient default (`?? false` /
+  `= false`) **or** has no explicit strict default at all (an option read
+  with no `?? true` is implicitly lenient). This is the actual guardrail —
+  the default alone is a convention a refactor could quietly flip back;
+  INV-18 makes it stick.
+- **Runs in CI** via the existing `check:architecture` step, same
+  aggregate verifier as INV-01…INV-17.
+- **Negative test:** `client/scripts/checkArchitectureInvariants.test.ts`
+  covers the `?? true` and `{ = true }` accept cases, the `?? false`
+  reject, the no-explicit-default reject, and the "not fooled by a
+  `{ strictHandContinuity: false }` in a doc comment" case.
+- Verified against the repo as it stands: **INV-18 passes** (1 verifier
+  pinned, strict default present).
+
+**Scope, stated plainly.** Only `verifyPlayerMoveLog.strictHandContinuity`
+matches the `strict*`/`*Continuity` boolean-option shape today — a
+full-repo scan of every exported `verify*` function turned up no other.
+`verifyDailyFritzHand.requireStateDigests`
+(`server/src/dailyFritzVerifier.ts`) is the RT-2-adjacent sibling flagged
+in Guardrail #2's write-up, but it is a different shape (`require*`, not
+`strict*`/`*Continuity`) **and** flipping its default is not
+behaviour-neutral: `fritzChallenges.ts`'s two call sites omit it (lenient)
+while `dailyFritzVerificationGlue.ts` sets it from an authority contract.
+Inverting that default would silently start requiring state digests on the
+`fritzChallenges` paths for real traffic — a live decision, not a
+mechanical edit (D-17 precedent). Left untouched and flagged for a
+deliberate call; add it to `STRICT_DEFAULT_VERIFIERS` if/when that
+decision is made.
 
 ---
 
