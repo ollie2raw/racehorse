@@ -14,8 +14,9 @@ covers what a checklist review catches that a CI rule does not.
 
 ## Current focus
 
-**As of 2026-09-05: Step 1 (read-only current-state map) written for System
-9-CQ's 5 parked areas. No fixes. Awaiting human review before Step 2.**
+**As of 2026-09-05: Step 1 map complete (5 areas + 3 pre-Step-2 investigations
+resolved); Step 2 graded findings list written (`§CQ9.2`, 19 findings). No
+fixes. Awaiting human ratification as `D-CQ-1` before Step 3.**
 
 Scope this plan covers (System 9's 5 items formally PARKED at D-18):
 
@@ -234,11 +235,18 @@ explicit human sign-off.
   - Not yet checked leaf-by-leaf: whether any *internal* helper in the 459-line
     `buildGuidedCoachPresentation.ts` or the 417-line `guidedPlacementHandlers.ts`
     is genuinely unreferenced. Deferred to Step 2.
-- **(2) Duplicated logic:** not yet traced in depth. `guidedBotMatchHelpers.ts`
-  re-derives board/scoring-ish concepts (`syncGuidedBoneyardCount`,
-  `sameTileKeyMultiset`, `guidedWinnerIdFromScores`) — need to check against
-  `@racehorse/game-core` / `match/runtime/botEngine` before Step 2 (Guardrail #2
-  / INV-16 only pins the `glicko2` constant pair, not this).
+- **(2) Duplicated logic — CHECKED, not a finding:** `guidedBotMatchHelpers.ts`'s
+  `parseGuidedBoardState` / `parseGuidedTranscriptState` parse the
+  **guided-lesson transcript wire format** (`board:empty` sentinel, `[low,high]`
+  tuple → `{low,high}` remap) — a different serialization than game-core's
+  `BoardState`, not a re-implementation of it. `syncGuidedBoneyardCount` pads a
+  tile array with `{low:0,high:0}` placeholders for a *count display* — a
+  guided-only presentational helper, no game-core equivalent.
+  `guidedWinnerIdFromScores` is a trivial `>=`. **Minor STYLE only (F-misc):**
+  there are 3 scattered small multiset helpers — `sameTileKeyMultiset`
+  (guided, equality), `multisetDiff` (`learn/guidedAuthoring.ts:365`), and the
+  subtract-comment in `modules/bot-turn/embeddedForcedDrawPresentation.ts` — a
+  candidate to consolidate into one `tileMultiset` util, low value.
 - **(3) Error handling:** not yet sampled beyond the debug file.
 - **(4) Type safety:** **clean at first pass** — `grep` for `: any` / `as any` /
   `as unknown as` / `= null!` across all 18 files returns **zero hits**.
@@ -307,25 +315,33 @@ only inside `MatchLiveLayout`).
   `return <>{children}</>` — a no-op fragment wrapper with one consumer
   (`bot/view/overlays/BotMatchInGameOverlays.tsx`). It adds a named type and a
   barrel entry for zero behaviour. **Candidate STYLE or FIX-NOW-delete.**
-- **(2) Duplicated logic + (6) naming — the notable finding:** there is a
-  **sibling file `client/src/match/InGameBoardShell.tsx` (307 LOC)** — one
-  directory up from `match/board/` — that:
-  - is named `InGameBoardShell.tsx` but its exported component is
-    **`InGameBoardFrame`** (file name ≠ export name);
-  - **also** exports an `InGameBoardShell` component and an `InGameBoardLayout`
-    type — so there are now *two* `InGameBoardShell` and *two* `InGameBoardFrame`
-    definitions a directory apart;
-  - contains a `<main className="nbl-stage walnut-nbl-stage rh-board-stage">`
-    block that is a **near-verbatim duplicate** of `match/board/MatchBoardCanvas.tsx`
-    (24 LOC) — same classNames, same watermark, same toolbar slot;
-  - **is imported by nothing** — `grep` for any import resolving to
-    `src/match/InGameBoardShell.tsx` returns zero hits (all `./InGameBoardShell`
-    imports resolve to the `match/board/` one).
-  So: a **307-line dead file** whose name collides with a live sibling and whose
-  body duplicates a live component. **Scope note:** it's `match/` not
-  `match/board/`, so technically one level outside the parked item — but it *is*
-  "the sibling module" the checklist asks about, and it's the single highest-
-  value finding in this area. Flag it; the human decides whether it's in scope.
+- **(1) Dead code + (2) duplicated body + (6) name collision — the headline,
+  now fully mapped (investigation 3, human pulled it into scope):**
+  `client/src/match/InGameBoardShell.tsx` — **307 LOC, dead, superseded.**
+  - **Dead since 2026-05-29.** `git log -S "match/InGameBoardShell'"` shows the
+    last commit importing it is `3150655e` ("Consolidate live match layout and
+    theme under rh-match-live") — **the same commit that ADDED
+    `match/board/MatchLiveLayout.tsx`** (`git log --diff-filter=A`). The
+    `match/board/` 6-file decomposition (`InGameBoardShell` + `InGameBoardHud` +
+    `InGameBoardFrame` + `MatchBoardCanvas` + `MatchLiveLayout` +
+    `InGameOverlayStack`) **replaced** this one mega-file; it was never deleted.
+    The two commits touching it since (`05703df3` WebP conversion 2026-08-14,
+    `4d04a838` lint sweep 2026-06-17) are repo-wide sweeps, not intentional
+    edits.
+  - **Zero importers** — confirmed via `git grep`, no `src/match/index.ts`
+    barrel, no dynamic/string reference.
+  - **Name collision:** file is `InGameBoardShell.tsx` but exports a function
+    `InGameBoardFrame` (file name ≠ export), plus `InGameBoardShell` (an
+    18-prop mega-component with a `layout: 'studio' | 'walnut-hud' | 'walnut-wrap'`
+    union) and `InGameBoardLayout`. So there are two `InGameBoardShell` and two
+    `InGameBoardFrame` definitions one directory apart, only the `match/board/`
+    set live.
+  - **Duplicated body:** its `InGameBoardFrame` is the `<main className="nbl-stage
+    walnut-nbl-stage rh-board-stage">` + watermark + toolbar block — a
+    near-verbatim duplicate of `match/board/MatchBoardCanvas.tsx` (24 LOC).
+  - **Scope note:** `match/` not `match/board/`, one directory outside the D-18
+    item — the human explicitly pulled it into this pass (2026-09-05). It is the
+    single highest-value finding in the area.
 - **(3) Error handling / (7) cleanup:** n/a — pure presentational, no effects,
   no async, no listeners.
 - **(4) Type safety:** clean.
@@ -375,11 +391,37 @@ treat it like a `multiplayer/` change.
   No other timers/intervals/listeners are created directly here (they live in the
   sub-hooks, out of this file's scope). The 3 sibling `useEffect`s that sync
   refs to state (lines 103–113) have no cleanup and need none.
-- **(3) Error handling:** `applyJoinResponseGameState` (lines 228–253) returns
-  `{ ok: false, nextState: null }` on a failed projection **silently** — no
-  `showToast`, no `setError`, no log. The caller presumably handles `ok:false`,
-  but a silent projection failure in a recovery path is a candidate finding
-  (category 3) — verify the caller in Step 2.
+- **(3) Error handling — `applyJoinResponseGameState` silent early-return
+  (investigation 1: TRACED, verdict GENUINELY BENIGN, NOT a `HARDENING_PLAN.md`
+  candidate):** `applyJoinResponseGameState` (lines 228–253) returns
+  `{ ok: false, nextState: null }` on a failed `projectMultiplayerGameState`
+  **without** any log / toast / `setError` at that site, and returns *before*
+  `setState` / `setLegalMoves` / `setCanDraw`. Full trace of what a player
+  experiences:
+  - **Primary caller** — `joinAckCoordinator.ts:104` — *does* check `ok`:
+    `if (!ok && resp.state != null)` → `logger.warn('join', 'room:join
+    handshake state failed projection validation — resync scheduled', {roomCode})`
+    **and dispatches `RESYNC_NEEDED`**, which refetches authoritative state from
+    the server. So at the system level it is observable and self-healing.
+  - **Secondary caller** — `MultiplayerGameShell.tsx:1016` (a `useLayoutEffect`
+    replaying a *buffered* join response once the shell mounts) — discards the
+    return. If that leaves `state` null: the shell has a null-state effect
+    (`MultiplayerGameShell.tsx:347`) that clears draw UI but does **not**
+    refetch; recovery instead comes from (a) the server's next
+    `room:update` / `state:sync` broadcast (any opponent action, or periodic)
+    delivering fresh state via `setState`, or (b) socket reconnect re-running
+    join.
+  - **Can the player cause harm while stuck?** No. A `play` with null `state`:
+    `usePlayAction.ts:100` reads `stateRef.current` (null) and `legalMovesRef.current`
+    (`[]` — never set); line 130 `legalMovesNow.find(...)` → `undefined` → line 140
+    `setActionError('That tile cannot be played there.')` and **returns without
+    emitting anything**. Loud, safe no-op. No wrong result, no disputed outcome.
+  - **Worst case:** a transient blank/loading board that recovers on the next
+    server broadcast or reconnect, with a `logger.warn` in the log.
+  **This is a quality finding** (the *function itself* would be clearer with a
+  one-line comment "caller schedules resync on `!ok`" or its own `logger.warn`),
+  not a hardening one — the recovery is sound and no player-visible wrong state
+  or dispute is reachable.
 - **(4) Type safety:** `resp.legalMoves as Move[]` and `resp.state ?? null) as GameState | null`
   (lines 230, 245) — casts on socket-ack payloads. `projectMultiplayerGameState`
   validates `state`; `legalMoves` is cast with only an `Array.isArray` guard, no
@@ -409,23 +451,43 @@ the game-reviewer open/close, and the "pivotal turn review wizard" state.
 — **live** (the Play-vs-Fritz post-game "review your game" prompt + analyzer).
 
 **Checklist observations (candidates):**
-- **(1) Dead code — feature-flagged-off subsystem, needs a call:**
-  `PIVOTAL_REVIEW_WIZARD_ENABLED` (`modules/match/types/matchRuntimeTypes.ts:4`)
-  is a **hardcoded `const … = false`** (not env-driven). In `useReviewRuntime`
-  every `!(PIVOTAL_REVIEW_WIZARD_ENABLED && …)` clause collapses to `true`, and
-  `BotMatchModalLayer.tsx:60,66` passes the flag straight to the wizard's
-  `enabled` prop. So the wizard UI never renders. Yet `usePostGamePivotalReview`
-  still maintains ~9 wizard-only state fields (`pivotalReviewOpen`,
-  `pivotalReviewSummary`, `completePivotalTurnReview`, `savePivotalReviewSummary`,
-  `pivotalSelection` `useMemo` that runs `selectPivotalTurnsFromAnalysis` on
-  every analysis) plus a `training/pivotalReview/` subsystem
-  (`pivotalTurnSelector`, `pivotalReviewStorage`, `buildPivotalReviewSession`).
-  **Is this a pending feature (ACCEPT) or abandoned (FIX NOW — delete the wizard
-  half + the flag + the `training/pivotalReview/` bits that only it uses)?**
-  Step 2 needs a human call — same shape as FC-DEAD-1's "revive or remove"
-  question. The **non-wizard** half (`postGameAnalysis`,
-  `showPostGameReviewPrompt`, `openReviewGameFromPrompt`, the analyzer) **is
-  live** and stays regardless.
+- **(1) Dead code — `PIVOTAL_REVIEW_WIZARD_ENABLED` (investigation 2: history
+  traced, verdict INCOMPLETE / PARKED beta feature, not abandoned — grade
+  ACCEPT with residual notes):**
+  - **Never been `true`.** `git grep "PIVOTAL_REVIEW_WIZARD_ENABLED = true"` over
+    the last 200 commits on all branches → **zero hits**. `false` on `main` and
+    every branch checked. `-S` on the identifier shows only the two large
+    "architecture refactor" commits (`99a3c4d5` sprint-1-7, `d9e82c8e`) ever
+    touched it — set to `false` at creation, never flipped.
+  - **No open trigger is wired.** `setPivotalReviewOpen(true)` **exists nowhere**
+    — the only call is `setPivotalReviewOpen(false)` (a reset in
+    `useMatchNavigation.ts:141`). So even flipping the flag to `true` would leave
+    `pivotalReviewOpen` permanently `false` and `BotPivotalReviewPortal`
+    (`if (!enabled || !open || !selection) return null`) rendering nothing. The
+    wizard is not just flag-gated, it is **unfinished** — the "open the wizard"
+    UI was never built.
+  - **But the surrounding feature is actively beta-gated, not abandoned.**
+    `97e47ae0` (2026-08-15, ~3 weeks pre-audit): *"fix(beta): hide post-game
+    review except for the admin account … The analyzer is not ready for players.
+    Keep the normal result overlay, and only show Review Game / Analyze Game
+    when the signed-in email matches VITE_ADMIN_EMAIL."* — flipped
+    `POST_GAME_REVIEW_VISIBLE true→false` and added `isPostGameReviewEnabled(isAdmin)`.
+    The sibling flags in the same file (`LEARN_MODE_VISIBLE`,
+    `JOURNEY_MODE_VISIBLE`, `POST_GAME_REVIEW_VISIBLE`) are all actively toggled
+    over time — this is a live beta-gating flag file, and the whole post-game
+    review area (analyzer + wizard) was *deliberately* deferred for the beta
+    with a stated reason.
+  - **Verdict: genuinely unclear, weight of evidence = "parked / incomplete beta
+    feature."** Grade **ACCEPT** for the flag + wizard state. **Residual notes
+    for a future session:** (i) the wizard has **no open trigger** — "flip
+    `PIVOTAL_REVIEW_WIZARD_ENABLED = true`" is *not* sufficient to ship it, the
+    open UI must be built; (ii) `pivotalSelection` `useMemo` runs
+    `selectPivotalTurnsFromAnalysis` on every analysis regardless of the flag —
+    small wasted compute for a feature that can't render (separate STYLE
+    finding F17).
+  - The **non-wizard** half (`postGameAnalysis`, `showPostGameReviewPrompt`,
+    `openReviewGameFromPrompt`, the analyzer) **is live** (admin-gated per
+    `97e47ae0`) and stays regardless.
 - **(1) Dead code — the re-export shim:** `src/bot/usePostGamePivotalReview.ts`
   is a one-line `export * from '../modules/review/usePostGamePivotalReview.ts'`
   with **zero importers** — its only consumer is
@@ -454,20 +516,87 @@ the game-reviewer open/close, and the "pivotal turn review wizard" state.
 
 ---
 
-## CQ9.2 Graded findings list — **Step 2, not started**
+## CQ9.2 Graded findings list — **Step 2, written 2026-09-05, awaiting ratification as `D-CQ-1`**
 
-Every candidate above gets exactly one grade (FIX NOW / REFACTOR / STYLE /
-ACCEPT), a checklist category, a file:line, and a one-line reason. Then the
-human ratifies as `D-N`.
+Every Step-1 candidate assigned exactly one grade. **Nothing here is a
+`HARDENING_PLAN.md` candidate** — investigation 1 confirmed the one
+recovery-path concern (`applyJoinResponseGameState`) is genuinely benign.
 
-## CQ9.3 Step-3 change plan — **not started** (waits on CQ9.2 ratification)
+Grades: **FIX NOW** = clearly wrong, cheap, unambiguous, ships in Step 3 by
+default · **REFACTOR** = works but a senior wouldn't approve as-is, ships only
+with explicit per-finding greenlight (touches working code / protected surface)
+· **STYLE** = cosmetic, low value · **ACCEPT** = looks rough, is actually fine.
+
+### FIX NOW
+
+| # | Cat | File | Finding | Why FIX NOW |
+|---|---|---|---|---|
+| **F1** | 1 | `client/src/modules/daily-puzzle/` (both files) | Dead — `isDailyPuzzleRun = Boolean(dailyPuzzleDate)` is permanently false (no `<BotMatchScreen>` render site passes `dailyPuzzleDate`; `DailyPuzzleScreen` routed nowhere). Client remnant of the 5-slot ladder decommissioned 2026-09-02. | Zero reachable execution. Delete the 2 files + the `useBotMatchScreenController.ts:127,170` wiring + the `puzzle:` field in `createBotMatchViewModelArgs.ts` + the `dailyLeaderboard*` fields in `assembleBotMatchViewModel.ts:285–287` that *only* it feeds. |
+| **F8** | 1 / 2 / 6 | `client/src/match/InGameBoardShell.tsx` (307 LOC) | Dead since 2026-05-29 (`3150655e` added `match/board/MatchLiveLayout` and stopped importing this). Zero importers. File name ≠ export (`InGameBoardFrame`); duplicates `MatchBoardCanvas`'s body; name-collides with the live `match/board/` set. | Superseded v1 that the `match/board/` decomposition replaced, never deleted. Delete the file. |
+| **F10** | 1 | `client/src/match/board/InGameOverlayStack.tsx` (9 LOC) + barrel entry | The entire component is `return <>{children}</>` — a no-op. One consumer (`bot/view/overlays/BotMatchInGameOverlays.tsx`). | Dead weight: a file, a type, a barrel line, an extra element in the tree for zero behaviour. Inline `<>{children}</>` at the one call site; delete the file + barrel entry. |
+| **F18** | 1 | `client/src/bot/usePostGamePivotalReview.ts` (1 line) | Dead re-export shim (`export * from '../modules/review/usePostGamePivotalReview.ts'`). Zero importers; only `bot/usePostGamePivotalReview.behaviorTests.ts` (non-vitest) touches it. | The module moved to `modules/review/`. Point the behaviorTest at the real path; delete the shim. |
+
+### REFACTOR (ship only with explicit per-finding greenlight)
+
+| # | Cat | File | Finding | Why not FIX NOW |
+|---|---|---|---|---|
+| **F12** | 5 | `client/src/match/session/useLiveMatchSession.ts` | ~95-key grab-bag return — leaks every internal `setState*` and every ref to consumers. | Real "senior wouldn't approve" smell, but grouping the return (`{ state, refs, actions, viewModel }`) rewrites a spread consumed across a large socket-adjacent prop tree. High blast radius; `match/session/` is socket-lifecycle-coupled (treat like protected `multiplayer/`). |
+| **F19** | 3 | `client/src/modules/review/usePostGamePivotalReview.ts:84` | `.catch(() => setPostGameAnalysisPending(false))` swallows the analyzer import/run failure — the "review your game" prompt then silently never appears, with no log. | Add a `logger.warn`. Small, but it *is* changing error-handling behaviour in a live path — wants a look, not a blind FIX NOW. Low urgency (review is a nice-to-have). |
+| **F3** | 1 / 6 | `client/src/modules/guided/index.ts` | Barrel exports ~40 symbols; only ~6–7 have an importer outside `modules/guided/`. The rest are internal-only. | Trimming the barrel to its real external surface is safe mechanically but `modules/guided/` has 25 imports into protected `learn/` and the barrel is the module's contract — wants a deliberate pass, not a drive-by. |
+| **F6** | 9 | `client/src/modules/guided/` (whole area) | ~3,516 LOC, **one** vitest file (`useGuidedLessonBoot.test.tsx`). V2 playback, placement handlers, coach-presentation builder, authoring capture — all untested. | The single largest coverage gap in scope, but writing tests for a live lesson runtime coupled to protected `learn/` is a project, not a step. Needs its own scoped effort + greenlight. |
+| **F11** | 6 | `client/src/match/board/InGameBoardFrame.tsx` | 12 props, 5 of them `*ClassName` escape hatches (`studioShellClassName`, `boardZoneClassName`, `handDockClassName`, `handStackClassName`, `handFooterClassName`) that its **only** caller (`MatchLiveLayout`) never passes. | Speculative generality. Trimming is safe but touches a load-bearing layout component (7 downstream consumers via `MatchLiveLayout`) — verify no other caller wants them first. |
+
+### STYLE (recorded, generally not worth a dedicated change)
+
+| # | Cat | File | Finding |
+|---|---|---|---|
+| **F4** | 8 | `modules/guided/useGuidedWindowDebugApis.ts`, `useGuidedMatchRuntime.ts` | `console.log` in shipped code (`[guided-frozen-audit] ready…`, `[guided-transcript-authoring] ready…`, `[guided-debug] …`, `[guided-fallback] …`). Contributes to the 401-warning lint budget. Route through `logger` or gate on a dev flag. |
+| **F9** | 1 | `client/src/match/board/index.ts` | `InGameBoardHud` is barrel-exported but imported only inside `MatchLiveLayout` (same module). Drop it from the barrel; keep the component. |
+| **F13** | 3 | `useLiveMatchSession.ts:228–253` | `applyJoinResponseGameState` returns `{ ok: false }` on projection failure with no log at that site (caller `joinAckCoordinator.ts:104` logs + schedules resync — benign, see investigation 1). Add a one-line comment ("caller resyncs on `!ok`") or its own `logger.warn` for grep-ability. |
+| **F15** | 9 | `useLiveMatchSession.ts` | No direct test of the composition / the unmount cleanup effect / `applyJoinResponseGameState` (the 6 sub-hooks *are* tested). A thin composition test is nice-to-have. |
+| **F17** | 1 | `modules/review/usePostGamePivotalReview.ts:100–103` | `pivotalSelection` `useMemo` runs `selectPivotalTurnsFromAnalysis` on every analysis even though `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and the result can't render. Gate it on the flag. |
+| **F-misc** | 2 | guided / learn / bot-turn | 3 scattered small multiset helpers (`sameTileKeyMultiset`, `multisetDiff`, an inline subtract). Consolidate into one `tileMultiset` util. Low value. |
+| **F20** | 6 | `modules/review/usePostGamePivotalReview.ts` docstring | Docstring says it "owns … pivotal review wizard state" but with the wizard flag off + no open trigger it is mostly "post-game analysis + analyzer open/close." Name/doc over-promise vs live behaviour. |
+
+### ACCEPT (looks rough, is actually fine — reason stated)
+
+| # | Cat | File | Finding | Why ACCEPT |
+|---|---|---|---|---|
+| **F5** | 8 | `modules/guided/` (8 `react-hooks/exhaustive-deps` disables) | Deliberate "run this effect on `handNumber` change only, not on `coach`/`match` identity churn" pattern. The trade (a known, bounded stale-closure risk) is the correct call for playback-sequencing effects. **Residual:** each disable should carry a one-line `why` comment where it doesn't already (folded into F3's pass if that's greenlit). |
+| **F14** | 4 | `useLiveMatchSession.ts:245` | `resp.legalMoves as Move[]` cast with only an `Array.isArray` guard, no element validation. | The server is the move-legality authority (GC-INV-1) — every move is re-validated server-side regardless of what the client's `legalMoves` array contains. Client-side element validation would be pure defense-in-depth against a benign display glitch. `state` *is* validated (`projectMultiplayerGameState`). |
+| **F16** | 1 | `PIVOTAL_REVIEW_WIZARD_ENABLED` + the wizard half of `usePostGamePivotalReview` + `training/pivotalReview/pivotalTurnSelector` / `pivotalReviewStorage` / `BotPivotalReviewPortal` / `BotReviewSummaryPortal` | Feature-flagged-off + **unfinished** (no `setPivotalReviewOpen(true)` anywhere). | Investigation 2: parked, not abandoned — it lives in an *actively-toggled* beta-gate flag file, and the sibling post-game-review feature was *explicitly* deferred for beta as recently as 2026-08-15 (`97e47ae0`, "the analyzer is not ready for players"). **Residual note (must survive to a future session):** flipping the flag is NOT sufficient to ship the wizard — the "open" UI was never built. |
+
+### daily-puzzle wider cluster — deferred scope (like FC-DEAD-1), not a graded finding yet
+
+F1 deletes the 2 audited `modules/daily-puzzle/` files. The surrounding dead
+`daily_puzzle*` **client** cluster — `dailyPuzzle/DailyPuzzleScreen.tsx`,
+`DailyPuzzleLadderScreen.tsx`, `DailyPuzzleLegacyInPlayView.tsx`,
+`DailyPuzzleLadderLeaderboardScreen.tsx`, the `daily_puzzle_scores` /
+`daily_puzzles` write paths in `dailyPuzzle/api.ts`
+(`upsertDailyPuzzleBestScore`, `fetchDailyPuzzleLeaderboard`,
+`getAllDailyPuzzlesForDate`), the `dailyPuzzleDate` prop and its ~10
+`isDailyPuzzleRun` gate sites — is a **separate deletion pass**, scoped and
+graded on its own, the same way FC-DEAD-1 flagged the Fritz-Challenge cluster
+rather than chasing the whole boundary in one commit. Recorded here so it is
+not lost. `daily_puzzle*` prod tables and any server references stay
+`HARDENING_PLAN.md`'s call, not this plan's.
+
+## CQ9.3 Step-3 change plan — **not started** (waits on `D-CQ-1` ratification)
+
+Once graded findings are ratified: the **FIX NOW** set (F1, F8, F10, F18) as
+four separate commits, each verified green (typecheck + full vitest + lint +
+`check:architecture`). REFACTOR/STYLE items only on explicit greenlight.
 
 ## CQ9.4 Checklist
 
-- [x] **Step 1 — current-state map** for all 5 areas — written 2026-09-05, this section. Read-only, no fixes.
-- [x] CQ9.1.1 `modules/daily-puzzle/` dead-or-alive resolved — **dead** (`isDailyPuzzleRun` permanently false; traced from the render prop, not the name).
-- [ ] **Step 2 — graded findings list** (`§CQ9.2`) → ratify as `D-N`.
-- [ ] **Step 3 — fix the ratified scope.** Commit each area separately. Do not push.
+- [x] **Step 1 — current-state map** for all 5 areas — written 2026-09-05. Read-only, no fixes.
+- [x] CQ9.1.1 `modules/daily-puzzle/` dead-or-alive resolved — **dead**.
+- [x] Investigation 1 — `applyJoinResponseGameState` silent failure traced — **benign, not a `HARDENING_PLAN.md` candidate** (`§CQ9.1.4`).
+- [x] Investigation 2 — `PIVOTAL_REVIEW_WIZARD_ENABLED` history traced — **parked/incomplete beta feature, ACCEPT** (`§CQ9.1.5`).
+- [x] Investigation 3 — `client/src/match/InGameBoardShell.tsx` mapped into scope — **dead since 2026-05-29, FIX NOW** (`§CQ9.1.3` / F8).
+- [x] **Step 2 — graded findings list** (`§CQ9.2`, 19 findings + 1 deferred cluster) — written 2026-09-05.
+- [ ] **Step 2 ratification** — human reviews `§CQ9.2` line-by-line → `D-CQ-1`.
+- [ ] **Step 3 — fix the ratified FIX-NOW scope.** Commit each finding separately. Do not push.
 
 ---
 
