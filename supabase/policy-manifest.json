@@ -30,7 +30,7 @@
   ],
   "tables": {
     "ranked_games": {
-      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Human dropped and recreated this policy scoped to service_role after finding it was `to public`.",
+      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Human dropped and recreated this policy scoped to service_role after finding it was `to public`. 'Users can read own ranked games' added 2026-09-04 after the first live policy-manifest CI run flagged it as unpinned drift: pulled live via list_rls_policy_manifest(), a pre-existing legitimate read policy that was simply never seeded into this manifest, not a new or suspect grant.",
       "policies": [
         {
           "policyname": "Service role can insert ranked games",
@@ -38,11 +38,18 @@
           "roles": ["service_role"],
           "qual": null,
           "with_check": "true"
+        },
+        {
+          "policyname": "Users can read own ranked games",
+          "cmd": "SELECT",
+          "roles": ["public"],
+          "qual": "(auth.uid() = player_id)",
+          "with_check": null
         }
       ]
     },
     "rating_periods": {
-      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Same fix as ranked_games.",
+      "_source": "RK-0 fix, confirmed applied live 2026-09-04 (HARDENING_PLAN.md decisions log, row RK-0). Same fix as ranked_games. 'Users can read own rating periods' added 2026-09-04, same circumstance as ranked_games' read policy above — pulled live via list_rls_policy_manifest(), pre-existing and legitimate, just never seeded.",
       "policies": [
         {
           "policyname": "Service role can insert rating periods",
@@ -50,23 +57,30 @@
           "roles": ["service_role"],
           "qual": null,
           "with_check": "true"
+        },
+        {
+          "policyname": "Users can read own rating periods",
+          "cmd": "SELECT",
+          "roles": ["public"],
+          "qual": "(auth.uid() = player_id)",
+          "with_check": null
         }
       ]
     },
     "room_live_sessions": {
-      "_source": "D-8 (HARDENING_PLAN.md decisions log) — human ran `select policyname, cmd, roles, qual, with_check from pg_policies where tablename in ('room_live_sessions','room_match_logs')` on 2026-09-01 and confirmed the exact rows below live. No SELECT policy exists on this table at all — that absence is itself load-bearing (deny-by-default for reads), not an omission from this manifest.",
+      "_source": "D-8 (HARDENING_PLAN.md decisions log) — human ran `select policyname, cmd, roles, qual, with_check from pg_policies where tablename in ('room_live_sessions','room_match_logs')` on 2026-09-01 and confirmed the exact rows below live. No SELECT policy exists on this table at all — that absence is itself load-bearing (deny-by-default for reads), not an omission from this manifest. with_check corrected 2026-09-04: the canonical DDL (`supabase/room_live_sessions.sql`) explicitly declares `with check (false)`, not just `using (false)` — the manifest's prior `with_check: null` was a seeding mistake (read the intent, not the full pg_policies row), not a reflection of an unresolved live question.",
       "policies": [
         {
           "policyname": "room_live_sessions_no_client_write",
           "cmd": "ALL",
           "roles": ["authenticated"],
           "qual": "false",
-          "with_check": null
+          "with_check": "false"
         }
       ]
     },
     "room_match_logs": {
-      "_source": "D-8 (HARDENING_PLAN.md decisions log), same 2026-09-01 confirmation as room_live_sessions.",
+      "_source": "D-8 (HARDENING_PLAN.md decisions log), same 2026-09-01 confirmation as room_live_sessions. with_check corrected 2026-09-04, same reason as room_live_sessions above: `supabase/room_match_logs.sql` declares `with check (false)` explicitly for room_match_logs_no_client_write.",
       "policies": [
         {
           "policyname": "room_match_logs_select_own",
@@ -80,7 +94,7 @@
           "cmd": "ALL",
           "roles": ["public"],
           "qual": "false",
-          "with_check": null
+          "with_check": "false"
         }
       ]
     }
