@@ -689,7 +689,26 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
   a scoring play, take it" — a coaching choice, debatable but intentional, tagged
   `isControlChoice: false`).
   Green: `tsc -b`, full vitest 221/1632, lint 401/401, `check:architecture`
-  CERTIFIED. Not pushed. Remaining: files 5–8 per `§CQ9.5.6`.
+  CERTIFIED. Not pushed.
+  File 5 landed: `parseGuidedBoardState` addendum in `guidedBotMatchHelpers.test.ts`
+  — **6 cases** (est. ~6–8). Per §CQ9.5.6 item 5 the multi-tile board is generated
+  by playing real moves (`createFixedBotMatch` + `applyPlayMove`) then round-tripped
+  through the actual `serializeGhostBoardState`, not hand-written. Covers: real
+  round-trip (tiles `[l,h]` → `{low,high}`, authoritative ends, hub value survives) ·
+  `board:empty`/`''` → null · malformed + non-object JSON → null · explicit tuple
+  remap · `hubs` key → `hubDoubles` + branch-tile remap · serialized ends win over
+  recomputed / absent → recomputed.
+  **Fixture-generation findings (the plan flagged real risk here — confirmed):**
+  (1) the opening `5|5` double creates a **mainline hub** (`hubValue: 5`,
+  `isCrossed: true`), so the round-trip test exercises the hub path, not just an
+  empty `hubDoubles`. (2) **`parseGuidedBoardState` is NOT a pure inverse of the
+  serializer** — it runs `hydrateBoardForOpenEnds`, which canonicalises each hub's
+  `branches` from the serializer's `[]` to the 2-slot `[left, right]` shape, and
+  `branchDepth` `undefined` → `null`. Faithful for tiles/ends/hub-values; the parse
+  output is *more* canonical than the wire, by design. No bug — pinned with a
+  comment so the next reader knows the asymmetry is intentional.
+  Green: `tsc -b`, full vitest 221/1638, lint 401/401, `check:architecture`
+  CERTIFIED. Not pushed. Remaining: files 6–8 per `§CQ9.5.6`.
 
 ---
 
