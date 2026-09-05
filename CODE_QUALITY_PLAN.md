@@ -656,7 +656,19 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
   `showCoachMoreButton` can only be `true` once the body exceeds the ~600-char
   preview cap (below that the preview text equals the body), unless an explicit
   shorter summary is present. Green: `tsc -b`, full vitest 220/1614, lint 401/401,
-  `check:architecture` CERTIFIED. Not pushed. Remaining: files 4–8 per `§CQ9.5.6`.
+  `check:architecture` CERTIFIED. Not pushed.
+  File 4 landed (Tier 2): `computeGuidedCoachTip.test.ts` — **17 cases** (est. ~12–15)
+  on real botEngine (`createFixedBotMatch` + `getLegalMoves` + `previewPlayMove`
+  fixtures, no mocks). Covers: 6 guards, opening move (highest-scoring pick ·
+  scoring-double still `isOpeningDouble:false` · highest-double fallback · null when
+  neither), single-legal-play `isOnlyPlay`, and the multi-move mirrored-`chooseBotMove`
+  path (coherence assertions). **Not covered — `chooseBotMove('master')`-output-
+  dependent, not deterministically reachable without coupling to engine internals:**
+  the `best.pts === 0` scoring-override branch and the `isControlChoice` computation.
+  Expected scores are derived in-test from `previewPlayMove` rather than hard-coded,
+  so the tests don't encode the all-fives scoring rule. Green: `tsc -b`, full vitest
+  221/1631, lint 401/401, `check:architecture` CERTIFIED. Not pushed. Remaining:
+  files 5–8 per `§CQ9.5.6`.
 
 ---
 
