@@ -3,7 +3,6 @@ import { lazy, Suspense, type CSSProperties } from 'react';
 const GameReviewer = lazy(() => import('../../../analyzer/GameReviewer.tsx'));
 import LeaveGameModal from '../../../components/LeaveGameModal.tsx';
 import { GameOverlayPortal } from '../../../components/GameOverlayPortal.tsx';
-import { InGameOverlayStack } from '../../../match/board';
 import type { InGameOverlayViewModel } from '../../view-model/botMatchViewModelTypes.ts';
 
 type BotMatchInGameOverlaysProps = InGameOverlayViewModel;
@@ -37,24 +36,22 @@ export function BotMatchInGameOverlays({
   const { exitJourneyTrial, exitMatch, onProfileRefresh } = navigation;
   return (
     <>
-      <InGameOverlayStack>
-        {flyingTiles.length > 0 && (
-          <GameOverlayPortal>
-            {flyingTiles.map((ft) => (
-              <div
-                key={ft.id}
-                className="flying-tile-overlay"
-                style={{
-                  '--fly-from-x': `${ft.x}px`,
-                  '--fly-from-y': `${ft.y}px`,
-                  '--fly-to-x': `${ft.toX}px`,
-                  '--fly-to-y': `${ft.toY}px`,
-                } as CSSProperties}
-              />
-            ))}
-          </GameOverlayPortal>
-        )}
-      </InGameOverlayStack>
+      {flyingTiles.length > 0 && (
+        <GameOverlayPortal>
+          {flyingTiles.map((ft) => (
+            <div
+              key={ft.id}
+              className="flying-tile-overlay"
+              style={{
+                '--fly-from-x': `${ft.x}px`,
+                '--fly-from-y': `${ft.y}px`,
+                '--fly-to-x': `${ft.toX}px`,
+                '--fly-to-y': `${ft.toY}px`,
+              } as CSSProperties}
+            />
+          ))}
+        </GameOverlayPortal>
+      )}
 
       {isLessonLayoutMode && showFullCoachTip && showPlayerCoaching && !lessonCoachVm?.isOffAuthoredLine ? (
         <GameOverlayPortal>

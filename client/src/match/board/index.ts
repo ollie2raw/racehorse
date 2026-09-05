@@ -12,6 +12,3 @@ export type { MatchBoardCanvasProps } from './MatchBoardCanvas';
 
 export { MatchLiveLayout } from './MatchLiveLayout';
 export type { MatchLiveLayoutProps } from './MatchLiveLayout';
-
-export { InGameOverlayStack } from './InGameOverlayStack';
-export type { InGameOverlayStackProps } from './InGameOverlayStack';
