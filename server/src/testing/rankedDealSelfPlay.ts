@@ -14,6 +14,7 @@ import {
   type RankedDealSnapshot,
   type RankedMoveSequenceEntry,
 } from '../ghost/rankedDealAuthority';
+import type { GhostMoveLogEntry } from '../ghost/service';
 
 function tileKey(tile: Tile): string {
   return `${Math.min(tile.low, tile.high)}|${Math.max(tile.low, tile.high)}`;
@@ -133,6 +134,90 @@ export function playHonestRankedGame(snapshot: RankedDealSnapshot): {
     moveLog,
     playerScore: state.players.you.score,
     opponentScore: state.players.bot.score,
+  };
+}
+
+/**
+ * Drives an honest multi-hand game and emits it in the REAL client move-log
+ * shape (`GhostMoveLogEntry` — `branch`/`tile_played`/`actor: 'you'|'ghost'`),
+ * not the `RankedMoveSequenceEntry` shape `playHonestRankedGame` above emits.
+ *
+ * GM-2 (HARDENING_PLAN.md §10.3): confirms this real shape is actually
+ * accepted by `isSafeRankedMoveSequence` — previously only established by
+ * tracing, not by a test — using a low `winningScore` so the game reliably
+ * spans multiple hands (`hand_number` incrementing), the case most likely to
+ * catch a future drift between the two independently-maintained shapes.
+ */
+export function playHonestGhostShapedGame(snapshot: RankedDealSnapshot): {
+  moveLog: GhostMoveLogEntry[];
+  playerScore: number;
+  opponentScore: number;
+  handCount: number;
+} {
+  let state = buildHandState(snapshot, null, 1);
+  const moveLog: GhostMoveLogEntry[] = [];
+  let guard = 0;
+  while (!state.gameOver && guard < 4000) {
+    guard += 1;
+    if (state.handOver) {
+      state = buildHandState(snapshot, state, state.handNumber + 1);
+      continue;
+    }
+    const actorId = state.playerIds[state.currentPlayerIndex] as 'you' | 'bot';
+    const actor: GhostMoveLogEntry['actor'] = actorId === 'you' ? 'you' : 'ghost';
+    const handNumber = state.handNumber;
+    const legal = getLegalMoves(state, actorId);
+    const play = legal.find((move) => move.type === 'play');
+    if (play && play.type === 'play') {
+      moveLog.push({
+        turn: moveLog.length + 1,
+        hand_number: handNumber,
+        actor,
+        board_state: 'ignored-by-isSafeRankedMoveSequence',
+        hand_before: [tileKey(play.tile)],
+        score_delta: 0,
+        tile_played: tileKey(play.tile),
+        branch: play.position,
+      });
+      state = applyMove(state, actorId, play).state;
+      continue;
+    }
+    if (canDraw(state, actorId)) {
+      const { state: afterDraw, drew } = drawOne(state, actorId);
+      moveLog.push({
+        turn: moveLog.length + 1,
+        hand_number: handNumber,
+        actor,
+        board_state: 'ignored-by-isSafeRankedMoveSequence',
+        hand_before: [],
+        score_delta: 0,
+        tile_played: null,
+        branch: 'draw',
+        drawn_tile: drew ? tileKey(drew) : null,
+      });
+      state = afterDraw;
+      continue;
+    }
+    moveLog.push({
+      turn: moveLog.length + 1,
+      hand_number: handNumber,
+      actor,
+      board_state: 'ignored-by-isSafeRankedMoveSequence',
+      hand_before: [],
+      score_delta: 0,
+      tile_played: null,
+      branch: 'pass',
+    });
+    state = applyMove(state, actorId, { type: 'pass' }).state;
+  }
+  if (!state.gameOver) {
+    throw new Error('Honest ghost-shaped driver failed to finish the game.');
+  }
+  return {
+    moveLog,
+    playerScore: state.players.you.score,
+    opponentScore: state.players.bot.score,
+    handCount: state.handNumber,
   };
 }
 
