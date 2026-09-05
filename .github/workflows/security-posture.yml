@@ -73,3 +73,32 @@ jobs:
           SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: npm run check:policy-manifest --prefix server
+
+  cascade-delete-completeness:
+    # Guardrail #6 (ENGINEERING_GUARDRAILS.md). assert_security_posture()
+    # and the policy-manifest job above check RLS; neither looks at foreign-key
+    # delete actions. SA-6 (bot_match_pending's user_id FK, no ON DELETE action
+    # → RESTRICT) 500'd DELETE /api/account for every affected user and was
+    # found only by a human tracing the account-deletion flow. This job diffs
+    # every live FK targeting profiles(id)/auth.users(id) against
+    # supabase/cascade-delete-allowlist.json — anything non-cascade that isn't
+    # a recorded exception fails.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check cascade-delete completeness against prod
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: npm run check:cascade-delete --prefix server
