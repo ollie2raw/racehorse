@@ -1,2 +1,0 @@
-export { useDailyPuzzleLeaderboardSync } from './useDailyPuzzleLeaderboardSync.ts';
-export type { UseDailyPuzzleLeaderboardSyncArgs, UseDailyPuzzleLeaderboardSyncResult } from './useDailyPuzzleLeaderboardSync.ts';

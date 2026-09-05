@@ -14,7 +14,6 @@ import { useGhostRuntime } from '../modules/ghost/useGhostRuntime.ts';
 import { useDailyFritzRuntime } from '../modules/daily/useDailyFritzRuntime.ts';
 import { useReviewRuntime } from '../modules/review/useReviewRuntime.ts';
 import { useFritzRatingDisplay } from '../modules/fritz/useFritzRatingDisplay.ts';
-import { useDailyPuzzleLeaderboardSync } from '../modules/daily-puzzle/useDailyPuzzleLeaderboardSync.ts';
 import { useReplayRecorder } from '../modules/replay/index.ts';
 import { useLocalRunSession } from '../modules/bot-turn/index.ts';
 
@@ -124,14 +123,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     ghost,
   });
 
-  const puzzle = useDailyPuzzleLeaderboardSync({
-    props,
-    bootstrap,
-    refs,
-    guidedBoot,
-    dailyFritz,
-  });
-
   const navigation = useMatchNavigation({
     props,
     bootstrap,
@@ -167,7 +158,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     review,
     turns,
     rating,
-    puzzle,
     navigation,
   });
 }

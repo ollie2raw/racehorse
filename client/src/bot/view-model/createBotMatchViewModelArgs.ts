@@ -8,7 +8,6 @@ import type { UseDailyFritzRuntimeResult } from '../../modules/daily/useDailyFri
 import type { UseReviewRuntimeResult } from '../../modules/review/useReviewRuntime.ts';
 import type { UseMatchTurnStackResult } from '../../modules/match/hooks/useMatchTurnStack.ts';
 import type { UseFritzRatingDisplayResult } from '../../modules/fritz/useFritzRatingDisplay.ts';
-import type { UseDailyPuzzleLeaderboardSyncResult } from '../../modules/daily-puzzle/useDailyPuzzleLeaderboardSync.ts';
 import type { UseMatchNavigationResult } from '../../modules/match/hooks/useMatchNavigation.ts';
 import type { useAuthoringCapture } from '../../modules/guided/useAuthoringCapture.ts';
 import type { useMatchUiChrome } from '../useMatchUiChrome.ts';
@@ -29,6 +28,5 @@ export type CreateBotMatchViewModelArgs = {
   review: UseReviewRuntimeResult;
   turns: UseMatchTurnStackResult;
   rating: UseFritzRatingDisplayResult;
-  puzzle: UseDailyPuzzleLeaderboardSyncResult;
   navigation: UseMatchNavigationResult;
 };

@@ -16,7 +16,6 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     review,
     turns,
     rating,
-    puzzle,
     navigation,
   } = args;
 
@@ -282,9 +281,14 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       dailyFritzLeaderboard: dailyFritz.dailyFritzLeaderboard,
       isDailyPuzzleRun,
       userId: userId ?? null,
-      dailyLeaderboardLoading: puzzle.dailyLeaderboardLoading,
-      dailyLeaderboardError: puzzle.dailyLeaderboardError,
-      dailyLeaderboard: puzzle.dailyLeaderboard,
+      // Daily-puzzle "Today's Top Scores" state — still surfaced for the
+      // isDailyPuzzleRun-gated BotGameOverModal block (currently unreachable;
+      // see CODE_QUALITY_PLAN.md F1 + the deferred daily_puzzle* cluster).
+      // Sourced directly from the runtime that owns the useState; the deleted
+      // useDailyPuzzleLeaderboardSync hook was a pure pass-through of these.
+      dailyLeaderboardLoading: dailyFritz.dailyLeaderboardLoading,
+      dailyLeaderboardError: dailyFritz.dailyLeaderboardError,
+      dailyLeaderboard: dailyFritz.dailyLeaderboard,
       ghostRatingDeltaLabel: ghost.ghostRatingDeltaLabel,
       ghostResultMessage: ghost.ghostResultMessage,
       canSaveGuidedMatchCandidate: turns.canSaveGuidedMatchCandidate,
