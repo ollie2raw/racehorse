@@ -70,6 +70,7 @@ function makeHarness() {
 
   const matches = new Map<string, VerifiedSinglePlayerMatch>();
   const completeCalls: Array<Record<string, unknown>> = [];
+  const activityCalls: Array<Record<string, unknown>> = [];
 
   const startVerifiedSinglePlayerMatch = vi.fn(async (params: {
     userId: string;
@@ -118,7 +119,10 @@ function makeHarness() {
     startVerifiedSinglePlayerMatch,
     isSafeGhostMoveLog: (raw): raw is Array<Record<string, unknown>> => Array.isArray(raw) && raw.length > 0,
     buildGhostCompletionHash: () => 'hash',
-    writeMatchActivity: async () => null,
+    writeMatchActivity: async (params) => {
+      activityCalls.push(params as unknown as Record<string, unknown>);
+      return null;
+    },
     formatFritzActivityOpponentLabel: () => 'Fritz Elite',
     supabaseFetch: async (path: string, init?: RequestInit) => {
       if (String(path).includes('bot_match_pending') && init?.method === 'PATCH') return [];
@@ -151,6 +155,7 @@ function makeHarness() {
   return {
     matches,
     completeCalls,
+    activityCalls,
     startVerifiedSinglePlayerMatch,
     async request(method: 'GET' | 'POST', path: string, body: unknown = {}) {
       const handler = routes.get(`${method} ${path}`);
@@ -272,6 +277,34 @@ describe('ranked Fritz start/complete deal authority', () => {
         matchId: started.body.matchId,
       },
     ]);
+  });
+
+  it('SA-3 (HARDENING_PLAN.md §11.3): passes sourceMatchId on the standalone-Fritz activity-feed write, matching every other writeMatchActivity caller', async () => {
+    const harness = makeHarness();
+    const started = await harness.request('POST', '/api/bot-matches/local/start', {
+      userId: USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      fritzTier: 'elite',
+      winningScore: 10,
+      dealSize: 7,
+      matchStarter: 'you',
+    });
+    const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
+    const honest = playHonestRankedGame(snapshot);
+
+    await harness.request('POST', '/api/ghost/complete', {
+      userId: USER_ID,
+      matchId: started.body.matchId,
+      opponentUserId: FRITZ_ELITE_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      finalScore: 200,
+      opponentScore: 0,
+      moveLog: toGhostBodyLog(honest.moveLog),
+      playerMoveLog: toGhostBodyLog(honest.moveLog.filter((entry) => entry.actor === 'you')),
+    });
+
+    expect(harness.activityCalls).toHaveLength(1);
+    expect(harness.activityCalls[0]?.sourceMatchId).toBe(started.body.matchId);
   });
 
   it('grandfathers a ranked match missing a snapshot as unranked with no Glicko write', async () => {

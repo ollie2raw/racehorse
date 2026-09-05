@@ -51,6 +51,7 @@ export type GhostRouteDeps = {
     winnerScore: number | null;
     loserScore: number | null;
     fritzTier?: string | null;
+    sourceMatchId?: string | null;
   }) => Promise<unknown>;
   formatFritzActivityOpponentLabel: (rawTier: string) => string;
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -346,6 +347,10 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
           winnerScore: playerWon ? roundedPlayerScore : roundedFritzScore,
           loserScore: playerWon ? roundedFritzScore : roundedPlayerScore,
           fritzTier: verifiedMatch.fritzTier ?? 'elite',
+          // SA-3 (HARDENING_PLAN.md §11.3): every other writeMatchActivity
+          // caller passes a stable match identity so a retry can't double-write
+          // this row (MP-G4's dedupe-key pattern); this call site was missing it.
+          sourceMatchId: matchId,
         }).catch(() => {});
       }
       res.json({ ok: true, result });

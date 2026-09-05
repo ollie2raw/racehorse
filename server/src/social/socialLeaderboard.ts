@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds } from './socialAuth';
+import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 
 /**
  * Online win counts for a set of users, in one round-trip.
@@ -14,17 +15,29 @@ import { getFriendIds } from './socialAuth';
  * count per user. Only the grouping column is selected, so the payload is as
  * small as a row-returning query can be. If match volume grows enough for this
  * to matter, the next step is a `count_online_wins(user_ids uuid[])` RPC.
+ *
+ * SA-1 (HARDENING_PLAN.md §11.3): both participants' clients record the same
+ * real online match, so `matches` carries two rows per game — `dedupeMatchRows`
+ * (already used by `rivalService.ts`/`socialProfile.ts` for the same reason)
+ * collapses them before counting, so a real win isn't counted twice here.
  */
 async function countOnlineWinsByUser(userIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>(userIds.map((id) => [id, 0]));
   if (!userIds.length) return counts;
   const inClause = userIds.map((id) => `"${id}"`).join(',');
   try {
-    const rows = await supabaseFetch<Array<{ winner_user_id: string | null }>>(
+    const rows = await supabaseFetch<Array<{
+      winner_user_id: string | null;
+      loser_user_id: string | null;
+      winner_score: number | null;
+      loser_score: number | null;
+      created_at: string;
+      room_code: string | null;
+    }>>(
       `/rest/v1/matches?winner_user_id=in.(${encodeURIComponent(inClause)})` +
-      '&mode=eq.online&select=winner_user_id',
+      '&mode=eq.online&select=winner_user_id,loser_user_id,winner_score,loser_score,created_at,room_code',
     );
-    for (const row of rows) {
+    for (const row of dedupeMatchRows(rows)) {
       if (!row.winner_user_id) continue;
       const current = counts.get(row.winner_user_id);
       if (current !== undefined) counts.set(row.winner_user_id, current + 1);
@@ -72,10 +85,21 @@ async function buildWeeklyLeaderboard(): Promise<WeeklyRow[]> {
   if (weeklyCache && weeklyCache.expiresAt > now) return weeklyCache.rows;
 
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const matches = await supabaseFetch<Array<{ winner_user_id: string | null; loser_user_id: string | null }>>(
+  const rawMatches = await supabaseFetch<Array<{
+    winner_user_id: string | null;
+    loser_user_id: string | null;
+    winner_score: number | null;
+    loser_score: number | null;
+    created_at: string;
+    room_code: string | null;
+  }>>(
     `/rest/v1/matches?mode=eq.online&created_at=gte.${encodeURIComponent(weekAgo)}` +
-    '&select=winner_user_id,loser_user_id&limit=10000',
+    '&select=winner_user_id,loser_user_id,winner_score,loser_score,created_at,room_code&limit=10000',
   );
+  // SA-1 (HARDENING_PLAN.md §11.3): dedupe before counting, same reason as
+  // countOnlineWinsByUser above — both participants' clients record one row
+  // each for the same real match.
+  const matches = dedupeMatchRows(rawMatches);
   const winCounts = new Map<string, number>();
   for (const m of matches) {
     if (m.winner_user_id) winCounts.set(m.winner_user_id, (winCounts.get(m.winner_user_id) ?? 0) + 1);

@@ -1,4 +1,7 @@
 import { supabaseFetch } from '../supabaseUtils';
+import { childLogger } from '../logger';
+
+const log = childLogger('stats');
 
 export const RECORD_MATCH_MODES = ['bot', 'online', 'practice'] as const;
 export type RecordMatchMode = (typeof RECORD_MATCH_MODES)[number];
@@ -201,6 +204,45 @@ async function hasExistingGuestMatch(idempotency: NonNullable<ValidatedRecordUse
   return rows.length > 0;
 }
 
+/**
+ * SA-2 (HARDENING_PLAN.md §11.3): confirms a claimed registered-vs-registered
+ * `online` win/loss actually happened, by requiring it to match the row
+ * `stats/recordPublicMatch.ts`'s `recordPublicOnlineMatch` already wrote from
+ * the real, server-triggered game-over event — the same room_code and both
+ * participant ids, and specifically a row carrying `metadata.roomMatchId`
+ * (the marker only that authoritative writer ever sets; a self-report never
+ * does). Reproduced live before this existed: an authenticated user could
+ * POST an entirely fabricated win against a real other registered user with
+ * no such row required at all.
+ *
+ * Deliberately scoped to the both-ids-populated case only. `MultiplayerGameShell.tsx`'s
+ * own client-side guard (`if (winnerUserId && loserUserId) return;`) means a
+ * real registered-vs-registered match never actually reaches this endpoint —
+ * both participants already have their own account-linked row from
+ * `recordPublicOnlineMatch` and never self-report. The only traffic this
+ * endpoint legitimately serves for `mode: 'online'` today is a
+ * guest-vs-registered match (exactly one of winner/loser is null, since a
+ * guest has no account) — `recordPublicOnlineMatch` never runs for those
+ * (it requires both `a.userId` and `b.userId`), so there is no authoritative
+ * row to require, and none is required here.
+ */
+async function hasAuthoritativeOnlineMatch(params: {
+  roomCode: string;
+  winnerUserId: string;
+  loserUserId: string;
+}): Promise<boolean> {
+  const roomEnc = encodeURIComponent(params.roomCode);
+  const winnerEnc = encodeURIComponent(params.winnerUserId);
+  const loserEnc = encodeURIComponent(params.loserUserId);
+  const rows = await supabaseFetch<Array<{ id: string }>>(
+    `/rest/v1/matches?mode=eq.online&room_code=eq.${roomEnc}` +
+      `&winner_user_id=eq.${winnerEnc}&loser_user_id=eq.${loserEnc}` +
+      `&metadata->>roomMatchId=not.is.null&select=id&limit=1`,
+    { method: 'GET' },
+  );
+  return rows.length > 0;
+}
+
 function isMissingAvgMoveQualityColumn(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return (
@@ -217,6 +259,38 @@ export async function recordUserMatch(
   if (!validated.ok) return validated;
 
   const { payload } = validated;
+
+  if (
+    payload.mode === 'online' &&
+    payload.winner_user_id &&
+    payload.loser_user_id
+  ) {
+    if (!payload.room_code) {
+      return { ok: false, error: 'room_code is required to record an online match result.', status: 400 };
+    }
+    try {
+      const authoritative = await hasAuthoritativeOnlineMatch({
+        roomCode: payload.room_code,
+        winnerUserId: payload.winner_user_id,
+        loserUserId: payload.loser_user_id,
+      });
+      if (!authoritative) {
+        return {
+          ok: false,
+          error: 'No authoritative record of this online match was found.',
+          status: 409,
+        };
+      }
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : err }, 'recordUserMatch authoritative-match check failed');
+      return {
+        ok: false,
+        error: 'Could not verify this online match.',
+        status: 503,
+      };
+    }
+  }
+
   if (payload.idempotency) {
     try {
       if (await hasExistingGuestMatch(payload.idempotency)) {

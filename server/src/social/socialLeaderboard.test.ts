@@ -78,6 +78,34 @@ describe('respondLeaderboardFriends', () => {
     expect(board.find((r) => r.userId === 'friend-c')?.win_rate).toBe(0);
   });
 
+  it('SA-1 (HARDENING_PLAN.md §11.3): collapses the two rows both clients wrote for the same real match before counting', async () => {
+    mockFriendIds.mockResolvedValueOnce(['friend-a']);
+    mockFetch.mockResolvedValueOnce([
+      { id: 'me', username: 'me', glicko_rating: 1000, ranked_games_played: 1, provisional: false },
+      { id: 'friend-a', username: 'ada', glicko_rating: 950, ranked_games_played: 1, provisional: false },
+    ]);
+    // Same real match, written twice — once by each participant's client —
+    // sharing a room_code and created_at (the shape dedupeMatchRows collapses).
+    mockFetch.mockResolvedValueOnce([
+      {
+        winner_user_id: 'me', loser_user_id: 'friend-a',
+        winner_score: 60, loser_score: 20,
+        created_at: '2026-09-05T00:00:00.000Z', room_code: 'ABCD',
+      },
+      {
+        winner_user_id: 'me', loser_user_id: 'friend-a',
+        winner_score: 60, loser_score: 20,
+        created_at: '2026-09-05T00:00:00.100Z', room_code: 'ABCD',
+      },
+    ]);
+
+    const res = makeRes();
+    await respondLeaderboardFriends('me', res as never);
+
+    const board = (res.body as { leaderboard: Array<{ userId: string; wins: number }> }).leaderboard;
+    expect(board.find((r) => r.userId === 'me')?.wins).toBe(1);
+  });
+
   it('reports zero wins rather than failing when match history is unavailable', async () => {
     mockFriendIds.mockResolvedValueOnce(['friend-a']);
     mockFetch.mockResolvedValueOnce([
@@ -139,6 +167,37 @@ describe('respondLeaderboardWeekly', () => {
     const secondBody = second.body as { self: { userId: string } | null };
     expect(firstBody.self?.userId).toBe('alice');
     expect(secondBody.self?.userId).toBe('bob');
+  });
+
+  it('SA-1 (HARDENING_PLAN.md §11.3): collapses duplicate rows before tallying wins_this_week', async () => {
+    mockFetch.mockResolvedValueOnce([
+      // Same real match written twice, same shape SA-1 targets.
+      {
+        winner_user_id: 'alice', loser_user_id: 'bob',
+        winner_score: 60, loser_score: 30,
+        created_at: '2026-09-05T00:00:00.000Z', room_code: 'WXYZ',
+      },
+      {
+        winner_user_id: 'alice', loser_user_id: 'bob',
+        winner_score: 60, loser_score: 30,
+        created_at: '2026-09-05T00:00:00.200Z', room_code: 'WXYZ',
+      },
+      // A genuinely different match — must still count.
+      {
+        winner_user_id: 'alice', loser_user_id: 'cara',
+        winner_score: 60, loser_score: 10,
+        created_at: '2026-09-04T00:00:00.000Z', room_code: 'QRST',
+      },
+    ]);
+    mockFetch.mockResolvedValueOnce([
+      { id: 'alice', username: 'alice', glicko_rating: 1200, provisional: false },
+    ]);
+
+    const res = makeRes();
+    await respondLeaderboardWeekly('alice', res as never);
+
+    const body = res.body as { leaderboard: Array<{ userId: string; wins_this_week: number }> };
+    expect(body.leaderboard[0]).toMatchObject({ userId: 'alice', wins_this_week: 2 });
   });
 
   it('rebuilds after invalidation', async () => {
