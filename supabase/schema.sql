@@ -69,14 +69,19 @@ create policy "profiles_update_own"
   with check (id = auth.uid());
 
 -- matches policies
+-- 2026-09-05 (HARDENING_PLAN.md §13.1.2, migrations/2026-09-05_matches_insert_guest_only.sql):
+-- tightened to guest-opponent-only. A registered-vs-registered win/loss claim
+-- must come from recordPublicOnlineMatch under service role, which bypasses
+-- RLS -- it was never meant to be insertable by an authenticated client at
+-- all, and the old check permitted exactly that forgery.
 drop policy if exists "matches_insert_participant" on public.matches;
 create policy "matches_insert_participant"
   on public.matches
   for insert
   to authenticated
   with check (
-    auth.uid() = winner_user_id
-    or auth.uid() = loser_user_id
+    (auth.uid() = winner_user_id or auth.uid() = loser_user_id)
+    and (winner_user_id is null or loser_user_id is null)
   );
 
 drop policy if exists "matches_select_participant" on public.matches;
