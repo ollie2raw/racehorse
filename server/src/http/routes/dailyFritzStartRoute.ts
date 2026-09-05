@@ -45,7 +45,10 @@ import {
   buildDailyFritzPublishedChallenge,
   canonicalizeDailyFritzChallenge,
 } from '../../dailyFritzPublishedChallenge';
-import { publishDailyFritzChallenge } from '../stores/dailyFritzPublishedChallengeStore';
+import {
+  getDailyFritzPublishedChallenge,
+  publishDailyFritzChallenge,
+} from '../stores/dailyFritzPublishedChallengeStore';
 import { startDailyFritzAttemptCommand } from '../stores/dailyFritzCommandStore';
 import {
   loadDailyFritzPublishedAuthority,
@@ -200,11 +203,34 @@ export function registerDailyFritzStartRoute(app: Application): void {
         });
         return;
       }
-      await publishDailyFritzChallenge(publishedChallenge);
+      const existingPublishedChallenge = await getDailyFritzPublishedChallenge(publishedChallenge.challengeId);
+      if (existingPublishedChallenge?.status === 'invalidated') {
+        // The run itself isn't invalidated (checked above) but its published challenge is —
+        // an inconsistent state that should never occur (invalidate_daily_fritz_challenge
+        // invalidates both atomically). Fail loudly and clearly rather than call publish and
+        // let it raise a confusing identity-conflict against a frozen, invalidated row.
+        capture500(new Error('Daily Fritz published challenge is invalidated while its run is live.'), {
+          runDate: run.runDate,
+          challengeId: publishedChallenge.challengeId,
+        });
+        res.status(409).json({
+          error: 'Today’s Daily Fritz challenge was invalidated.',
+          code: 'challenge_publication_invalidated',
+        });
+        return;
+      }
+      // Once a challenge is published for the day it is immutable and authoritative for
+      // every subsequent caller — reuse it as-is rather than re-deriving it from whatever
+      // constants happen to be live right now. A version-constant bump between day-ahead
+      // pre-generation and the first real /start call must not re-litigate an
+      // already-published, unplayed-against challenge (see HARDENING_PLAN.md incident:
+      // daily_fritz_challenge_identity_conflict, 2026-09-05).
+      const effectiveChallenge = existingPublishedChallenge
+        ?? await publishDailyFritzChallenge(publishedChallenge);
       const command = await startDailyFritzAttemptCommand<Record<string, unknown>>({
         userId: authenticatedUserId,
-        challengeId: publishedChallenge.challengeId,
-        operationId: `start:${publishedChallenge.challengeId}`,
+        challengeId: effectiveChallenge.challengeId,
+        operationId: `start:${effectiveChallenge.challengeId}`,
         authorityResult: initialResult,
       });
       if (command.outcome !== 'committed' || !command.response) {
