@@ -530,6 +530,21 @@ unrelated later change.
   `fritz_policy_version 2` vs current 3) as **`info:stale_tolerated`** — visible
   but not failing, because the shipped reuse-first fix makes it servable.
 
+**Known limitation, stated plainly:** INV-19 is **file-level, not
+call-site-level** — the same coarseness as INV-11 (`socket.on()` by file) and
+INV-13, and the same shape of gap as INV-17's literal-match note. It passes as
+long as `getDailyFritzPublishedChallenge` appears *somewhere* in a file that
+calls `publishDailyFritzChallenge(`. A file with one properly guarded call and
+a second, unrelated, unguarded call in a different handler would **false-pass**.
+It reliably catches the realistic regression (a whole new module added that
+publishes without any reuse check) and the realistic refactor (the reuse
+fetch deleted from a file that has only publish calls), not an unguarded call
+smuggled into a file that already has a guarded one elsewhere. The freshness
+detector is the backstop for that residual case: an unguarded call that
+actually re-publishes a drifted row would leave the row conflicted/absent and
+the detector's prod run would flag it — after the fact, not in CI, but not
+silently.
+
 **Scope, stated plainly.** Daily Fritz's `daily_fritz_published_challenges` is
 the only instance of the pre-generate → publish → serve-later pipeline in the
 codebase. Puzzle Rush / daily-puzzle select live at run start (`config_version`
