@@ -6528,7 +6528,7 @@ The MP path (`realtime/gameOverPersistence.ts`, called from `rooms.ts`'s real-ti
 - [x] Step 2 — invariants (§11.2, SA-INV-1..9) + risk-ranked gap list (§11.3, SA-1..SA-7) written 2026-09-05, folding in SA-6 (account-deletion cascade) as already-fixed rather than an open FIX NOW.
 - [x] Step 2 → ratified **D-20** (2026-09-05). Step 3 scope agreed: SA-1 + SA-2 + SA-3 + SA-5. SA-4 + SA-7 left untouched.
 - [x] Step 3 — SA-1, SA-2, SA-3, SA-5 shipped 2026-09-05. SA-1: `dedupeMatchRows()` wired into both leaderboard aggregations, confirmed against real live data (a real user's 63 raw wins → 47 deduped). SA-2: reproduced the forgery live first, fixed by requiring a matching `recordPublicOnlineMatch` row for the registered-vs-registered case only (the only case that was ever forgeable — traced the client and found registered-vs-registered never actually reaches this endpoint), confirmed the fix blocks the exact reproduced forgery. SA-3: `sourceMatchId` added at the `ghost.ts` call site. SA-5: `friends.sql` resynced to the live RLS policies + the live `CHECK` constraint (confirmed `'blocked'` is genuinely live-accepted) + the live `updated_at` column. Tests added for SA-1/SA-2/SA-3 (docs-only for SA-5). SA-4 + SA-7 untouched, as scoped. Server suite green, `tsc -b` clean, lint unchanged. Committed, not pushed.
-- [ ] Guardrail #6 (`ENGINEERING_GUARDRAILS.md`) — account-deletion cascade completeness, designed per SA-6/§11.1.5, NOT YET BUILT
+- [x] Guardrail #6 (`ENGINEERING_GUARDRAILS.md`) written 2026-09-05 — account-deletion cascade completeness, citing SA-6/§11.1.5 as the finding, mechanism proposed (a `pg_constraint`-querying script mirroring `checkPolicyManifest.ts`) but marked **NOT YET BUILT**, same standard as guardrails #2–#5.
 
 ---
 

@@ -179,3 +179,54 @@ Render (server) or Vercel (client) side of this project. Flagged
 explicitly as a known gap, not a false "coming soon" — building this is a
 real infrastructure project (a second Render service + environment, or a
 feature-flag system, or both), not a script, and hasn't been scoped.
+
+---
+
+## 6. Account-deletion cascade completeness
+
+**Rule:** every table with a `user_id`/`player_id`-shaped foreign key
+referencing `profiles(id)` or `auth.users(id)` must specify
+`on delete cascade` — no exceptions without a recorded reason (a real
+retention/audit requirement, written down, not just an omission that
+happens to compile).
+
+**Closes:** SA-6 (`HARDENING_PLAN.md` §11.1.5 / D-20). `bot_match_pending`
+— an out-of-band table, added directly to prod and only later
+reverse-engineered into a checked-in migration
+(`2026-05-12_bot_match_pending_greenfield_baseline.sql`) — referenced
+`profiles(id)` with no `ON DELETE` action at all (defaulting to
+`RESTRICT`), while every other player-owned table in the schema
+correctly cascades from `auth.users`. Confirmed live, not just read from
+the DDL: `DELETE /api/account` (`account/routes.ts`) 500'd with a raw
+`23503` Postgres error for any user with an unresolved (`resolved: false`)
+pending match row — the normal state for up to 30 minutes after starting
+*any* local bot/Ghost/Fritz match. Fixed same day, out of band from the
+normal audit sequence, given the live/user-facing severity (same urgency
+class as GC-5/RK-0) — `2026-09-05_bot_match_pending_cascade_delete.sql`,
+pg16-verified against a disposable local Postgres instance before being
+handed off for prod application.
+
+**Enforcement — NOT YET BUILT.** SA-6 was caught by a manual, targeted
+account-deletion-flow read during a `HARDENING_PLAN.md` system pass, the
+same way RK-0/RK-3/RT-2 were each caught by a manual pass over their own
+respective areas — nothing automatic flagged `bot_match_pending` as an
+outlier before that. **Proposed mechanism, not yet built** (mirroring
+Guardrail #1's own shape almost exactly): a script analogous to
+`checkPolicyManifest.ts` — call it `checkCascadeDeleteCompleteness.ts` —
+that queries `pg_constraint` (via a new read-only, `service_role`-only RPC
+the same shape as `list_rls_policy_manifest()`, since `pg_constraint` is a
+system catalog PostgREST cannot reach directly) for every foreign-key
+constraint whose target is `public.profiles(id)` or `auth.users(id)`, and
+fails the build if any such constraint's `confdeltype` is anything other
+than `'c'` (cascade) — the exact column this session's own live pg16 test
+of the SA-6 fix confirmed changes from `RESTRICT`'s default to `'c'` once
+a migration adds the cascade action. A constraint that genuinely needs a
+different behavior (e.g. `matches.winner_user_id`'s deliberate
+`on delete set null`, which is not a `user_id`/`player_id`-shaped
+ownership FK in the same sense — it's "this match happened, the player is
+gone," not "this row belongs to the player") would need an explicit
+allow-list entry with a recorded reason, the same honest
+partial-coverage-by-design pattern `policy-manifest.json` already uses
+for unpinned tables. Run on the same CI schedule as the policy-manifest
+job (`.github/workflows/security-posture.yml`, Mondays 09:00 UTC + manual
+dispatch) once built. Not designed further than this, and not built.
