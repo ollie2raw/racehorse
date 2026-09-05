@@ -6437,7 +6437,60 @@ game-over pipeline's ordering / idempotency for its **non-MP** callers.
 rows; `social/` had 6 server + 6 client commits in the last 60 days.
 
 ## 11.1 Current-state map
-**Not started.** Step 1.
+
+**Live finding requiring attention, before anything else:** §11.1.5 below is a **confirmed, reproducible, currently-live bug** — deleting an account fails outright (`500`, raw Postgres error) for any user with an unresolved `bot_match_pending` row. Verified end-to-end against live prod (throwaway user, real reproduction, then repaired and cleaned up). Not a Step-3 fix yet per your instruction (audit only this pass), but flagged here exactly like GM-1 was, ahead of the rest of the write-up.
+
+### 11.1.1 Activity feed write idempotency (`social/activityWriter.ts`)
+
+`writeActivity`'s dedupe mechanism (MP-G4's pattern: a `dedupeKey` → the partial unique index `activity_feed_dedupe_key_uidx` + `resolution=ignore-duplicates`) is real and correctly wired — but it's **optional per call site**, and not every call site that should use it does. Traced `writeMatchActivity`'s callers: `http/routes/ghost.ts`'s `/api/ghost/complete` (standalone Play-vs-Fritz completion, System 10 territory) calls it **without `sourceMatchId`** — every standalone-Fritz win/loss activity-feed row is written with no dedupe key at all. In isolation this is low-risk today only because `/api/ghost/complete` itself short-circuits a genuine retry (`if (verifiedMatch.status === 'completed') return cached result`) before ever reaching the activity write — but that short-circuit is a sequential read-then-branch, not a lock. Found no mutex/CAS guard around `/api/ghost/complete` analogous to Daily Fritz's `withDailyFritzAttemptLock` or Fritz Challenge's `commitCommand` — two genuinely concurrent completion requests for the same `matchId` (double-tap, or a client retry firing while the first request is still in flight) could both read `status: 'started'`, both proceed, and both call `writeMatchActivity` with no dedupe key — a duplicate activity-feed row (and, separately, `completeGhostGame` running twice — see §11.1.6). Not confirmed exploited or even confirmed reachable in practice — recorded as a traced structural gap, matching how GM-2 was framed, not asserted as a live incident.
+
+### 11.1.2 Friends-request state machine (`social/socialFriends.ts`, `friends` table) — live repo/prod policy drift found
+
+Traced the full state machine against the **live** RLS policies (via `list_rls_policy_manifest()`), not the checked-in `supabase/friends.sql`, after noticing the two didn't obviously agree. They don't:
+
+- **`supabase/friends.sql`** (repo) declares `friends_update_participant`: `USING/WITH CHECK (auth.uid() = user_id OR auth.uid() = friend_user_id)` — either party can update the row, any status.
+- **Live prod** actually runs `friends_update_recipient`: `USING (auth.uid() = friend_user_id)`, `WITH CHECK (auth.uid() = friend_user_id AND status IN ('accepted','blocked'))` — a stricter, different policy: only the **recipient** can update, and only to `accepted`/`blocked`.
+
+Confirmed live prod is the safer of the two by directly testing the exact scenario the repo file's looser policy would have permitted: minted two real throwaway users, had the sender (A) attempt to self-accept their own outgoing pending request via a direct authenticated `PATCH` against PostgREST (bypassing the app server's `/friends/accept/:requestId` route entirely, which itself correctly restricts to the recipient). Result: `200` with zero rows affected (`content-range: */*`, empty body); a service-role read immediately after confirmed the row's `status` was still `pending` — RLS genuinely blocked it. **No live gap** — but the checked-in `friends.sql` is stale and describes a materially weaker policy than what's actually deployed. Worth correcting in the repo so a future migration based on that file doesn't accidentally *regress* prod to the looser policy it currently only exists on paper. Also noted in passing: the live policy's `WITH CHECK` allows a `status` value of `'blocked'` that the repo's own `check (status in ('pending', 'accepted'))` table constraint doesn't recognize — unconfirmed whether prod's live constraint was also updated; worth a one-line check in Step 2, not chased further here.
+
+Separately, `friends_pair_unique_idx` (`least`/`greatest` unique index) correctly prevents a duplicate/mutual-direction request row at the DB level — a race between two users each requesting the other simultaneously can't produce two rows, though the losing request's `supabaseFetch` call would surface the resulting unique-violation as a generic `500 Failed to send request` rather than a clean `409`. Minor UX gap, not a security one.
+
+### 11.1.3 Presence correctness (`social/presenceRegistry.ts`, `registerPresenceHandlers.ts`)
+
+Clean. The in-memory socket-count model (`isOnline(userId) ⟺ socketsByUserId.get(userId)?.size > 0`) is a deliberate, well-documented redesign away from a previous approach that silently failed (mirroring to a `player_presence` table that was never actually created in prod, so every read/write threw `PGRST205` and was swallowed — friends always read as offline). Confirmed the single `disconnect` handler in `index.ts` calls `handlePresenceDisconnect()` unconditionally, and multi-tab/multi-socket users are handled correctly (`removeSocket` only reports "went offline" when it was the user's *last* socket — a stale bug this docstring explicitly says it replaced). No gap found.
+
+### 11.1.4 Leaderboard-query integrity (`social/socialLeaderboard.ts`, `matches`, `stats/recordUserMatch.ts`, `stats/recordPublicMatch.ts`) — two real findings, both bounded to cosmetic/social stats, not competitive rating
+
+Traced where `matches` rows actually come from, because the same table is written from two very different trust levels:
+
+- **`recordPublicOnlineMatch`** (`stats/recordPublicMatch.ts`) — the real, server-authoritative write, called only from `realtime/gameOverPersistence.ts` after a genuine multiplayer game-over. Properly idempotent (a partial unique index on `metadata->>roomMatchId` + `resolution=ignore-duplicates`), never client-reachable directly.
+- **`recordUserMatch`** (`stats/recordUserMatch.ts`, behind the public `POST /api/stats/record-match`) — a **client-callable** endpoint. Its own validation is real (`authenticatedUserId` must be one of the two claimed participants — you can't forge a match between two *other* people), but nothing checks that the claimed match, score, or outcome actually happened. Traced the one real caller (`MultiplayerGameShell.tsx`'s `recordMatchResult`, fired after a genuine multiplayer game-over): it derives `winnerUserId`/`loserUserId`/scores from the client's own local `finalState` object, then POSTs them — self-reported, not server-verified.
+
+**Finding 1 (real, not malicious, currently live):** because *both* participants' clients call this after the same real match, every genuine online match writes **two** `matches` rows for the same game. This is a known, named phenomenon — `stats/dedupeMatchRows.ts`'s own docstring says exactly this ("Collapse duplicate rows written when both clients recorded the same online game") — but tracing its actual callers shows it's wired into `rivalService.ts` and `socialProfile.ts` (personal stats / rivals displays) and **not** into `socialLeaderboard.ts`'s `countOnlineWinsByUser`/`buildWeeklyLeaderboard`. The weekly and friends leaderboards' win counts read raw, undeduped rows — every real online win is very plausibly counted twice on those two leaderboards specifically, while the personal-stats views that do dedupe show the correct count. Not confirmed against a specific live user's numbers this pass, but the code path is unambiguous.
+
+**Finding 2 (a real forgery surface, bounded severity):** since `recordUserMatch` never verifies the claim, an authenticated user can `POST /api/stats/record-match` with `mode: 'online'`, themselves as winner, a real other user's id as loser, and any score — with no matching multiplayer game ever having been played — and it will be accepted and counted. Blast radius is bounded: `matches` does **not** feed the actual competitive Glicko rating (that's `ranked_games`, written only by the properly-audited System 1/2 pipeline) — only the weekly/friends leaderboards' win counts and the personal online-win-streak (`stats/onlineWinStreak.ts`) are at stake. Cosmetic/social-proof stakes, not rating manipulation — same severity class as GM-3/RT-2, not a new integrity-oracle finding.
+
+### 11.1.5 Account-deletion cascade completeness (`account/routes.ts`) — LIVE BUG, confirmed by reproduction
+
+`account/routes.ts`'s own docstring states the deletion model plainly: delete the `auth.users` row and rely on `on delete cascade` everywhere a table "belongs to a player," explicitly naming `profiles`, `friends`, `ranked_games.player_id`, `ghost_profiles`, `daily_fritz_attempts`, and Puzzle Rush runs. Spot-checked the canonical DDL for exactly those tables plus `verified_single_player_matches` and `activity_feed`: all confirmed `on delete cascade` from `auth.users`, matching the claim (a legitimate, accurate docstring for everything it names).
+
+**One table it doesn't name breaks the model: `bot_match_pending`.** Its own migration file's header says it plainly — `"bot_match_pending was created manually in production... captured from the production catalog in a read-only transaction"` — an out-of-band table that was never designed to this system's usual standard. Its `user_id` foreign key references **`public.profiles(id)`, not `auth.users(id)`, with no `ON DELETE` action specified at all** (defaults to `RESTRICT`).
+
+**Reproduced live, end to end, not just read from the DDL:** created a real throwaway auth user (service-key admin API), confirmed a `profiles` row existed for them (the `handle_new_user` trigger), inserted an **unresolved** `bot_match_pending` row for them (`resolved: false` — exactly the state that exists for up to 30 minutes after anyone starts *any* local bot/Ghost/Fritz match, per `bot-matches/cleanup-stale`'s own sweep window, or indefinitely if that sweep is ever delayed), then called the literal action `DELETE /api/account` performs (`DELETE /auth/v1/admin/users/:id`). Result:
+
+```
+500 { "code": "23503", "message": "update or delete on table \"profiles\" violates
+      foreign key constraint \"bot_match_pending_user_id_fkey\" on table
+      \"bot_match_pending\"", "detail": "Key is still referenced from table
+      \"bot_match_pending\"." }
+```
+
+`account/routes.ts`'s own error handler (`err instanceof Error ? err.message : ...`) would surface this raw Postgres constraint text straight to the user as the deletion-failure reason. Deleting the `bot_match_pending` row manually and retrying succeeded cleanly (`200`), confirming this constraint is the sole blocker. Grepped the entire schema for any other table with the same shape (`references public.profiles(id)` instead of `auth.users(id)`, no cascade) — **`bot_match_pending` is the only one**; this isn't a systemic pattern, just this one out-of-band table. All probe data (the throwaway user and its rows) deleted afterward — net-zero prod state.
+
+### 11.1.6 Game-over pipeline ordering/idempotency for non-MP callers
+
+The MP path (`realtime/gameOverPersistence.ts`, called from `rooms.ts`'s real-time game-over) already has its idempotency covered by System 2's MP-G4. The non-MP callers — standalone Ghost/Fritz via `http/routes/ghost.ts`'s `/api/ghost/complete`, traced in depth under System 10 §10.1.1 — were re-examined here specifically for the ordering/idempotency angle System 10 didn't need to resolve: the route's own `status === 'completed'` short-circuit is what actually protects against a **sequential** retry (confirmed replaying the cached `completionResult`), but there is no lock protecting against a **concurrent** double-completion, unlike Daily Fritz (`withDailyFritzAttemptLock`) or Fritz Challenge (`commitCommand`'s CAS). This is the same underlying structural gap named in §11.1.1 (the missing activity-feed dedupe key is one symptom of it) — recorded once here as the root observation, cross-referenced there rather than described twice.
+
 
 ## 11.2 Invariants
 **Not started.** Step 2.
@@ -6446,7 +6499,7 @@ rows; `social/` had 6 server + 6 client commits in the last 60 days.
 **Not started.** Step 2.
 
 ## 11.4 Checklist
-- [ ] Step 1 — social / stats / account / game-over-pipeline current-state map
+- [x] Step 1 — current-state map written 2026-09-05 (§11.1.1–§11.1.6). **Live bug confirmed by reproduction:** account deletion 500s for any user with an unresolved `bot_match_pending` row (`bot_match_pending_user_id_fkey` references `profiles`, not `auth.users`, no `ON DELETE` action — the one table in the whole schema with this shape). Also found: leaderboard win-counts are undeduped (every online match double-counted on the weekly/friends boards specifically, not on personal-stats views which do dedupe); a client-forgeable `/api/stats/record-match` self-report surface bounded to cosmetic win-streak/leaderboard stats (does not touch the real Glicko rating); `supabase/friends.sql` stale vs. a stricter live RLS policy (confirmed live prod is safe, the repo file is just wrong); the activity-feed dedupe key + game-over completion lock pattern used elsewhere (Daily Fritz, Fritz Challenge) is missing for standalone Ghost/Fritz completions. Presence confirmed clean, no gap.
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + tests
 
