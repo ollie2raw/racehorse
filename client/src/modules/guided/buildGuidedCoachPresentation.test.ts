@@ -217,7 +217,7 @@ describe('buildLessonRecommendedTileKey', () => {
     ).toBeNull();
   });
 
-  it('frozen mode: strips the ":position" suffix and swaps the pipe for a hyphen', () => {
+  it('frozen mode: strips the ":position" suffix, returning the "low|high" key (F22/F23)', () => {
     expect(
       buildLessonRecommendedTileKey(
         base({
@@ -225,18 +225,17 @@ describe('buildLessonRecommendedTileKey', () => {
           currentLessonStep: makeAuthoredStep({ chosenMove: '6|6:left' }),
         }),
       ),
-    ).toBe('6-6');
+    ).toBe('6|6');
   });
 
-  it('frozen mode QUIRK: a "draw"/"pass" chosenMove is returned verbatim as a tile key (unguarded, unlike playLessonBestMove)', () => {
-    expect(
-      buildLessonRecommendedTileKey(
-        base({
-          isGuidedFrozenLessonMode: true,
-          currentLessonStep: makeAuthoredStep({ chosenMove: 'draw' }),
-        }),
-      ),
-    ).toBe('draw');
+  it('frozen mode: a "draw"/"pass" chosenMove yields null (F22 guard)', () => {
+    for (const chosenMove of ['draw', 'pass']) {
+      expect(
+        buildLessonRecommendedTileKey(
+          base({ isGuidedFrozenLessonMode: true, currentLessonStep: makeAuthoredStep({ chosenMove }) }),
+        ),
+      ).toBeNull();
+    }
   });
 });
 

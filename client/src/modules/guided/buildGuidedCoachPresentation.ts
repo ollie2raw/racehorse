@@ -249,7 +249,13 @@ export function buildLessonRecommendedTileKey(input: {
       : null;
   }
   if (isGuidedFrozenLessonMode && currentLessonStep?.chosenMove) {
-    return currentLessonStep.chosenMove.split(':')[0]?.replace('|', '-') ?? null;
+    const { chosenMove } = currentLessonStep;
+    // F22: draw/pass are not tiles — guard like playLessonBestMove / buildLessonCoachVm.
+    // Return the "low|high" key (matches the V2/transcript branches and the sole
+    // consumer, BotHandTray's `=== toTileKey(tile)`); the display hyphen form is
+    // applied downstream by formatLessonTileLabel. (F23: was `.replace('|', '-')`.)
+    if (chosenMove === 'draw' || chosenMove === 'pass') return null;
+    return chosenMove.split(':')[0] ?? null;
   }
   return null;
 }
