@@ -194,6 +194,20 @@ structural script was chosen instead because it lands in the same CI
 verifier as Guardrails #1, #2, and #6 and needs no server-side lint step
 (server lint does not run in CI today).
 
+**Known limitation, stated plainly:** `findNonIdempotentRankedGamesWrites`
+is a literal-string match — it fires only on a `supabaseFetch`/`fetch`
+call where `/rest/v1/ranked_games` appears as a string literal *and*
+`method: 'POST'` appears as a literal in the same call. A call that
+computes the path (`` `/rest/v1/${table}` ``, a `RANKED_GAMES_PATH`
+constant, a helper that appends the REST prefix) or that supplies the
+method from a variable or expression (`method: verb`, `method: isInsert ?
+'POST' : 'PATCH'`) would not be caught. This is the same shape of gap as
+Guardrail #1's "pinned tables only" and Guardrail #6's "FKs that actually
+target those two tables only" — the check covers the direct, obvious form
+that RK-1/RK-2 actually took, not every syntactic way the same POST could
+be expressed. A reviewer still has to catch an obfuscated insert; the
+check catches the copy-paste one.
+
 ---
 
 ## 4. Verification-strictness parity across call sites
