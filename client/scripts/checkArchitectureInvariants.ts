@@ -1012,6 +1012,116 @@ function checkFloatingImports(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 16. Shared rating-constant parity (ENGINEERING_GUARDRAILS.md §2 — narrowed)
+// ---------------------------------------------------------------------------
+// Guardrail #2 ("no second implementation of shared logic") in its full form
+// wants any client re-implementation of shared math flagged. That general case
+// is not cheaply expressible without false positives — `client/src/ranking/
+// glicko2.ts` and `server/src/ranking/glicko2.ts` legitimately differ in body,
+// return shape, and which functions each exports (RK-3, §8.3), so no
+// name/shape or content-hash check passes clean on the code as it stands today.
+//
+// What CAN be checked with zero false positives, and is the highest-signal
+// half of that pair, is the tuning table: the `export const` numeric/string
+// constants (Glicko-2 τ-adjacent params, the Fritz rating/RD ladder, the Fritz
+// UUIDs). Those two files carry the same set today with identical values. If a
+// future edit bumps a Fritz difficulty rating or a default RD on one side and
+// not the other, the client rating prediction silently diverges from the
+// server's authoritative update — exactly the RK-3 drift class. This check
+// fails CI on that.
+//
+// Scope narrowing stated plainly: the Ghost move-log vs Daily Fritz transcript
+// pair (RT-2, §9.3) is NOT covered here. That divergence was a semantic drift
+// in "reconstruct omitted forced draws" logic between `server/src/ghost/
+// verifier.ts` and `server/src/dailyFritzVerifier.ts` — two verifiers that are
+// deliberately different in structure and evolve independently. No cheap
+// static check catches a logic drift there without either false positives or
+// constant low-signal manifest churn; it belongs with Guardrail #4 (verifier-
+// strictness parity, still NOT YET BUILT), which is about those same two
+// single-player verifiers agreeing.
+
+const RATING_CONST_FILES = {
+  client: 'client/src/ranking/glicko2.ts',
+  server: 'server/src/ranking/glicko2.ts',
+};
+
+type RatingConstDrift = { name: string; client: string; server: string | null };
+
+/**
+ * Every `export const NAME = <literal>` in the client rating module must be
+ * declared in the server rating module with a byte-identical right-hand side.
+ * A client-only rating constant, or a mismatched value, is drift.
+ */
+export function findDriftedRatingConstants(
+  clientSource: string,
+  serverSource: string,
+): RatingConstDrift[] {
+  const constPattern = /export\s+const\s+([A-Z][A-Z0-9_]*)\s*=\s*([^;\n]+);/g;
+
+  const serverConsts = new Map<string, string>();
+  let match: RegExpExecArray | null;
+  while ((match = constPattern.exec(serverSource)) !== null) {
+    serverConsts.set(match[1], match[2].trim());
+  }
+
+  const drift: RatingConstDrift[] = [];
+  constPattern.lastIndex = 0;
+  while ((match = constPattern.exec(clientSource)) !== null) {
+    const name = match[1];
+    const clientValue = match[2].trim();
+    const serverValue = serverConsts.get(name);
+    if (serverValue === undefined) {
+      drift.push({ name, client: clientValue, server: null });
+    } else if (serverValue !== clientValue) {
+      drift.push({ name, client: clientValue, server: serverValue });
+    }
+  }
+  return drift;
+}
+
+function checkRatingConstantParity(): void {
+  const errors: string[] = [];
+  const clientPath = path.join(REPO_ROOT, RATING_CONST_FILES.client);
+  const serverPath = path.join(REPO_ROOT, RATING_CONST_FILES.server);
+
+  if (!fs.existsSync(clientPath) || !fs.existsSync(serverPath)) {
+    errors.push(
+      `Rating-constant parity: expected both ${RATING_CONST_FILES.client} and ${RATING_CONST_FILES.server} to exist`,
+    );
+    addResult({ id: 'INV-16', name: 'Shared Rating-Constant Parity', status: 'fail', errors, warnings: [] });
+    return;
+  }
+
+  const drift = findDriftedRatingConstants(
+    fs.readFileSync(clientPath, 'utf8'),
+    fs.readFileSync(serverPath, 'utf8'),
+  );
+
+  for (const entry of drift) {
+    if (entry.server === null) {
+      errors.push(
+        `${RATING_CONST_FILES.client} exports rating constant ${entry.name} = ${entry.client}, ` +
+        `absent from ${RATING_CONST_FILES.server} — client rating math would diverge from the server's authority`,
+      );
+    } else {
+      errors.push(
+        `Rating constant ${entry.name} drifted: client ${entry.client} vs server ${entry.server} ` +
+        `(${RATING_CONST_FILES.client} vs ${RATING_CONST_FILES.server}) — edit both sides or neither`,
+      );
+    }
+  }
+
+  addResult({
+    id: 'INV-16',
+    name: 'Shared Rating-Constant Parity',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { driftedConstants: drift.length },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1049,6 +1159,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['No Backup Files', 'repo-wide *.bak* find', 'check:architecture'],
     ['Daily Fritz Score Trust', 'req.body score/result heuristic (guardrail)', 'check:architecture'],
     ['Godfile LOC Caps', 'line count vs cap', 'check:architecture'],
+    ['Shared Rating-Constant Parity', 'client vs server glicko2 export const diff', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -1128,6 +1239,7 @@ function main(): void {
   checkDailyFritzScoreTrust();
   checkLocCaps();
   checkFloatingImports();
+  checkRatingConstantParity();
 
   printReport(manifest);
 }

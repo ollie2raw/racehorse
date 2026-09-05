@@ -96,18 +96,51 @@ duplicated the "loop once per real draw" logic already correctly written
 for the Daily Fritz transcript path a few lines away, and were never kept
 in sync when that logic was hardened).
 
-**Enforcement — NOT YET BUILT.** Today this is caught only by manual
-audit during a `HARDENING_PLAN.md` system pass (as GC-3b, RK-3, and RT-2
-all were), not by anything automatic. No lint rule, dependency-cruiser
-rule, or CI check currently flags a new local reimplementation of logic
-that already exists in `@racehorse/game-core` or another shared module.
-A real mechanism would need to be more specific than "duplicate code" —
-e.g. a `dependency-cruiser` or ESLint rule forbidding client modules from
-re-implementing functions with the same *name and shape* as an exported
-`@racehorse/game-core` function, or a periodic structural diff between
-`client/src/ranking/glicko2.ts` and `server/src/ranking/glicko2.ts` (the
-same idea as this guardrail's own policy-manifest diff, applied to code
-instead of policies). Not designed or built yet.
+**Enforcement — BUILT (narrowed; see scope note):**
+- `client/scripts/checkArchitectureInvariants.ts`'s **INV-16 — Shared
+  Rating-Constant Parity**. A pure helper (`findDriftedRatingConstants`)
+  diffs the `export const` declarations of `client/src/ranking/glicko2.ts`
+  against `server/src/ranking/glicko2.ts`: every constant the client
+  exports must be declared on the server with a byte-identical right-hand
+  side. A client-only rating constant, or a value that drifted on one
+  side, fails the build. This is the "periodic structural diff between the
+  two glicko2 files" this section always proposed — the same idea as
+  Guardrail #1's policy-manifest diff, applied to code.
+- **Runs in CI** via the existing `check:architecture` step in
+  `.github/workflows/ci.yml` (client job) — no new job, same aggregate
+  verifier as INV-01…INV-15.
+- **Negative test:** `client/scripts/checkArchitectureInvariants.test.ts`
+  reproduces the RK-3 drift shape (`FRITZ_RATING` bumped on the client
+  only), the client-only-constant shape, and the two clean cases
+  (all-match, server-superset-is-fine) — asserting the diff catches the
+  first two and stays silent on the rest.
+- Verified against the repo as it stands: **0 drifted constants** — the
+  two files carry the same 15 constants with identical values today.
+
+**Scope narrowing, stated plainly.** INV-16 covers the *constant table*
+half of the glicko2 pair, not the full guardrail. Two deliberate cuts:
+- **The function bodies are not checked.** `computeGlicko2` and friends
+  legitimately differ between the two files (RK-3: the client omits the
+  server's forfeit-outcome override; the client exports a smaller function
+  set). A body-hash or "same name and shape" check fails on the code as it
+  stands today — it cannot be turned on without either false positives or
+  first reconciling RK-3, which is a parked decision (§8.3). The constant
+  table is the highest-signal slice that *is* clean, and a bumped Fritz
+  rating or default RD is the most likely future drift.
+- **The Ghost move-log ↔ Daily Fritz transcript pair (RT-2) is not
+  covered here.** That was a semantic drift in "reconstruct omitted forced
+  draws" logic between `server/src/ghost/verifier.ts` and
+  `server/src/dailyFritzVerifier.ts` — two verifiers that are deliberately
+  different in structure and evolve independently. No cheap static check
+  catches a logic drift there without false positives or constant
+  low-signal churn. It belongs with **Guardrail #4** (verifier-strictness
+  parity, still NOT YET BUILT), which is about those same two single-player
+  verifiers agreeing — fold RT-2's structural coverage into whichever
+  shape #4 lands as.
+
+The general case — "any client reimplementation of an exported
+`@racehorse/game-core` function" (GC-3b) — is still not built; it needs a
+mechanism more specific than "duplicate code" and hasn't been designed.
 
 ---
 
