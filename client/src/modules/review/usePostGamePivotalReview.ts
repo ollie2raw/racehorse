@@ -24,6 +24,7 @@ import {
   type PivotalTurnReflection,
 } from '../../training/pivotalReview/pivotalReviewStorage.ts';
 import { selectPivotalTurnsFromAnalysis } from '../../training/pivotalReview/pivotalTurnSelector.ts';
+import { logger } from '../../utils/logger.ts';
 
 export type UsePostGamePivotalReviewParams = {
   match: BotMatchState;
@@ -81,8 +82,16 @@ export function usePostGamePivotalReview({
       if (cancelled) return;
       setPostGameAnalysis(analysis);
       setPostGameAnalysisPending(false);
-    }).catch(() => {
-      if (!cancelled) setPostGameAnalysisPending(false);
+    }).catch((error) => {
+      if (cancelled) return;
+      // F19: without this, an analyzer import/run failure clears the pending flag
+      // and the "review your game" prompt silently never appears, with no trace.
+      setPostGameAnalysisPending(false);
+      logger.warn(
+        'usePostGamePivotalReview',
+        'post-game analysis failed to load or run; the review-your-game prompt will not appear',
+        { error: error instanceof Error ? error.message : String(error) },
+      );
     });
 
     return () => {
