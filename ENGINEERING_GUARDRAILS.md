@@ -335,6 +335,22 @@ explicitly as a known gap, not a false "coming soon" — building this is a
 real infrastructure project (a second Render service + environment, or a
 feature-flag system, or both), not a script, and hasn't been scoped.
 
+**Step-1 scoping written 2026-09-05 — `docs/guardrail-5-staging-canary-scoping.md`.**
+Confirmed deploy reality (Render free / Vercel Hobby, both auto-deploy on
+`main` push via their own Git integrations; `smoke-test.yml` is post-deploy
+detection, not a gate). Three options priced against *this* codebase, and
+run against AD-1 / SA-6 / DF-STALE-1 — **none of the three would have caught
+any of them** (two schema drift, one temporal staleness; a shadow-DB canary
+would have *masked* the schema-drift ones). Every real incident this plan has
+had was caught by an assertion against live prod state (Guardrails #1/#6/#7),
+not by an environment. **Recommendation: do not build a canary environment at
+this scale.** Adopt (A) the Vercel preview deployments that almost certainly
+already exist, as a pre-merge habit + optional PR smoke, and (B) a light
+formalization of the server feature-flag pattern that already works
+(`RANKED_GAMES_*_COLUMN_ENABLED` is the proof). Revisit the environment
+question off Render free tier or at ~50+ peak concurrent / ~1 deploy-a-day
+with live multiplayer. Awaiting a direction call before any Step-2 build.
+
 ---
 
 ## 6. Account-deletion cascade completeness
