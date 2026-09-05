@@ -25,7 +25,11 @@ export function splitCoachingSummaryBlock(raw: string): { summary: string | null
   if (!match) return { summary: null, body: raw };
   return {
     summary: match[1]?.trim() || null,
-    body: match[2] ?? '',
+    // COACHING_SUMMARY_BLOCK_RE matches only the `@summary … ---` header (one
+    // capture group), so the body is the remainder after the matched header.
+    // (F21: this previously read `match[2]`, which never exists — the body was
+    // silently dropped whenever a @summary block was present.)
+    body: raw.slice((match.index ?? 0) + match[0].length),
   };
 }
 

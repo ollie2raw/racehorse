@@ -31,14 +31,16 @@ describe('splitCoachingSummaryBlock', () => {
     expect(splitCoachingSummaryBlock(raw).summary).toBe('Block the sixes early.');
   });
 
-  it('NOTE(latent): body is dropped to "" whenever a @summary block matches — the regex has no capture group for the remainder, so match[2] is undefined', () => {
-    const raw = '@summary\nBlock the sixes.\n---\nThis body text is silently discarded.';
-    expect(splitCoachingSummaryBlock(raw).body).toBe('');
+  it('returns the body as the remainder after the --- line (F21)', () => {
+    const raw = '@summary\nBlock the sixes.\n---\nThis body text is the real coaching content.';
+    expect(splitCoachingSummaryBlock(raw)).toEqual({
+      summary: 'Block the sixes.',
+      body: 'This body text is the real coaching content.',
+    });
   });
 
-  it('an empty summary line collapses to null (match[1] === "" -> "" || null)', () => {
-    const raw = '@summary\n\n---\nbody';
-    expect(splitCoachingSummaryBlock(raw).summary).toBeNull();
+  it('an empty summary line collapses to null while the body is still extracted', () => {
+    expect(splitCoachingSummaryBlock('@summary\n\n---\nbody')).toEqual({ summary: null, body: 'body' });
   });
 });
 
@@ -102,17 +104,22 @@ describe('parseGuidedLessonCoachContent', () => {
     expect(result.bodyParagraphs).toEqual(['Para one wrapped.', 'Para two.']);
   });
 
-  it('takes the summary from an inline @summary block (body then falls back — see splitCoachingSummaryBlock latent note)', () => {
-    const result = parseGuidedLessonCoachContent('@summary\nKeep the 6-6 back.\n---\nlong body here');
+  it('extracts the summary from an inline @summary block and keeps the body (F21)', () => {
+    const result = parseGuidedLessonCoachContent(
+      '@summary\nKeep the 6-6 back.\n---\nHold your double\n\nFritz will chase the count.',
+    );
     expect(result.summary).toBe('Keep the 6-6 back.');
-    expect(result.bodyParagraphs).toEqual([
-      'Study the board, compare your options, and follow the coached line.',
-    ]);
+    expect(result.title).toBe('Hold your double');
+    expect(result.bodyParagraphs).toEqual(['Fritz will chase the count.']);
   });
 
-  it('prefers the explicit summary arg over an inline @summary block', () => {
-    const result = parseGuidedLessonCoachContent('@summary\nInline\n---\n', 'Explicit summary');
+  it('prefers the explicit summary arg over an inline @summary block, body still kept', () => {
+    const result = parseGuidedLessonCoachContent(
+      '@summary\nInline\n---\nThe body survives.',
+      'Explicit summary',
+    );
     expect(result.summary).toBe('Explicit summary');
+    expect(result.bodyParagraphs).toEqual(['The body survives.']);
   });
 
   it('keeps a normal body while attaching the explicit summary arg', () => {
