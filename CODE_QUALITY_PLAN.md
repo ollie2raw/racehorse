@@ -639,7 +639,20 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
   dropped-body bug) — graded FIX NOW, fixed and ratified `D-CQ-2` in a separate
   commit before file 3; the two tests that pinned the bug now assert the correct
   behaviour. Green: `tsc -b`, full vitest 219/1570, lint 401/401,
-  `check:architecture` CERTIFIED. Not pushed. Remaining: files 3–8 per `§CQ9.5.6`.
+  `check:architecture` CERTIFIED. Not pushed.
+  File 3 landed: `buildGuidedCoachPresentation.test.ts` — **44 cases** (est. ~30–40;
+  trimmed to sit under the 500-line `max-lines` warn) across all 6 exports
+  (`computeActivePlacementMoves`, `buildGuidedCoachingFlags`,
+  `buildLessonRecommendedTileKey`, `buildLessonCoachVm`, `buildLessonCoachPanelContent`,
+  and end-to-end `buildGuidedCoachPresentation`). This file is the §CQ9.5.2
+  dead-branch verification for the 459-line source — every branch confirmed live.
+  Two behaviour notes pinned (not bugs): (a) `buildLessonRecommendedTileKey`'s
+  frozen-mode branch returns a `'draw'`/`'pass'` `chosenMove` verbatim as a
+  "tile key" — unguarded, unlike `playLessonBestMove`; (b) `showCoachMoreButton`
+  can only be `true` once the body exceeds the ~600-char preview cap (below that
+  the preview text equals the body), unless an explicit shorter summary is present.
+  Green: `tsc -b`, full vitest 220/1614, lint 401/401, `check:architecture`
+  CERTIFIED. Not pushed. Remaining: files 4–8 per `§CQ9.5.6`.
 
 ---
 
