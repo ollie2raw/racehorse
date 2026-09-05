@@ -14,9 +14,10 @@ covers what a checklist review catches that a CI rule does not.
 
 ## Current focus
 
-**As of 2026-09-05: Step 1 map complete (5 areas + 3 pre-Step-2 investigations
-resolved); Step 2 graded findings list written (`§CQ9.2`, 19 findings). No
-fixes. Awaiting human ratification as `D-CQ-1` before Step 3.**
+**As of 2026-09-05: Steps 1–3 done for the FIX-NOW scope. `D-CQ-1` ratified
+`§CQ9.2`; F10/F8/F18/F1 shipped as four commits (`b7979243`, `4254a235`,
+`459871a5`, `181624b7`), each green, not pushed. Open: REFACTOR/STYLE findings
+(per-finding greenlight) and the deferred `daily_puzzle*` client cluster.**
 
 Scope this plan covers (System 9's 5 items formally PARKED at D-18):
 
@@ -581,11 +582,42 @@ rather than chasing the whole boundary in one commit. Recorded here so it is
 not lost. `daily_puzzle*` prod tables and any server references stay
 `HARDENING_PLAN.md`'s call, not this plan's.
 
-## CQ9.3 Step-3 change plan — **not started** (waits on `D-CQ-1` ratification)
+## CQ9.3 Step-3 change plan
 
-Once graded findings are ratified: the **FIX NOW** set (F1, F8, F10, F18) as
-four separate commits, each verified green (typecheck + full vitest + lint +
-`check:architecture`). REFACTOR/STYLE items only on explicit greenlight.
+**FIX-NOW set shipped 2026-09-05 (D-CQ-1), four separate commits, order
+F10 → F8 → F18 → F1 (widest blast radius last). Not pushed.**
+
+| # | Commit | Deleted / changed | Touched beyond the named file |
+|---|---|---|---|
+| **F10** | `b7979243` | `match/board/InGameOverlayStack.tsx` + its 2 barrel exports; inlined `<>{children}</>` at `BotMatchInGameOverlays.tsx` | just the one call site (expected) |
+| **F8** | `4254a235` | `src/match/InGameBoardShell.tsx` (307 LOC) | none — zero importers |
+| **F18** | `459871a5` | `bot/usePostGamePivotalReview.ts` (dead re-export shim) | `bot/usePostGamePivotalReview.behaviorTests.ts` import redirected to `modules/review/usePostGamePivotalReview.ts` (as instructed) |
+| **F1** | `181624b7` | `modules/daily-puzzle/` (both files) | `useBotMatchScreenController.ts` (drop import + hook call + `puzzle` arg), `createBotMatchViewModelArgs.ts` (drop `puzzle` type), `assembleBotMatchViewModel.ts` (3 view-model fields **re-sourced** `puzzle.*` → `dailyFritz.*`, not deleted — behaviour-identical since the hook was a pure pass-through) |
+
+**F1 pre-commit check (as instructed — "confirm nothing outside
+`modules/daily-puzzle/` reads the `dailyLeaderboard*` fields"):** traced fully.
+The `dailyLeaderboard` / `dailyLeaderboardLoading` / `dailyLeaderboardError`
+state is a **misplaced piece of daily-*puzzle* state living in
+`useDailyFritzRuntime`** (`useState` at lines 114–116). Written only by the
+deleted hook (dead effect) and by a mode-agnostic reset in
+`useMatchNavigation.ts:132–134`. **Read** only by
+`assembleBotMatchViewModel.ts:285–287` → `BotMatchModalLayer` → the
+`{isDailyPuzzleRun && …}` "Today's Top Scores" block in `BotGameOverModal`,
+which never renders (`isDailyPuzzleRun` permanently false). No Daily Fritz
+feature reads them — Daily Fritz uses the separate `dailyFritzLeaderboard` /
+`dailyFritzRank`. So: **no live reader.** Kept the plumbing (re-sourced, not
+deleted-under) so the deferred `daily_puzzle*` cluster pass can remove the
+whole surface at once rather than half here.
+
+**Deferred `daily_puzzle*` client cluster** (its own scoped pass, per `§CQ9.2`):
+the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
+`useMatchNavigation`, `botMatchViewModelTypes.ts:277–279`,
+`BotMatchModalLayer.tsx:132–134`, the `BotGameOverModal` block, the
+`dailyPuzzleDate` prop + ~10 `isDailyPuzzleRun` gates, and
+`dailyPuzzle/DailyPuzzleScreen.tsx` / `DailyPuzzleLadderScreen.tsx` /
+`DailyPuzzleLegacyInPlayView.tsx` / the `dailyPuzzle/api.ts` write paths.
+
+**REFACTOR / STYLE items** — not touched; await explicit per-finding greenlight.
 
 ## CQ9.4 Checklist
 
@@ -595,8 +627,10 @@ four separate commits, each verified green (typecheck + full vitest + lint +
 - [x] Investigation 2 — `PIVOTAL_REVIEW_WIZARD_ENABLED` history traced — **parked/incomplete beta feature, ACCEPT** (`§CQ9.1.5`).
 - [x] Investigation 3 — `client/src/match/InGameBoardShell.tsx` mapped into scope — **dead since 2026-05-29, FIX NOW** (`§CQ9.1.3` / F8).
 - [x] **Step 2 — graded findings list** (`§CQ9.2`, 19 findings + 1 deferred cluster) — written 2026-09-05.
-- [ ] **Step 2 ratification** — human reviews `§CQ9.2` line-by-line → `D-CQ-1`.
-- [ ] **Step 3 — fix the ratified FIX-NOW scope.** Commit each finding separately. Do not push.
+- [x] **Step 2 ratification** — `D-CQ-1` (2026-09-05): FIX-NOW scope only (F1, F8, F10, F18).
+- [x] **Step 3 — FIX-NOW scope shipped** — F10 `b7979243` · F8 `4254a235` · F18 `459871a5` · F1 `181624b7`. Each green (typecheck + full vitest 217/1502 + lint 401/401 + `check:architecture` 20/20). Not pushed.
+- [ ] REFACTOR / STYLE findings — await per-finding greenlight.
+- [ ] Deferred `daily_puzzle*` client cluster — its own scoped pass.
 
 ---
 
@@ -630,4 +664,6 @@ four separate commits, each verified green (typecheck + full vitest + lint +
 
 # Decisions log
 
-*(empty — first decision will be D-CQ-1 when Step 2's findings list is ratified)*
+| D | Date | Decision | Reasoning |
+|---|---|---|---|
+| **D-CQ-1** | 2026-09-05 | **`§CQ9.2` graded findings list ratified. Step-3 scope = the FIX-NOW set only: F1 (`modules/daily-puzzle/` dead), F8 (`match/InGameBoardShell.tsx` dead, pulled in from one dir outside the D-18 item), F10 (`InGameOverlayStack` no-op), F18 (dead re-export shim).** Three pre-Step-2 investigations resolved: (1) `applyJoinResponseGameState`'s silent early-return is genuinely benign — caller checks `ok`, logs, schedules resync; no player-visible wrong state or dispute reachable → quality finding F13, **explicitly not a `HARDENING_PLAN.md` candidate**; (2) `PIVOTAL_REVIEW_WIZARD_ENABLED` — never `true` on any branch and no open trigger wired, but lives in an actively-toggled beta-gate flag file with a 2026-08-15 "analyzer not ready for players" decision on the sibling → **parked/incomplete, ACCEPT** (F16), with a residual note that flipping the flag alone won't ship it; (3) `match/InGameBoardShell.tsx` dead since 2026-05-29 (superseded by the `match/board/` decomposition in the same commit that added `MatchLiveLayout`). REFACTOR/STYLE items (F3/F6/F11/F12/F19 + the STYLE set) held for per-finding greenlight — they touch working code and, for the guided ones, the CLAUDE.md-protected `learn/` surface. | FIX-NOW = clearly wrong, cheap, unambiguous; ships by default. The `daily_puzzle*` client surface beyond the 2 audited files is a **separate scoped pass** (FC-DEAD-1 treatment) — F1 re-sources the `dailyLeaderboard*` view-model fields from `dailyFritz` rather than cascade-deleting the plumbing, so that pass can remove the whole surface at once. Same one-step-per-session / verify-against-code / no-push discipline as every `HARDENING_PLAN.md` step. |
