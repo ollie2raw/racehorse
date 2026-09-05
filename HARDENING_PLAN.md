@@ -6634,7 +6634,64 @@ rate limiter (System 6).
 core tables' RLS/grants are unverified.
 
 ## 13.1 Current-state map
-**Not started.** Step 1.
+
+**Live finding requiring your attention before anything else, RK-0-class:** §13.1.2 below is a **confirmed, reproduced, currently-live gap** — `matches`' own RLS `INSERT` policy permits exactly the forgery System 11's SA-2 fixed at the application layer, but SA-2's fix lives entirely in the Express route (`/api/stats/record-match`) and does nothing to the database itself. A direct authenticated PostgREST call — bypassing the Express server completely — still inserts an arbitrary fabricated win/loss row today. Reproduced live, cleaned up net-zero. See §13.1.2 for the full evidence; this is flagged here first, the same way GM-1 and the account-deletion bug were, before the rest of the write-up.
+
+### 13.1.1 Methodology — full table enumeration, not the scope note's list
+
+Rather than auditing only the tables named in this system's scope block (or the ones named in this pass's request), pulled the actual live inventory two ways and cross-checked them against each other: `list_rls_policy_manifest()` (every table with at least one live `pg_policies` row — **48 tables**) and PostgREST's own OpenAPI spec under the service-role key (every table/view Postgres actually exposes — **55 objects**). The difference is exactly the 7 `*_metrics` views (`daily_fritz_event_metrics`, `daily_fritz_failure_metrics`, `daily_fritz_funnel_metrics`, `daily_fritz_retention_metrics`, `fritz_challenge_failure_metrics`, `fritz_challenge_funnel_metrics`, `mp_authority_funnel_metrics`) — already fully closed by the cross-cutting sweep before System 1 (confirmed `anon`/`authenticated` both get `401`/`403` on all 7, `security_invoker = true`). **No table exists outside the union of these two lists** — nothing is invisible from having zero policies while still being reachable, and nothing sits behind a grant the service-role key wouldn't also see.
+
+**`league_*`: confirmed fully absent, not just "likely dead."** None of `fixtures`/`leagues`/`league_members`/`fixture_match_results`/`league_bots`/`player_league_history` (the names System 5's investigation used) appear anywhere in either enumeration. System 5's decommission is complete at the schema level — nothing survived to audit here.
+
+Read every one of the 48 tables' actual policy rows (`roles`, `cmd`, `qual`, `with_check`) — not "RLS enabled," the literal predicates, the same standard Guardrail #1 exists to enforce structurally. Findings below are grouped by what they mean, not table-by-table — the raw predicate dump is reproducible from `list_rls_policy_manifest()` at any time and isn't worth re-pasting in full here.
+
+### 13.1.2 `matches` — CONFIRMED LIVE: SA-2's application-layer fix does not close the underlying forgery
+
+`matches_insert_participant` (`INSERT`, `authenticated`, `with_check: (auth.uid() = winner_user_id) OR (auth.uid() = loser_user_id)`) is the **entire** gate on writing this table from a client. It requires the caller to be a participant — but nothing else. No `roomCode`, no reference to an authoritative row, no score sanity check. This is precisely the shape System 11's SA-2 fixed — except SA-2's fix (`recordUserMatch.ts`'s `hasAuthoritativeOnlineMatch` check) lives entirely inside the Express `/api/stats/record-match` handler. **RLS is the actual database-level gate, and it was never touched.**
+
+**Reproduced live, end to end:** minted two real throwaway users (attacker, victim) via the service-key admin API. POSTed directly to `{SUPABASE_URL}/rest/v1/matches` — not the Express server at all — using only the attacker's own authenticated JWT as the `Authorization` bearer:
+
+```json
+{ "mode": "online", "winner_user_id": "<attacker>", "loser_user_id": "<victim>",
+  "winner_score": 60, "loser_score": 0, "metadata": { "forged_via": "direct-rest-bypass" } }
+```
+
+Result: **`201`**, row created, no `room_code`, no authoritative game-over event of any kind. Confirmed with a service-role read afterward. This is reachable by anyone with a valid session (the anon key is necessarily public, and a logged-in user's own Supabase client already holds their session JWT in the page) — no special access needed, just opening devtools. All probe data (2 throwaway users, the forged row) deleted afterward, net-zero.
+
+**Same blast radius as SA-2 already established** — `matches` doesn't feed the real competitive Glicko rating (that's `ranked_games`, a completely different table with its own, correctly-scoped policies — see §13.1.3), only the weekly/friends leaderboard win counts and the personal online-win-streak. Cosmetic/social stakes, not rating manipulation. But the *mechanism* SA-2 was supposed to close is fully open at the layer that actually enforces it — SA-2 only ever closed the one HTTP route, not the vulnerability.
+
+### 13.1.3 Tables confirmed correctly locked — newly verified at the predicate level for several, not previously read this closely
+
+- **`ghost_games` / `ghost_profiles`** — each carries **only** a `SELECT ... auth.uid() = user_id` policy, no `INSERT`/`UPDATE`/`DELETE` policy of any kind for `anon`/`authenticated`. RLS's default-deny means no client write path exists regardless of any raw table grant — matches System 10's tracing of `completeGhostGame` being the sole, service-role-only writer. **Not previously read at the RLS-predicate level under System 10** (that system traced the application logic, not the raw policies) — confirmed clean here for the first time.
+- **`verified_single_player_matches`** — `no_client_write` (`ALL`/`authenticated`/`false`/`false`) + `select_own`. Same shape, same conclusion — System 10's entire `deal_snapshot`/replay design depends on this table being write-only-by-service-role, and it genuinely is.
+- **`room_live_sessions` / `room_match_logs` / `bot_match_pending` / `room_command_receipts` / `mp_authority_events`** — all deny-all-to-client on writes, matching System 2's D-8/RK-1 work and the already-pinned `policy-manifest.json` entries (the first two are literally the guardrail's own pinned tables).
+- **`daily_fritz_*` / `fritz_challenge_*`** (attempts, events, outbox, verified games/hands, attempt_operations) — uniformly `no_client_access`/`no_client_write` (`ALL`/`authenticated`/`false`/`false`), consistent with System 3/10's server-authoritative command-store design.
+- **`ranked_games` / `rating_periods`** — the already-pinned, RK-0-remediated policies (`service_role`-only insert, owner-only read) — unchanged, confirmed still correct.
+- **`gauntlet_*`** (attempts/ratings/replays/round_results/days/seasons/day_solutions) — correctly scoped to their own owning-attempt via `EXISTS` subqueries or plain owner checks, answer keys (`gauntlet_day_solutions`) deny-all. Gauntlet is an already-documented scrapped/in-progress feature (System 3's decision log) — not re-litigated here, just confirmed its RLS is internally consistent with what exists of it.
+
+### 13.1.4 Public-read policies reviewed for sensitive-data exposure — none found, but one worth naming explicitly
+
+`profiles` (`anon` **and** `authenticated`, `qual: true` — genuinely world-readable, no auth required at all), `activity_feed` (`authenticated`, `qual: true` — any logged-in user, not just friends), `scheduled_tournament_matches`/`scheduled_tournaments`/`scheduled_tournament_registrations` (`public`, `qual: true`) are all broadly or fully public-readable. Checked the actual live columns (via the OpenAPI schema definitions, not the stale `supabase/schema.sql` baseline file) for each: no email, no payment info, no admin flags, nothing beyond username/ratings/game outcomes/tournament bracket data. **Not a gap** — but worth resolving explicitly rather than leaving as "probably fine": `activity_feed`'s broad-read policy looked, from an old migration's policy name (`"read own and friends activity"`, `2026-05-18_social_greenfield_baseline.sql`), like it might have been intended as friends-only and later widened by accident. Traced the actual server route (`social/socialFeed.ts`'s `GET /api/social/feed/user/:userId`) and found the **application itself** already deliberately serves any authenticated user any other specific user's activity feed, with no friend check — a public-profile-activity feature, not a friends-only one. The live RLS policy matches the app's actual intended behavior exactly. Confirmed, not assumed.
+
+### 13.1.5 Process findings — inconsistent, not exploitable
+
+- **Redundant/dead policies.** `profiles_select_own` (`authenticated`, `id = auth.uid()`) is fully subsumed by the broader `profiles_select_authenticated` (`authenticated`, `true`) sitting right next to it — the narrower policy does nothing, since Postgres RLS policies are OR'd together. Same shape on `scheduled_tournament_registrations`: `"Users can read own registrations"` is subsumed by `str_select_all`. Harmless (the broader policy is the intentional one in both cases, confirmed by §13.1.4), but worth a cleanup pass so a future reader doesn't mistake the narrow policy for the actual access boundary.
+- **`daily_puzzles`'s admin policies use a hardcoded email**, not the `ADMIN_SECRET` pattern used everywhere else in this codebase: `daily_puzzles_insert_admin`/`_update_admin`/`_delete_admin` all gate on `(auth.jwt() ->> 'email') = 'olivermorid@gmail.com'`. Functionally fine today (single admin, single email) but a different, undocumented admin-authorization mechanism from the rest of the app — an email change would silently break it with no error surfaced anywhere, and it's invisible to `assert_security_posture()`'s advisory checks (which look at grants/RLS-enabled, not policy predicate content). Not itself a vulnerability; a maintainability/consistency note.
+
+### 13.1.6 Admin/ops endpoints — every route's actual auth check confirmed, not assumed present
+
+Full inventory (grepped for every `isAdminSecret`/`ADMIN_SECRET` reference in `server/src`, not just the endpoints named in this pass's scope): **8 routes total**, all gated by the same `isAdminSecret()` → `constantTimeEqualSecret()` function (`timingSafeEqual`, fails closed — `false` whenever `process.env.ADMIN_SECRET` itself is falsy/unset).
+
+- **Header-only (AU-6's hardened pattern — `x-admin-secret`):** `GET /api/daily-fritz/metrics`, `GET /api/daily-fritz/health`, `GET /api/daily-fritz/events/:attemptId`.
+- **Still body-param (`req.body?.adminKey`), never migrated to AU-6's pattern:** `POST /api/daily-fritz/generate`, `POST /api/daily-fritz/invalidate`, `POST /api/daily-fritz/reset-attempt`, `POST /api/ranking/process/:userId`, `POST /bot-matches/cleanup-stale`.
+
+Body-param transport is not the exact leak vector AU-6 fixed (`?admin_key=` in a query string hits access logs/Referer/browser history; a POST body does not) — but it's a real, confirmed inconsistency: AU-6's remediation reached 3 of 8 admin-secret-gated routes, not all of them. **Confirmed still moot today, not just assumed**: re-checked `GET /ready` on live prod — `recommendedEnv.ADMIN_SECRET: false`, unchanged from System 6's original finding. Every one of these 8 routes is currently fail-closed and uncallable in prod by anyone, admin included, until a human sets the env var. Worth remediating the remaining 5 to header-only *before* that happens, not after.
+
+No admin/internal route exists in this codebase beyond these 8 — confirmed by grep, not assumed from the scope note's shorter list (`/league/run-*` named in the scope block does not exist; System 5's decommission removed it along with the tables).
+
+### 13.1.7 Telemetry/observability and deploy/infra — noted, not deep-audited this pass
+
+The System 13 scope block also names telemetry (`operationalTelemetry.ts`, `sentryScrubbers.ts`, `client/src/debug/`) and deploy/infra (Render single-instance/spin-down, Vercel rewrites, `/ready`/`/ping`, graceful shutdown) as in-scope. This pass focused on RLS/grants and admin endpoints per the explicit request; those two areas are **not yet audited** and are carried forward rather than silently dropped — Render's spin-down/single-instance posture is already documented piecemeal across System 1's T-17..T-19 and this session's own GM-1 finding, but has never been written up system-wide in one place the way this system's scope block calls for.
 
 ## 13.2 Invariants
 **Not started.** Step 2.
@@ -6643,7 +6700,8 @@ core tables' RLS/grants are unverified.
 **Not started.** Step 2.
 
 ## 13.4 Checklist
-- [ ] Step 1 — RLS probe of every un-audited `public` table; admin-endpoint gate map; telemetry + deploy-posture map
+- [x] Step 1 (RLS/grants + admin endpoints) — written 2026-09-05 (§13.1.1–§13.1.6). Full live table enumeration (48 policy-bearing tables + 7 already-closed metrics views = 55, cross-checked two independent ways) confirmed `league_*` fully absent and no table exists outside this union. **Live finding, confirmed by reproduction:** `matches`' own RLS `INSERT` policy permits exactly the forgery System 11's SA-2 fixed — SA-2's fix lives only in the Express route, RLS itself was never touched, and a direct authenticated PostgREST call still forges a row today (`201`, reproduced and cleaned up net-zero). `ghost_games`/`ghost_profiles`/`verified_single_player_matches` and the rest of the daily-fritz/fritz-challenge/room/gauntlet/ranked_games families all confirmed correctly locked at the predicate level. Public-read policies (`profiles`, `activity_feed`, tournament tables) confirmed non-sensitive and, for `activity_feed`, confirmed intentional against the app's own actual behavior rather than assumed. Two process findings (redundant dead policies; `daily_puzzles`' hardcoded-email admin gate). Admin/ops: full 8-route inventory, all fail-closed today (`ADMIN_SECRET` still unset, re-confirmed live) but 5 of 8 never migrated to AU-6's header-only pattern.
+- [ ] Step 1 (telemetry + deploy-posture) — **not yet done**, carried forward explicitly rather than dropped (§13.1.7)
 - [ ] Step 2 — invariants + gap list → ratify (D-N)
 - [ ] Step 3 — fixes + migrations (human applies)
 
