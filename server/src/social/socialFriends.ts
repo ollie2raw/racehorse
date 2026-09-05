@@ -3,6 +3,22 @@ import { supabaseFetch } from '../supabaseUtils';
 import { friendIdsFromRows, getFriendRows, requireAuth } from './socialAuth';
 import { getPresenceBatch } from './presenceRegistry';
 
+/**
+ * SA-7 (HARDENING_PLAN.md §11.3): the friends-request routes read for an
+ * existing pair row, then insert — a TOCTOU window. Two users requesting each
+ * other simultaneously both pass the read, both insert, and the second hits the
+ * `friends_pair_unique_idx` (a normalized `(least, greatest)` pair index, so
+ * A→B and B→A collide). PostgREST returns 409 / `23505`; without this check the
+ * route's catch turns it into a generic `500 Failed to send request`. The DB
+ * invariant (one row per pair, SA-INV-5) already holds — this only fixes the
+ * status code. Matches the index-name-or-23505 detection used in
+ * `puzzleRushStore.ts`.
+ */
+function isFriendsPairConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /friends_pair_unique_idx|23505/i.test(message);
+}
+
 export function registerSocialFriendsRoutes(socialRouter: Router): void {
   socialRouter.get('/friends/requests', async (req, res) => {
     const userId = await requireAuth(req, res);
@@ -94,6 +110,10 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       });
       res.json({ ok: true });
     } catch (err) {
+      if (isFriendsPairConflict(err)) {
+        res.status(409).json({ error: 'A friend request between you already exists.' });
+        return;
+      }
       res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send request.' });
     }
   });
@@ -126,6 +146,10 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       });
       res.json({ ok: true });
     } catch (err) {
+      if (isFriendsPairConflict(err)) {
+        res.status(409).json({ error: 'A friend request between you already exists.' });
+        return;
+      }
       res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send request.' });
     }
   });
