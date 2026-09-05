@@ -6586,15 +6586,24 @@ Both confirmed `localStorage`-only (`pivotalReviewStorage.ts` for review session
 Every write path across all four directories terminates in `window.localStorage`, confirmed by direct code reading, not inference from the plan's own scoping note. No Supabase client import, no `/api/` call, no shared/competitive state anywhere in this system's scope. The one real fact worth carrying into Step 2 is §12.1.1's account-detachment (journey progress isn't tied to a user id) — everything else is either a clean, defensively-written store or (§12.1.2) inert scaffolding with no live effect. No live-prod reproduction was needed or performed, per the verified absence of any server-touching surface.
 
 ## 12.2 Invariants
-**Not started.** Likely a short list, or "none — client-only, no shared state".
+
+- **PL-INV-1 — No progression/learning state in this system's scope reaches a server, a shared table, or anything another player can see.** *HOLDS — confirmed by direct grep of all four directories plus the full server schema (§12.1), not inferred from the plan's own scoping note.*
+- **PL-INV-2 — Journey campaign progress is device-local, with no account tie-in.** *Stated as a neutral fact, not a gap — journey mode is currently on hold product-wise, not being actively developed. See **PL-1**.*
+- **PL-INV-3 — Every localStorage read path in this system's scope fails safe (a fresh default) on corrupt/missing/unparseable data, never throwing into the surrounding UI.** *HOLDS — confirmed for `journeyStorage.ts`, `guidedAuthoring.ts`, `learningStore.ts`, and `pivotalReviewStorage.ts` (§12.1.1–§12.1.4).*
 
 ## 12.3 Gap list (risk-ranked)
-**Not started.** Step 2.
+
+**Scoring** (same axes as prior systems). *Severity* ∈ {**integrity-oracle**, **availability**, **latent-drift**, **process**, **cosmetic**}. *Verdict* ∈ {**FIX NOW**, **POSTURE**, **REVISIT IF SCALE**, **ACCEPT**}.
+
+| ID | Gap | §12.1 ref | Severity | Likelihood | Blast radius | Verdict | Protects |
+|---|---|---|---|---|---|---|---|
+| **PL-1** | Journey campaign progress is device-local with no account tie-in — a device switch, browser-data clear, or shared browser loses/overwrites progress with no recovery path. | §12.1.1 | **cosmetic** (no security or integrity stake — nothing shared or competitive) | n/a | a single player's own campaign progress | **ACCEPT / OUT OF SCOPE** — journey mode is currently on hold product-wise, not being actively developed. Recorded as a neutral fact, not a pending item. | PL-INV-2 |
+| **PL-2** | `learning/profileProgress.ts`'s `LearningProfileStore` interface (an explicitly Phase-1, storage-agnostic "localStorage or Supabase, TBD" scaffold) has no implementer anywhere in the codebase. | §12.1.2 | **process** (dead/unused code, not a live gap) | n/a | none — inert | **ACCEPT** — confirmed inert, not a half-built server integration; no action needed. | — |
 
 ## 12.4 Checklist
 - [x] Step 1 — current-state map written 2026-09-05 (§12.1.1–§12.1.5). **"Client-only, low risk" verified, not assumed**: grepped all four scoped directories for any Supabase import/`fetch`/`/api/` call and cross-checked the full server schema for "journey"/"lesson_progress"/"guided_progress" — zero server-side hits, one non-server `fetch()` (a bundled static asset, confirmed by reading the code). No live-prod reproduction needed. One real fact recorded for Step 2: journey progress is not tied to a user account at all (pure `localStorage`, device/browser-local). Also found inert, unused scaffolding (`learning/profileProgress.ts`'s `LearningProfileStore` interface — no implementer exists).
-- [ ] Step 2 — short invariant list + any gaps → ratify (D-N)
-- [ ] Step 3 — fixes if any
+- [x] Step 2 — invariants (§12.2, PL-INV-1..3) + gap list (§12.3, PL-1..PL-2) written 2026-09-05. Both gaps ACCEPT — PL-1 (journey account-detachment) recorded as a neutral fact, no forward-looking note, since journey mode is currently on hold product-wise; PL-2 (dead `LearningProfileStore` scaffolding) confirmed inert. **Awaiting human ratification.**
+- [ ] Step 3 — fixes if any (none expected — both gaps are ACCEPT)
 
 ---
 
