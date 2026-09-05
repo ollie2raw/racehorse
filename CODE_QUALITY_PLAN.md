@@ -657,18 +657,39 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
   preview cap (below that the preview text equals the body), unless an explicit
   shorter summary is present. Green: `tsc -b`, full vitest 220/1614, lint 401/401,
   `check:architecture` CERTIFIED. Not pushed.
-  File 4 landed (Tier 2): `computeGuidedCoachTip.test.ts` — **17 cases** (est. ~12–15)
+  File 4 landed (Tier 2): `computeGuidedCoachTip.test.ts` — **18 cases** (est. ~12–15)
   on real botEngine (`createFixedBotMatch` + `getLegalMoves` + `previewPlayMove`
-  fixtures, no mocks). Covers: 6 guards, opening move (highest-scoring pick ·
-  scoring-double still `isOpeningDouble:false` · highest-double fallback · null when
-  neither), single-legal-play `isOnlyPlay`, and the multi-move mirrored-`chooseBotMove`
-  path (coherence assertions). **Not covered — `chooseBotMove('master')`-output-
-  dependent, not deterministically reachable without coupling to engine internals:**
-  the `best.pts === 0` scoring-override branch and the `isControlChoice` computation.
-  Expected scores are derived in-test from `previewPlayMove` rather than hard-coded,
-  so the tests don't encode the all-fives scoring rule. Green: `tsc -b`, full vitest
-  221/1631, lint 401/401, `check:architecture` CERTIFIED. Not pushed. Remaining:
-  files 5–8 per `§CQ9.5.6`.
+  fixtures, no mocks; expected scores derived in-test from `previewPlayMove`, not
+  hard-coded, so the tests don't encode the all-fives rule). Covers: 6 guards;
+  opening move (highest-scoring pick · scoring-double still `isOpeningDouble:false` ·
+  highest-double fallback · null when neither); single-legal-play `isOnlyPlay`;
+  **`isControlChoice`** (one tile, two non-scoring placements, differing `openSum` —
+  `hand=[3|4]` on board L3R4, fully deterministic); `computeGuidedScoringTiles`
+  (guards · `low-high` keying · max-of on collision).
+  **Fixture-generation surprise:** the all-fives scoring is `openSum / 5` — a
+  `5|5` opener scores **2**, not 10. Every score assertion is now derived, not
+  literal.
+  **The multi-move mirrored-`chooseBotMove` case is a `[smoke]` test only** —
+  no-throw + shape-drawn-from-candidates. It does **not** assert which tile the
+  mirrored master picks; must not later be counted as covering that branch's logic.
+  **`best.pts === 0` scoring-override branch — NOT covered, and NOT dead.**
+  Real attempt: 4 exploration rounds, ~18 constructed positions, read the
+  `evaluateStrategicMove` master weighting. It IS reachable — `immediateWeight` is
+  only 22–34 and `outBlockBonus` reaches ~161, so the master genuinely declines a
+  small scoring play to block a near-win opponent (`youProximity ≥ 0.85`,
+  `oppTileCount ≤ 3`, post-move `blockProb < 0.45`). But `chooseBotMove` in the
+  mirror re-samples the opponent hand from the unseen pool via a **seeded** PRNG
+  (`createStatePrng`), so the "punisher" tile is only reliably in-sample when that
+  pool is small — a deep played-out endgame with ~20 tiles visible. Constructing
+  that needs either a full `applyPlayMove` game choreography or a hand-written
+  ~20-tile board (the exact wire-format fragility the plan flags for
+  `parseGuidedBoardState`). So: an **integration-fixture gap with a stated reason**,
+  not dead code — and note the branch's behaviour when it does fire is deliberate
+  (it overrides the master's block recommendation with the scoring tile: "you had
+  a scoring play, take it" — a coaching choice, debatable but intentional, tagged
+  `isControlChoice: false`).
+  Green: `tsc -b`, full vitest 221/1632, lint 401/401, `check:architecture`
+  CERTIFIED. Not pushed. Remaining: files 5–8 per `§CQ9.5.6`.
 
 ---
 

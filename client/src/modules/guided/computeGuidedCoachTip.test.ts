@@ -141,7 +141,11 @@ describe('computeGuidedCoachTip — non-opening move', () => {
     expect(tip?.placementCount).toBe(1);
   });
 
-  it('with multiple options, returns a coherent tip drawn from the candidate moves', () => {
+  // SMOKE TEST (not a correctness assertion): this only pins that the mirrored-
+  // chooseBotMove path returns a shape drawn from the candidate set and never
+  // throws. It does NOT verify which tile the mirrored master picks — see §CQ9.5
+  // for why that branch's actual logic is not unit-asserted here.
+  it('[smoke] with multiple options, returns a coherent tip drawn from the candidate moves', () => {
     const match = midHandMatch([t(5, 6), t(2, 4), t(1, 1)], board52); // 5|6 -> left(5), 2|4 -> right(2)
     const moves = getLegalMoves(match, 'you');
     expect(moves.length).toBeGreaterThan(1);
@@ -153,6 +157,33 @@ describe('computeGuidedCoachTip — non-opening move', () => {
       true,
     );
     expect(moves).toContainEqual(tip!.bestMove);
+  });
+
+  it('flags isControlChoice when the only tile has two non-scoring placements with different open sums', () => {
+    // board 3|4 => leftEnd 3, rightEnd 4. Hand holds only 3|4, which fits BOTH ends:
+    //   left  -> exposes 4 -> ends {4,4} openSum 8, 0 pts
+    //   right -> exposes 3 -> ends {3,3} openSum 6, 0 pts
+    // -> two placements of one tile, neither scores, openSums differ -> isControlChoice.
+    const board34: BoardState = {
+      leftEnd: 3,
+      rightEnd: 4,
+      leftEndIsDouble: false,
+      rightEndIsDouble: false,
+      mainLine: [{ tile: t(3, 4), orientation: 'horizontal-normal' }],
+      hubDoubles: [],
+    };
+    const match = midHandMatch([t(3, 4)], board34);
+    const moves = getLegalMoves(match, 'you');
+    const previews = moves.map((m) => previewPlayMove(match, 'you', m)!);
+    expect(previews.every((p) => p.immediateScore === 0)).toBe(true);
+    expect(new Set(previews.map((p) => p.openSum)).size).toBe(2);
+
+    const tip = computeGuidedCoachTip(match, moves, true);
+    expect(tip?.tile).toEqual(t(3, 4));
+    expect(tip?.pts).toBe(0);
+    expect(tip?.isControlChoice).toBe(true);
+    expect(tip?.isOnlyPlay).toBe(false);
+    expect(tip?.placementCount).toBe(2);
   });
 
   it('null when the mirrored recommendation is a tile the player cannot actually place', () => {
