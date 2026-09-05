@@ -1289,6 +1289,83 @@ function checkStrictDefaultVerifiers(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 19. Reuse-first published-challenge writes (ENGINEERING_GUARDRAILS.md §7)
+// ---------------------------------------------------------------------------
+// DF-STALE-1: `daily_fritz_published_challenges` rows are immutable and
+// content-addressed. A code path that *re-derives* a challenge package from the
+// live version constants (`FRITZ_POLICY_VERSION`, verifier/protocol versions)
+// and calls `publishDailyFritzChallenge` hits `daily_fritz_challenge_identity_
+// conflict` against a frozen row whose stamp has since drifted — the outage was
+// `dailyFritzStartRoute.ts`, and the same shape was latent in `dailyWarmup.ts`
+// and the admin routes. The fix everywhere is the same: fetch the already-
+// published row first (`getDailyFritzPublishedChallenge`) and reuse it, only
+// publishing when none exists.
+//
+// INV-19 pins that: every non-test module that calls `publishDailyFritzChallenge`
+// must also reference `getDailyFritzPublishedChallenge` in the same file. A new
+// call site added later without the reuse check fails CI instead of waiting for
+// a second incident. Coarse (file-level, like INV-11/INV-13) on purpose — the
+// admin `/generate` route is a deliberate non-reuse publish, but it still
+// references the guard function (to 409 cleanly on a pre-existing frozen row),
+// so it needs no exception carve-out.
+
+const PUBLISH_CHALLENGE_FN = 'publishDailyFritzChallenge';
+const PUBLISH_CHALLENGE_REUSE_FN = 'getDailyFritzPublishedChallenge';
+// The module that defines both — not a call site.
+const PUBLISH_CHALLENGE_DEFINITION_FILE = 'stores/dailyFritzPublishedChallengeStore.ts';
+
+/**
+ * Given a file's path and source, returns a violation string if the file calls
+ * `publishDailyFritzChallenge(` but never references `getDailyFritzPublishedChallenge`.
+ */
+export function findUnguardedPublishChallengeCallers(
+  relativePath: string,
+  source: string,
+): string | null {
+  const normalized = relativePath.replace(/\\/g, '/');
+  if (normalized.endsWith(PUBLISH_CHALLENGE_DEFINITION_FILE)) return null;
+  if (/\.(test|behaviorTests)\.ts$/.test(normalized)) return null;
+
+  const callsPublish = new RegExp(`\\b${PUBLISH_CHALLENGE_FN}\\s*\\(`).test(source);
+  if (!callsPublish) return null;
+
+  const referencesReuse = new RegExp(`\\b${PUBLISH_CHALLENGE_REUSE_FN}\\b`).test(source);
+  if (referencesReuse) return null;
+
+  return (
+    `${normalized} calls ${PUBLISH_CHALLENGE_FN}() but never references ` +
+    `${PUBLISH_CHALLENGE_REUSE_FN} — a published challenge must be reused, not ` +
+    `re-derived against live version constants (ENGINEERING_GUARDRAILS.md §7 / DF-STALE-1)`
+  );
+}
+
+function checkReuseFirstPublishedChallengeWrites(): void {
+  const errors: string[] = [];
+  const serverFiles = walkTsFiles(SERVER_SRC).filter((f) => !/\.test\.ts$/.test(f));
+
+  let callerFiles = 0;
+  for (const absolutePath of serverFiles) {
+    const relative = `server/src/${path.relative(SERVER_SRC, absolutePath).split(path.sep).join('/')}`;
+    const source = fs.readFileSync(absolutePath, 'utf8');
+    if (new RegExp(`\\b${PUBLISH_CHALLENGE_FN}\\s*\\(`).test(source)
+      && !relative.endsWith(PUBLISH_CHALLENGE_DEFINITION_FILE)) {
+      callerFiles += 1;
+    }
+    const violation = findUnguardedPublishChallengeCallers(relative, source);
+    if (violation) errors.push(violation);
+  }
+
+  addResult({
+    id: 'INV-19',
+    name: 'Reuse-First Published-Challenge Writes',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { publishCallerFiles: callerFiles },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1329,6 +1406,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Shared Rating-Constant Parity', 'client vs server glicko2 export const diff', 'check:architecture'],
     ['Idempotent ranked_games Writes', 'server-wide POST /rest/v1/ranked_games scan', 'check:architecture'],
     ['Strict-by-Default Verifier Options', 'strict* default-value assertion on pinned verifiers', 'check:architecture'],
+    ['Reuse-First Published-Challenge Writes', 'publishDailyFritzChallenge callers must reference the reuse check', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -1411,6 +1489,7 @@ function main(): void {
   checkRatingConstantParity();
   checkIdempotentRankedGamesWrites();
   checkStrictDefaultVerifiers();
+  checkReuseFirstPublishedChallengeWrites();
 
   printReport(manifest);
 }

@@ -445,3 +445,99 @@ to be FKs (`scheduled_tournament_matches`'s player/winner columns, after
 documents. Those are a separate, non-blocking concern (an orphaned id that
 no longer resolves to a profile), not the deletion-blocking concern this
 guardrail exists for.
+
+---
+
+## 7. Version-stamped published artifacts: reuse, don't re-derive
+
+**Rule:** a version-stamped artifact that is published ahead of its effective
+date and frozen (content-addressed, immutable) must be **reused as-is** by the
+serving path — never re-derived from the version constants that happen to be
+live at serve time — and something must proactively detect a pre-generated
+artifact that will fail on its effective date, on the day the invalidating
+change ships rather than the day the calendar reaches it.
+
+**Closes:** DF-STALE-1 (`HARDENING_PLAN.md`, "Incident 2026-09-05" / D-23). A
+`daily_fritz_published_challenges` row was pre-generated a day ahead stamped
+`FRITZ_POLICY_VERSION = 2`; an unrelated same-day deploy bumped the constant to
+3 before the run date rolled over. `dailyFritzStartRoute.ts` then rebuilt the
+challenge package under the *current* constant on every `/start`, and
+`publish_daily_fritz_challenge`'s identity-conflict guard rejected the
+re-derived v3 digest against the frozen v2 row — a `500` on every `/start` for
+the day, even though the dealt hands were byte-identical. New bug class:
+temporal staleness of a version-stamped published artifact, invalidated by an
+unrelated later change.
+
+**Enforcement — BUILT (both halves):**
+
+**Behavioural half — reuse-first serving, pinned by INV-19:**
+- The fix shipped for `/start` in `f37cf0ef`
+  (`dailyFritzStartRoute.ts` fetches the already-published challenge and reuses
+  it; `publishDailyFritzChallenge` is never called when a row exists). The same
+  latent shape was then fixed in `scheduled/dailyWarmup.ts` (the nightly
+  pre-generation, which re-visits [today, tomorrow] and so re-published each
+  date under whatever constants were live — `warmOneDailyFritzRun` now
+  `getDailyFritzPublishedChallenge`-first; also switched `Promise.all` →
+  `Promise.allSettled` so one date's failure no longer skips the sibling) and
+  in `dailyFritzAdminRoutes.ts` (`/invalidate` reuses an existing row instead
+  of a materialising re-publish that would conflict on drift; `/generate`, the
+  one deliberate non-reuse publish, now 409s cleanly on a pre-existing frozen
+  row instead of letting the RPC 500 opaquely).
+- `client/scripts/checkArchitectureInvariants.ts`'s **INV-19 —
+  Reuse-First Published-Challenge Writes**. A pure helper
+  (`findUnguardedPublishChallengeCallers`) fails the build if any non-test
+  module calls `publishDailyFritzChallenge(` without also referencing
+  `getDailyFritzPublishedChallenge` in the same file. Coarse (file-level, like
+  INV-11/INV-13) on purpose: a new fourth call site added without the reuse
+  check fails CI instead of waiting for a second incident. Runs in the existing
+  `check:architecture` CI step. **Negative test:**
+  `checkArchitectureInvariants.test.ts` covers the unguarded-caller flag, the
+  reuse-first pass, the definition-module exemption, the no-call pass, and the
+  test-file exemption. Verified against the repo: **3 caller files, all
+  guarded** (`dailyFritzStartRoute.ts`, `scheduled/dailyWarmup.ts`,
+  `dailyFritzAdminRoutes.ts`).
+
+**Proactive half — `server/scripts/checkPublishedArtifactFreshness.ts`:**
+- For every future-dated (`run_date >= today`) `daily_fritz_published_challenges`
+  row it runs **the same validity oracle the serving path runs** —
+  `toDailyFritzPublishedChallenge` + `assertValidDailyFritzPublishedChallenge` —
+  and cross-checks that a `live` challenge has a matching `live`
+  `daily_fritz_runs` row. Findings:
+  - `unservable` (**fails the build**) — the stored row does not survive
+    validation: `content_digest` no longer matches its `package`, a column
+    disagrees with the package, `fritz_policy_version` has dropped below the
+    current *min-supported* floor (GC-6 tolerates supported prior versions —
+    only supported ones), `fritz_policy_contract` no longer resolves, a wrong
+    generation / rules / seed / verifier / transcript-protocol stamp, malformed
+    hand slots. Any of these 500s every `/start` once the calendar reaches it.
+  - `orphaned_run` (**fails the build**) — a `live` future challenge whose run
+    row is missing or itself `invalidated` (`/start` 409s).
+  - `stale_tolerated` (**INFO, never fails**) — a `fritz_policy_version` behind
+    current but still supported. The reuse-first path absorbs this; reported so
+    the drift is visible on bump day. This is the DF-STALE-1 scenario itself.
+  - `missing_published_row` (**WARN, never fails**) — a future `live` run with
+    no published challenge yet (a warmup gap); `/start` self-heals by publishing
+    on first call.
+- `.github/workflows/security-posture.yml`'s `published-artifact-freshness` job
+  runs `npm run check:published-freshness --prefix server` on the same schedule
+  as the `policy-manifest` and `cascade-delete-completeness` jobs.
+- The pure diff (`diffPublishedArtifactFreshness`) is tested independently of
+  any live database (seven cases: clean, `stale_tolerated` non-failing, digest
+  corruption, below-floor policy version, missing run, invalidated run,
+  `missing_published_row` non-failing).
+- **Verified against prod:** the check runs clean (exit 0). It correctly
+  reports the still-present DF-STALE-1 row (`daily-fritz:2026-09-05:r2:s1`,
+  `fritz_policy_version 2` vs current 3) as **`info:stale_tolerated`** — visible
+  but not failing, because the shipped reuse-first fix makes it servable.
+
+**Scope, stated plainly.** Daily Fritz's `daily_fritz_published_challenges` is
+the only instance of the pre-generate → publish → serve-later pipeline in the
+codebase. Puzzle Rush / daily-puzzle select live at run start (`config_version`
+is a leaderboard tag, never re-verified). Scheduled tournaments pre-seed
+brackets idempotently but stamp no version constant that is re-derived and
+hard-compared. The **Fritz Challenge** feature has the identical class shape and
+worse (its `/start` hard-equals the current `FRITZ_POLICY_VERSION`, no tolerance
+path, and every open challenge row is already unstartable) — but its routes are
+**unmounted dead code on `main`** (`HARDENING_PLAN.md`, FC-DEAD-1), so INV-19
+and this detector are deliberately scoped to Daily Fritz; if the feature is
+revived, the tolerance path is part of that revival, not this guardrail.

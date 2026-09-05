@@ -102,3 +102,36 @@ jobs:
           SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: npm run check:cascade-delete --prefix server
+
+  published-artifact-freshness:
+    # Guardrail #7 (ENGINEERING_GUARDRAILS.md). DF-STALE-1: a Daily Fritz
+    # published challenge is pre-generated a day ahead and frozen; a version
+    # constant bumped before the run date rolls over left the serving path
+    # re-deriving the package and hard-failing on the digest mismatch. INV-19
+    # pins the reuse-first serving fix. This job is proactive detection: for
+    # every future-dated published row it runs the same validity oracle /start
+    # would, so a row that will 500 on its effective date is caught on the day
+    # of the bump instead. Tolerated drift (a supported prior policy version the
+    # reuse path absorbs) is reported, not failed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Check published-artifact freshness against prod
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: npm run check:published-freshness --prefix server

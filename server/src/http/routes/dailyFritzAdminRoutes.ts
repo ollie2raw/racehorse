@@ -31,6 +31,7 @@ import { evaluateDailyFritzHealthStatus } from './dailyFritzHealthPolicy';
 import { getDailyFritzMetricRates, getDailyFritzMetrics, incrementDailyFritzMetric } from './dailyFritzMetrics';
 import { buildDailyFritzPublishedChallenge } from '../../dailyFritzPublishedChallenge';
 import {
+  getDailyFritzPublishedChallenge,
   invalidateDailyFritzPublishedChallenge,
   publishDailyFritzChallenge,
 } from '../stores/dailyFritzPublishedChallengeStore';
@@ -236,6 +237,36 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
       });
       return;
     }
+    // Guardrail #7 / INV-19: this route deliberately does NOT reuse an existing
+    // published challenge — regenerate means "produce a new artifact". But a
+    // published-challenge row is content-addressed and immutable, and its
+    // challenge_id is a pure function of run_date/rules/seed (no generation
+    // counter), so an in-place regenerate for a date that already has one is not
+    // expressible — publishDailyFritzChallenge would hit
+    // daily_fritz_challenge_identity_conflict. Surface that as a clear 409 here
+    // rather than an opaque 500 from the RPC. (This is the one publish call site
+    // that is not reuse-first; INV-19 is satisfied by the getDailyFritzPublishedChallenge
+    // reference in this file, added for /invalidate below.)
+    if (DAILY_FRITZ_TRANSACTIONAL_COMMANDS_ENABLED) {
+      const publishedChallengeId = buildDailyFritzPublishedChallenge({
+        runDate,
+        fritzTier,
+        dealSize,
+        winningScore: Math.round(winningScore),
+      }).challengeId;
+      const alreadyPublished = await getDailyFritzPublishedChallenge(publishedChallengeId);
+      if (alreadyPublished) {
+        res.status(409).json({
+          error:
+            'A published Daily Fritz challenge already exists for this date. Its content is frozen; '
+            + 'regenerating a different challenge for the same date is not supported.',
+          run_date: runDate,
+          challenge_id: alreadyPublished.challengeId,
+          status: alreadyPublished.status,
+        });
+        return;
+      }
+    }
     const generated = generateDailyFritzRun(runDate, fritzTier, dealSize, Math.round(winningScore));
     const saved = await upsertDailyFritzRun({
       runDate: generated.runDate,
@@ -293,13 +324,23 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
       res.json({ ok: true, status: run.status });
       return;
     }
-    await publishDailyFritzChallenge(buildDailyFritzPublishedChallenge({
+    // Materialize the published-challenge row only if pre-generation never ran
+    // for this date — otherwise reuse the existing (immutable) row as-is.
+    // Guardrail #7 / INV-19: a blind publish here re-derives under current
+    // constants and would raise daily_fritz_challenge_identity_conflict against a
+    // row whose version stamp has since drifted — i.e. you could not invalidate a
+    // stale challenge, the one operation you most need to work.
+    const built = buildDailyFritzPublishedChallenge({
       runDate: run.runDate,
       fritzTier: run.fritzTier,
       dealSize: run.dealSize,
       winningScore: run.winningScore,
       publishedAt: run.generatedAt,
-    }));
+    });
+    const existingPublished = await getDailyFritzPublishedChallenge(built.challengeId);
+    if (!existingPublished) {
+      await publishDailyFritzChallenge(built);
+    }
     const invalidated = await invalidateDailyFritzPublishedChallenge(runDate, reason);
     dailyFritzRunCache.delete(runDate);
     res.json({ ok: true, challenge_id: invalidated.challengeId, status: invalidated.status });

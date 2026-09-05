@@ -4,6 +4,7 @@ import {
   findLenientDefaultStrictnessOptions,
   findNonIdempotentRankedGamesWrites,
   findUnguardedFloatingImports,
+  findUnguardedPublishChallengeCallers,
   isSuspiciousDailyFritzScoreAccess,
 } from './checkArchitectureInvariants.ts';
 
@@ -253,5 +254,57 @@ describe('INV-18 strict-by-default verifier options', () => {
       const strictHandContinuity = options.strictHandContinuity ?? true;
     `;
     expect(findLenientDefaultStrictnessOptions(withCommentedOptOut, spec)).toEqual([]);
+  });
+});
+
+
+/**
+ * INV-19 — Reuse-first published-challenge writes (ENGINEERING_GUARDRAILS.md §7).
+ * DF-STALE-1: a caller that re-derives a Daily Fritz challenge under live version
+ * constants and calls publishDailyFritzChallenge hits an identity conflict
+ * against the frozen row. Every caller must fetch the existing row first.
+ */
+describe('INV-19 reuse-first published-challenge writes', () => {
+  it('flags a file that calls publishDailyFritzChallenge without referencing the reuse check', () => {
+    const violation = `
+      import { publishDailyFritzChallenge } from '../stores/dailyFritzPublishedChallengeStore';
+      export async function warmup(run) {
+        await publishDailyFritzChallenge(buildDailyFritzPublishedChallenge(run));
+      }
+    `;
+    expect(findUnguardedPublishChallengeCallers('server/src/scheduled/newWarmup.ts', violation)).toMatch(
+      /never references getDailyFritzPublishedChallenge/,
+    );
+  });
+
+  it('does not flag a caller that fetches the existing challenge first', () => {
+    const guarded = `
+      import { getDailyFritzPublishedChallenge, publishDailyFritzChallenge } from '../stores/dailyFritzPublishedChallengeStore';
+      export async function start(run) {
+        const existing = await getDailyFritzPublishedChallenge(challengeId);
+        return existing ?? await publishDailyFritzChallenge(built);
+      }
+    `;
+    expect(findUnguardedPublishChallengeCallers('server/src/http/routes/dailyFritzStartRoute.ts', guarded)).toBeNull();
+  });
+
+  it('does not flag the module that defines both functions', () => {
+    const store = `
+      export async function getDailyFritzPublishedChallenge(id) { /* ... */ }
+      export async function publishDailyFritzChallenge(challenge) { /* ... */ }
+    `;
+    expect(
+      findUnguardedPublishChallengeCallers('server/src/http/stores/dailyFritzPublishedChallengeStore.ts', store),
+    ).toBeNull();
+  });
+
+  it('does not flag a file that never calls publishDailyFritzChallenge', () => {
+    const unrelated = `export function helper() { return getDailyFritzPublishedChallenge; }`;
+    expect(findUnguardedPublishChallengeCallers('server/src/http/routes/dailyFritzTodayRoute.ts', unrelated)).toBeNull();
+  });
+
+  it('does not flag a test file even if it calls publish without the reuse check', () => {
+    const testFile = `await publishDailyFritzChallenge(fixture);`;
+    expect(findUnguardedPublishChallengeCallers('server/src/scheduled/dailyWarmup.test.ts', testFile)).toBeNull();
   });
 });
