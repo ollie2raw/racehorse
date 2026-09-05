@@ -1122,6 +1122,88 @@ function checkRatingConstantParity(): void {
 }
 
 // ---------------------------------------------------------------------------
+// 17. Idempotent ranked_games writes only (ENGINEERING_GUARDRAILS.md §3)
+// ---------------------------------------------------------------------------
+// Guardrail #3: any code path that inserts a row feeding a competitive rating
+// (`ranked_games`) must go through `insertRankedGameIdempotent()`, never a bare
+// `supabaseFetch` POST. RK-1 / RK-2 (§8.3) were two such direct inserts, one of
+// them re-runnable by an unrelated later failure in the same call.
+//
+// Deviation from the doc's literal spec, stated plainly: the doc says "flag any
+// string literal matching /rest/v1/ranked_games in a supabaseFetch/fetch call".
+// Taken literally that also flags the legitimate GET reads of `ranked_games`
+// (`periodService.ts`, `http/routes/ranking.ts`, `privateMatchResult.ts`) and
+// the account-deletion DELETE — false positives the task explicitly rules out.
+// This check is therefore scoped to POST (the insert verb) to `/rest/v1/
+// ranked_games` outside `insertRankedGameIdempotent.ts`. Reads and the
+// deletion cascade are not rating-feeding inserts and stay out of scope.
+
+const IDEMPOTENT_RANKED_GAMES_WRAPPER = 'ranking/insertRankedGameIdempotent.ts';
+
+/** Strip `//` line comments and `/* *\/` block comments so a `ranked_games`
+ *  mention in prose (e.g. account/routes.ts's deletion note) can't trip the
+ *  scan. */
+function stripTsComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+/**
+ * Returns the offending call snippets: a `supabaseFetch`/`fetch` call whose
+ * argument targets `/rest/v1/ranked_games` and whose options carry
+ * `method: 'POST'`, in a file other than the idempotent wrapper.
+ */
+export function findNonIdempotentRankedGamesWrites(
+  relativePath: string,
+  source: string,
+): string[] {
+  if (relativePath.replace(/\\/g, '/').endsWith(IDEMPOTENT_RANKED_GAMES_WRAPPER)) {
+    return [];
+  }
+  const stripped = stripTsComments(source);
+  const offenders: string[] = [];
+  // A single (supabaseFetch|fetch) call statement — bounded to the call by
+  // requiring the ranked_games path and the POST method between the callee and
+  // the next `;`. `[^;]` spans newlines, so multi-line calls are covered.
+  const callPattern =
+    /\b(?:supabaseFetch|fetch)\s*(?:<[^>]*>)?\s*\([^;]*?\/rest\/v1\/ranked_games[^;]*?method:\s*['"]POST['"][^;]*?;/g;
+  let match: RegExpExecArray | null;
+  while ((match = callPattern.exec(stripped)) !== null) {
+    offenders.push(match[0].replace(/\s+/g, ' ').trim().slice(0, 160));
+  }
+  return offenders;
+}
+
+function checkIdempotentRankedGamesWrites(): void {
+  const errors: string[] = [];
+  const serverFiles = walkTsFiles(SERVER_SRC).filter((f) => !/\.test\.ts$/.test(f));
+
+  let flaggedFiles = 0;
+  for (const absolutePath of serverFiles) {
+    const relative = `server/src/${path.relative(SERVER_SRC, absolutePath).split(path.sep).join('/')}`;
+    const offenders = findNonIdempotentRankedGamesWrites(relative, fs.readFileSync(absolutePath, 'utf8'));
+    if (offenders.length === 0) continue;
+    flaggedFiles += 1;
+    for (const offender of offenders) {
+      errors.push(
+        `${relative} POSTs directly to /rest/v1/ranked_games — must go through ` +
+        `insertRankedGameIdempotent() (ENGINEERING_GUARDRAILS.md §3): ${offender}`,
+      );
+    }
+  }
+
+  addResult({
+    id: 'INV-17',
+    name: 'Idempotent ranked_games Writes',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { serverFilesScanned: serverFiles.length, flaggedFiles },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1160,6 +1242,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Daily Fritz Score Trust', 'req.body score/result heuristic (guardrail)', 'check:architecture'],
     ['Godfile LOC Caps', 'line count vs cap', 'check:architecture'],
     ['Shared Rating-Constant Parity', 'client vs server glicko2 export const diff', 'check:architecture'],
+    ['Idempotent ranked_games Writes', 'server-wide POST /rest/v1/ranked_games scan', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -1240,6 +1323,7 @@ function main(): void {
   checkLocCaps();
   checkFloatingImports();
   checkRatingConstantParity();
+  checkIdempotentRankedGamesWrites();
 
   printReport(manifest);
 }

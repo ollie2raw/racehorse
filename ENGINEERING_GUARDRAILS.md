@@ -160,16 +160,39 @@ reachable through `gameOverPersistence.ts`'s retry-on-any-throw wrapper,
 meaning an already-successful insert could be silently re-run by an
 unrelated later failure in the same call.
 
-**Enforcement — NOT YET BUILT.** Both known instances were fixed in place
-(§8.3 Step 3), but nothing stops a *third* direct-insert call site from
-being added tomorrow. No ESLint `no-restricted-imports`/`no-restricted-
-syntax` rule currently forbids `supabaseFetch('/rest/v1/ranked_games', ...)`
-outside `insertRankedGameIdempotent.ts` itself. A real mechanism: an
-ESLint rule (or a `dependency-cruiser` forbidden-path rule, matching the
-pattern already used elsewhere in this repo for the verifier-file import
-boundary, GC-4) that flags any string literal matching
-`/rest/v1/ranked_games` in a `supabaseFetch`/`fetch` call outside
-`insertRankedGameIdempotent.ts`. Not designed or built yet.
+**Enforcement — BUILT:**
+- `client/scripts/checkArchitectureInvariants.ts`'s **INV-17 — Idempotent
+  ranked_games Writes**. A pure helper
+  (`findNonIdempotentRankedGamesWrites`) scans every non-test file under
+  `server/src/` for a `supabaseFetch`/`fetch` call that targets
+  `/rest/v1/ranked_games` **with `method: 'POST'`** — anywhere except
+  `server/src/ranking/insertRankedGameIdempotent.ts` itself. Any hit fails
+  the build and prints the offending call. Comments are stripped before
+  the scan, so a `ranked_games` mention in prose (e.g.
+  `account/routes.ts`'s deletion note) can't trip it.
+- **Runs in CI** via the existing `check:architecture` step in
+  `.github/workflows/ci.yml` (client job — the aggregate verifier already
+  walks `server/src/`, as INV-11/INV-13 do).
+- **Negative test:** `client/scripts/checkArchitectureInvariants.test.ts`
+  reproduces the RK-1 shape (a direct `supabaseFetch<Row[]>('/rest/v1/
+  ranked_games', { method: 'POST', … })` in a lifecycle file) and asserts
+  it's caught; plus the wrapper-is-exempt case, the GET-read-is-fine case,
+  and the comment-only-mention case.
+- Verified against the repo as it stands: **0 flagged files** — the only
+  POST to `ranked_games` today is the wrapper's own two call sites.
+
+**Deviation from the spec above, stated plainly.** This section originally
+called for flagging "any string literal matching `/rest/v1/ranked_games`
+in a `supabaseFetch`/`fetch` call." Taken literally that also flags the
+legitimate **GET** reads (`periodService.ts`, `http/routes/ranking.ts`,
+`privateMatchResult.ts`) and the account-deletion cascade `DELETE` —
+false positives. INV-17 is therefore scoped to **POST** (the insert verb),
+which is the actual RK-1/RK-2 failure mode; reads and the deletion cascade
+are not rating-feeding inserts and stay out of scope. An ESLint
+`no-restricted-syntax` rule was the doc's other suggested shape — a
+structural script was chosen instead because it lands in the same CI
+verifier as Guardrails #1, #2, and #6 and needs no server-side lint step
+(server lint does not run in CI today).
 
 ---
 

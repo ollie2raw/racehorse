@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findDriftedRatingConstants,
+  findNonIdempotentRankedGamesWrites,
   findUnguardedFloatingImports,
   isSuspiciousDailyFritzScoreAccess,
 } from './checkArchitectureInvariants.ts';
@@ -159,5 +160,54 @@ describe('INV-16 shared rating-constant parity', () => {
   it('does not flag a server-only constant (server is allowed a superset)', () => {
     const clientSubset = `export const FRITZ_RD = 50;`;
     expect(findDriftedRatingConstants(clientSubset, serverFixture)).toEqual([]);
+  });
+});
+
+
+/**
+ * INV-17 — Idempotent ranked_games writes only (ENGINEERING_GUARDRAILS.md §3).
+ * RK-1 / RK-2 were direct `supabaseFetch` POSTs to `ranked_games` bypassing
+ * `insertRankedGameIdempotent()`; one was re-runnable by an unrelated later
+ * failure in the same call. This catches a third such call site.
+ */
+describe('INV-17 idempotent ranked_games writes', () => {
+  it('flags a direct supabaseFetch POST to ranked_games outside the wrapper', () => {
+    const violation = `
+      export async function recordDisconnectLoss(input) {
+        const rows = await supabaseFetch<Row[]>('/rest/v1/ranked_games', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify(payload),
+        });
+        return rows?.[0] ?? null;
+      }
+    `;
+    expect(findNonIdempotentRankedGamesWrites('server/src/shared/fritzMatchLifecycle.ts', violation)).toHaveLength(1);
+  });
+
+  it('does not flag the idempotent wrapper itself', () => {
+    const wrapper = `
+      const rows = await supabaseFetch<Row[]>('/rest/v1/ranked_games', { method: 'POST', body });
+    `;
+    expect(
+      findNonIdempotentRankedGamesWrites('server/src/ranking/insertRankedGameIdempotent.ts', wrapper),
+    ).toEqual([]);
+  });
+
+  it('does not flag a GET read of ranked_games', () => {
+    const read = `
+      const rows = await supabaseFetch('/rest/v1/ranked_games?player_id=eq.' + id + '&select=delta', {
+        method: 'GET',
+      });
+    `;
+    expect(findNonIdempotentRankedGamesWrites('server/src/http/routes/ranking.ts', read)).toEqual([]);
+  });
+
+  it('does not flag a ranked_games mention that only appears in a comment', () => {
+    const prose = `
+      // Cascades: friends, ranked_games.player_id, ghost_profiles are handled by FK.
+      await supabaseFetch('/auth/v1/admin/users/' + userId, { method: 'DELETE' });
+    `;
+    expect(findNonIdempotentRankedGamesWrites('server/src/account/routes.ts', prose)).toEqual([]);
   });
 });
