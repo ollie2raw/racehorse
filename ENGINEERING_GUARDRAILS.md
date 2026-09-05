@@ -203,43 +203,103 @@ referencing `profiles(id)` or `auth.users(id)` must specify
 retention/audit requirement, written down, not just an omission that
 happens to compile).
 
-**Closes:** SA-6 (`HARDENING_PLAN.md` §11.1.5 / D-20). `bot_match_pending`
-— an out-of-band table, added directly to prod and only later
-reverse-engineered into a checked-in migration
-(`2026-05-12_bot_match_pending_greenfield_baseline.sql`) — referenced
-`profiles(id)` with no `ON DELETE` action at all (defaulting to
-`RESTRICT`), while every other player-owned table in the schema
-correctly cascades from `auth.users`. Confirmed live, not just read from
-the DDL: `DELETE /api/account` (`account/routes.ts`) 500'd with a raw
-`23503` Postgres error for any user with an unresolved (`resolved: false`)
-pending match row — the normal state for up to 30 minutes after starting
-*any* local bot/Ghost/Fritz match. Fixed same day, out of band from the
-normal audit sequence, given the live/user-facing severity (same urgency
-class as GC-5/RK-0) — `2026-09-05_bot_match_pending_cascade_delete.sql`,
-pg16-verified against a disposable local Postgres instance before being
-handed off for prod application.
+**Closes:** SA-6 (`HARDENING_PLAN.md` §11.1.5 / D-20) and **AD-1**
+(`HARDENING_PLAN.md`, "Finding 2026-09-06" / D-24 — found by this
+guardrail's own first prod run).
 
-**Enforcement — NOT YET BUILT.** SA-6 was caught by a manual, targeted
-account-deletion-flow read during a `HARDENING_PLAN.md` system pass, the
-same way RK-0/RK-3/RT-2 were each caught by a manual pass over their own
-respective areas — nothing automatic flagged `bot_match_pending` as an
-outlier before that. **Proposed mechanism, not yet built** (mirroring
-Guardrail #1's own shape almost exactly): a script analogous to
-`checkPolicyManifest.ts` — call it `checkCascadeDeleteCompleteness.ts` —
-that queries `pg_constraint` (via a new read-only, `service_role`-only RPC
-the same shape as `list_rls_policy_manifest()`, since `pg_constraint` is a
-system catalog PostgREST cannot reach directly) for every foreign-key
-constraint whose target is `public.profiles(id)` or `auth.users(id)`, and
-fails the build if any such constraint's `confdeltype` is anything other
-than `'c'` (cascade) — the exact column this session's own live pg16 test
-of the SA-6 fix confirmed changes from `RESTRICT`'s default to `'c'` once
-a migration adds the cascade action. A constraint that genuinely needs a
-different behavior (e.g. `matches.winner_user_id`'s deliberate
-`on delete set null`, which is not a `user_id`/`player_id`-shaped
-ownership FK in the same sense — it's "this match happened, the player is
-gone," not "this row belongs to the player") would need an explicit
-allow-list entry with a recorded reason, the same honest
-partial-coverage-by-design pattern `policy-manifest.json` already uses
-for unpinned tables. Run on the same CI schedule as the policy-manifest
-job (`.github/workflows/security-posture.yml`, Mondays 09:00 UTC + manual
-dispatch) once built. Not designed further than this, and not built.
+SA-6: `bot_match_pending` — an out-of-band table, added directly to prod
+and only later reverse-engineered into a checked-in migration
+(`2026-05-12_bot_match_pending_greenfield_baseline.sql`) — referenced
+`profiles(id)` with no `ON DELETE` action at all (`confdeltype 'a'` /
+NO ACTION, which blocks the delete exactly as `RESTRICT` would), while
+every other player-owned table cascaded from `auth.users`. Confirmed live,
+not just read from the DDL: `DELETE /api/account` (`account/routes.ts`)
+500'd with a raw `23503` for any user with an unresolved pending match row
+— the normal state for up to 30 minutes after starting *any* local
+bot/Ghost/Fritz match. Fixed same day
+(`2026-09-05_bot_match_pending_cascade_delete.sql`, pg16-verified).
+
+AD-1: the same class, wider blast radius, found the moment this check first
+ran against prod. `ghost_games.user_id` and `ghost_profiles.user_id` were
+NO ACTION, not the `CASCADE` that `supabase/ghost.sql` and
+`account/routes.ts`'s docstring both assert; `matches.winner_user_id` and
+`matches.loser_user_id` were NO ACTION, not the `SET NULL` that
+`supabase/schema.sql`, the same docstring, *and* ratified invariant SA-INV
+(D-20) all describe. The applied DDL had never matched any of them — the
+reference files are aspirational, and SA-6's own fix migration had
+"spot-checked `ghost_profiles` against canonical DDL" against exactly that
+wrong source. Result: `DELETE /api/account` 500'd for any user with a
+Ghost profile, a Ghost game, or a completed multiplayer match — nearly
+every established player. Reproduced live, fixed by
+`2026-09-06_account_deletion_cascade_ghost_matches.sql` (pg16-verified,
+human-applied, then re-verified live: check green, Ghost-cascade and
+`matches`-SET-NULL both confirmed by follow-up query).
+
+**Enforcement — BUILT:**
+- `supabase/migrations/2026-09-05_cascade_delete_manifest_rpc.sql` — a
+  read-only, `service_role`-only RPC (`list_cascade_delete_manifest()`)
+  exposing `pg_constraint` over PostgREST (which cannot otherwise reach
+  system catalogs). Returns one row per FK whose referenced table is
+  `public.profiles` or `auth.users`: owning table, constraint name,
+  constrained column(s), referenced table, referenced column(s), and
+  `confdeltype` (`'c'` = CASCADE, `'r'` = RESTRICT, `'n'` = SET NULL,
+  `'d'` = SET DEFAULT, `'a'` = NO ACTION). Same posture as
+  `list_rls_policy_manifest()`: `SECURITY DEFINER`, pinned `search_path`,
+  EXECUTE revoked from `anon`/`authenticated`/`public`, self-asserting
+  lockdown block. pg16-verified.
+- `server/scripts/checkCascadeDeleteCompleteness.ts` — fetches the live FK
+  rows via that RPC and checks each: `confdeltype` must be `'c'`, unless
+  the `(table, columns)` pair is in `supabase/cascade-delete-allowlist.json`
+  with a recorded reason **and** the allow-listed `confdeltype` matches
+  live exactly (an allow-listed FK whose live action drifts is a
+  `wrong_action` finding — e.g. a `SET NULL` exception silently becoming
+  `RESTRICT`). An allow-list entry that matches no live FK is a
+  `stale_allowlist_entry` finding — a dropped/renamed constraint can't
+  hide a regression behind it. Any finding fails the build
+  (`process.exitCode = 1`). The diff logic (`diffCascadeDeleteManifest`)
+  is a pure function, tested independently of any live database.
+- `.github/workflows/security-posture.yml`'s `cascade-delete-completeness`
+  job runs `npm run check:cascade-delete --prefix server` on the same
+  schedule as the `policy-manifest` job (Mondays 09:00 UTC + manual
+  dispatch).
+- **Negative test, not just "the script runs":**
+  `server/src/checkCascadeDeleteCompletenessDiff.test.ts` reproduces the
+  exact SA-6 shape (a bare ownership FK, `confdeltype 'a'` — verified
+  against pg16 that a clause-less FK yields `'a'`, not `'r'`) and asserts
+  the diff catches it as `missing_cascade`; plus the explicit-`RESTRICT`
+  variant, the allow-listed-exception-doesn't-fail case, the
+  allow-listed-but-drifted case (`SET NULL` → `RESTRICT`), the
+  stale-allow-list-entry case, and column-order insensitivity.
+
+**Allow-list — the 5 recorded exceptions** (`supabase/cascade-delete-allowlist.json`),
+each investigated with SA-6-level rigor (`SET NULL` cannot block a delete,
+and each is a deliberate per-column choice in its own defining migration,
+not an oversight):
+- `matches.winner_user_id` / `matches.loser_user_id` (`SET NULL`) — a
+  completed PvP match is a historical result record shared with the
+  opponent; the opponent's match history survives one player's deletion.
+  The exception this guardrail's write-up always named; ratified SA-INV /
+  D-20.
+- `fritz_challenges.opponent_user_id` (`SET NULL`) — the challenge is
+  owned by `creator_user_id` (which cascades); the opponent is an invited
+  participant, not the owner. Behaviorally verified live 2026-09-05:
+  deleting the opponent leaves the creator's challenge intact with a null
+  opponent.
+- `daily_fritz_events.user_id` / `fritz_challenge_events.user_id`
+  (`SET NULL`) — append-only telemetry logs. Their `attempt_id` /
+  `challenge_id` FKs cascade, so a deleted user's attempt-linked events
+  are removed via that chain; `user_id` SET NULL only anonymizes events
+  with no attempt linkage (pre-attempt funnel telemetry). The same
+  migrations set the sibling FKs to cascade explicitly.
+
+**Known limitation, stated plainly:** the allow-list is `(table, columns)`
+keyed and covers exactly the 5 FKs above; every other FK targeting
+`profiles`/`auth.users` must cascade or the build fails. The check reads
+only FKs that actually target those two tables — `text` columns that used
+to be FKs (`scheduled_tournament_matches`'s player/winner columns, after
+`2026-05-16_zz_tournament_bot_fill.sql`) and orphaned bare-uuid columns
+(`ranked_games.opponent_id`) are outside its reach by design, the same way
+`ranked_games`'s own account-deletion note in `account/routes.ts` already
+documents. Those are a separate, non-blocking concern (an orphaned id that
+no longer resolves to a profile), not the deletion-blocking concern this
+guardrail exists for.
