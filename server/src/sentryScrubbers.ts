@@ -2,11 +2,22 @@ import type { ErrorEvent, EventHint } from '@sentry/node';
 
 const REDACTED = '[Filtered]';
 
+// Exact key match (not substring / not pattern) — kept deliberately narrow so it
+// can't over-redact adjacent fields (e.g. `password_set_at`, `email_confirmed`).
+// snake_case + camelCase variants are both listed where the field has one.
+// CC-5 (HARDENING_PLAN.md §13.3): password / refresh_token / email added as
+// defense-in-depth — no server code path attaches any of them to an error
+// payload today (auth is client-side against Supabase; the server never handles
+// credentials), so this is posture, not a live behaviour change.
 function isSensitiveKey(key: string): boolean {
   return key === 'access_token'
     || key === 'accessToken'
     || key === 'admin_key'
-    || key === 'adminKey';
+    || key === 'adminKey'
+    || key === 'password'
+    || key === 'refresh_token'
+    || key === 'refreshToken'
+    || key === 'email';
 }
 
 /** Recursively redact bearer/session tokens from structured request payloads. */

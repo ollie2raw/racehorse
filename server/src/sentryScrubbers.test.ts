@@ -26,6 +26,27 @@ describe('scrubSensitiveFields', () => {
     expect(scrubbed.access_token).toBe('[Filtered]');
   });
 
+  it('redacts password, refresh_token/refreshToken, and email (CC-5)', () => {
+    const scrubbed = scrubSensitiveFields({
+      username: 'racer',
+      password: 'hunter2',
+      email: 'racer@example.com',
+      refresh_token: 'rt-abc',
+      session: { refreshToken: 'rt-nested', expiresIn: 3600 },
+      email_confirmed: true,
+      password_set_at: '2026-01-01',
+    }) as Record<string, unknown>;
+
+    expect(scrubbed.username).toBe('racer');
+    expect(scrubbed.password).toBe('[Filtered]');
+    expect(scrubbed.email).toBe('[Filtered]');
+    expect(scrubbed.refresh_token).toBe('[Filtered]');
+    expect(scrubbed.session).toEqual({ refreshToken: '[Filtered]', expiresIn: 3600 });
+    // exact-match only — adjacent fields with the token substring are untouched
+    expect(scrubbed.email_confirmed).toBe(true);
+    expect(scrubbed.password_set_at).toBe('2026-01-01');
+  });
+
   it('leaves non-token payloads unchanged', () => {
     const payload = {
       attempt_id: 'attempt-1',
