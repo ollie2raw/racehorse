@@ -1,0 +1,64 @@
+{
+  "$schema": "informal — see server/scripts/checkCascadeDeleteCompleteness.ts",
+  "_read_me": [
+    "Guardrail #6 (ENGINEERING_GUARDRAILS.md): the recorded exceptions to the",
+    "rule that every foreign key targeting public.profiles(id) or auth.users(id)",
+    "must be ON DELETE CASCADE. checkCascadeDeleteCompleteness.ts diffs the live",
+    "database (via list_cascade_delete_manifest(),",
+    "2026-09-05_cascade_delete_manifest_rpc.sql) against this file in CI.",
+    "",
+    "An entry here means: this FK is DELIBERATELY not-cascade, for a real",
+    "retention/audit reason written down below — the row is meant to survive the",
+    "referenced user's account deletion, with that user's id nulled out. This is",
+    "NOT a place to silence a finding you haven't investigated. SA-6",
+    "(bot_match_pending) is exactly what happens when a non-cascade FK is an",
+    "oversight rather than a decision: DELETE /api/account 500s for every",
+    "affected user. Treat any newly-flagged FK with the same rigor — confirm the",
+    "row is genuinely meant to outlive the account before adding it here.",
+    "",
+    "The check is EXACT: `confdeltype` below must match the live action (n = SET",
+    "NULL, r = RESTRICT, a = NO ACTION, d = SET DEFAULT). If matches.winner_user_id",
+    "ever silently changed from SET NULL to RESTRICT, that is drift and the check",
+    "fails, the same way Guardrail #1 fails on a policy whose roles drifted.",
+    "",
+    "Match key is (table, sorted columns) — not the constraint name, which",
+    "Postgres auto-generates and a migration can change without changing intent."
+  ],
+  "exceptions": [
+    {
+      "table": "matches",
+      "columns": ["winner_user_id"],
+      "confdeltype": "n",
+      "reason": "A completed match is a historical result record shared with the opponent, not data owned by either player. Nulling the departed player's id preserves the opponent's match history and the leaderboard/stat rows that reference this match, rather than deleting a game the other player actually played. Ratified as part of System 11's SA-INV set (HARDENING_PLAN.md D-20); this is the exception Guardrail #6's own write-up names.",
+      "_source": "schema.sql:15 (`winner_user_id uuid null references auth.users(id) on delete set null`); HARDENING_PLAN.md §11 / ENGINEERING_GUARDRAILS.md §6."
+    },
+    {
+      "table": "matches",
+      "columns": ["loser_user_id"],
+      "confdeltype": "n",
+      "reason": "Same as matches.winner_user_id — the losing side of a historical match result. The row records that this game happened and its score; the departed player's id is nulled, the record stays.",
+      "_source": "schema.sql:16 (`loser_user_id uuid null references auth.users(id) on delete set null`); HARDENING_PLAN.md §11 / ENGINEERING_GUARDRAILS.md §6."
+    },
+    {
+      "table": "fritz_challenges",
+      "columns": ["opponent_user_id"],
+      "confdeltype": "n",
+      "reason": "A Fritz Challenge is owned by creator_user_id, which DOES cascade (delete the creator and the challenge goes with them). opponent_user_id is the invited participant, not the owner — nulling it on the opponent's account deletion preserves the creator's challenge rather than destroying a record the creator still owns. Same participant-vs-owner split as matches. The opponent's own attempts (fritz_challenge_attempts.user_id) cascade separately. Behaviorally verified live 2026-09-05: created a challenge, deleted the opponent's auth user, the row survived with opponent_user_id null, creator_user_id and status untouched. SET NULL cannot block account deletion.",
+      "_source": "supabase/fritz_challenges.sql:8; behavioral confirmation in HARDENING_PLAN.md's DF-STALE-1-era investigation notes / this session's Guardrail #6 pass."
+    },
+    {
+      "table": "daily_fritz_events",
+      "columns": ["user_id"],
+      "confdeltype": "n",
+      "reason": "Append-only Daily Fritz telemetry/event log. Its attempt_id FK cascades from daily_fritz_attempts (which cascades from auth.users), so a deleted user's attempt-linked events are already removed via that chain. user_id SET NULL only affects events with a null attempt_id — pre-attempt funnel events (mode_impression, start_requested) — which are anonymized rather than deleted, preserving aggregate funnel metrics without PII linkage. The same migration sets attempt_id -> cascade and run_date -> set null on this table, i.e. every column's ON DELETE action was chosen deliberately per column, not defaulted. SET NULL cannot block account deletion. This entry is the written record that the anonymize-not-delete choice is intentional.",
+      "_source": "supabase/migrations/2026-07-31_daily_fritz_events.sql:5 (`user_id uuid null references auth.users(id) on delete set null`, alongside `attempt_id ... on delete cascade` and `run_date ... on delete set null`)."
+    },
+    {
+      "table": "fritz_challenge_events",
+      "columns": ["user_id"],
+      "confdeltype": "n",
+      "reason": "Append-only Fritz Challenge telemetry/event log — same shape and same reasoning as daily_fritz_events.user_id. challenge_id cascades from fritz_challenges and attempt_id cascades from fritz_challenge_attempts, so a deleted user's challenge- and attempt-linked events are removed via those chains; user_id SET NULL only anonymizes events with no attempt linkage. Every FK on this table's defining migration has an explicit, per-column ON DELETE action. SET NULL cannot block account deletion.",
+      "_source": "supabase/migrations/2026-08-02_fritz_challenge_canonical_telemetry.sql:5 (`user_id uuid null references auth.users(id) on delete set null`, alongside `challenge_id`/`attempt_id ... on delete cascade`)."
+    }
+  ]
+}

@@ -17,6 +17,7 @@
     "soak:daily-puzzle-authority": "tsx scripts/dailyPuzzleAuthoritySoak.ts",
     "backtest:human-move-log": "tsx scripts/backtestHumanMoveLogVerification.ts",
     "check:policy-manifest": "tsx scripts/checkPolicyManifest.ts",
+    "check:cascade-delete": "tsx scripts/checkCascadeDeleteCompleteness.ts",
     "chaos:multiplayer-restart": "tsx scripts/multiplayerProcessRestartChaos.ts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
