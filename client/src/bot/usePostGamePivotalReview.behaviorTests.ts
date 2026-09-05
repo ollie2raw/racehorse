@@ -1,6 +1,6 @@
 import { analyzeMoveLogDeferred } from '../analyzer/moveAnalyzer.ts';
 import { selectPivotalTurnsFromAnalysis } from '../training/pivotalReview/pivotalTurnSelector.ts';
-import { usePostGamePivotalReview } from './usePostGamePivotalReview.ts';
+import { usePostGamePivotalReview } from '../modules/review/usePostGamePivotalReview.ts';
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`[usePostGamePivotalReview.behaviorTests] ${msg}`);
