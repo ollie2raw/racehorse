@@ -631,6 +631,209 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
 - [x] **Step 3 — FIX-NOW scope shipped** — F10 `b7979243` · F8 `4254a235` · F18 `459871a5` · F1 `181624b7`. Each green (typecheck + full vitest 217/1502 + lint 401/401 + `check:architecture` 20/20). Not pushed.
 - [ ] REFACTOR / STYLE findings — await per-finding greenlight.
 - [ ] Deferred `daily_puzzle*` client cluster — its own scoped pass.
+- [~] **F6 — guided module test coverage** greenlit 2026-09-05. Scoping pass done (`§CQ9.5`). Tier 1 file 1 landed: `guidedTestFixtures.ts` + `guidedV2State.test.ts` (18 cases — all 6 `resolveNextPlayerAfterV2Event` branch combos, `parseV2EventHands` malformed-key filtering, `buildBotMatchStateFromV2Event` board-null/handOpen · boneyard pad+trim · winnerId-on-gameOver · not-gameOver passthrough · field mapping). Green: `tsc -b`, full vitest 218/1520, lint 401/401, `check:architecture` 20/20 CERTIFIED. Not pushed. Remaining: files 2–8 per `§CQ9.5.6`.
+
+---
+
+## CQ9.5 F6 — `modules/guided/` test coverage: scoping pass (greenlit 2026-09-05)
+
+**Discipline reminder.** This is the scoping step only. No test files are written
+until the human signs off on the file list below. Then: one test file per session,
+verify against the code, no push.
+
+### CQ9.5.1 Exported surface, 18 files — pure vs hook, and existing coverage
+
+`P` = pure function (no React, deterministic given inputs). `H` = React hook
+(state/effects/refs). Existing coverage: the **only** vitest file is
+`useGuidedLessonBoot.test.tsx` (one case — the V2-registry-not-touched-before-preload
+guard). `bot/useAuthoringCapture.behaviorTests.ts` is **not** real coverage — it
+regex-greps the hook source for `export function useAuthoringCapture` and
+re-implements two one-line helpers inline; it exercises none of the module's code.
+
+| File | Export | Kind | Branching? | Covered? |
+|---|---|---|---|---|
+| `guidedV2State.ts` | `resolveNextPlayerAfterV2Event` | P | yes — handOver/gameOver · turnContinues · actor (4 paths) | no |
+| | `parseV2EventHands` | P | light — parse + null-filter | no |
+| | `buildBotMatchStateFromV2Event` | P (dep: `parseLessonV2BoardState`) | yes — board null→handOpen, boneyard sync, winnerId on gameOver | no |
+| `guidedBotMatchHelpers.ts` | `splitCoachingSummaryBlock` | P | yes — regex match / no-match | no |
+| | `buildCoachPreviewText` | P | yes — summary-wins · under/over max · word-boundary cut | no |
+| | `formatLessonTileLabel` | P | trivial (`\|`→`-`, null) | no |
+| | `parseGuidedLessonCoachContent` | P | **yes, heavy** — empty→fallback · first-line-as-title vs not · `play:` reject · 72-char cap · paragraph split · safe fallback | no |
+| | `syncGuidedBoneyardCount` | P | yes — equal / trim / pad | no |
+| | `sameTileKeyMultiset` | P | yes — length · missing key · dup accounting | no |
+| | `guidedWinnerIdFromScores` | P | trivial `>=` | no |
+| | `notifyGuidedV2EventToasts` | P (callback dispatch) | yes — score · draw · pass · actor label | no |
+| | `parseGuidedBoardState` | P (dep: `hydrateBoardForOpenEnds`) | **yes, heavy** — sentinel · array-vs-object tile remap · `hubs`/`hubDoubles` key · branch remap · leftEnd/rightEnd override · try/catch | no |
+| | `getGuidedV1AuthoredStepByIndex` | P | light — find w/ `chosenMove !== null` | no |
+| | `getGuidedV1OrderedAuthoredSteps` | P | light — filter + sort | no |
+| | `getNextGuidedV1StepIndex` | P | light | no |
+| | `restoreGuidedV1NextFullMatchState` | P | yes — scan loop skipping stateless steps | no |
+| | `restoreGuidedV1StepMatchState` | P | yes — null / parse / catch | no |
+| | `parseGuidedTranscriptState` | P | yes — empty / parse / catch | no |
+| `buildGuidedCoachPresentation.ts` | `computeActivePlacementMoves` | P | yes — V2-active filter (tile key, position) vs pass-through | no |
+| | `buildGuidedCoachingFlags` | P | **yes, heavy** — 7 output flags, `showPlayerCoaching` gated by ~8 conditions | no |
+| | `buildLessonCoachVm` | P | **yes, heavy** — 3 mode branches (transcript / frozen V1 / V2), each computes stepIndex / totalSteps / canBestMove | no |
+| | `buildLessonRecommendedTileKey` | P | yes — 4 mode branches incl. frozen `split(':')[0].replace('\|','-')` parse | no |
+| | `buildLessonCoachPanelContent` | P | **yes, heavy** — 6-way return (off-line · fritz · hand-over · player-coaching · fallback · null) | no |
+| | `buildGuidedCoachPresentation` | P | orchestrator — progress label/pct/count math + `showCoachMoreButton` closure | no |
+| `computeGuidedCoachTip.ts` | `computeGuidedCoachTip` | P (deps: `previewPlayMove`, `chooseBotMove` — real botEngine) | **yes, heavy** — guard · opening scoring / opening double / opening null · single play · mirrored bot-choice · `pts===0` scoring override · `isControlChoice` | no |
+| | `computeGuidedScoringTiles` | P (dep: `previewPlayMove`) | yes — map of positive-score tiles | no |
+| `useGuidedLessonBoot.ts` | `useGuidedLessonBoot` | H (useMemo/useState lazy init) | yes — `mode==='bot'` gate · frozenLesson vs authoring fallback · transcript published vs draft · derived mode booleans | **partial** — 1 case (V2 preload guard) |
+| `useGuidedV2CoordinationState.ts` | `useGuidedV2CoordinationState` | H (useState lazy init, ref) | yes — 5-guard chain → `firstEventIndex` vs `0` | no |
+| `useGuidedMatchCaptureRuntime.ts` | `useGuidedMatchCaptureRuntime` | H (1 effect + callbacks) | `isEmergencySaveableGuidedMatchCandidate` predicate (7 ANDed conditions), `canSaveGuidedMatchCandidate`, save-validation branch | no |
+| `guidedPlacementHandlers.ts` | `useGuidedPlacementHandlers` | H (no effects — 6 `useCallback`) | **yes, heavy** — `handleGuidedPlacement` transcript/V2 match logic (clicked-vs-expected key+position), `playLessonBestMove` 3 mode branches; but ~50-key deps object | no |
+| `useGuidedMatchRuntime.ts` | `useGuidedMatchRuntime` | H (useMemo derivations + 4 effects) | derivations are mode-flag one-liners; the `[guided-fallback]` new-hand reset effect has real logic | no |
+| `useGuidedV1ReplayEffect.ts` | `useGuidedV1ReplayEffect` | H (1 timer effect) | yes — missing-events · replyIndex bounds · delay calc · per-event `BotActionResult` shaping | no |
+| `useGuidedV2PlaybackEffects.ts` | `useGuidedV2PlaybackEffects` | H (5 timer effects) | **yes, heavy** — fritz-apply, player-repair-draw, draw/pass advance, note-align log | no |
+| `useAuthoringCapture.ts` | `useAuthoringCapture` | H (8 effects + `useState` + localStorage + dynamic import) | yes — but authoring-only (dev tool); repeated "find last real step" reducer ×3 | no (behaviorTests = source-grep only) |
+| `useGuidedWindowDebugApis.ts` | `useGuidedWindowDebugApis` | H (3 effects, `window.__*` attach/detach) | dev diagnostics; `applyScriptedFritzMove` has logic but authoring-only | no |
+| `useGuidedMatchCommandEffects.ts` | `useGuidedMatchCommandEffects` | H — **pure wiring**, calls 4 sub-hooks, no logic of its own | none | n/a |
+| `useGuidedMatchRuntimeTypes.ts` · `guidedCoachPresentationTypes.ts` · `index.ts` | types / barrel | — | — | n/a |
+
+### CQ9.5.2 Step-1 leaf-by-leaf follow-up (the two flagged files)
+
+Step 1 (`§CQ9.1.2 (1)`) deferred a dead-branch check of the 459-line
+`buildGuidedCoachPresentation.ts` and the 417-line `guidedPlacementHandlers.ts`.
+Reading both leaf-by-leaf for this scoping pass: **no dead exports and no
+unreachable branches found.** Every `buildGuidedCoachPresentation.ts` helper is
+called by `buildGuidedCoachPresentation`, which `useGuidedMatchRuntime` consumes;
+every `guidedPlacementHandlers.ts` branch is reachable from the three lesson modes.
+The overlap Step 1 predicted (dead branch ≈ untested branch) resolves as: the
+branches are *live but untested*. Writing the Tier-1 tests below **is** the
+verification that they behave as the reader expects — that's the value here, not
+dead-code removal.
+
+### CQ9.5.3 Risk × cost ranking
+
+Fixtures are cheap: `modules/match/runtime/botEngine.ts` already exports
+`createBotMatch` / `createFixedBotMatch` / `createFixedBotMatchWithStarter` for
+real `BotMatchState`s, and the `vi.mock('../match/bootstrap/lessonV2LazyRegistry.ts', …)`
+pattern from `useGuidedLessonBoot.test.tsx` already works for stubbing the lazy
+registry. Small hand-rolled `FrozenLesson` / `AuthoredStep` / `GuidedTranscript` /
+`LessonV2Event` literals cover the rest.
+
+**Tier 1 — pure, real branching, low cost, player-facing correctness. Do first.**
+
+1. **`guidedV2State.test.ts`** (new) — ~12–15 cases.
+   `resolveNextPlayerAfterV2Event` (all 4 branch combinations),
+   `parseV2EventHands` (valid keys, malformed keys filtered),
+   `buildBotMatchStateFromV2Event` (board present vs null → `handOpen`; boneyard
+   pad/trim; score + hand mapping; `winnerId` set only on `gameOver`; passthrough
+   of untouched fields). Mock `parseLessonV2BoardState` from the lazy registry.
+
+2. **`guidedBotMatchHelpers.test.ts`** (new) — ~30–35 cases.
+   `splitCoachingSummaryBlock`, `buildCoachPreviewText` (summary-wins · under max ·
+   over max with word-boundary cut · 65%-threshold hard cut), `parseGuidedLessonCoachContent`
+   (empty → fallback title/body · first line as title · `play:`-prefixed first
+   line rejected · >72-char first line · multi-paragraph split · summary from
+   inline block vs explicit arg), `sameTileKeyMultiset` (equal · length mismatch ·
+   content mismatch · duplicate-count accounting), `syncGuidedBoneyardCount`
+   (equal / trim / pad), `formatLessonTileLabel`, `guidedWinnerIdFromScores`,
+   `getGuidedV1AuthoredStepByIndex` / `getGuidedV1OrderedAuthoredSteps` /
+   `getNextGuidedV1StepIndex` / `restoreGuidedV1NextFullMatchState` (small
+   `FrozenLesson` fixture with a stateless step to skip),
+   `restoreGuidedV1StepMatchState` / `parseGuidedTranscriptState` (valid · empty ·
+   garbage → null), `notifyGuidedV2EventToasts` (score / draw / pass callbacks via
+   `vi.fn()` spies, `player` vs `opponentLabel`).
+   **Deliberately excluded from this file:** `parseGuidedBoardState` — see Tier 2.
+
+3. **`buildGuidedCoachPresentation.test.ts`** (new) — ~30–40 cases. Pure, uses
+   `createBotMatch*` fixtures + lesson literals, no mocks.
+   `computeActivePlacementMoves` (V2 filter active — tile-key match, position
+   match, position absent; inactive → pass-through), `buildGuidedCoachingFlags`
+   (the `showPlayerCoaching` true path, then each negating condition flipped one at
+   a time; `showFritzCoachingPanel`; `isGuidedV2FritzResolving`),
+   `buildLessonRecommendedTileKey` (each of the 4 mode branches incl. the frozen
+   `split(':')` parse), `buildLessonCoachVm` (transcript / frozen V1 / V2 — assert
+   `stepIndex`, `totalSteps`, `canBestMove` per branch), `buildLessonCoachPanelContent`
+   (all 6 returns), plus 3–4 end-to-end `buildGuidedCoachPresentation` cases
+   asserting `lessonCoachProgressLabel` / `Pct` / `Count` and `showCoachMoreButton`.
+
+**Tier 2 — pure but needs heavier fixtures / real engine. Do after Tier 1.**
+
+4. **`computeGuidedCoachTip.test.ts`** (new) — ~12–15 cases. Real botEngine
+   (`previewPlayMove`, `chooseBotMove`) — build real `BotMatchState`s via
+   `createFixedBotMatchWithStarter` for: empty-board opening (scoring move ·
+   double fallback · neither → null), single legal play, mid-hand mirrored
+   bot-choice recommendation, `pts===0` scoring-override path, `isControlChoice`
+   detection, plus the guards (not guided / not your turn / no moves → null).
+   `computeGuidedScoringTiles` (map keyed `low-high`, max-of on collision).
+
+5. **`parseGuidedBoardState`** — add to `guidedBotMatchHelpers.test.ts` in a
+   second pass, ~6–8 cases. Needs a realistic `serializeGhostBoardState` output
+   fixture (generate one from a real board rather than hand-write the wire
+   format): `board:empty` / `''` → null, `[low,high]` tuple remap, `hubs` key →
+   `hubDoubles`, branch-tile remap, `leftEnd`/`rightEnd` authoritative override,
+   malformed JSON → null. Split out because the fixture cost is real and the
+   round-trip is easy to get subtly wrong.
+
+**Tier 3 — hooks worth a focused test, lower priority.**
+
+6. **`useGuidedLessonBoot.test.tsx`** (extend existing) — ~8–10 cases.
+   `mode !== 'bot'` disables all flags; `frozenLesson` from `loadFrozenLesson`
+   vs the authoring-session fallback; transcript published vs draft;
+   the `isGuidedTranscriptMode` / `isGuidedFrozenLessonMode` / `lessonLayoutMode`
+   truth table. Mock `learn/guidedAuthoring.ts` loaders.
+
+7. **`useGuidedV2CoordinationState.test.ts`** (new) — ~5 cases, cheap.
+   The lazy-init guard chain: not V2 · no lesson · not preloaded · `canStart`
+   false → `0`; happy path → `initGuidedV2Playback(...).firstEventIndex`. Mock the
+   lazy registry.
+
+8. **`guidedPlacementHandlers`** — decision logic only. **Preferred:** if a small
+   refactor is separately greenlit, extract the "does the clicked move match the
+   expected transcript/V2 event?" comparison (tile key + optional position) into a
+   pure `matchesExpectedGuidedMove(...)` helper in `guidedBotMatchHelpers.ts` and
+   unit-test that (~8 cases). **Otherwise:** `renderHook` with a hand-rolled deps
+   object of `vi.fn()`s, asserting `handleGuidedPlacement` returns
+   `'handled'`/`'continue'` and calls the right setters for the transcript-match,
+   V2-match, and off-line paths (~6–8 cases). Flagged higher-cost because of the
+   deps surface.
+
+### CQ9.5.4 Effect-heavy hooks deliberately skipped for now (with reasons)
+
+- **`useGuidedV2PlaybackEffects.ts`** — 5 interacting `setTimeout` effects driving
+  `setMatch` + sound. A correct fake-timer harness (registry mock, ~25-key arg
+  object, ordering between the fritz-apply / repair-draw / advance effects) is a
+  multi-session build, and the transforms these effects delegate to
+  (`buildBotMatchStateFromV2Event`, `resolveNextPlayerAfterV2Event`,
+  `sameTileKeyMultiset`, `syncGuidedBoneyardCount`) are **fully covered by Tier 1**.
+  Revisit only if a V2 playback bug surfaces.
+- **`useGuidedV1ReplayEffect.ts`** — one timer effect, same harness cost profile,
+  lower traffic (V1 explicit-transcript mode). Candidate for a thin fake-timer
+  test later; not now.
+- **`useGuidedMatchRuntime.ts`** — composition hook; the `useMemo` derivations are
+  mode-flag one-liners already exercised through the `buildGuidedCoachPresentation`
+  tests. Its one effect with real logic (`[guided-fallback]` new-hand step reset)
+  could get a targeted test later; a full harness is not worth it.
+- **`useAuthoringCapture.ts`** — dev-only lesson-authoring tool, not a player
+  path; 8 effects + localStorage + dynamic `import()`. Cheap win available:
+  extract the thrice-repeated "walk backwards to the last step with
+  `chosenMove !== null`" reducer into a pure helper and test that. Skip the hook
+  itself.
+- **`useGuidedMatchCaptureRuntime.ts`** — `isEmergencySaveableGuidedMatchCandidate`
+  is already a pure inline predicate; lift it (or just its condition) to
+  module scope and give it a ~4-case test. Skip the effect + async callbacks.
+- **`useGuidedWindowDebugApis.ts`** — dev diagnostics; F4 (STYLE) will likely
+  gate/remove its `console.log`s anyway. No test.
+- **`useGuidedMatchCommandEffects.ts`** — pure wiring, nothing to assert.
+
+### CQ9.5.5 Fixture helper
+
+All Tier-1/2 files need the same handful of literals. First test file to land
+creates `modules/guided/__fixtures__/guidedFixtures.ts` (or co-located
+`guidedTestFixtures.ts`) with: a `LessonV2Event` builder, a minimal
+`FrozenLesson` + `AuthoredStep` builder, a `GuidedTranscript` + `GuidedTurn`
+builder. `BotMatchState` comes from `botEngine`'s existing `createBotMatch*`
+exports — do **not** add another.
+
+### CQ9.5.6 Proposed landing order (one file per session, verify + no push)
+
+CQ9.5.5 fixtures (folded into file 1) → 1 `guidedV2State` → 2 `guidedBotMatchHelpers`
+→ 3 `buildGuidedCoachPresentation` → 4 `computeGuidedCoachTip` → 5 `parseGuidedBoardState`
+addendum → 6 `useGuidedLessonBoot` extension → 7 `useGuidedV2CoordinationState` →
+8 `guidedPlacementHandlers` (pending the extract-helper decision). Tiers 1–2
+(files 1–5) are the high-value core; Tier 3 is opt-in continuation.
 
 ---
 
