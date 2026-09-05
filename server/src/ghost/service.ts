@@ -1,4 +1,5 @@
 import { childLogger } from '../logger';
+import { supabaseFetch } from '../supabaseUtils';
 import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
@@ -117,42 +118,6 @@ export type GhostProfileSummary = {
   styleProfile: GhostStyleProfile | null;
 };
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-
-function requireEnv(name: string, value: string | undefined): string {
-  if (!value) throw new Error(`${name} is required.`);
-  return value;
-}
-
-function getConfig() {
-  return {
-    supabaseUrl: requireEnv('SUPABASE_URL', SUPABASE_URL),
-    serviceKey: requireEnv('SUPABASE_SERVICE_KEY', SUPABASE_SERVICE_KEY),
-  };
-}
-
-async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const { supabaseUrl, serviceKey } = getConfig();
-  const url = new URL(path, supabaseUrl);
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Supabase request failed: ${response.status} ${await response.text()}`);
-  }
-
-  if (response.status === 204) return [] as T;
-  return (await response.json()) as T;
-}
 
 function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
   if (!Array.isArray(raw)) return [];
