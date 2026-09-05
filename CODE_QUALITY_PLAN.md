@@ -631,7 +631,18 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
 - [x] **Step 3 — FIX-NOW scope shipped** — F10 `b7979243` · F8 `4254a235` · F18 `459871a5` · F1 `181624b7`. Each green (typecheck + full vitest 217/1502 + lint 401/401 + `check:architecture` 20/20). Not pushed.
 - [ ] REFACTOR / STYLE findings — await per-finding greenlight.
 - [ ] Deferred `daily_puzzle*` client cluster — its own scoped pass.
-- [~] **F6 — guided module test coverage** greenlit 2026-09-05. Scoping pass done (`§CQ9.5`). Tier 1 file 1 landed: `guidedTestFixtures.ts` + `guidedV2State.test.ts` (18 cases — all 6 `resolveNextPlayerAfterV2Event` branch combos, `parseV2EventHands` malformed-key filtering, `buildBotMatchStateFromV2Event` board-null/handOpen · boneyard pad+trim · winnerId-on-gameOver · not-gameOver passthrough · field mapping). Green: `tsc -b`, full vitest 218/1520, lint 401/401, `check:architecture` 20/20 CERTIFIED. Not pushed. Remaining: files 2–8 per `§CQ9.5.6`.
+- [~] **F6 — guided module test coverage** greenlit 2026-09-05. Scoping pass done (`§CQ9.5`). Tier 1 file 1 landed: `guidedTestFixtures.ts` + `guidedV2State.test.ts` (18 cases — all 6 `resolveNextPlayerAfterV2Event` branch combos, `parseV2EventHands` malformed-key filtering, `buildBotMatchStateFromV2Event` board-null/handOpen · boneyard pad+trim · winnerId-on-gameOver · not-gameOver passthrough · field mapping). Green: `tsc -b`, full vitest 218/1520, lint 401/401, `check:architecture` 20/20 CERTIFIED. Not pushed.
+  File 2 landed: `guidedBotMatchHelpers.test.ts` — **50 cases** (est. ~30–35), all 14
+  non-`parseGuidedBoardState` exports. Surfaced a **latent bug** in
+  `splitCoachingSummaryBlock`: `COACHING_SUMMARY_BLOCK_RE` has one capture group, so
+  `match[2]` is always `undefined` and `body` is dropped to `''` whenever a
+  `@summary … ---` block matches — i.e. an inline-summary lesson loses its entire
+  coaching body to the generic "Study the board…" fallback. **Not currently
+  reachable** (no authored content in `src/` uses `@summary`; the field-based
+  `coachingSummary` is the live path), so recorded here, not escalated. Tests pin
+  the actual behaviour with `NOTE(latent)` comments. Green: `tsc -b`, full vitest
+  219/1570, lint 401/401, `check:architecture` CERTIFIED. Not pushed. Remaining:
+  files 3–8 per `§CQ9.5.6`.
 
 ---
 
