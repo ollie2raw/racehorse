@@ -21,6 +21,7 @@ import {
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
+import { recordOperationalFailure } from '../operationalTelemetry';
 import { isAnyTournamentRoom } from '../multiplayer/roomKind';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
@@ -459,6 +460,21 @@ export function createGameOverPersistScheduler(io: Server) {
         }
       }
 
+      // Observability (surfaced while investigating ranked-MP dormancy —
+      // HARDENING_PLAN.md §8.3): every branch below only log.warns, so a
+      // game-over that permanently fails to persist — a ranked rating never
+      // recorded, or a tournament bracket never advanced — leaves no alertable
+      // trace, only an mp_authority_events row nobody thinks to query. Fire
+      // ONCE, only after the retry ceiling is exhausted: transient failures
+      // that recover on retry are normal and must not page.
+      recordOperationalFailure('game_over_persist_exhausted', lastError, {
+        roomCode: room.code,
+        sourceMatchId,
+        matchId: room.matchId,
+        scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
+        sequence: room.state?.sequence ?? null,
+        attempts: GAME_OVER_PERSIST_MAX_ATTEMPTS,
+      });
       markGameOverPersistFailed(room);
       emitGameOverPersistFailed(io, room, sourceMatchId, lastError);
       return 'failed';

@@ -20,6 +20,7 @@ const {
   logWarnMock,
   verifyPlayerMoveLogMock,
   emitMpAuthorityFunnelMock,
+  recordOperationalFailureMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -36,6 +37,7 @@ const {
   logWarnMock: vi.fn(),
   verifyPlayerMoveLogMock: vi.fn(),
   emitMpAuthorityFunnelMock: vi.fn(),
+  recordOperationalFailureMock: vi.fn(),
 }));
 
 vi.mock('../ghost/verifier', () => ({
@@ -91,6 +93,10 @@ vi.mock('../logger', () => ({
 
 vi.mock('../multiplayer/mpAuthorityTelemetry', () => ({
   emitMpAuthorityFunnel: (...args: unknown[]) => emitMpAuthorityFunnelMock(...args),
+}));
+
+vi.mock('../operationalTelemetry', () => ({
+  recordOperationalFailure: (...args: unknown[]) => recordOperationalFailureMock(...args),
 }));
 
 import { createGameOverPersistScheduler } from './gameOverPersistence';
@@ -205,6 +211,19 @@ describe('createGameOverPersistScheduler', () => {
         extra: expect.objectContaining({ matchId: input.room.matchId }),
       }),
     );
+    // Observability: Sentry fires exactly once, only after the retry ceiling,
+    // with enough context to debug from the event alone.
+    expect(recordOperationalFailureMock).toHaveBeenCalledTimes(1);
+    expect(recordOperationalFailureMock).toHaveBeenCalledWith(
+      'game_over_persist_exhausted',
+      expect.objectContaining({ message: 'db_down' }),
+      expect.objectContaining({
+        roomCode: 'ROOM1',
+        sourceMatchId: 'match-1',
+        matchId: 'match-1',
+        attempts: 4,
+      }),
+    );
     vi.useRealTimers();
   });
 
@@ -225,6 +244,8 @@ describe('createGameOverPersistScheduler', () => {
       'match:result_persist_failed',
       expect.anything(),
     );
+    // A transient failure that recovers on retry must NOT page.
+    expect(recordOperationalFailureMock).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
