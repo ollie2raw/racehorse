@@ -758,7 +758,7 @@ history — none get deleted; listed for completeness.
      concept, but doubles as a de-facto *"is the generator still producing
      content"* signal — which, given the pipeline is KEEP, is not obviously
      worthless.
-   - **DEAD — ✅ SHIPPED 2026-09-05 (commit `<this>`).** The retired ladder's
+   - **DEAD — ✅ SHIPPED 2026-09-05 (commit `c1bc286e`).** The retired ladder's
      *attempt-tracking* server surface in `dailyPuzzleStore.ts` — a distinct
      concern from the KEEP generation pipeline. Deleted: the greenlit 7
      (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
