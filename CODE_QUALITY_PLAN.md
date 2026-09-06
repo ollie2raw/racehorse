@@ -758,21 +758,44 @@ history — none get deleted; listed for completeness.
      concept, but doubles as a de-facto *"is the generator still producing
      content"* signal — which, given the pipeline is KEEP, is not obviously
      worthless.
-   - **STILL CLEANLY FIX NOW DEAD — unaffected by this correction:** the
-     0-live-caller `dailyPuzzleStore.ts` **attempt/gameplay** exports —
-     `persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
+   - **DEAD — ✅ SHIPPED 2026-09-05 (commit `<this>`).** The retired ladder's
+     *attempt-tracking* server surface in `dailyPuzzleStore.ts` — a distinct
+     concern from the KEEP generation pipeline. Deleted: the greenlit 7
+     (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
      `createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
      `buildDailyPuzzleLeaderboardForDate`, `getDailyPuzzleLadderStreak`,
-     `listDailyPuzzleSlotsForAttempt`. These are the retired ladder's
-     *attempt-tracking* server surface (imported into `index.ts`, never called) —
-     a **distinct concern** from the generation pipeline. Nothing in this
-     reconciliation touches their dead status. Candidate for its own small
-     deletion pass. (`dailyPuzzle.ts` STAYS regardless — Puzzle Rush uses its
-     `DailyPuzzleSlot` type / `DAILY_PUZZLE_SLOT_INDICES` /
-     `computeBestPossiblePuzzleScore` re-export path.)
+     `listDailyPuzzleSlotsForAttempt`) + their now-orphaned chain
+     (`listDailyPuzzleSlotsForDateAndVersion`, `isRequestPuzzleGenerationEnabled`,
+     `listDailyPuzzleAttemptsForDate`, `listAllDailyPuzzleAttemptsForDate`,
+     `fetchAttemptsForDate`, `LEADERBOARD_ATTEMPT_LIMIT`, and — surfaced by
+     removing `createDailyPuzzleAttempt`, its sole caller —
+     `getDailyPuzzleAttempt` + `getDailyPuzzleAttemptById` +
+     `listDailyPuzzleSlotResults`) + orphaned imports. `dailyPuzzleStore.ts`:
+     353 → ~100 LOC; its only live exports now are `listDailyPuzzleSlotsForDate`
+     (health route) and `getUsernameForUserId` (`puzzleRush.ts` route).
+     `index.ts` `dailyPuzzleStore` import trimmed 11 names → 1.
+     Tests: `dailyPuzzleStore.test.ts` + `dailyPuzzleStore.leaderboardCap.test.ts`
+     deleted (covered only removed fns); `leaderboardCircuitBreaker.test.ts` — the
+     2 `buildDailyPuzzleLeaderboardForDate` cases removed, its 3 **live**
+     `buildDailyFritzLeaderboard` cases kept (whole-file coverage checked, the
+     `dailyPuzzleGeneration.test.ts` lesson); `dailyPuzzleGeneration.test.ts` —
+     the request-time-gen opt-out `it` removed (tested removed code).
+     `puzzleRush/config.ts` + `puzzleRushStore.ts` "Mirrors LEADERBOARD_ATTEMPT_LIMIT"
+     comments reworded (the referenced symbol is gone). `dailyPuzzle.ts` STAYS
+     (Puzzle Rush's `DailyPuzzleSlot` type / `DAILY_PUZZLE_SLOT_INDICES` /
+     `computeBestPossiblePuzzleScore` re-export).
+     Verified: server build clean, server vitest **216/1280** (was 218/1288),
+     client `tsc -b` / lint / `check:architecture` 20/20 CERTIFIED / vitest 1553.
+   - **STILL DEAD, NOT this pass (out of scope — already 0-caller before, not
+     orphaned by the 7):** `handleDailyPuzzleLadderCronWarm` (`express.RequestHandler`,
+     **0 route registrations**) + `isAuthorizedDailyPuzzleCronRequest` (its sole
+     caller). The retired ladder's cron-warm HTTP endpoint, never mounted. Left in
+     `dailyPuzzleStore.ts` — its own tiny follow-up, or fold into the borderline
+     health-check pass.
 
-   Net: the item-2 loop is **not** deletable as "dead weight." Only the ladder
-   *attempt-tracking* store exports are unambiguous dead code.
+   Net: the item-2 loop is **not** deletable as "dead weight." The ladder
+   *attempt-tracking* store surface **is now removed**; only the unmounted
+   cron-warm handler + the borderline health check remain.
 3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
    write paths into `daily_puzzle_scores` / `daily_puzzle_completions` (via the
    removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**

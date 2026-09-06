@@ -257,19 +257,7 @@ import {
   upsertDailyFritzAttempt,
   upsertDailyFritzRun,
 } from './http/stores/dailyFritzStore';
-import {
-  buildDailyPuzzleLeaderboardForDate,
-  createDailyPuzzleAttempt,
-  createDailyPuzzleSlotResult,
-  getDailyPuzzleAttempt,
-  getDailyPuzzleAttemptById,
-  getDailyPuzzleLadderStreak,
-  getUsernameForUserId,
-  listDailyPuzzleSlotsForAttempt,
-  listDailyPuzzleSlotsForDate,
-  listDailyPuzzleSlotsForDateWithAutoSeed,
-  persistDailyPuzzleAttempt,
-} from './http/stores/dailyPuzzleStore';
+import { listDailyPuzzleSlotsForDate } from './http/stores/dailyPuzzleStore';
 import { registerStatsRoutes } from './http/routes/stats';
 import { registerRankingRoutes } from './http/routes/ranking';
 import { registerGhostRoutes } from './http/routes/ghost';

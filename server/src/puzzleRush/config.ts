@@ -112,7 +112,7 @@ export type PuzzleRushConfig = {
   };
 
   leaderboard: {
-    /** Mirrors LEADERBOARD_ATTEMPT_LIMIT in dailyPuzzleStore. */
+    /** Bounded scan cap (was mirrored from the retired daily-puzzle ladder's 200-row leaderboard limit). */
     scanLimit: number;
     /** Rows returned to a caller. */
     pageSize: number;

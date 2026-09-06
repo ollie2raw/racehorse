@@ -24,7 +24,7 @@ const RUN_SELECT =
 const RUN_PUZZLE_SELECT =
   'id,run_id,puzzle_id,ordinal,raw_score,awarded_points,client_raw_score,solved,perfect,moves_used,bonus_seconds,submitted_line,client_reported_at,graded_at,grading_error,stage_reached_key';
 
-/** Mirrors LEADERBOARD_ATTEMPT_LIMIT in dailyPuzzleStore: bounded scan, not a full table read. */
+/** Bounded scan, not a full table read (cap style carried over from the retired daily-puzzle ladder leaderboard). */
 export const RUSH_LEADERBOARD_RUN_LIMIT = PUZZLE_RUSH_CONFIG.leaderboard.scanLimit;
 
 /**

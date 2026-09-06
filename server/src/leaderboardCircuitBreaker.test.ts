@@ -1,10 +1,12 @@
 /**
- * Phase 3 item 3.2 (integration): circuit breaker trips through real leaderboard
- * call sites, not just the raw supabaseFetch primitive.
+ * Phase 3 item 3.2 (integration): circuit breaker trips through a real leaderboard
+ * call site, not just the raw supabaseFetch primitive.
  *
- * Forces 3 network failures through buildDailyPuzzleLeaderboardForDate and
- * buildDailyFritzLeaderboard, then confirms the 4th call is short-circuited
- * without hitting fetch at all.
+ * Forces 3 network failures through buildDailyFritzLeaderboard, then confirms the
+ * 4th call is short-circuited without hitting fetch at all.
+ *
+ * (The parallel buildDailyPuzzleLeaderboardForDate cases went with the retired
+ * daily-puzzle ladder's attempt-tracking surface — §CQ9.1.6.4.)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -26,7 +28,6 @@ vi.mock('@sentry/node', () => ({
 }));
 
 import { resetCircuitBreaker, isCircuitOpen } from './supabaseUtils';
-import { buildDailyPuzzleLeaderboardForDate } from './http/stores/dailyPuzzleStore';
 import { buildDailyFritzLeaderboard } from './http/stores/dailyFritzStore';
 
 function make503(): Response {
@@ -43,28 +44,6 @@ afterEach(() => {
 });
 
 describe('leaderboard circuit breaker integration (item 3.2)', () => {
-  it('trips the breaker after 3 failures through buildDailyPuzzleLeaderboardForDate', async () => {
-    mockFetch.mockResolvedValue(make503());
-
-    for (let i = 0; i < 3; i++) {
-      await expect(buildDailyPuzzleLeaderboardForDate('2026-08-12')).rejects.toThrow('Supabase request failed');
-    }
-
-    expect(isCircuitOpen()).toBe(true);
-  });
-
-  it('short-circuits 4th puzzle leaderboard call without hitting fetch', async () => {
-    mockFetch.mockResolvedValue(make503());
-
-    for (let i = 0; i < 3; i++) {
-      await expect(buildDailyPuzzleLeaderboardForDate('2026-08-12')).rejects.toThrow();
-    }
-
-    const callsBefore = mockFetch.mock.calls.length;
-    await expect(buildDailyPuzzleLeaderboardForDate('2026-08-12')).rejects.toThrow('circuit breaker is open');
-    expect(mockFetch.mock.calls.length).toBe(callsBefore);
-  });
-
   it('trips the breaker after 3 failures through buildDailyFritzLeaderboard', async () => {
     mockFetch.mockResolvedValue(make503());
 

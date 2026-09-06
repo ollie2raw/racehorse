@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import {
   findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleLadderReady,
@@ -252,10 +250,8 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
     ])).toBe(false);
   });
 
-  it('keeps request-time generation opt-out via ENABLE_REQUEST_PUZZLE_GENERATION=false', () => {
-    const source = readFileSync(resolve(__dirname, 'http/stores/dailyPuzzleStore.ts'), 'utf8');
-    expect(source).toContain('isRequestPuzzleGenerationEnabled');
-    expect(source).toContain('ENABLE_REQUEST_PUZZLE_GENERATION');
-    expect(source).toContain('request-time generation skipped');
-  });
+  // (The request-time ladder-generation opt-out — isRequestPuzzleGenerationEnabled
+  // + listDailyPuzzleSlotsForDateWithAutoSeed — was removed with the retired
+  // ladder's attempt-tracking surface, §CQ9.1.6.4. The generator itself
+  // (createHighScorePuzzle / choosePuzzleForSlot, tested above) stays.)
 });
