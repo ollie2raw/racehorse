@@ -17,7 +17,6 @@ const {
   completeGhostGameMock,
   processRealtimeMultiplayerGameMock,
   recordMatchEndMock,
-  isRankedGameSourceColumnsEnabledMock,
   logWarnMock,
   verifyPlayerMoveLogMock,
   emitMpAuthorityFunnelMock,
@@ -34,7 +33,6 @@ const {
   completeGhostGameMock: vi.fn(),
   processRealtimeMultiplayerGameMock: vi.fn(),
   recordMatchEndMock: vi.fn(),
-  isRankedGameSourceColumnsEnabledMock: vi.fn(),
   logWarnMock: vi.fn(),
   verifyPlayerMoveLogMock: vi.fn(),
   emitMpAuthorityFunnelMock: vi.fn(),
@@ -85,10 +83,6 @@ vi.mock('../ranking/periodService', () => ({
 
 vi.mock('../matchmaking/persistence', () => ({
   recordMatchEnd: (...args: unknown[]) => recordMatchEndMock(...args),
-}));
-
-vi.mock('../ranking/rankedGamePayload', () => ({
-  isRankedGameSourceColumnsEnabled: () => isRankedGameSourceColumnsEnabledMock(),
 }));
 
 vi.mock('../logger', () => ({
@@ -171,7 +165,6 @@ describe('createGameOverPersistScheduler', () => {
     resolvePendingFritzMatchMock.mockResolvedValue(undefined);
     appendMatchMock.mockResolvedValue(undefined);
     writeMatchActivityMock.mockResolvedValue(undefined);
-    isRankedGameSourceColumnsEnabledMock.mockReturnValue(true);
     supabaseFetchMock.mockResolvedValue([]);
     insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
     verifyPlayerMoveLogMock.mockReturnValue({ ok: true });

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { insertRankedGameIdempotent } from './insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 
@@ -7,8 +7,6 @@ vi.mock('../supabaseUtils', () => ({
 }));
 
 const mockedSupabaseFetch = vi.mocked(supabaseFetch);
-
-const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
 
 const baseInput = {
   playerId: '11111111-1111-4111-8111-111111111111',
@@ -41,17 +39,8 @@ beforeEach(() => {
   mockedSupabaseFetch.mockReset();
 });
 
-afterEach(() => {
-  if (OLD_ENV === undefined) {
-    delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-  } else {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
-  }
-});
-
 describe('insertRankedGameIdempotent', () => {
-  it('posts with on_conflict and ignore-duplicates when source columns are enabled', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
+  it('posts with on_conflict and ignore-duplicates when the input carries a sourceMatchId', async () => {
     mockedSupabaseFetch.mockResolvedValue([insertedRow]);
 
     const result = await insertRankedGameIdempotent(baseInput);
@@ -72,7 +61,6 @@ describe('insertRankedGameIdempotent', () => {
   });
 
   it('returns isNew false when ignore-duplicates yields no row (duplicate source)', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
     mockedSupabaseFetch.mockResolvedValue([]);
 
     const result = await insertRankedGameIdempotent(baseInput);
@@ -80,30 +68,27 @@ describe('insertRankedGameIdempotent', () => {
     expect(result).toEqual({ isNew: false, game: null });
   });
 
-  it('RK-8: unset env var defaults to the idempotent on_conflict path', async () => {
-    delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+  it('RK-8: the deleted RANKED_GAMES_SOURCE_COLUMNS_ENABLED env var has no effect — still takes the on_conflict path', async () => {
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
     mockedSupabaseFetch.mockResolvedValue([insertedRow]);
+    try {
+      await insertRankedGameIdempotent(baseInput);
 
-    await insertRankedGameIdempotent(baseInput);
-
-    const [path, init] = mockedSupabaseFetch.mock.calls[0]!;
-    expect(path).toBe('/rest/v1/ranked_games?on_conflict=player_id,source_match_id');
-    expect(init?.headers).toMatchObject({
-      Prefer: 'return=representation,resolution=ignore-duplicates',
-    });
+      const [path, init] = mockedSupabaseFetch.mock.calls[0]!;
+      // The old escape hatch is gone: =false must NOT drop back to a bare POST.
+      expect(path).toBe('/rest/v1/ranked_games?on_conflict=player_id,source_match_id');
+      expect(init?.headers).toMatchObject({
+        Prefer: 'return=representation,resolution=ignore-duplicates',
+      });
+    } finally {
+      delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+    }
   });
 
-  it('RK-8: explicit =false still uses the legacy plain insert (escape hatch intact)', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
-    mockedSupabaseFetch.mockResolvedValue([
-      {
-        ...insertedRow,
-        source_type: undefined,
-        source_match_id: undefined,
-      },
-    ]);
+  it('falls back to a plain POST when the input carries no sourceMatchId (completeGhostGame null-matchId path)', async () => {
+    mockedSupabaseFetch.mockResolvedValue([{ ...insertedRow, source_type: null, source_match_id: null }]);
 
-    const result = await insertRankedGameIdempotent(baseInput);
+    const result = await insertRankedGameIdempotent({ ...baseInput, source: null });
 
     expect(result.isNew).toBe(true);
     const [path, init] = mockedSupabaseFetch.mock.calls[0]!;
@@ -112,11 +97,10 @@ describe('insertRankedGameIdempotent', () => {
     expect(JSON.parse(String(init?.body))).not.toHaveProperty('source_match_id');
   });
 
-  it('returns isNew false when a legacy plain insert (=false) returns no row', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
+  it('returns isNew false when a source-less plain insert returns no row', async () => {
     mockedSupabaseFetch.mockResolvedValue([]);
 
-    const result = await insertRankedGameIdempotent(baseInput);
+    const result = await insertRankedGameIdempotent({ ...baseInput, source: null });
 
     expect(result).toEqual({ isNew: false, game: null });
   });

@@ -223,57 +223,43 @@ describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HAR
   });
 
   it('routes the Fritz ranked_games insert through insertRankedGameIdempotent (on_conflict + ignore-duplicates), not a bare POST', async () => {
-    const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
-    try {
-      stub([{ id: 'rg-1', player_id: USER_ID, source_match_id: 'match-1' }]);
+    stub([{ id: 'rg-1', player_id: USER_ID, source_match_id: 'match-1' }]);
 
-      const result = await completeGhostGame({
-        userId: USER_ID,
-        opponentUserId: FRITZ_ELITE_ID,
-        finalScore: 60,
-        opponentScore: 10,
-        moveLog: [],
-        matchId: 'match-1',
-        applyGlicko: true,
-      });
+    const result = await completeGhostGame({
+      userId: USER_ID,
+      opponentUserId: FRITZ_ELITE_ID,
+      finalScore: 60,
+      opponentScore: 10,
+      moveLog: [],
+      matchId: 'match-1',
+      applyGlicko: true,
+    });
 
-      expect(rankedGamesCalls).toHaveLength(1);
-      expect(rankedGamesCalls[0]!.path).toContain('on_conflict=player_id,source_match_id');
-      expect(rankedGamesCalls[0]!.body).toMatchObject({ source_match_id: 'match-1' });
-      // A genuinely new row → the rating actually applied.
-      expect(result.glickoDelta).not.toBe(0);
-    } finally {
-      if (OLD_ENV === undefined) delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-      else process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
-    }
+    expect(rankedGamesCalls).toHaveLength(1);
+    expect(rankedGamesCalls[0]!.path).toContain('on_conflict=player_id,source_match_id');
+    expect(rankedGamesCalls[0]!.body).toMatchObject({ source_match_id: 'match-1' });
+    // A genuinely new row → the rating actually applied.
+    expect(result.glickoDelta).not.toBe(0);
   });
 
   it('a duplicate matchId (ignore-duplicates yields no row) is a no-op — no second rating application', async () => {
-    const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
-    try {
-      // PostgREST's ignore-duplicates response for a conflicting row: [].
-      stub([]);
+    // PostgREST's ignore-duplicates response for a conflicting row: [].
+    stub([]);
 
-      const result = await completeGhostGame({
-        userId: USER_ID,
-        opponentUserId: FRITZ_ELITE_ID,
-        finalScore: 60,
-        opponentScore: 10,
-        moveLog: [],
-        matchId: 'match-1',
-        applyGlicko: true,
-      });
+    const result = await completeGhostGame({
+      userId: USER_ID,
+      opponentUserId: FRITZ_ELITE_ID,
+      finalScore: 60,
+      opponentScore: 10,
+      moveLog: [],
+      matchId: 'match-1',
+      applyGlicko: true,
+    });
 
-      expect(rankedGamesCalls).toHaveLength(1);
-      // No second write anywhere, and the returned delta reflects "no change
-      // applied" rather than a second computed rating.
-      expect(result.glickoDelta).toBe(0);
-      expect(result.glickoRating).toBe(1500);
-    } finally {
-      if (OLD_ENV === undefined) delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-      else process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
-    }
+    expect(rankedGamesCalls).toHaveLength(1);
+    // No second write anywhere, and the returned delta reflects "no change
+    // applied" rather than a second computed rating.
+    expect(result.glickoDelta).toBe(0);
+    expect(result.glickoRating).toBe(1500);
   });
 });

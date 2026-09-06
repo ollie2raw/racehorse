@@ -8,7 +8,6 @@ import { writeMatchActivity } from '../social/activityWriter';
 import { supabaseFetch } from '../supabaseUtils';
 import { FRITZ_SYSTEM_ID } from '../ranking/glicko2';
 import { processRealtimeMultiplayerGame, type Profile } from '../ranking/periodService';
-import { isRankedGameSourceColumnsEnabled } from '../ranking/rankedGamePayload';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { recordMatchEnd } from '../matchmaking/persistence';
 import {
@@ -223,12 +222,10 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     string,
     Awaited<ReturnType<typeof insertRankedGameIdempotent>>
   >();
-  const rankedSourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
   let realtimeRankingApplied = false;
   log.info({
     roomCode: room.code,
     sourceMatchId,
-    rankedSourceColumnsEnabled,
   }, 'game-over persist ranked insert');
 
   const isHumanVsHuman = Boolean(a.userId && b.userId && !fritzActivityCtx);

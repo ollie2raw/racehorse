@@ -4,7 +4,6 @@ import {
   buildPrivateMatchResult,
   type RankedGameRatingRow,
 } from '../../multiplayer/buildPrivateMatchResult';
-import { isRankedGameSourceColumnsEnabled } from '../../ranking/rankedGamePayload';
 import { emitMpAuthorityFunnel } from '../../multiplayer/mpAuthorityTelemetry';
 import { supabaseFetch } from '../../supabaseUtils';
 
@@ -25,7 +24,6 @@ export async function queryRankedGameForMatch(
   playerId: string,
   sourceMatchId: string,
 ): Promise<RankedGameRatingRow | null> {
-  if (!isRankedGameSourceColumnsEnabled()) return null;
   try {
     const rows = await supabaseFetch<RankedGameRatingRow[]>(
       `/rest/v1/ranked_games?select=player_id,rating_before,rating_after,delta,source_match_id&player_id=eq.${encodeURIComponent(playerId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId)}&limit=1`,

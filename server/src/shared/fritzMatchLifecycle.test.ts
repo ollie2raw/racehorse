@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   supabaseFetchMock,
@@ -30,19 +30,9 @@ vi.mock('../logger', () => ({
 
 import { recordPendingFritzDisconnectLoss } from './fritzMatchLifecycle';
 
-const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-
 describe('recordPendingFritzDisconnectLoss', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    if (OLD_ENV === undefined) {
-      delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-    } else {
-      process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
-    }
   });
 
   it('writes Glicko using the real server-derived scores when verifiedScores is present — never a synthesized 0/60', async () => {
@@ -84,7 +74,6 @@ describe('recordPendingFritzDisconnectLoss', () => {
   // --- RK-1 (HARDENING_PLAN §8.3): idempotent insert ---------------------
 
   it('routes the ranked_games insert through the idempotent on_conflict path using an explicit verifiedMatchId, and applies the rating on a genuinely new row', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
     supabaseFetchMock.mockImplementation(async (path: string) => {
       if (path.includes('/rest/v1/profiles')) return [{ id: 'u1', glicko_rating: 1500, glicko_rd: 200 }];
       if (path.includes('/rest/v1/ranked_games')) return [{ id: 'row-1', source_match_id: 'bot-match-pending:pending-1:forfeit' }];
@@ -113,7 +102,6 @@ describe('recordPendingFritzDisconnectLoss', () => {
   });
 
   it('a duplicate sourceMatchId (same forfeit event recorded twice) is a no-op — no second rating application', async () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
     supabaseFetchMock.mockImplementation(async (path: string) => {
       if (path.includes('/rest/v1/profiles')) return [{ id: 'u1', glicko_rating: 1500, glicko_rd: 200 }];
       // ignore-duplicates on a conflicting source_match_id → PostgREST

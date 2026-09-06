@@ -2,7 +2,6 @@ import { supabaseFetch } from '../supabaseUtils';
 import type { MatchOutcome } from './glicko2';
 import {
   buildRankedGameInsertPayload,
-  isRankedGameSourceColumnsEnabled,
   type RankedGameInsertInput,
 } from './rankedGamePayload';
 
@@ -24,14 +23,21 @@ export type InsertRankedGameResult =
   | { isNew: true; game: InsertedRankedGameRow }
   | { isNew: false; game: null };
 
+/**
+ * True when the input carries a per-match idempotency key. The only path that
+ * legitimately has none is completeGhostGame() called with a null matchId — see
+ * buildRankedGameInsertPayload. RK-8: this used to also require a runtime flag;
+ * that flag was deleted 2026-09-06 (HARDENING_PLAN.md §8.3).
+ */
 function hasIdempotentSource(input: RankedGameInsertInput): boolean {
-  const sourceMatchId = input.source?.sourceMatchId?.trim();
-  return isRankedGameSourceColumnsEnabled() && Boolean(sourceMatchId);
+  return Boolean(input.source?.sourceMatchId?.trim());
 }
 
 /**
- * Inserts a ranked_games row idempotently when source columns are enabled.
+ * Inserts a ranked_games row idempotently when the input carries a sourceMatchId.
  * ON CONFLICT (player_id, source_match_id) DO NOTHING — empty response means duplicate.
+ * A source-less insert (no sourceMatchId) falls back to a plain POST; the unique
+ * index treats NULL source ids as non-conflicting, so on_conflict would be a no-op.
  */
 export async function insertRankedGameIdempotent(
   input: RankedGameInsertInput,

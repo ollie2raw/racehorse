@@ -1,15 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { buildRankedGameInsertPayload, isRankedGameSourceColumnsEnabled } from './rankedGamePayload';
-
-const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-
-afterEach(() => {
-  if (OLD_ENV === undefined) {
-    delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-  } else {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = OLD_ENV;
-  }
-});
+import { describe, expect, it } from 'vitest';
+import { buildRankedGameInsertPayload } from './rankedGamePayload';
 
 describe('buildRankedGameInsertPayload', () => {
   const baseInput = {
@@ -27,21 +17,28 @@ describe('buildRankedGameInsertPayload', () => {
     },
   };
 
-  it('RK-8: defaults to ON when the env var is unset — payload carries the source columns', () => {
-    delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
-
-    expect(isRankedGameSourceColumnsEnabled()).toBe(true);
+  it('RK-8: always writes the source columns (the write is unconditional as of 2026-09-06)', () => {
     expect(buildRankedGameInsertPayload(baseInput)).toMatchObject({
       source_type: 'live_room',
       source_match_id: 'room-match-1',
     });
   });
 
-  it('RK-8: explicit =false still forces the legacy plain payload shape (escape hatch intact)', () => {
+  it('RK-8: the deleted RANKED_GAMES_SOURCE_COLUMNS_ENABLED env var has no effect — regression guard against reintroduction', () => {
     process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
+    try {
+      // The old escape hatch is gone: =false must NOT drop the source columns.
+      expect(buildRankedGameInsertPayload(baseInput)).toMatchObject({
+        source_type: 'live_room',
+        source_match_id: 'room-match-1',
+      });
+    } finally {
+      delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+    }
+  });
 
-    expect(isRankedGameSourceColumnsEnabled()).toBe(false);
-    expect(buildRankedGameInsertPayload(baseInput)).toEqual({
+  it('omits the source columns only when the input carries no sourceMatchId (completeGhostGame null-matchId path)', () => {
+    expect(buildRankedGameInsertPayload({ ...baseInput, source: null })).toEqual({
       player_id: '11111111-1111-4111-8111-111111111111',
       opponent_id: '22222222-2222-4222-8222-222222222222',
       player_score: 61,
@@ -53,9 +50,7 @@ describe('buildRankedGameInsertPayload', () => {
     });
   });
 
-  it('includes source_type and source_match_id when the source-column flag is on', () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
-
+  it('includes source_type and source_match_id', () => {
     expect(buildRankedGameInsertPayload(baseInput)).toEqual({
       player_id: '11111111-1111-4111-8111-111111111111',
       opponent_id: '22222222-2222-4222-8222-222222222222',
@@ -71,8 +66,6 @@ describe('buildRankedGameInsertPayload', () => {
   });
 
   it('preserves rating_after null for pending single-player rating rows', () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
-
     expect(
       buildRankedGameInsertPayload({
         ...baseInput,
@@ -91,9 +84,7 @@ describe('buildRankedGameInsertPayload', () => {
     });
   });
 
-  it('does not alter score or rating fields when source metadata is enabled', () => {
-    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
-
+  it('does not alter score or rating fields when source metadata is written', () => {
     const payload = buildRankedGameInsertPayload({
       ...baseInput,
       playerScore: 0,

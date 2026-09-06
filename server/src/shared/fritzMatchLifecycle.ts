@@ -13,10 +13,7 @@ import {
   FRITZ_STANDARD_ID,
 } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
-import {
-  isRankedGameSourceColumnsEnabled,
-  type RankedGameSource,
-} from '../ranking/rankedGamePayload';
+import type { RankedGameSource } from '../ranking/rankedGamePayload';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 import type { ProfileRow } from '../supabaseTypes';
@@ -180,7 +177,6 @@ export async function resolveLocalFritzAbandonRankedSource(
   userId: string,
   source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null },
 ): Promise<RankedGameSource | null> {
-  if (!isRankedGameSourceColumnsEnabled()) return null;
   const explicitVerifiedMatchId = source?.verifiedMatchId?.trim();
   if (explicitVerifiedMatchId) {
     return { sourceType: 'local_fritz_abandon', sourceMatchId: explicitVerifiedMatchId };

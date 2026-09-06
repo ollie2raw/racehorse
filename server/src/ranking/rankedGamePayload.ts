@@ -1,5 +1,4 @@
 import type { MatchOutcome } from './glicko2';
-import { getEnvBool } from '../config';
 
 export type RankedGameSourceType =
   | 'live_room'
@@ -48,29 +47,6 @@ export interface RankedGameInsertPayload {
 }
 
 /**
- * Manifest: docs/server-feature-flags.md (rollout / migration-gate).
- *
- * DEFAULT INTENTIONALLY INVERTED FROM CONVENTION (true, not the usual false).
- * RK-8 (HARDENING_PLAN.md §8.3): this flag also gates the `on_conflict` dedup
- * guard in insertRankedGameIdempotent() AND the source_match_id write the DB
- * unique index needs — so a server that comes up with the env var unset would
- * lose ranked-insert idempotency (Guardrail #3 / INV-17) silently. The
- * (player_id, source_match_id) migration is confirmed long-applied and ON in
- * prod (2026-06-17/18; live service-role query 2026-09-05: the 118 most recent
- * ranked_games rows all carry a non-NULL source_match_id, 0 duplicate keys), so
- * defaulting true is strictly safer with no change to the current correct
- * state. Explicit `=false` / `=0` still forces the legacy plain-insert path —
- * the escape hatch stays; only its default is fixed.
- *
- * remove-when: OVERDUE — clean end state is to make the source-column write +
- * the `on_conflict` unconditional and delete this flag entirely. Still open at
- * §8.3's priority.
- */
-export function isRankedGameSourceColumnsEnabled(): boolean {
-  return getEnvBool('RANKED_GAMES_SOURCE_COLUMNS_ENABLED', true);
-}
-
-/**
  * The `outcome` column ships behind a flag so a server running ahead of the
  * migration does not fail every ranked insert on an unknown column. The inline
  * rating path passes the outcome in memory regardless, so the forfeit sign is
@@ -79,7 +55,7 @@ export function isRankedGameSourceColumnsEnabled(): boolean {
  *
  * Manifest: docs/server-feature-flags.md (rollout / migration-gate).
  *
- * NOT default-flipped like isRankedGameSourceColumnsEnabled() above. The
+ * NOT made unconditional like the source-column write (RK-8, 2026-09-06). The
  * `outcome` column exists in prod (live query 2026-09-05: `select=outcome`
  * returns 200), but its migration is recent (2026-08-28, ~1wk) — not the
  * 11-week track record the source-columns flag has — and 0 prod rows carry a
@@ -115,8 +91,15 @@ export function buildRankedGameInsertPayload(input: RankedGameInsertInput): Rank
     payload.outcome = input.outcome;
   }
 
+  // RK-8 (HARDENING_PLAN.md §8.3): the source-column write is unconditional as
+  // of 2026-09-06 — the (player_id, source_match_id) migration is long-applied
+  // in prod and every ranked_games row since ~2026-08-10 carries a non-NULL
+  // source_match_id. The `input.source && sourceMatchId` guard remains only for
+  // the genuine no-match-identity path (completeGhostGame with a null matchId);
+  // such a row goes in with source_match_id NULL, which the full unique index
+  // treats as non-conflicting by design.
   const sourceMatchId = input.source?.sourceMatchId?.trim();
-  if (isRankedGameSourceColumnsEnabled() && input.source && sourceMatchId) {
+  if (input.source && sourceMatchId) {
     payload.source_type = input.source.sourceType;
     payload.source_match_id = sourceMatchId;
   }

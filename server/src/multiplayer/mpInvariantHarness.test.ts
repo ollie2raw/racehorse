@@ -66,7 +66,6 @@ const completeGhostGameMock = vi.fn();
 vi.mock('../ghost/service', () => ({ completeGhostGame: (...a: unknown[]) => completeGhostGameMock(...a) }));
 vi.mock('../ghost/verifier', () => ({ verifyPlayerMoveLog: vi.fn(() => ({ ok: true })) }));
 vi.mock('../ranking/periodService', () => ({ processRealtimeMultiplayerGame: vi.fn(async () => ({ playerA: { delta: 1 }, playerB: { delta: -1 } })) }));
-vi.mock('../ranking/rankedGamePayload', () => ({ isRankedGameSourceColumnsEnabled: () => true }));
 vi.mock('../ranking/insertRankedGameIdempotent', () => ({
   insertRankedGameIdempotent: vi.fn(async () => ({ isNew: false, game: null })),
 }));
