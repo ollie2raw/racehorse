@@ -250,7 +250,9 @@ export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatI
     if (room.disconnectExpiries) {
       room.disconnectExpiries[playerSeatId] = 0;
     }
-  } catch {}
+  } catch {
+    // room already gone — the grace clear above is the only thing that mattered
+  }
   if (hadGrace) {
     io.to(roomCode).emit('player:reconnected', { playerId: playerSeatId });
   }
