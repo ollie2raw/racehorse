@@ -1122,7 +1122,7 @@ async function actUnlocked(
   assertRoomNotAbandonedOrForfeitBlocked(room);
   if (!room.state) throw new Error('Game not started.');
 
-  let state = room.state;
+  const state = room.state;
 
   if (state.handOver && !state.gameOver && action.type !== 'DRAW' && action.type !== 'PASS') {
     throw new Error('Hand is over. Waiting for next hand to start.');

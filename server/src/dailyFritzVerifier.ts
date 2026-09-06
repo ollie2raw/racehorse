@@ -224,7 +224,7 @@ function applyOmittedOfficialFritzTurn(
   policyVersion: FritzPolicyVersion,
   tier: DailyFritzTier,
 ): GameState {
-  let current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
+  const current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
   const decision = chooseOfficialFritzDecisionForVersion({
     version: policyVersion,
     state: current,
