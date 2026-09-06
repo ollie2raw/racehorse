@@ -257,7 +257,7 @@ import {
   upsertDailyFritzAttempt,
   upsertDailyFritzRun,
 } from './http/stores/dailyFritzStore';
-import { listDailyPuzzleSlotsForDate } from './http/stores/dailyPuzzleStore';
+import { getFurthestPublishedDailyPuzzleDate } from './http/stores/dailyPuzzleStore';
 import { registerStatsRoutes } from './http/routes/stats';
 import { registerRankingRoutes } from './http/routes/ranking';
 import { registerGhostRoutes } from './http/routes/ghost';
@@ -864,7 +864,7 @@ registerHealthRoutes({
   io,
   getRoomRuntimeStats,
   getPacificDateKey,
-  listDailyPuzzleSlotsForDate,
+  getFurthestPublishedDailyPuzzleDate,
   getRoomMatchLogsPersistenceAvailability,
   probeRoomMatchLogsTable,
   isRoomMatchLogsPersistenceAvailable,

@@ -8,10 +8,9 @@ import { isGracefulShutdownInProgress } from '../gracefulShutdown';
 import { supabaseFetch } from '../../supabaseUtils';
 import { resolveReleaseVersion } from './releaseVersion';
 import {
-  assessDailyPuzzleLadderReadiness,
-  isPastLadderReadinessGracePt,
-} from '../../dailyPuzzleLadderReadiness';
-import { DAILY_PUZZLE_SLOT_INDICES, type DailyPuzzleSlot } from '../../dailyPuzzle';
+  assessDailyPuzzleGenerationHealth,
+  type DailyPuzzleGenerationHealthSnapshot,
+} from './dailyPuzzleGenerationHealth';
 import { gameCoreReadyReport } from '../gameCoreConsistency';
 
 const READY_REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'] as const;
@@ -68,7 +67,7 @@ export type HealthRouteDeps = {
   io: Server;
   getRoomRuntimeStats: () => { roomCount: number; gamesInProgress: number };
   getPacificDateKey: (date?: Date) => string;
-  listDailyPuzzleSlotsForDate: (runDate: string) => Promise<DailyPuzzleSlot[]>;
+  getFurthestPublishedDailyPuzzleDate: () => Promise<string | null>;
   getRoomMatchLogsPersistenceAvailability: () => boolean | null;
   probeRoomMatchLogsTable: () => Promise<boolean>;
   isRoomMatchLogsPersistenceAvailable: () => boolean;
@@ -85,7 +84,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
     io,
     getRoomRuntimeStats,
     getPacificDateKey,
-    listDailyPuzzleSlotsForDate,
+    getFurthestPublishedDailyPuzzleDate,
     getRoomMatchLogsPersistenceAvailability,
     probeRoomMatchLogsTable,
     isRoomMatchLogsPersistenceAvailable,
@@ -181,37 +180,41 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         : { ok: false, available: false, enabled: isDailyFritzTransactionalAuthorityEnabled() };
 
     const todayPt = getPacificDateKey();
-    let dailyPuzzleLadder: ReturnType<typeof assessDailyPuzzleLadderReadiness> & { ok: boolean };
+    let dailyPuzzleGeneration: DailyPuzzleGenerationHealthSnapshot;
     try {
-      const slots = requiredEnvOk ? await listDailyPuzzleSlotsForDate(todayPt) : [];
-      const readiness = assessDailyPuzzleLadderReadiness(todayPt, slots);
-      dailyPuzzleLadder = {
-        ...readiness,
-        ok: readiness.ready || !readiness.shouldAlert,
-      };
-      if (readiness.shouldAlert) {
+      const furthestPublishedDate = requiredEnvOk ? await getFurthestPublishedDailyPuzzleDate() : null;
+      dailyPuzzleGeneration = assessDailyPuzzleGenerationHealth(todayPt, furthestPublishedDate);
+      if (dailyPuzzleGeneration.shouldAlert && requiredEnvOk) {
         log.error({
-          runDate: todayPt,
-          publishedSlotCount: readiness.publishedSlotCount,
-          missingSlotIndexes: readiness.missingSlotIndexes,
-          alertReason: readiness.alertReason,
-        }, 'daily-puzzle-ladder readiness alert');
+          todayPt,
+          furthestPublishedDate: dailyPuzzleGeneration.furthestPublishedDate,
+          requiredThroughDate: dailyPuzzleGeneration.requiredThroughDate,
+          lookaheadDays: dailyPuzzleGeneration.lookaheadDays,
+        }, 'daily-puzzle generation pipeline is behind');
+        // The trace (§CQ9.1.6.4) found the old log.error-only alert was effectively
+        // unwatched — nothing scrapes /ready logs. Surface it where it will be seen.
+        Sentry.captureException(
+          new Error(dailyPuzzleGeneration.alertReason ?? 'daily-puzzle generation pipeline is behind'),
+        );
       }
     } catch (error) {
-      dailyPuzzleLadder = {
-        runDate: todayPt,
-        ready: false,
-        publishedSlotCount: 0,
-        missingSlotIndexes: [...DAILY_PUZZLE_SLOT_INDICES],
-        legacySinglePuzzleDay: true,
-        shouldAlert: isPastLadderReadinessGracePt(todayPt),
-        alertReason: error instanceof Error ? error.message : String(error),
+      dailyPuzzleGeneration = {
         ok: false,
+        furthestPublishedDate: null,
+        requiredThroughDate: '',
+        lookaheadDays: null,
+        shouldAlert: true,
+        alertReason: error instanceof Error ? error.message : String(error),
       };
+      log.error(getProcessErrorLogPayload(error), 'daily-puzzle generation health probe failed');
     }
 
     const shuttingDown = isGracefulShutdownInProgress();
-    const ok = !shuttingDown && requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok
+    // `dailyPuzzleGeneration` is intentionally NOT in this gate (§CQ9.1.6.4): it
+    // tracks a background content pipeline for a mode that reads a separate table
+    // (`puzzle_pool`), not this server's ability to serve traffic. A stalled cron
+    // must not 503 /ready. It stays in `checks` below for visibility + alerting.
+    const ok = !shuttingDown && requiredEnvOk && supabase.ok
       && dailyFritzEvents.ok && dailyFritzAuthority.ok;
 
     res.status(ok ? 200 : 503).json({
@@ -225,7 +228,7 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
         roomMatchLogs,
         dailyFritzEvents,
         dailyFritzAuthority,
-        dailyPuzzleLadder,
+        dailyPuzzleGeneration,
       },
       gameCore: gameCoreReadyReport(),
     });

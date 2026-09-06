@@ -1,17 +1,16 @@
-import {
-  normalizeDailyPuzzleSlot,
-  sortDailyPuzzleSlots,
-  type DailyPuzzleSlot,
-  type DailyPuzzleSlotRow,
-} from '../../dailyPuzzle';
 import { supabaseFetch } from '../../supabaseUtils';
 
-export async function listDailyPuzzleSlotsForDate(runDate: string): Promise<DailyPuzzleSlot[]> {
-  const rows = await supabaseFetch<DailyPuzzleSlotRow[]>(
-    `/rest/v1/daily_puzzles?select=id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published&published=eq.true&puzzle_date=eq.${encodeURIComponent(runDate)}&order=set_version.asc,slot_index.asc,id.asc`,
+/**
+ * The furthest-out `puzzle_date` that has a published `daily_puzzles` row, or
+ * null if the table has no published rows at all. Used by
+ * `/ready.checks.dailyPuzzleGeneration` to detect a stalled generation pipeline.
+ */
+export async function getFurthestPublishedDailyPuzzleDate(): Promise<string | null> {
+  const rows = await supabaseFetch<Array<{ puzzle_date: string }>>(
+    `/rest/v1/daily_puzzles?select=puzzle_date&published=eq.true&order=puzzle_date.desc&limit=1`,
     { method: 'GET' },
   );
-  return sortDailyPuzzleSlots(rows.map(normalizeDailyPuzzleSlot));
+  return rows[0]?.puzzle_date ?? null;
 }
 
 export async function getUsernameForUserId(userId: string): Promise<string | null> {
