@@ -567,7 +567,7 @@ file).
 **8 files stay** (the shared-live set above); deleting the 25 does not touch them
 (closure proved no live→dead edge).
 
-**SHIPPED 2026-09-05 (commit `25442b2a`).** Corrections found during the deletion
+**SHIPPED 2026-09-05 (commit `de14ade6`).** Corrections found during the deletion
 (the map was close but not exact — verification bar caught the rest):
 - **14 dead `.test.*`, not 17** — the map's "17 co-located tests" included
   `DailyPuzzleSoloHandDock.test.tsx`, `dailyPuzzlePlayMoveCompletion.test.ts`,
