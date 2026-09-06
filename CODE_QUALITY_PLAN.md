@@ -535,7 +535,7 @@ names collide hard. Every `puzzle`-containing symbol/dir/table, sorted:
 | **DEFINITELY LIVE — Puzzle Rush** | `client/src/puzzleRush/**` · `server/src/puzzleRush/**` · `server/src/http/routes/puzzleRush.ts` + `puzzleRushStore.ts` (registered `index.ts:592`) · `journey/*Puzzle*` (Learn journey — separate feature) · `stats/components/PuzzlePerformanceSection.tsx` · table **`puzzle_pool`** (Puzzle Rush's puzzle source) · tables `puzzle_rush_*` |
 | **DEFINITELY LIVE — shared code reused by Puzzle Rush** (per the "touches both → live" rule) | `client/src/dailyPuzzle/`: `DailyPuzzleSoloHandDock.tsx`, `useResponsiveHandTileSize.ts`, `dailyPuzzlePlayMoveCompletion.ts`, `dailyPuzzleScreenTypes.ts` (transitive), `dailyPuzzleLadderIcons.tsx`, `date.ts`, `types.ts`, `api.ts` — **8 of 33**, imported by `puzzleRush/PuzzleRush{PlayView,Screen,HubView}.tsx` / `home/*` / `learn/engine/rulesAdapter.ts` · `server/src/dailyPuzzle.ts` (`DailyPuzzleSlot` type, `DAILY_PUZZLE_SLOT_INDICES`, `buildDailyPuzzleLeaderboard`) — used by `puzzleRush/grading.ts`, `puzzleRush/leaderboard.ts`, health route · `server/src/dailyPuzzleSubmissionValidation.ts` (`validateDailyPuzzleSubmission`) — **used by `puzzleRush/grading.ts:169`** · `server/src/http/stores/dailyPuzzleStore.ts` (`getUsernameForUserId` → `puzzleRush.ts` route; archive-read fns → stats route) · `server/src/generatePuzzles.ts` (`computeBestPossiblePuzzleScore` → `dailyPuzzle.ts` → Puzzle Rush) |
 | **LIVE (read-only archive)** — retired writes, historical SELECT only | tables `daily_puzzle_attempts`, `daily_puzzle_slot_results`, `daily_puzzle_completions` — read by `server/src/social/socialProfile.ts` (profile "puzzles solved" count) + `server/src/http/stores/homeCompletionDates.ts` (streak-calendar frozen history), both service-role, via `listCompleted{DailyPuzzleLadder,LegacyDailyPuzzle}DatesForUser` passed to `registerStatsRoutes`. Client write policies + grants revoked 2026-09-02 (`2026-09-02_daily_puzzle_ladder_decommission.sql`, DF-CAND-1). |
-| **AMBIGUOUS — needs a trace before anything** | **table `daily_puzzles`** + the `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderPublish.ts` + `dailyPuzzleLadderReadiness.ts` + `seedPuzzlePool.ts` — see 6.3, they are entangled with the live Puzzle Rush pipeline and cannot be assumed dead |
+| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderReadiness.ts` + the health-route check = **borderline, own scoped look**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports = **FIX-NOW dead** (own small pass). |
 
 Guard test worth keeping: `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` —
 source-level asserts the Home "Daily Puzzle" card routes to `puzzleRush`, not the
@@ -629,19 +629,23 @@ still receive traffic. This is **not** a client-only cleanup.
   every `/healthz`/`/ready` hit; `log.error`s a "daily-puzzle-ladder readiness
   alert" if slots aren't published 15min past PT midnight), (b)
   `listDailyPuzzleSlotsForDateWithAutoSeed`.
-- **The pipeline link to Puzzle Rush — TRACED 2026-09-05, see `§CQ9.1.6.4` item
-  2 for the full write-up + live numbers.** `seedPuzzlePool.ts` backfills
-  `puzzle_pool` *from* `daily_puzzles`; it is a manual script, run **once at the
-  2026-08-20 launch and never since** (live: `puzzle_pool` = 2284 rows, tiers
-  identical to the launch-day reference). Puzzle Rush reads `puzzle_pool` only —
-  **no `daily_puzzles` read, no fallback to it** — and the pool recycles rather
-  than draining (27 runs ever; 82% of the pool never served). The `gen-puzzles.yml`
-  cron's fresh `daily_puzzles` rows reach **exactly one live thing**: the
-  health-route ladder-readiness alert about the retired feature. **Verdict:
-  circular dead weight, gradeable FIX NOW for the cron + ladder-server files +
-  the health check — conditional on confirming no intent to ever refresh
-  `puzzle_pool` (it is 91% `master_chain`).** `daily_puzzles` the table +
-  `seedPuzzlePool.ts` + `generatePuzzles.ts` stay.
+- **The pipeline link to Puzzle Rush — TRACED 2026-09-05, then CORRECTED
+  2026-09-05. See `§CQ9.1.6.4` item 2 for the full write-up + live numbers + the
+  correction note.** `seedPuzzlePool.ts` backfills `puzzle_pool` *from*
+  `daily_puzzles`; it is a manual script, run **once at the 2026-08-20 launch and
+  never since** (live: `puzzle_pool` = 2284 rows, frozen at the launch-day
+  reference). Puzzle Rush reads `puzzle_pool` only — **no `daily_puzzles` read,
+  no fallback** — and the pool recycles rather than draining (27 runs ever).
+  **The prior "circular dead weight, gradeable FIX NOW for the whole loop"
+  verdict was WRONG** — it missed `docs/ops/puzzle-rush-deploy.md`'s "The ladder
+  generator must keep running" section, which documents `seedDailyPuzzleLadder.ts`
+  as the deliberately-kept **only source of new Puzzle Rush content** + the
+  tooling for the thin-tier backlog. **Corrected:** the cron +
+  `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts`
+  + `daily_puzzles` table + `seedPuzzlePool.ts` **KEEP (load-bearing)**; the
+  health-route ladder-readiness check is **borderline** (own scoped look); only
+  the 0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports are cleanly
+  FIX-NOW dead.
 - **HTTP routes: none.** No `registerDailyPuzzleRoutes` in `index.ts`; the
   `/api/daily-puzzle/*` routes are already gone (migration comment confirmed
   against `index.ts`).
@@ -706,57 +710,69 @@ history — none get deleted; listed for completeness.
      take ~150 days to give every pool puzzle a single play; the pool never
      empties.
 
-   **Verdict.** Puzzle Rush is **fully self-sufficient off the frozen 2026-08-20
-   `puzzle_pool` snapshot.** Fresh `daily_puzzles` rows are **not reaching it and
-   have not since launch.** The `gen-puzzles.yml` cron's output feeds **exactly
-   one live consumer**: the health-route `dailyPuzzleLadder` readiness block
-   (`registerHealthRoutes.ts:184-210` + `dailyPuzzleLadderReadiness.ts`), which
-   reads `daily_puzzles` for *today* on every `/healthz` and `log.error`s
-   `'daily-puzzle-ladder readiness alert'` if the retired ladder's 3 slots aren't
-   published. **Circular dead weight:** the cron exists to keep a monitor quiet,
-   and the monitor watches a feature no player can reach.
+   **Verdict (superseded — see the 2026-09-05 correction below).** Puzzle Rush is
+   fully self-sufficient off the frozen 2026-08-20 `puzzle_pool` snapshot; fresh
+   `daily_puzzles` rows have not reached it since launch. The original write-up
+   then called the whole `gen-puzzles.yml` → `daily_puzzles` → health-check loop
+   *"circular dead weight, gradeable FIX NOW,"* conditional on "no intent to
+   refresh the pool." **That was wrong.**
 
-   **Gradeable FIX NOW (delete) — `HARDENING_PLAN.md`'s process, its own
-   greenlight, NOT this pass:**
-   - the health-route `dailyPuzzleLadder` block + `dailyPuzzleLadderReadiness.ts`
-   - `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `checkDailyPuzzleLadder.ts`
-   - `dailyPuzzleLadderPublish.ts` (sole remaining consumer once the above go is
-     `scrubPartialPublishedLadderForDate` inside the **already-dead**
-     `dailyPuzzleStore.ts:57` `listDailyPuzzleSlotsForDateWithAutoSeed` — 0 callers)
-   - dead `dailyPuzzleStore.ts` exports (0 live callers, imported into `index.ts`
-     but never called): `listDailyPuzzleSlotsForDateWithAutoSeed`,
+   ---
+
+   **⚠ CORRECTION — 2026-09-05 (reconciliation pass).** The prior verdict was
+   wrong because it **did not read `docs/ops/puzzle-rush-deploy.md` to the end.**
+   That doc has two sections the trace missed:
+
+   - **"## The ladder generator must keep running"** — states outright that
+     `seedDailyPuzzleLadder.ts` **is not retired even though the ladder UI is**,
+     and is *"still the only source of new puzzle content"* for Puzzle Rush
+     (`seedDailyPuzzleLadder.ts → daily_puzzles → seedPuzzlePool.ts → puzzle_pool
+     → Rush runs`). Turning it off *"degrades quietly — no new content, staler
+     rotation, and the `play_count`-based variety spread flattens as every puzzle
+     gets played."*
+   - **"## Backlog: the two thin tiers cap the mode at three stages"** — an
+     explicit (unscheduled) plan to unlock more run stages by generating more
+     `quick_line` / `tactical_setup` content **through this exact pipeline**
+     (`seedDailyPuzzleLadder.ts` has a `manual` budget built for it) and re-running
+     `seedPuzzlePool.ts`.
+
+   Separately confirmed in the same pass: the `quick_line`/`tactical_setup`/
+   `master_chain` labels are **internal `puzzle_pool.tier` values**, not
+   player-facing — `config.ts` maps them to the live 3-stage **Warm-Up / Building
+   / Master** run (`baseSeconds: 120` = 2:00, `puzzlesPerRun: 15`). The human's
+   "2 min / 15 puzzles / beginner-medium-hard, no chain tiers" description **is**
+   today's live state; there is no unbuilt redesign and no v2 path.
+
+   **Corrected picture:**
+
+   - **KEEP — load-bearing (documented):** `gen-puzzles.yml` cron,
+     `seedDailyPuzzleLadder.ts`, `generatePuzzles.ts`, `dailyPuzzleLadderPublish.ts`,
+     the **`daily_puzzles` table**, `seedPuzzlePool.ts`. This is the *only* new-
+     content source for a mode with a known thin-tier constraint, and the tooling
+     the deploy doc's backlog item depends on. Underused since launch (pool frozen
+     at 2284 rows) and degrading quietly — **operator-accepted, not dead.**
+   - **BORDERLINE — not graded here, needs its own scoped look (not a
+     default-delete):** the health-route `dailyPuzzleLadder` readiness alert
+     (`registerHealthRoutes.ts:184-210`) + `dailyPuzzleLadderReadiness.ts` +
+     `checkDailyPuzzleLadder.ts`. Nominally monitors the retired ladder *UI*
+     concept, but doubles as a de-facto *"is the generator still producing
+     content"* signal — which, given the pipeline is KEEP, is not obviously
+     worthless.
+   - **STILL CLEANLY FIX NOW DEAD — unaffected by this correction:** the
+     0-live-caller `dailyPuzzleStore.ts` **attempt/gameplay** exports —
+     `persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
+     `createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
      `buildDailyPuzzleLeaderboardForDate`, `getDailyPuzzleLadderStreak`,
-     `listDailyPuzzleSlotsForAttempt`, `persistDailyPuzzleAttempt`,
-     `createDailyPuzzleAttempt`, `createDailyPuzzleSlotResult`
-   - dead `dailyPuzzle.ts` ladder exports once readiness/publish go
-     (`findReadyDailyPuzzleLadderSlots`, `isDailyPuzzleLadderReady`,
-     `buildDailyPuzzleLeaderboard`, `calculateDailyPuzzleAwardedPoints`,
-     `normalizeDailyPuzzleAttempt/Slot/SlotResult`, `sortDailyPuzzleSlots`, …).
-     **`dailyPuzzle.ts` STAYS** — Puzzle Rush uses `DailyPuzzleSlot` type,
-     `DAILY_PUZZLE_SLOT_INDICES`, and the `computeBestPossiblePuzzleScore`
-     re-export path.
+     `listDailyPuzzleSlotsForAttempt`. These are the retired ladder's
+     *attempt-tracking* server surface (imported into `index.ts`, never called) —
+     a **distinct concern** from the generation pipeline. Nothing in this
+     reconciliation touches their dead status. Candidate for its own small
+     deletion pass. (`dailyPuzzle.ts` STAYS regardless — Puzzle Rush uses its
+     `DailyPuzzleSlot` type / `DAILY_PUZZLE_SLOT_INDICES` /
+     `computeBestPossiblePuzzleScore` re-export path.)
 
-   **KEEP:**
-   - **`daily_puzzles` table** — frozen archive, the source `puzzle_pool` was
-     built from. Read-only. Same treatment as the `daily_puzzle_attempts` archive
-     (item 3). **Do not drop** — it burns the pool-refill bridge.
-   - **`seedPuzzlePool.ts` + `generatePuzzles.ts`** — the documented idempotent
-     refill script + the shared content generator (`generatePuzzles.ts` also
-     feeds `dailyPuzzle.ts` → Puzzle Rush grading). Unused-since-launch, but the
-     escape hatch for the tier problem below.
-
-   **The RK-8-shaped caveat — a product-direction question, not a code fact.**
-   `puzzle_pool` is a frozen snapshot that is **91% `master_chain`** with only
-   106 `quick_line` / 104 `tactical_setup`. Puzzle Rush's early ordinals need the
-   thin tiers; that imbalance is a real latent quality issue (already surfaces as
-   `difficulty.ts` fallbacks). Deleting the cron freezes it **permanently**.
-   Puzzle Rush works fine today at 27 runs total — but if refreshing / rebalancing
-   `puzzle_pool` ever becomes a goal, the cron + ladder generation + a
-   `seedPuzzlePool.ts` re-run **are** the tooling. So the FIX-NOW grade above is
-   **conditional on confirming there is no intent to refresh the pool.** With
-   that confirmed → dead weight, delete. Without it → the cron+generation are
-   dormant-but-intentional tooling and only the *health check* + the 0-caller
-   store/`dailyPuzzle.ts` exports are unambiguous dead weight.
+   Net: the item-2 loop is **not** deletable as "dead weight." Only the ladder
+   *attempt-tracking* store exports are unambiguous dead code.
 3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
    write paths into `daily_puzzle_scores` / `daily_puzzle_completions` (via the
    removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**
@@ -835,15 +851,24 @@ not lost. `daily_puzzle*` prod tables and any server references stay
 tests deleted (greenlit); 3 dead `api.ts` exports + orphaned privates removed;
 2 client tests + 1 server test fixed; lint budget 401→377. **8 `dailyPuzzle/`
 files are shared-live with Puzzle Rush** and stayed. **Server half TRACED
-2026-09-05** (`§CQ9.1.6.4` item 2): Puzzle Rush is self-sufficient off the
-frozen 2026-08-20 `puzzle_pool` (never topped up since; `seedPuzzlePool.ts`
-run once at launch, no cron), reads `puzzle_pool` only, no `daily_puzzles`
-fallback. The `gen-puzzles.yml` cron feeds only the vestigial health-route
-ladder alert → **gradeable FIX NOW for the cron + ladder-server files + health
-check, conditional on "no intent to ever refresh the 91%-`master_chain`
-pool"** — its own `HARDENING_PLAN.md` greenlight, not this pass. `daily_puzzles`
-table + `seedPuzzlePool.ts` + `generatePuzzles.ts` stay. Archive-table drop =
-`HARDENING_PLAN.md`'s call. F1-leftover bot plumbing not touched.
+then CORRECTED 2026-09-05** (`§CQ9.1.6.4` item 2): Puzzle Rush reads
+`puzzle_pool` only, off the frozen 2026-08-20 snapshot (never topped up;
+`seedPuzzlePool.ts` run once at launch), no `daily_puzzles` fallback. The
+**first** verdict — "circular dead weight, gradeable FIX NOW for the whole
+cron/ladder loop" — **was wrong**: it missed
+`docs/ops/puzzle-rush-deploy.md`'s "The ladder generator must keep running"
+section, which documents the generator as the deliberately-kept **only source
+of new Puzzle Rush content** + the tooling for the thin-tier backlog.
+**Corrected:** `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` +
+`generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `daily_puzzles` table +
+`seedPuzzlePool.ts` = **KEEP, load-bearing**; the health-route ladder-readiness
+check = **borderline, own scoped look**; only the 0-caller `dailyPuzzleStore.ts`
+**attempt-tracking** exports (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
+`createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
+`buildDailyPuzzleLeaderboardForDate`, `getDailyPuzzleLadderStreak`,
+`listDailyPuzzleSlotsForAttempt`) are **cleanly FIX-NOW dead** — a candidate for
+their own small pass. Archive-table drop = `HARDENING_PLAN.md`'s call. F1-leftover
+bot plumbing not touched.
 
 ## CQ9.3 Step-3 change plan
 
