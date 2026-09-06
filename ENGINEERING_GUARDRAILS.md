@@ -208,6 +208,24 @@ that RK-1/RK-2 actually took, not every syntactic way the same POST could
 be expressed. A reviewer still has to catch an obfuscated insert; the
 check catches the copy-paste one.
 
+**Second known limitation (RK-8, 2026-09-05): INV-17 verifies the POST
+routes through the wrapper — not that the wrapper is actually
+idempotent.** `insertRankedGameIdempotent()`'s dedup (`on_conflict` +
+`ignore-duplicates`, and the `source_match_id` write that the DB unique
+index needs) is gated on `RANKED_GAMES_SOURCE_COLUMNS_ENABLED === 'true'`
+via `hasIdempotentSource()`. With that flag unset the wrapper degrades to a
+plain non-idempotent POST, the payload omits `source_match_id` (so the DB
+unique index — a full index — does not catch the duplicate either), and
+`isNew` is always `true` (so callers' own skip-duplicate branch never
+fires). INV-17 stays green throughout. The flag has no `getEnvBool`
+default and no boot assertion. It is confirmed ON in prod today (RK-8's
+live query: 118 recent rows all carry a `source_match_id`, 0 duplicate
+keys), so the guarantee holds — but a new server environment stood up
+without the env var would silently have non-idempotent ranked writes.
+Graded **POSTURE** in `HARDENING_PLAN.md` §8.3 (RK-8); stopgap is to
+default the flag `true`, clean fix is to make the source-column write +
+`on_conflict` unconditional and delete the flag.
+
 ---
 
 ## 4. Verification-strictness parity across call sites

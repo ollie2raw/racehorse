@@ -134,17 +134,20 @@ Test scaffolding. Out of scope for the rollout-flag convention.
 
 ## Findings from this pass (logged, not fixed — per the pass's scope)
 
-1. **`RANKED_GAMES_SOURCE_COLUMNS_ENABLED` is a stale rollout flag.** The
-   migration is long applied and the flag is ON in prod (HARDENING §8.1.3). It
-   now gates only a code path that is always taken in production, and — because
-   the same flag also gates the `on_conflict` dedup guard in
-   `insertRankedGameIdempotent()` — a server that came up with the env var
-   *unset* would silently lose ranked-insert idempotency. The safe end state is
-   to make the `source_type`/`source_match_id` write + the dedup `on_conflict`
-   unconditional and delete the flag. **This is the "flag nobody plans to
-   remove" instance the scoping doc predicted.** Own scoped change; interacts
-   with HARDENING §8.1.3's open work on the two bypass call sites — probably
-   bundle with that.
+1. **`RANKED_GAMES_SOURCE_COLUMNS_ENABLED` is a stale rollout flag — and its
+   removal-without-replacement risk is now a graded HARDENING finding.** The
+   migration is long applied and the flag is ON in prod (confirmed 2026-09-05 by
+   a service-role query — the 118 most recent `ranked_games` rows all carry a
+   `source_match_id`, 0 duplicate keys). It now gates only a code path that is
+   always taken in production. Because the same flag also gates the `on_conflict`
+   dedup guard and the `source_match_id` write in `insertRankedGameIdempotent()`,
+   a server that comes up with the env var *unset* silently loses ranked-insert
+   idempotency **and Guardrail #3 / INV-17 stays green while it happens** — the
+   static check verifies the POST routes through the wrapper, not that the
+   wrapper is idempotent. Traced and graded **POSTURE** as **RK-8** in
+   `HARDENING_PLAN.md` §8.3 (that is the authoritative record — this row is just
+   the pointer). Safe end state: make the write + `on_conflict` unconditional and
+   delete the flag; stopgap: `getEnvBool(..., true)`.
 2. **`RANKED_GAMES_OUTCOME_COLUMN_ENABLED` has no remove-when.** Sibling of #1,
    same migration era. The docstring documents the ordering hazard but never
    says when the flag should die. Needs: confirm prod state, confirm migration
