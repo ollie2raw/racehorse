@@ -517,6 +517,126 @@ the game-reviewer open/close, and the "pivotal turn review wizard" state.
 
 ---
 
+### CQ9.1.6 the deferred `daily_puzzle*` cluster — Step-1 map (2026-09-05)
+
+**Scope.** The `daily_puzzle*` surface beyond the 2 files F1 already deleted
+(`§CQ9.2` deferred-cluster note). **Map only — no deletions.** Server side has
+data/cron stakes → **STOP-AND-REPORT triggered** (`§CQ9.1.6.3`).
+
+#### CQ9.1.6.1 Puzzle-naming disambiguation (a finding worth keeping)
+
+"Daily Puzzle" (retired 5-slot **ladder**), "Daily Puzzle Rush" / "Puzzle Rush"
+(**live**), and the shared puzzle-**generation** pipeline are three things whose
+names collide hard. Every `puzzle`-containing symbol/dir/table, sorted:
+
+| Bucket | Items |
+|---|---|
+| **DEFINITELY DEAD — retired ladder** | `client/src/dailyPuzzle/` **25 of 33 files** (see 6.2 table) + their 17 `.test.*` · client routes `/daily`, `/daily/leaderboard` (already gone — no route module references them) · `/api/daily-puzzle/*` HTTP routes (already gone — no `registerDailyPuzzleRoutes` in `server/src/index.ts`) · the F1-leftover bot plumbing (`useDailyFritzRuntime.ts:114-116,242-246` misplaced `dailyLeaderboard*` `useState`; `botMatchViewModelTypes` fields; `BotMatchModalLayer` plumbing; `BotGameOverModal`'s `{isDailyPuzzleRun && …}` block; `isDailyPuzzleRun` + `dailyPuzzleDate` prop + ~10 gate sites) |
+| **DEFINITELY LIVE — Puzzle Rush** | `client/src/puzzleRush/**` · `server/src/puzzleRush/**` · `server/src/http/routes/puzzleRush.ts` + `puzzleRushStore.ts` (registered `index.ts:592`) · `journey/*Puzzle*` (Learn journey — separate feature) · `stats/components/PuzzlePerformanceSection.tsx` · table **`puzzle_pool`** (Puzzle Rush's puzzle source) · tables `puzzle_rush_*` |
+| **DEFINITELY LIVE — shared code reused by Puzzle Rush** (per the "touches both → live" rule) | `client/src/dailyPuzzle/`: `DailyPuzzleSoloHandDock.tsx`, `useResponsiveHandTileSize.ts`, `dailyPuzzlePlayMoveCompletion.ts`, `dailyPuzzleScreenTypes.ts` (transitive), `dailyPuzzleLadderIcons.tsx`, `date.ts`, `types.ts`, `api.ts` — **8 of 33**, imported by `puzzleRush/PuzzleRush{PlayView,Screen,HubView}.tsx` / `home/*` / `learn/engine/rulesAdapter.ts` · `server/src/dailyPuzzle.ts` (`DailyPuzzleSlot` type, `DAILY_PUZZLE_SLOT_INDICES`, `buildDailyPuzzleLeaderboard`) — used by `puzzleRush/grading.ts`, `puzzleRush/leaderboard.ts`, health route · `server/src/dailyPuzzleSubmissionValidation.ts` (`validateDailyPuzzleSubmission`) — **used by `puzzleRush/grading.ts:169`** · `server/src/http/stores/dailyPuzzleStore.ts` (`getUsernameForUserId` → `puzzleRush.ts` route; archive-read fns → stats route) · `server/src/generatePuzzles.ts` (`computeBestPossiblePuzzleScore` → `dailyPuzzle.ts` → Puzzle Rush) |
+| **LIVE (read-only archive)** — retired writes, historical SELECT only | tables `daily_puzzle_attempts`, `daily_puzzle_slot_results`, `daily_puzzle_completions` — read by `server/src/social/socialProfile.ts` (profile "puzzles solved" count) + `server/src/http/stores/homeCompletionDates.ts` (streak-calendar frozen history), both service-role, via `listCompleted{DailyPuzzleLadder,LegacyDailyPuzzle}DatesForUser` passed to `registerStatsRoutes`. Client write policies + grants revoked 2026-09-02 (`2026-09-02_daily_puzzle_ladder_decommission.sql`, DF-CAND-1). |
+| **AMBIGUOUS — needs a trace before anything** | **table `daily_puzzles`** + the `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderPublish.ts` + `dailyPuzzleLadderReadiness.ts` + `seedPuzzlePool.ts` — see 6.3, they are entangled with the live Puzzle Rush pipeline and cannot be assumed dead |
+
+Guard test worth keeping: `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` —
+source-level asserts the Home "Daily Puzzle" card routes to `puzzleRush`, not the
+retired `navigate('daily')`. It `?raw`-imports `DailyPuzzleLadderHubView.tsx` (a
+dead file) — that reference needs updating when the dead files go, not deleting
+the test.
+
+#### CQ9.1.6.2 Client dead subtree — reachability verdicts (FC-DEAD-1 method)
+
+Method: full transitive-import closure of `client/src/dailyPuzzle/` from the 7
+externally-live-imported roots (+`dailyPuzzleScreenTypes`, reached transitively).
+Everything outside that closure has **zero non-test importer anywhere in `src/`**
+— no route module, no `App.tsx`/`AppRoutes.tsx`, no `lazy()`, no dynamic
+`import()`, no `new Worker()`. Confirmed unrouted (`/daily` appears in no route
+file).
+
+**25 dead files** (`client/src/dailyPuzzle/`), all verdict **UNREACHABLE**:
+`DailyPuzzleScreen.tsx`, `DailyPuzzleLadderScreen.tsx`, `DailyPuzzleLadderHubView.tsx`,
+`DailyPuzzleLadderLeaderboardScreen.tsx`, `DailyPuzzleLadderOverlays.tsx`,
+`DailyPuzzleLegacyInPlayView.tsx`, `DailyPuzzleLoadingScreen.tsx`,
+`DailyPuzzleAdminScreen.tsx`, `dailyPuzzleArchiveLeaderboardHelpers.ts`,
+`dailyPuzzleLadderSessionStorage.ts`, `dailyPuzzleLadderSlotSubmission.ts`,
+`dailyPuzzleLegacyResultSubmission.ts`, `dailyPuzzleScreenHelpers.ts`,
+`dailyPuzzleSlotHelpers.ts`, `ladderHelpers.ts`, `ladderShareCard.ts`,
+`ladderSlotRowViewModel.ts`, `presentation.ts`, `streakStorage.ts`,
+`useDailyPuzzleArchiveLeaderboard.ts`, `useDailyPuzzleLadderGameplay.ts`,
+`useDailyPuzzleLegacyGameplay.ts`, `useDailyPuzzleValidatorWorker.ts`,
+`validator.ts`, `validator.worker.ts` — + their 17 co-located `.test.*` files.
+**8 files stay** (the shared-live set above); deleting the 25 does not touch them
+(closure proved no live→dead edge). `api.ts` keeps its dead exports
+(`upsertDailyPuzzleBestScore`, `fetchDailyPuzzleLeaderboard`,
+`getAllDailyPuzzlesForDate`) — pruning those is a within-file follow-up on a
+live file, not part of the subtree deletion.
+
+**F1 re-sourcing — verified, landed clean.** Traced `181624b7`:
+`assembleBotMatchViewModel.ts:289-291` HEAD reads `dailyFritz.dailyLeaderboard{,Loading,Error}`
+(not the deleted `puzzle.*`); `useDailyFritzRuntime.ts:114-116` declares the
+`useState`s (init `[]`/`false`/`null`), returns them at `:242-246`; **no writer
+exists** (the deleted `useDailyPuzzleLeaderboardSync` was the only one), so the
+values are frozen at their inits and the `isDailyPuzzleRun`-gated consumer never
+renders — behaviour-identical, as claimed.
+
+#### CQ9.1.6.3 Server-side status — **STOP-AND-REPORT**
+
+Per the pass's instruction: a `daily_puzzle*` table, cron, and health check
+still receive traffic. This is **not** a client-only cleanup.
+
+- **Cron: `gen-puzzles.yml` is LIVE** — GitHub Actions `schedule: '0 */6 * * *'`
+  (every 6h) → `scripts/gen-puzzles.sh` → `server/src/seedDailyPuzzleLadder.ts`
+  → generates puzzle content (`generatePuzzles.ts`) and **writes `daily_puzzles`**
+  (ladder-slot shape, 365 days ahead).
+- **Table `daily_puzzles` — LIVE writes (the cron) + LIVE reads.**
+  `listDailyPuzzleSlotsForDate` (`dailyPuzzleStore.ts:32`) SELECTs
+  `daily_puzzles?published=eq.true` and is called by (a) the **health route**
+  (`registerHealthRoutes.ts:187` → `assessDailyPuzzleLadderReadiness` → runs on
+  every `/healthz`/`/ready` hit; `log.error`s a "daily-puzzle-ladder readiness
+  alert" if slots aren't published 15min past PT midnight), (b)
+  `listDailyPuzzleSlotsForDateWithAutoSeed`.
+- **The pipeline link to Puzzle Rush.** `server/src/seedPuzzlePool.ts` backfills
+  **`puzzle_pool`** (Puzzle Rush's live table) *from* `daily_puzzles`. It is a
+  **manual script — NOT on any cron** (no GH Actions reference). So today: the
+  cron keeps `daily_puzzles` fresh; `puzzle_pool` was backfilled once and is not
+  automatically topped up. **Whether Puzzle Rush still needs fresh `daily_puzzles`
+  — i.e. whether `seedPuzzlePool.ts` gets re-run periodically, or whether
+  `puzzle_pool`'s one-time backfill is a sufficient permanent pool, or whether
+  Puzzle Rush has a `daily_puzzles` fallback read — is the trace that must happen
+  before any of the AMBIGUOUS bucket is graded.** Not resolved here (Step-1 =
+  map only).
+- **HTTP routes: none.** No `registerDailyPuzzleRoutes` in `index.ts`; the
+  `/api/daily-puzzle/*` routes are already gone (migration comment confirmed
+  against `index.ts`).
+- **Archive tables (`daily_puzzle_attempts`, `_slot_results`, `_completions`):**
+  live SELECT traffic (stats/profile), writes retired + client grants revoked.
+  Dropping these would break the streak calendar / "puzzles solved" count for
+  pre-2026-08-20 history — a **data-retention decision**, not a code cleanup.
+- **`daily_puzzle_scores` / `daily_puzzle_submissions`** — not referenced by any
+  current server code (grep: 0 hits outside migrations). Parked as DF-CAND-3/4 in
+  `HARDENING_PLAN.md` — that plan's call.
+
+**Migrations** touching the cluster: `daily_puzzle.sql`, `daily_puzzle_v2.sql`,
+`daily_puzzle_ladder_v1.sql`, `2026-08-06_daily_puzzle_five_slot_*` (×2),
+`2026-08-12_daily_puzzle_attempts_indexes.sql`,
+`2026-08-12_drop_redundant_puzzle_indexes.sql`,
+`2026-09-02_daily_puzzle_ladder_decommission.sql`. Migrations are append-only
+history — none get deleted; listed for completeness.
+
+#### CQ9.1.6.4 Recommended Step-2 shape (for the human's call, not done here)
+
+1. **Client subtree (25 files + 17 tests + F1-leftover bot plumbing)** — clean,
+   client-only, no data stakes. Gradeable **FIX NOW (delete)** as its own
+   commit(s). The `dailyPuzzleIsRush.test.ts` `?raw` import + the dead `api.ts`
+   exports are small within-scope loose ends.
+2. **`daily_puzzles` table + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts`
+   / `checkDailyPuzzleLadder.ts` / `dailyPuzzleLadderPublish.ts` /
+   `dailyPuzzleLadderReadiness.ts` + the health-route ladder check** — **blocked
+   on the `seedPuzzlePool.ts` / Puzzle-Rush-pool trace.** If Puzzle Rush's pool
+   is self-sufficient, this whole loop (cron seeds a table only the health check
+   reads) is dead weight and removable server-side; if not, it's load-bearing.
+   `HARDENING_PLAN.md`'s call once traced.
+3. **Archive tables** — retention decision, `HARDENING_PLAN.md`.
+
 ## CQ9.2 Graded findings list — **Step 2, written 2026-09-05, awaiting ratification as `D-CQ-1`**
 
 Every Step-1 candidate assigned exactly one grade. **Nothing here is a
@@ -584,6 +704,15 @@ graded on its own, the same way FC-DEAD-1 flagged the Fritz-Challenge cluster
 rather than chasing the whole boundary in one commit. Recorded here so it is
 not lost. `daily_puzzle*` prod tables and any server references stay
 `HARDENING_PLAN.md`'s call, not this plan's.
+
+**Step-1 map now written — `§CQ9.1.6` (2026-09-05).** The client subtree is
+bigger and cleaner than this note assumed (25 dead files + 17 tests, zero live
+importer) but **8 `dailyPuzzle/` files are shared-live with Puzzle Rush** and
+must stay. Server side hit the **STOP-AND-REPORT** trigger: `daily_puzzles` has
+a live 6-hourly `gen-puzzles.yml` cron writing it and a live health-route read;
+`seedPuzzlePool.ts` links it to Puzzle Rush's `puzzle_pool`. Client deletion is
+gradeable on its own; the `daily_puzzles`/cron half is blocked on a Puzzle-Rush-
+pool trace.
 
 ## CQ9.3 Step-3 change plan
 
