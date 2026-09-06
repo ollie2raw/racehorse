@@ -46,6 +46,14 @@ export interface RankedGameInsertPayload {
   outcome?: MatchOutcome;
 }
 
+/**
+ * Manifest: docs/server-feature-flags.md (rollout / migration-gate).
+ * remove-when: OVERDUE. The migration is long applied and this is ON in prod
+ * (HARDENING_PLAN.md §8.1.3). It now also gates the `on_conflict` dedup guard in
+ * insertRankedGameIdempotent() — a server that comes up with the env var UNSET
+ * silently loses ranked-insert idempotency. Make the source-column write + the
+ * dedup unconditional and delete this flag (bundle with §8.1.3's bypass fix).
+ */
 export function isRankedGameSourceColumnsEnabled(): boolean {
   return process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED === 'true';
 }
@@ -56,6 +64,10 @@ export function isRankedGameSourceColumnsEnabled(): boolean {
  * rating path passes the outcome in memory regardless, so the forfeit sign is
  * correct with the flag off; the flag only governs whether the deferred
  * rating-period path can recover it from the row.
+ *
+ * Manifest: docs/server-feature-flags.md (rollout / migration-gate).
+ * remove-when: confirm the `outcome` column migration is applied in prod → make
+ * the write unconditional and delete this flag. (Not currently documented.)
  */
 export function isRankedGameOutcomeColumnEnabled(): boolean {
   return process.env.RANKED_GAMES_OUTCOME_COLUMN_ENABLED === 'true';

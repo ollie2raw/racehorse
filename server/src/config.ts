@@ -58,6 +58,9 @@ const getEnvInt = (key: string, defaultValue: number): number => {
   return Number.isNaN(parsed) ? defaultValue : parsed;
 };
 
+// Runtime feature flags read through getEnvBool (here or in small is…Enabled()
+// helpers) are catalogued in docs/server-feature-flags.md — add a manifest row
+// (and a remove-when, for rollout/migration-gate flags) when you add one.
 const getEnvBool = (key: string, defaultValue: boolean): boolean => {
   const val = process.env[key];
   if (!val) return defaultValue;

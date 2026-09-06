@@ -340,9 +340,14 @@ environment question at the scale triggers above.**
 
 - **A:** human confirms Vercel preview state; fix `.vercel/project.json`; decide
   whether the PR-smoke workflow and/or Playwright-against-preview are in scope.
-- **B:** enumerate every current `process.env.*_ENABLED` read, design the
-  `config.featureFlags` shape, write the manifest, decide whether a stale-flag
-  `check:architecture` invariant is worth it.
+- **B:** *(light version done 2026-09-05 — `docs/server-feature-flags.md`:*
+  *manifest + convention, RANKED_GAMES_\* as the worked example, findings on 3*
+  *rollout flags with no remove-when. Comment pointers added in `config.ts` /*
+  *`dailyFritzAuthorityFeature.ts` / `rankedGamePayload.ts`. Purely*
+  *organizational — no logic, no test.)* Remaining if wanted: fold
+  `RANKED_GAMES_*` into `config`, act on the stale-flag findings (esp.
+  `RANKED_GAMES_SOURCE_COLUMNS_ENABLED`), decide whether a stale-flag
+  `check:architecture` invariant is worth building.
 - **C:** only if greenlit despite the recommendation — price a Render Starter
   service, decide same-DB vs shadow-DB, scope the schema-sync mechanism.
 - Unrelated small hygiene surfaced here: `.vercel/project.json` mislink;
