@@ -535,7 +535,7 @@ names collide hard. Every `puzzle`-containing symbol/dir/table, sorted:
 | **DEFINITELY LIVE — Puzzle Rush** | `client/src/puzzleRush/**` · `server/src/puzzleRush/**` · `server/src/http/routes/puzzleRush.ts` + `puzzleRushStore.ts` (registered `index.ts:592`) · `journey/*Puzzle*` (Learn journey — separate feature) · `stats/components/PuzzlePerformanceSection.tsx` · table **`puzzle_pool`** (Puzzle Rush's puzzle source) · tables `puzzle_rush_*` |
 | **DEFINITELY LIVE — shared code reused by Puzzle Rush** (per the "touches both → live" rule) | `client/src/dailyPuzzle/`: `DailyPuzzleSoloHandDock.tsx`, `useResponsiveHandTileSize.ts`, `dailyPuzzlePlayMoveCompletion.ts`, `dailyPuzzleScreenTypes.ts` (transitive), `dailyPuzzleLadderIcons.tsx`, `date.ts`, `types.ts`, `api.ts` — **8 of 33**, imported by `puzzleRush/PuzzleRush{PlayView,Screen,HubView}.tsx` / `home/*` / `learn/engine/rulesAdapter.ts` · `server/src/dailyPuzzle.ts` (`DailyPuzzleSlot` type, `DAILY_PUZZLE_SLOT_INDICES`, `buildDailyPuzzleLeaderboard`) — used by `puzzleRush/grading.ts`, `puzzleRush/leaderboard.ts`, health route · `server/src/dailyPuzzleSubmissionValidation.ts` (`validateDailyPuzzleSubmission`) — **used by `puzzleRush/grading.ts:169`** · `server/src/http/stores/dailyPuzzleStore.ts` (`getUsernameForUserId` → `puzzleRush.ts` route; archive-read fns → stats route) · `server/src/generatePuzzles.ts` (`computeBestPossiblePuzzleScore` → `dailyPuzzle.ts` → Puzzle Rush) |
 | **LIVE (read-only archive)** — retired writes, historical SELECT only | tables `daily_puzzle_attempts`, `daily_puzzle_slot_results`, `daily_puzzle_completions` — read by `server/src/social/socialProfile.ts` (profile "puzzles solved" count) + `server/src/http/stores/homeCompletionDates.ts` (streak-calendar frozen history), both service-role, via `listCompleted{DailyPuzzleLadder,LegacyDailyPuzzle}DatesForUser` passed to `registerStatsRoutes`. Client write policies + grants revoked 2026-09-02 (`2026-09-02_daily_puzzle_ladder_decommission.sql`, DF-CAND-1). |
-| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderReadiness.ts` + the health-route check = **borderline, own scoped look**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports + the unmounted `handleDailyPuzzleLadderCronWarm` cron-warm endpoint = **FIX-NOW dead — ✅ SHIPPED (`c1bc286e`, `b132e381`)**. |
+| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. the health-route check = **borderline — TRACED 2026-09-05, small rewrite (de-gate + relabel the `/ready` block) recommended; `dailyPuzzleLadderReadiness.ts` stays (KEEP — used by `dailyPuzzleLadderPublish.ts`), `checkDailyPuzzleLadder.ts` stays (unwired manual CLI)**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports + the unmounted `handleDailyPuzzleLadderCronWarm` cron-warm endpoint = **FIX-NOW dead — ✅ SHIPPED (`c1bc286e`, `b132e381`)**. |
 
 Guard test worth keeping: `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` —
 source-level asserts the Home "Daily Puzzle" card routes to `puzzleRush`, not the
@@ -643,7 +643,8 @@ still receive traffic. This is **not** a client-only cleanup.
   tooling for the thin-tier backlog. **Corrected:** the cron +
   `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts`
   + `daily_puzzles` table + `seedPuzzlePool.ts` **KEEP (load-bearing)**; the
-  health-route ladder-readiness check is **borderline** (own scoped look); the
+  health-route ladder-readiness check is **borderline — TRACED 2026-09-05,
+  de-gate + relabel the `/ready` block recommended** (§CQ9.1.6.4 item 2); the
   0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports (commit `c1bc286e`)
   and the unmounted `handleDailyPuzzleLadderCronWarm` /
   `isAuthorizedDailyPuzzleCronRequest` cron-warm endpoint (commit `b132e381`)
@@ -753,13 +754,80 @@ history — none get deleted; listed for completeness.
      content source for a mode with a known thin-tier constraint, and the tooling
      the deploy doc's backlog item depends on. Underused since launch (pool frozen
      at 2284 rows) and degrading quietly — **operator-accepted, not dead.**
-   - **BORDERLINE — not graded here, needs its own scoped look (not a
-     default-delete):** the health-route `dailyPuzzleLadder` readiness alert
-     (`registerHealthRoutes.ts:184-210`) + `dailyPuzzleLadderReadiness.ts` +
-     `checkDailyPuzzleLadder.ts`. Nominally monitors the retired ladder *UI*
-     concept, but doubles as a de-facto *"is the generator still producing
-     content"* signal — which, given the pipeline is KEEP, is not obviously
-     worthless.
+   - **BORDERLINE — TRACED 2026-09-05. Recommendation: small rewrite (de-gate +
+     relabel) of the `/ready` block only; keep the two modules.** Awaiting
+     greenlight before any code.
+
+     **What the check actually verifies (from code, not the name).**
+     `registerHealthRoutes.ts:183-211` — inside `GET /ready` (NOT `/healthz`;
+     `/healthz` only does a Supabase DB probe) — calls
+     `assessDailyPuzzleLadderReadiness(todayPt, await listDailyPuzzleSlotsForDate(todayPt))`.
+     The predicate is `isDailyPuzzleLadderReady` → `findReadyDailyPuzzleLadderSlots(slots) !== null`
+     (`dailyPuzzle.ts:289-321`), which requires, for **today's Pacific date** in
+     `daily_puzzles`: ≥3 rows; grouped by `set_version`, newest first; the first 3
+     sorted slots all `published === true`; their `slotIndex` exactly `[1,2,3]`;
+     and **every one of the 3 has `slotMaxPoints > 0` AND `(bestPossibleScore ?? 0) > 0`**.
+     `shouldAlert = !ready && isPastLadderReadinessGracePt(runDate, now)` — fires
+     only when `runDate === todayPt` **and** it is ≥15 min past Pacific midnight.
+     On fire: `log.error({...}, 'daily-puzzle-ladder readiness alert')` with
+     `alertReason = "Daily Puzzle ladder for {date} is not publish-ready ({n}/3
+     slots, missing: {indexes|'metadata'})"`. **`log.error` only — no
+     `Sentry.captureException`** (unlike the `/healthz` DB-probe path).
+
+     **How often it runs / what hits `/ready`.** Not "every `/healthz` hit."
+     `/ready` is hit by: (a) `smoke-test.yml` once per deploy (`on: push:[main]`,
+     server/client code only — doc pushes don't deploy), and that job asserts
+     only `.gameCore`, **never `.dailyPuzzleLadder`**; (b) manual human checks
+     (frequent during hardening work). The UptimeRobot monitor and `index.ts`'s
+     ~10-min self-ping both target **`/ping`**, not `/ready` (T-17). Render's own
+     health-check path is external config, unverified from the repo. So the
+     `log.error` is an essentially-unwatched log line.
+
+     **It is checking a reasonable condition, but it is redundant and mis-wired:**
+     - The **predicate is not a dead-UI concept** — "3 published, fully-scored
+       slots for a date" is exactly the publish gate the KEEP generator itself
+       uses: `dailyPuzzleLadderReadiness.ts` (`assessDailyPuzzleLadderReadiness`,
+       `normalizePublishedSlotRows`) is imported by **`dailyPuzzleLadderPublish.ts`**
+       (a KEEP pipeline file, `:8-10,84,112-133`). Deleting that module is off the
+       table; it is load-bearing.
+     - **Redundant with existing, better monitoring.** `gen-puzzles.yml` already
+       runs a *"Verify today Pacific ladder is publish-ready"* step
+       (`seedDailyPuzzleLadder.ts --date TODAY --diagnose`) **every 6 h** in GitHub
+       Actions, co-located with the generator, and **fails the workflow visibly**
+       if today isn't ready. The `/ready` block is a lower-frequency, inert copy of
+       the same check.
+     - **Wrong date offset for a generator-health signal.** `gen-puzzles.yml`
+       seeds `today-2 … today+363` and **skips already-ready dates**. Today's rows
+       were written ~a year ago; a generator that dies *today* leaves this check
+       green until ~today+365. As a "did the generator run recently" signal it has
+       a ~365-day blind spot.
+     - **Real risk — a retired feature's content lag can 503 the readiness probe.**
+       `/ready`'s overall `ok` is `… && dailyPuzzleLadder.ok && …`, and
+       `dailyPuzzleLadder.ok = readiness.ready || !readiness.shouldAlert`. So if
+       today's `daily_puzzles` set is not publish-ready after 00:15 PT, **`GET /ready`
+       returns 503** — and if Render's health-check path is `/ready`, a non-urgent
+       content-staleness issue becomes an availability event on the free-tier
+       single instance (cf. T-17's health-check history).
+
+     **Recommendation — REWRITE (small), scoped to the `/ready` block only:**
+     1. **De-gate:** drop `dailyPuzzleLadder.ok` from `/ready`'s overall `ok`
+        expression (keep the field in the JSON for visibility). Puzzle-content
+        staleness must not 503 the server.
+     2. **Relabel:** rename the check + message away from "daily-puzzle-ladder
+        readiness"/`legacySinglePuzzleDay` (retired-UI framing) to a
+        generation-pipeline name.
+     3. **Optionally repurpose the predicate** to a lookahead-horizon check
+        (`max(daily_puzzles.puzzle_date) >= today + N`), which catches a stalled
+        generator within weeks instead of a year and doesn't false-positive on one
+        bad day; if kept, add `Sentry.captureException` when it trips so it is
+        actually seen.
+     - **Keep** `dailyPuzzleLadderReadiness.ts` (load-bearing for
+       `dailyPuzzleLadderPublish.ts`) and `checkDailyPuzzleLadder.ts` (harmless
+       unwired manual CLI, `check:daily-ladder`; already logged in the server-lint
+       backlog) **untouched**.
+     - **Not delete:** the correction bars removing observability on a load-bearing
+       system, and de-gate+relabel is nearly as cheap while keeping the `/ready`
+       field and removing the 503 coupling.
    - **DEAD — ✅ SHIPPED 2026-09-05 (commit `c1bc286e`).** The retired ladder's
      *attempt-tracking* server surface in `dailyPuzzleStore.ts` — a distinct
      concern from the KEEP generation pipeline. Deleted: the greenlit 7
@@ -808,10 +876,15 @@ history — none get deleted; listed for completeness.
    Net: the item-2 loop is **not** deletable as "dead weight." The ladder
    *attempt-tracking* store surface and the unmounted cron-warm handler are
    **both now removed**. **The only things left open in this cluster:**
-   (1) the **BORDERLINE health-route ladder-readiness check**
-   (`registerHealthRoutes.ts` `dailyPuzzleLadder` block +
-   `dailyPuzzleLadderReadiness.ts` + `checkDailyPuzzleLadder.ts`) — untouched,
-   pending its own scoped look; and (2) the **archive-table retention decision**
+   (1) the **BORDERLINE health-route ladder-readiness check** — now TRACED (see
+   the borderline bullet above): the predicate is sound (it is the KEEP
+   generator's own publish gate, shared via `dailyPuzzleLadderReadiness.ts` ←
+   `dailyPuzzleLadderPublish.ts`), but the `/ready` block that reuses it is
+   redundant with `gen-puzzles.yml`'s every-6h verify step, inert (`log.error`
+   only, unwatched), and — the real risk — **gates `/ready`'s 503**, so a retired
+   feature's content lag can mark the server unhealthy. **Recommendation: small
+   rewrite — de-gate + relabel the `/ready` block only; keep both modules.**
+   Awaiting greenlight. (2) the **archive-table retention decision**
    (`daily_puzzle_attempts` / `_slot_results` / `_completions`) — `HARDENING_PLAN.md`'s
    call, not this plan's.
 3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
@@ -916,12 +989,15 @@ of new Puzzle Rush content** + the tooling for the thin-tier backlog.
   `listDailyPuzzleSlotsForDate` + `getUsernameForUserId`.
 
 **This cluster is now closed except for two named items:**
-1. **BORDERLINE — health-route ladder-readiness check**
-   (`registerHealthRoutes.ts` `dailyPuzzleLadder` block +
-   `dailyPuzzleLadderReadiness.ts` + `checkDailyPuzzleLadder.ts`) — untouched,
-   pending its own scoped look (not a default-delete: given the generation
-   pipeline is KEEP, it doubles as a de-facto "is the generator still producing
-   content" signal).
+1. **BORDERLINE — health-route ladder-readiness check — TRACED 2026-09-05**
+   (see §CQ9.1.6.4 item 2's borderline bullet). The predicate is sound (it is the
+   KEEP generator's own publish gate, shared via `dailyPuzzleLadderReadiness.ts` ←
+   `dailyPuzzleLadderPublish.ts` — that module stays). But the `/ready` block
+   reusing it is redundant with `gen-puzzles.yml`'s every-6h verify step, inert
+   (`log.error` only), and **gates `/ready`'s 503** — a retired feature's content
+   lag can mark the server unhealthy. **Recommendation: small rewrite — de-gate +
+   relabel the `/ready` block only, keep both modules. Awaiting greenlight; no
+   code touched.**
 2. **Archive-table retention decision** (`daily_puzzle_attempts` /
    `_slot_results` / `_completions`, now zero writers) — `HARDENING_PLAN.md`'s
    call, not this plan's.
