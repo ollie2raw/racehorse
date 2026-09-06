@@ -535,7 +535,7 @@ names collide hard. Every `puzzle`-containing symbol/dir/table, sorted:
 | **DEFINITELY LIVE — Puzzle Rush** | `client/src/puzzleRush/**` · `server/src/puzzleRush/**` · `server/src/http/routes/puzzleRush.ts` + `puzzleRushStore.ts` (registered `index.ts:592`) · `journey/*Puzzle*` (Learn journey — separate feature) · `stats/components/PuzzlePerformanceSection.tsx` · table **`puzzle_pool`** (Puzzle Rush's puzzle source) · tables `puzzle_rush_*` |
 | **DEFINITELY LIVE — shared code reused by Puzzle Rush** (per the "touches both → live" rule) | `client/src/dailyPuzzle/`: `DailyPuzzleSoloHandDock.tsx`, `useResponsiveHandTileSize.ts`, `dailyPuzzlePlayMoveCompletion.ts`, `dailyPuzzleScreenTypes.ts` (transitive), `dailyPuzzleLadderIcons.tsx`, `date.ts`, `types.ts`, `api.ts` — **8 of 33**, imported by `puzzleRush/PuzzleRush{PlayView,Screen,HubView}.tsx` / `home/*` / `learn/engine/rulesAdapter.ts` · `server/src/dailyPuzzle.ts` (`DailyPuzzleSlot` type, `DAILY_PUZZLE_SLOT_INDICES`, `buildDailyPuzzleLeaderboard`) — used by `puzzleRush/grading.ts`, `puzzleRush/leaderboard.ts`, health route · `server/src/dailyPuzzleSubmissionValidation.ts` (`validateDailyPuzzleSubmission`) — **used by `puzzleRush/grading.ts:169`** · `server/src/http/stores/dailyPuzzleStore.ts` (`getUsernameForUserId` → `puzzleRush.ts` route; archive-read fns → stats route) · `server/src/generatePuzzles.ts` (`computeBestPossiblePuzzleScore` → `dailyPuzzle.ts` → Puzzle Rush) |
 | **LIVE (read-only archive)** — retired writes, historical SELECT only | tables `daily_puzzle_attempts`, `daily_puzzle_slot_results`, `daily_puzzle_completions` — read by `server/src/social/socialProfile.ts` (profile "puzzles solved" count) + `server/src/http/stores/homeCompletionDates.ts` (streak-calendar frozen history), both service-role, via `listCompleted{DailyPuzzleLadder,LegacyDailyPuzzle}DatesForUser` passed to `registerStatsRoutes`. Client write policies + grants revoked 2026-09-02 (`2026-09-02_daily_puzzle_ladder_decommission.sql`, DF-CAND-1). |
-| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderReadiness.ts` + the health-route check = **borderline, own scoped look**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports = **FIX-NOW dead** (own small pass). |
+| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. `checkDailyPuzzleLadder.ts` + `dailyPuzzleLadderReadiness.ts` + the health-route check = **borderline, own scoped look**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports + the unmounted `handleDailyPuzzleLadderCronWarm` cron-warm endpoint = **FIX-NOW dead — ✅ SHIPPED (`c1bc286e`, `b132e381`)**. |
 
 Guard test worth keeping: `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` —
 source-level asserts the Home "Daily Puzzle" card routes to `puzzleRush`, not the
@@ -643,9 +643,11 @@ still receive traffic. This is **not** a client-only cleanup.
   tooling for the thin-tier backlog. **Corrected:** the cron +
   `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts`
   + `daily_puzzles` table + `seedPuzzlePool.ts` **KEEP (load-bearing)**; the
-  health-route ladder-readiness check is **borderline** (own scoped look); only
-  the 0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports are cleanly
-  FIX-NOW dead.
+  health-route ladder-readiness check is **borderline** (own scoped look); the
+  0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports (commit `c1bc286e`)
+  and the unmounted `handleDailyPuzzleLadderCronWarm` /
+  `isAuthorizedDailyPuzzleCronRequest` cron-warm endpoint (commit `b132e381`)
+  were FIX-NOW dead — **both now deleted**.
 - **HTTP routes: none.** No `registerDailyPuzzleRoutes` in `index.ts`; the
   `/api/daily-puzzle/*` routes are already gone (migration comment confirmed
   against `index.ts`).
@@ -786,16 +788,32 @@ history — none get deleted; listed for completeness.
      `computeBestPossiblePuzzleScore` re-export).
      Verified: server build clean, server vitest **216/1280** (was 218/1288),
      client `tsc -b` / lint / `check:architecture` 20/20 CERTIFIED / vitest 1553.
-   - **STILL DEAD, NOT this pass (out of scope — already 0-caller before, not
-     orphaned by the 7):** `handleDailyPuzzleLadderCronWarm` (`express.RequestHandler`,
-     **0 route registrations**) + `isAuthorizedDailyPuzzleCronRequest` (its sole
-     caller). The retired ladder's cron-warm HTTP endpoint, never mounted. Left in
-     `dailyPuzzleStore.ts` — its own tiny follow-up, or fold into the borderline
-     health-check pass.
+   - **DEAD — ✅ SHIPPED 2026-09-05 (commit `b132e381`).**
+     `handleDailyPuzzleLadderCronWarm` (`express.RequestHandler`) +
+     `isAuthorizedDailyPuzzleCronRequest` (its sole caller) — the retired ladder's
+     cron-warm HTTP endpoint. Route-registration check (not just static import,
+     since Express handlers can be wired indirectly): no `dailyPuzzle.ts` route
+     file on main, no `app.get`/`app.post`/router-mount in `server/src` references
+     the handler, `index.ts` only mounts `cronLimit` middleware on `/api/cron`.
+     The registering route file was deleted in System 3 (`HARDENING_PLAN.md:3304`)
+     and now survives only in stale `.claude/worktrees/*` branches. No co-located
+     test. Deleted the 2 functions + now-orphaned imports (`express`,
+     `ensureDailyPuzzleLadderForDate`, `constantTimeEqualSecret`,
+     `getPacificDateKeyDaysFromNow` — each confirmed used only by these two).
+     `dailyPuzzleStore.ts` now ~25 LOC: `listDailyPuzzleSlotsForDate` +
+     `getUsernameForUserId`. Verified: server `tsc -b` clean, server vitest
+     1280/1280, client `tsc -b` / lint 377 / `check:architecture` 20/20 CERTIFIED
+     / vitest 1553.
 
    Net: the item-2 loop is **not** deletable as "dead weight." The ladder
-   *attempt-tracking* store surface **is now removed**; only the unmounted
-   cron-warm handler + the borderline health check remain.
+   *attempt-tracking* store surface and the unmounted cron-warm handler are
+   **both now removed**. **The only things left open in this cluster:**
+   (1) the **BORDERLINE health-route ladder-readiness check**
+   (`registerHealthRoutes.ts` `dailyPuzzleLadder` block +
+   `dailyPuzzleLadderReadiness.ts` + `checkDailyPuzzleLadder.ts`) — untouched,
+   pending its own scoped look; and (2) the **archive-table retention decision**
+   (`daily_puzzle_attempts` / `_slot_results` / `_completions`) — `HARDENING_PLAN.md`'s
+   call, not this plan's.
 3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
    write paths into `daily_puzzle_scores` / `daily_puzzle_completions` (via the
    removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**
@@ -884,14 +902,31 @@ section, which documents the generator as the deliberately-kept **only source
 of new Puzzle Rush content** + the tooling for the thin-tier backlog.
 **Corrected:** `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` +
 `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `daily_puzzles` table +
-`seedPuzzlePool.ts` = **KEEP, load-bearing**; the health-route ladder-readiness
-check = **borderline, own scoped look**; only the 0-caller `dailyPuzzleStore.ts`
-**attempt-tracking** exports (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
-`createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
-`buildDailyPuzzleLeaderboardForDate`, `getDailyPuzzleLadderStreak`,
-`listDailyPuzzleSlotsForAttempt`) are **cleanly FIX-NOW dead** — a candidate for
-their own small pass. Archive-table drop = `HARDENING_PLAN.md`'s call. F1-leftover
-bot plumbing not touched.
+`seedPuzzlePool.ts` = **KEEP, load-bearing**.
+
+**Server dead-surface deletions — ✅ SHIPPED 2026-09-05, two passes:**
+- The 0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports
+  (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
+  `createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
+  `buildDailyPuzzleLeaderboardForDate`, `getDailyPuzzleLadderStreak`,
+  `listDailyPuzzleSlotsForAttempt`) + orphaned chain — commit `c1bc286e`.
+- `handleDailyPuzzleLadderCronWarm` + `isAuthorizedDailyPuzzleCronRequest` (the
+  unmounted cron-warm endpoint; route-registration check confirmed 0 mounts) +
+  orphaned imports — commit `b132e381`. `dailyPuzzleStore.ts` now ~25 LOC:
+  `listDailyPuzzleSlotsForDate` + `getUsernameForUserId`.
+
+**This cluster is now closed except for two named items:**
+1. **BORDERLINE — health-route ladder-readiness check**
+   (`registerHealthRoutes.ts` `dailyPuzzleLadder` block +
+   `dailyPuzzleLadderReadiness.ts` + `checkDailyPuzzleLadder.ts`) — untouched,
+   pending its own scoped look (not a default-delete: given the generation
+   pipeline is KEEP, it doubles as a de-facto "is the generator still producing
+   content" signal).
+2. **Archive-table retention decision** (`daily_puzzle_attempts` /
+   `_slot_results` / `_completions`, now zero writers) — `HARDENING_PLAN.md`'s
+   call, not this plan's.
+
+F1-leftover bot plumbing (client) not touched — its own scoped removal.
 
 ## CQ9.3 Step-3 change plan
 
