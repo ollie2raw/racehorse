@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 import { SITE_DOMAIN } from './siteUrl';
 import { buildShareText } from '../dailyFritz/shareCard';
-import { buildLadderShareText } from '../dailyPuzzle/ladderShareCard';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 
 const DEPLOY_HOST = /[a-z0-9-]+\.vercel\.app/i;
@@ -33,18 +32,9 @@ describe('share domain', () => {
     expect(text).not.toMatch(DEPLOY_HOST);
   });
 
-  it('signs the Daily Puzzle Ladder share', () => {
-    const text = buildLadderShareText({
-      shareDate: 'August 26, 2026',
-      totalScore: 420,
-      rank: 3,
-      slotLines: ['A ✓', 'B ✓'],
-      shareStreak: 7,
-      shareRating: 2230,
-    } as Parameters<typeof buildLadderShareText>[0]);
-    expect(text).toContain(SITE_DOMAIN);
-    expect(text).not.toMatch(DEPLOY_HOST);
-  });
+  // (The Daily Puzzle Ladder share was removed with the retired ladder —
+  // CODE_QUALITY_PLAN.md §CQ9.1.6. The source-scan below still covers every
+  // remaining *share*.ts module, including Puzzle Rush's.)
 
   it('no share module hardcodes a deploy host', () => {
     // Vite reads these at build time, so the scan needs no node builtins and

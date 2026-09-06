@@ -12,10 +12,10 @@ import {
   choosePuzzleForSlot,
   type LadderSlotGenerationProfile,
 } from './seedDailyPuzzleLadder';
-import {
-  getDailyPuzzleDisplayTitle,
-  getDailyPuzzleStepPresentation,
-} from '../../client/src/dailyPuzzle/presentation';
+// The retired ladder's slot-label presentation (client/src/dailyPuzzle/
+// presentation.ts) and the ladder screens were deleted — CODE_QUALITY_PLAN.md
+// §CQ9.1.6. Their tests went with them; the live generation + readiness cases
+// below stay.
 
 const tacticalProfile: LadderSlotGenerationProfile = {
   slotIndex: 2,
@@ -250,64 +250,6 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
       }),
       slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
     ])).toBe(false);
-  });
-
-  it('keeps unavailable copy product-facing', () => {
-    const source = readFileSync(
-      resolve(__dirname, '../../client/src/dailyPuzzle/DailyPuzzleScreen.tsx'),
-      'utf8',
-    );
-    expect(source).toContain('Today’s Puzzle Ladder is being prepared');
-    expect(source).not.toContain('valid scoring metadata');
-    expect(source).not.toContain('single-puzzle format is no longer offered');
-  });
-
-  it('maps ladder slot indexes to clean user-facing puzzle labels', () => {
-    expect(getDailyPuzzleStepPresentation(1)).toEqual({
-      title: 'Quick Hit',
-      subtitle: 'Warm-up',
-      shortLabel: 'P1',
-    });
-    expect(getDailyPuzzleStepPresentation(2)).toEqual({
-      title: 'Tactical Setup',
-      subtitle: 'Tactical test',
-      shortLabel: 'P2',
-    });
-    expect(getDailyPuzzleStepPresentation(3)).toEqual({
-      title: 'Master Chain',
-      subtitle: 'Finale',
-      shortLabel: 'P3',
-    });
-  });
-
-  it('renders stored off-ladder slot titles with clean puzzle labels', () => {
-    // Titles from earlier ladder shapes (e.g. the five-slot 'Build'/'Read'
-    // rungs) are not current step identities, so they fall back to Puzzle N.
-    expect(getDailyPuzzleDisplayTitle(1, 'Quick Line')).toBe('Puzzle 1');
-    expect(getDailyPuzzleDisplayTitle(2, 'Build')).toBe('Puzzle 2');
-    expect(getDailyPuzzleDisplayTitle(3, 'Read')).toBe('Puzzle 3');
-    expect(getDailyPuzzleDisplayTitle(2, 'Build')).not.toBe('Build');
-  });
-
-  it('renders the published three-stage identities', () => {
-    expect(getDailyPuzzleDisplayTitle(1, 'Quick Hit')).toBe('Quick Hit');
-    expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).toBe('Tactical Setup');
-    expect(getDailyPuzzleDisplayTitle(3, 'Master Chain')).toBe('Master Chain');
-  });
-
-  it('still labels archived five-slot rungs', () => {
-    expect(getDailyPuzzleDisplayTitle(4, 'Pressure')).toBe('Pressure');
-    expect(getDailyPuzzleDisplayTitle(5, 'Master Chain')).toBe('Master Chain');
-  });
-
-  it('allows fallback-published slots to keep clean product labels', () => {
-    const legacyFallbackSlot = slot({
-      slotIndex: 2,
-      slotTitle: 'Read',
-      puzzleType: 'one_turn_high_score',
-      objectiveType: 'one_turn_high_score',
-    });
-    expect(getDailyPuzzleDisplayTitle(legacyFallbackSlot.slotIndex, legacyFallbackSlot.slotTitle)).toBe('Puzzle 2');
   });
 
   it('keeps request-time generation opt-out via ENABLE_REQUEST_PUZZLE_GENERATION=false', () => {

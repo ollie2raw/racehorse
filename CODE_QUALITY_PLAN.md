@@ -563,12 +563,47 @@ file).
 `ladderSlotRowViewModel.ts`, `presentation.ts`, `streakStorage.ts`,
 `useDailyPuzzleArchiveLeaderboard.ts`, `useDailyPuzzleLadderGameplay.ts`,
 `useDailyPuzzleLegacyGameplay.ts`, `useDailyPuzzleValidatorWorker.ts`,
-`validator.ts`, `validator.worker.ts` — + their 17 co-located `.test.*` files.
+`validator.ts`, `validator.worker.ts`.
 **8 files stay** (the shared-live set above); deleting the 25 does not touch them
-(closure proved no live→dead edge). `api.ts` keeps its dead exports
-(`upsertDailyPuzzleBestScore`, `fetchDailyPuzzleLeaderboard`,
-`getAllDailyPuzzlesForDate`) — pruning those is a within-file follow-up on a
-live file, not part of the subtree deletion.
+(closure proved no live→dead edge).
+
+**SHIPPED 2026-09-05 (commit `25442b2a`).** Corrections found during the deletion
+(the map was close but not exact — verification bar caught the rest):
+- **14 dead `.test.*`, not 17** — the map's "17 co-located tests" included
+  `DailyPuzzleSoloHandDock.test.tsx`, `dailyPuzzlePlayMoveCompletion.test.ts`,
+  `useResponsiveHandTileSize.test.ts`, which test **live** shared files. Kept.
+- **`dailyPuzzle.css` (402 selectors) also deleted** — not in the map's file
+  count. Imported only by 4 of the deleted screens; exhaustive check: 0 of its
+  selectors referenced by any live consumer (`PuzzleRushHubView`'s
+  `dpl-ladder-hub` mention is a *comment explaining it deliberately does not use
+  it*). Orphan with no bundler entry point once its importers were gone.
+- **`presentation.ts` was NOT client-dead-only — a server test imported it.**
+  `server/src/dailyPuzzleGeneration.test.ts` imported `getDailyPuzzleStepPresentation`
+  / `getDailyPuzzleDisplayTitle` and `readFileSync`'d `DailyPuzzleScreen.tsx`.
+  `presentation.ts` still had **0 non-test importers** (client *and* server) — it
+  is genuinely dead; the 6 `it`s testing it + the copy-guard `it` were pruned,
+  the live generation/readiness cases in that file kept. The map's §CQ9.1.6.2
+  closure was client-scoped and should have grepped `server/` too.
+- **`api.ts` dead-export removal — done, and it was more than 3.** Removed
+  `upsertDailyPuzzleBestScore`, `fetchDailyPuzzleLeaderboard`,
+  `getAllDailyPuzzlesForDate` (confirmed 0 callers after the subtree deletion —
+  their only refs were in the deleted files + 1 deleted test) plus their now-orphaned
+  privates: `DAILY_PUZZLE_TYPE_ORDER`, `UpsertDailyPuzzleBestScoreInput`,
+  `sanitizeLeaderboardUsername`, the `logger` import. `DailyPuzzleLeaderboardEntry`
+  kept (external type consumer). **Still dead in `api.ts`, left for a follow-up:**
+  `getDailyPuzzleForDate`, `getDailyPuzzleByDateSeed`, `upsertDailyPuzzle`,
+  `upsertDailyPuzzleCompletion`, `getTodayDailyPuzzleLadder`, `startDailyPuzzleLadder`,
+  `submitDailyPuzzleSlot`, `completeDailyPuzzleLadder`, `fetchDailyPuzzleLadderLeaderboard`
+  — ~9 more ladder API fns now unused, a within-file prune.
+- **`client/src/lib/siteUrl.test.ts`** lost its `buildLadderShareText` import + the
+  "signs the Daily Puzzle Ladder share" `it` (dead helper deleted).
+- **`client/src/puzzleRush/dailyPuzzleIsRush.test.ts`** — see below.
+- **Lint budget ratcheted 401 → 377** (`client/package.json`) — the deleted files
+  carried 24 warnings; freed headroom pinned so it can't silently absorb new ones.
+
+Verified: `tsc -b` clean · client vitest **208/1553** (was 222/1640) · server
+vitest **218/1288** (was 218/1294) · lint 377/377 exit 0 · `check:architecture`
+20/20 CERTIFIED.
 
 **F1 re-sourcing — verified, landed clean.** Traced `181624b7`:
 `assembleBotMatchViewModel.ts:289-291` HEAD reads `dailyFritz.dailyLeaderboard{,Loading,Error}`
@@ -622,20 +657,32 @@ still receive traffic. This is **not** a client-only cleanup.
 `2026-09-02_daily_puzzle_ladder_decommission.sql`. Migrations are append-only
 history — none get deleted; listed for completeness.
 
-#### CQ9.1.6.4 Recommended Step-2 shape (for the human's call, not done here)
+#### CQ9.1.6.4 Step-2/3 status
 
-1. **Client subtree (25 files + 17 tests + F1-leftover bot plumbing)** — clean,
-   client-only, no data stakes. Gradeable **FIX NOW (delete)** as its own
-   commit(s). The `dailyPuzzleIsRush.test.ts` `?raw` import + the dead `api.ts`
-   exports are small within-scope loose ends.
+1. **Client subtree — ✅ SHIPPED 2026-09-05** (greenlit). 25 source + 1 CSS + 14
+   dead tests deleted; 3 `api.ts` exports + orphaned privates removed;
+   `siteUrl.test.ts` / `dailyPuzzleIsRush.test.ts` fixed; one dead `it`-cluster
+   in `server/src/dailyPuzzleGeneration.test.ts` pruned (it tested the deleted
+   `presentation.ts`); lint budget 401→377. **Still open (small within-file
+   follow-up):** ~9 more dead ladder fns in the live `api.ts`; the `'daily'`
+   `AppMode` union member (`types.ts:95`) now has no renderer; the F1-leftover
+   bot plumbing (`useDailyFritzRuntime` misplaced `dailyLeaderboard*` `useState`,
+   `botMatchViewModelTypes` fields, `BotMatchModalLayer` plumbing, `BotGameOverModal`
+   `{isDailyPuzzleRun && …}` block, `isDailyPuzzleRun` + `dailyPuzzleDate` prop +
+   ~10 gates) — **NOT touched this pass** (still gated on nothing being reachable;
+   its own scoped removal).
 2. **`daily_puzzles` table + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts`
    / `checkDailyPuzzleLadder.ts` / `dailyPuzzleLadderPublish.ts` /
-   `dailyPuzzleLadderReadiness.ts` + the health-route ladder check** — **blocked
-   on the `seedPuzzlePool.ts` / Puzzle-Rush-pool trace.** If Puzzle Rush's pool
-   is self-sufficient, this whole loop (cron seeds a table only the health check
-   reads) is dead weight and removable server-side; if not, it's load-bearing.
-   `HARDENING_PLAN.md`'s call once traced.
-3. **Archive tables** — retention decision, `HARDENING_PLAN.md`.
+   `dailyPuzzleLadderReadiness.ts` + the health-route ladder check** — **still
+   blocked on the `seedPuzzlePool.ts` / Puzzle-Rush-pool trace.** If Puzzle
+   Rush's pool is self-sufficient, this whole loop (cron seeds a table only the
+   health check reads) is dead weight and removable server-side; if not, it's
+   load-bearing. `HARDENING_PLAN.md`'s call once traced. **Unchanged by the
+   client deletion.**
+3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
+   write paths into `daily_puzzle_scores` / `daily_puzzle_completions` (via the
+   removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**
+   writers anywhere now.
 
 ## CQ9.2 Graded findings list — **Step 2, written 2026-09-05, awaiting ratification as `D-CQ-1`**
 
@@ -705,14 +752,16 @@ rather than chasing the whole boundary in one commit. Recorded here so it is
 not lost. `daily_puzzle*` prod tables and any server references stay
 `HARDENING_PLAN.md`'s call, not this plan's.
 
-**Step-1 map now written — `§CQ9.1.6` (2026-09-05).** The client subtree is
-bigger and cleaner than this note assumed (25 dead files + 17 tests, zero live
-importer) but **8 `dailyPuzzle/` files are shared-live with Puzzle Rush** and
-must stay. Server side hit the **STOP-AND-REPORT** trigger: `daily_puzzles` has
-a live 6-hourly `gen-puzzles.yml` cron writing it and a live health-route read;
-`seedPuzzlePool.ts` links it to Puzzle Rush's `puzzle_pool`. Client deletion is
-gradeable on its own; the `daily_puzzles`/cron half is blocked on a Puzzle-Rush-
-pool trace.
+**Step-1 map written + client half SHIPPED — `§CQ9.1.6` (2026-09-05).**
+25 dead `client/src/dailyPuzzle/` source files + `dailyPuzzle.css` + 14 dead
+tests deleted (greenlit); 3 dead `api.ts` exports + orphaned privates removed;
+2 client tests + 1 server test fixed; lint budget 401→377. **8 `dailyPuzzle/`
+files are shared-live with Puzzle Rush** and stayed. **Server half still blocked
+on the `seedPuzzlePool.ts` / Puzzle-Rush-`puzzle_pool` trace** — `daily_puzzles`
+has a live 6-hourly `gen-puzzles.yml` cron + a live health-route read;
+untouched. Archive-table drop = `HARDENING_PLAN.md`'s call (now zero writers
+anywhere after the `api.ts` `upsert*` removal). F1-leftover bot plumbing not
+touched (its own scoped removal). See `§CQ9.1.6.4`.
 
 ## CQ9.3 Step-3 change plan
 

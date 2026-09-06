@@ -1,7 +1,6 @@
 import { track } from '../lib/analytics';
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import { apiGet, apiPost } from '../api/client';
-import { logger } from '../utils/logger';
 import type { BoardState, BranchArm, PlacedTile, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
 import type {
@@ -17,13 +16,6 @@ import type {
   DailyPuzzleType,
 } from './types';
 import { getLocalDateKey, normalizeDateInputToLocalKey } from './date';
-
-const DAILY_PUZZLE_TYPE_ORDER: DailyPuzzleType[] = [
-  'one_turn_high_score',
-  'setup_and_strike',
-  'branch_mastery',
-  'reach_target',
-];
 
 async function requestServerJson<T>(
   path: string,
@@ -347,37 +339,6 @@ export async function getDailyPuzzleForDate(
   return coercePuzzleRow(data as CuratedDailyPuzzleRow);
 }
 
-export async function getAllDailyPuzzlesForDate(date: Date): Promise<CuratedDailyPuzzle[]> {
-  if (!supabase) return [];
-
-  const seed = getLocalDateKey(date);
-  const { data, error } = await withTimeout(
-    Promise.resolve(
-      supabase
-        .from('daily_puzzles')
-        .select(
-          'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
-        )
-        .eq('puzzle_date', seed),
-    ),
-    8000,
-  );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data) return [];
-
-  return (data as CuratedDailyPuzzleRow[])
-    .map(coercePuzzleRow)
-    .sort(
-      (a, b) =>
-        DAILY_PUZZLE_TYPE_ORDER.indexOf(a.puzzleType) -
-        DAILY_PUZZLE_TYPE_ORDER.indexOf(b.puzzleType),
-    );
-}
-
 export async function getDailyPuzzleByDateSeed(
   dateSeed: string,
   puzzleType: DailyPuzzleType = 'one_turn_high_score',
@@ -459,15 +420,6 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
   }
 }
 
-export interface UpsertDailyPuzzleBestScoreInput {
-  puzzleDate: string;
-  userId: string;
-  username: string;
-  score: number;
-  movesUsed: number;
-  seconds?: number;
-}
-
 export interface UpsertDailyPuzzleCompletionInput {
   puzzleDate: string;
   userId: string;
@@ -485,143 +437,6 @@ export interface DailyPuzzleLeaderboardEntry {
   bestMovesUsed: number;
   bestSeconds: number;
   updatedAt: string;
-}
-
-function sanitizeLeaderboardUsername(storedUsername: string | null | undefined): string {
-  const storedName = (storedUsername ?? '').trim();
-  if (storedName && !/^user_[a-f0-9]{8}$/i.test(storedName)) return storedName;
-
-  return 'Player';
-}
-
-export async function upsertDailyPuzzleBestScore(
-  input: UpsertDailyPuzzleBestScoreInput,
-): Promise<void> {
-  if (!supabase) {
-    throw new Error('Supabase is not configured.');
-  }
-
-  const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
-  const nextSeconds = Math.max(0, Math.floor(input.seconds ?? 0));
-  const { data: existing, error: selectError } = await withTimeout(
-    Promise.resolve(
-      supabase
-        .from('daily_puzzle_scores')
-        .select('best_score, best_moves_used, best_seconds')
-        .eq('puzzle_date', canonicalDate)
-        .eq('user_id', input.userId)
-        .maybeSingle(),
-    ),
-  );
-
-  if (selectError) {
-    throw new Error(selectError.message);
-  }
-
-  if (!existing) {
-    const { error: insertError } = await withTimeout(
-      Promise.resolve(
-        supabase.from('daily_puzzle_scores').insert({
-          puzzle_date: canonicalDate,
-          user_id: input.userId,
-          username: input.username,
-
-          // legacy columns (keep compatible)
-          score: input.score,
-          moves_used: input.movesUsed,
-
-          best_score: input.score,
-          best_moves_used: input.movesUsed,
-          best_seconds: nextSeconds,
-          updated_at: new Date().toISOString(),
-        }),
-      ),
-    );
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-    return;
-  }
-
-  const currentBestScore = Number(existing.best_score ?? 0);
-  const currentBestMoves = Number(existing.best_moves_used ?? Number.MAX_SAFE_INTEGER);
-  const currentBestSeconds = Number(existing.best_seconds ?? Number.MAX_SAFE_INTEGER);
-
-  const shouldUpdate =
-    input.score > currentBestScore ||
-    (input.score === currentBestScore && input.movesUsed < currentBestMoves) ||
-    (input.score === currentBestScore &&
-      input.movesUsed === currentBestMoves &&
-      nextSeconds < currentBestSeconds);
-
-  if (!shouldUpdate) return;
-
-  const { error: updateError } = await withTimeout(
-    Promise.resolve(
-      supabase
-        .from('daily_puzzle_scores')
-        .update({
-          // legacy columns (keep compatible)
-          score: input.score,
-          moves_used: input.movesUsed,
-
-          best_score: input.score,
-          best_moves_used: input.movesUsed,
-          best_seconds: nextSeconds,
-          username: input.username,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('puzzle_date', canonicalDate)
-        .eq('user_id', input.userId),
-    ),
-  );
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-}
-
-export async function fetchDailyPuzzleLeaderboard(
-  puzzleDate: string,
-  limit = 25,
-): Promise<DailyPuzzleLeaderboardEntry[]> {
-  if (!supabase) return [];
-
-  const canonicalDate = normalizeDateInputToLocalKey(puzzleDate);
-  const { data, error } = await withTimeout(
-    Promise.resolve(
-      supabase
-        .from('daily_puzzle_scores')
-        .select('user_id, username, best_score, best_moves_used, best_seconds, updated_at')
-        .eq('puzzle_date', canonicalDate)
-        .order('best_score', { ascending: false })
-        .order('best_moves_used', { ascending: true })
-        .order('best_seconds', { ascending: true })
-        .order('updated_at', { ascending: true })
-        .limit(limit),
-    ),
-  );
-
-  if (error) {
-    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-       
-      logger.error('api.ts', error, { message: '[DailyPuzzleLeaderboard] fetch error' });
-    }
-    throw new Error(error.message);
-  }
-
-  if (!data) return [];
-  return data.map((row) => {
-    const storedUsername = row.username as string | null;
-    return {
-      userId: row.user_id as string,
-      username: sanitizeLeaderboardUsername(storedUsername),
-      bestScore: Number(row.best_score ?? 0),
-      bestMovesUsed: Number(row.best_moves_used ?? 0),
-      bestSeconds: Number(row.best_seconds ?? 0),
-      updatedAt: row.updated_at as string,
-    };
-  });
 }
 
 export async function upsertDailyPuzzleCompletion(
