@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildRankedGameInsertPayload } from './rankedGamePayload';
+import { buildRankedGameInsertPayload, isRankedGameSourceColumnsEnabled } from './rankedGamePayload';
 
 const OLD_ENV = process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
 
@@ -27,9 +27,20 @@ describe('buildRankedGameInsertPayload', () => {
     },
   };
 
-  it('keeps the current DB payload shape exactly when the source-column flag is off', () => {
+  it('RK-8: defaults to ON when the env var is unset — payload carries the source columns', () => {
     delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
 
+    expect(isRankedGameSourceColumnsEnabled()).toBe(true);
+    expect(buildRankedGameInsertPayload(baseInput)).toMatchObject({
+      source_type: 'live_room',
+      source_match_id: 'room-match-1',
+    });
+  });
+
+  it('RK-8: explicit =false still forces the legacy plain payload shape (escape hatch intact)', () => {
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
+
+    expect(isRankedGameSourceColumnsEnabled()).toBe(false);
     expect(buildRankedGameInsertPayload(baseInput)).toEqual({
       player_id: '11111111-1111-4111-8111-111111111111',
       opponent_id: '22222222-2222-4222-8222-222222222222',
@@ -42,7 +53,7 @@ describe('buildRankedGameInsertPayload', () => {
     });
   });
 
-  it('includes source_type and source_match_id only when the source-column flag is on', () => {
+  it('includes source_type and source_match_id when the source-column flag is on', () => {
     process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'true';
 
     expect(buildRankedGameInsertPayload(baseInput)).toEqual({

@@ -285,6 +285,7 @@ import {
   probeDailyFritzAuthoritySchema,
 } from './http/stores/dailyFritzAuthorityReadiness';
 import { isDailyFritzTransactionalAuthorityEnabled } from './dailyFritzAuthorityFeature';
+import { isRankedGameSourceColumnsEnabled } from './ranking/rankedGamePayload';
 import { registerRoomEventsRoutes } from './http/routes/roomEvents';
 import {
   queryRankedGameForMatch,
@@ -936,6 +937,29 @@ server.listen(PORT, () => {
     .catch((err) => {
       log.warn({ err }, 'daily-fritz-authority startup probe error');
     });
+  // RK-8 (HARDENING_PLAN §8.3): when RANKED_GAMES_SOURCE_COLUMNS_ENABLED resolves
+  // false, insertRankedGameIdempotent() degrades to a non-idempotent POST and the
+  // (player_id, source_match_id) unique index can't catch a NULL-source duplicate
+  // — Guardrail #3 / INV-17 is void while INV-17's own check stays green. The
+  // default is now true (rankedGamePayload.ts), so a false here means an explicit
+  // `=false`/`=0`. Surface it loudly, GC-1-style, rather than throwing (the escape
+  // hatch is legitimate for a deliberate operator).
+  {
+    const sourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
+    if (!sourceColumnsEnabled) {
+      log.error(
+        {},
+        'RANKED_GAMES_SOURCE_COLUMNS_ENABLED resolved false — ranked_games inserts are NOT deduplicated (RK-8). Unset the env var to restore the safe default.',
+      );
+      if (config.isProd) {
+        Sentry.captureException(
+          new Error('RK-8: RANKED_GAMES_SOURCE_COLUMNS_ENABLED is false in production — ranked inserts are non-idempotent'),
+        );
+      }
+    } else {
+      log.info({ enabled: true }, 'ranked-games source-column idempotency active');
+    }
+  }
   const serverUrl = config.serverUrl;
   if (serverUrl) {
     const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;

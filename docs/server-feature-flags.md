@@ -97,7 +97,7 @@ Render dashboard. `?` = unknown from the repo.
 | Flag | Reads at | Gates | default | prod | remove-when |
 |---|---|---|---|---|---|
 | `DAILY_FRITZ_TRANSACTIONAL_COMMANDS` | `dailyFritzAuthorityFeature.ts` → ~10 Daily Fritz route/store files | transactional authority commands for Daily Fritz record-game / next-hand / completion / stranded-recovery; select-column shape; canonical telemetry writes | `false` | ? | docstring says "enable after all four `2026-08-01_daily_fritz_*` migrations applied" — but that's an *enable*-when, not a *remove*-when. Migrations are checked in and ~5 weeks old. **remove-when:** confirm applied in prod → make unconditional, delete the helper + `.env.example` line. |
-| `RANKED_GAMES_SOURCE_COLUMNS_ENABLED` | `rankedGamePayload.ts` | writes `source_type` / `source_match_id` on `ranked_games` inserts; **also the gate for the `on_conflict=player_id,source_match_id` dedup guard** in `insertRankedGameIdempotent()` | `false` | **ON** (HARDENING_PLAN.md §8.1.3: "confirmed live in prod via a recent-row sample") | **OVERDUE.** The migration is long applied and the flag is ON in prod; it now only gates a code path that's always taken. **Finding — see below.** remove-when: now. |
+| `RANKED_GAMES_SOURCE_COLUMNS_ENABLED` | `rankedGamePayload.ts` | writes `source_type` / `source_match_id` on `ranked_games` inserts; **also the gate for the `on_conflict=player_id,source_match_id` dedup guard** in `insertRankedGameIdempotent()` | **`true`** (inverted from convention — RK-8; was `false`) | **ON** (live query 2026-09-05: 118 recent rows all populated, 0 dup keys) | stopgap done (default-flip + boot log — RK-8). **remove-when: still now** — clean end state is to make the write + `on_conflict` unconditional and delete the flag. **Finding #1 below.** |
 | `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` | `rankedGamePayload.ts` | writes the `outcome` column on `ranked_games` (deferred rating path recovers forfeit sign from the row) | `false` | ? | docstring explains the *why* but **never states a remove-when**. Same migration era as its sibling above. **Finding — see below.** |
 
 ### Permanent operational toggles (keep — not rollout flags)
@@ -132,22 +132,23 @@ Test scaffolding. Out of scope for the rollout-flag convention.
 
 ---
 
-## Findings from this pass (logged, not fixed — per the pass's scope)
+## Findings from this pass
 
-1. **`RANKED_GAMES_SOURCE_COLUMNS_ENABLED` is a stale rollout flag — and its
-   removal-without-replacement risk is now a graded HARDENING finding.** The
-   migration is long applied and the flag is ON in prod (confirmed 2026-09-05 by
-   a service-role query — the 118 most recent `ranked_games` rows all carry a
-   `source_match_id`, 0 duplicate keys). It now gates only a code path that is
-   always taken in production. Because the same flag also gates the `on_conflict`
-   dedup guard and the `source_match_id` write in `insertRankedGameIdempotent()`,
-   a server that comes up with the env var *unset* silently loses ranked-insert
-   idempotency **and Guardrail #3 / INV-17 stays green while it happens** — the
-   static check verifies the POST routes through the wrapper, not that the
-   wrapper is idempotent. Traced and graded **POSTURE** as **RK-8** in
-   `HARDENING_PLAN.md` §8.3 (that is the authoritative record — this row is just
-   the pointer). Safe end state: make the write + `on_conflict` unconditional and
-   delete the flag; stopgap: `getEnvBool(..., true)`.
+Finding #1 was subsequently graded FIX NOW and its stopgap shipped (RK-8);
+#2–#4 remain logged, not fixed.
+
+1. **`RANKED_GAMES_SOURCE_COLUMNS_ENABLED` — stopgap SHIPPED, clean fix still
+   open.** The flag gated the `on_conflict` dedup guard + the `source_match_id`
+   write in `insertRankedGameIdempotent()`, so a server booting with the env var
+   *unset* silently lost ranked-insert idempotency while Guardrail #3 / INV-17
+   stayed green. Traced and graded as **RK-8** in `HARDENING_PLAN.md` §8.3 (the
+   authoritative record — this row is the pointer), then **FIX NOW on human
+   override**. **Done 2026-09-05:** `isRankedGameSourceColumnsEnabled()` now
+   `getEnvBool('RANKED_GAMES_SOURCE_COLUMNS_ENABLED', true)` — default inverted
+   from convention (comment says why), escape hatch (`=false`/`=0`) intact, plus
+   an `index.ts` boot `log.error` + Sentry if it ever resolves false. **Still
+   open at §8.3 priority:** the clean end state — make the write + `on_conflict`
+   unconditional and delete the flag.
 2. **`RANKED_GAMES_OUTCOME_COLUMN_ENABLED` has no remove-when.** Sibling of #1,
    same migration era. The docstring documents the ordering hazard but never
    says when the flag should die. Needs: confirm prod state, confirm migration

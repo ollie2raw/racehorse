@@ -61,7 +61,9 @@ const getEnvInt = (key: string, defaultValue: number): number => {
 // Runtime feature flags read through getEnvBool (here or in small is…Enabled()
 // helpers) are catalogued in docs/server-feature-flags.md — add a manifest row
 // (and a remove-when, for rollout/migration-gate flags) when you add one.
-const getEnvBool = (key: string, defaultValue: boolean): boolean => {
+// Exported so is…Enabled() helpers outside this file read env booleans the same
+// way (normalization + default) rather than reimplementing `=== 'true'`.
+export const getEnvBool = (key: string, defaultValue: boolean): boolean => {
   const val = process.env[key];
   if (!val) return defaultValue;
   const normalized = val.trim().toLowerCase();

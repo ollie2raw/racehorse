@@ -80,8 +80,21 @@ describe('insertRankedGameIdempotent', () => {
     expect(result).toEqual({ isNew: false, game: null });
   });
 
-  it('uses plain insert without on_conflict when the source-column flag is off', async () => {
+  it('RK-8: unset env var defaults to the idempotent on_conflict path', async () => {
     delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+    mockedSupabaseFetch.mockResolvedValue([insertedRow]);
+
+    await insertRankedGameIdempotent(baseInput);
+
+    const [path, init] = mockedSupabaseFetch.mock.calls[0]!;
+    expect(path).toBe('/rest/v1/ranked_games?on_conflict=player_id,source_match_id');
+    expect(init?.headers).toMatchObject({
+      Prefer: 'return=representation,resolution=ignore-duplicates',
+    });
+  });
+
+  it('RK-8: explicit =false still uses the legacy plain insert (escape hatch intact)', async () => {
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
     mockedSupabaseFetch.mockResolvedValue([
       {
         ...insertedRow,
@@ -99,8 +112,8 @@ describe('insertRankedGameIdempotent', () => {
     expect(JSON.parse(String(init?.body))).not.toHaveProperty('source_match_id');
   });
 
-  it('returns isNew false when legacy plain insert returns no row', async () => {
-    delete process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED;
+  it('returns isNew false when a legacy plain insert (=false) returns no row', async () => {
+    process.env.RANKED_GAMES_SOURCE_COLUMNS_ENABLED = 'false';
     mockedSupabaseFetch.mockResolvedValue([]);
 
     const result = await insertRankedGameIdempotent(baseInput);
