@@ -208,28 +208,24 @@ that RK-1/RK-2 actually took, not every syntactic way the same POST could
 be expressed. A reviewer still has to catch an obfuscated insert; the
 check catches the copy-paste one.
 
-**Second known limitation (RK-8, 2026-09-05): INV-17 verifies the POST
-routes through the wrapper — not that the wrapper is actually
-idempotent.** `insertRankedGameIdempotent()`'s dedup (`on_conflict` +
-`ignore-duplicates`, and the `source_match_id` write that the DB unique
-index needs) is gated on `RANKED_GAMES_SOURCE_COLUMNS_ENABLED === 'true'`
-via `hasIdempotentSource()`. With that flag unset the wrapper degrades to a
-plain non-idempotent POST, the payload omits `source_match_id` (so the DB
-unique index — a full index — does not catch the duplicate either), and
-`isNew` is always `true` (so callers' own skip-duplicate branch never
-fires). INV-17 stays green throughout. It is confirmed ON in prod (RK-8's
-live query: 118 recent rows all carry a `source_match_id`, 0 duplicate
-keys). **Stopgap shipped 2026-09-05** (FIX NOW, human override of the
-POSTURE grade): `isRankedGameSourceColumnsEnabled()` now
-`getEnvBool('RANKED_GAMES_SOURCE_COLUMNS_ENABLED', true)` — default
-intentionally inverted from the codebase's usual `false` because the
-`(player_id, source_match_id)` migration is confirmed long-applied; an
-explicit `=false`/`=0` still forces the legacy plain-insert path, and
-`index.ts` logs `log.error` + Sentry (prod) if the flag ever resolves
-false. So INV-17's guarantee now holds even in a fresh environment unless
-someone deliberately disables it. **Still open at `HARDENING_PLAN.md` §8.3's
-priority (RK-8):** the clean fix — make the source-column write +
-`on_conflict` unconditional and delete the flag entirely.
+**Former second limitation (RK-8) — RESOLVED, no longer applies.** From
+2026-09-05 it was recorded here that INV-17 verifies the POST routes
+through the wrapper but not that the wrapper is *actually* idempotent,
+because `insertRankedGameIdempotent()`'s dedup (`on_conflict` +
+`ignore-duplicates` + the `source_match_id` write) was gated on the
+runtime flag `RANKED_GAMES_SOURCE_COLUMNS_ENABLED` — so a server booting
+with that env var unset would silently do plain non-idempotent POSTs while
+INV-17 stayed green. A stopgap (default-flip) shipped 2026-09-05; the
+**clean fix shipped 2026-09-06** — the flag is **deleted** and the
+source-column write + `on_conflict` path are **unconditional**
+(`HARDENING_PLAN.md` §8.3, RK-8, now closed). The only remaining
+conditional is the genuine no-`sourceMatchId` path (`completeGhostGame`
+with a null `matchId`), which the full unique index treats as
+non-conflicting by design. INV-17's guarantee — "every ranked_games POST
+routes through the wrapper" — now means what it says: the wrapper dedups
+whenever the caller has a match identity, with no flag able to turn that
+off. (The first limitation above — literal-string matching — still
+stands.)
 
 ---
 

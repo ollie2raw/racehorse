@@ -82,9 +82,11 @@ Not "nothing," but uneven:
   `MP_DRAW_AUDIT`, `MP_DEBUG`/`DEBUG_MP`, `MATCHMAKING_DEBUG`,
   `ENABLE_REQUEST_PUZZLE_GENERATION`, `ENABLE_STARTUP_FRITZ_WARMUP`,
   `SOFT_GAME_INVARIANTS`, `DAILY_FRITZ_TRANSACTIONAL_COMMANDS`,
-  `RANKED_GAMES_SOURCE_COLUMNS_ENABLED`, `RANKED_GAMES_OUTCOME_COLUMN_ENABLED`.
-  The last two are **precisely the "gate new logic behind a runtime toggle
-  defaulting OFF so a server running ahead of a migration doesn't 500"** pattern
+  `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` (`RANKED_GAMES_SOURCE_COLUMNS_ENABLED`
+  was here too — **deleted 2026-09-06**, RK-8 clean fix, write now unconditional).
+  `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` is **precisely the "gate new logic behind
+  a runtime toggle defaulting OFF so a server running ahead of a migration
+  doesn't 500"** pattern
   (`server/src/ranking/rankedGamePayload.ts:50,61` — the docstring says so
   outright). This is the generalizable pattern; it is currently applied
   ad hoc, per-need, with no manifest and no removal discipline (a flag added for
@@ -345,12 +347,14 @@ environment question at the scale triggers above.**
   *rollout flags with no remove-when. Comment pointers added in `config.ts` /*
   *`dailyFritzAuthorityFeature.ts` / `rankedGamePayload.ts`. Purely*
   *organizational — no logic, no test.)* Remaining if wanted: fold
-  `RANKED_GAMES_*` into `config`, act on the stale-flag findings (esp.
-  `RANKED_GAMES_SOURCE_COLUMNS_ENABLED`), decide whether a stale-flag
-  `check:architecture` invariant is worth building.
+  `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` + `DAILY_FRITZ_TRANSACTIONAL_COMMANDS`
+  into `config`, act on their remaining stale-flag findings, decide whether a
+  stale-flag `check:architecture` invariant is worth building.
+  (`RANKED_GAMES_SOURCE_COLUMNS_ENABLED` — the sharpest of the findings — was
+  fully resolved 2026-09-06: flag deleted, write unconditional.)
 - **C:** only if greenlit despite the recommendation — price a Render Starter
   service, decide same-DB vs shadow-DB, scope the schema-sync mechanism.
 - Unrelated small hygiene surfaced here: `.vercel/project.json` mislink;
-  `RANKED_GAMES_*` flags read directly from `process.env` instead of `config`;
+  `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` reads directly from `process.env` instead of `config`;
   the runbook's "Apply migrations in staging first" line is aspirational (no
   staging exists) and should be reworded to match reality.

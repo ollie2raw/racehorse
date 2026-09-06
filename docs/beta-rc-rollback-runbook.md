@@ -31,9 +31,12 @@ SHAs.
 - `DAILY_FRITZ_TRANSACTIONAL_COMMANDS=false` disables new transactional Daily
   Fritz commands. Existing challenge-bound attempts fail closed while disabled;
   they must never fall back to legacy writes.
-- `RANKED_GAMES_SOURCE_COLUMNS_ENABLED=false` removes source columns from new
-  ranked-game inserts if ranking persistence itself must be contained. This
-  reduces idempotency protection and is an incident-only measure.
+- `RANKED_GAMES_SOURCE_COLUMNS_ENABLED` — **removed 2026-09-06 (RK-8 clean fix).**
+  Setting it now has no effect: the `source_type`/`source_match_id` write and the
+  `on_conflict` idempotency guard on ranked-game inserts are unconditional. There
+  is no supported way to contain ranking persistence via env var; if a ranked
+  insert must be stopped in an incident, that is a code-level change or a DB-side
+  measure, not a flag flip.
 - Challenge HTTP exposure must remain off unless the pending Challenge branch
   is deliberately included and separately reviewed.
 
