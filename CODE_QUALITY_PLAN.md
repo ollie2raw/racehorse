@@ -535,7 +535,7 @@ names collide hard. Every `puzzle`-containing symbol/dir/table, sorted:
 | **DEFINITELY LIVE — Puzzle Rush** | `client/src/puzzleRush/**` · `server/src/puzzleRush/**` · `server/src/http/routes/puzzleRush.ts` + `puzzleRushStore.ts` (registered `index.ts:592`) · `journey/*Puzzle*` (Learn journey — separate feature) · `stats/components/PuzzlePerformanceSection.tsx` · table **`puzzle_pool`** (Puzzle Rush's puzzle source) · tables `puzzle_rush_*` |
 | **DEFINITELY LIVE — shared code reused by Puzzle Rush** (per the "touches both → live" rule) | `client/src/dailyPuzzle/`: `DailyPuzzleSoloHandDock.tsx`, `useResponsiveHandTileSize.ts`, `dailyPuzzlePlayMoveCompletion.ts`, `dailyPuzzleScreenTypes.ts` (transitive), `dailyPuzzleLadderIcons.tsx`, `date.ts`, `types.ts`, `api.ts` — **8 of 33**, imported by `puzzleRush/PuzzleRush{PlayView,Screen,HubView}.tsx` / `home/*` / `learn/engine/rulesAdapter.ts` · `server/src/dailyPuzzle.ts` (`DailyPuzzleSlot` type, `DAILY_PUZZLE_SLOT_INDICES`, `buildDailyPuzzleLeaderboard`) — used by `puzzleRush/grading.ts`, `puzzleRush/leaderboard.ts`, health route · `server/src/dailyPuzzleSubmissionValidation.ts` (`validateDailyPuzzleSubmission`) — **used by `puzzleRush/grading.ts:169`** · `server/src/http/stores/dailyPuzzleStore.ts` (`getUsernameForUserId` → `puzzleRush.ts` route; archive-read fns → stats route) · `server/src/generatePuzzles.ts` (`computeBestPossiblePuzzleScore` → `dailyPuzzle.ts` → Puzzle Rush) |
 | **LIVE (read-only archive)** — retired writes, historical SELECT only | tables `daily_puzzle_attempts`, `daily_puzzle_slot_results`, `daily_puzzle_completions` — read by `server/src/social/socialProfile.ts` (profile "puzzles solved" count) + `server/src/http/stores/homeCompletionDates.ts` (streak-calendar frozen history), both service-role, via `listCompleted{DailyPuzzleLadder,LegacyDailyPuzzle}DatesForUser` passed to `registerStatsRoutes`. Client write policies + grants revoked 2026-09-02 (`2026-09-02_daily_puzzle_ladder_decommission.sql`, DF-CAND-1). |
-| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. the health-route check = **borderline — TRACED 2026-09-05, small rewrite (de-gate + relabel the `/ready` block) recommended; `dailyPuzzleLadderReadiness.ts` stays (KEEP — used by `dailyPuzzleLadderPublish.ts`), `checkDailyPuzzleLadder.ts` stays (unwired manual CLI)**. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports + the unmounted `handleDailyPuzzleLadderCronWarm` cron-warm endpoint = **FIX-NOW dead — ✅ SHIPPED (`c1bc286e`, `b132e381`)**. |
+| **AMBIGUOUS → RESOLVED 2026-09-05** | **table `daily_puzzles`** + `gen-puzzles.yml` cron + `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `seedPuzzlePool.ts` — traced (6.4 item 2): **KEEP, load-bearing** — `docs/ops/puzzle-rush-deploy.md` documents this as Puzzle Rush's only new-content pipeline. the `/ready` health-route check = **rewritten (de-gate + relabel + horizon-predicate) — ✅ SHIPPED (`4791f736`)**; `dailyPuzzleLadderReadiness.ts` (KEEP — used by `dailyPuzzleLadderPublish.ts`) + `checkDailyPuzzleLadder.ts` (unwired manual CLI) left untouched. The 0-caller `dailyPuzzleStore.ts` attempt-tracking exports + the unmounted `handleDailyPuzzleLadderCronWarm` cron-warm endpoint = **FIX-NOW dead — ✅ SHIPPED (`c1bc286e`, `b132e381`)**. |
 
 Guard test worth keeping: `client/src/puzzleRush/dailyPuzzleIsRush.test.ts` —
 source-level asserts the Home "Daily Puzzle" card routes to `puzzleRush`, not the
@@ -623,12 +623,12 @@ still receive traffic. This is **not** a client-only cleanup.
   → generates puzzle content (`generatePuzzles.ts`) and **writes `daily_puzzles`**
   (ladder-slot shape, 365 days ahead).
 - **Table `daily_puzzles` — LIVE writes (the cron) + LIVE reads.**
-  `listDailyPuzzleSlotsForDate` (`dailyPuzzleStore.ts:32`) SELECTs
-  `daily_puzzles?published=eq.true` and is called by (a) the **health route**
-  (`registerHealthRoutes.ts:187` → `assessDailyPuzzleLadderReadiness` → runs on
-  every `/healthz`/`/ready` hit; `log.error`s a "daily-puzzle-ladder readiness
-  alert" if slots aren't published 15min past PT midnight), (b)
-  `listDailyPuzzleSlotsForDateWithAutoSeed`.
+  Read by `dailyPuzzleLadderPublish.ts` (the generator's publish step) and, since
+  `4791f736`, by `getFurthestPublishedDailyPuzzleDate` (`dailyPuzzleStore.ts`) for
+  the `/ready` `dailyPuzzleGeneration` health snapshot (non-gating — see
+  §CQ9.1.6.4 item 2). The old `/ready` reader `listDailyPuzzleSlotsForDate` →
+  `assessDailyPuzzleLadderReadiness` (today's-ladder-publish-readiness, gated the
+  503) was replaced in that same commit.
 - **The pipeline link to Puzzle Rush — TRACED 2026-09-05, then CORRECTED
   2026-09-05. See `§CQ9.1.6.4` item 2 for the full write-up + live numbers + the
   correction note.** `seedPuzzlePool.ts` backfills `puzzle_pool` *from*
@@ -643,8 +643,8 @@ still receive traffic. This is **not** a client-only cleanup.
   tooling for the thin-tier backlog. **Corrected:** the cron +
   `seedDailyPuzzleLadder.ts` + `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts`
   + `daily_puzzles` table + `seedPuzzlePool.ts` **KEEP (load-bearing)**; the
-  health-route ladder-readiness check is **borderline — TRACED 2026-09-05,
-  de-gate + relabel the `/ready` block recommended** (§CQ9.1.6.4 item 2); the
+  `/ready` health-route check was **rewritten — de-gate + relabel + horizon
+  predicate, ✅ SHIPPED `4791f736`** (§CQ9.1.6.4 item 2); the
   0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports (commit `c1bc286e`)
   and the unmounted `handleDailyPuzzleLadderCronWarm` /
   `isAuthorizedDailyPuzzleCronRequest` cron-warm endpoint (commit `b132e381`)
@@ -754,11 +754,51 @@ history — none get deleted; listed for completeness.
      content source for a mode with a known thin-tier constraint, and the tooling
      the deploy doc's backlog item depends on. Underused since launch (pool frozen
      at 2284 rows) and degrading quietly — **operator-accepted, not dead.**
-   - **BORDERLINE — TRACED 2026-09-05. Recommendation: small rewrite (de-gate +
-     relabel) of the `/ready` block only; keep the two modules.** Awaiting
-     greenlight before any code.
+   - **BORDERLINE → ✅ SHIPPED 2026-09-05 (commit `4791f736`), graded FIX NOW.**
+     De-gate + relabel + predicate-repurpose of the `/ready` block, exactly as
+     scoped below. `dailyPuzzleLadderReadiness.ts` and `checkDailyPuzzleLadder.ts`
+     left untouched.
 
-     **What the check actually verifies (from code, not the name).**
+     **What shipped:**
+     - **De-gate:** `dailyPuzzleGeneration.ok` is no longer in `/ready`'s overall
+       `ok` expression (`registerHealthRoutes.ts` — `ok = !shuttingDown &&
+       requiredEnvOk && supabase.ok && dailyFritzEvents.ok &&
+       dailyFritzAuthority.ok`). A stalled content cron can no longer 503 the
+       readiness probe. The snapshot stays in `checks.dailyPuzzleGeneration`.
+     - **Relabel:** JSON field `dailyPuzzleLadder` → `dailyPuzzleGeneration`; log
+       message `'daily-puzzle-ladder readiness alert'` → `'daily-puzzle
+       generation pipeline is behind'`; the `legacySinglePuzzleDay` /
+       `missingSlotIndexes` shape is gone.
+     - **Repurpose predicate:** new `server/src/platform/health/dailyPuzzleGenerationHealth.ts`
+       — `assessDailyPuzzleGenerationHealth(todayPt, furthestPublishedDate)` is OK
+       iff the furthest **published** `daily_puzzles.puzzle_date` is `>= today +
+       DAILY_PUZZLE_GENERATION_MIN_LOOKAHEAD_DAYS` (**30**). `gen-puzzles.yml`
+       seeds 363 days out every 6 h, so a healthy pipeline sits far above the
+       floor; a genuinely stalled cron crosses it within weeks (was: ~365-day
+       blind spot); one bad near-term day never trips it. Adds
+       `Sentry.captureException` when it trips (the trace found the old
+       `log.error`-only alert was unwatched).
+     - **`dailyPuzzleStore.ts`:** `listDailyPuzzleSlotsForDate` (the health route
+       was its **sole** caller) replaced by `getFurthestPublishedDailyPuzzleDate`
+       (`select puzzle_date … published=eq.true order=puzzle_date.desc limit 1`).
+       File stays at 2 live exports (`+ getUsernameForUserId`).
+     - **Tests:** `dailyPuzzleGenerationHealth.test.ts` (predicate true/false
+       boundary incl. the exact `today + N` / `today + N - 1` edge, zero-rows,
+       custom horizon — 13 cases across both new test files);
+       `registerHealthRoutes.test.ts` — the **regression guard**: a failing
+       `dailyPuzzleGeneration` check leaves `/ready` `200` / `body.ok === true`
+       and still fires Sentry. Confirmed to **fail against the pre-change gated
+       code** (re-adding `&& dailyPuzzleGeneration.ok` → those 2 assertions turn
+       503, test red). A real supabase-probe failure still 503s (unchanged).
+     - **Verification:** server `tsc -b` clean, server vitest **218 files / 1293
+       tests**, server lint unchanged (201 problems / 62 errors — pre-existing
+       backlog, 0 new), client `tsc -b` clean, `check:architecture` **20/20
+       CERTIFIED**, client lint 377, client vitest 1553.
+
+     ---
+     Original trace (2026-09-05) preserved below for context.
+
+     **What the check actually verified (from code, not the name).**
      `registerHealthRoutes.ts:183-211` — inside `GET /ready` (NOT `/healthz`;
      `/healthz` only does a Supabase DB probe) — calls
      `assessDailyPuzzleLadderReadiness(todayPt, await listDailyPuzzleSlotsForDate(todayPt))`.
@@ -809,7 +849,7 @@ history — none get deleted; listed for completeness.
        content-staleness issue becomes an availability event on the free-tier
        single instance (cf. T-17's health-check history).
 
-     **Recommendation — REWRITE (small), scoped to the `/ready` block only:**
+     **Recommendation (SHIPPED as `4791f736`, above) — REWRITE (small), scoped to the `/ready` block only:**
      1. **De-gate:** drop `dailyPuzzleLadder.ok` from `/ready`'s overall `ok`
         expression (keep the field in the JSON for visibility). Puzzle-content
         staleness must not 503 the server.
@@ -874,19 +914,12 @@ history — none get deleted; listed for completeness.
      / vitest 1553.
 
    Net: the item-2 loop is **not** deletable as "dead weight." The ladder
-   *attempt-tracking* store surface and the unmounted cron-warm handler are
-   **both now removed**. **The only things left open in this cluster:**
-   (1) the **BORDERLINE health-route ladder-readiness check** — now TRACED (see
-   the borderline bullet above): the predicate is sound (it is the KEEP
-   generator's own publish gate, shared via `dailyPuzzleLadderReadiness.ts` ←
-   `dailyPuzzleLadderPublish.ts`), but the `/ready` block that reuses it is
-   redundant with `gen-puzzles.yml`'s every-6h verify step, inert (`log.error`
-   only, unwatched), and — the real risk — **gates `/ready`'s 503**, so a retired
-   feature's content lag can mark the server unhealthy. **Recommendation: small
-   rewrite — de-gate + relabel the `/ready` block only; keep both modules.**
-   Awaiting greenlight. (2) the **archive-table retention decision**
-   (`daily_puzzle_attempts` / `_slot_results` / `_completions`) — `HARDENING_PLAN.md`'s
-   call, not this plan's.
+   *attempt-tracking* store surface, the unmounted cron-warm handler, and the
+   `/ready` health-route rewrite are **all now shipped** (`c1bc286e`,
+   `b132e381`, `4791f736`). **The only thing left open in this cluster:** the
+   **archive-table retention decision** (`daily_puzzle_attempts` / `_slot_results`
+   / `_completions`, now zero writers) — `HARDENING_PLAN.md`'s call, not this
+   plan's.
 3. **Archive tables** — retention decision, `HARDENING_PLAN.md`. Note: the client
    write paths into `daily_puzzle_scores` / `daily_puzzle_completions` (via the
    removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**
@@ -977,7 +1010,7 @@ of new Puzzle Rush content** + the tooling for the thin-tier backlog.
 `generatePuzzles.ts` + `dailyPuzzleLadderPublish.ts` + `daily_puzzles` table +
 `seedPuzzlePool.ts` = **KEEP, load-bearing**.
 
-**Server dead-surface deletions — ✅ SHIPPED 2026-09-05, two passes:**
+**Server dead-surface cleanup — ✅ SHIPPED 2026-09-05, three passes:**
 - The 0-caller `dailyPuzzleStore.ts` **attempt-tracking** exports
   (`persistDailyPuzzleAttempt`, `createDailyPuzzleAttempt`,
   `createDailyPuzzleSlotResult`, `listDailyPuzzleSlotsForDateWithAutoSeed`,
@@ -985,20 +1018,18 @@ of new Puzzle Rush content** + the tooling for the thin-tier backlog.
   `listDailyPuzzleSlotsForAttempt`) + orphaned chain — commit `c1bc286e`.
 - `handleDailyPuzzleLadderCronWarm` + `isAuthorizedDailyPuzzleCronRequest` (the
   unmounted cron-warm endpoint; route-registration check confirmed 0 mounts) +
-  orphaned imports — commit `b132e381`. `dailyPuzzleStore.ts` now ~25 LOC:
-  `listDailyPuzzleSlotsForDate` + `getUsernameForUserId`.
+  orphaned imports — commit `b132e381`.
+- The `/ready` health-route check — de-gate + relabel + horizon-predicate rewrite
+  (`dailyPuzzleLadder` → `dailyPuzzleGeneration`; no longer gates the 503; alerts
+  on `max(daily_puzzles.puzzle_date) < today + 30d` via Sentry) — commit
+  `4791f736`. New `dailyPuzzleGenerationHealth.ts` + 2 test files (incl. a
+  regression guard proven to fail against the old gated code).
+  `dailyPuzzleLadderReadiness.ts` + `checkDailyPuzzleLadder.ts` left untouched.
+  `dailyPuzzleStore.ts` stays at 2 live exports
+  (`getFurthestPublishedDailyPuzzleDate` + `getUsernameForUserId`).
 
-**This cluster is now closed except for two named items:**
-1. **BORDERLINE — health-route ladder-readiness check — TRACED 2026-09-05**
-   (see §CQ9.1.6.4 item 2's borderline bullet). The predicate is sound (it is the
-   KEEP generator's own publish gate, shared via `dailyPuzzleLadderReadiness.ts` ←
-   `dailyPuzzleLadderPublish.ts` — that module stays). But the `/ready` block
-   reusing it is redundant with `gen-puzzles.yml`'s every-6h verify step, inert
-   (`log.error` only), and **gates `/ready`'s 503** — a retired feature's content
-   lag can mark the server unhealthy. **Recommendation: small rewrite — de-gate +
-   relabel the `/ready` block only, keep both modules. Awaiting greenlight; no
-   code touched.**
-2. **Archive-table retention decision** (`daily_puzzle_attempts` /
+**This cluster is now closed except for one named item:**
+1. **Archive-table retention decision** (`daily_puzzle_attempts` /
    `_slot_results` / `_completions`, now zero writers) — `HARDENING_PLAN.md`'s
    call, not this plan's.
 
