@@ -13,4 +13,4 @@
 .identity-highlight--signature .identity-highlight__heading { color: var(--text-secondary); }
 .identity-highlight strong { display: block; margin: 7px 0 4px; overflow-wrap: anywhere; color: var(--text-primary); font-family: var(--font-display); font-size: 21px; line-height: 1.05; }
 .identity-highlight__evidence { color: var(--text-secondary); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; }
-@media (max-width: 700px) { .identity-highlights { padding: 16px; } .identity-highlights__grid { grid-template-columns: 1fr; } }
+@media (--phone) { .identity-highlights { padding: 16px; } .identity-highlights__grid { grid-template-columns: 1fr; } }

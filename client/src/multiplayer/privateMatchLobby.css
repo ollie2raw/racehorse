@@ -2572,7 +2572,7 @@
   color: var(--text-primary);
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .mp-hub-shell.mp-hub-shell--pvf {
     padding: 16px 16px 24px;
   }
@@ -2693,7 +2693,7 @@
   opacity: 0.9;
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .pml-info-bar {
     grid-template-columns: 1fr;
     gap: 10px;

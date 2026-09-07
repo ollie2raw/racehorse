@@ -1,7 +1,7 @@
 /* ─── Global responsive overrides ────────────────────────────── */
 
 /* Small screens (≤640px) */
-@media (max-width: 640px) {
+@media (--phone) {
   .header h1 {
     font-size: 1rem;
   }
@@ -58,7 +58,7 @@
 }
 
 /* Mobile (≤768px) */
-@media (max-width: 768px) {
+@media (--phone) {
   .layout-screen {
     padding-inline: 0;
     overflow-x: hidden;

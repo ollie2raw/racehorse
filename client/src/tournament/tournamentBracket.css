@@ -1519,7 +1519,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .tb-shell {
     padding: 14px 16px 18px;
   }

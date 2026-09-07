@@ -224,3 +224,19 @@
   /* Inset guide ring on the board — faint structure without dulling the lift */
   --rh-match-board-inner-frame-fill: rgba(18, 28, 44, 0.1);
 }
+
+/* ── Responsive breakpoints ──────────────────────────────────────────
+   The one system. CSS custom properties cannot appear inside @media
+   conditions, so breakpoints are @custom-media (resolved at build by
+   postcss-custom-media via postcss-global-data pointed at this file).
+   Full convention + rationale: docs/breakpoints.md.
+
+     @media (--phone)           { ... }   phone: one column, bottom tabs
+     @media (--desk)            { ... }   desktop and up (the existing line)
+     @media (--below-wide)      { ... }   not a wide viewport: collapse grids
+     @media (--landscape-short) { ... }   in-game board on a landscape phone
+   ------------------------------------------------------------------ */
+@custom-media --phone (max-width: 768px);
+@custom-media --desk (min-width: 769px);
+@custom-media --below-wide (max-width: 900px);
+@custom-media --landscape-short (orientation: landscape) and (max-height: 480px);

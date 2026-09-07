@@ -1198,7 +1198,7 @@
   color: var(--color-elite);
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .learn-academy__module-inner--doubles {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -1285,7 +1285,7 @@
   justify-content: flex-start;
 }
 
-@media (max-width: 960px) {
+@media (--below-wide) {
   .learn-academy__module-inner {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -1319,7 +1319,7 @@
 
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .learn-academy__visual--pipeline .learn-academy__pipeline-track {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(4, auto);

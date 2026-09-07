@@ -408,7 +408,7 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .auth-modal-card {
     width: calc(100vw - 32px);
     padding: 22px 20px 20px;

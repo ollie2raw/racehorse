@@ -717,7 +717,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .lesson-coach-slot {
     padding: 0;
   }

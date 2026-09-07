@@ -928,7 +928,7 @@
   gap: 4px;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .nbl-header__rail {
     grid-template-columns: 1fr;
     row-gap: 10px;
@@ -966,7 +966,7 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (--phone) {
   .practice-lab .nbl-shell {
     padding: 10px 10px 12px;
   }

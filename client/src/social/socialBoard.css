@@ -468,7 +468,7 @@
 
 /* ---------------------------------------------------------- responsive */
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .rh-sb-masthead { flex-direction: column; gap: 16px; padding: 20px 18px 18px; }
   .rh-sb-masthead__actions { width: 100%; }
   .rh-sb-btn { flex: 1; justify-content: center; }
@@ -479,7 +479,7 @@
 
 /* The five-column grid needs a horizontal scroll on a phone — same
    constraint the leaderboard board has. */
-@media (max-width: 620px) {
+@media (--phone) {
   .rh-sb-table { overflow-x: auto; }
   .rh-sb-thead,
   .rh-sb-row { min-width: 560px; }

@@ -567,7 +567,7 @@
     linear-gradient(180deg, #02040a 0%, #050711 38%, #090b15 100%);
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .claude-home-shell {
     height: auto;
     min-height: 100dvh;
@@ -595,7 +595,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .claude-accordion-home {
     height: auto;
     overflow: visible;
@@ -1096,7 +1096,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .claude-accordion-home__live {
     display: none !important;
   }
@@ -1388,7 +1388,7 @@
   gap: 12px;
 }
 
-@media (max-width: 680px) {
+@media (--phone) {
   .daily-dash-main {
     padding: clamp(20px, 3vh, 32px) clamp(16px, 4vw, 24px);
   }

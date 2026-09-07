@@ -1307,7 +1307,7 @@
   width: 100%;
 }
 
-@media (max-width: 980px) {
+@media (--below-wide) {
   .home-lobby-screen {
     padding-inline: 18px;
   }
@@ -1855,7 +1855,7 @@
   }
 }
 
-@media (max-width: 980px) {
+@media (--below-wide) {
   .tournament-screen .tournament-grid-entry,
   .tournament-screen .tournament-grid-waiting,
   .tournament-screen .tournament-grid-running {
@@ -1874,7 +1874,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (--phone) {
   .mode-join-row {
     grid-template-columns: 1fr;
   }
@@ -1884,7 +1884,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .tournament-layout-2col {
     grid-template-columns: 1fr;
   }

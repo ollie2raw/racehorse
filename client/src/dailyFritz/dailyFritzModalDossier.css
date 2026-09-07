@@ -324,7 +324,7 @@
 
 .dfd__split .dfd__actions { margin-top: 20px; }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .dfd__split { grid-template-columns: minmax(0, 1fr); }
   .dfd__split > * + * { border-left: 0; border-top: 1px solid var(--dfd-line); }
   .dfd__headline { font-size: 28px; }

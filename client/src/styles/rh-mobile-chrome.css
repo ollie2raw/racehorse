@@ -273,7 +273,7 @@
  * utilities carry the same specificity as a bare class here and are emitted
  * later, so an unprefixed rule silently loses.
  */
-@media (min-width: 769px) and (max-width: 1279px) and (min-height: 600px) {
+@media (--desk) and (max-width: 1279px) and (min-height: 600px) {
   .rh-global-nav .rh-nav-inner {
     display: flex;
     justify-content: space-between;
@@ -307,7 +307,7 @@
 
 /* Below 1024px the tabs and stats alone need the whole row: the wordmark
  * yields to the logo mark, and the tabs drop to their secondary size. */
-@media (min-width: 769px) and (max-width: 1023px) and (min-height: 600px) {
+@media (--desk) and (max-width: 1023px) and (min-height: 600px) {
   .rh-global-nav .rh-nav-inner {
     padding-left: 10px;
     padding-right: 10px;

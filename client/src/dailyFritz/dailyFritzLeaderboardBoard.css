@@ -702,7 +702,7 @@
   }
 }
 
-@media (max-width: 860px) {
+@media (--below-wide) {
   .dfl-inner {
     padding: 16px 14px 14px;
   }

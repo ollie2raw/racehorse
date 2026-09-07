@@ -90,7 +90,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .social-hero__meta {
     grid-template-columns: minmax(0, 1fr);
   }

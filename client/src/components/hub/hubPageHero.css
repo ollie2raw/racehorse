@@ -127,7 +127,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .rh-hub-hero {
     grid-template-columns: 1fr;
     min-height: 0;

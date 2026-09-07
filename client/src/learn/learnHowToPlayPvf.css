@@ -724,7 +724,7 @@
 
 /* ── Responsive ── */
 
-@media (max-width: 960px) {
+@media (--below-wide) {
   .learn-howto-pvf__stage {
     grid-template-columns: 1fr;
     overflow-y: auto;
@@ -754,7 +754,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .learn-howto-pvf__beat-grid {
     grid-template-columns: 1fr;
   }

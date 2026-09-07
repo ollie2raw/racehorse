@@ -253,7 +253,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .sp-solo-grid {
     grid-template-columns: 1fr;
   }

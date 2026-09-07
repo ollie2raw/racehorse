@@ -294,7 +294,7 @@
 }
 
 /* ── Responsive Overrides ── */
-@media (max-width: 640px) {
+@media (--phone) {
   .rh-lb-header {
     padding: 16px 20px;
     flex-wrap: wrap;

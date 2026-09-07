@@ -175,7 +175,7 @@
   .home-next-move__cta { transition: none; }
 }
 
-@media (max-width: 600px) {
+@media (--phone) {
   .home-next-move {
     align-items: flex-start;
     flex-wrap: wrap;

@@ -958,7 +958,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .rh-sf-page-inner,
   .social-page-inner {
     padding: 16px 14px 20px;
