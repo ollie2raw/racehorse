@@ -180,18 +180,41 @@ Each phase is independently shippable. Stop and report at every boundary.
 - [x] Baseline: `npx tsc -b` green, 377 warnings, 0 errors
 - [ ] Commit this doc
 
-### Phase 1b — `no-console` (128 → 0)
+### Phase 1b — `no-console` (128 → 3)
 
-Target budget after: **249**. Four commits, one per bucket in §4:
+Phase 1b is deliberately **mechanical only** — its job is to drop the budget fast
+and prove the harness. Anything requiring a signature change or a behavioural
+guard is pushed to Phase 3, which lands in those files anyway.
 
-1. `chore(lint): delete TEMP-DIAGNOSTIC logging left from the MP-JIT pass` (−15)
-2. `chore(lint): exempt debug-tooling modules from no-console` (−17)
-3. `refactor(log): route match/tournament telemetry through logger` (−~60)
-4. `refactor(log): route multiplayer + guided telemetry through logger` (−~36)
+The `TEMP-DIAGNOSTIC` bucket turned out to be three subsystems rather than 15
+loose logs. Only 12 of the 15 are mechanical:
 
-No behavioral change intended. `logger.operational()` adds a Sentry breadcrumb
-where a bare `console.log` had none — a deliberate improvement, called out in the
-commit body. Verify per commit: `npx tsc -b`, both vitest suites, lint delta.
+1. `chore(lint): delete standalone TEMP-DIAGNOSTIC logging` (−9) — `59c0388e`.
+   Pure log statements; nothing else read the values.
+2. `chore(lint): remove the forced-draw diagnostic subsystem` (−3).
+   `forcedDrawPendingDiags` + two record functions + a 30s watchdog in
+   `useRoomSocketSync.ts`, and the optional `recordForcedDrawStateEvent` callback
+   threaded through `applyProjectionResult.ts`. The defensible signature touch:
+   an optional callback whose only implementation was the deleted diagnostic, no
+   test covers it, 2 files, no live-path param narrowing. Also fixes two real
+   leaks — the pending array grew unboundedly for the life of the socket effect,
+   and each forced draw armed an uncancelled 30s timer.
+3. `chore(lint): exempt debug-tooling modules from no-console` (−17)
+4. `refactor(log): route match/tournament telemetry through logger` (−~60)
+5. `refactor(log): route multiplayer + guided telemetry through logger` (−~36)
+6. `refactor(learn): replace console.assert with a thrown invariant` (−2)
+
+**Deferred out of Phase 1b — 3 logs, see Phase 3 unit P3-A below.** The log at
+`usePlayAction.ts:117` and the two in `gameplayBlockDiagnostics.ts` stay
+byte-for-byte intact, scaffold included. Deleting the `usePlayAction` one without
+also removing its 9 now-dead params would *regress* the budget by 7
+`no-unused-vars` warnings, and removing them is a signature change in the live
+MOVE path — not mechanical work.
+
+No behavioral change intended in Phase 1b. `logger.operational()` adds a Sentry
+breadcrumb where a bare `console.log` had none — a deliberate improvement, called
+out in the commit body. Verify per commit: `npx tsc -b`, both vitest suites, lint
+delta.
 
 ### Phase 2 — `set-state-in-effect` (51 → 0)
 
@@ -232,6 +255,39 @@ Group commits by hook family so each diff is one coherent dataflow change.
 
 Hardest files, do last and slowly: `useMatchRuntimeBridge.ts`,
 `useHandLifecycle.ts`, `useAppRouteState.ts`, `App.tsx`.
+
+#### P3-A — Remove the block-reason diagnostic *(deferred out of Phase 1b)*
+
+One coherent unit, **test-first**, because it is a signature change to a
+System-9-parked composed hook in the live MOVE path. Deferred here rather than
+done mechanically in Phase 1b: deleting the log alone would regress the budget by
+7 `no-unused-vars` warnings, and removing the params is behavioural-risk surface.
+Phase 3 lands in `match/session/actions/` anyway — the 7 refs in
+`gameplayBlockDiagnostics.ts` generate `react-hooks/refs` warnings this phase owns.
+
+Scope, verified by tracing every occurrence of each identifier:
+
+- 1 log — `usePlayAction.ts:117` (`[TEMP-DIAGNOSTIC] play() blocked by …`)
+- 2 logs — `gameplayBlockDiagnostics.ts:102, :121`
+- **9 `usePlayAction` params**, each appearing *only* in the param type, the
+  destructure, the deleted log, and the dep array: `drawSequenceActive`,
+  `flyingTiles`, `pendingUiAction`, `roomRecoveryState`, `isRecoveringConnection`,
+  `rejoinInFlightRef`, `pendingActionRef`, plus `diagnoseGameplayBlockReason` and
+  `blockConditionAgeMs`
+- the `useLiveMatchActions.ts` call-site edit (destructure at L181–185, pass-through
+  at L297–298)
+- 4 tracking effects + 7 refs in `gameplayBlockDiagnostics.ts`
+- `diagnoseGameplayBlockReason` and `blockConditionAgeMs` themselves — their only
+  consumer is the deleted log
+
+**`isGameplayActionBlocked` and `setPendingActionRefDiag` stay untouched** — both
+are live behaviour, not diagnostics. Write the failing test to guard the MOVE path
+first (the score-toast template, `869e0712`).
+
+Note: `gameplayBlockDiagnostics.ts` is misnamed — it exports the live
+gameplay-blocking predicate, not diagnostics. `setPendingActionRefDiag`'s name is
+likewise inaccurate once the tracking goes. Renaming either touches 4 files; treat
+as optional follow-up, not part of P3-A.
 
 ### Phase 4 — Gate it
 
