@@ -273,6 +273,89 @@ when that system is next touched with permission.
 
 31 + 18 + 2 = 51.
 
+### Pass 1 result — A/B/C classification (2026-09-07)
+
+**A = 1, B = 24, C = 25** across the 49 non-frozen sites. Plus **3 bugs found
+outside the warning list** (see below).
+
+**A — real bug, fixed this pass (1 of the 49).**
+`multiplayer/MultiplayerGameShell.tsx:612` — HUD score pulse stuck on
+(`e7ec6843`). Its warning survives the fix, so it is also a B for Pass 2.
+
+**B — mechanically clearable (24).** Synchronous setState that can move to
+render-phase adjust, a lazy `useState` initializer, or a `key` remount, with no
+behaviour change.
+`App.tsx:533` · `auth/AuthModal.tsx:55` · `auth/ChangePasswordModal.tsx:26` ·
+`auth/UsernameModal.tsx:35` · `auth/useAppSessionUi.ts:95` ·
+`bot/BotMatchScreen.tsx:42` · `identity/usePlayerIdentityModel.ts:121` ·
+`modules/daily/useDailyFritzRuntime.ts:107` · `modules/ghost/useGhostRuntime.ts:124` ·
+`modules/guided/useAuthoringCapture.ts:106` ·
+`modules/guided/useGuidedMatchCaptureRuntime.ts:61` ·
+`modules/review/usePostGamePivotalReview.ts:58` ·
+`multiplayer/MultiplayerGameShell.tsx:376, :394, :612` ·
+`puzzleRush/PuzzleRushPlayView.tsx:99` · `routing/useAppRouteState.ts:86, :102` ·
+`analyzer/GameReviewer.tsx:80` · `bot/useBotGamePreferences.ts:70` ·
+`components/GlobalNav.tsx:171` · `components/OfflineBanner.tsx:8` ·
+`dailyFritz/DailyFritzLeaderboardScreen.tsx:386` ·
+`practice/NoBrainerLabScreen.tsx:95`
+
+**C — legitimately in the effect (25).** Reacting to an external system (fetch,
+dynamic import, timer, storage, coach engine), or clearing it means restructuring
+a System-9-parked hook. These get a justified `eslint-disable-next-line` in
+Pass 2 under the D-2 precedent.
+`auth/useAppSessionUi.ts:75` (reset-then-fetch) ·
+`dailyFritz/useDailyFritzInit.ts:193` · `dailyFritz/useDailyFritzRunController.ts:358`
+(fires `void continueSet()`) · `match/session/handReveal/useHandRevealSequence.ts:168`
+(drives the auto-progress interval) · `modules/guided/useAuthoringCapture.ts:146`
+(deliberate turn-start latch — the code comments say so) ·
+`modules/guided/useGuidedMatchRuntime.ts:72` (dynamic import), `:158`
+(`coach.resetHand()`) · `modules/match/hand-lifecycle/useHandRevealScheduler.ts:160` ·
+`multiplayer/usePrivateLobbyWinStreak.ts:25` ·
+`multiplayer/usePrivateMatchLobbyFriends.ts:29` · `multiplayer/useSocialInviteState.ts:79` ·
+`tournament/useTournament.ts:275` · `tournament/useTournamentDisplayLabels.ts:31` ·
+`dailyFritz/DailyFritzLeaderboardScreen.tsx:272, :277, :307` ·
+`ghost/GhostSetupScreen.tsx:128` · `home/useHomeCommandCenter.ts:115` ·
+`journey/lessonHost/JourneyLessonHost.tsx:132, :238` ·
+`practice/NoBrainerLabScreen.tsx:141, :174, :237` ·
+`social/ActivityFeedPanel.tsx:252` · `stats/WeeklyStatsScreen.tsx:22`
+
+### The lint rule did not find the bugs
+
+**3 of the 4 bugs fixed this pass were at sites the rule never flagged.** The
+`set-state-in-effect` list pointed at exactly one of them. The others came from a
+targeted scan for the real defect signature — *an effect keyed on the raw `state`
+object that arms deferred work and cancels it from its cleanup*:
+
+```
+effects keyed on raw `state` that arm deferred work:  6
+  useHandRevealSequence.ts:116     HAS-CLEANUP   -> BUG (087cdeaf)
+  MultiplayerGameShell.tsx:421     HAS-CLEANUP   -> BUG (6c502a26)
+  MultiplayerGameShell.tsx:592     no-cleanup    -> the already-fixed pulse
+  MultiplayerGameShell.tsx:627     no-cleanup    -> ok
+  useMultiplayerPresentation.ts:86 no-cleanup    -> ok (toast, fixed 869e0712)
+  useMultiplayerPresentation.ts:143 HAS-CLEANUP  -> BUG (d445f4d5)
+```
+
+Every `HAS-CLEANUP` row was a live bug. That scan is the reusable artefact from
+this pass, not the rule.
+
+**Bugs found and fixed (all four share one root cause: MP-JIT-2 turned every
+gameplay transition into two `state` updates ~45ms apart, and any effect that
+defers work and cancels it from cleanup loses that work permanently, because the
+re-run's idempotency guard then refuses to re-arm).**
+
+| commit | site | failure |
+|---|---|---|
+| `e7ec6843` | `MultiplayerGameShell:612` | HUD score pulse stayed lit after every score |
+| `6c502a26` | `MultiplayerGameShell:421` | post-game rating stuck `pending` forever; delta never resolved |
+| `087cdeaf` | `useHandRevealSequence:116` | hand-over reveal never appeared (1400ms window; `setHandReveal` called 0 times) |
+| `d445f4d5` | `useMultiplayerPresentation:143` | multi-tile draw played only its first tile |
+
+`087cdeaf` is the sharpest: the hook was *already given* a shared
+`handRevealTimerRef` whose unmount cleanup lives in `useLiveMatchSession`, but it
+destructured it as `_handRevealTimerRef` and used a local `const tid` instead.
+The correct mechanism was threaded in and bypassed.
+
 **A recurring sub-pattern worth naming:** several auth sites
 (`AuthModal.tsx:55`, `ChangePasswordModal.tsx:26`, `UsernameModal.tsx:35`) are the
 "reset form state when the modal opens" idiom. React's own guidance is to remount
