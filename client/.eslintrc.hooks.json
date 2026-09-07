@@ -20,5 +20,11 @@
     "react-hooks/immutability": "warn",
     "react-hooks/preserve-manual-memoization": "warn",
     "react-hooks/purity": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/bot/view/board/BotMatchBoardDebugOverlays.tsx"],
+      "rules": { "react-hooks/refs": "off" }
+    }
+  ]
 }

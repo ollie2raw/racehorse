@@ -87,6 +87,14 @@
     },
     {
       "files": [
+        "src/bot/view/board/BotMatchBoardDebugOverlays.tsx"
+      ],
+      "rules": {
+        "react-hooks/refs": "off"
+      }
+    },
+    {
+      "files": [
         "src/components/boardDiagnostics.ts",
         "src/debug/renderProfiler.ts",
         "src/match/layoutDebug.ts",

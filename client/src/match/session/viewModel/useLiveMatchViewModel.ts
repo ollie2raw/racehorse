@@ -131,6 +131,7 @@ export function deriveLiveMatchViewModel(input: DeriveLiveMatchViewModelInput): 
 
 export function useLiveMatchViewModel(input: LiveMatchViewModelInput): LiveMatchViewModel {
   const { frozenHandOverBoardRef, ...rest } = input;
+  // eslint-disable-next-line react-hooks/refs -- view-model / runtime reads a latched ref during render; a real fix is a System-9-parked restructure
   const frozenHandOverBoard = frozenHandOverBoardRef.current;
 
   const derived = useMemo(

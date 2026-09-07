@@ -98,6 +98,7 @@ export function TournamentRoute({
     const nextSlot = tournament.upcoming[0];
     const nextCountdown = nextSlot
       ? (() => {
+          // eslint-disable-next-line react-hooks/purity -- countdown ms derived from wall-clock each render; the row re-renders on a tick
           const ms = Math.max(0, Date.parse(nextSlot.scheduled_start) - Date.now());
           const total = Math.floor(ms / 1000);
           const h = Math.floor(total / 3600);

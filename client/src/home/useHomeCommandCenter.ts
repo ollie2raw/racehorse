@@ -317,6 +317,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
     : createInitialModel(identity, tournament);
   return useMemo(
     () => {
+      // eslint-disable-next-line react-hooks/purity -- Date.now() stamps when this model snapshot was generated; consumed by the async load, not rendered
       const generatedAt = Date.now();
       const activityTimeline = buildHomeActivityTimeline(result, generatedAt);
       const modelWithTimeline = { ...result, activityTimeline };

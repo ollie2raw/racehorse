@@ -53,6 +53,7 @@ export function useHandRevealScheduler({
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const pendingHandRevealRef = useRef<{ handNumber: number; reveal: BotHandReveal } | null>(initialHandReveal ? { handNumber: match.handNumber, reveal: initialHandReveal } : null);
   const handRevealRef = useRef<BotHandReveal | null>(null);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   handRevealRef.current = handReveal;
 
   const handRevealShownAtRef = useRef<number | null>(null);

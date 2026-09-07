@@ -50,16 +50,20 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   const initialDynamicRouteAppliedRef = useRef(false);
   const browserNavigationRef = useRef(false);
 
+  // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
   const [routeReady, setRouteReady] = useState(!initialRouteRef.current.tournamentId);
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     Boolean(initialRouteRef.current.learnHowToPlay),
   );
   // Internal state — used only when caller doesn't provide external state.
   const [_mpSubView, _setMpSubView] = useState<'quick' | 'private'>(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     initialRouteRef.current.multiplayerView ?? 'quick',
   );
   const [profileTarget, setProfileTarget] = useState<string | null>(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     initialRouteRef.current.profileUsername ?? null,
   );
   const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);

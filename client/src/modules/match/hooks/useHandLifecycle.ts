@@ -299,6 +299,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     ],
   );
 
+  // eslint-disable-next-line react-hooks/immutability -- the callback mutates refs, not render-scope locals
   const advanceHand = useCallback(() => {
     const live = matchRef.current;
     const challengeHandOnlyGameOver = Boolean(
@@ -368,6 +369,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         handTransitionInFlightRef.current = false;
         prefetchCoordinator.clear();
         completedHandEvidenceRef.current = null;
+        // eslint-disable-next-line react-hooks/immutability -- ref.current write inside a callback, not render
         reveal.dailyFritzMinAdvanceAtRef.current = null;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
@@ -679,9 +681,11 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     traceHandLifecycle,
   ]);
 
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   advanceHandRef.current = advanceHand;
 
   const notifyBotActionResult = useCallback(
+    // eslint-disable-next-line react-hooks/immutability -- the callback mutates refs, not render-scope locals
     (result: BotActionResult) => {
       if (result.handEnded) {
         lifecycle.onHandEndedFromBotAction(
@@ -695,6 +699,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         );
         if (isDailyFritzMode) {
           lastDailyFlowLabelRef.current = 'hand-complete';
+          // eslint-disable-next-line react-hooks/immutability -- ref.current write inside a callback, not render
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
           logDailyFritzHandComplete(result);
         }

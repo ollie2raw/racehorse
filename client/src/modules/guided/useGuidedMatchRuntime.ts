@@ -125,6 +125,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
   const coachPresentation = useMemo(
     () => buildGuidedCoachPresentation({
       match, userPlayMoves, handActive, botTurn, drawSequenceActive, handReveal,
+      // eslint-disable-next-line react-hooks/refs -- view-model / runtime reads a latched ref during render; a real fix is a System-9-parked restructure
       isTransitioning: isTransitioningRef.current, showRecommendation, lessonLayoutMode,
       isGuidedV2Mode, isGuidedV2OffLine, isGuidedTranscriptMode, isGuidedFrozenLessonMode,
       guidedV2PlaybackReady, guidedV2EventIndex, currentV2CursorEvent, currentExpectedV2PlayerEvent,

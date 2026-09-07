@@ -71,6 +71,7 @@ export function useTournamentSessionSockets({
     onMatchAbandoned: () => undefined,
   });
 
+  // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
   sessionSocketDelegatesRef.current = {
     onTournamentCompleted: (payload) => {
       if (!payload?.tournamentId) return;

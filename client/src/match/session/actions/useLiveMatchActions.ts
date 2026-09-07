@@ -163,6 +163,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
   const markUncertainAndResync = useCallback(
     (requestId: string, error?: string) => {
       if (logicalGameplayActionRef.current?.requestId === requestId) {
+        // eslint-disable-next-line react-hooks/immutability -- ref.current write inside an event callback, not render
         logicalGameplayActionRef.current = {
           ...logicalGameplayActionRef.current,
           uncertain: true,
@@ -206,6 +207,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
         joinedRoom,
       )
     ) {
+      // eslint-disable-next-line react-hooks/immutability -- ref.current write inside an event callback, not render
       logicalGameplayActionRef.current = null;
     }
   }, [state?.sequence, state?.handNumber, state?.gameOver, state?.handOver, joinedRoom, logicalGameplayActionRef]);
