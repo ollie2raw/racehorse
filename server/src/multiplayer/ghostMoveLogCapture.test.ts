@@ -179,4 +179,60 @@ describe('ghost move log capture for verification', () => {
     const fullLog = getRoom(code).ghostMoveLogs['seat-1'] ?? [];
     expect(verifyPlayerMoveLog(fullLog, { strictHandContinuity: true })).toEqual({ ok: true });
   });
+
+  // RK-10: an illegal PASS (a legal play existed) must be rejected WITHOUT
+  // leaving a poisoned `branch: 'pass'` entry in the ghost move log — that entry
+  // used to permanently fail the game-over move-log verification and silently
+  // drop the match's ranked_games row.
+  it('a rejected illegal PASS does not poison the ghost move log', async () => {
+    const code = 'BADPASS';
+    const board: BoardState = {
+      mainLine: [pt(t(3, 3))],
+      leftEnd: 3,
+      rightEnd: 3,
+      leftEndIsDouble: true,
+      rightEndIsDouble: true,
+      hubDoubles: [],
+    };
+    seedRoom(code, {
+      config: {
+        maxPips: 6,
+        tilesPerPlayer: 7,
+        deadTileCount: 0,
+        scoringMultiple: 5,
+        blockedHandRule: 'lowestPips',
+        endHandBonus: 'sumOpponentPenalties',
+        winningScore: 60,
+      },
+      playerIds: ['seat-1', 'seat-2'],
+      // seat-1 holds 3|5 — a legal play on the open 3s. A PASS is illegal.
+      players: {
+        'seat-1': { id: 'seat-1', hand: [t(3, 5), t(1, 2)], score: 0 },
+        'seat-2': { id: 'seat-2', hand: [t(0, 0), t(4, 4)], score: 0 },
+      },
+      board,
+      boneyard: [],
+      deadTiles: [],
+      currentPlayerIndex: 0,
+      handNumber: 1,
+      handOpen: true,
+      handOver: false,
+      gameOver: false,
+      sequence: 1,
+    } as GameState);
+
+    const io = makeIo();
+    const legalPlays = getLegalMoves(getRoom(code).state!, 'seat-1').filter((m) => m.type === 'play');
+    expect(legalPlays.length, 'seat-1 has a legal play (pass would be illegal)').toBeGreaterThan(0);
+
+    await expect(
+      act(code, 'seat-1', { type: 'PASS', requestId: 'bad-pass' }, io, () => {}),
+    ).rejects.toThrow(/legal play/i);
+
+    const log = getRoom(code).ghostMoveLogs['seat-1'] ?? [];
+    expect(log, 'no poisoned pass entry appended').toEqual([]);
+    expect(getRoom(code).ghostTurnIndex, 'ghostTurnIndex not advanced by the rejected pass').toBe(0);
+    expect(getRoom(code).state!.sequence, 'state not mutated').toBe(1);
+    expect(verifyPlayerMoveLog(log, { strictHandContinuity: true })).toEqual({ ok: true });
+  });
 });

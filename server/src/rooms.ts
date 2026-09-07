@@ -1359,12 +1359,22 @@ async function actUnlocked(
       actionType: 'PASS',
       requestId: (action as { requestId?: string }).requestId,
     });
+    const previousState = state;
+    // RK-10: validate the pass BEFORE touching the ghost move log or the turn
+    // index. `applyMove` throws for an illegal pass (a legal play existed, or the
+    // boneyard is not locked). This used to run *after* `appendGhostMove` +
+    // `ghostTurnIndex++`, so a client that raced an illegal PASS (stale legal
+    // moves) left a poisoned `branch: 'pass'` entry in room.ghostMoveLogs even
+    // though the action was rejected — and that one entry permanently failed the
+    // game-over move-log verification, which silently dropped the whole match's
+    // `ranked_games` row (the ranked-MP dormancy). Order now matches the MOVE
+    // handler: engine first, log only on success.
+    const afterPass = applyMove(state, playerSeatId, { type: 'pass' }).state;
     drawAudit('pass-applied', {
       roomCode: code,
       playerId: playerSeatId,
       reason: 'client_pass',
     });
-    const previousState = state;
     appendGhostMove(room, playerSeatId, {
       turn: currentGhostTurn(room),
       hand_number: state.handNumber,
@@ -1377,7 +1387,6 @@ async function actUnlocked(
       forced_draw: false,
     });
     room.ghostTurnIndex += 1;
-    const afterPass = applyMove(state, playerSeatId, { type: 'pass' }).state;
     commitResolvedGameState(room, `act:PASS:${code}`, afterPass);
     appendRoomEvent(room, {
       type: 'turn_passed',
