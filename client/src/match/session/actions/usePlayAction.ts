@@ -54,6 +54,12 @@ export type UsePlayActionParams = {
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
   flashLastPlayed: (tile: Tile | null) => void;
   markUncertainAndResync: (requestId: string, error?: string) => void;
+  applyOptimisticPlay?: (
+    tile: Tile,
+    position: PlacementPosition,
+    requestId: string,
+  ) => { rollback: () => void } | null;
+  commitOptimisticPlay?: (requestId: string) => void;
 };
 
 /** MOVE (play) action handler, extracted verbatim from useLiveMatchActions. */
@@ -92,6 +98,8 @@ export function usePlayAction(
     appendMultiplayerMove,
     flashLastPlayed,
     markUncertainAndResync,
+    applyOptimisticPlay,
+    commitOptimisticPlay,
   } = params;
 
   return useCallback(
@@ -173,6 +181,15 @@ export function usePlayAction(
       logicalGameplayActionRef.current = logicalAction;
       const requestId = logicalAction.requestId;
 
+      // MP-JIT-2: predict the move with the same engine the server runs so the
+      // board updates on this tick instead of after the round-trip. `null` =
+      // not applicable / engine rejected → the server round-trip is the only
+      // path (unchanged behaviour).
+      const optimistic = applyOptimisticPlay?.(tileToPlay, position, requestId) ?? null;
+      if (optimistic) {
+        flashLastPlayed(selectedMove?.tile ?? tileToPlay);
+      }
+
       try {
         const resp = await emitGameAction(socket, joinedRoom, {
           type: 'MOVE',
@@ -182,6 +199,7 @@ export function usePlayAction(
 
         mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
         if (!resp?.ok) {
+          optimistic?.rollback();
           if (resp?.uncertain) {
             markUncertainAndResync(
               requestId,
@@ -192,6 +210,7 @@ export function usePlayAction(
           }
           return;
         }
+        commitOptimisticPlay?.(requestId);
         if (logicalGameplayActionRef.current?.requestId === requestId) {
           logicalGameplayActionRef.current = null;
         }
@@ -199,7 +218,9 @@ export function usePlayAction(
           mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
           autoTurnActionKeyRef.current = '';
         }
-        flashLastPlayed(selectedMove?.tile ?? tileToPlay);
+        if (!optimistic) {
+          flashLastPlayed(selectedMove?.tile ?? tileToPlay);
+        }
         appendMultiplayerMove({
           player: 'you',
           action: 'place',
@@ -217,6 +238,7 @@ export function usePlayAction(
         });
       } catch (e) {
         mpPerfMarkAck(false);
+        optimistic?.rollback();
         if (logicalGameplayActionRef.current?.requestId === requestId) {
           logicalGameplayActionRef.current = {
             ...logicalGameplayActionRef.current,
@@ -262,6 +284,8 @@ export function usePlayAction(
       setSelectedTile,
       setDrawStepMyHand,
       markUncertainAndResync,
+      applyOptimisticPlay,
+      commitOptimisticPlay,
     ],
   );
 }

@@ -230,4 +230,76 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
     expect(fetchGameState).toHaveBeenCalledWith('game_action_uncertain');
     expect(params.showToast).toHaveBeenCalledWith("Move couldn't be saved — try again.", 2500);
   });
+
+  // MP-JIT-2 — required cases: optimistic apply on the happy path (committed, no
+  // rollback), and rollback on a rejected move.
+  describe('MP-JIT-2 optimistic MOVE', () => {
+    const selectedTile = { low: 1, high: 2 };
+    function optimisticParams(overrides: Partial<UseLiveMatchActionsParams> = {}) {
+      const rollback = vi.fn();
+      const applyOptimisticPlay = vi.fn(() => ({ rollback }));
+      const commitOptimisticPlay = vi.fn();
+      const params = makeParams({
+        selectedTileRef: { current: selectedTile },
+        legalMoves: [{ type: 'play', tile: selectedTile, position: 'left' } as any],
+        legalMovesRef: { current: [{ type: 'play', tile: selectedTile, position: 'left' } as any] },
+        applyOptimisticPlay,
+        commitOptimisticPlay,
+        ...overrides,
+      });
+      return { params, applyOptimisticPlay, commitOptimisticPlay, rollback };
+    }
+
+    it('legal-move happy path: optimistic apply is committed, never rolled back, tile flashes once', async () => {
+      const { params, applyOptimisticPlay, commitOptimisticPlay, rollback } = optimisticParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: true, sequence: 5 });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.play('left');
+      });
+
+      expect(applyOptimisticPlay).toHaveBeenCalledWith(
+        selectedTile,
+        'left',
+        expect.any(String),
+      );
+      expect(commitOptimisticPlay).toHaveBeenCalledWith(expect.any(String));
+      expect(rollback).not.toHaveBeenCalled();
+      expect(params.flashLastPlayed).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejected move: optimistic apply is rolled back, not committed, error surfaced', async () => {
+      const { params, commitOptimisticPlay, rollback } = optimisticParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: false, error: 'It is not your turn.' });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.play('left');
+      });
+
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(commitOptimisticPlay).not.toHaveBeenCalled();
+      expect(params.setActionError).toHaveBeenCalledWith('It is not your turn.');
+    });
+
+    it('uncertain ack: rolls back, then resyncs via the existing machinery', async () => {
+      const fetchGameState = vi.fn(async () => true);
+      const { params, commitOptimisticPlay, rollback } = optimisticParams({ fetchGameState });
+      vi.mocked(emitGameAction).mockResolvedValueOnce({
+        ok: false,
+        uncertain: true,
+        error: "Move couldn't be saved — try again.",
+      });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.play('left');
+      });
+
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(commitOptimisticPlay).not.toHaveBeenCalled();
+      expect(fetchGameState).toHaveBeenCalledWith('game_action_uncertain');
+    });
+  });
 });

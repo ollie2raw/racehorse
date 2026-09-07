@@ -1,6 +1,51 @@
 # MP-JIT-2 — optimistic local apply for multiplayer MOVE / DRAW / PASS
 
-**Status: PLAN ONLY. No implementation until this is reviewed.**
+**Status: v1 SHIPPED 2026-09-07 — MOVE only.** PASS and DRAW stay reconcile-only
+(see "v1 scope" below). The rest of this doc is the original plan; deviations are
+noted inline.
+
+## v1 scope (what shipped)
+
+- **`client/src/match/session/actions/optimisticPlay.ts`** — pure
+  `computeOptimisticPlayState(state, you, tile, position)`: runs
+  `@racehorse/game-core`'s `applyMove` on the masked live `GameState`. The
+  masked state carries only a 2-field `config`, so it is merged over
+  `DEFAULT_CONFIG` (the missing fields — `deadTileCount` etc. — only affect the
+  reconcile-only forced-draw path). Returns `null` (→ plain server round-trip,
+  unchanged behaviour) when: not the actor's turn, hand/game over on input, the
+  engine rejects the move, **the result is terminal** (`handOver`/`gameOver` —
+  those drive hand-reveal / game-over UI and are latency-insensitive, mirroring
+  MP-JIT-1's server carve-out), or **a forced draw is pending** (scoring/double
+  play needing draws the client cannot predict — the masked boneyard is
+  length-correct but `{-1,-1}` placeholders).
+- **`useLiveMatchSession.ts`** — `applyOptimisticPlay(tile, position, requestId)`:
+  snapshots `{state, legalMoves, canDraw}`, `setState(next)` + `setLegalMoves([])`
+  + `setCanDraw(false)`, returns a `rollback()` closure that restores the
+  snapshot **only if `stateRef.current` is still the optimistic object**
+  (reference equality — an authoritative `state:update` that already superseded
+  it wins). `commitOptimisticPlay(requestId)` clears the snapshot on ack-ok. An
+  effect clears a stale snapshot whenever `state` changes to anything other than
+  the optimistic object. The watermark (`maxSequenceRef` in `useRoomSocketSync`)
+  is never touched.
+- **`usePlayAction.ts`** — calls `applyOptimisticPlay` right after move
+  validation; `flashLastPlayed` fires immediately on the optimistic path;
+  `rollback()` on `!resp.ok` (before the existing uncertain/error handling) and
+  in the `catch`; `commitOptimisticPlay` on `resp.ok`.
+- Tests: `optimisticPlay.test.ts` (5 — legal apply / not-your-turn / terminal /
+  engine-reject / no-mutation); `useLiveMatchActions.test.ts` MP-JIT-2 block (3 —
+  happy-path commit-no-rollback, rejected rollback, uncertain rollback+resync).
+
+**Known v1 limitation:** a scoring/double play that keeps the turn without a
+forced draw is optimistically applied but `legalMoves` is blanked, so the actor
+sees a brief (~1 RTT) "wait" before the authoritative update restores their
+continued-turn moves. Acceptable; a follow-up can recompute
+`getLegalMoves(next, you)` locally.
+
+---
+
+## Original plan
+
+**(kept for reference; superseded where v1 deviates)**
 Follows MP-JIT-1 (`docs/mp-live-move-persist-latency.md`). MP-JIT-1 removed the
 DB write from the broadcast critical path (median mid-hand `game:action` ack
 ~140ms → ~1ms local, ~48ms against Render). One socket round-trip of dead time
