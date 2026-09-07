@@ -4,7 +4,12 @@
 genuinely fixable), gate them in CI so they cannot regress, and leave the codebase
 ready to adopt the React Compiler.
 
-**Status:** Phase 1 triage complete. Phases 1b–5 not started.
+**Status:** ALL PHASES COMPLETE (2026-09-07). Phase 1 triage → Phase 1b
+(no-console 128→8) → Phase 2 (set-state-in-effect 51→0, 4 production bugs fixed)
+→ Phase 3 (refs/purity/immutability/exhaustive-deps → 0) → Phase 4 (CI gate:
+`lint:hooks` at zero, `lint` ratcheted 377→51) → Phase 5 (React Compiler on,
+391/391 components). Two follow-ups noted and deferred: the exhaustive-deps
+per-hook audit, and P3-A. See each phase's result section.
 
 **Branch:** `hooks-correctness`
 
@@ -500,16 +505,31 @@ The genuinely valuable output of Phases 2–3 was the **4 Pass-1 bug fixes** and
 Both gates green locally: `npm run lint` → 51 (exit 0), `npm run lint:hooks` → 0
 (exit 0).
 
-### Phase 5 — React Compiler — **DO NOT START WITHOUT EXPLICIT APPROVAL**
+### Phase 5 — React Compiler — **DONE (2026-09-07, `7188c95c`)**
 
-The 2 `preserve-manual-memoization` warnings already read *"React Compiler has
-skipped optimizing this component because the existing manual memoization could
-not be preserved"* — `multiplayer/useMultiplayerRoomCallbacks.ts:285` and
-`modules/match/hooks/useMatchNavigation.ts:108`. These are the compiler's own
-advance notice: both components would be silently skipped by the compiler today.
-When greenlit: enable
-`babel-plugin-react-compiler`, measure render counts on the live match screen and
-hubs before/after, then remove now-redundant manual `useMemo`/`useCallback`.
+`babel-plugin-react-compiler@1.0.0` in `@vitejs/plugin-react` (`target: '19'`).
+
+- `react-compiler-healthcheck`: **391 / 391 components compiled**, no
+  incompatible libraries, StrictMode present.
+- Full suite green *through compiled code* — the vitest config is the vite
+  config, so every one of the 1583 client tests + 39 behaviour files + 1300
+  server tests ran the compiler's output. Plus `check:architecture` 20/20,
+  build + prerender, `size-check` (index 474kB, +~4% for the memo cache code).
+- **Memoization skipped in exactly 2 components** (compilation still happens):
+  `useMultiplayerRoomCallbacks.ts` `emitCreateRoom` and `useMatchNavigation.ts`
+  `startFreshMatch` — the compiler can't reconcile their `useCallback` dep
+  arrays with its own analysis. Same behaviour as before; not a regression.
+  Fixing them means adjusting those two dep arrays (both `multiplayer/` /
+  `modules/match/`) — deferred with the rest of the exhaustive-deps audit.
+
+**Not done:** stripping manual `useMemo`/`useCallback`. The compiler preserves
+them where it can; removing them is churn with regression risk and no
+correctness gain — React's own post-adoption guidance.
+
+**Follow-up:** the before/after render-count measurement needs the React
+DevTools Profiler on the running preview (browser). The compiler's *correctness*
+is covered by the suite; the *win* (fewer re-renders) should be spot-checked on
+the match screen and hubs from the deployed branch preview.
 
 ---
 
