@@ -33,20 +33,10 @@ function clearDrawPreview(scope: Pick<MultiplayerRoomSyncScope, 'dom' | 'ui'>) {
     clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
     scope.dom.drawSequenceTimeoutRef.current = null;
   }
-  // TEMP-DIAGNOSTIC
-  console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
-    path: 'clearDrawPreview',
-    at: Date.now(),
-  });
   scope.ui.setDrawSequenceActiveBoth(false);
   scope.ui.setDrawStepMyHand(null);
   scope.ui.setDrawStepActorId(null);
   scope.ui.setDrawStepOpponentHandCount(null);
-  // TEMP-DIAGNOSTIC
-  console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
-    path: 'clearDrawPreview',
-    at: Date.now(),
-  });
   scope.ui.setFlyingTiles([]);
 }
 

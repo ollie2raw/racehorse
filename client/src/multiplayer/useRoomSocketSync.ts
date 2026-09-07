@@ -407,11 +407,6 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
         if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
           clearPendingDrawAnimationTimers();
-          // TEMP-DIAGNOSTIC
-          console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
-            path: 'game:draw_animation:handOverOrGameOver',
-            at: Date.now(),
-          });
           scope.ui.setFlyingTiles([]);
           return;
         }
@@ -450,16 +445,6 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           }
 
           const ownForcedDraw = payload.playerId === scope.dom.youRef.current;
-          // TEMP-DIAGNOSTIC
-          console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set true', {
-            path: 'game:draw_animation:handler_start',
-            actorId: payload.playerId,
-            sequence: payload.sequence,
-            chainId,
-            stepCount: payload.steps.length,
-            ownForcedDraw,
-            at: Date.now(),
-          });
           scope.ui.setDrawSequenceActiveBoth(true);
           scope.ui.setDrawStepActorId(payload.playerId);
 
@@ -506,11 +491,6 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
               try {
                 if (scope.dom.stateRef.current?.handOver || scope.dom.stateRef.current?.gameOver) {
                   clearPendingDrawAnimationTimers();
-                  // TEMP-DIAGNOSTIC
-                  console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
-                    path: 'game:draw_animation:step:handOverOrGameOver',
-                    at: Date.now(),
-                  });
                   scope.ui.setFlyingTiles([]);
                   scope.ui.setDrawSequenceActiveBoth(false);
                   return;
@@ -590,22 +570,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
             scope.ui.setDrawStepActorId(null);
             scope.ui.setDrawStepOpponentHandCount(null);
             scope.ui.setBoneyardDisplayCount(null);
-            // TEMP-DIAGNOSTIC
-            console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
-              path: 'game:draw_animation:timer_chain_complete',
-              chainId,
-              chainDurationMs,
-              at: Date.now(),
-            });
             scope.ui.setFlyingTiles([]);
-            // TEMP-DIAGNOSTIC
-            console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
-              path: 'game:draw_animation:timer_chain_complete',
-              chainId,
-              chainDurationMs,
-              stepCount: payload.steps.length,
-              at: Date.now(),
-            });
             scope.ui.setDrawSequenceActiveBoth(false);
           }, chainDurationMs);
         } catch (error) {
