@@ -41,6 +41,9 @@
   gap: 14px;
 }
 
+/* Masthead + stat strip are one connected unit — no gap between them. */
+.rh-sb-masthead-wrap { display: flex; flex-direction: column; }
+
 /* ------------------------------------------------------------ masthead */
 
 .rh-sb-masthead {
@@ -213,9 +216,6 @@
   color: var(--rh-sb-accent);
 }
 
-.rh-sb-filter__icon { display: inline-flex; width: 13px; height: 13px; }
-.rh-sb-filter__icon svg { width: 100%; height: 100%; }
-
 /* ------------------------------------------------------------- table */
 
 .rh-sb-table {
@@ -289,7 +289,7 @@
   height: 28px;
   flex-shrink: 0;
   border-radius: var(--radius-record);
-  background: hsl(var(--rh-sb-avatar-hue, 220) 34% 26%);
+  background: hsl(var(--rh-sb-avatar-hue, 220) 40% 34%);
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
@@ -304,6 +304,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--rh-sb-ink);
@@ -324,11 +325,9 @@
   letter-spacing: 0.12em;
 }
 
-.rh-sb-who__meta { margin-top: 2px; font-size: 11px; color: var(--rh-sb-dim); }
-
-.rh-sb-what { min-width: 0; font-size: 13px; color: var(--rh-sb-subtle); }
+.rh-sb-what { min-width: 0; font-size: 13px; line-height: 1.35; color: var(--rh-sb-subtle); }
 .rh-sb-what strong { color: var(--rh-sb-ink); font-weight: 600; }
-.rh-sb-what__sub { margin-top: 2px; font-size: 11.5px; color: var(--rh-sb-muted); }
+.rh-sb-what__sub { display: block; margin-top: 3px; font-size: 11.5px; color: var(--rh-sb-muted); }
 .rh-sb-what__sub.is-win { color: var(--rh-sb-win); }
 .rh-sb-what__sub.is-loss { color: var(--rh-sb-loss); }
 .rh-sb-what__sub.is-accent { color: var(--rh-sb-accent); }
@@ -355,13 +354,19 @@
 .rh-sb-badge--win { border-color: rgba(74, 222, 128, 0.4); color: var(--rh-sb-win); }
 .rh-sb-badge--loss { border-color: rgba(255, 77, 109, 0.36); color: var(--rh-sb-loss); }
 
-.rh-sb-score { font-variant-numeric: tabular-nums; }
+.rh-sb-score {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
 
 .rh-sb-score__line {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.05;
+  letter-spacing: 0.01em;
   color: var(--rh-sb-ink);
 }
 
@@ -429,6 +434,7 @@
 
 .rh-sb-page .rh-sf-widget,
 .rh-sb-page .rh-hub-rail-card,
+.rh-sb-page .rh-hub-panel,
 .rh-sb-page .social-right-card,
 .rh-sb-page .rh-social-card {
   border-radius: var(--radius-record);
@@ -438,13 +444,25 @@
 }
 
 .rh-sb-page .rh-sf-widget-title,
-.rh-sb-page .rh-hub-rail-title {
+.rh-sb-page .rh-hub-rail-title,
+.rh-sb-page .rh-hub-rail-card-title,
+.rh-sb-page .rh-sf-widget-title--solo {
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--rh-sb-label);
+}
+
+/* Square the inner sub-panels the widgets draw (highlight tiles, ranked
+   rows) so nothing rounded survives inside a record. */
+.rh-sb-page .rh-sf-highlights-grid > article,
+.rh-sb-page .rh-sf-ranked-row,
+.rh-sb-page .rh-sf-online-chip,
+.rh-sb-page .rh-sf-rival-card,
+.rh-sb-page .rh-sf-tournament {
+  border-radius: var(--radius-record);
 }
 
 /* ---------------------------------------------------------- responsive */

@@ -3,7 +3,6 @@ import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import {
   buildFeedRowViewModel,
-  type FeedIconKind,
   type FeedRowViewModel,
 } from './activityFeedRowModel';
 import './activityFeed.css';
@@ -11,13 +10,13 @@ import './socialBoard.css';
 
 export type ActivityFeedFilterTab = 'all' | 'friends' | 'wins' | 'streaks' | 'tournaments' | 'mentions';
 
-const FILTER_TABS: { id: ActivityFeedFilterTab; label: string; icon: FeedIconKind | 'friends' | 'mention' }[] = [
-  { id: 'all', label: 'All Activity', icon: 'medal' },
-  { id: 'friends', label: 'Friends', icon: 'friends' },
-  { id: 'wins', label: 'Wins', icon: 'trophy' },
-  { id: 'streaks', label: 'Streaks', icon: 'flame' },
-  { id: 'tournaments', label: 'Tournaments', icon: 'crown' },
-  { id: 'mentions', label: 'Mentions', icon: 'mention' },
+const FILTER_TABS: { id: ActivityFeedFilterTab; label: string }[] = [
+  { id: 'all', label: 'All Activity' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'wins', label: 'Wins' },
+  { id: 'streaks', label: 'Streaks' },
+  { id: 'tournaments', label: 'Tournaments' },
+  { id: 'mentions', label: 'Mentions' },
 ];
 
 function initials(username: string): string {
@@ -34,49 +33,6 @@ function avatarHue(username: string): number {
   return Math.abs(hash) % 360;
 }
 
-function FilterTabIcon({ kind }: { kind: (typeof FILTER_TABS)[number]['icon'] }) {
-  const common = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true as const };
-  switch (kind) {
-    case 'friends':
-      return (
-        <svg {...common}>
-          <path d="M16 11c1.66 0 3-1.34 3-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3ZM8 11c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.06 1.16.84 1.97 1.97 1.97 3.44V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" fill="currentColor" />
-        </svg>
-      );
-    case 'trophy':
-      return (
-        <svg {...common}>
-          <path d="M8 4h8v2a4 4 0 0 0 4 4h1v2a5 5 0 0 1-5 5h-1v3H9v-3H8a5 5 0 0 1-5-5V10h1a4 4 0 0 0 4-4V4Z" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
-      );
-    case 'flame':
-      return (
-        <svg {...common}>
-          <path d="M12 3s-4 4.5-4 8a4 4 0 0 0 8 0c0-2-1.5-3.5-2-4.5.5 1 1.5 2.5 1.5 4a2.5 2.5 0 0 1-5 0c0-2.5 2-5.5 2-5.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'crown':
-      return (
-        <svg {...common}>
-          <path d="M5 18h14l-1.2-9-3.3 3.5L12 6 9.5 12.5 6.2 9 5 18Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'mention':
-      return (
-        <svg {...common}>
-          <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Zm0-8v4m0 4h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-      );
-    case 'medal':
-    default:
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      );
-  }
-}
 
 type BoardOutcome = 'win' | 'loss' | 'neutral';
 
@@ -158,9 +114,6 @@ export function ActivityFeedFilterTabs({ filter, onFilterChange }: ActivityFeedF
           className="rh-sb-filter"
           onClick={() => onFilterChange(tab.id)}
         >
-          <span className="rh-sb-filter__icon" aria-hidden="true">
-            <FilterTabIcon kind={tab.icon} />
-          </span>
           {tab.label}
         </button>
       ))}
@@ -355,7 +308,6 @@ export default function ActivityFeedPanel({
                   <span className="rh-sb-who__handle">{item.username}</span>
                   {isSelf ? <span className="rh-sb-you">You</span> : null}
                 </span>
-                <span className="rh-sb-who__meta">{row.modeLabel}</span>
               </span>
             </span>
 
@@ -373,7 +325,7 @@ export default function ActivityFeedPanel({
 
             <span className="rh-sb-score">
               {vm.scoreLine ? (
-                <span className="rh-sb-score__line">{vm.scoreLine.replace(' - ', '–')}</span>
+                <span className="rh-sb-score__line">{vm.scoreLine.replace(/\s*[-–]\s*/, '–')}</span>
               ) : null}
               {row.margin ? (
                 <span
