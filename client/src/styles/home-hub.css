@@ -973,7 +973,10 @@
   appearance: none;
   width: fit-content;
   min-width: 0;
-  min-height: 0;
+  /* >=44px tap target — the rule zeroes the primitive's height:44px, so the
+   * 11px padding + 12px text alone left it ~34px. Content is already
+   * flex-centered, so min-height just pads the hit area. */
+  min-height: 44px;
   height: auto;
   display: inline-flex;
   align-items: center;
