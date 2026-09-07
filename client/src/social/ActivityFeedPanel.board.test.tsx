@@ -43,14 +43,17 @@ describe('ActivityFeedPanel — board table', () => {
 
   it('marks the signed-in player’s own row', async () => {
     fetchActivityFeed.mockResolvedValue({
-      feed: [item({ username: 'oliver' }), item({ id: 'f2', username: 'tessa_ng' })],
+      feed: [
+        item({ username: 'oliver', user_id: 'me' }),
+        item({ id: 'f2', username: 'tessa_ng', user_id: 'other' }),
+      ],
       error: null,
     });
     render(
       <ActivityFeedPanel
         user={user}
         filter="all"
-        selfUsername="oliver"
+        selfUserId="me"
         onViewProfile={vi.fn()}
       />,
     );

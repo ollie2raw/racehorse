@@ -125,9 +125,9 @@ interface ActivityFeedPanelProps {
   user: User | null;
   filter: ActivityFeedFilterTab;
   friendUsernames?: Set<string>;
-  /** Lower/exact handle of the signed-in player — the row that matches
-   *  gets the gold left bar. Best-effort; absent just means no self row. */
-  selfUsername?: string;
+  /** Supabase id of the signed-in player — the row whose `user_id`
+   *  matches gets the gold left bar. */
+  selfUserId?: string;
   onViewProfile: (username: string) => void;
   emptyAction?: React.ReactNode;
   onFeedChange?: (feed: FeedItem[]) => void;
@@ -187,12 +187,11 @@ export default function ActivityFeedPanel({
   user,
   filter,
   friendUsernames = new Set(),
-  selfUsername,
+  selfUserId,
   onViewProfile,
   emptyAction,
   onFeedChange,
 }: ActivityFeedPanelProps) {
-  const selfHandle = selfUsername?.toLowerCase() ?? null;
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +284,7 @@ export default function ActivityFeedPanel({
       {visibleItems.map((item) => {
         const vm = buildFeedRowViewModel(item);
         const row = boardRow(item, vm);
-        const isSelf = selfHandle != null && item.username.toLowerCase() === selfHandle;
+        const isSelf = selfUserId != null && item.user_id === selfUserId;
         const outcomeClass =
           row.outcome === 'win' ? ' is-win' : row.outcome === 'loss' ? ' is-loss' : '';
         return (

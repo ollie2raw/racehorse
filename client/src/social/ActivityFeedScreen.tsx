@@ -320,10 +320,6 @@ export default function ActivityFeedScreen({
     [displayOnlineCount, feedItems.length, friends.length, weeklyHighlights.topStreak],
   );
 
-  const selfUsername =
-    (user?.user_metadata?.username as string | undefined) ??
-    user?.email?.split('@')[0] ??
-    undefined;
 
   const noopToast = useMemo(() => (_message: string) => undefined, []);
   const {
@@ -422,7 +418,7 @@ export default function ActivityFeedScreen({
                   user={user}
                   filter={feedFilter}
                   friendUsernames={friendUsernames}
-                  selfUsername={selfUsername}
+                  selfUserId={user.id}
                   onViewProfile={onViewProfile}
                   onFeedChange={setFeedItems}
                   emptyAction={
