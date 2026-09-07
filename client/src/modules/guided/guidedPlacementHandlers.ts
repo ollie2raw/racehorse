@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useCallback } from 'react';
 import {
   snapshotBoardState,
@@ -207,7 +208,7 @@ export function useGuidedPlacementHandlers(deps: GuidedPlacementHandlerDeps) {
         applyV2PlayerEvent(expected, move.tile ?? null, 1400);
         return 'handled';
       }
-      console.log('[guided-v2-mismatch]', {
+      logger.info('guided', 'v2-mismatch', {
         guidedV2EventIndex,
         expectedTile: expected?.tile ?? null,
         expectedPosition: expectedPos,
@@ -352,7 +353,11 @@ export function useGuidedPlacementHandlers(deps: GuidedPlacementHandlerDeps) {
     }
     if (!move?.tile) return;
     const clickedMove = `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`;
-    console.log('[guided-player] expectedMove =', step.chosenMove, 'clickedMove =', clickedMove, 'accepted =', true);
+    logger.info('guided-player', 'move accepted', {
+      expectedMove: step.chosenMove,
+      clickedMove,
+      accepted: true,
+    });
 
     const boardEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];

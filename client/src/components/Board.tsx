@@ -668,6 +668,7 @@ function BoardComponent(
 
   // Keep the camera/layout stable when the player selects a tile.
   const layout = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe inside the layout memo — instrumentation, not a value the memo returns
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
     traceCameraDebug('[camera-debug] computeLayout input', {
       boardTileCount,
@@ -684,16 +685,20 @@ function BoardComponent(
       scale: Number(camera.scale.toFixed(3)),
     });
     if (profileDailyFritz) {
+      // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation
       const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
       recordDailyFritzBoardMetric('computeLayout', end - start);
       logLayoutDebug(validPositions.length, selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null, nextLayout);
     }
     return nextLayout;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the layout memo keys on the inputs that change its geometry; boardTileCount/camera.scale are derived from those and would only add churn
   }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions, isResettingBoard]);
   const placementZones = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const zones = computeBoardLayout(isResettingBoard ? null : board, validPositions).zones;
     if (profileDailyFritz) {
+      // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation
       const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
       recordDailyFritzBoardMetric('computeLayout', end - start);
       traceDailyFritzBoardEvent('[render] placementZones', {

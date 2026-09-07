@@ -104,6 +104,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
 
   // Live inputs for the async tenure — updated every render, never in effect deps.
   const liveRef = useRef(args);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   liveRef.current = args;
 
   // Tenure identity only. Hand/board/boneyard lengths MUST NOT be here — they change

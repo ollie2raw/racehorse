@@ -8,6 +8,7 @@ import {
 import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentSessionNavigation } from './useTournamentSessionNavigation';
 import type { TournamentHookApi } from './tournamentMatchSessionTypes';
+import { logger } from '../../../utils/logger';
 
 type UseTournamentBracketTerminalParams = {
   appMode: AppMode;
@@ -66,7 +67,7 @@ export function useTournamentBracketTerminal({
       setActiveTournamentId(tid);
       if (tournamentSubView === 'hub') {
         if (phase === 'bracket_lobby' || phase === 'registered') {
-          console.log('[tournament:hub] tournament lobby detected, routing', { tournamentId: tid, phase });
+          logger.operational('tournament:hub', 'tournament lobby detected, routing', { tournamentId: tid, phase });
         }
         setTournamentSubView('bracket');
       }
@@ -74,6 +75,7 @@ export function useTournamentBracketTerminal({
         void tournament.openBracket(tid);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on the tournament fields it acts on; the whole object changes on every poll
   }, [
     appMode,
     authUserId,
@@ -115,7 +117,7 @@ export function useTournamentBracketTerminal({
     const kick = () => {
       const waitMs = scheduleKick();
       if (waitMs == null) return;
-      console.log('[tournament:exit] final completed, routing hub', {
+      logger.operational('tournament:exit', 'final completed, routing hub', {
         tournamentId: activeTournamentId,
         waitMs,
       });

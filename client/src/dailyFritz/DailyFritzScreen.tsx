@@ -132,6 +132,7 @@ export default function DailyFritzScreen({
         profileGlickoRating: profile?.glicko_rating,
       },
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is onNavigate, a stable callback prop
   }, [
     setOverlay,
     continueSet,

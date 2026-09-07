@@ -22,14 +22,18 @@ export function useMatchRuntimeBridge<TState>(input: {
   const instanceKeyRef = useRef(input.instanceKey);
 
   if (
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     runtimeRef.current === null
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     || instanceKeyRef.current !== input.instanceKey
   ) {
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     runtimeRef.current?.destroy();
     runtimeRef.current = createMatchRuntime({
       initialState: input.createInitialState(),
       capabilities: input.capabilities,
     });
+    // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
     instanceKeyRef.current = input.instanceKey;
   }
 
@@ -41,12 +45,16 @@ export function useMatchRuntimeBridge<TState>(input: {
   }, []);
 
   const match = useSyncExternalStore(
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     runtime.store.subscribe,
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     runtime.store.getState,
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     runtime.store.getState,
   );
 
   const matchRef = useRef(match);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   matchRef.current = match;
 
   const setMatch = useCallback((updater: StateUpdater<TState>) => {
@@ -54,5 +62,6 @@ export function useMatchRuntimeBridge<TState>(input: {
     matchRef.current = runtime.store.getState();
   }, [runtime]);
 
+  // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
   return { runtime, match, setMatch, matchRef };
 }

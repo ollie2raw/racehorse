@@ -370,9 +370,13 @@ export function useMultiplayerRoomCallbacks(
   }, [handleJoinAck]);
 
   // Ref write-backs: run every render so refs always hold the latest callbacks
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   applyRoomEventMetaRef.current = applyRoomEventMeta;
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   schedulePlayerReadyRef.current = schedulePlayerReady;
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   trySchedulePlayerReadyRef.current = trySchedulePlayerReady;
 
   const handleMatchmakingAutoJoin = useCallback(

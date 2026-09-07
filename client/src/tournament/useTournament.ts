@@ -10,6 +10,7 @@ import type {
   ScheduledTournament,
   TournamentMeResponse,
 } from './types';
+import { logger } from '../utils/logger';
 
 type Args = { userId: string | null };
 
@@ -231,14 +232,14 @@ export function useTournament({ userId }: Args) {
       applyRegistrations(me?.registrations ?? []);
       const recovered = me?.activeAssignedMatch ?? null;
       if (recovered && isTerminalTournamentMatch(recovered.matchId)) {
-        console.log('[tournament:recovery] ignored completed match', {
+        logger.operational('tournament:recovery', 'ignored completed match', {
           matchId: recovered.matchId,
           roomCode: recovered.roomCode,
         });
         applyRecoveryMatch(null);
       } else {
         if (recovered) {
-          console.log('[tournament] recovery activeAssignedMatch received', recovered);
+          logger.operational('tournament', 'recovery activeAssignedMatch received', recovered);
         }
         applyRecoveryMatch(recovered);
       }
@@ -271,6 +272,7 @@ export function useTournament({ userId }: Args) {
     applyCountdown,
   ]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- registration-close countdown driven by wall-clock time
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
@@ -284,14 +286,14 @@ export function useTournament({ userId }: Args) {
       if (cancelled || Date.now() < closeAtMs) return;
       if (boundaryRefreshInFlightRef.current) return;
       boundaryRefreshInFlightRef.current = true;
-      console.log('[tournament:hub] registration close reached, refreshing');
+      logger.operational('tournament:hub', 'registration close reached, refreshing');
       try {
         const ok = await refresh();
         if (!ok) {
-          console.log('[tournament:hub] refresh after countdown failed', { error: 'refresh_failed' });
+          logger.operational('tournament:hub', 'refresh after countdown failed', { error: 'refresh_failed' });
         }
       } catch (err) {
-        console.log('[tournament:hub] refresh after countdown failed', {
+        logger.operational('tournament:hub', 'refresh after countdown failed', {
           error: err instanceof Error ? err.message : String(err),
         });
       } finally {
@@ -329,14 +331,14 @@ export function useTournament({ userId }: Args) {
     applyRegistrations(me.registrations);
     const recovered = me.activeAssignedMatch;
     if (recovered && isTerminalTournamentMatch(recovered.matchId)) {
-      console.log('[tournament:recovery] ignored completed match', {
+      logger.operational('tournament:recovery', 'ignored completed match', {
         matchId: recovered.matchId,
         roomCode: recovered.roomCode,
       });
       applyRecoveryMatch(null);
     } else {
       if (recovered) {
-        console.log('[tournament] recovery activeAssignedMatch received', recovered);
+        logger.operational('tournament', 'recovery activeAssignedMatch received', recovered);
       }
       applyRecoveryMatch(recovered);
     }
@@ -365,7 +367,7 @@ export function useTournament({ userId }: Args) {
         void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
       },
       onMatchReady: (payload) => {
-        console.log('[tournament] match_ready received', {
+        logger.operational('tournament', 'match_ready received', {
           matchId: payload.matchId,
           tournamentId: payload.tournamentId,
           roomCode: payload.roomCode,
@@ -374,7 +376,7 @@ export function useTournament({ userId }: Args) {
         setPendingMatch((prev) => (samePendingMatch(prev, payload) ? prev : payload));
       },
       onMatchCompleted: (payload) => {
-        console.log('[tournament:complete] received match_completed', {
+        logger.operational('tournament:complete', 'received match_completed', {
           roomCode: payload.roomCode ?? null,
           matchId: payload.matchId,
           tournamentId: payload.tournamentId,

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { io, type Socket } from 'socket.io-client';
@@ -231,6 +232,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (recoveryDispatchBridgeRef) {
       recoveryDispatchBridgeRef.current = dispatchRecovery;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep params.recoveryDispatchRef is a stable ref
   }, [dispatchRecovery]);
 
   useEffect(() => {
@@ -452,7 +454,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         if (!s.connected) return;
         const sentAt = performance.now();
         s.emit('mp:ping', sentAt, () => {
-          console.info('[mp-ping]', `${Math.round(performance.now() - sentAt)}ms`);
+          logger.operational('mp-ping', 'rtt', {
+            ms: Math.round(performance.now() - sentAt),
+          });
         });
       }, 5000);
     }
@@ -461,6 +465,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (import.meta.env.DEV && typeof window !== 'undefined') {
       (window as Window & { __racehorseE2eSocket?: Socket }).__racehorseE2eSocket = s;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the listed deps are stable and unread here — kept from an earlier shape, harmless
   }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
 
   useLayoutEffect(() => {
@@ -642,10 +647,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       authToken: scope.auth.authAccessTokenRef.current,
     }).catch((error) => {
       if (import.meta.env.DEV) {
-        console.log(
-          '[presence] re-identify on auth change failed',
-          error instanceof Error ? error.message : error,
-        );
+        logger.operational('presence', 're-identify on auth change failed', {
+          error: error instanceof Error ? error.message : error,
+        });
       }
     });
   }, [

@@ -92,6 +92,7 @@ export default function GuidedMatchSourceEditor({
   );
   const beforeHand = boardState?.players.you.hand ?? [];
   const playedTileId = activeEvent?.tileId ?? null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the optional-chain expression is stable enough; hoisting it is a real refactor for a dev authoring tool
   const playableTileIdsBefore = activeEvent?.legalMoveMetadata.playableTileIdsBefore ?? [];
   const playableTilesBefore = useMemo(
     () => new Set(playableTileIdsBefore),

@@ -8,6 +8,7 @@ import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentAttachFlow } from './useTournamentAttachFlow';
 import type { TournamentHookApi } from './tournamentMatchSessionTypes';
 import type { Socket } from 'socket.io-client';
+import { logger } from '../../../utils/logger';
 
 type UseTournamentSessionLifecycleParams = {
   socket: Socket | null;
@@ -70,7 +71,7 @@ export function useTournamentSessionLifecycle({
     const matchId = tournament.recoveryMatch?.matchId;
     if (!matchId) return;
     if (isTerminalTournamentMatch(matchId)) {
-      console.log('[tournament:recovery] ignored completed match', {
+      logger.operational('tournament:recovery', 'ignored completed match', {
         matchId,
         roomCode: tournament.recoveryMatch?.roomCode ?? null,
       });
@@ -86,6 +87,7 @@ export function useTournamentSessionLifecycle({
       tournamentId: tournament.recoveryMatch?.tournamentId,
       matchStatus: tournament.recoveryMatch?.matchStatus,
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
     appMode,
     attemptTournamentAttach,
@@ -101,7 +103,7 @@ export function useTournamentSessionLifecycle({
     const pending = tournament.pendingMatch;
     if (!pending?.matchId) return;
     if (tournament.tournamentPhase === 'bracket_lobby') return;
-    console.log('[tournament] match_ready received', {
+    logger.operational('tournament', 'match_ready received', {
       matchId: pending.matchId,
       tournamentId: pending.tournamentId,
       roomCode: pending.roomCode,
@@ -116,6 +118,7 @@ export function useTournamentSessionLifecycle({
         tournament.clearPendingMatch();
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
     attemptTournamentAttach,
     setActiveTournamentId,
@@ -131,12 +134,13 @@ export function useTournamentSessionLifecycle({
     if (tournamentSubView === 'result' && activeTournamentId && !tournament.activeBracket) {
       void tournament.openBracket(activeTournamentId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [activeTournamentId, tournament.activeBracket, tournament.openBracket, tournamentSubView]);
 
   useEffect(() => {
     if (appMode !== 'tournament') return;
     if (tournamentSubView === 'bracket' && !activeTournamentId) {
-      console.log('[app:navigation] invalid state fallback', {
+      logger.operational('app:navigation', 'invalid state fallback', {
         appMode,
         path: typeof window !== 'undefined' ? window.location.pathname : '',
       });

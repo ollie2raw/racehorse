@@ -11,6 +11,7 @@ import type {
   TournamentUserPhase,
 } from './types';
 import { resolveTournamentPlayerName } from './displayNames';
+import { logger } from '../utils/logger';
 
 /** Mirrors server scheduledTournament/activeWindow.ts */
 export const TOURNAMENT_ACTIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -233,7 +234,7 @@ export function deriveBracketTerminalState(input: {
     userLive &&
     (isTerminalTournamentMatch(userLive.id) || userLive.winner_id || userLive.completed_at)
   ) {
-    console.log('[tournament:bracket] suppressed join for terminal tournament', {
+    logger.operational('tournament:bracket', 'suppressed join for terminal tournament', {
       matchId: userLive.id,
       tournamentId: tournament.id,
     });
@@ -256,7 +257,7 @@ export function deriveBracketTerminalState(input: {
     assigned?.matchId &&
     (isTerminalTournamentMatch(assigned.matchId) || !assigned.roomCode)
   ) {
-    console.log('[tournament:bracket] suppressed join for terminal tournament', {
+    logger.operational('tournament:bracket', 'suppressed join for terminal tournament', {
       matchId: assigned.matchId,
       tournamentId: tournament.id,
     });

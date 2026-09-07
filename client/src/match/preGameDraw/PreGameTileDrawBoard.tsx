@@ -27,6 +27,7 @@ export function PreGameTileDrawBoard({
     // recompute positions mid-draw and made the board jump back to a "fresh" scatter.
     const positions = computePreGameDrawScatterPositions(drawState.tiles.map((slot) => slot.id));
     return new Map(positions.map((pos) => [pos.tileId, pos]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the memo keys on tileOrderKey, a stable digest of drawState.tiles
   }, [tileOrderKey]);
 
   const visibleSlots = useMemo(

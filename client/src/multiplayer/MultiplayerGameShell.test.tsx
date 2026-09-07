@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createRef } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { MultiplayerGameShell } from './MultiplayerGameShell';
 import { getGameSnapshot, resetGameSnapshot } from './multiplayerGameSnapshot';
@@ -186,5 +186,128 @@ describe('MultiplayerGameShell integration tests', () => {
     const snapshot = getGameSnapshot();
     expect(snapshot.hasState).toBe(true);
     expect(snapshot.routeProps.state?.sequence).toBe(10);
+  });
+});
+
+describe('MultiplayerGameShell HUD score pulse', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * MP-JIT-2 makes a scoring play two `state` transitions — the optimistic local
+   * projection, then the authoritative echo ~45ms later. The pulse effect arms a
+   * 260ms reset timer and returns clearTimeout as its cleanup, so the second
+   * transition cancels the reset. On that run the score is unchanged, so the
+   * effect early-returns without arming a replacement and the pulse sticks on.
+   * Same shape as the score-toast bug fixed in 869e0712.
+   */
+  it('clears the HUD score pulse when the authoritative echo follows the optimistic apply', () => {
+    resetGameSnapshot();
+    vi.useFakeTimers();
+
+    const shellDelegatesRef = createRef<any>();
+    const props = makeDefaultProps({
+      joinedRoomResponseRef: { current: null as any },
+      shellDelegatesRef,
+    });
+
+    render(<MultiplayerGameShell {...props} />);
+
+    const applyState = (state: GameState) => {
+      act(() => {
+        shellDelegatesRef.current?.applyJoinResponseGameState({
+          ok: true,
+          roomCode: 'ROOM123',
+          you: YOU,
+          players: [{ id: YOU }, { id: OPP }],
+          state,
+        } as RoomAckResponse);
+      });
+    };
+
+    const scored = (sequence: number, oppScore: number) =>
+      makeState({
+        sequence,
+        players: {
+          [YOU]: { id: YOU, hand: [], score: 0 },
+          [OPP]: { id: OPP, hand: [], score: oppScore },
+        },
+      });
+
+    // Baseline, then the optimistic apply that scores.
+    applyState(scored(1, 0));
+    applyState(scored(2, 10));
+    expect(getGameSnapshot().routeProps.hudScorePulse[OPP]).toBe(true);
+
+    // Authoritative echo lands inside the 260ms window with the same score.
+    act(() => {
+      vi.advanceTimersByTime(45);
+    });
+    applyState(scored(3, 10));
+
+    // Well past the reset window, the pulse must be gone.
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(getGameSnapshot().routeProps.hudScorePulse[OPP]).toBeFalsy();
+  });
+});
+
+describe('MultiplayerGameShell post-game rating refresh', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The rating refresh runs a ~13s retry loop and guards re-entry with
+   * multiplayerRatingRefreshKeyRef. Its cleanup set `cancelled = true`, and the
+   * effect depends on the raw `state` object — so any post-game state echo
+   * cancelled the in-flight loop, while the key guard made the re-run
+   * early-return without starting a replacement. The `finally` that clears
+   * pending is skipped when cancelled, so the summary stuck on pending forever.
+   */
+  it('still settles the rating refresh when a state echo lands mid-retry', async () => {
+    resetGameSnapshot();
+    vi.useFakeTimers();
+
+    const shellDelegatesRef = createRef<any>();
+    const props = makeDefaultProps({
+      joinedRoomResponseRef: { current: null as any },
+      shellDelegatesRef,
+      authProfileRef: { current: { glicko_rating: 1500 } } as any,
+      authProfile: { username: 'You', glicko_rating: 1500 } as any,
+    });
+
+    render(<MultiplayerGameShell {...props} />);
+
+    const applyState = (state: GameState) => {
+      act(() => {
+        shellDelegatesRef.current?.applyJoinResponseGameState({
+          ok: true,
+          roomCode: 'ROOM123',
+          you: YOU,
+          players: [{ id: YOU, userId: '1' }, { id: OPP, userId: '2' }],
+          state,
+        } as RoomAckResponse);
+      });
+    };
+
+    const over = (sequence: number) =>
+      makeState({ sequence, gameOver: true, handOver: true, winnerId: YOU });
+
+    // Game ends: the retry loop starts and pending goes true.
+    applyState(over(20));
+    expect(getGameSnapshot().routeProps.multiplayerRatingSummary?.pending).toBe(true);
+
+    // An authoritative echo of the same terminal state lands mid-retry.
+    applyState(over(21));
+
+    // Let the whole retry ladder (~13.3s) drain.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+
+    expect(getGameSnapshot().routeProps.multiplayerRatingSummary?.pending).toBe(false);
   });
 });

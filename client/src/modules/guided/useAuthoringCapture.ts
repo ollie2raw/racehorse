@@ -11,6 +11,7 @@
  * artifacts (steps, events, notes) as output.
  */
 
+import { logger } from '../../utils/logger';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { Tile } from '../../types.ts';
 import type { GhostResolvedMove } from '../ghost/ghostContracts.ts';
@@ -102,6 +103,7 @@ export function useAuthoringCapture({
   useEffect(() => {
     if (!isAuthoringV2Mode) {
       lessonV2ApiRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- tears down / rebuilds the V2 authoring capture when the mode toggles; owns the async lessonV2 API load
       setAuthoringV2Events([]);
       setAuthoringV2HandStarts([]);
       authoringV2NextEventIndexRef.current = 0;
@@ -142,6 +144,7 @@ export function useAuthoringCapture({
     };
     // Load any existing note for this step index (handles reload mid-session)
     const existing = authoringSteps.find((s) => s.stepIndex === stepIdx);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- turn-start latch that loads the authored note for the new step (see comment)
     setAuthoringNoteText(existing?.coachingText ?? '');
     // NOTE: Do NOT clear fritzSessionReplyRef here. The ref holds Fritz's reply
     // events from the bot turn that just finished, and those events need to be
@@ -192,7 +195,7 @@ export function useAuthoringCapture({
       const updated: AuthoredStep = { ...target, fritzReplyEvents: events };
       const next = [...prev];
       next[targetIdx] = updated;
-      console.log('[guided-capture] flush', {
+      logger.info('guided-capture', 'flush', {
         flushedToStepIndex: target.stepIndex,
         count: events.length,
         stepHasEventsAfterFlush:
@@ -200,6 +203,7 @@ export function useAuthoringCapture({
       });
       return next;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is fritzSessionReplyRef, a stable ref (see the comment: it must NOT be in deps)
   }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]);
 
   // ── Authoring V1: persist session to localStorage on every steps change ─────
@@ -213,6 +217,7 @@ export function useAuthoringCapture({
       matchSnapshot: JSON.stringify(matchRef.current),
     };
     saveAuthoringSession(session);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is matchRef, a stable ref
   }, [isAuthoringMode, authoringSteps]);
 
   // ── Authoring V2: keep events ref in sync ────────────────────────────────
@@ -235,6 +240,7 @@ export function useAuthoringCapture({
       lastEventIndex: authoringV2Events.length - 1,
     };
     lessonV2ApiRef.current?.saveV2AuthoringSession(session);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is matchRef, a stable ref
   }, [isAuthoringV2Mode, authoringV2Events, authoringV2HandStarts, match]);
 
   // ── Authoring V2: capture LessonV2HandStart when a new hand begins ───────
@@ -249,7 +255,7 @@ export function useAuthoringCapture({
         matchStateJson: JSON.stringify(match),
         firstEventIndex: authoringV2EventsRef.current.length,
       };
-      console.log('[v2-capture] hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
+      logger.info('v2-capture', 'hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
       return [...prev, handStart];
     });
   }, [isAuthoringV2Mode, match.handNumber]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -273,7 +279,7 @@ export function useAuthoringCapture({
         fritzReplyEvents: [],
         matchStateJson: pre?.matchStateJson ?? null,
       };
-      console.log('[guided-capture] authored step created', {
+      logger.info('guided-capture', 'authored step created', {
         stepIndex: stepIdx,
         chosenMove,
         handNumber: newStep.handNumber,
@@ -296,7 +302,7 @@ export function useAuthoringCapture({
             const updated: AuthoredStep = { ...target, fritzReplyEvents: pendingEvents };
             base = [...base];
             base[targetIdx] = updated;
-            console.log('[guided-capture] pre-flush fritz reply events', {
+            logger.info('guided-capture', 'pre-flush fritz reply events', {
               stepIndex: target.stepIndex,
               eventCount: pendingEvents.length,
             });
@@ -315,6 +321,7 @@ export function useAuthoringCapture({
         return [...base, newStep];
       });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is fritzSessionReplyRef, a stable ref
     [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand],
   );
 
@@ -372,7 +379,7 @@ export function useAuthoringCapture({
         break;
       }
     }
-    console.log('[guided-capture] push', {
+    logger.info('guided-capture', 'push', {
       stepIndexTarget: targetStepIdx,
       currentPlayer: result.state.currentPlayer,
       action: captureAction,
@@ -396,7 +403,7 @@ export function useAuthoringCapture({
       eventIndex,
     });
     setAuthoringV2Events((prev) => [...prev, v2event]);
-    console.log('[v2-capture] fritz', { eventIndex, action: captureAction, tile: v2event.tile });
+    logger.info('v2-capture', 'fritz', { eventIndex, action: captureAction, tile: v2event.tile });
   }, [matchRef, setAuthoringV2Events, authoringV2NextEventIndexRef]);
 
   const createV2Event = useCallback((args: CreateV2EventArgs) => {

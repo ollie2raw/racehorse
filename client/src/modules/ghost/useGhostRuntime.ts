@@ -121,6 +121,7 @@ export function useGhostRuntime({
     if (match.gameOver) return;
     if (currentGlickoRating == null) return;
     if (matchStartGlickoRating != null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- latches the starting Glicko rating once, when it first becomes available
     setMatchStartGlickoRating(Number(currentGlickoRating));
   }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
 

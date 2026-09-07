@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useEffect, useMemo, useState } from 'react';
 import {
   getGuidedV1AuthoredStepByIndex,
@@ -68,6 +69,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
 
   useEffect(() => {
     if (!isGuidedV2Mode || match.winnerId !== 'you') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- dynamic-imports the debrief module on game end; the null reset clears it when the win no longer holds
       setGuidedMatchFinalDebrief(null);
       return;
     }
@@ -123,6 +125,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
   const coachPresentation = useMemo(
     () => buildGuidedCoachPresentation({
       match, userPlayMoves, handActive, botTurn, drawSequenceActive, handReveal,
+      // eslint-disable-next-line react-hooks/refs -- view-model / runtime reads a latched ref during render; a real fix is a System-9-parked restructure
       isTransitioning: isTransitioningRef.current, showRecommendation, lessonLayoutMode,
       isGuidedV2Mode, isGuidedV2OffLine, isGuidedTranscriptMode, isGuidedFrozenLessonMode,
       guidedV2PlaybackReady, guidedV2EventIndex, currentV2CursorEvent, currentExpectedV2PlayerEvent,
@@ -152,13 +155,14 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
     if (!isGuidedMode) return;
     coach.resetHand();
     if (frozenLesson && isOffAuthoredLine) {
-      console.log(`[guided-fallback] hand ended in fallback = ${match.handNumber - 1}`);
-      console.log(`[guided-fallback] resetting fallback on new hand start = ${match.handNumber}`);
+      logger.info('guided-fallback', `hand ended in fallback = ${match.handNumber - 1}`);
+      logger.info('guided-fallback', `resetting fallback on new hand start = ${match.handNumber}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the coach engine and realigns the lesson step on each new hand
       setIsOffAuthoredLine(false);
       const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
       const firstStepIdx = realSteps.findIndex((s) => s.handNumber === match.handNumber);
       if (firstStepIdx >= 0) {
-        console.log(`[guided-fallback] resumed coached mode at step = ${firstStepIdx}`);
+        logger.info('guided-fallback', `resumed coached mode at step = ${firstStepIdx}`);
         setLessonStepIndex(firstStepIdx);
       }
     }

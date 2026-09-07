@@ -140,8 +140,11 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
       authUsername: props.authProfile?.username ?? 'Guest',
       authUserId: props.multiplayerIdentityUserId,
       authToken: props.multiplayerAuthToken,
+      // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
       authUsernameRef,
+      // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
       authUserIdRef,
+      // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
       authTokenRef,
     }),
     [props.authProfile?.username, props.multiplayerAuthToken, props.multiplayerIdentityUserId],

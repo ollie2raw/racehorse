@@ -50,16 +50,20 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   const initialDynamicRouteAppliedRef = useRef(false);
   const browserNavigationRef = useRef(false);
 
+  // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
   const [routeReady, setRouteReady] = useState(!initialRouteRef.current.tournamentId);
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     Boolean(initialRouteRef.current.learnHowToPlay),
   );
   // Internal state — used only when caller doesn't provide external state.
   const [_mpSubView, _setMpSubView] = useState<'quick' | 'private'>(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     initialRouteRef.current.multiplayerView ?? 'quick',
   );
   const [profileTarget, setProfileTarget] = useState<string | null>(
+    // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     initialRouteRef.current.profileUsername ?? null,
   );
   const [profileOriginMode, setProfileOriginMode] = useState<AppMode | null>(null);
@@ -83,10 +87,12 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   // Mode guard: LEARN_MODE_VISIBLE
   useEffect(() => {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mode guard — redirects out of a feature-flagged-off route and clears its state
       setSelectedLearnLessonId(null);
       setLearnHowToPlayOpen(false);
       setAppMode('singlePlayerHub');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is setAppMode, a stable setter; the effect is a mode guard that must key only on appMode
   }, [appMode]);
 
   // Mode guard: JOURNEY_MODE_VISIBLE
@@ -94,11 +100,13 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
     if (!JOURNEY_MODE_VISIBLE && appMode === 'journey') {
       setAppMode('singlePlayerHub');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is setAppMode, a stable setter; mode guard keys only on appMode
   }, [appMode]);
 
   // Clear learnHowToPlayOpen when leaving learn
   useEffect(() => {
     if (appMode !== 'learn') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the how-to-play flag when navigating away from learn
       setLearnHowToPlayOpen(false);
     }
   }, [appMode]);
@@ -138,6 +146,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
 
     window.addEventListener('popstate', applyBrowserRoute);
     return () => window.removeEventListener('popstate', applyBrowserRoute);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing deps are stable setters; the one-shot bootstrap keys on its guard ref
   }, [setActiveTournamentId, setTournamentSubView]);
 
   // Sync URL to state

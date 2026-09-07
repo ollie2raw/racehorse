@@ -284,6 +284,7 @@ export function useMatchPresentation({
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
   const playableTileKeys = useMemo(() => buildPlayableTileKeys(userPlayMoves), [userPlayMoves]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- getDisplayOpenEnds reads match.board; the memo keys on the board identity, not the whole match
   const openEnds = useMemo(() => getDisplayOpenEnds(match), [match.board]);
   const openEndsSum = useMemo(() => (match.board ? computeOpenEndsSum(match.board) : 0), [match.board]);
 

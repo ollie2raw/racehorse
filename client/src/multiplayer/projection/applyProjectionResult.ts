@@ -13,19 +13,11 @@ import type {
   StateUpdateProjectionApply,
 } from './projectionTypes';
 
-type ForcedDrawDiagSource = 'state:self_forced' | 'state:opponent_forced';
-
 export type ApplyProjectionOptions = {
   commitId: symbol;
   currentCommitRef: MutableRefObject<symbol | null>;
   transportId?: string;
   projectionMs?: number;
-  recordForcedDrawStateEvent?: (
-    source: ForcedDrawDiagSource,
-    sequence: number,
-    actorId: string,
-    forcedDrawCount: number,
-  ) => void;
 };
 
 function clearDrawPreview(scope: Pick<MultiplayerRoomSyncScope, 'dom' | 'ui'>) {
@@ -33,20 +25,10 @@ function clearDrawPreview(scope: Pick<MultiplayerRoomSyncScope, 'dom' | 'ui'>) {
     clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
     scope.dom.drawSequenceTimeoutRef.current = null;
   }
-  // TEMP-DIAGNOSTIC
-  console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
-    path: 'clearDrawPreview',
-    at: Date.now(),
-  });
   scope.ui.setDrawSequenceActiveBoth(false);
   scope.ui.setDrawStepMyHand(null);
   scope.ui.setDrawStepActorId(null);
   scope.ui.setDrawStepOpponentHandCount(null);
-  // TEMP-DIAGNOSTIC
-  console.log('[TEMP-DIAGNOSTIC] flyingTiles cleared', {
-    path: 'clearDrawPreview',
-    at: Date.now(),
-  });
   scope.ui.setFlyingTiles([]);
 }
 
@@ -63,19 +45,12 @@ export function applyProjectionSessionRefs(
 function applyForcedDrawStaging(
   scope: MultiplayerRoomSyncScope,
   staging: ForcedDrawStaging,
-  recordForcedDrawStateEvent?: ApplyProjectionOptions['recordForcedDrawStateEvent'],
 ): void {
   if (staging.kind === 'self') {
     if (scope.dom.drawSequenceTimeoutRef.current) {
       clearTimeout(scope.dom.drawSequenceTimeoutRef.current);
       scope.dom.drawSequenceTimeoutRef.current = null;
     }
-    recordForcedDrawStateEvent?.(
-      'state:self_forced',
-      staging.sequence,
-      staging.youId,
-      staging.drawnCount,
-    );
     scope.ui.setDrawSequenceActiveBoth(true);
     scope.dom.pendingForcedHandRevealRef.current = staging.pendingReveal;
     scope.ui.setDrawStepMyHand(staging.stagedHand);
@@ -88,12 +63,6 @@ function applyForcedDrawStaging(
   if (staging.kind === 'opponent') {
     scope.dom.pendingForcedHandRevealRef.current = null;
     scope.ui.setDrawStepMyHand(null);
-    recordForcedDrawStateEvent?.(
-      'state:opponent_forced',
-      staging.sequence,
-      staging.opponentId,
-      staging.drawnCount,
-    );
     scope.ui.setDrawSequenceActiveBoth(true);
     scope.ui.setDrawStepActorId(staging.opponentId);
     scope.ui.setDrawStepOpponentHandCount(staging.stagedOpponentHandCount);
@@ -146,7 +115,7 @@ export function applyStateUpdateProjection(
     scope.ui.setRecentAutoPasses(result.autoPassPlayerIds);
   }
 
-  applyForcedDrawStaging(scope, result.forcedDrawStaging, options.recordForcedDrawStateEvent);
+  applyForcedDrawStaging(scope, result.forcedDrawStaging);
 
   drawAudit('room-update', {
     requestId: result.nextState?.sequence,

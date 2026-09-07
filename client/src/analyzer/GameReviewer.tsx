@@ -77,6 +77,7 @@ export default function GameReviewer({
   useEffect(() => {
     if (!open || !analysis) return;
     const defaultHand = scopeHandNumber ?? hands[0]?.handNumber ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derives the initial hand + move cursor from props when the reviewer opens
     setSelectedHandNumber(defaultHand);
     const hand = hands.find((entry) => entry.handNumber === defaultHand);
     const moveCount = hand?.analyzedMoves.length ?? analysis.analyzedMoves.length;

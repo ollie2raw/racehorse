@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useEffect } from 'react';
 import {
   notifyGuidedV2EventToasts,
@@ -99,7 +100,7 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
       if (fritzV2LastAppliedIndexRef.current === guidedV2EventIndex) return;
       fritzV2LastAppliedIndexRef.current = guidedV2EventIndex;
 
-      console.log('[guided-v2-fritz-apply]', {
+      logger.info('guided', 'v2-fritz-apply', {
         guidedV2EventIndex,
         eventIndex: event.eventIndex,
         tile: event.tile ?? null,
@@ -125,7 +126,7 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
 
       window.setTimeout(() => {
         const live = matchRef.current;
-        console.log('[guided-v2-fritz-after]', {
+        logger.info('guided', 'v2-fritz-after', {
           guidedV2EventIndex,
           eventIndex: event.eventIndex,
           tile: event.tile ?? null,
@@ -179,7 +180,7 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
     const missingTile = parseTileKey(event.tile);
     if (!missingTile) return;
 
-    console.log('[guided-v2-player-repair-draw]', {
+    logger.info('guided', 'v2-player-repair-draw', {
       guidedV2EventIndex,
       eventIndex: event.eventIndex,
       missingTile: event.tile,
@@ -265,7 +266,7 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
       .slice(0, guidedV2EventIndex)
       .filter((e) => e.actor === 'player' && e.action === 'play').length;
 
-    console.log('[guided-note-align]', JSON.stringify({
+    logger.info('guided-note-align', 'align', {
       uiStepNumber,
       eventsArrayIndex: guidedV2EventIndex,
       eventIndex: currentEvent.eventIndex,
@@ -276,6 +277,6 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
       coachingTextStart: (currentEvent.coachingText || '').substring(0, 80),
       bestMoveTile: currentExpectedV2PlayerEvent?.tile,
       playerHandTiles: currentEvent.playerHandAfter,
-    }));
+    });
   }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, currentExpectedV2PlayerEvent]);
 }

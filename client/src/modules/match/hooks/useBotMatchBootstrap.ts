@@ -128,6 +128,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   );
   const preGameDrawActive = preGameDrawEligible && !preGameDrawCompleted;
   const preGameDrawActiveRef = useRef(preGameDrawActive);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   preGameDrawActiveRef.current = preGameDrawActive;
 
   botMatchDebugLog('[mode-debug]', { mode, isGuidedModeProp: props.isGuidedMode, isGuidedMode, isLearnAcademyMode });
@@ -195,6 +196,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     dailyFritzPackage,
     guidedInitSourceRef,
   });
+  // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
   bootstrapInputRef.current = {
     mode,
     winningScore,
@@ -212,6 +214,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
   };
 
   const initialDailyFritzSessionRef = useRef(initialDailyFritzSession);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   initialDailyFritzSessionRef.current = initialDailyFritzSession;
 
   const { match, setMatch: rawSetMatch, matchRef, runtime: matchRuntime } = useMatchRuntimeBridge<BotMatchState>({
@@ -304,6 +307,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
       boneyardCount: match.boneyard.length,
       boneyardOrder: match.boneyard.map((tile) => `${tile.low}-${tile.high}`),
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time bootstrap — reads the initial match snapshot on mount by design
   }, []);
 
   return {

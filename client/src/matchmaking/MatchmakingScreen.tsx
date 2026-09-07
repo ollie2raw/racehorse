@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
@@ -199,7 +200,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
 
   useEffect(() => {
     if (!showDisconnectedHint || import.meta.env.PROD) return;
-    console.info('[matchmaking] game server not connected yet', {
+    logger.operational('matchmaking', 'game server not connected yet', {
       serverUrl: serverUrl || '(page origin)',
       sameOriginAsPage: serverUrl ? isGameServerSameOriginAsPage(serverUrl) : false,
     });
@@ -237,6 +238,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   useEffect(() => {
     if (!props.socket || !props.isConnected) return;
     mm.refreshOnlineCounts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mm.refreshOnlineCounts is the used member and is listed; the whole mm object is a fresh literal each render
   }, [props.socket, props.isConnected, mm.refreshOnlineCounts]);
 
   const isIdle = mm.state === 'idle';

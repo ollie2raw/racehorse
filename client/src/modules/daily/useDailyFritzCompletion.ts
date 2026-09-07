@@ -135,6 +135,7 @@ export function useDailyFritzCompletion({
       .finally(() => {
         gameCompleteInFlightRef.current = false;
       });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on the completion trigger; challenge_code is stable for the life of the run
   }, [
     dailyFritzHandIndex,
     dailyFritzPackage?.attempt_id,

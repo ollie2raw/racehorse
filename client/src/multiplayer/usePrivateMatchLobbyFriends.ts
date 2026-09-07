@@ -26,6 +26,7 @@ export function usePrivateMatchLobbyFriends({
 
   useEffect(() => {
     if (!showFriendPicker || !isRatedEligible) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading/error state around the fetchFriendsWithPresence() call this effect owns
     setFriendsLoading(true);
     setFriendsError(null);
     fetchFriendsWithPresence()

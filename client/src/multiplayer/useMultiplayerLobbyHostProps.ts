@@ -116,6 +116,7 @@ export function useMultiplayerLobbyHostProps(
       autoJoinAttemptedRef: source.autoJoinAttemptedRef,
       roomOperationEpochRef: source.roomOperationEpochRef,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- missing deps are stable refs and callbacks on the source object; the memo keys on the values it reads
     [
       source.socket,
       source.socketRuntime,

@@ -8,6 +8,7 @@ import type { TournamentAttachRefs } from './useTournamentAttachRefs';
 import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentSessionNavigation } from './useTournamentSessionNavigation';
 import type { TournamentHookApi } from './tournamentMatchSessionTypes';
+import { logger } from '../../../utils/logger';
 
 type UseTournamentSessionSocketsParams = {
   attachRuntime: TournamentAttachRuntime;
@@ -70,6 +71,7 @@ export function useTournamentSessionSockets({
     onMatchAbandoned: () => undefined,
   });
 
+  // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
   sessionSocketDelegatesRef.current = {
     onTournamentCompleted: (payload) => {
       if (!payload?.tournamentId) return;
@@ -85,7 +87,7 @@ export function useTournamentSessionSockets({
           payloadMatchId: payload.matchId,
         })
       ) {
-        console.log('[tournament:complete] deferring finalize until postgame overlay', {
+        logger.operational('tournament:complete', 'deferring finalize until postgame overlay', {
           matchId: payload.matchId,
         });
         void tournament.openBracket(payload.tournamentId);
@@ -111,7 +113,7 @@ export function useTournamentSessionSockets({
       if (payload.abandonedUserId && payload.abandonedUserId === currentUserId) {
         return;
       }
-      console.log('[leave-game] received opponent abandoned', {
+      logger.operational('leave-game', 'received opponent abandoned', {
         roomCode: payload.roomCode,
         abandonedUserId: payload.abandonedUserId ?? null,
       });

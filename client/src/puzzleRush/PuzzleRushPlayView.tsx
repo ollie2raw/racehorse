@@ -96,12 +96,14 @@ export function PuzzleRushPlayView({
 
   // A new ordinal is a fresh board: reset every per-puzzle ref and piece of state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the whole per-puzzle runtime when the ordinal changes (a fresh board)
     setRuntimeState(createRushMatchState(puzzle));
     setSelectedTile(null);
     setLastPlayedTile(null);
     setDone(false);
     runningScoreRef.current = 0;
     moveTraceRef.current = [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on puzzle.puzzleId + puzzle.ordinal; the rest of the puzzle object is stable per ordinal
   }, [puzzle.puzzleId, puzzle.ordinal]);
 
   const legalMoves = useMemo(() => {

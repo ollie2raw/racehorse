@@ -283,6 +283,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         setShowManualHandAdvance(true);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the callback keys on the hand-lifecycle inputs; dailyFritzPackage is read via a ref path
     [
       dailyFritzPackage?.challenge_code,
       dailyFritzPackage?.current_game_number,
@@ -299,6 +300,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     ],
   );
 
+  // eslint-disable-next-line react-hooks/immutability -- the callback mutates refs, not render-scope locals
   const advanceHand = useCallback(() => {
     const live = matchRef.current;
     const challengeHandOnlyGameOver = Boolean(
@@ -368,6 +370,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         handTransitionInFlightRef.current = false;
         prefetchCoordinator.clear();
         completedHandEvidenceRef.current = null;
+        // eslint-disable-next-line react-hooks/immutability -- ref.current write inside a callback, not render
         reveal.dailyFritzMinAdvanceAtRef.current = null;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
@@ -679,9 +682,11 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     traceHandLifecycle,
   ]);
 
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   advanceHandRef.current = advanceHand;
 
   const notifyBotActionResult = useCallback(
+    // eslint-disable-next-line react-hooks/immutability -- the callback mutates refs, not render-scope locals
     (result: BotActionResult) => {
       if (result.handEnded) {
         lifecycle.onHandEndedFromBotAction(
@@ -695,6 +700,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         );
         if (isDailyFritzMode) {
           lastDailyFlowLabelRef.current = 'hand-complete';
+          // eslint-disable-next-line react-hooks/immutability -- ref.current write inside a callback, not render
           reveal.dailyFritzMinAdvanceAtRef.current = computeDailyFritzMinAdvanceAtOnHandComplete();
           logDailyFritzHandComplete(result);
         }
@@ -706,6 +712,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       }
       applyBotActionUiEffects(result, ports, opponentLabel, isMuted, isDailyFritzMode);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- listed deps are not read in this branch after the daily-fritz refactor — harmless, a separate cleanup
     [
       dailyFritzHandIndex,
       dailyFritzPackage,
@@ -739,6 +746,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     // manual retry must too.
     completedHandEvidenceRef.current = null;
     advanceHandRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dailyFritzPackage is not read in the callback body — harmless extra dep
   }, [dailyFritzPackage, prefetchCoordinator]);
 
   const getDebugSnapshot = useCallback((): HandLifecycleDebugSnapshot => ({

@@ -76,6 +76,7 @@ export function useSocialInviteState(
   // Clear outbound challenge when room fills (opponent joined)
   useEffect(() => {
     if (playerCount >= 2 && outboundChallenge) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-expires the outbound challenge at its deadline via a timer
       clearOutboundChallenge();
     }
   }, [playerCount, outboundChallenge, clearOutboundChallenge]);

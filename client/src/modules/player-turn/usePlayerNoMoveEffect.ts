@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useEffect } from 'react';
 import type { RunDrawSequence } from '../bot-turn/drawSequence.ts';
 import {
@@ -255,7 +256,7 @@ export function usePlayerNoMoveEffect({
             eventIndex,
           });
           setAuthoringV2Events((prev) => [...prev, v2event]);
-          console.log('[v2-capture] player draw', { eventIndex });
+          logger.info('v2-capture', 'player draw', { eventIndex });
         }
 
         if (result.passed) {
@@ -268,7 +269,7 @@ export function usePlayerNoMoveEffect({
               eventIndex,
             });
             setAuthoringV2Events((prev) => [...prev, v2event]);
-            console.log('[v2-capture] player pass', { eventIndex });
+            logger.info('v2-capture', 'player pass', { eventIndex });
           }
           if (isGuidedMode && frozenLesson) {
             isTransitioningRef.current = true;
@@ -301,6 +302,7 @@ export function usePlayerNoMoveEffect({
     return () => {
       // Progress renders from this draw sequence should not cancel its final pass/block result.
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ports and userPlayMoves are stable for the effect scope; it keys on the no-move trigger
   }, [
     acceptGuidedTranscriptTurn,
     appendGhostMove,

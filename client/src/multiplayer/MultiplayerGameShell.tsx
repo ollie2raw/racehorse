@@ -107,6 +107,19 @@ function MultiplayerGameShellComponent({
   const prevOppCountRef = useRef<number | null>(null);
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
   const prevHudScoresRef = useRef<Record<string, number>>({});
+  // MP-JIT-2 makes a scoring play two `state` transitions (optimistic, then the
+  // authoritative echo ~45ms later). Returning clearTimeout as the effect's
+  // cleanup let the second transition cancel the pulse reset, and that run sees
+  // no score change so it armed no replacement — the pulse stuck on forever.
+  // Hold the timer in a ref that only unmount clears. Same fix as 869e0712.
+  const hudScorePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The post-game rating refresh runs a ~13s retry ladder guarded for re-entry
+  // by multiplayerRatingRefreshKeyRef. Cancelling it from the effect cleanup
+  // killed it on any post-game `state` echo, and the key guard then made the
+  // re-run early-return without starting a replacement — so `pending` never
+  // cleared. Invalidate by run id instead: only a genuinely new key, or
+  // unmount, retires an in-flight ladder.
+  const multiplayerRatingRunIdRef = useRef(0);
   const prevMyHandLenRef = useRef(0);
   const boardRef = useRef<BoardHandle>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -306,6 +319,7 @@ function MultiplayerGameShellComponent({
     setOpponentDragging,
   ]);
 
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   resetShellClientGameSessionRef.current = resetShellClientGameSession;
 
   useEffect(() => {
@@ -350,11 +364,6 @@ function MultiplayerGameShellComponent({
       clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = null;
     }
-    // TEMP-DIAGNOSTIC
-    console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
-      path: 'MultiplayerGameShell:stateNullEffect',
-      at: Date.now(),
-    });
     setDrawSequenceActiveBoth(false);
     setDrawStepMyHand(null);
     setDrawStepOpponentHandCount(null);
@@ -372,6 +381,7 @@ function MultiplayerGameShellComponent({
   useEffect(() => {
     setRematchRequested(false);
     setRematchReadyIds([]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- new-match lifecycle reset (rematch, move log, rating baseline) keyed on the room/session
     setMultiplayerMoveLog([]);
     setScoreTrackOpen(false);
     multiplayerMoveCounterRef.current = 1;
@@ -390,6 +400,7 @@ function MultiplayerGameShellComponent({
     if (!joinedRoom || state?.gameOver) return;
     if (multiplayerRatingBaseline != null) return;
     if (authProfile?.glicko_rating == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- latches the rating baseline once per room, when the profile rating first becomes available
     setMultiplayerRatingBaseline(Number(authProfile.glicko_rating));
   }, [authProfile?.glicko_rating, joinedRoom, multiplayerRatingBaseline, state?.gameOver]);
 
@@ -425,7 +436,9 @@ function MultiplayerGameShellComponent({
     if (multiplayerRatingRefreshKeyRef.current === key) return;
     multiplayerRatingRefreshKeyRef.current = key;
     setMultiplayerRatingPending(true);
-    let cancelled = false;
+    const runId = multiplayerRatingRunIdRef.current + 1;
+    multiplayerRatingRunIdRef.current = runId;
+    const isStale = () => multiplayerRatingRunIdRef.current !== runId;
     const baselineRating = multiplayerRatingBaseline;
     const retryDelaysMs = [0, 700, 1400, 2400, 3600, 5200];
 
@@ -436,7 +449,7 @@ function MultiplayerGameShellComponent({
           if (delayMs > 0) {
             await new Promise((resolve) => window.setTimeout(resolve, delayMs));
           }
-          if (cancelled) return;
+          if (isStale()) return;
 
           try {
             await Promise.resolve(refreshAuthProfile());
@@ -444,7 +457,7 @@ function MultiplayerGameShellComponent({
             console.warn('[Multiplayer Rating] profile refresh failed:', err);
           }
 
-          if (cancelled) return;
+          if (isStale()) return;
           const latestRating = authProfileRef.current?.glicko_rating;
           if (
             latestRating != null &&
@@ -456,15 +469,11 @@ function MultiplayerGameShellComponent({
           }
         }
       } finally {
-        if (!cancelled) {
+        if (!isStale()) {
           setMultiplayerRatingPending(false);
         }
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     authProfileRef,
     authUser,
@@ -608,10 +617,23 @@ function MultiplayerGameShellComponent({
     prevHudScoresRef.current = nextScores;
     if (!changed) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lights the HUD score pulse from the score delta; the effect also arms the 260ms reset timer
     setHudScorePulse(nextPulse);
-    const timeout = setTimeout(() => setHudScorePulse({}), 260);
-    return () => clearTimeout(timeout);
+    if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
+    hudScorePulseTimerRef.current = setTimeout(() => {
+      hudScorePulseTimerRef.current = null;
+      setHudScorePulse({});
+    }, 260);
   }, [state]);
+
+  useEffect(
+    () => () => {
+      if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
+      // Retire any in-flight rating retry ladder on unmount.
+      multiplayerRatingRunIdRef.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     const finalState = state;
@@ -810,6 +832,7 @@ function MultiplayerGameShellComponent({
       players.length === 2 &&
       players.every((p) => Boolean(p.userId)),
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- multiplayerRatingSummary is a plain object literal; the downstream memo tolerates the identity churn
   const multiplayerRatingSummary =
     multiplayerRatingEligible && state?.gameOver
       ? {
@@ -1002,7 +1025,9 @@ function MultiplayerGameShellComponent({
     ],
   );
 
+  // eslint-disable-next-line react-hooks/immutability -- the layout effect syncs shared refs; not a render-scope mutation
   useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- shared-ref .current write inside a layout effect; the rule cannot see it is a ref
     sharedGameplayRefs.stateRef.current = stateRef.current;
     sharedGameplayRefs.draggingStateRef.current = draggingStateRef.current;
     sharedGameplayRefs.handRevealShownRef.current = handRevealShownRef.current;

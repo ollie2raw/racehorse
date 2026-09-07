@@ -97,11 +97,6 @@ export function useTransientRoomUi(params: UseTransientRoomUiParams): UseTransie
       clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = null;
     }
-    // TEMP-DIAGNOSTIC
-    console.log('[TEMP-DIAGNOSTIC] drawSequenceActive set false', {
-      path: 'useTransientRoomUi:clearTransientRoomUi',
-      at: Date.now(),
-    });
     setDrawSequenceActiveBoth(false);
     setDrawStepMyHand(null);
     setDrawStepActorId(null);

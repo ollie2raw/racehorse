@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useMemo, useRef, useState, type MutableRefObject } from 'react';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import { botMatchDebugLog } from '../match/runtime/botMatchDebug.ts';
@@ -100,7 +101,9 @@ export function useGuidedLessonBoot({
     }
     const authoring = loadAuthoringSession();
     if (authoring && authoring.steps.some((s) => s.chosenMove !== null)) {
-      console.log('[guided-debug] frozen step0 hand = (authoring fallback)', authoring.steps[0]?.playerHand ?? []);
+      logger.info('guided-debug', 'frozen step0 hand (authoring fallback)', {
+        playerHand: authoring.steps[0]?.playerHand ?? [],
+      });
       return authoring;
     }
     return null;

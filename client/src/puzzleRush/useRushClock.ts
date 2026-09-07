@@ -35,9 +35,11 @@ export function useRushClock(params: {
 
   // Deadline-based rather than decrement-based: a backgrounded tab that misses
   // ticks must not gain time, which is exactly what a naive interval would do.
+  // eslint-disable-next-line react-hooks/purity -- useRef initializer runs once — Date.now() seeds the clock deadline
   const deadlineRef = useRef<number>(Date.now() + baseSeconds * 1000);
   const expiredRef = useRef(false);
   const onExpireRef = useRef(onExpire);
+  // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   onExpireRef.current = onExpire;
 
   const start = useCallback(() => {

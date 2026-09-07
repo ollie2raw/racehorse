@@ -48,7 +48,17 @@ export default defineConfig({
       '@racehorse/match-protocol': path.resolve(repoRoot, '../packages/match-protocol/src/index.ts'),
     },
   },
-  plugins: [react(), preloadHeroImagePlugin()],
+  plugins: [
+    react({
+      // React Compiler (Phase 5 of the hooks-correctness sweep). Auto-memoizes
+      // components/hooks; bails out on anything it can't prove safe. The
+      // react-hooks/* lint family (gated at zero in CI) is its safety contract.
+      babel: {
+        plugins: [['babel-plugin-react-compiler', { target: '19' }]],
+      },
+    }),
+    preloadHeroImagePlugin(),
+  ],
   // Baked in rather than read from the environment at runtime: Vite only
   // exposes VITE_-prefixed variables, so Vercel's VERCEL_GIT_COMMIT_SHA could
   // not reach the client and every Sentry event reported release 'unknown'.

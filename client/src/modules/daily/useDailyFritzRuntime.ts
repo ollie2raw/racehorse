@@ -104,6 +104,7 @@ export function useDailyFritzRuntime({
   }, [dailyFritzShareText]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the copied-to-clipboard flag when the share text changes
     setShareCopied(false);
   }, [dailyFritzShareText]);
 

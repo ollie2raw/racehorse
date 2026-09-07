@@ -54,11 +54,20 @@ export function useMultiplayerPresentation({
   // Keying off "last announced score" makes the announcement idempotent across
   // that double update and lets the timer run uncancelled.
   const announcedScoreRef = useRef<Record<string, number>>({});
+  // Tile-fly timers are staggered (i * 150ms). Cancelling them from the effect
+  // cleanup meant MP-JIT's authoritative echo wiped every pending one, and the
+  // re-run saw prevMyHandLenRef already advanced so it armed no replacement —
+  // a multi-tile draw played only its first tile. Hold them in a ref that only
+  // unmount clears; each timer removes its own id when it fires.
+  const drawAnimationTimersRef = useRef<Set<number>>(new Set());
   const scoreToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () => () => {
       if (scoreToastTimerRef.current) clearTimeout(scoreToastTimerRef.current);
+      const pendingDrawTimers = drawAnimationTimersRef.current;
+      pendingDrawTimers.forEach((id) => window.clearTimeout(id));
+      pendingDrawTimers.clear();
     },
     [],
   );
@@ -175,12 +184,18 @@ export function useMultiplayerPresentation({
       return;
     }
 
-    const animationTimers: number[] = [];
+    const armDrawTimer = (fn: () => void, delayMs: number) => {
+      const id = window.setTimeout(() => {
+        drawAnimationTimersRef.current.delete(id);
+        fn();
+      }, delayMs);
+      drawAnimationTimersRef.current.add(id);
+    };
 
     if (currentMyHandLen > prevMyHandLen) {
       const drawnCount = currentMyHandLen - prevMyHandLen;
       for (let i = 0; i < drawnCount; i++) {
-        const t = window.setTimeout(() => {
+        armDrawTimer(() => {
           if (!boneyardRef.current || !handAreaRef.current) return;
           playDrawSound(isMutedRef.current);
           const from = boneyardRef.current.getBoundingClientRect();
@@ -198,19 +213,17 @@ export function useMultiplayerPresentation({
             },
           ]);
 
-          const ftRemove = window.setTimeout(() => {
+          armDrawTimer(() => {
             setFlyingTiles((prevTiles) => (prevTiles || []).filter((tile) => tile.id !== id));
           }, 1800);
-          animationTimers.push(ftRemove);
         }, i * 150);
-        animationTimers.push(t);
       }
     }
 
     if (currentOppHandLen > prevOppHandLen) {
       const drawnCount = currentOppHandLen - prevOppHandLen;
       for (let i = 0; i < drawnCount; i++) {
-        const t = window.setTimeout(() => {
+        armDrawTimer(() => {
           if (!boneyardRef.current || !opponentPillRef.current) return;
           playDrawSound(isMutedRef.current);
           const from = boneyardRef.current.getBoundingClientRect();
@@ -228,21 +241,16 @@ export function useMultiplayerPresentation({
             },
           ]);
 
-          const ftRemove = window.setTimeout(() => {
+          armDrawTimer(() => {
             setFlyingTiles((prevTiles) => (prevTiles || []).filter((tile) => tile.id !== id));
           }, 1800);
-          animationTimers.push(ftRemove);
         }, i * 150);
-        animationTimers.push(t);
       }
     }
 
     prevMyHandLenRef.current = currentMyHandLen;
     prevOpponentHandLenRef.current = currentOppHandLen;
 
-    return () => {
-      animationTimers.forEach((timer) => window.clearTimeout(timer));
-    };
   }, [
     state,
     myHand.length,

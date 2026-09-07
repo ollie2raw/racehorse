@@ -23,6 +23,7 @@ export default function ChangePasswordModal({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the form when the modal opens (key-remount is the cleaner fix — see plan doc)
     setPassword('');
     setConfirmPassword('');
     setSubmitting(false);

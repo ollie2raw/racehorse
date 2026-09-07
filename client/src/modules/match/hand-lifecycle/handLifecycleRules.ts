@@ -3,6 +3,7 @@
  * Keeps transition rules explicit and testable.
  */
 
+import { logger } from '../../../utils/logger';
 import type { HandLifecyclePhase, HandLifecycleLogPayload } from '@racehorse/match-protocol';
 import { reportOptionalChunkFailure } from '../../../utils/optionalChunk';
 
@@ -127,7 +128,7 @@ export function logDailyFritzHandBreadcrumb(
   event: DailyFritzHandBreadcrumbEvent,
   detail: Record<string, unknown>,
 ): void {
-  console.log(`[daily-flow] ${event}`, detail);
+  logger.info('daily-flow', event, detail);
 }
 
 export function logHandLifecycle(payload: HandLifecycleLogPayload): void {
@@ -135,7 +136,7 @@ export function logHandLifecycle(payload: HandLifecycleLogPayload): void {
   lastPhase = payload.phase;
   if (DEV) {
     const suffix = payload.detail ? ` ${JSON.stringify(payload.detail)}` : '';
-    console.log(`[handLifecycle] ${previousPhase} -> ${payload.phase}${suffix}`);
+    logger.info('handLifecycle', `${previousPhase} -> ${payload.phase}${suffix}`);
   }
 }
 

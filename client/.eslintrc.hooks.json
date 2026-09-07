@@ -1,0 +1,33 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.app.json",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "plugins": ["react-hooks"],
+  "ignorePatterns": [
+    "**/*.behaviorTests.ts",
+    "src/devtools/**"
+  ],
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "react-hooks/refs": "warn",
+    "react-hooks/set-state-in-effect": "warn",
+    "react-hooks/immutability": "warn",
+    "react-hooks/purity": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["src/bot/view/board/BotMatchBoardDebugOverlays.tsx"],
+      "rules": { "react-hooks/refs": "off" }
+    },
+    {
+      "files": ["src/learn/AuthoringCoachPanel.tsx"],
+      "rules": { "react-hooks/set-state-in-effect": "off" }
+    }
+  ]
+}

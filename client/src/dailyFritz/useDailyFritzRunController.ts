@@ -355,6 +355,7 @@ export function useDailyFritzRunController({
   useEffect(() => {
     if (resolveTodayNextAction(today) !== 'finalize_set' || activeRun) return;
     if (!normalizeSetResult(today?.set_result ?? today?.result)?.setWinner) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers the async continueSet() flow when the set is ready to finalize
     void continueSet();
   }, [activeRun, continueSet, today]);
 

@@ -357,6 +357,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
 
       return { ok: true, nextState };
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- transientUi.clearTransientRoomUi is the only member used and is already listed; the whole object is unstable
     [transientUi.clearTransientRoomUi, maxSequenceRef],
   );
 

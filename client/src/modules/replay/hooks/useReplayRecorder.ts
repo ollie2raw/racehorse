@@ -12,9 +12,13 @@ export function useReplayRecorder(initialLog: MoveEntry[]): {
   }
   const recorder = recorderRef.current;
   const moveLog = useSyncExternalStore(
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     recorder.subscribe.bind(recorder),
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     recorder.getMoveLog.bind(recorder),
+    // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
     recorder.getMoveLog.bind(recorder),
   );
+  // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
   return { recorder, moveLog };
 }

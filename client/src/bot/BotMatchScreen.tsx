@@ -26,11 +26,14 @@ export default function BotMatchScreen(props: BotMatchScreenProps) {
   );
   const [lessonV2LoadError, setLessonV2LoadError] = useState<string | null>(null);
   const lessonV2Preloaded = isLessonV2Preloaded();
+  // eslint-disable-next-line react-hooks/refs -- render-time transition detection against a previous-value ref; the paired effect keeps it current
   const enteredLessonV2Mode = needsLessonV2 && !wasNeedingLessonV2Ref.current;
   const shouldBlockForLessonV2 =
+    // eslint-disable-next-line react-hooks/refs -- render-time transition detection against a previous-value ref; the paired effect keeps it current
     needsLessonV2 &&
     !lessonV2Preloaded &&
     !lessonV2LoadError &&
+    // eslint-disable-next-line react-hooks/refs -- render-time transition detection against a previous-value ref; the paired effect keeps it current
     (enteredLessonV2Mode || !lessonV2Ready);
 
   useEffect(() => {
@@ -39,6 +42,7 @@ export default function BotMatchScreen(props: BotMatchScreenProps) {
 
   useEffect(() => {
     if (!needsLessonV2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- readies or dynamically imports Lesson V2 based on needsLessonV2; sync branch is the already-loaded fast path
       setLessonV2Ready(true);
       setLessonV2LoadError(null);
       return;
@@ -74,6 +78,7 @@ export default function BotMatchScreen(props: BotMatchScreenProps) {
     );
   }
 
+  // eslint-disable-next-line react-hooks/refs -- render-time transition detection against a previous-value ref; the paired effect keeps it current
   if (shouldBlockForLessonV2) {
     return <ScreenLoader label="Loading lesson…" />;
   }

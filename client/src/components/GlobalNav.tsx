@@ -168,6 +168,7 @@ export function GlobalNav({
 
   // Signing out mid-menu leaves the popup anchored to a "Sign In" trigger.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- closes the account menu when the user signs out mid-session
     if (!authUser) setAccountMenuOpen(false);
   }, [authUser]);
 

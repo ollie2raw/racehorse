@@ -52,6 +52,7 @@ export default function AuthModal({
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the form when the modal opens or switches mode (a key-remount refactor is the cleaner fix — see plan doc)
     resetFormState();
   }, [open, mode]);
 

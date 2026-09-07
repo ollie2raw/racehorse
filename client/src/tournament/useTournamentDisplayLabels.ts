@@ -28,6 +28,7 @@ export function useTournamentDisplayLabels(
 
   useEffect(() => {
     if (!tournamentMatch) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- dynamic-imports displayNames to resolve the opponent label; null reset clears it with no match
       setTournamentOpponentLabel(null);
       return;
     }
