@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createRef } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { MultiplayerGameShell } from './MultiplayerGameShell';
 import { getGameSnapshot, resetGameSnapshot } from './multiplayerGameSnapshot';
@@ -186,5 +186,70 @@ describe('MultiplayerGameShell integration tests', () => {
     const snapshot = getGameSnapshot();
     expect(snapshot.hasState).toBe(true);
     expect(snapshot.routeProps.state?.sequence).toBe(10);
+  });
+});
+
+describe('MultiplayerGameShell HUD score pulse', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * MP-JIT-2 makes a scoring play two `state` transitions — the optimistic local
+   * projection, then the authoritative echo ~45ms later. The pulse effect arms a
+   * 260ms reset timer and returns clearTimeout as its cleanup, so the second
+   * transition cancels the reset. On that run the score is unchanged, so the
+   * effect early-returns without arming a replacement and the pulse sticks on.
+   * Same shape as the score-toast bug fixed in 869e0712.
+   */
+  it('clears the HUD score pulse when the authoritative echo follows the optimistic apply', () => {
+    resetGameSnapshot();
+    vi.useFakeTimers();
+
+    const shellDelegatesRef = createRef<any>();
+    const props = makeDefaultProps({
+      joinedRoomResponseRef: { current: null as any },
+      shellDelegatesRef,
+    });
+
+    render(<MultiplayerGameShell {...props} />);
+
+    const applyState = (state: GameState) => {
+      act(() => {
+        shellDelegatesRef.current?.applyJoinResponseGameState({
+          ok: true,
+          roomCode: 'ROOM123',
+          you: YOU,
+          players: [{ id: YOU }, { id: OPP }],
+          state,
+        } as RoomAckResponse);
+      });
+    };
+
+    const scored = (sequence: number, oppScore: number) =>
+      makeState({
+        sequence,
+        players: {
+          [YOU]: { id: YOU, hand: [], score: 0 },
+          [OPP]: { id: OPP, hand: [], score: oppScore },
+        },
+      });
+
+    // Baseline, then the optimistic apply that scores.
+    applyState(scored(1, 0));
+    applyState(scored(2, 10));
+    expect(getGameSnapshot().routeProps.hudScorePulse[OPP]).toBe(true);
+
+    // Authoritative echo lands inside the 260ms window with the same score.
+    act(() => {
+      vi.advanceTimersByTime(45);
+    });
+    applyState(scored(3, 10));
+
+    // Well past the reset window, the pulse must be gone.
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(getGameSnapshot().routeProps.hudScorePulse[OPP]).toBeFalsy();
   });
 });

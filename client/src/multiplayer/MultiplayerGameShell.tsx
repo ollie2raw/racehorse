@@ -107,6 +107,12 @@ function MultiplayerGameShellComponent({
   const prevOppCountRef = useRef<number | null>(null);
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
   const prevHudScoresRef = useRef<Record<string, number>>({});
+  // MP-JIT-2 makes a scoring play two `state` transitions (optimistic, then the
+  // authoritative echo ~45ms later). Returning clearTimeout as the effect's
+  // cleanup let the second transition cancel the pulse reset, and that run sees
+  // no score change so it armed no replacement — the pulse stuck on forever.
+  // Hold the timer in a ref that only unmount clears. Same fix as 869e0712.
+  const hudScorePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevMyHandLenRef = useRef(0);
   const boardRef = useRef<BoardHandle>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -604,9 +610,19 @@ function MultiplayerGameShellComponent({
     if (!changed) return;
 
     setHudScorePulse(nextPulse);
-    const timeout = setTimeout(() => setHudScorePulse({}), 260);
-    return () => clearTimeout(timeout);
+    if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
+    hudScorePulseTimerRef.current = setTimeout(() => {
+      hudScorePulseTimerRef.current = null;
+      setHudScorePulse({});
+    }, 260);
   }, [state]);
+
+  useEffect(
+    () => () => {
+      if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const finalState = state;
