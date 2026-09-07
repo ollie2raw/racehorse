@@ -1,0 +1,282 @@
+# Hooks Correctness Plan
+
+**Goal:** Drive `react-hooks/*` ESLint warnings to zero (for the classes that are
+genuinely fixable), gate them in CI so they cannot regress, and leave the codebase
+ready to adopt the React Compiler.
+
+**Status:** Phase 1 triage complete. Phases 1b–5 not started.
+
+**Branch:** `hooks-correctness`
+
+**Baseline commit:** `869e0712`
+
+**Measured:** 2026-09-06, `cd client && ESLINT_USE_FLAT_CONFIG=false npx eslint src --ext .ts,.tsx`
+
+---
+
+## 1. The actual budget
+
+`client/package.json` runs lint with `--max-warnings 377`. The tree currently
+emits **exactly 377 warnings and 0 errors** — the budget is pinned to the
+high-water mark with zero headroom, so *any* new warning fails CI today.
+
+| Rule | Count | Fixable by this sweep? |
+|---|---:|---|
+| `no-console` | 128 | Yes — Phase 1b |
+| `react-hooks/refs` | 88 | **Partly** — see §3 |
+| `react-hooks/set-state-in-effect` | 51 | Yes — Phase 2 |
+| `react-hooks/exhaustive-deps` | 49 | Yes — Phase 3 |
+| `max-lines` | **40** | **No** — see §2 |
+| `react-hooks/purity` | 11 | Yes — Phase 3 |
+| `react-hooks/immutability` | 8 | Yes — Phase 3 |
+| `react-hooks/preserve-manual-memoization` | 2 | Phase 5 (React Compiler) |
+| **Total** | **377** | |
+
+`react-hooks/*` totals **209**, not the ~190 estimated in the task brief
+(`exhaustive-deps` is 49, not 50; the brief's subtotal omitted `max-lines`).
+
+### `react-hooks/*` by rule × feature folder
+
+| folder | refs | set-state | deps | purity | immut | memo | total |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `modules/` | 34 | 9 | 14 | · | 4 | 1 | **62** |
+| `multiplayer/` | 9 | 6 | 7 | · | 2 | 1 | **25** |
+| `(src root — App.tsx)` | 15 | 1 | 4 | · | · | · | **20** |
+| `bot/` | 14 | 2 | 2 | · | · | · | **18** |
+| `match/` | 4 | 1 | 8 | · | 2 | · | **15** |
+| `components/` | · | 2 | 1 | 8 | · | · | **11** |
+| `routing/` | 6 | 2 | 3 | · | · | · | **11** |
+| `dailyFritz/` | · | 6 | 1 | · | · | · | **7** |
+| `puzzleRush/` | 3 | 1 | 1 | 1 | · | · | **6** |
+| `auth/` | · | 5 | · | · | · | · | **5** |
+| `practice/` | · | 4 | 1 | · | · | · | **5** |
+| `social/` | · | 1 | 3 | · | · | · | **4** |
+| `home/`, `learn/`, `tournament/` | · | 1–2 ea | 1 ea | 1 | · | · | **3** ea |
+| `identity/`, `journey/`, `matchmaking/` | | | | | | | **2** ea |
+| `analyzer/`, `friends/`, `ghost/`, `routes/`, `stats/` | | | | | | | **1** ea |
+| **TOTAL** | **88** | **51** | **49** | **11** | **8** | **2** | **209** |
+
+79 files carry at least one hook warning. Regenerate the full per-file manifest with:
+
+```bash
+cd client && ESLINT_USE_FLAT_CONFIG=false npx eslint src --ext .ts,.tsx \
+  --format json -o /tmp/lint.json
+```
+
+---
+
+## 2. Finding A — `max-lines` (40) blocks a literal `--max-warnings 0`
+
+**40 of the 377 warnings are `max-lines` (>500 lines), unrelated to hooks.** The
+task brief did not account for these. Driving the budget to a literal zero means
+splitting 40 files — and the largest offenders are explicitly off-limits:
+
+| file | lines | status |
+|---|---:|---|
+| `modules/fritz/botHeuristics.ts` | 1635 | |
+| `components/Board.tsx` | 1108 | |
+| `match/LiveMatchScreen.tsx` | 1029 | |
+| `multiplayer/MultiplayerGameShell.tsx` | 980 | **`multiplayer/` — do not restructure** |
+| `App.tsx` | 974 | **lines 1480–1530 frozen** |
+| `learn/guidedMatch/GuidedMatchRecorderScreen.tsx` | 930 | **`learn/` frozen** |
+| `learn/lessonV2.ts` | 895 | **`learn/` frozen** |
+| `learning/reasonTagging.ts` | 773 | **`learning/` frozen** |
+| …33 more, 501–866 lines | | 8 further files in `multiplayer/` and `learn/`/`learning/` |
+
+**Decision D-1 (recommended, needs approval): do not chase `max-lines`.** Phase 4
+gates `react-hooks/*` at zero via a dedicated CI lint invocation and leaves
+`max-lines` on a residual, ratcheting budget. Concretely:
+
+```jsonc
+// client/package.json
+"lint":       "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --max-warnings 40",
+"lint:hooks": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx --max-warnings 0 \
+               --rule '{\"no-console\":\"off\",\"max-lines\":\"off\"}'"
+```
+
+CI runs both. `lint:hooks` is the regression gate; the 40 in `lint` can only go
+down. File-splitting is a separate, later piece of work with its own risk profile
+— it is not a hooks-correctness change and must not ride along in this sweep.
+
+---
+
+## 3. Finding B — the 88 `refs` warnings are not 88 bugs
+
+Classifying every `react-hooks/refs` warning against its source line gives four
+populations with very different risk and fix strategy:
+
+| # | pattern | count | verdict |
+|---|---|---:|---|
+| **D** | ref *object* passed into a custom hook / JSX (`useMultiplayerResync({ socketRef, sessionRef, … })`) | **37** | **False positive.** Not fixable in place. |
+| **B** | render-phase mirror write (`fooRef.current = foo`) | **25** | Real. Mechanical fix. |
+| **C** | `.current` dereferenced during render | **22** | Real. Genuine bug class. |
+| **A** | lazy-init singleton (`if (!ref.current) ref.current = new X()`) | **4** | React-sanctioned idiom. |
+
+### Why bucket D is a false positive — verified, not assumed
+
+`App.tsx:358` passes an object literal of ref *objects* (never `.current`) into
+`useMultiplayerResync`. The rule flags the whole call site because it cannot see
+into the callee. Inside `multiplayer/useMultiplayerResync.ts`, every `.current`
+read — lines 89, 98, 176 — sits inside the `useCallback` at line 87 or the
+`useEffect` at line 173. **There are zero render-phase ref reads.** The code is
+correct; the lint rule is conservative across a function boundary.
+
+Passing a ref object into a custom hook is the standard way to share a ref.
+"Fixing" these 37 means changing hook signatures across the multiplayer session
+layer — which collides directly with the `client/src/multiplayer/` "do not
+restructure" guardrail *and* with HARDENING_PLAN System 9's parked pool
+(`useLiveMatchSession.ts`'s composed hooks, explicitly deferred at D-18).
+
+**Decision D-2 (recommended, needs approval):** for bucket D only, apply targeted
+`// eslint-disable-next-line react-hooks/refs -- <verified reason>` at each call
+site, with the justification naming the callee and stating that its `.current`
+reads are effect/callback-only. Each disable is verified individually the way
+`useMultiplayerResync` was above — not applied in bulk. Buckets A, B and C get
+real fixes.
+
+This is the one place the sweep suppresses rather than fixes, so it needs an
+explicit call. The alternative — restructuring the multiplayer hook signatures —
+is a much larger, guardrail-violating change that this sweep should not make.
+If you'd rather not suppress at all, the honest outcome is that
+`react-hooks/refs` gates at 37, not 0.
+
+### Bucket A (4) — `modules/match/hooks/useMatchRuntimeBridge.ts:28`
+
+The documented "avoid recreating ref contents" idiom from the React `useRef`
+docs. Safe, but it *does* also destroy-and-recreate on `instanceKey` change
+during render, which is a real render-phase side effect. Fix properly by moving
+the re-keying to a `useState`-with-key or a `key` prop on the consumer, rather
+than suppressing. Treated as a Phase 3 task with a test.
+
+---
+
+## 4. Finding C — `no-console` is not purely mechanical
+
+128 warnings across 46 files: 120 `console.log`, 4 `console.info`, 2
+`console.debug`, 2 `console.assert`. Three distinct dispositions:
+
+| bucket | count | action |
+|---|---:|---|
+| **Tagged telemetry** (`[tournament:attach-client]`, `[hand:ready]`, …) | 94 | Route through `utils/logger.ts` — `logger.operational()` for socket/match lifecycle, `logger.info()` for the rest |
+| **Debug tooling** (`renderProfiler`, `layoutDebug`, `botMatchDebug`, `*Diagnostics`) | 17 | Add the files to the existing `no-console: off` override list in `.eslintrc.json` alongside `boardDiagnostics.ts` / `fairnessLog.ts` / `drawAudit.ts` / `mpPerf.ts` |
+| **`[TEMP-DIAGNOSTIC]` markers** | 15 | Delete outright — 6 files, all left over from the MP-JIT investigation |
+| **`console.assert`** | 2 | `learn/engine/rulesAdapter.ts` — convert to a thrown invariant or delete |
+
+`logger.ts` already exposes `error` / `warn` / `info` / `operational`, and six of
+the 46 files already import it while still calling `console.log` — those are the
+unambiguous starting point.
+
+---
+
+## 5. Phase plan
+
+Each phase is independently shippable. Stop and report at every boundary.
+
+### Phase 1 — Triage ✅ *(this document)*
+
+- [x] Full rule × folder × file breakdown
+- [x] Classify all 88 `refs` warnings by code pattern
+- [x] Classify all 128 `no-console` sites by disposition
+- [x] Baseline: `npx tsc -b` green, 377 warnings, 0 errors
+- [ ] Commit this doc
+
+### Phase 1b — `no-console` (128 → 0)
+
+Target budget after: **249**. Four commits, one per bucket in §4:
+
+1. `chore(lint): delete TEMP-DIAGNOSTIC logging left from the MP-JIT pass` (−15)
+2. `chore(lint): exempt debug-tooling modules from no-console` (−17)
+3. `refactor(log): route match/tournament telemetry through logger` (−~60)
+4. `refactor(log): route multiplayer + guided telemetry through logger` (−~36)
+
+No behavioral change intended. `logger.operational()` adds a Sentry breadcrumb
+where a bare `console.log` had none — a deliberate improvement, called out in the
+commit body. Verify per commit: `npx tsc -b`, both vitest suites, lint delta.
+
+### Phase 2 — `set-state-in-effect` (51 → 0)
+
+The bug-bearing class — the one that dropped every multiplayer score toast in
+production two days ago. **Template: commit `869e0712`** —
+failing test first, idempotent guard via a ref, timer held in a ref cleared only
+on unmount.
+
+Split by risk:
+
+- **18 warnings in `multiplayer/` (6), `modules/` (9), `tournament/` (2), `match/` (1)** —
+  one fix per commit, failing test first, e2e smoke after each folder.
+- **33 warnings elsewhere** (`dailyFritz/` 6, `auth/` 5, `practice/` 4, `routing/` 2,
+  `components/` 2, `learn/` 2, `journey/` 2, and 10 single-warning folders) —
+  still test-first, but groupable by folder into one commit each.
+
+Highest concentration: `practice/NoBrainerLabScreen.tsx` (4),
+`modules/guided/useAuthoringCapture.ts` (2), `multiplayer/MultiplayerGameShell.tsx` (3).
+
+### Phase 3 — `refs` + `exhaustive-deps` + `purity`/`immutability`
+
+Group commits by hook family so each diff is one coherent dataflow change.
+
+- `refs` bucket B (25) + C (22) + A (4) — real fixes
+- `refs` bucket D (37) — per D-2
+- `exhaustive-deps` (49) — **each one is a behavioral question**, not a mechanical
+  add. A wrong dep array in `useLiveMatchSession.ts`'s composed hooks introduces a
+  render loop. Where the answer is "this effect genuinely should not re-run on
+  that dep," the fix is to restructure so the dep is not needed (ref-held latest
+  value, or move the read into the handler) — not to suppress.
+- `purity` (11) — 8 are in `components/Board.tsx`, but at only 4 distinct lines
+  (L671, L687, L694, L697, each reported twice); one cluster, one commit. The
+  other 3 are `home/useHomeCommandCenter.ts:319`, `puzzleRush/useRushClock.ts:38`,
+  `routes/tournamentRoutes.tsx:101`
+- `immutability` (8) — `modules/match/hooks/useHandLifecycle.ts` (L302, L371,
+  L685, L698), `match/session/actions/useLiveMatchActions.ts` (L166, L209),
+  `multiplayer/MultiplayerGameShell.tsx` (L1005, L1006)
+
+Hardest files, do last and slowly: `useMatchRuntimeBridge.ts`,
+`useHandLifecycle.ts`, `useAppRouteState.ts`, `App.tsx`.
+
+### Phase 4 — Gate it
+
+Per D-1: add `lint:hooks` at `--max-warnings 0`, drop `lint` to the residual
+`max-lines` count, wire both into the Client Validation CI job.
+
+### Phase 5 — React Compiler — **DO NOT START WITHOUT EXPLICIT APPROVAL**
+
+The 2 `preserve-manual-memoization` warnings already read *"React Compiler has
+skipped optimizing this component because the existing manual memoization could
+not be preserved"* — `multiplayer/useMultiplayerRoomCallbacks.ts:285` and
+`modules/match/hooks/useMatchNavigation.ts:108`. These are the compiler's own
+advance notice: both components would be silently skipped by the compiler today.
+When greenlit: enable
+`babel-plugin-react-compiler`, measure render counts on the live match screen and
+hubs before/after, then remove now-redundant manual `useMemo`/`useCallback`.
+
+---
+
+## 6. Verification (repo-specific — these bite)
+
+```bash
+cd client && npx tsc -b          # NOT tsc -p, which passes vacuously
+cd client && npx vitest run      # client suite
+cd server && npx vitest run      # server tests import client source — run both
+cd client && npm run lint        # fails on a --max-warnings COUNT, not errors
+```
+
+- **e2e:** `cd client && npx playwright test` reuses a dev server already on
+  :5173. Kill stray dev servers first or you are testing the wrong code — and it
+  rewrites screenshot baselines.
+- **CI = 3 jobs:** Server Validation, Client Validation (Typecheck → Lint
+  short-circuits the rest on failure), MP Private Authority Soak. A newly-surfaced
+  failure may be pre-existing behind an earlier failing step.
+- **Render auto-deploys `main` on push.** Push at phase boundaries only, to the
+  branch, never half-finished behavioral change to `main`.
+- **This working tree is shared with another Claude session — never `git stash`.**
+
+---
+
+## 7. Open decisions
+
+| # | Decision | Recommendation | Status |
+|---|---|---|---|
+| **D-1** | `max-lines` (40) blocks a literal `--max-warnings 0` | Split the lint script; gate hooks at 0, ratchet `max-lines` | **Needs approval** |
+| **D-2** | 37 `refs` warnings are cross-boundary false positives | Targeted, individually-verified `eslint-disable-next-line` with reasons | **Needs approval** |
+| **D-3** | `logger.operational()` adds Sentry breadcrumbs where `console.log` had none | Accept — it is the improvement, not a regression | Proposed |
+| **D-4** | Per-`exhaustive-deps` behavioral calls | Resolve individually in Phase 3; record non-obvious ones here | Open, ongoing |
