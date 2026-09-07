@@ -58,7 +58,10 @@ const ROUTES: string[] = [
   '/practice',
   '/learn',
   '/learn/how-to-play',
-  '/learn/recorder',
+  // '/learn/recorder' — deliberately exempt: internal content-authoring tool
+  // (records the fixed Standard Fritz match into guided-lesson JSON), reached
+  // only from the Learn screen's AUTHOR column. No mobile use case, so it is
+  // held to no phone-portrait tap-target bar. See docs/breakpoints.md.
   '/learn/guided-annotator',
   '/multiplayer',
   '/multiplayer/private',
