@@ -10,12 +10,14 @@ import {
 } from '../rooms';
 import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
 import { childLogger } from '../logger';
+import { recordOperationalFailure } from '../operationalTelemetry';
 
 const log = childLogger('game-action');
 import {
   flushScheduledLiveRoomPersistence,
   getLiveRoomDurabilityState,
   isLiveRoomDurablyRecoverable,
+  isLiveRoomPersistenceShuttingDown,
 } from './roomLivePersistence';
 import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import {
@@ -31,6 +33,31 @@ import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 export const GAME_ACTION_PERSIST_RETRY_MESSAGE = "Move couldn't be saved — try again.";
 
 export { HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE };
+
+function emitDebugTimingLog(
+  room: { code: string; state?: { sequence?: number } | null },
+  socket: Socket,
+  action: { type?: string } | null | undefined,
+  flushedRoomCodes: string[],
+  durabilityStatus: string,
+): void {
+  const shouldLog =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.MP_DEBUG === '1' ||
+    process.env.DEBUG_MP === '1';
+  if (!shouldLog) return;
+  log.info(
+    {
+      roomCode: room.code,
+      playerId: socket.id,
+      action: action?.type,
+      sequence: room.state?.sequence ?? null,
+      flushedRoomCodes,
+      durabilityStatus,
+    },
+    '',
+  );
+}
 
 export type RegisterGameplayActionHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -102,6 +129,11 @@ export function registerGameplayActionHandlers(
         return;
       }
       assertRoomDurabilityOperationAllowed(existingRoom, 'gameplay_action');
+      // Resolves `true` once this move is durable in `room_live_sessions`. Passed
+      // to the idempotency wrapper so the `room_command_receipts` row is only
+      // written after the snapshot lands — the receipt table must never lead the
+      // snapshot (see MP-JIT-1 in docs/mp-live-move-persist-latency.md).
+      let persistDurableGate: Promise<boolean> = Promise.resolve(false);
       const ack = await withGameActionIdempotency(
         roomCode,
         playerSeatId,
@@ -123,39 +155,80 @@ export function registerGameplayActionHandlers(
                 count: result.forcedDrawAnimation.steps.length,
               }
             : undefined;
-          const flushResult = await flushScheduledLiveRoomPersistence(room.code);
-          const durability = getLiveRoomDurabilityState(room);
-          const committed = isLiveRoomDurablyRecoverable(room);
-          if (!committed) {
-            rollbackRoomGameplayCommit(room, snapshot);
-            return {
-              ok: false,
-              error: GAME_ACTION_PERSIST_RETRY_MESSAGE,
-              uncertain: true,
-              sequence: room.state?.sequence ?? null,
-            };
+
+          // Terminal / hand-boundary moves and the graceful-shutdown window keep
+          // the strong mutate-then-persist-then-broadcast contract: persist
+          // synchronously and roll back if it cannot be proven durable. These are
+          // low-frequency, latency-insensitive (a mandatory hand-over pause / the
+          // game being over / a deploy in progress), and the highest-stakes to
+          // lose to a restart.
+          const stateAfter = room.state;
+          const persistSynchronously =
+            isLiveRoomPersistenceShuttingDown() ||
+            Boolean(stateAfter?.gameOver) ||
+            Boolean(stateAfter?.handOver);
+
+          if (persistSynchronously) {
+            const flushResult = await flushScheduledLiveRoomPersistence(room.code);
+            const durability = getLiveRoomDurabilityState(room);
+            const committed = isLiveRoomDurablyRecoverable(room);
+            if (!committed) {
+              rollbackRoomGameplayCommit(room, snapshot);
+              return {
+                ok: false,
+                error: GAME_ACTION_PERSIST_RETRY_MESSAGE,
+                uncertain: true,
+                sequence: room.state?.sequence ?? null,
+              };
+            }
+            persistDurableGate = Promise.resolve(true);
+            // Authoritative state before draw animations so clients never render
+            // against stale hands/board.
+            broadcastStateUpdate(room.code);
+            emitDebugTimingLog(room, socket, action, flushResult.flushedRoomCodes, durability.status);
+          } else {
+            // Mid-hand move: broadcast immediately from authoritative in-memory
+            // state, persist the room snapshot off the critical path. A persist
+            // that never lands leaves in-memory state ahead of the DB for this
+            // room until the next successful write (or a restart — MP-JIT-1's
+            // accepted risk). The room self-heals: the snapshot is a full upsert,
+            // so any later successful persist catches it fully up.
+            persistDurableGate = flushScheduledLiveRoomPersistence(room.code)
+              .then(() => {
+                const durable = isLiveRoomDurablyRecoverable(room);
+                if (!durable) {
+                  recordOperationalFailure(
+                    'live_room_move_persist_uncommitted',
+                    getLiveRoomDurabilityState(room).lastError ??
+                      'room not durably recoverable after mid-move flush',
+                    {
+                      roomCode: room.code,
+                      sequence: room.state?.sequence ?? null,
+                      requestId,
+                      durabilityStatus: getLiveRoomDurabilityState(room).status,
+                      consecutiveFailures:
+                        getLiveRoomDurabilityState(room).consecutiveFailures,
+                    },
+                  );
+                }
+                return durable;
+              })
+              .catch((err) => {
+                recordOperationalFailure('live_room_move_persist_failed', err, {
+                  roomCode: room.code,
+                  sequence: room.state?.sequence ?? null,
+                  requestId,
+                });
+                return false;
+              });
+            broadcastStateUpdate(room.code);
+            emitDebugTimingLog(room, socket, action, [], getLiveRoomDurabilityState(room).status);
           }
 
-          // Authoritative state before draw animations so clients never render against stale hands/board.
-          broadcastStateUpdate(room.code);
           if (result.forcedDrawAnimation) {
             emitForcedDrawAnimationPayload(room.code, result.forcedDrawAnimation);
           }
           setImmediate(() => handlerDeps.maybeFinalizeTournamentMatch?.(room));
-          if (
-            process.env.NODE_ENV !== 'production' ||
-            process.env.MP_DEBUG === '1' ||
-            process.env.DEBUG_MP === '1'
-          ) {
-            log.info({
-              roomCode: room.code,
-              playerId: socket.id,
-              action: action?.type,
-              sequence: room.state?.sequence ?? null,
-              flushedRoomCodes: flushResult.flushedRoomCodes,
-              durabilityStatus: durability.status,
-            }, '');
-          }
           const forcedMeta = result.forcedDrawAnimation
             ? {
                 drewCount: result.forcedDrawAnimation.steps.length,
@@ -165,6 +238,7 @@ export function registerGameplayActionHandlers(
             : undefined;
           return { ok: true, sequence: room.state?.sequence ?? null, forcedDraw: forcedMeta };
         },
+        { deferReceiptPersistUntilDurable: () => persistDurableGate },
       );
       if (ack.uncertain) {
         emitMpAuthorityFunnel('private_action_uncertain', {

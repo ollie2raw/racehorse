@@ -137,6 +137,8 @@ async function waitFor(pred: () => boolean, ms = 8000): Promise<void> {
   throw new Error('waitFor timed out');
 }
 
+const actionTimings: Array<{ type: string; ackMs: number }> = [];
+
 async function playToGameOver(
   roomCode: string,
   host: Client,
@@ -175,7 +177,9 @@ async function playToGameOver(
         ? { type: 'DRAW', requestId: randomUUID() }
         : { type: 'PASS', requestId: randomUUID() };
     const seqBefore = ref.sequence;
+    const t0 = Date.now();
     const resp = await emitAck(cur.socket, 'game:action', roomCode, action);
+    actionTimings.push({ type: action.type, ackMs: Date.now() - t0 });
     if (!resp?.ok) {
       noProgress += 1;
       if (noProgress > 25) {
@@ -253,6 +257,16 @@ async function main(): Promise<void> {
     }
 
     const finalState = await playToGameOver(roomCode, hostClient, guestClient);
+    const ackMsValues = actionTimings.map((t) => t.ackMs).sort((a, b) => a - b);
+    process.stdout.write(
+      `\n=== game:action emit→ack latency (n=${ackMsValues.length}) ===\n${JSON.stringify({
+        perAction: actionTimings,
+        min: ackMsValues[0],
+        median: ackMsValues[Math.floor(ackMsValues.length / 2)],
+        max: ackMsValues[ackMsValues.length - 1],
+        mean: Math.round(ackMsValues.reduce((s, v) => s + v, 0) / ackMsValues.length),
+      }, null, 2)}\n`,
+    );
     process.stdout.write(
       `\nGAME OVER: ${JSON.stringify({
         roomCode,

@@ -212,6 +212,20 @@ export function hydrateGameActionReceiptsForRoom(
   return restored;
 }
 
+export type WithGameActionIdempotencyOptions = {
+  /**
+   * Gate for the dedicated `room_command_receipts` table write. When supplied,
+   * the receipt row is persisted only once this resolves `true` — i.e. only
+   * after the move is durable in `room_live_sessions`. This preserves the
+   * invariant that the receipt table never leads the room snapshot: if the
+   * snapshot write for this move is lost to a restart, no receipt exists to
+   * block the client's retry, so the lost move is correctly re-applied.
+   * Absent → the receipt is persisted immediately (callers whose `execute()`
+   * only returns after the move is already durable, e.g. `hand:ready`).
+   */
+  deferReceiptPersistUntilDurable?: () => Promise<boolean>;
+};
+
 /**
  * Server-authoritative idempotency for retried `game:action` submissions.
  * Only durable successes are cached/persisted. Uncertain (rolled-back) and
@@ -222,6 +236,7 @@ export async function withGameActionIdempotency(
   playerSeatId: string,
   requestId: unknown,
   execute: () => Promise<GameActionAck>,
+  options: WithGameActionIdempotencyOptions = {},
 ): Promise<GameActionAck> {
   const normalizedRequestId = normalizeGameActionRequestId(requestId);
   if (!normalizedRequestId) {
@@ -243,18 +258,31 @@ export async function withGameActionIdempotency(
     if (result.ok) {
       storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
       const expiresAtMs = Date.now() + ACTION_IDEMPOTENCY_TTL_MS;
-      void persistRoomCommandReceipt({
-        roomCode,
-        playerSeatId,
-        requestId: normalizedRequestId,
-        ack: {
-          ok: true,
-          sequence: result.sequence ?? null,
-          ...(result.forcedDraw ? { forcedDraw: result.forcedDraw } : {}),
-          ...(result.error ? { error: result.error } : {}),
-        },
-        expiresAtMs,
-      });
+      const writeReceipt = () =>
+        void persistRoomCommandReceipt({
+          roomCode,
+          playerSeatId,
+          requestId: normalizedRequestId,
+          ack: {
+            ok: true,
+            sequence: result.sequence ?? null,
+            ...(result.forcedDraw ? { forcedDraw: result.forcedDraw } : {}),
+            ...(result.error ? { error: result.error } : {}),
+          },
+          expiresAtMs,
+        });
+      if (options.deferReceiptPersistUntilDurable) {
+        void options
+          .deferReceiptPersistUntilDurable()
+          .then((durable) => {
+            if (durable) writeReceipt();
+          })
+          .catch(() => {
+            /* snapshot persist failed — no receipt, retry re-executes */
+          });
+      } else {
+        writeReceipt();
+      }
     }
     return result;
   })().finally(() => {

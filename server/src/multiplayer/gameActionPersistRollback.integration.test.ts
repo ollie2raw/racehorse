@@ -1,8 +1,15 @@
 /**
  * Two-client integration: live private match with real room-session handlers.
- * Drives PR-MP-C mutate-then-persist rollback through flush-failure injection.
+ *
+ * Covers MP-JIT-1 (docs/mp-live-move-persist-latency.md): a mid-hand move
+ * broadcasts immediately and persists the room snapshot off the critical path;
+ * a persist that cannot be proven durable does NOT roll back the already-
+ * broadcast move — it is recorded via operational telemetry. Terminal /
+ * hand-boundary moves and the graceful-shutdown window keep the original
+ * mutate-then-persist-then-broadcast rollback contract.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as operationalTelemetry from '../operationalTelemetry';
 import {
   getRoom,
   getRoomCanDraw,
@@ -10,12 +17,15 @@ import {
   resetLiveRoomPersistHookForTests,
   resetRoomRuntimeForTests,
 } from '../rooms';
-import { GAME_ACTION_PERSIST_RETRY_MESSAGE } from './registerGameplayActionHandlers';
 import { resetGameActionIdempotencyForTests } from './gameActionIdempotency';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
+import { applyLiveSessionRow } from './applyLiveSessionRoom';
+import { verifyPlayerMoveLog } from '../ghost/verifier';
 import {
+  buildLiveSessionRow,
   resetLiveRoomPersistenceForTests,
   setForceLiveRoomFlushUnrecoverableForTests,
+  type LiveRosterEntry,
 } from './roomLivePersistence';
 import { initRoomSession, resetRoomSessionStoresForTests, setRoomRoster } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
@@ -227,7 +237,7 @@ describe('PR-MP-C two-client game:action persist rollback integration', () => {
     resetRoomSessionStoresForTests();
   });
 
-  it('steps 1–6: happy move → forced flush fail → silent B → A retry → recover', async () => {
+  it('mid-hand move: broadcasts before persist; a non-durable persist does not roll back or silence the opponent (MP-JIT-1)', async () => {
     const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
     const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
 
@@ -286,187 +296,241 @@ describe('PR-MP-C two-client game:action persist rollback integration', () => {
     expect(step1B?.state?.players?.[seatAId]?.hand ?? [], 'step1 B masks A hand').toEqual([]);
 
     // Advance until Seat A again has a playable MOVE (may pass/draw through B).
-    let failMove = await findPlayMoveForCurrentTurn(
+    const failMove = await findPlayMoveForCurrentTurn(
       roomCode,
       hostSeatId,
       hostHandlers,
       guestHandlers,
     );
-    // Prefer keeping the same logical actor if possible; otherwise use whoever has the turn.
     const actorId = failMove.currentId;
     const actorHandlers = actorId === hostSeatId ? hostHandlers : guestHandlers;
-    const actorSocket = actorId === hostSeatId ? hostSocket : guestSocket;
     const opponentSocket = actorId === hostSeatId ? guestSocket : hostSocket;
-    const opponentId = actorId === hostSeatId ? guestSeatId : hostSeatId;
 
-    // ── Step 2: force flush failure on next move ────────────────────────────
+    // ── Step 2: force the room-snapshot persist to fail for the next move ──
     setForceLiveRoomFlushUnrecoverableForTests(true);
+    const telemetrySpy = vi
+      .spyOn(operationalTelemetry, 'recordOperationalFailure')
+      .mockImplementation(() => {});
 
     const baselineState = structuredClone(getRoom(roomCode).state!);
     const baselineSequence = baselineState.sequence;
-    const baselineTurnSeat = baselineState.playerIds[baselineState.currentPlayerIndex];
-    expect(baselineTurnSeat, 'step2 baseline is actor turn').toBe(actorId);
-
-    // Capture last client snapshots before clearing emit spies for the failure window.
-    const actorClientBefore = structuredClone(latestStateUpdate(actorSocket));
-    expect(actorClientBefore?.state?.sequence, 'step2 actor has prior state:update').toBe(
-      baselineSequence,
+    expect(
+      baselineState.playerIds[baselineState.currentPlayerIndex],
+      'step2 baseline is actor turn',
+    ).toBe(actorId);
+    expect(baselineState.handOver || baselineState.gameOver, 'step2 baseline is mid-hand').toBe(
+      false,
     );
+    expect(
+      baselineState.players[actorId].hand.length,
+      'step2 actor has multiple tiles (move will not end the hand)',
+    ).toBeGreaterThan(1);
 
     hostSocket.emit.mockClear();
     guestSocket.emit.mockClear();
-    const opponentEventsBefore = gameplayEmitEvents(opponentSocket).length;
+
     const failPayload = {
       type: 'MOVE' as const,
-      requestId: 'step2-fail-move',
+      requestId: 'step2-midhand-move',
       move: { tile: failMove.playMove!.tile, position: failMove.playMove!.position },
     };
     const failAck = vi.fn();
     await actorHandlers.get('game:action')?.(roomCode, failPayload, failAck);
+    await new Promise((r) => setTimeout(r, 0)); // let the async persist gate settle
 
-    // ── Step 3: Seat B receives nothing ─────────────────────────────────────
-    expect(gameplayEmitEvents(opponentSocket).length, 'step3 B no gameplay emits').toBe(
-      opponentEventsBefore,
-    );
-    expect(stateUpdateCalls(opponentSocket).length, 'step3 B no state:update').toBe(0);
-
-    // ── Step 4: Seat A uncertain + board matches rolled-back server ─────────
-    expect(failAck, 'step4 uncertain ack').toHaveBeenCalledWith(
-      expect.objectContaining({
-        ok: false,
-        uncertain: true,
-        error: GAME_ACTION_PERSIST_RETRY_MESSAGE,
-        sequence: baselineSequence,
-      }),
-    );
-    expect(stateUpdateCalls(actorSocket).length, 'step4 A no state:update on fail').toBe(0);
-
-    const rolledBack = getRoom(roomCode).state!;
-    expect(rolledBack.sequence, 'step4 server sequence rolled back').toBe(baselineSequence);
-    expect(rolledBack.playerIds[rolledBack.currentPlayerIndex], 'step4 still actor turn').toBe(
-      actorId,
-    );
-    expect(boardFingerprint(rolledBack), 'step4 server board == baseline').toEqual(
-      boardFingerprint(baselineState),
-    );
-    expect(rolledBack.players[actorId].hand, 'step4 actor hand == baseline').toEqual(
-      baselineState.players[actorId].hand,
-    );
-    expect(rolledBack.board, 'step4 board deep-equal baseline').toEqual(baselineState.board);
-
-    // Actor "client" still holds last successful snapshot; must agree with server baseline.
-    const actorClientNow = latestStateUpdate(actorSocket) ?? actorClientBefore;
-    expect(actorClientNow?.state?.sequence, 'step4 client seq == server').toBe(rolledBack.sequence);
-    expect(actorClientNow?.state?.board, 'step4 client board == server').toEqual(rolledBack.board);
+    // ── Step 3: the opponent DOES receive the move — it is authoritative ────
     expect(
-      actorClientNow?.state?.players?.[actorId]?.hand,
-      'step4 client hand == server',
-    ).toEqual(rolledBack.players[actorId].hand);
+      stateUpdateCalls(opponentSocket).length,
+      'step3 B received the broadcast',
+    ).toBeGreaterThan(0);
+    const step3B = latestStateUpdate(opponentSocket);
+    expect(step3B?.state?.sequence, 'step3 B sees the advanced sequence').toBeGreaterThan(
+      baselineSequence,
+    );
+
+    // ── Step 4: actor ack is ok; server state advanced, NOT rolled back ────
+    expect(failAck, 'step4 ok ack').toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+    const afterFail = getRoom(roomCode).state!;
+    expect(afterFail.sequence, 'step4 server sequence advanced').toBeGreaterThan(baselineSequence);
     expect(
-      actorClientNow?.state?.currentPlayerIndex,
-      'step4 client turn index == server',
-    ).toBe(rolledBack.currentPlayerIndex);
+      afterFail.players[actorId].hand.length,
+      'step4 tile consumed from actor hand',
+    ).toBe(baselineState.players[actorId].hand.length - 1);
 
-    // ── Step 5: rapid retries while failure forced ──────────────────────────
-    hostSocket.emit.mockClear();
-    guestSocket.emit.mockClear();
-    const rapidAcks = [vi.fn(), vi.fn(), vi.fn()];
-    for (let i = 0; i < 3; i += 1) {
-      // Re-read legal move each time (board unchanged, but keep realistic).
-      const legal = getRoomLegalMoves(roomCode, actorId);
-      const play = legal.find(
-        (m) =>
-          m.type === 'play' &&
-          m.tile &&
-          m.tile.low === failMove.playMove!.tile!.low &&
-          m.tile.high === failMove.playMove!.tile!.high &&
-          m.position === failMove.playMove!.position,
-      );
-      expect(play, `step5 legal play still available attempt ${i + 1}`).toBeTruthy();
-      await actorHandlers.get('game:action')?.(
-        roomCode,
-        {
-          type: 'MOVE',
-          requestId: `step5-retry-${i}`,
-          move: { tile: play!.tile, position: play!.position },
-        },
-        rapidAcks[i],
-      );
-    }
-
-    for (let i = 0; i < 3; i += 1) {
-      expect(rapidAcks[i], `step5 ack ${i + 1}`).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ok: false,
-          uncertain: true,
-          error: GAME_ACTION_PERSIST_RETRY_MESSAGE,
-          sequence: baselineSequence,
-        }),
-      );
-    }
-    const afterRapid = getRoom(roomCode).state!;
-    expect(afterRapid.sequence, 'step5 sequence stuck at baseline').toBe(baselineSequence);
-    expect(afterRapid.playerIds[afterRapid.currentPlayerIndex], 'step5 still actor turn').toBe(
-      actorId,
+    // ── Step 5: the non-durable persist is recorded, not silent ────────────
+    expect(telemetrySpy, 'step5 persist lag recorded').toHaveBeenCalledWith(
+      expect.stringMatching(/live_room_move_persist_(uncommitted|failed)/),
+      expect.anything(),
+      expect.objectContaining({ roomCode }),
     );
-    expect(boardFingerprint(afterRapid), 'step5 board unchanged').toEqual(
-      boardFingerprint(baselineState),
-    );
-    expect(stateUpdateCalls(opponentSocket).length, 'step5 B still silent').toBe(0);
-    expect(stateUpdateCalls(actorSocket).length, 'step5 A still no broadcast').toBe(0);
+    // (A genuine Supabase failure also flips the room to `degraded`, gating new
+    // joins / new hands but not gameplay — see the durability-policy tests. The
+    // flush-unrecoverable injection here only forces the recoverability check.)
 
-    // ── Step 6: clear force; retry succeeds; B receives update ──────────────
+    // ── Step 6: persistence recovers; next move persists; clients stay in sync ─
     setForceLiveRoomFlushUnrecoverableForTests(false);
+    telemetrySpy.mockClear();
     hostSocket.emit.mockClear();
     guestSocket.emit.mockClear();
 
-    const legalFinal = getRoomLegalMoves(roomCode, actorId);
-    const playFinal = legalFinal.find(
-      (m) =>
-        m.type === 'play' &&
-        m.tile &&
-        m.tile.low === failMove.playMove!.tile!.low &&
-        m.tile.high === failMove.playMove!.tile!.high &&
-        m.position === failMove.playMove!.position,
+    const recover = await findPlayMoveForCurrentTurn(
+      roomCode,
+      hostSeatId,
+      hostHandlers,
+      guestHandlers,
     );
-    expect(playFinal, 'step6 same play still legal').toBeTruthy();
-
+    const recoverHandlers = recover.currentId === hostSeatId ? hostHandlers : guestHandlers;
+    const recoverActorSocket = recover.currentId === hostSeatId ? hostSocket : guestSocket;
+    const recoverOppSocket = recover.currentId === hostSeatId ? guestSocket : hostSocket;
     const successAck = vi.fn();
-    await actorHandlers.get('game:action')?.(
+    await recoverHandlers.get('game:action')?.(
       roomCode,
       {
         type: 'MOVE',
         requestId: 'step6-success-move',
-        move: { tile: playFinal!.tile, position: playFinal!.position },
+        move: { tile: recover.playMove!.tile, position: recover.playMove!.position },
       },
       successAck,
     );
+    await new Promise((r) => setTimeout(r, 0));
 
     expect(successAck, 'step6 success ack').toHaveBeenCalledWith(
       expect.objectContaining({ ok: true }),
     );
     const afterSuccess = getRoom(roomCode).state!;
-    // Engine bumps sequence on play and again on turn advance (not a leftover from failed attempts).
     expect(afterSuccess.sequence, 'step6 sequence advanced').toBeGreaterThan(baselineSequence);
+    expect(getRoom(roomCode).durability.status, 'step6 room healthy').toBe('healthy');
+    expect(telemetrySpy, 'step6 no new persist-lag telemetry').not.toHaveBeenCalled();
+
+    const finalA = latestStateUpdate(recoverActorSocket);
+    const finalB = latestStateUpdate(recoverOppSocket);
+    expect(finalA?.state?.sequence, 'step6 actor client seq').toBe(afterSuccess.sequence);
+    expect(finalB?.state?.sequence, 'step6 opp client seq').toBe(afterSuccess.sequence);
+    expect(finalA?.state?.board, 'step6 boards agree').toEqual(finalB?.state?.board);
     expect(
-      afterSuccess.players[actorId].hand.length,
-      'step6 exactly one tile consumed from actor hand',
-    ).toBe(baselineState.players[actorId].hand.length - 1);
-    expect(stateUpdateCalls(opponentSocket).length, 'step6 B received state:update').toBeGreaterThan(
+      getRoom(roomCode).pendingForcedDrawBroadcast,
+      'step6 no pending forced draw',
+    ).toBeUndefined();
+  });
+
+  // MP-JIT-1 ACCEPTED RISK — documented, not fixed. An uncontrolled restart
+  // (OOM / crash — SIGTERM deploys keep the synchronous gate) between a mid-hand
+  // move's broadcast and its async snapshot persist rehydrates the room one move
+  // behind. This test pins exactly what that looks like.
+  it('restart before the async persist lands: server rehydrates one move behind (MP-JIT-1 accepted risk)', async () => {
+    const { socket: hostSocket, handlers: hostHandlers } = makeSocket('Host', 'host-user');
+    const { socket: guestSocket, handlers: guestHandlers } = makeSocket('Guest', 'guest-user');
+    const io = makeTwoPlayerIo(hostSocket, guestSocket, 'PENDING');
+    initRoomSession(io, sessionDeps);
+    registerRoomSessionHandlers(io, hostSocket);
+    registerRoomSessionHandlers(io, guestSocket);
+
+    const { roomCode, hostSeatId, guestSeatId } = await startPrivateMatch(
+      io,
+      hostHandlers,
+      guestHandlers,
+      hostSocket,
+      guestSocket,
+    );
+    const roster: LiveRosterEntry[] = [
+      { seatId: hostSeatId, userId: 'host-user', username: 'Host' },
+      { seatId: guestSeatId, userId: 'guest-user', username: 'Guest' },
+    ];
+
+    // Play a few real, durably-persisted moves.
+    for (let i = 0; i < 3; i += 1) {
+      const step = await findPlayMoveForCurrentTurn(roomCode, hostSeatId, hostHandlers, guestHandlers);
+      const stepHandlers = step.currentId === hostSeatId ? hostHandlers : guestHandlers;
+      const ack = vi.fn();
+      await stepHandlers.get('game:action')?.(
+        roomCode,
+        {
+          type: 'MOVE',
+          requestId: `persisted-${i}`,
+          move: { tile: step.playMove!.tile, position: step.playMove!.position },
+        },
+        ack,
+      );
+      expect(ack).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    // Capture the durable snapshot AS OF NOW — this is what `room_live_sessions`
+    // holds. `buildLiveSessionRow` reads the same room state the real persist does.
+    const persistedRow = buildLiveSessionRow(getRoom(roomCode), roster);
+    const persistedSequence = getRoom(roomCode).state!.sequence;
+    const persistedGhostLogTotal = Object.values(getRoom(roomCode).ghostMoveLogs).reduce(
+      (sum, log) => sum + log.length,
       0,
     );
-    expect(stateUpdateCalls(actorSocket).length, 'step6 A received state:update').toBeGreaterThan(0);
 
-    const finalA = latestStateUpdate(actorSocket);
-    const finalB = latestStateUpdate(opponentSocket);
-    expect(finalA?.state?.sequence, 'step6 A client seq').toBe(afterSuccess.sequence);
-    expect(finalB?.state?.sequence, 'step6 B client seq').toBe(afterSuccess.sequence);
-    expect(finalA?.state?.board, 'step6 A/B boards agree').toEqual(finalB?.state?.board);
-    expect(finalB?.state?.players?.[actorId]?.hand ?? [], 'step6 B still masks A hand').toEqual([]);
-    expect(finalA?.state?.players?.[opponentId]?.hand ?? [], 'step6 A still masks B hand').toEqual(
-      [],
+    // One more real move — it broadcasts, but its snapshot persist is forced
+    // non-durable (stands in for "process died before the async upsert landed").
+    const lost = await findPlayMoveForCurrentTurn(roomCode, hostSeatId, hostHandlers, guestHandlers);
+    const lostHandlers = lost.currentId === hostSeatId ? hostHandlers : guestHandlers;
+    setForceLiveRoomFlushUnrecoverableForTests(true);
+    const lostAck = vi.fn();
+    await lostHandlers.get('game:action')?.(
+      roomCode,
+      {
+        type: 'MOVE',
+        requestId: 'lost-move',
+        move: { tile: lost.playMove!.tile, position: lost.playMove!.position },
+      },
+      lostAck,
     );
-    // No leftover pending forced-draw from failed attempts.
-    expect(getRoom(roomCode).pendingForcedDrawBroadcast, 'step6 no pending forced draw').toBeUndefined();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lostAck, 'the lost move still broadcasts + acks ok').toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true }),
+    );
+    const clientSawSequence = getRoom(roomCode).state!.sequence;
+    expect(clientSawSequence, 'clients saw the advanced sequence').toBeGreaterThan(persistedSequence);
+    const ghostLogTotalAfterLostMove = Object.values(getRoom(roomCode).ghostMoveLogs).reduce(
+      (sum, log) => sum + log.length,
+      0,
+    );
+
+    // ── "restart": wipe in-memory state, rehydrate from the last durable snapshot ──
+    resetRoomRuntimeForTests();
+    resetRoomSessionStoresForTests();
+    resetLiveRoomPersistenceForTests();
+    resetGameActionIdempotencyForTests();
+    const applied = applyLiveSessionRow(persistedRow);
+    expect(applied, 'rehydrated from the persisted snapshot').not.toBeNull();
+    const rehydrated = getRoom(roomCode);
+
+    // (1) SEQUENCE REGRESSION — the server is one move behind what clients saw.
+    //     On resync the clients' watermark (clientSawSequence) is ahead of the
+    //     server, so `evaluateSequenceWatermark` reports a regression and the
+    //     clients accept the rollback to `persistedSequence`.
+    expect(rehydrated.state!.sequence, 'rehydrated at the persisted sequence').toBe(persistedSequence);
+    expect(rehydrated.state!.sequence).toBeLessThan(clientSawSequence);
+
+    // (2) GHOST-LOG GAP AT REHYDRATION — the lost move's ghost-log entry is absent.
+    const rehydratedGhostLogTotal = Object.values(rehydrated.ghostMoveLogs).reduce(
+      (sum, log) => sum + log.length,
+      0,
+    );
+    expect(rehydratedGhostLogTotal, 'rehydrated log matches the persisted snapshot').toBe(
+      persistedGhostLogTotal,
+    );
+    expect(
+      rehydratedGhostLogTotal,
+      'rehydrated log is shorter than what the clients had witnessed',
+    ).toBeLessThan(ghostLogTotalAfterLostMove);
+
+    // (3) WHAT DOES *NOT* HAPPEN — the rehydrated server log is a consistent
+    //     prefix, so move-log verification still passes. The missing move is
+    //     re-applied when the acting client resyncs and replays; it does not
+    //     silently fail verification / drop the match's Glicko rating. The real
+    //     residual damage is a transient visible desync, plus (only if the acting
+    //     player also never reconnects) that one move being discarded.
+    for (const log of Object.values(rehydrated.ghostMoveLogs)) {
+      if (log.length === 0) continue;
+      expect(
+        verifyPlayerMoveLog(log, { strictHandContinuity: true }).ok,
+        'rehydrated per-seat move log still verifies',
+      ).toBe(true);
+    }
   });
 });
