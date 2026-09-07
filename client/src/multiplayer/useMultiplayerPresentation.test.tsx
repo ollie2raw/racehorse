@@ -255,3 +255,94 @@ describe('useMultiplayerPresentation — score toast survives the optimistic→a
     expect(showScoreToast).toHaveBeenCalledWith('opp', 10, 'OpponentName');
   });
 });
+
+describe('useMultiplayerPresentation — draw animation survives the authoritative echo', () => {
+  let setFlyingTiles: any;
+
+  const rect = () => ({ left: 0, top: 0, width: 10, height: 10 }) as DOMRect;
+  const el = () => ({ getBoundingClientRect: rect }) as unknown as HTMLElement;
+
+  const params = (myHand: Tile[]) => ({
+    you: YOU,
+    isMutedRef: { current: true } as any,
+    opponentName: 'OpponentName',
+    players: [
+      { id: YOU, username: 'You', userId: '1' },
+      { id: OPP, username: 'OpponentName', userId: '2' },
+    ] as RoomPlayer[],
+    myHand,
+    opponentTileCount: 0,
+    drawSequenceActive: false,
+    boneyardCount: 0,
+    showScoreLikeToast: vi.fn() as any,
+    showScoreToast: vi.fn() as any,
+    setFlyingTiles: setFlyingTiles as any,
+    boneyardRef: { current: el() } as any,
+    handAreaRef: { current: el() } as any,
+    opponentPillRef: { current: el() } as any,
+  });
+
+  beforeEach(() => {
+    setFlyingTiles = vi.fn();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const tile = (low: number, high: number) => ({ low, high }) as Tile;
+
+  /**
+   * A normal (non-forced) draw grows myHand by one, which arms the tile-fly
+   * timers. The effect advanced prevMyHandLenRef immediately and returned
+   * clearTimeout-for-all as its cleanup, so MP-JIT's authoritative echo
+   * cancelled every pending fly timer, and the re-run saw no hand growth and
+   * armed nothing. The draw animation never played.
+   */
+  it('still plays the tile-fly when the echo lands before the animation timers', () => {
+    const hand0 = [tile(1, 2), tile(3, 4)];
+    const hand1 = [...hand0, tile(5, 6)];
+
+    const { rerender } = renderHook(
+      ({ myHand, state }) => useMultiplayerPresentation({ ...params(myHand), state }),
+      { initialProps: { myHand: hand0, state: makeState({ sequence: 1 }) } },
+    );
+
+    // Establish the baseline hand length.
+    rerender({ myHand: hand0, state: makeState({ sequence: 2 }) });
+
+    // Optimistic apply: the drawn tile lands in hand.
+    rerender({ myHand: hand1, state: makeState({ sequence: 3 }) });
+
+    // Authoritative echo ~45ms later, same hand.
+    vi.advanceTimersByTime(45);
+    rerender({ myHand: hand1, state: makeState({ sequence: 4 }) });
+
+    vi.advanceTimersByTime(500);
+
+    expect(setFlyingTiles).toHaveBeenCalled();
+  });
+
+  // Probe: staggered timers (i * 150) are the ones an echo at ~45ms could
+  // actually cancel. The first tile's timer is armed at 0ms and fires first.
+  it('plays every tile of a multi-tile draw across an echo', () => {
+    const hand0 = [tile(1, 2)];
+    const hand2 = [...hand0, tile(5, 6), tile(0, 1)];
+
+    const { rerender } = renderHook(
+      ({ myHand, state }) => useMultiplayerPresentation({ ...params(myHand), state }),
+      { initialProps: { myHand: hand0, state: makeState({ sequence: 1 }) } },
+    );
+
+    rerender({ myHand: hand0, state: makeState({ sequence: 2 }) });
+    rerender({ myHand: hand2, state: makeState({ sequence: 3 }) });
+
+    vi.advanceTimersByTime(45);
+    rerender({ myHand: hand2, state: makeState({ sequence: 4 }) });
+
+    vi.advanceTimersByTime(1000);
+
+    expect(setFlyingTiles).toHaveBeenCalledTimes(2);
+  });
+});
