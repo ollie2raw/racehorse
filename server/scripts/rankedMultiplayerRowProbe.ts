@@ -145,7 +145,7 @@ async function playToGameOver(
   guest: Client,
 ): Promise<StateUpdate['state']> {
   const clients = [host, guest];
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + Number(process.env.PROBE_DEADLINE_MS ?? 120_000);
   let noProgress = 0;
   while (Date.now() < deadline) {
     const ref = host.latest?.state;
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
 
     const created = await emitAck(hostSocket, 'room:create', {
       ...hostIdentity,
-      winningScore: 5,
+      winningScore: Number(process.env.PROBE_WINNING_SCORE ?? 5),
       skipPregameDraw: true,
     });
     if (!created.ok) throw new Error(`room:create failed: ${created.error}`);
@@ -249,10 +249,11 @@ async function main(): Promise<void> {
     if (!started.ok) throw new Error(`game:start failed: ${started.error}`);
 
     await waitFor(() => Boolean(hostClient.latest?.state && guestClient.latest?.state), 15_000);
+    const requestedWinningScore = Number(process.env.PROBE_WINNING_SCORE ?? 5);
     const winningScore = hostClient.latest?.state?.config?.winningScore;
-    if (winningScore !== 5) {
+    if (winningScore !== requestedWinningScore) {
       process.stderr.write(
-        `WARNING: winningScore is ${winningScore}, not 5 — start the server with MP_PRIVATE_CERT_MODE=1. Continuing (match will be longer).\n`,
+        `WARNING: winningScore is ${winningScore}, not ${requestedWinningScore} (5 needs MP_PRIVATE_CERT_MODE=1; 30/60 are always allowed). Continuing.\n`,
       );
     }
 
