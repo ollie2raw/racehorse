@@ -98,6 +98,67 @@ resolution-agnostic. Verify at 768px once browser tooling is available.
   now 768.
 - `social/*` and `learn/*` files folding from 640–720 → 768.
 
+## Reachability harness
+
+`client/e2e/mobile-reachability.spec.ts` asserts two contracts on all 21
+top-level routes at three viewports (phone portrait 390×844, tablet portrait
+834×1112, phone landscape 844×390):
+
+1. **Tap targets** — every visible interactive element has a computed
+   `getBoundingClientRect()` whose smaller side is ≥ 44px, unless it clears the
+   WCAG 2.5.8 spacing exemption (no other target within a 24px radius of its
+   centre). Measured on the element, never a container.
+2. **Horizontal overflow** — `documentElement.scrollWidth ≤ clientWidth`.
+
+Run: `npm run e2e:reachability` (opt-in via `REACHABILITY=1`; kept out of the
+blocking `e2e` gate until the matrix is green). Writes `matrix.json` /
+`matrix.txt` and per-cell screenshots to
+`e2e/screenshots/mobile-reachability/`. CI runs it `continue-on-error` and
+uploads the matrix as an artifact.
+
+### Baseline matrix (2026-09-07, post-migration, pre screen fixes)
+
+```
+route                       phone-portrait    tablet-portrait   phone-landscape
+/                           PASS              PASS              PASS
+/stats                      PASS              FAIL(2)           PASS
+/friends                    PASS              PASS              PASS
+/daily-fritz                PASS              FAIL(2)           PASS
+/daily-fritz/leaderboard    PASS              FAIL(2)           PASS
+/rating-history             PASS              PASS              PASS
+/solo                       FAIL(1)           FAIL(2)           FAIL(1)
+/solo/fritz                 PASS              FAIL(2)           PASS
+/solo/ghost                 PASS              FAIL(2)           PASS
+/journey                    PASS              FAIL(2)           PASS
+/tournament                 PASS              FAIL(2)           PASS
+/practice                   PASS              PASS              PASS
+/learn                      PASS              FAIL(2)           PASS
+/learn/how-to-play          PASS              FAIL(2)           PASS
+/learn/recorder             FAIL(5)           FAIL(2)           PASS
+/learn/guided-annotator     PASS              PASS              PASS
+/multiplayer                PASS              FAIL(2)           PASS
+/multiplayer/private        FAIL(1)           FAIL(2)           PASS
+/social                     PASS              FAIL(2)           PASS
+/settings                   PASS              FAIL(2)           PASS
+/admin/daily-fritz-health   PASS              PASS              PASS
+```
+
+Distinct defects behind the matrix (worklist for the screen-by-screen pass):
+
+- **Desktop nav tabs are 41px tall** (`.rh-nav-tab`) — 3px under. Surfaces on
+  the tablet 834px viewport (≥769 → `--desk` nav shown) on every route that
+  renders the top nav. One fix clears the whole `tablet-portrait` column's
+  `FAIL(2)` (only "Social" and "Learn" trip the spacing exemption; the rest of
+  the row is the same height).
+- **`/solo` "← Back to Home"** ghost button is 24px tall.
+- **`/multiplayer/private` "Create lobby"** primary button is 36px tall (should
+  be the 44px `Button` md size).
+- **`/learn/recorder`** — board zoom buttons 32×32; sidebar action buttons
+  ("Copy Draft JSON", "Validate Draft", "Validate Final") 36px tall.
+
+No horizontal overflow anywhere. Auth-gated routes were measured as a guest
+(signed-out gate); the gates themselves pass.
+
 ## Excluded from the system (kept literal breakpoints)
 
 The in-game rendering subsystem tunes breakpoints to the board geometry, not to

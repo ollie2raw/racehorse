@@ -112,6 +112,21 @@ jobs:
           npx playwright install chromium --with-deps
           npm run e2e --prefix client
 
+      - name: Mobile reachability matrix (non-blocking worklist — not yet a gate)
+        continue-on-error: true
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: npm run e2e:reachability --prefix client
+
+      - name: Upload reachability matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-reachability-matrix
+          path: client/e2e/screenshots/mobile-reachability/matrix.*
+          if-no-files-found: ignore
+
       - name: Client build
         env:
           VITE_APP_VERSION: ${{ github.sha }}

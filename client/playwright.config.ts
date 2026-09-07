@@ -41,7 +41,24 @@ export default defineConfig({
           },
         ]
       : []),
-    { name: 'chromium', testIgnore: /mobile-390.*\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      testIgnore: [/mobile-390.*\.spec\.ts/, /mobile-reachability\.spec\.ts/],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Repo-wide mobile reachability harness (tap targets + h-overflow across
+    // 21 routes × 3 viewports). Sets its own viewport per test. Opt-in via
+    // REACHABILITY=1 (npm run e2e:reachability) so it stays out of the blocking
+    // `e2e` gate until its matrix is green. See docs/breakpoints.md.
+    ...(process.env.REACHABILITY
+      ? [
+          {
+            name: 'mobile-reachability',
+            testMatch: /mobile-reachability\.spec\.ts/,
+            use: { ...devices['Desktop Chrome'] },
+          },
+        ]
+      : []),
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
