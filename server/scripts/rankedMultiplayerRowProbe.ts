@@ -148,7 +148,12 @@ async function playToGameOver(
   const deadline = Date.now() + Number(process.env.PROBE_DEADLINE_MS ?? 120_000);
   let noProgress = 0;
   while (Date.now() < deadline) {
-    const ref = host.latest?.state;
+    // The authoritative view is whichever client holds the highest sequence —
+    // acting on one client's stale `state:update` is how this probe used to
+    // desync itself.
+    const ref = [host.latest?.state, guest.latest?.state]
+      .filter((s): s is NonNullable<typeof s> => Boolean(s))
+      .sort((a, b) => b.sequence - a.sequence)[0];
     if (!ref) {
       await sleep(100);
       continue;
@@ -158,7 +163,9 @@ async function playToGameOver(
       await emitAck(host.socket, 'hand:ready', roomCode, ref.handNumber);
       await emitAck(guest.socket, 'hand:ready', roomCode, ref.handNumber);
       await waitFor(() => {
-        const s = host.latest?.state;
+        const s = [host.latest?.state, guest.latest?.state]
+          .filter((x): x is NonNullable<typeof x> => Boolean(x))
+          .sort((a, b) => b.sequence - a.sequence)[0];
         return Boolean(s && (s.gameOver || (!s.handOver && s.handNumber !== ref.handNumber)));
       }, 10_000).catch(() => {});
       continue;
@@ -169,15 +176,25 @@ async function playToGameOver(
       await sleep(50);
       continue;
     }
-    // Only decide a move once the acting client's own view has caught up to the
-    // reference sequence — acting on a stale `state:update` is how this probe
-    // used to send an illegal PASS/DRAW (RK-10).
-    if ((cur.latest?.state?.sequence ?? -1) !== ref.sequence) {
-      const ok = await waitFor(() => (cur.latest?.state?.sequence ?? -1) === ref.sequence, 4000);
+    // Act only once the acting client's own view has caught up to the
+    // authoritative sequence.
+    if ((cur.latest?.state?.sequence ?? -1) < ref.sequence) {
+      const ok = await waitFor(() => (cur.latest?.state?.sequence ?? -1) >= ref.sequence, 4000);
       if (!ok) {
         await sleep(100);
         continue;
       }
+    }
+    // If our view is still not the current-player's turn, wait for the frame.
+    const curState = cur.latest?.state;
+    if (
+      !curState ||
+      curState.gameOver ||
+      curState.handOver ||
+      curState.playerIds[curState.currentPlayerIndex] !== currentSeat
+    ) {
+      await sleep(80);
+      continue;
     }
     const legal = cur.latest?.legalMoves ?? [];
     const play = legal.find((m) => m.type === 'play' && m.tile && m.position);
@@ -202,8 +219,10 @@ async function playToGameOver(
     }
     noProgress = 0;
     await waitFor(() => {
-      const s = host.latest?.state;
-      return Boolean(s && (s.sequence !== seqBefore || s.gameOver || s.handOver));
+      const s = [host.latest?.state, guest.latest?.state]
+        .filter((x): x is NonNullable<typeof x> => Boolean(x))
+        .sort((a, b) => b.sequence - a.sequence)[0];
+      return Boolean(s && (s.sequence > seqBefore || s.gameOver || s.handOver));
     }, 8000).catch(() => {});
   }
   throw new Error('playToGameOver timed out');
