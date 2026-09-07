@@ -75,6 +75,7 @@ describe('computeOptimisticPlayState (MP-JIT-2)', () => {
     expect(r).not.toBeNull();
     // turn stayed with YOU after opening a double
     expect(r!.nextState.playerIds[r!.nextState.currentPlayerIndex]).toBe(YOU);
+    expect(r!.turnRetained).toBe(true);
     // 3|6 is now playable on the open 6 — the actor can continue with no wait
     expect(r!.nextLegalMoves.length).toBeGreaterThan(0);
     expect(
@@ -105,6 +106,7 @@ describe('computeOptimisticPlayState (MP-JIT-2)', () => {
     const r = computeOptimisticPlayState(s, YOU, { low: 4, high: 5 }, 'right');
     expect(r).not.toBeNull();
     expect(r!.nextState.playerIds[r!.nextState.currentPlayerIndex]).toBe(OPP);
+    expect(r!.turnRetained).toBe(false);
     expect(r!.nextLegalMoves).toEqual([]);
     expect(r!.nextCanDraw).toBe(false);
   });

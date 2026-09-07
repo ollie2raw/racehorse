@@ -6,12 +6,21 @@ noted inline.
 
 ## Steps 2–4 (2026-09-07 follow-up)
 
-- **Step 2 — continued-turn legal moves.** A scoring/double play that keeps the
-  turn (no forced draw) previously blanked `legalMoves` for ~1 RTT.
+- **Step 2 — continued-turn legal moves + immediate lock release.** A
+  scoring/double play that keeps the turn (no forced draw) previously blanked
+  `legalMoves` for ~1 RTT *and* held `pendingUiAction === 'play'` /
+  `pendingActionRef`, so `isGameplayActionBlocked()` and the view model's
+  `boardLegalMoves` both kept the player frozen until the ack.
   `computeOptimisticPlayState` now returns `{ nextState, nextLegalMoves,
-  nextCanDraw }`; for a retained turn it computes `getLegalMoves(next, you)`
-  locally — the actor can continue immediately with no visible wait. A
-  turn that passed still yields `[]`.
+  nextCanDraw, turnRetained }`; for a retained turn it computes
+  `getLegalMoves(next, you)` locally, **and `usePlayAction` releases the pending
+  lock immediately** (`setPendingUiAction` clear + `setPendingActionRefDiag(false)`)
+  so the next tile is playable with no wait. The in-flight emit still
+  commits/rolls back by `requestId`. A chained second play while the first is
+  still in flight falls back to the plain server path (the single-in-flight
+  `optimisticActionRef` guard) — it goes optimistic again as soon as the first
+  reconciles, which is fast. A turn that passed still yields `[]` and keeps the
+  normal lock-until-ack.
 - **Step 3 — optimistic PASS.** `computeOptimisticPassState` mirrors MOVE (no
   hidden information; the engine validates and hands the turn off
   deterministically). `usePassAction` gets the same optimistic-apply /

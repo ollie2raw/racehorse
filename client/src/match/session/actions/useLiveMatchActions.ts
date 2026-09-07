@@ -77,8 +77,8 @@ export type UseLiveMatchActionsParams = {
     tile: Tile,
     position: PlacementPosition,
     requestId: string,
-  ) => { rollback: () => void } | null;
-  applyOptimisticPass?: (requestId: string) => { rollback: () => void } | null;
+  ) => { rollback: () => void; turnRetained?: boolean } | null;
+  applyOptimisticPass?: (requestId: string) => { rollback: () => void; turnRetained?: boolean } | null;
   commitOptimisticAction?: (requestId: string) => void;
 };
 

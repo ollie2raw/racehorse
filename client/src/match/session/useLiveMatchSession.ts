@@ -128,7 +128,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     (
       requestId: string,
       compute: (cur: GameState, you: string) => OptimisticResult | null,
-    ): { rollback: () => void } | null => {
+    ): { rollback: () => void; turnRetained: boolean } | null => {
       const cur = stateRef.current;
       if (!cur) return null;
       if (optimisticActionRef.current) return null; // one in flight at a time
@@ -154,6 +154,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       setCanDraw(result.nextCanDraw);
 
       return {
+        turnRetained: result.turnRetained,
         rollback: () => {
           if (optimisticActionRef.current !== snapshot) return;
           optimisticActionRef.current = null;

@@ -235,9 +235,12 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
   // rollback), and rollback on a rejected move.
   describe('MP-JIT-2 optimistic MOVE', () => {
     const selectedTile = { low: 1, high: 2 };
-    function optimisticParams(overrides: Partial<UseLiveMatchActionsParams> = {}) {
+    function optimisticParams(
+      overrides: Partial<UseLiveMatchActionsParams> = {},
+      turnRetained = false,
+    ) {
       const rollback = vi.fn();
-      const applyOptimisticPlay = vi.fn(() => ({ rollback }));
+      const applyOptimisticPlay = vi.fn(() => ({ rollback, turnRetained }));
       const commitOptimisticAction = vi.fn();
       const params = makeParams({
         selectedTileRef: { current: selectedTile },
@@ -281,6 +284,65 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
       expect(rollback).toHaveBeenCalledTimes(1);
       expect(commitOptimisticAction).not.toHaveBeenCalled();
       expect(params.setActionError).toHaveBeenCalledWith('It is not your turn.');
+    });
+
+    // Step 2 — a continued-turn scoring/double play releases the pending lock
+    // immediately (the player can play their next tile without a round-trip);
+    // a normal turn-passing play does not.
+    it('continued-turn play (turnRetained) clears the pending-UI lock before the ack', async () => {
+      const { params } = optimisticParams({}, true);
+      let resolveAck: (v: unknown) => void = () => {};
+      vi.mocked(emitGameAction).mockReturnValueOnce(
+        new Promise((r) => {
+          resolveAck = r;
+        }) as Promise<any>,
+      );
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      let done: Promise<void>;
+      await act(async () => {
+        done = result.current.play('left');
+        // let the sync body + optimistic apply run
+        await Promise.resolve();
+      });
+
+      // pending 'play' cleared via the function-updater BEFORE the ack resolves
+      const fnClears = vi
+        .mocked(params.setPendingUiAction)
+        .mock.calls.filter(([a]) => typeof a === 'function');
+      expect(fnClears.length).toBeGreaterThanOrEqual(1);
+
+      await act(async () => {
+        resolveAck({ ok: true, sequence: 5 });
+        await done;
+      });
+    });
+
+    it('normal turn-passing play does NOT release the lock early', async () => {
+      const { params } = optimisticParams({}, false);
+      let resolveAck: (v: unknown) => void = () => {};
+      vi.mocked(emitGameAction).mockReturnValueOnce(
+        new Promise((r) => {
+          resolveAck = r;
+        }) as Promise<any>,
+      );
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      let done: Promise<void>;
+      await act(async () => {
+        done = result.current.play('left');
+        await Promise.resolve();
+      });
+
+      const fnClears = vi
+        .mocked(params.setPendingUiAction)
+        .mock.calls.filter(([a]) => typeof a === 'function');
+      expect(fnClears.length).toBe(0); // only the finally clears it, after the ack
+
+      await act(async () => {
+        resolveAck({ ok: true, sequence: 5 });
+        await done;
+      });
     });
 
     it('uncertain ack: rolls back, then resyncs via the existing machinery', async () => {

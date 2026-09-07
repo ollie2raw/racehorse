@@ -12,6 +12,10 @@ export type OptimisticResult = {
    *  scoring/double play that keeps the turn; `[]` when the turn passed. */
   nextLegalMoves: Move[];
   nextCanDraw: boolean;
+  /** True when the turn stayed with the actor (scoring/double play). The caller
+   *  releases the pending-action lock immediately so the continued turn is not
+   *  blocked for a round-trip. */
+  turnRetained: boolean;
 };
 
 /**
@@ -46,6 +50,7 @@ function projectForActor(
     nextState: next as unknown as GameState,
     nextLegalMoves: turnStillYours ? (coreGetLegalMoves(next, you) as unknown as Move[]) : [],
     nextCanDraw: turnStillYours ? coreCanDraw(next, you) : false,
+    turnRetained: turnStillYours,
   };
 }
 

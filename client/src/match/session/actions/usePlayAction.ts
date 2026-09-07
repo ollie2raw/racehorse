@@ -58,7 +58,7 @@ export type UsePlayActionParams = {
     tile: Tile,
     position: PlacementPosition,
     requestId: string,
-  ) => { rollback: () => void } | null;
+  ) => { rollback: () => void; turnRetained?: boolean } | null;
   commitOptimisticAction?: (requestId: string) => void;
 };
 
@@ -188,6 +188,14 @@ export function usePlayAction(
       const optimistic = applyOptimisticPlay?.(tileToPlay, position, requestId) ?? null;
       if (optimistic) {
         flashLastPlayed(selectedMove?.tile ?? tileToPlay);
+      }
+      if (optimistic?.turnRetained) {
+        // Scoring / double play — the turn stays with the actor. Release the
+        // pending lock now so the continued turn is playable immediately
+        // instead of after a round-trip. The in-flight emit still commits /
+        // rolls back by requestId.
+        setPendingUiAction((prev) => (prev === 'play' ? null : prev));
+        setPendingActionRefDiag(false);
       }
 
       try {
