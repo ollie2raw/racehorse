@@ -1,27 +1,65 @@
 import type { ReactNode } from 'react';
-import './socialPageHero.css';
+
+export interface SocialHeroStat {
+  label: string;
+  value: string;
+  qualifier?: string;
+  accent?: boolean;
+}
 
 interface SocialPageHeroProps {
+  eyebrow: string;
   title: string;
-  subtitle: string;
-  meta?: ReactNode;
+  tagline: string;
+  actions?: ReactNode;
+  stats?: SocialHeroStat[];
   filters?: ReactNode;
 }
 
+/**
+ * The Social masthead in the leaderboard "board" treatment: display
+ * headline with a gold terminal dot on a faint grid-paper ground, and a
+ * single connected stat strip fused to its bottom edge.
+ */
 export default function SocialPageHero({
+  eyebrow,
   title,
-  subtitle,
-  meta,
+  tagline,
+  actions,
+  stats,
   filters,
 }: SocialPageHeroProps) {
   return (
-    <header className="social-hero">
-      <div className="social-hero__head">
-        <h1 className="social-hero__title">{title}</h1>
-        <p className="social-hero__subtitle">{subtitle}</p>
+    <>
+      <div className="rh-sb-masthead-wrap">
+        <header className="rh-sb-masthead">
+          <div>
+            <span className="rh-sb-eyebrow">{eyebrow}</span>
+            <h1 className="rh-sb-title">
+              {title}
+              <span className="rh-sb-title__dot" aria-hidden="true">.</span>
+            </h1>
+            <p className="rh-sb-tagline">{tagline}</p>
+          </div>
+          {actions ? <div className="rh-sb-masthead__actions">{actions}</div> : null}
+        </header>
+
+        {stats && stats.length > 0 ? (
+          <div className="rh-sb-meta" aria-label="Social status">
+            {stats.map((stat) => (
+              <div className="rh-sb-meta__cell" key={stat.label}>
+                <span className="rh-sb-meta__label">{stat.label}</span>
+                <span className={`rh-sb-meta__value${stat.accent ? ' is-accent' : ''}`}>
+                  {stat.value}
+                  {stat.qualifier ? <span className="rh-sb-meta__qual"> {stat.qualifier}</span> : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {meta ? <div className="social-hero__meta">{meta}</div> : null}
-      {filters ? <div className="social-hero__filters">{filters}</div> : null}
-    </header>
+
+      {filters ?? null}
+    </>
   );
 }

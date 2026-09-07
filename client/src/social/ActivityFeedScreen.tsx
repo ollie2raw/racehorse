@@ -6,7 +6,7 @@ import {
   PlayerInitialsAvatar,
   SideRailCard,
 } from '../components/hub';
-import SocialPageHero from './SocialPageHero';
+import SocialPageHero, { type SocialHeroStat } from './SocialPageHero';
 import { secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import type { OutboundChallenge, SendFriendChallengeResult } from '../multiplayer/friendChallenge';
 import { useFriendChallenge } from '../multiplayer/useFriendChallenge';
@@ -26,6 +26,7 @@ import ActivityFeedPanel, {
 import { fetchGlobalLeaderboard } from './socialApi';
 import './hub/hubShared.css';
 import './activityFeedScreen.css';
+import './socialBoard.css';
 
 interface ActivityFeedScreenProps {
   user: User | null;
@@ -292,32 +293,33 @@ export default function ActivityFeedScreen({
       .slice(0, 3);
   }, [friends, onlineFriends]);
 
-  const socialHeroStats = useMemo(
+  const socialHeroStats = useMemo<SocialHeroStat[]>(
     () => [
       {
         label: 'Online',
         value: String(displayOnlineCount),
-        note: displayOnlineCount > 0 ? 'friends live now' : 'quiet right now',
+        qualifier: displayOnlineCount > 0 ? 'live now' : 'quiet',
       },
       {
         label: 'Rivals',
         value: String(friends.length),
-        note: friends.length > 0 ? 'players in your circle' : 'add players to follow',
+        qualifier: friends.length > 0 ? 'in your circle' : 'none yet',
       },
       {
-        label: 'Recent Activity',
+        label: 'Activity',
         value: String(feedItems.length),
-        note: feedItems.length > 0 ? 'updates in your feed' : 'no updates yet',
+        qualifier: 'this week',
       },
       {
-        label: 'Top Streak',
+        label: 'Top streak',
         value: weeklyHighlights.topStreak?.value != null ? String(weeklyHighlights.topStreak.value) : '—',
-        note: weeklyHighlights.topStreak?.username ?? 'waiting on this week',
+        qualifier: weeklyHighlights.topStreak?.username ?? undefined,
         accent: true,
       },
     ],
     [displayOnlineCount, feedItems.length, friends.length, weeklyHighlights.topStreak],
   );
+
 
   const noopToast = useMemo(() => (_message: string) => undefined, []);
   const {
@@ -368,7 +370,7 @@ export default function ActivityFeedScreen({
     <HubViewportPage
       currentMode="feed"
       activeColor="var(--tier-elite)"
-      className="rh-sf-page rh-sf-screen"
+      className="rh-sf-page rh-sf-screen rh-sb-page"
       onNavigate={(mode) => {
         if (mode === 'home') {
           onClose();
@@ -383,41 +385,45 @@ export default function ActivityFeedScreen({
         <div className="rh-hub-grid rh-sf-layout-grid social-layout-grid">
           <main className="rh-hub-main rh-sf-main-column social-main-column">
             <SocialPageHero
+              eyebrow="Community"
               title="Social"
-              subtitle="Follow rivals, track wins, and see what’s happening across Racehorse."
-              meta={user ? (
+              tagline="Every result your circle posts, in the order it happened."
+              actions={(
                 <>
-                  {socialHeroStats.map((stat) => (
-                    <article
-                      key={stat.label}
-                      className={`social-hero__stat${stat.accent ? ' social-hero__stat--accent' : ''}`}
-                    >
-                      <span className="social-hero__stat-label">{stat.label}</span>
-                      <strong className="social-hero__stat-value">{stat.value}</strong>
-                      <span className="social-hero__stat-note">{stat.note}</span>
-                    </article>
-                  ))}
+                  <button type="button" className="rh-sb-btn" onClick={onClose}>
+                    <span aria-hidden="true">←</span> Home
+                  </button>
+                  {onNavigateToFriends ? (
+                    <button type="button" className="rh-sb-btn rh-sb-btn--accent" onClick={onNavigateToFriends}>
+                      Find Players
+                    </button>
+                  ) : null}
                 </>
-              ) : undefined}
+              )}
+              stats={user ? socialHeroStats : undefined}
               filters={user ? (
                 <ActivityFeedFilterTabs filter={feedFilter} onFilterChange={setFeedFilter} />
               ) : undefined}
             />
 
                 {!user ? (
-                  <section className="rh-sf-signin social-feed-panel">
-                    <p>Sign in to see activity from your friends and rivals.</p>
+                  <section className="rh-sb-table">
+                    <div className="rh-sb-feed-state">
+                      <span className="rh-sb-feed-state__kicker">Signed out</span>
+                      <strong>Sign in to see activity from your friends and rivals.</strong>
+                    </div>
                   </section>
                 ) : (
                 <ActivityFeedPanel
                   user={user}
                   filter={feedFilter}
                   friendUsernames={friendUsernames}
+                  selfUserId={user.id}
                   onViewProfile={onViewProfile}
                   onFeedChange={setFeedItems}
                   emptyAction={
                     onNavigateToFriends ? (
-                      <button className="rh-sf-widget-link" type="button" onClick={onNavigateToFriends}>
+                      <button className="rh-sb-btn" type="button" onClick={onNavigateToFriends}>
                         Add Friends
                       </button>
                     ) : undefined
