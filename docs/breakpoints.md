@@ -117,14 +117,24 @@ matrix is green and any regression fails the Client Validation job. Writes
 `e2e/screenshots/mobile-reachability/` (gitignored); CI uploads the matrix as
 an artifact.
 
-### Status: green, 20 routes × 3 viewports (2026-09-07)
+**Server isolation (load-bearing):** the harness runs on port **5233** with
+`reuseExistingServer: false` and `vite --strictPort`, so every run builds a
+fresh dev server. A stale server on :5173 — one left running from before a
+`postcss.config.js` or `tokens.css` breakpoint change — serves `@media
+(--phone)` *unresolved*; the browser silently drops the unknown feature, no
+phone rules apply, and the matrix comes back green over a broken app. The first
+green matrix for this work was exactly that false pass; the `.rh-hub-filter`
+defect below only surfaced once the harness got its own fresh server.
+
+### Status: green, 20 routes × 3 viewports (2026-09-07, verified on a
+### freshly-started :5233 server — `lsof :5233` confirmed empty pre-run)
 
 `/learn/recorder` is **exempt** and not in the route list — it is an internal
 content-authoring tool (records the fixed Standard Fritz match into
 guided-lesson JSON, reached only from the Learn screen's AUTHOR column) with no
 mobile use case.
 
-The four defects found in the post-migration baseline are fixed:
+The defects found in the post-migration baseline are fixed:
 
 - **`.rh-nav-tab`** (top-nav tabs) was 41px tall — 3px under, and the entire
   `tablet-portrait` column (834 ≥ 769 → `--desk` nav shown). Fixed:
@@ -134,6 +144,10 @@ The four defects found in the post-migration baseline are fixed:
   `min-height: 44px` on that rule.
 - **`.pml-start-btn.rh-btn`** (private-lobby footer: "Create lobby", "Start
   Match", …) forced `height: 36px`. Fixed: restored to 44px (`Button` md).
+- **`.rh-hub-filter`** (shared `FilterPills.tsx` — the `.dfl-page` leaderboard
+  boards for Daily Fritz *and* Puzzle Rush) was 36px base / 30px under
+  `.dfl-page`. Fixed: `min-height: 44px` on both rules. `/social`'s feed uses
+  `rh-sb-*` pills, not these.
 - `/learn/recorder`'s 32×32 zoom + 36px sidebar buttons — exempted, see above.
 
 No horizontal overflow anywhere. Auth-gated routes are measured as a guest
