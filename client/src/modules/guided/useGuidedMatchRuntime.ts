@@ -69,6 +69,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
 
   useEffect(() => {
     if (!isGuidedV2Mode || match.winnerId !== 'you') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- dynamic-imports the debrief module on game end; the null reset clears it when the win no longer holds
       setGuidedMatchFinalDebrief(null);
       return;
     }
@@ -155,6 +156,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
     if (frozenLesson && isOffAuthoredLine) {
       logger.info('guided-fallback', `hand ended in fallback = ${match.handNumber - 1}`);
       logger.info('guided-fallback', `resetting fallback on new hand start = ${match.handNumber}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the coach engine and realigns the lesson step on each new hand
       setIsOffAuthoredLine(false);
       const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
       const firstStepIdx = realSteps.findIndex((s) => s.handNumber === match.handNumber);

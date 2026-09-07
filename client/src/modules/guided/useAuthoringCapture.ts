@@ -143,6 +143,7 @@ export function useAuthoringCapture({
     };
     // Load any existing note for this step index (handles reload mid-session)
     const existing = authoringSteps.find((s) => s.stepIndex === stepIdx);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- turn-start latch that loads the authored note for the new step (see comment)
     setAuthoringNoteText(existing?.coachingText ?? '');
     // NOTE: Do NOT clear fritzSessionReplyRef here. The ref holds Fritz's reply
     // events from the bot turn that just finished, and those events need to be

@@ -272,6 +272,7 @@ export function useTournament({ userId }: Args) {
     applyCountdown,
   ]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- registration-close countdown driven by wall-clock time
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {

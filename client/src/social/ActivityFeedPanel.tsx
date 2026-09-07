@@ -249,6 +249,7 @@ export default function ActivityFeedPanel({
     onFeedChange?.(result.feed);
   }, [onFeedChange, user]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets pagination inside the feed-fetch callback this effect runs
   useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(

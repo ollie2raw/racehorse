@@ -129,6 +129,7 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
     const startedAt = ids.now();
     const initial = createJourneyLessonSession(definition, { sessionId, startedAt });
     const result = transitionJourneyLessonSession(initial, { kind: 'start', sessionId, timestamp: startedAt }, definition);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- runs the lesson session state machine on start and applies its effects
     if (result.kind === 'rejected') setError(result.error.message);
     else {
       sessionRef.current = result.state;
@@ -235,6 +236,7 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
       ? resolveJourneyAuthoredVariant(bundle, session.pendingRetry.policy.variantSetId, previous)
       : { kind: 'resolved' as const, scenario: bundle.scenarios[previous[previous.length - 1]] ?? activeScenario };
     if (resolved.kind !== 'resolved' || !resolved.scenario) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resolves and applies a retry variant through the session state machine
       setError('There are no unused authored positions left for this retry.');
       return;
     }

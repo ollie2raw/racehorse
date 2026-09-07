@@ -22,6 +22,7 @@ export function usePrivateLobbyWinStreak(
 
   useEffect(() => {
     if (appMode !== 'multiplayer' || !authUserId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the fetched win streak when the lobby is not shown; the effect runs the async fetch
       setWinStreak(null);
       return;
     }

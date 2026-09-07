@@ -182,6 +182,7 @@ export function useHandRevealSequence(
     if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
 
     if (!handReveal || state?.gameOver) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializes the progress bar the 4s auto-progress interval below then animates
       setHandRevealAutoProgress(1);
       return;
     }

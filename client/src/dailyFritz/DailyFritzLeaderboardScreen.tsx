@@ -269,11 +269,13 @@ export default function DailyFritzLeaderboardScreen({
   }, [runDate]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets friend usernames on sign-out; the effect runs the async friends fetch
     void loadLeaderboard();
   }, [loadLeaderboard]);
 
   useEffect(() => {
     if (!user?.id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets friend usernames on sign-out; the effect runs the async friends fetch
       setFriendUsernames(new Set());
       return;
     }
@@ -304,6 +306,7 @@ export default function DailyFritzLeaderboardScreen({
 
   useEffect(() => {
     if (!user?.id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets friend usernames on sign-out; the effect runs the async friends fetch
       setToday(null);
       return;
     }

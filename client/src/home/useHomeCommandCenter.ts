@@ -112,6 +112,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
     // Carry previously loaded data over as `stale` so a refresh doesn't flash the
     // whole screen back to skeletons. Only ever for the *same* identity: on a
     // logout or a user switch the old data belongs to someone else and must go.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stale-data carry-over on refresh, keyed on identity; a functional update that must read current
     setModel((current) => {
       const next = createInitialModel(identity, tournament);
       const sameIdentity =

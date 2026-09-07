@@ -19,6 +19,7 @@ export default function WeeklyStatsScreen({
 
   useEffect(() => {
     if (!open || !user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the recap when the panel closes; the effect runs the async recap fetch
       setRecap(null);
       setError(null);
       return;

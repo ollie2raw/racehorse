@@ -125,6 +125,7 @@ export default function GhostSetupScreen({
 
   useEffect(() => {
     if (!selectedUserId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the summary panel when no user is selected; the effect runs the async summary fetch
       setLoading(false);
       setSummary(null);
       setError(null);

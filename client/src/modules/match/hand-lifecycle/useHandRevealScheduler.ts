@@ -157,6 +157,7 @@ export function useHandRevealScheduler({
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- drives the hand-reveal auto-advance timer; setState initializes the progress it animates
       setHandRevealProgress(1);
       onRevealHidden();
       handRevealShownAtRef.current = null;

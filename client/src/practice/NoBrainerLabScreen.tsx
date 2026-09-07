@@ -138,6 +138,7 @@ export default function NoBrainerLabScreen({
 
   useEffect(() => {
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the error before the async loadNoBrainerDataset() call this effect owns
     setError('');
     loadNoBrainerDataset()
       .then((rows) => {
@@ -171,6 +172,7 @@ export default function NoBrainerLabScreen({
 
   useEffect(() => {
     if (canStart && !record && !introOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-starts the first practice hand once the dataset is ready
       startHand();
     }
   }, [canStart, record, startHand, introOpen]);
@@ -234,6 +236,7 @@ export default function NoBrainerLabScreen({
     if (!record || !practiceState || practiceState.status !== 'won') return;
     if (usedHint || usedShowSolution) return;
     if (markNoBrainerHandSolved(userId, record.key)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- persists the solve to storage on win and syncs the solved count back
       setSolvedCount(getNoBrainerSolvedCount(userId));
     }
   }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);

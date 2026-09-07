@@ -190,6 +190,7 @@ export function useDailyFritzInit({ userId }: UseDailyFritzInitParams): UseDaily
 
   useEffect(() => {
     if (!userId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets Daily Fritz init state on sign-out; the effect drives the async runInit()
       setToday(null);
       setInitPhase('ready');
       setLoadError(null);

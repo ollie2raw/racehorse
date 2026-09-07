@@ -72,6 +72,7 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
   const authUserId = authUser?.id ?? null;
   useEffect(() => {
     if (!authUserId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the fetched ghost profile when the signed-in user changes; the effect exists to run fetchGhostProfileSummary
       setGhostProfile(null);
       return;
     }
