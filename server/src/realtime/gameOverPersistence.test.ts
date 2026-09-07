@@ -171,8 +171,21 @@ describe('createGameOverPersistScheduler', () => {
     resolvePendingFritzMatchMock.mockResolvedValue(undefined);
     appendMatchMock.mockResolvedValue(undefined);
     writeMatchActivityMock.mockResolvedValue(undefined);
-    supabaseFetchMock.mockResolvedValue([]);
-    insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
+    // Default: healthy ranking path — a profile exists and the ranked insert
+    // writes a fresh row. Tests that exercise the failure/dormancy paths
+    // override these.
+    supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+    insertRankedGameIdempotentMock.mockResolvedValue({
+      isNew: true,
+      game: {
+        id: 'ranked-default',
+        player_id: 'user-a',
+        opponent_id: 'user-b',
+        player_score: 1,
+        opponent_score: 1,
+        played_at: 't',
+      },
+    });
     verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
     processRealtimeMultiplayerGameMock.mockResolvedValue({ playerA: { delta: 1 }, playerB: { delta: -1 } });
   });
@@ -247,6 +260,41 @@ describe('createGameOverPersistScheduler', () => {
     // A transient failure that recovers on retry must NOT page.
     expect(recordOperationalFailureMock).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  // RK-10: the ranked-MP dormancy shape. An eligible human-vs-human game reaches
+  // the ranking loop, the profile lookup comes back empty, the ranked insert is
+  // skipped — and today `persistGameOverOnce` STILL returns success. The skip
+  // must not be silent.
+  it('ranked insert skipped on an empty profile lookup fires recordOperationalFailure (does not fail the persist)', async () => {
+    supabaseFetchMock.mockResolvedValue([]); // profiles lookup returns no row
+    const input = buildInput();
+    const outcome = await runPersist(input);
+
+    expect(outcome).toBe('succeeded');
+    expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+    expect(recordOperationalFailureMock).toHaveBeenCalledWith(
+      'ranked_insert_skipped_no_profile',
+      expect.anything(),
+      expect.objectContaining({
+        roomCode: 'ROOM1',
+        sourceMatchId: 'match-1',
+        profileFetchThrew: false,
+        rowsReturned: 0,
+      }),
+    );
+  });
+
+  it('ranked insert that returns no row (unexpected duplicate) fires recordOperationalFailure', async () => {
+    insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
+    const outcome = await runPersist(buildInput());
+
+    expect(outcome).toBe('succeeded');
+    expect(recordOperationalFailureMock).toHaveBeenCalledWith(
+      'ranked_insert_returned_no_row',
+      expect.anything(),
+      expect.objectContaining({ roomCode: 'ROOM1', sourceMatchId: 'match-1' }),
+    );
   });
 
   it('short-circuits when applyTournamentGameOverFromRoom returns true', async () => {

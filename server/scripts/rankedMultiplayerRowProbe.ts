@@ -277,6 +277,41 @@ async function main(): Promise<void> {
       })}\n`,
     );
 
+    // RK-10 diagnostics: capture the DB state the deployed game-over persist
+    // actually sees, right after game-over — do the participant profile rows
+    // exist? what did the mp_authority funnel record?
+    const diag = async (label: string) => {
+      const [profiles, ghostGames, mpEvents, rankedNow] = await Promise.all([
+        sb<unknown[]>(
+          `/rest/v1/profiles?id=in.(${userIds.join(',')})&select=id,username,glicko_rating,glicko_rd,ranked_games_played`,
+        ).catch((e) => [{ error: String(e) }]),
+        sb<unknown[]>(`/rest/v1/ghost_games?user_id=in.(${userIds.join(',')})&select=id,user_id,played_at`).catch(
+          (e) => [{ error: String(e) }],
+        ),
+        sb<unknown[]>(
+          `/rest/v1/mp_authority_events?room_code=eq.${roomCode}&select=event,ts,failure_code,payload&order=ts.asc`,
+        ).catch((e) => [{ error: String(e) }]),
+        sb<unknown[]>(`/rest/v1/ranked_games?player_id=in.(${userIds.join(',')})&select=id,source_type,rating_after`).catch(
+          () => [],
+        ),
+      ]);
+      process.stdout.write(
+        `\n=== RK-10 DIAG (${label}) ===\n` +
+          `participant userIds: ${userIds.join(', ')}\n` +
+          `profiles (${profiles.length}): ${JSON.stringify(profiles)}\n` +
+          `ghost_games (${ghostGames.length}): ${JSON.stringify(ghostGames)}\n` +
+          `ranked_games (${rankedNow.length}): ${JSON.stringify(rankedNow)}\n` +
+          `mp_authority_events for room:\n` +
+          (Array.isArray(mpEvents)
+            ? mpEvents
+                .map((e: any) => `  ${e.ts} ${e.event} ${e.failure_code ?? ''} ${JSON.stringify(e.payload ?? {})}`)
+                .join('\n')
+            : JSON.stringify(mpEvents)) +
+          `\n`,
+      );
+    };
+    await diag('immediately after GAME OVER');
+
     // Deferred game-over persist runs with retry backoff; give it room. Slower
     // against a remote deployment — poll for up to PROBE_RANKED_POLL_MS.
     let rows: unknown[] = [];
@@ -313,29 +348,38 @@ async function main(): Promise<void> {
       ratingApplied: rows.every((r: any) => r.rating_after !== null && r.delta !== null),
     };
     process.stdout.write(`\n=== ANALYSIS ===\n${JSON.stringify(analysis, null, 2)}\n`);
+    await diag('after ranked poll window');
   } finally {
     hostSocket?.disconnect();
     guestSocket?.disconnect();
     await sleep(500);
-    // Explicit cleanup: matches.winner/loser FK is ON DELETE SET NULL, so the
-    // row survives a user delete — remove it by room_code first.
-    if (roomCode) {
-      await sb(`/rest/v1/matches?room_code=eq.${roomCode}`, { method: 'DELETE' }).catch((e) =>
-        process.stderr.write(`matches cleanup: ${e}\n`),
+    if (process.env.PROBE_KEEP_USERS === '1') {
+      process.stdout.write(
+        `\nPROBE_KEEP_USERS=1 — NOT cleaning up. Manual cleanup:\n` +
+          `  users: ${userIds.join(' ')}\n  room: ${roomCode}\n`,
+      );
+    } else {
+      // Explicit cleanup: matches.winner/loser FK is ON DELETE SET NULL, so the
+      // row survives a user delete — remove it by room_code first.
+      if (roomCode) {
+        await sb(`/rest/v1/matches?room_code=eq.${roomCode}`, { method: 'DELETE' }).catch((e) =>
+          process.stderr.write(`matches cleanup: ${e}\n`),
+        );
+      }
+      await Promise.all(
+        userIds.map((id) => deleteEphemeralUser(id).catch((e) => process.stderr.write(`${e}\n`))),
+      );
+
+      const leftoverRanked = await sb<unknown[]>(
+        `/rest/v1/ranked_games?player_id=in.(${userIds.join(',')})`,
+      ).catch(() => []);
+      const leftoverMatches = roomCode
+        ? await sb<unknown[]>(`/rest/v1/matches?room_code=eq.${roomCode}`).catch(() => [])
+        : [];
+      process.stdout.write(
+        `\n=== CLEANUP VERIFY ===\nleftover ranked_games: ${leftoverRanked.length}\nleftover matches: ${leftoverMatches.length}\n`,
       );
     }
-    await Promise.all(userIds.map((id) => deleteEphemeralUser(id).catch((e) => process.stderr.write(`${e}\n`))));
-
-    // Verify net-zero.
-    const leftoverRanked = await sb<unknown[]>(
-      `/rest/v1/ranked_games?player_id=in.(${userIds.join(',')})`,
-    ).catch(() => []);
-    const leftoverMatches = roomCode
-      ? await sb<unknown[]>(`/rest/v1/matches?room_code=eq.${roomCode}`).catch(() => [])
-      : [];
-    process.stdout.write(
-      `\n=== CLEANUP VERIFY ===\nleftover ranked_games: ${leftoverRanked.length}\nleftover matches: ${leftoverMatches.length}\n`,
-    );
   }
 }
 

@@ -235,16 +235,40 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     : { eligible: true as const };
   const humanGlickoEligible = humanMoveLogVerification.eligible;
 
+
   for (const p of rankingParticipants) {
     if (p.me.userId) {
       const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
       if (opponentId) {
         let profile = rankingProfiles.get(p.me.userId);
         if (!profile) {
-          const profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+          let profileData: Profile[] | undefined;
+          let profileFetchError: string | null = null;
+          try {
+            profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+          } catch (err) {
+            profileFetchError = err instanceof Error ? err.message : String(err);
+          }
           profile = profileData?.[0];
           if (profile) {
             rankingProfiles.set(p.me.userId, profile);
+          } else if (opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
+            // RK-10: this is the silent-skip. A ranked human game reached here,
+            // was eligible, and got no `ranked_games` row purely because the
+            // profile lookup came back empty (or threw). Make it loud — a falsy
+            // profile lookup must NOT let the pipeline report success silently.
+            recordOperationalFailure(
+              'ranked_insert_skipped_no_profile',
+              profileFetchError ?? 'profiles lookup returned no row',
+              {
+                roomCode: room.code,
+                sourceMatchId,
+                playerId: p.me.userId,
+                opponentId,
+                profileFetchThrew: Boolean(profileFetchError),
+                rowsReturned: Array.isArray(profileData) ? profileData.length : null,
+              },
+            );
           }
         }
         if (profile && opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
@@ -260,6 +284,15 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
             source: { sourceType: 'live_room', sourceMatchId },
           });
           rankedInsertResults.set(p.me.userId, insertResult);
+          if (!insertResult.isNew) {
+            // RK-10: unexpected for a fresh (player_id, source_match_id) — the
+            // on_conflict POST returned no row. Do not let this pass silently.
+            recordOperationalFailure(
+              'ranked_insert_returned_no_row',
+              'insertRankedGameIdempotent returned isNew:false for a fresh match',
+              { roomCode: room.code, sourceMatchId, playerId: p.me.userId, opponentId },
+            );
+          }
         }
 
         const moveLog = room.ghostMoveLogs[p.me.id] ?? [];
