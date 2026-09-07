@@ -113,6 +113,13 @@ function MultiplayerGameShellComponent({
   // no score change so it armed no replacement — the pulse stuck on forever.
   // Hold the timer in a ref that only unmount clears. Same fix as 869e0712.
   const hudScorePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The post-game rating refresh runs a ~13s retry ladder guarded for re-entry
+  // by multiplayerRatingRefreshKeyRef. Cancelling it from the effect cleanup
+  // killed it on any post-game `state` echo, and the key guard then made the
+  // re-run early-return without starting a replacement — so `pending` never
+  // cleared. Invalidate by run id instead: only a genuinely new key, or
+  // unmount, retires an in-flight ladder.
+  const multiplayerRatingRunIdRef = useRef(0);
   const prevMyHandLenRef = useRef(0);
   const boardRef = useRef<BoardHandle>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -426,7 +433,9 @@ function MultiplayerGameShellComponent({
     if (multiplayerRatingRefreshKeyRef.current === key) return;
     multiplayerRatingRefreshKeyRef.current = key;
     setMultiplayerRatingPending(true);
-    let cancelled = false;
+    const runId = multiplayerRatingRunIdRef.current + 1;
+    multiplayerRatingRunIdRef.current = runId;
+    const isStale = () => multiplayerRatingRunIdRef.current !== runId;
     const baselineRating = multiplayerRatingBaseline;
     const retryDelaysMs = [0, 700, 1400, 2400, 3600, 5200];
 
@@ -437,7 +446,7 @@ function MultiplayerGameShellComponent({
           if (delayMs > 0) {
             await new Promise((resolve) => window.setTimeout(resolve, delayMs));
           }
-          if (cancelled) return;
+          if (isStale()) return;
 
           try {
             await Promise.resolve(refreshAuthProfile());
@@ -445,7 +454,7 @@ function MultiplayerGameShellComponent({
             console.warn('[Multiplayer Rating] profile refresh failed:', err);
           }
 
-          if (cancelled) return;
+          if (isStale()) return;
           const latestRating = authProfileRef.current?.glicko_rating;
           if (
             latestRating != null &&
@@ -457,15 +466,11 @@ function MultiplayerGameShellComponent({
           }
         }
       } finally {
-        if (!cancelled) {
+        if (!isStale()) {
           setMultiplayerRatingPending(false);
         }
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     authProfileRef,
     authUser,
@@ -620,6 +625,8 @@ function MultiplayerGameShellComponent({
   useEffect(
     () => () => {
       if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
+      // Retire any in-flight rating retry ladder on unmount.
+      multiplayerRatingRunIdRef.current += 1;
     },
     [],
   );

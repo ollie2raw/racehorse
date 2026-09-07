@@ -253,3 +253,61 @@ describe('MultiplayerGameShell HUD score pulse', () => {
     expect(getGameSnapshot().routeProps.hudScorePulse[OPP]).toBeFalsy();
   });
 });
+
+describe('MultiplayerGameShell post-game rating refresh', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The rating refresh runs a ~13s retry loop and guards re-entry with
+   * multiplayerRatingRefreshKeyRef. Its cleanup set `cancelled = true`, and the
+   * effect depends on the raw `state` object — so any post-game state echo
+   * cancelled the in-flight loop, while the key guard made the re-run
+   * early-return without starting a replacement. The `finally` that clears
+   * pending is skipped when cancelled, so the summary stuck on pending forever.
+   */
+  it('still settles the rating refresh when a state echo lands mid-retry', async () => {
+    resetGameSnapshot();
+    vi.useFakeTimers();
+
+    const shellDelegatesRef = createRef<any>();
+    const props = makeDefaultProps({
+      joinedRoomResponseRef: { current: null as any },
+      shellDelegatesRef,
+      authProfileRef: { current: { glicko_rating: 1500 } } as any,
+      authProfile: { username: 'You', glicko_rating: 1500 } as any,
+    });
+
+    render(<MultiplayerGameShell {...props} />);
+
+    const applyState = (state: GameState) => {
+      act(() => {
+        shellDelegatesRef.current?.applyJoinResponseGameState({
+          ok: true,
+          roomCode: 'ROOM123',
+          you: YOU,
+          players: [{ id: YOU, userId: '1' }, { id: OPP, userId: '2' }],
+          state,
+        } as RoomAckResponse);
+      });
+    };
+
+    const over = (sequence: number) =>
+      makeState({ sequence, gameOver: true, handOver: true, winnerId: YOU });
+
+    // Game ends: the retry loop starts and pending goes true.
+    applyState(over(20));
+    expect(getGameSnapshot().routeProps.multiplayerRatingSummary?.pending).toBe(true);
+
+    // An authoritative echo of the same terminal state lands mid-retry.
+    applyState(over(21));
+
+    // Let the whole retry ladder (~13.3s) drain.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+
+    expect(getGameSnapshot().routeProps.multiplayerRatingSummary?.pending).toBe(false);
+  });
+});
