@@ -46,11 +46,19 @@ function projectForActor(
     return null;
   }
   const turnStillYours = next.playerIds[next.currentPlayerIndex] === you;
+  const nextLegalMoves = turnStillYours
+    ? (coreGetLegalMoves(next, you) as unknown as Move[])
+    : [];
+  const nextCanDraw = turnStillYours ? coreCanDraw(next, you) : false;
   return {
     nextState: next as unknown as GameState,
-    nextLegalMoves: turnStillYours ? (coreGetLegalMoves(next, you) as unknown as Move[]) : [],
-    nextCanDraw: turnStillYours ? coreCanDraw(next, you) : false,
-    turnRetained: turnStillYours,
+    nextLegalMoves,
+    nextCanDraw,
+    // Only report "turn retained" when the actor can actually do something next
+    // (a play or a draw). If the turn technically stays but there's nothing to
+    // do — scored on a near-last tile with a locked boneyard — leave the lock on
+    // and let the server's auto-resolution reconcile.
+    turnRetained: turnStillYours && (nextLegalMoves.length > 0 || nextCanDraw),
   };
 }
 
