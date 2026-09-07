@@ -234,16 +234,51 @@ production two days ago. **Template: commit `869e0712`** —
 failing test first, idempotent guard via a ref, timer held in a ref cleared only
 on unmount.
 
-Split by risk:
+**Split confirmed against real call sites, not folder names (2026-09-06).** The
+folder heuristic said 18 heavy / 33 light. Reading each site moved **13 more to
+heavy** — anything in the live game path or auth is heavy regardless of folder.
 
-- **18 warnings in `multiplayer/` (6), `modules/` (9), `tournament/` (2), `match/` (1)** —
-  one fix per commit, failing test first, e2e smoke after each folder.
-- **33 warnings elsewhere** (`dailyFritz/` 6, `auth/` 5, `practice/` 4, `routing/` 2,
-  `components/` 2, `learn/` 2, `journey/` 2, and 10 single-warning folders) —
-  still test-first, but groupable by folder into one commit each.
+**HEAVY — 31.** Failing test first, one fix per commit, e2e smoke per folder.
 
-Highest concentration: `practice/NoBrainerLabScreen.tsx` (4),
-`modules/guided/useAuthoringCapture.ts` (2), `multiplayer/MultiplayerGameShell.tsx` (3).
+| file | n | why heavy |
+|---|---:|---|
+| `multiplayer/MultiplayerGameShell.tsx` | 3 | multiplayer shell |
+| `modules/guided/useAuthoringCapture.ts` | 2 | `modules/` |
+| `modules/guided/useGuidedMatchRuntime.ts` | 2 | `modules/` |
+| `auth/useAppSessionUi.ts` | 2 | **auth/session** |
+| `routing/useAppRouteState.ts` | 2 | **drives live-match nav** |
+| `auth/AuthModal.tsx` · `ChangePasswordModal.tsx` · `UsernameModal.tsx` | 3 | **auth** |
+| `App.tsx` L533 | 1 | **room-invite bootstrap + `setAppMode`** |
+| `bot/BotMatchScreen.tsx` L42 | 1 | **live bot match** |
+| `puzzleRush/PuzzleRushPlayView.tsx` L99 | 1 | **resets live runtime match state** |
+| `dailyFritz/useDailyFritzRunController.ts` L358 | 1 | **fires `void continueSet()`** |
+| `dailyFritz/useDailyFritzInit.ts` L193 | 1 | **game-mode bootstrap** |
+| `identity/usePlayerIdentityModel.ts` L121 | 1 | auth-adjacent |
+| `match/session/handReveal/useHandRevealSequence.ts` · `modules/match/hand-lifecycle/useHandRevealScheduler.ts` | 2 | hand lifecycle |
+| `modules/daily/useDailyFritzRuntime.ts` · `modules/ghost/useGhostRuntime.ts` · `modules/guided/useGuidedMatchCaptureRuntime.ts` · `modules/review/usePostGamePivotalReview.ts` | 4 | `modules/` runtimes |
+| `multiplayer/usePrivateLobbyWinStreak.ts` · `usePrivateMatchLobbyFriends.ts` · `useSocialInviteState.ts` | 3 | `multiplayer/` |
+| `tournament/useTournament.ts` L275 · `useTournamentDisplayLabels.ts` L31 | 2 | `tournament/` |
+
+**LIGHT — 18.** Test-first, one commit per folder.
+`dailyFritz/DailyFritzLeaderboardScreen.tsx` (4), `practice/NoBrainerLabScreen.tsx` (4),
+`journey/lessonHost/JourneyLessonHost.tsx` (2), `analyzer/GameReviewer.tsx`,
+`bot/useBotGamePreferences.ts`, `components/GlobalNav.tsx`,
+`components/OfflineBanner.tsx`, `ghost/GhostSetupScreen.tsx`,
+`home/useHomeCommandCenter.ts`, `social/ActivityFeedPanel.tsx`,
+`stats/WeeklyStatsScreen.tsx`.
+
+**FROZEN — 2.** `learn/AuthoringCoachPanel.tsx:45,51`. Same constraint as the
+`no-console` residual above: `learn/` is never-touch-without-permission. Convert
+when that system is next touched with permission.
+
+31 + 18 + 2 = 51.
+
+**A recurring sub-pattern worth naming:** several auth sites
+(`AuthModal.tsx:55`, `ChangePasswordModal.tsx:26`, `UsernameModal.tsx:35`) are the
+"reset form state when the modal opens" idiom. React's own guidance is to remount
+via a `key` prop or derive during render rather than reset in an effect. Whether a
+`key` remount is right here is a real design question per-modal — record the call,
+don't apply it mechanically.
 
 ### Phase 3 — `refs` + `exhaustive-deps` + `purity`/`immutability`
 
