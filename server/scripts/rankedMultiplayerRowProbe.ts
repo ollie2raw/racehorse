@@ -277,9 +277,11 @@ async function main(): Promise<void> {
       })}\n`,
     );
 
-    // Deferred game-over persist runs with retry backoff; give it room.
+    // Deferred game-over persist runs with retry backoff; give it room. Slower
+    // against a remote deployment — poll for up to PROBE_RANKED_POLL_MS.
     let rows: unknown[] = [];
-    for (let attempt = 0; attempt < 15; attempt += 1) {
+    const rankedPollDeadline = Date.now() + Number(process.env.PROBE_RANKED_POLL_MS ?? 30_000);
+    while (Date.now() < rankedPollDeadline) {
       await sleep(2000);
       rows = await sb<unknown[]>(
         `/rest/v1/ranked_games?player_id=in.(${userIds.join(',')})&order=played_at.desc`,
