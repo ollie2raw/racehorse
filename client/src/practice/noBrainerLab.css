@@ -989,6 +989,17 @@
   display: none;
 }
 
+/* Dossier treatment — square corners, hairline border, faint plan grid,
+   matching the Daily Fritz set-result card. */
+.rh-glass-card.nbl-intro-modal-panel {
+  border-radius: var(--radius-record);
+  border-color: rgba(168, 85, 247, 0.22);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 .nbl-intro-modal {
   display: flex;
   flex-direction: column;
@@ -1047,7 +1058,7 @@
   gap: clamp(12px, 1.8vh, 18px);
   padding: clamp(16px, 2.4vh, 24px) clamp(14px, 1.8vw, 20px);
   border: 1px solid rgba(168, 85, 247, 0.28);
-  border-radius: 12px;
+  border-radius: var(--radius-record);
   background: rgba(168, 85, 247, 0.06);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),

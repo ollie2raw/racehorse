@@ -98,7 +98,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     sectionRounded: 'rounded-[20px] rounded-br-[5px]',
     title: 'The Lab',
     titleColor: '#C77DFF',
-    desc: "Clear all 7 tiles in one turn. Chain them until it's automatic.",
+    desc: "A no brainer is a starting hand where all 7 tiles link into one chain. Play them in a single turn and go out before your opponent moves. Learn to spot them on sight.",
     variant: 'tier-master',
     chevronColor: '#E9D5FF',
     action: 'noBrainer',

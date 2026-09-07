@@ -11,14 +11,14 @@ export function NoBrainerIntroModal({ open, onStart, onDismiss }: NoBrainerIntro
     <Modal
       open={open}
       onClose={onDismiss}
-      title="What's a no-brainer?"
+      title="What's a no brainer?"
       panelClassName="nbl-intro-modal-panel"
       maxWidth={560}
     >
       <div className="nbl-intro-modal">
         <header className="nbl-intro-modal__header">
           <p className="nbl-intro-modal__kicker">The Lab</p>
-          <h2 className="nbl-intro-modal__title">What&apos;s a no-brainer?</h2>
+          <h2 className="nbl-intro-modal__title">What&apos;s a no brainer?</h2>
           <p className="nbl-intro-modal__lede">Every hand in this mode has one.</p>
         </header>
 

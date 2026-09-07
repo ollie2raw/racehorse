@@ -76,7 +76,7 @@ describe('NoBrainerLabScreen intro gate', () => {
   it('shows the intro modal before the training hand is available', async () => {
     render(<NoBrainerLabScreen onBack={vi.fn()} />);
 
-    expect(screen.getByRole('dialog', { name: "What's a no-brainer?" })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: "What's a no brainer?" })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Hint/i })).not.toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe('NoBrainerLabScreen intro gate', () => {
     fireEvent.click(screen.getByRole('button', { name: /Start training/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: "What's a no-brainer?" })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: "What's a no brainer?" })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Hint/i })).toBeInTheDocument();
     });
     expect(pickNoBrainerHandMock).toHaveBeenCalled();

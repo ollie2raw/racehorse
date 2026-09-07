@@ -7,7 +7,7 @@ describe('NoBrainerIntroModal', () => {
   it('renders the no-brainer explainer copy', () => {
     render(<NoBrainerIntroModal open onStart={vi.fn()} onDismiss={vi.fn()} />);
 
-    expect(screen.getByRole('dialog', { name: "What's a no-brainer?" })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: "What's a no brainer?" })).toBeInTheDocument();
     expect(screen.getByText(/all 7 of your starting tiles chain together/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Solve it, and you'll never miss one in a real game\./i),
