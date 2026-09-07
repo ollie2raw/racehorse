@@ -92,6 +92,7 @@ export default function NoBrainerLabScreen({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the solved count from storage when the user changes
     setSolvedCount(getNoBrainerSolvedCount(userId));
   }, [userId]);
 

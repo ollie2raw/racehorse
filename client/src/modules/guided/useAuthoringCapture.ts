@@ -103,6 +103,7 @@ export function useAuthoringCapture({
   useEffect(() => {
     if (!isAuthoringV2Mode) {
       lessonV2ApiRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- tears down / rebuilds the V2 authoring capture when the mode toggles; owns the async lessonV2 API load
       setAuthoringV2Events([]);
       setAuthoringV2HandStarts([]);
       authoringV2NextEventIndexRef.current = 0;

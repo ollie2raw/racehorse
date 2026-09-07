@@ -380,6 +380,7 @@ function MultiplayerGameShellComponent({
   useEffect(() => {
     setRematchRequested(false);
     setRematchReadyIds([]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- new-match lifecycle reset (rematch, move log, rating baseline) keyed on the room/session
     setMultiplayerMoveLog([]);
     setScoreTrackOpen(false);
     multiplayerMoveCounterRef.current = 1;
@@ -398,6 +399,7 @@ function MultiplayerGameShellComponent({
     if (!joinedRoom || state?.gameOver) return;
     if (multiplayerRatingBaseline != null) return;
     if (authProfile?.glicko_rating == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- latches the rating baseline once per room, when the profile rating first becomes available
     setMultiplayerRatingBaseline(Number(authProfile.glicko_rating));
   }, [authProfile?.glicko_rating, joinedRoom, multiplayerRatingBaseline, state?.gameOver]);
 
@@ -614,6 +616,7 @@ function MultiplayerGameShellComponent({
     prevHudScoresRef.current = nextScores;
     if (!changed) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lights the HUD score pulse from the score delta; the effect also arms the 260ms reset timer
     setHudScorePulse(nextPulse);
     if (hudScorePulseTimerRef.current) clearTimeout(hudScorePulseTimerRef.current);
     hudScorePulseTimerRef.current = setTimeout(() => {

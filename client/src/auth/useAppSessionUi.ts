@@ -93,6 +93,7 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const hasSeen = window.localStorage.getItem('hasSeenWelcome');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount read of the hasSeenWelcome localStorage flag
     if (!hasSeen) setWelcomeOpen(true);
   }, []);
 

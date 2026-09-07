@@ -118,6 +118,7 @@ export function usePlayerIdentityModel(request: PlayerIdentityRequest): PlayerId
   useEffect(() => {
     let cancelled = false;
     const generatedAt = Date.now();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- re-seeds the identity model and starts loadModel() when the request changes
     setState({
       model: seedModel(request, generatedAt),
       loading: Boolean(request.subjectUsername || (request.subjectUserId && request.subjectUserId === request.currentUserId)),

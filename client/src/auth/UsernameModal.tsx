@@ -32,6 +32,7 @@ export default function UsernameModal({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the field from currentUsername when the modal opens (key-remount is the cleaner fix — see plan doc)
       setUsername(currentUsername ?? '');
       setError(null);
       setSaving(false);

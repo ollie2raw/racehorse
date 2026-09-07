@@ -5,6 +5,7 @@ export function OfflineBanner({ online }: { online: boolean }) {
 
   // Reset dismissed state when coming back online so the banner can show again if offline recurs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- re-enables the banner when connectivity returns so a later drop can show it again
     if (online) setDismissed(false);
   }, [online]);
 

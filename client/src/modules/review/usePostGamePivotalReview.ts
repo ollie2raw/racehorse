@@ -55,6 +55,7 @@ export function usePostGamePivotalReview({
 
   useEffect(() => {
     if (!match.gameOver) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the post-game review block while the match is live; the effect owns the analysis lifecycle
       setPostGameReviewDismissed(false);
       setPivotalReviewOpen(false);
       setPivotalReviewSummary(null);

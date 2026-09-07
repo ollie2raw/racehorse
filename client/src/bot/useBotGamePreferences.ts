@@ -67,6 +67,7 @@ export function useBotGamePreferences(
   // Reset deal size to default when entering bot setup
   useEffect(() => {
     if (appMode !== 'botSetup') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the deal size to the default each time bot setup is entered
     setBotDealSize(7);
   }, [appMode]);
 

@@ -96,6 +96,7 @@ export function PuzzleRushPlayView({
 
   // A new ordinal is a fresh board: reset every per-puzzle ref and piece of state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the whole per-puzzle runtime when the ordinal changes (a fresh board)
     setRuntimeState(createRushMatchState(puzzle));
     setSelectedTile(null);
     setLastPlayedTile(null);

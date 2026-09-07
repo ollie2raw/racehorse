@@ -530,6 +530,7 @@ export default function App() {
     if (inviteJoinInFlightRef.current) return;
     const linkedRoom = readRoomInviteCodeFromLocation();
     if (!linkedRoom) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount bootstrap that reads the room-invite code from window.location
     setRoomCode(linkedRoom);
     setAppMode('home');
   }, []);

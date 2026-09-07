@@ -58,6 +58,7 @@ export function useGuidedMatchCaptureRuntime(
   useEffect(() => {
     if (!enableGuidedMatchCandidateCapture) {
       guidedMatchCaptureRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- creates or destroys the guided-match capture object as the toggle changes
       setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(null));
       setGuidedMatchCandidateSaveStatus(null);
       return;

@@ -83,6 +83,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   // Mode guard: LEARN_MODE_VISIBLE
   useEffect(() => {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mode guard — redirects out of a feature-flagged-off route and clears its state
       setSelectedLearnLessonId(null);
       setLearnHowToPlayOpen(false);
       setAppMode('singlePlayerHub');
@@ -99,6 +100,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   // Clear learnHowToPlayOpen when leaving learn
   useEffect(() => {
     if (appMode !== 'learn') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the how-to-play flag when navigating away from learn
       setLearnHowToPlayOpen(false);
     }
   }, [appMode]);

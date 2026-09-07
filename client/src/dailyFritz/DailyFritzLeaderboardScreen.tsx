@@ -386,6 +386,7 @@ export default function DailyFritzLeaderboardScreen({
   }, [resultShareText, runDate]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the share-done flag when the share text or overlay state changes
     setShareDone(false);
   }, [resultShareText, resultOverlayOpen]);
 

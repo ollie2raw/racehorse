@@ -39,6 +39,7 @@ export default function BotMatchScreen(props: BotMatchScreenProps) {
 
   useEffect(() => {
     if (!needsLessonV2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- readies or dynamically imports Lesson V2 based on needsLessonV2; sync branch is the already-loaded fast path
       setLessonV2Ready(true);
       setLessonV2LoadError(null);
       return;
