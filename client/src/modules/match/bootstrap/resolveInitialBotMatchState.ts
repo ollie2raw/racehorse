@@ -1,3 +1,4 @@
+import { logger } from '../../../utils/logger';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import {
   createBotMatch,
@@ -86,8 +87,8 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
 
   if (isGuidedMode && !input.frozenLesson) {
     guidedInitSourceRef.current = 'random';
-    console.log('[guided-init] source=random (no frozen lesson found)');
-    console.log('[guided-flow] initial coached board hydrated = false');
+    logger.info('guided-init', 'source=random (no frozen lesson found)');
+    logger.info('guided-flow', 'initial coached board hydrated = false');
   }
 
   return (

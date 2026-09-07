@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../appRouteTypes';
@@ -79,7 +80,7 @@ export function useMatchExitHandlers(
       shellSetActionError('Could not leave the match right now.');
       return;
     }
-    console.log('[leave-game] confirm', {
+    logger.operational('leave-game', 'confirm', {
       mode: currentTournamentContext ? 'tournament' : 'multiplayer',
       roomCode: activeRoomCode,
       tournamentMatchId: currentTournamentContext?.matchId ?? null,
@@ -91,11 +92,11 @@ export function useMatchExitHandlers(
       });
       if (!resp?.ok) {
         const errorMessage = resp?.error ?? 'Could not leave the match.';
-        console.log('[leave-game] ack/error', { roomCode: activeRoomCode, error: errorMessage });
+        logger.operational('leave-game', 'ack/error', { roomCode: activeRoomCode, error: errorMessage });
         handleMatchAbandonFailure(errorMessage, { shellSetActionError, showToast });
         return;
       }
-      console.log('[leave-game] ack/success', { roomCode: activeRoomCode });
+      logger.operational('leave-game', 'ack/success', { roomCode: activeRoomCode });
       performMatchAbandonSuccessCleanup({
         clearRecoverableRoomState,
         resetMultiplayerRoomState,
@@ -112,7 +113,7 @@ export function useMatchExitHandlers(
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not leave the match.';
-      console.log('[leave-game] ack/error', { roomCode: activeRoomCode, error: message });
+      logger.operational('leave-game', 'ack/error', { roomCode: activeRoomCode, error: message });
       handleMatchAbandonFailure(message, { shellSetActionError, showToast });
     }
   }, [

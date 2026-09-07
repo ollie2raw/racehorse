@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { DailyFritzSetGameNumber } from './dailyFritzContracts.ts';
 
@@ -68,10 +69,6 @@ export function assertDailyFritzSessionCoherent(
   context: string,
 ): void {
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && !isCoherentDailyFritzSession(session)) {
-    console.assert(
-      false,
-      `[daily-fritz-session] incoherent session at ${context}`,
-      session,
-    );
+    logger.warn('daily-fritz-session', `incoherent session at ${context}`, { session });
   }
 }

@@ -1,3 +1,4 @@
+import { logger } from '../../../utils/logger';
 import {
   useCallback,
   useEffect,
@@ -88,7 +89,7 @@ export function useHandRevealSequence(
     if (handReadyRecoveryRef.current) return;
     handReadyRecoveryRef.current = true;
     if (import.meta.env.DEV) {
-      console.log('[hand:ready] recovering lost hand:ready signal after reconnect');
+      logger.operational('hand:ready', 'recovering lost hand:ready signal after reconnect');
     }
     emitHandReady(socket!, joinedRoom!, state?.handNumber).catch((error) => {
       handReadyRecoveryRef.current = false;

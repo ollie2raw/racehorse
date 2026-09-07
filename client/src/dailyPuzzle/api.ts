@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { track } from '../lib/analytics';
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import { apiGet, apiPost } from '../api/client';
@@ -328,7 +329,7 @@ export async function getDailyPuzzleForDate(
   const ms = Math.round(performance.now() - t0);
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
      
-    console.debug('[DailyPuzzle] select finished', { ms, seed, error, hasData: Boolean(data) });
+    logger.info('DailyPuzzle', 'select finished', { ms, seed, error, hasData: Boolean(data) });
   }
 
   if (error) {
@@ -361,7 +362,7 @@ export async function getDailyPuzzleByDateSeed(
   );
   const ms = Math.round(performance.now() - t0);
    
-  console.log('[DailyPuzzleAdmin] select finished', {
+  logger.info('DailyPuzzleAdmin', 'select finished', {
     ms,
     canonicalDate,
     error,
@@ -413,7 +414,7 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
   );
   const ms = Math.round(performance.now() - t0);
    
-  console.log('[DailyPuzzleAdmin] upsert finished', { ms, canonicalDate, error });
+  logger.info('DailyPuzzleAdmin', 'upsert finished', { ms, canonicalDate, error });
 
   if (error) {
     throw new Error(error.message);

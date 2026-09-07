@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useEffect, useMemo, useState } from 'react';
 import {
   getGuidedV1AuthoredStepByIndex,
@@ -152,13 +153,13 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
     if (!isGuidedMode) return;
     coach.resetHand();
     if (frozenLesson && isOffAuthoredLine) {
-      console.log(`[guided-fallback] hand ended in fallback = ${match.handNumber - 1}`);
-      console.log(`[guided-fallback] resetting fallback on new hand start = ${match.handNumber}`);
+      logger.info('guided-fallback', `hand ended in fallback = ${match.handNumber - 1}`);
+      logger.info('guided-fallback', `resetting fallback on new hand start = ${match.handNumber}`);
       setIsOffAuthoredLine(false);
       const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
       const firstStepIdx = realSteps.findIndex((s) => s.handNumber === match.handNumber);
       if (firstStepIdx >= 0) {
-        console.log(`[guided-fallback] resumed coached mode at step = ${firstStepIdx}`);
+        logger.info('guided-fallback', `resumed coached mode at step = ${firstStepIdx}`);
         setLessonStepIndex(firstStepIdx);
       }
     }

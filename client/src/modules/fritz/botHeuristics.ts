@@ -14,6 +14,7 @@
  *       stronger pip/threat denial, without changing elite or fairness paths
  */
 
+import { logger } from '../../utils/logger';
 import type { Move, Tile } from '../../types.ts';
 export type { Move, Tile };
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
@@ -1594,7 +1595,7 @@ export function chooseBotMove(
   function done(result: BotChoice | null, label?: string): BotChoice | null {
     if (isDevRuntime) {
       const ms = (performance.now() - t0).toFixed(1);
-      console.debug(`[Fritz] chooseBotMove (${difficulty}, ${totalTilesForLog} tiles${label ? ', ' + label : ''}): ${ms}ms`);
+      logger.info('Fritz', `chooseBotMove (${difficulty}, ${totalTilesForLog} tiles${label ? ', ' + label : ''}): ${ms}ms`);
     }
     return result;
   }

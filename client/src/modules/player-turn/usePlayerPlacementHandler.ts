@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useCallback, useEffect, useRef } from 'react';
 import { applyPlayMove } from '../match/runtime/botEngine.ts';
 import {
@@ -108,14 +109,14 @@ export function usePlayerPlacementHandler({
   }, [match, selectedTile]);
 
   return useCallback((position: PlacementPosition) => {
-    console.log('[guided-path-root]', {
+    logger.info('guided', 'path-root', {
       position,
       selectedTile: selectedTile ? toTileKey(selectedTile) : null,
       currentPlayer: match.currentPlayer,
       handOver: match.handOver,
       gameOver: match.gameOver,
     });
-    console.log('[guided-click-enter]', {
+    logger.info('guided', 'click-enter', {
       selectedTile: selectedTile ? toTileKey(selectedTile) : null,
       position,
       currentPlayer: match.currentPlayer,
@@ -137,7 +138,7 @@ export function usePlayerPlacementHandler({
       placementInFlightRef.current || drawSequenceActiveRef.current,
     );
     if (blockReason) {
-      console.log(`[guided-click-blocked] reason = ${blockReason}`);
+      logger.info('guided-click-blocked', `reason = ${blockReason}`);
       return;
     }
 
@@ -145,7 +146,7 @@ export function usePlayerPlacementHandler({
     const clickedMoveForLog = move!.tile
       ? `${toTileKey(move!.tile)}${move!.position ? `:${move!.position}` : ''}`
       : null;
-    console.log('[guided-click-move]', {
+    logger.info('guided', 'click-move', {
       foundMove: true,
       clickedMove: clickedMoveForLog,
       expectedMove: expectedMoveForLog,
@@ -201,17 +202,19 @@ export function usePlayerPlacementHandler({
         coachingText: authoringNoteText,
       });
       setAuthoringV2Events((prev) => [...prev, v2event]);
-      console.log('[v2-capture] player play', { eventIndex, tile: v2event.tile, position: v2event.position });
+      logger.info('v2-capture', 'player play', { eventIndex, tile: v2event.tile, position: v2event.position });
     }
 
-    console.log('[guided-move] applying result to match state');
-    console.log('[guided-move] result.state player hand =', result.state.players.you.hand.map(toTileKey));
-    console.log('[guided-move] result.state board mainLine length =', result.state.board?.mainLine.length);
+    logger.info('guided-move', 'applying result to match state');
+    logger.info('guided-move', 'result.state applied', {
+      playerHand: result.state.players.you.hand.map(toTileKey),
+      mainLineLength: result.state.board?.mainLine.length,
+    });
 
     const drawnTiles = listEmbeddedForcedDrawTiles(match, result.state);
     const commitResult = (): void => {
       applyAndNotify(result);
-      console.log('[guided-click-applied]', {
+      logger.info('guided', 'click-applied', {
         currentPlayerAfter: result.state.currentPlayer,
         lessonStepIndexCurrent: lessonStepIndex,
       });

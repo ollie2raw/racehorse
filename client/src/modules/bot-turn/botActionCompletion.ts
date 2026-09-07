@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { toTileTuple } from '../../game/moveLogger.ts';
 import { shouldApplyBotActionResult } from '../match/hand-lifecycle/handLifecycleRules.ts';
 import type { BotActionResult, BotMatchState } from '../match/runtime/botEngine.ts';
@@ -132,7 +133,7 @@ export function completeBotTurnAction(input: {
 
   if (!shouldApplyBotActionResult(input.matchRef.current, input.result)) {
     if (import.meta.env.DEV) {
-      console.log('[BOT-TURN] apply skipped — stale result', {
+      logger.info('BOT-TURN', 'apply skipped — stale result', {
         liveHandOver: input.matchRef.current.handOver,
         liveGameOver: input.matchRef.current.gameOver,
         resultHandOver: input.result.state.handOver,

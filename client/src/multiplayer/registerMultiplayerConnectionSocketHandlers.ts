@@ -85,10 +85,9 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
               })
               .catch((error) => {
                 if (import.meta.env.DEV) {
-                  console.log(
-                    '[presence] identify failed',
-                    error instanceof Error ? error.message : error,
-                  );
+                  logger.operational('presence', 'identify failed', {
+                    error: error instanceof Error ? error.message : error,
+                  });
                 }
               });
           }

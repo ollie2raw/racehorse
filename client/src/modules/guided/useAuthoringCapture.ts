@@ -11,6 +11,7 @@
  * artifacts (steps, events, notes) as output.
  */
 
+import { logger } from '../../utils/logger';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { Tile } from '../../types.ts';
 import type { GhostResolvedMove } from '../ghost/ghostContracts.ts';
@@ -192,7 +193,7 @@ export function useAuthoringCapture({
       const updated: AuthoredStep = { ...target, fritzReplyEvents: events };
       const next = [...prev];
       next[targetIdx] = updated;
-      console.log('[guided-capture] flush', {
+      logger.info('guided-capture', 'flush', {
         flushedToStepIndex: target.stepIndex,
         count: events.length,
         stepHasEventsAfterFlush:
@@ -249,7 +250,7 @@ export function useAuthoringCapture({
         matchStateJson: JSON.stringify(match),
         firstEventIndex: authoringV2EventsRef.current.length,
       };
-      console.log('[v2-capture] hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
+      logger.info('v2-capture', 'hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
       return [...prev, handStart];
     });
   }, [isAuthoringV2Mode, match.handNumber]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -273,7 +274,7 @@ export function useAuthoringCapture({
         fritzReplyEvents: [],
         matchStateJson: pre?.matchStateJson ?? null,
       };
-      console.log('[guided-capture] authored step created', {
+      logger.info('guided-capture', 'authored step created', {
         stepIndex: stepIdx,
         chosenMove,
         handNumber: newStep.handNumber,
@@ -296,7 +297,7 @@ export function useAuthoringCapture({
             const updated: AuthoredStep = { ...target, fritzReplyEvents: pendingEvents };
             base = [...base];
             base[targetIdx] = updated;
-            console.log('[guided-capture] pre-flush fritz reply events', {
+            logger.info('guided-capture', 'pre-flush fritz reply events', {
               stepIndex: target.stepIndex,
               eventCount: pendingEvents.length,
             });
@@ -372,7 +373,7 @@ export function useAuthoringCapture({
         break;
       }
     }
-    console.log('[guided-capture] push', {
+    logger.info('guided-capture', 'push', {
       stepIndexTarget: targetStepIdx,
       currentPlayer: result.state.currentPlayer,
       action: captureAction,
@@ -396,7 +397,7 @@ export function useAuthoringCapture({
       eventIndex,
     });
     setAuthoringV2Events((prev) => [...prev, v2event]);
-    console.log('[v2-capture] fritz', { eventIndex, action: captureAction, tile: v2event.tile });
+    logger.info('v2-capture', 'fritz', { eventIndex, action: captureAction, tile: v2event.tile });
   }, [matchRef, setAuthoringV2Events, authoringV2NextEventIndexRef]);
 
   const createV2Event = useCallback((args: CreateV2EventArgs) => {

@@ -1,5 +1,6 @@
 /** Socket.IO emit-with-ack transport for live multiplayer / tournament rooms. */
 
+import { logger } from '../utils/logger';
 import type { GameState } from '../types';
 import { recordJoinAckTimeout } from './mpTelemetry';
 // Single-sourced from @racehorse/game-core's dtoContracts module (also used
@@ -98,7 +99,7 @@ export function emitWithAck<TResp>(
     const mpDebug = isMpDebugEnabled();
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (mpDebug) {
-      console.log('[mp-action-client] sent', {
+      logger.operational('mp-action-client', 'sent', {
         event,
         payload: argsWithoutAck[argsWithoutAck.length - 1],
       });
@@ -119,7 +120,7 @@ export function emitWithAck<TResp>(
       window.clearTimeout(t);
       if (mpDebug) {
         const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        console.log('[mp-action-client] ack', {
+        logger.operational('mp-action-client', 'ack', {
           event,
           elapsedMs: Number((endedAt - startedAt).toFixed(1)),
           response: resp,
