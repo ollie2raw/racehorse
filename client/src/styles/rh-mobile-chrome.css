@@ -247,6 +247,14 @@
  * date 800) so the tabs read as secondary chrome, not primary nav. */
 .rh-nav-tab {
   font-size: 20px;
+  /* >=44px tap target on every viewport that shows this nav (the 769-1279
+   * tablet band and wide desktop). The glow underline is absolutely
+   * positioned, so the extra height never grows the nav row — the stat
+   * blocks beside it are already taller. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
 }
 
 .rh-nav--compact .rh-nav-tab {
