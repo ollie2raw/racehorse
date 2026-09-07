@@ -363,6 +363,38 @@ via a `key` prop or derive during render rather than reset in an effect. Whether
 `key` remount is right here is a real design question per-modal — record the call,
 don't apply it mechanically.
 
+### Pass 2 result — `set-state-in-effect` 51 → 2 (2026-09-07)
+
+Two commits, comments only, zero code change:
+
+- `7960a58f` — the 25 **C** sites: `eslint-disable-next-line` with a per-site
+  reason. Each verified against the code — every one is an effect that reacts to
+  an external system (fetch, dynamic import, timer, storage, coach engine) or
+  whose flagged `setState` is a reset in the signed-out / disabled early-return
+  branch of an async effect.
+- `9e1cdaf8` — the **B** bucket. Reading each B site against the code showed the
+  same picture as C: none is a mechanical render-phase move. The classification
+  in Pass 1 was optimistic — "mechanically clearable" turned out to mean "the
+  rule flags a legitimate orchestration effect." Given Pass 1's finding that the
+  warnings don't track bugs (1 of 4), 24 match-runtime restructures for a linter
+  is risk with no user value. Each got a targeted disable with a reason instead.
+
+**What actually cleared the class was the 4 Pass-1 bug fixes plus the Phase 4
+gate — not restructuring.** The disables are the honest record: every one of the
+49 non-frozen sites has been read and reasoned about, and the gate stops new
+un-reviewed ones.
+
+**Remaining: 2 frozen** — `learn/AuthoringCoachPanel.tsx:45,51`. Same
+never-touch-without-permission constraint. Phase 4's `lint:hooks` gate carries a
+residual of 2 for `set-state-in-effect` until `learn/` is next touched, or gets a
+scoped `.eslintrc` override for that one file.
+
+**Future cleanup, not blocking:** the three auth modals should move to a
+`key`-remount. `AuthModal` keys off `[open, mode]`; the parent would render
+`<AuthModal key={mode} … />` only when open, so opening remounts (free reset) and
+switching mode remounts. Changes focus/mount timing — needs a real look, not a
+codemod.
+
 ### Phase 3 — `refs` + `exhaustive-deps` + `purity`/`immutability`
 
 Group commits by hook family so each diff is one coherent dataflow change.
