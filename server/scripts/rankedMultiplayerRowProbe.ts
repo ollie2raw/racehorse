@@ -128,13 +128,14 @@ function connect(): Promise<Socket> {
 
 type Client = { socket: Socket; seatId: string | null; latest: StateUpdate | null };
 
-async function waitFor(pred: () => boolean, ms = 8000): Promise<void> {
+/** Resolves `true` once `pred()` holds, `false` on timeout. Never throws. */
+async function waitFor(pred: () => boolean, ms = 8000): Promise<boolean> {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
-    if (pred()) return;
+    if (pred()) return true;
     await sleep(50);
   }
-  throw new Error('waitFor timed out');
+  return false;
 }
 
 const actionTimings: Array<{ type: string; ackMs: number }> = [];
