@@ -74,7 +74,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     sectionRounded: 'rounded-[20px] rounded-tr-[5px]',
     title: 'How to Play',
     titleColor: '#34D399',
-    desc: 'Fritz walks you through rules and instincts before your first coached hand.',
+    desc: 'Walk through the rules and core instincts before your first coached hand.',
     action: 'howToPlay',
     ctaLabel: 'Start',
   },
@@ -85,7 +85,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     sectionRounded: 'rounded-[20px] rounded-tl-[5px]',
     title: 'Guided Match',
     titleColor: '#E7B64A',
-    desc: 'One coached game. Oliver narrates every move.',
+    desc: 'One coached game, every move narrated.',
     variant: 'tier-elite',
     chevronColor: '#FFD76A',
     action: 'guided',
@@ -391,7 +391,7 @@ export default function LearnHome({
                 Learn
               </h1>
               <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
-                Coach led practice modes to sharpen your Racehorse strategy.
+                Coach Oliver's practice modes to sharpen your Racehorse strategy.
               </p>
               {guidedV2StartError ? (
                 <p className="mt-4 text-[15px] text-[#f0a8a8]" role="alert">
