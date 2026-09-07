@@ -88,9 +88,18 @@
     {
       "files": [
         "src/components/boardDiagnostics.ts",
+        "src/debug/renderProfiler.ts",
+        "src/match/layoutDebug.ts",
+        "src/modules/daily/dailyFritzMatchDiagnostics.ts",
+        "src/modules/daily/useDailyFritzDiagnostics.ts",
+        "src/modules/guided/useGuidedWindowDebugApis.ts",
+        "src/modules/match/runtime/botMatchDebug.ts",
         "src/modules/match/runtime/fairnessLog.ts",
         "src/multiplayer/drawAudit.ts",
-        "src/multiplayer/mpPerf.ts"
+        "src/multiplayer/mpPerf.ts",
+        "src/multiplayer/recoveryMachine.production.invariantTests.ts",
+        "src/multiplayer/runtime/runtimeBehaviorTests.ts",
+        "src/utils/logger.ts"
       ],
       "rules": {
         "no-console": "off"
