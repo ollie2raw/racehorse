@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useMultiplayerPresentation } from './useMultiplayerPresentation';
 import type { GameState, Tile } from '../types';
@@ -168,5 +168,90 @@ describe('useMultiplayerPresentation passed toast logic', () => {
     rerender({ state: state2, recentAutoPasses: [] });
 
     expect(showScoreLikeToast).not.toHaveBeenCalledWith('OpponentName passed', 'opp');
+  });
+});
+
+describe('useMultiplayerPresentation — score toast survives the optimistic→authoritative double update', () => {
+  let showScoreLikeToast: any;
+  let showScoreToast: any;
+
+  const params = () => ({
+    you: YOU,
+    isMutedRef: { current: true } as any,
+    opponentName: 'OpponentName',
+    players: [
+      { id: YOU, username: 'You', userId: '1' },
+      { id: OPP, username: 'OpponentName', userId: '2' },
+    ] as RoomPlayer[],
+    myHand: [] as Tile[],
+    opponentTileCount: 0,
+    drawSequenceActive: false,
+    boneyardCount: 0,
+    showScoreLikeToast: (...a: any[]) => showScoreLikeToast(...a),
+    showScoreToast: (...a: any[]) => showScoreToast(...a),
+    setFlyingTiles: vi.fn() as any,
+    boneyardRef: { current: null } as any,
+    handAreaRef: { current: null } as any,
+    opponentPillRef: { current: null } as any,
+  });
+
+  beforeEach(() => {
+    showScoreLikeToast = vi.fn();
+    showScoreToast = vi.fn();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('still fires the score toast when the authoritative update lands before the 80ms defer', () => {
+    const s0 = makeState({ currentPlayerIndex: 0, sequence: 1 });
+    const { rerender } = renderHook(({ state }) => useMultiplayerPresentation({ ...params(), state }), {
+      initialProps: { state: s0 },
+    });
+
+    // Optimistic local apply: YOU score jumps to 5, same object shape otherwise.
+    const optimistic = makeState({
+      currentPlayerIndex: 1,
+      sequence: 2,
+      players: { [YOU]: { id: YOU, hand: [], score: 5 }, [OPP]: { id: OPP, hand: [], score: 0 } },
+    });
+    rerender({ state: optimistic });
+
+    // Authoritative echo arrives ~45ms later — a new object, identical score.
+    vi.advanceTimersByTime(45);
+    const authoritative = makeState({
+      currentPlayerIndex: 1,
+      sequence: 2,
+      players: { [YOU]: { id: YOU, hand: [], score: 5 }, [OPP]: { id: OPP, hand: [], score: 0 } },
+    });
+    rerender({ state: authoritative });
+
+    vi.advanceTimersByTime(200);
+
+    expect(showScoreToast).toHaveBeenCalledTimes(1);
+    expect(showScoreToast).toHaveBeenCalledWith('you', 5, 'You');
+  });
+
+  it('does not double-fire when the same score is re-projected', () => {
+    const s0 = makeState({ currentPlayerIndex: 1, sequence: 1 });
+    const { rerender } = renderHook(({ state }) => useMultiplayerPresentation({ ...params(), state }), {
+      initialProps: { state: s0 },
+    });
+
+    const scored = makeState({
+      currentPlayerIndex: 0,
+      sequence: 2,
+      players: { [YOU]: { id: YOU, hand: [], score: 0 }, [OPP]: { id: OPP, hand: [], score: 10 } },
+    });
+    rerender({ state: scored });
+    vi.advanceTimersByTime(200);
+    rerender({ state: { ...scored, sequence: 3 } });
+    vi.advanceTimersByTime(200);
+
+    expect(showScoreToast).toHaveBeenCalledTimes(1);
+    expect(showScoreToast).toHaveBeenCalledWith('opp', 10, 'OpponentName');
   });
 });

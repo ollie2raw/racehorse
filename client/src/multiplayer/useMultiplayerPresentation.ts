@@ -47,6 +47,21 @@ export function useMultiplayerPresentation({
   const localFlyingTileIdRef = useRef<number>(0);
   const lastHandNumberRef = useRef<number | null>(null);
   const lastTurnPlayerRef = useRef<string | null>(null);
+  // Highest score already announced per player. The score toast is deferred
+  // ~80ms so the tile-fly animation leads; with MP-JIT-2 the optimistic apply
+  // and the authoritative echo are two `state` transitions ~45ms apart, so a
+  // per-render effect cleanup would cancel the pending toast before it fires.
+  // Keying off "last announced score" makes the announcement idempotent across
+  // that double update and lets the timer run uncancelled.
+  const announcedScoreRef = useRef<Record<string, number>>({});
+  const scoreToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (scoreToastTimerRef.current) clearTimeout(scoreToastTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!state) {
@@ -71,6 +86,7 @@ export function useMultiplayerPresentation({
   useEffect(() => {
     if (!state) {
       prevStateRef.current = null;
+      announcedScoreRef.current = {};
       return;
     }
     const prev = prevStateRef.current;
@@ -102,21 +118,25 @@ export function useMultiplayerPresentation({
     }
 
     for (const pid of state.playerIds) {
-      const prevScore = prev.players[pid]?.score ?? 0;
       const nextScore = state.players[pid]?.score ?? 0;
-      const delta = nextScore - prevScore;
+      const announced = announcedScoreRef.current[pid] ?? (prev.players[pid]?.score ?? 0);
+      const delta = nextScore - announced;
 
       if (delta > 0 && !state.handOver && !state.gameOver) {
+        announcedScoreRef.current[pid] = nextScore;
         const tone = pid === you ? 'you' : 'opp';
         const label = players.find((p) => p.id === pid)?.username?.trim() || (pid === you ? 'You' : opponentName);
 
-        const timer = setTimeout(() => {
+        if (scoreToastTimerRef.current) clearTimeout(scoreToastTimerRef.current);
+        scoreToastTimerRef.current = setTimeout(() => {
+          scoreToastTimerRef.current = null;
           playScoreSound(delta, isMutedRef.current);
           showScoreToast(tone, delta, label);
         }, 80);
-
-        return () => clearTimeout(timer);
+        break;
       }
+
+      announcedScoreRef.current[pid] = Math.max(announced, nextScore);
     }
   }, [state, you, isMutedRef, opponentName, players, showScoreLikeToast, showScoreToast, recentAutoPasses]);
 
