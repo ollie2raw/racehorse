@@ -1,42 +1,83 @@
-import { applyMove as applyCoreMove, DEFAULT_CONFIG } from '@racehorse/game-core';
-import type { GameState, PlacementPosition, Tile } from '../../../types';
+import {
+  applyMove as applyCoreMove,
+  canDraw as coreCanDraw,
+  DEFAULT_CONFIG,
+  getLegalMoves as coreGetLegalMoves,
+} from '@racehorse/game-core';
+import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
+
+export type OptimisticResult = {
+  nextState: GameState;
+  /** Legal moves for the actor after the action — non-empty only for a
+   *  scoring/double play that keeps the turn; `[]` when the turn passed. */
+  nextLegalMoves: Move[];
+  nextCanDraw: boolean;
+};
 
 /**
- * MP-JIT-2: predict the actor's own MOVE with the same engine the server runs.
- * Pure — no React, no refs. Returns the predicted next state, or `null` when the
- * move is not applicable / the engine rejects it (in which case the caller falls
- * back to the plain server round-trip, unchanged behaviour).
+ * MP-JIT-2: predict the actor's own action with the same engine the server runs.
+ * Pure — no React, no refs. Returns `null` when the action is not applicable /
+ * the engine rejects it (→ the caller falls back to the plain server round-trip,
+ * unchanged behaviour). See docs/mp-jit-2-optimistic-local-apply-plan.md.
  *
  * The masked live `GameState` carries only a 2-field `config`; game-core needs
- * the full `Config`. `deadTileCount` / `blockedHandRule` / etc. only affect the
- * reconcile-only forced-draw path here, so `DEFAULT_CONFIG` is a safe fill.
- * See docs/mp-jit-2-optimistic-local-apply-plan.md.
+ * the full `Config`, so it is merged over `DEFAULT_CONFIG` (the missing fields —
+ * `deadTileCount` etc. — only affect the reconcile-only forced-draw path).
  */
+function toCoreInput(state: GameState): Parameters<typeof applyCoreMove>[0] {
+  return {
+    ...state,
+    config: { ...DEFAULT_CONFIG, ...state.config },
+  } as unknown as Parameters<typeof applyCoreMove>[0];
+}
+
+function projectForActor(
+  next: Parameters<typeof applyCoreMove>[0] & { playerIds: readonly string[]; currentPlayerIndex: number },
+  you: string,
+): OptimisticResult | null {
+  // Defer terminal / hand-boundary results to the server — they drive
+  // hand-reveal / game-over UI and are latency-insensitive (a mandatory pause
+  // follows), mirroring MP-JIT-1's server-side carve-out.
+  if ((next as { handOver?: boolean }).handOver || (next as { gameOver?: boolean }).gameOver) {
+    return null;
+  }
+  const turnStillYours = next.playerIds[next.currentPlayerIndex] === you;
+  return {
+    nextState: next as unknown as GameState,
+    nextLegalMoves: turnStillYours ? (coreGetLegalMoves(next, you) as unknown as Move[]) : [],
+    nextCanDraw: turnStillYours ? coreCanDraw(next, you) : false,
+  };
+}
+
 export function computeOptimisticPlayState(
   state: GameState,
   you: string,
   tile: Tile,
   position: PlacementPosition,
-): GameState | null {
+): OptimisticResult | null {
   if (state.gameOver || state.handOver) return null;
   if (state.playerIds[state.currentPlayerIndex] !== you) return null;
-
   try {
-    const coreInput = {
-      ...state,
-      config: { ...DEFAULT_CONFIG, ...state.config },
-    } as unknown as Parameters<typeof applyCoreMove>[0];
-    const result = applyCoreMove(coreInput, you, { type: 'play', tile, position });
-    const next = result.state as unknown as GameState;
-    // Defer terminal / hand-boundary moves to the server: they trigger
-    // hand-reveal / game-over UI, are latency-insensitive (a mandatory
-    // hand-over pause follows), and mirror MP-JIT-1's server-side carve-out.
-    if (next.handOver || next.gameOver) return null;
-    // Forced-draw pending (scoring/double play that keeps the turn but needs
-    // draws we cannot predict) — show nothing speculative; let the
-    // authoritative update + game:draw_animation drive it.
+    const result = applyCoreMove(toCoreInput(state), you, { type: 'play', tile, position });
+    // A pending forced draw needs draws the client cannot predict (masked
+    // boneyard is length-correct but `{-1,-1}` placeholders) — defer to the
+    // authoritative update + game:draw_animation.
     if (result.forcedDraw != null) return null;
-    return next;
+    return projectForActor(result.state as never, you);
+  } catch {
+    return null;
+  }
+}
+
+export function computeOptimisticPassState(
+  state: GameState,
+  you: string,
+): OptimisticResult | null {
+  if (state.gameOver || state.handOver) return null;
+  if (state.playerIds[state.currentPlayerIndex] !== you) return null;
+  try {
+    const result = applyCoreMove(toCoreInput(state), you, { type: 'pass' });
+    return projectForActor(result.state as never, you);
   } catch {
     return null;
   }

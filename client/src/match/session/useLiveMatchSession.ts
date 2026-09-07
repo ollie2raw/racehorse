@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
-import { computeOptimisticPlayState } from './actions/optimisticPlay';
+import {
+  computeOptimisticPassState,
+  computeOptimisticPlayState,
+  type OptimisticResult,
+} from './actions/optimisticPlay';
 import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
 import { projectMultiplayerGameState } from '../../multiplayer/boardSnapshotGuards';
 import type { RoomAckResponse } from '../../multiplayer/roomTransport';
@@ -106,13 +110,13 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     stateRef.current = state;
   }, [state]);
 
-  // ── MP-JIT-2: optimistic local apply for the actor's own MOVE ──
-  // Predict the move with the same engine the server runs, commit it to local
+  // ── MP-JIT-2: optimistic local apply for the actor's own MOVE / PASS ──
+  // Predict the action with the same engine the server runs, commit it to local
   // state on the same tick as the click, then let the authoritative `state:update`
-  // reconcile. A rejected move is rolled back to the pre-click snapshot; the
+  // reconcile. A rejected action is rolled back to the pre-click snapshot; the
   // watermark (in useRoomSocketSync) is never touched, so resync/regression
   // handling is unchanged. See docs/mp-jit-2-optimistic-local-apply-plan.md.
-  const optimisticPlayRef = useRef<{
+  const optimisticActionRef = useRef<{
     requestId: string;
     prevState: GameState;
     prevLegalMoves: Move[];
@@ -120,43 +124,45 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     nextState: GameState;
   } | null>(null);
 
-  const applyOptimisticPlay = useCallback(
+  const runOptimisticAction = useCallback(
     (
-      tile: Tile,
-      position: PlacementPosition,
       requestId: string,
+      compute: (cur: GameState, you: string) => OptimisticResult | null,
     ): { rollback: () => void } | null => {
       const cur = stateRef.current;
       if (!cur) return null;
-      if (optimisticPlayRef.current) return null; // one in flight at a time
+      if (optimisticActionRef.current) return null; // one in flight at a time
 
-      const nextState = computeOptimisticPlayState(cur, youRef.current, tile, position);
-      if (!nextState) return null; // not applicable / engine rejected
+      const result = compute(cur, youRef.current);
+      if (!result) return null; // not applicable / engine rejected
 
       const snapshot = {
         requestId,
         prevState: cur,
         prevLegalMoves: legalMovesRef.current,
         prevCanDraw: canDrawRef.current,
-        nextState,
+        nextState: result.nextState,
       };
-      optimisticPlayRef.current = snapshot;
-      stateRef.current = nextState;
-      setState(nextState);
-      // Turn advanced (or a forced draw is pending) — the actor cannot act again
-      // until the authoritative update. A continued (scoring/double) turn gets
-      // its real legalMoves back from that update.
-      setLegalMoves([]);
-      setCanDraw(false);
+      optimisticActionRef.current = snapshot;
+      stateRef.current = result.nextState;
+      legalMovesRef.current = result.nextLegalMoves;
+      canDrawRef.current = result.nextCanDraw;
+      setState(result.nextState);
+      // A scoring/double play that keeps the turn gets its real continued-turn
+      // legal moves here (no ~1-RTT blank); a turn that passed gets `[]`.
+      setLegalMoves(result.nextLegalMoves);
+      setCanDraw(result.nextCanDraw);
 
       return {
         rollback: () => {
-          if (optimisticPlayRef.current !== snapshot) return;
-          optimisticPlayRef.current = null;
+          if (optimisticActionRef.current !== snapshot) return;
+          optimisticActionRef.current = null;
           // Only restore if our optimistic state is still the one showing — an
           // authoritative `state:update` may already have superseded it.
           if (stateRef.current === snapshot.nextState) {
             stateRef.current = snapshot.prevState;
+            legalMovesRef.current = snapshot.prevLegalMoves;
+            canDrawRef.current = snapshot.prevCanDraw;
             setState(snapshot.prevState);
             setLegalMoves(snapshot.prevLegalMoves);
             setCanDraw(snapshot.prevCanDraw);
@@ -167,9 +173,23 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     [setState, setLegalMoves, setCanDraw],
   );
 
-  const commitOptimisticPlay = useCallback((requestId: string) => {
-    if (optimisticPlayRef.current?.requestId === requestId) {
-      optimisticPlayRef.current = null;
+  const applyOptimisticPlay = useCallback(
+    (tile: Tile, position: PlacementPosition, requestId: string) =>
+      runOptimisticAction(requestId, (cur, you) =>
+        computeOptimisticPlayState(cur, you, tile, position),
+      ),
+    [runOptimisticAction],
+  );
+
+  const applyOptimisticPass = useCallback(
+    (requestId: string) =>
+      runOptimisticAction(requestId, (cur, you) => computeOptimisticPassState(cur, you)),
+    [runOptimisticAction],
+  );
+
+  const commitOptimisticAction = useCallback((requestId: string) => {
+    if (optimisticActionRef.current?.requestId === requestId) {
+      optimisticActionRef.current = null;
     }
   }, []);
 
@@ -177,9 +197,9 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   // snapshot so it cannot block the next optimistic apply or fire a late
   // rollback onto server truth.
   useEffect(() => {
-    const snap = optimisticPlayRef.current;
+    const snap = optimisticActionRef.current;
     if (snap && state !== snap.nextState) {
-      optimisticPlayRef.current = null;
+      optimisticActionRef.current = null;
     }
   }, [state]);
 
@@ -293,7 +313,8 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     flashLastPlayed: transientUi.flashLastPlayed,
     fetchGameState: params.fetchGameState,
     applyOptimisticPlay,
-    commitOptimisticPlay,
+    applyOptimisticPass,
+    commitOptimisticAction,
   });
 
   const handRevealSequence = useHandRevealSequence({

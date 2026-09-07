@@ -32,6 +32,8 @@ export type UsePassActionParams = {
   showToast: (message: string, duration?: number) => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
   markUncertainAndResync: (requestId: string, error?: string) => void;
+  applyOptimisticPass?: (requestId: string) => { rollback: () => void } | null;
+  commitOptimisticAction?: (requestId: string) => void;
 };
 
 /** PASS action handler, extracted verbatim from useLiveMatchActions. */
@@ -52,6 +54,8 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
     showToast,
     appendMultiplayerMove,
     markUncertainAndResync,
+    applyOptimisticPass,
+    commitOptimisticAction,
   } = params;
 
   return useCallback(async () => {
@@ -86,10 +90,17 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
     });
     logicalGameplayActionRef.current = logicalAction;
     const requestId = logicalAction.requestId;
+
+    // MP-JIT-2: predict the pass locally (no hidden information) so the turn
+    // hands off on this tick. `null` = not applicable / engine rejected → the
+    // server round-trip is the only path (unchanged behaviour).
+    const optimistic = applyOptimisticPass?.(requestId) ?? null;
+
     try {
       const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
+        optimistic?.rollback();
         if (resp?.uncertain) {
           markUncertainAndResync(
             requestId,
@@ -100,6 +111,7 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
         }
         return;
       }
+      commitOptimisticAction?.(requestId);
       if (logicalGameplayActionRef.current?.requestId === requestId) {
         logicalGameplayActionRef.current = null;
       }
@@ -112,6 +124,7 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
       });
     } catch (e) {
       mpPerfMarkAck(false);
+      optimistic?.rollback();
       if (logicalGameplayActionRef.current?.requestId === requestId) {
         logicalGameplayActionRef.current = {
           ...logicalGameplayActionRef.current,
@@ -140,5 +153,7 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
     setActionError,
     setPendingUiAction,
     markUncertainAndResync,
+    applyOptimisticPass,
+    commitOptimisticAction,
   ]);
 }

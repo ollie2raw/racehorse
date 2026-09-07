@@ -238,20 +238,20 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
     function optimisticParams(overrides: Partial<UseLiveMatchActionsParams> = {}) {
       const rollback = vi.fn();
       const applyOptimisticPlay = vi.fn(() => ({ rollback }));
-      const commitOptimisticPlay = vi.fn();
+      const commitOptimisticAction = vi.fn();
       const params = makeParams({
         selectedTileRef: { current: selectedTile },
         legalMoves: [{ type: 'play', tile: selectedTile, position: 'left' } as any],
         legalMovesRef: { current: [{ type: 'play', tile: selectedTile, position: 'left' } as any] },
         applyOptimisticPlay,
-        commitOptimisticPlay,
+        commitOptimisticAction,
         ...overrides,
       });
-      return { params, applyOptimisticPlay, commitOptimisticPlay, rollback };
+      return { params, applyOptimisticPlay, commitOptimisticAction, rollback };
     }
 
     it('legal-move happy path: optimistic apply is committed, never rolled back, tile flashes once', async () => {
-      const { params, applyOptimisticPlay, commitOptimisticPlay, rollback } = optimisticParams();
+      const { params, applyOptimisticPlay, commitOptimisticAction, rollback } = optimisticParams();
       vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: true, sequence: 5 });
 
       const { result } = renderHook(() => useLiveMatchActions(params));
@@ -264,13 +264,13 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
         'left',
         expect.any(String),
       );
-      expect(commitOptimisticPlay).toHaveBeenCalledWith(expect.any(String));
+      expect(commitOptimisticAction).toHaveBeenCalledWith(expect.any(String));
       expect(rollback).not.toHaveBeenCalled();
       expect(params.flashLastPlayed).toHaveBeenCalledTimes(1);
     });
 
     it('rejected move: optimistic apply is rolled back, not committed, error surfaced', async () => {
-      const { params, commitOptimisticPlay, rollback } = optimisticParams();
+      const { params, commitOptimisticAction, rollback } = optimisticParams();
       vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: false, error: 'It is not your turn.' });
 
       const { result } = renderHook(() => useLiveMatchActions(params));
@@ -279,13 +279,13 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
       });
 
       expect(rollback).toHaveBeenCalledTimes(1);
-      expect(commitOptimisticPlay).not.toHaveBeenCalled();
+      expect(commitOptimisticAction).not.toHaveBeenCalled();
       expect(params.setActionError).toHaveBeenCalledWith('It is not your turn.');
     });
 
     it('uncertain ack: rolls back, then resyncs via the existing machinery', async () => {
       const fetchGameState = vi.fn(async () => true);
-      const { params, commitOptimisticPlay, rollback } = optimisticParams({ fetchGameState });
+      const { params, commitOptimisticAction, rollback } = optimisticParams({ fetchGameState });
       vi.mocked(emitGameAction).mockResolvedValueOnce({
         ok: false,
         uncertain: true,
@@ -298,8 +298,55 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
       });
 
       expect(rollback).toHaveBeenCalledTimes(1);
-      expect(commitOptimisticPlay).not.toHaveBeenCalled();
+      expect(commitOptimisticAction).not.toHaveBeenCalled();
       expect(fetchGameState).toHaveBeenCalledWith('game_action_uncertain');
     });
   });
+
+  // MP-JIT-2 step 3 — required cases for PASS: legal-pass happy path and
+  // rejected-pass rollback (mirroring MOVE).
+  describe('MP-JIT-2 optimistic PASS', () => {
+    function passParams(overrides: Partial<UseLiveMatchActionsParams> = {}) {
+      const rollback = vi.fn();
+      const applyOptimisticPass = vi.fn(() => ({ rollback }));
+      const commitOptimisticAction = vi.fn();
+      const params = makeParams({
+        legalMoves: [{ type: 'pass' } as any],
+        legalMovesRef: { current: [{ type: 'pass' } as any] },
+        applyOptimisticPass,
+        commitOptimisticAction,
+        ...overrides,
+      });
+      return { params, applyOptimisticPass, commitOptimisticAction, rollback };
+    }
+
+    it('legal-pass happy path: optimistic pass committed, never rolled back', async () => {
+      const { params, applyOptimisticPass, commitOptimisticAction, rollback } = passParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: true, sequence: 3 });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.pass();
+      });
+
+      expect(applyOptimisticPass).toHaveBeenCalledWith(expect.any(String));
+      expect(commitOptimisticAction).toHaveBeenCalledWith(expect.any(String));
+      expect(rollback).not.toHaveBeenCalled();
+    });
+
+    it('rejected pass: optimistic pass rolled back, not committed, error surfaced', async () => {
+      const { params, commitOptimisticAction, rollback } = passParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: false, error: 'You have a legal play.' });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.pass();
+      });
+
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(commitOptimisticAction).not.toHaveBeenCalled();
+      expect(params.setActionError).toHaveBeenCalledWith('You have a legal play.');
+    });
+  });
+
 });

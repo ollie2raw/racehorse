@@ -59,7 +59,7 @@ export type UsePlayActionParams = {
     position: PlacementPosition,
     requestId: string,
   ) => { rollback: () => void } | null;
-  commitOptimisticPlay?: (requestId: string) => void;
+  commitOptimisticAction?: (requestId: string) => void;
 };
 
 /** MOVE (play) action handler, extracted verbatim from useLiveMatchActions. */
@@ -99,7 +99,7 @@ export function usePlayAction(
     flashLastPlayed,
     markUncertainAndResync,
     applyOptimisticPlay,
-    commitOptimisticPlay,
+    commitOptimisticAction,
   } = params;
 
   return useCallback(
@@ -210,7 +210,7 @@ export function usePlayAction(
           }
           return;
         }
-        commitOptimisticPlay?.(requestId);
+        commitOptimisticAction?.(requestId);
         if (logicalGameplayActionRef.current?.requestId === requestId) {
           logicalGameplayActionRef.current = null;
         }
@@ -285,7 +285,7 @@ export function usePlayAction(
       setDrawStepMyHand,
       markUncertainAndResync,
       applyOptimisticPlay,
-      commitOptimisticPlay,
+      commitOptimisticAction,
     ],
   );
 }

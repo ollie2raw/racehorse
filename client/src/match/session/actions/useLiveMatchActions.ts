@@ -71,13 +71,14 @@ export type UseLiveMatchActionsParams = {
   flashLastPlayed: (tile: Tile | null) => void;
   /** Authority resync when server returns uncertain after mutate-then-persist failure. */
   fetchGameState?: (reason: string) => Promise<boolean>;
-  /** MP-JIT-2: optimistic local apply of the actor's MOVE. Returns a rollback closure. */
+  /** MP-JIT-2: optimistic local apply of the actor's MOVE / PASS. Returns a rollback closure. */
   applyOptimisticPlay?: (
     tile: Tile,
     position: PlacementPosition,
     requestId: string,
   ) => { rollback: () => void } | null;
-  commitOptimisticPlay?: (requestId: string) => void;
+  applyOptimisticPass?: (requestId: string) => { rollback: () => void } | null;
+  commitOptimisticAction?: (requestId: string) => void;
 };
 
 export type UseLiveMatchActionsResult = {
@@ -136,7 +137,8 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     flashLastPlayed,
     fetchGameState,
     applyOptimisticPlay,
-    commitOptimisticPlay,
+    applyOptimisticPass,
+    commitOptimisticAction,
   } = params;
 
   const emitDraggingState = useCallback(
@@ -259,6 +261,8 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     showToast,
     appendMultiplayerMove,
     markUncertainAndResync,
+    applyOptimisticPass,
+    commitOptimisticAction,
   });
 
   const play = usePlayAction({
@@ -294,7 +298,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     flashLastPlayed,
     markUncertainAndResync,
     applyOptimisticPlay,
-    commitOptimisticPlay,
+    commitOptimisticAction,
   });
 
   useAutoTurnEffect({
