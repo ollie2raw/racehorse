@@ -23,14 +23,19 @@ Traced 2026-09-07. The structural difference, not network latency:
 | Optimistic UI / client prediction / interpolation | n/a (it *is* local) | **none** (`grep -r optimistic|predict|interpolat` over `multiplayer/`, `match/`, `modules/match/` → nothing for gameplay) |
 
 **Measured** (`server/scripts/rankedMultiplayerRowProbe.ts` with per-move
-`emit→ack` timing, local server → real prod Supabase, ~70 moves):
+`emit→ack` timing):
 
-- **Before:** median ~140–240ms per move, mean ~145–245ms, tail 300–700ms. Not a
-  constant lag — the `room_live_sessions` upsert's *latency variance* swinging
-  100→700ms per move is what reads as jitter.
-- **After MP-JIT-1:** mid-hand moves median **~1ms**, mean **~17–27ms**. Tail
-  spikes (~200–430ms) are the terminal moves (hand-over / game-over), which
-  still persist synchronously by design.
+| Path | median | mean | tail (max) |
+|---|---|---|---|
+| **Before**, local server → prod Supabase | ~140–240ms | ~145–245ms | 300–700ms |
+| **After MP-JIT-1**, local server → prod Supabase | **~1ms** | **~17–27ms** | ~200–430ms |
+| **After MP-JIT-1**, deployed Render instance (real network hop) | **~48ms** | **~113ms** | ~1100–1540ms |
+
+Not a constant lag before — the `room_live_sessions` upsert's *latency variance*
+per move is the jitter. After: mid-hand moves are just the socket round-trip
+(~37–60ms to Render); the tail is the terminal moves (hand-over / game-over),
+which keep the synchronous persist by design — ~4 of ~40 moves in a
+`winningScore:30` game.
 
 ---
 
@@ -155,20 +160,17 @@ so the value is versioned rather than an unversioned dashboard assumption.
 ## MP-JIT-2 — no optimistic local apply for multiplayer moves (follow-up candidate)
 
 Daily Fritz commits the move locally and instantly; multiplayer shows nothing
-until the `state:update` broadcast. Even with MP-JIT-1 (broadcast now ~1ms +
-network instead of ~150ms + network), there is still one socket round-trip of
-dead time where the clicked tile sits in the player's hand with only a pending
-spinner.
+until the `state:update` broadcast. Even with MP-JIT-1, there is still one socket
+round-trip (~48ms to Render) of dead time where the clicked tile sits in the
+player's hand with only a pending spinner.
 
-**Candidate fix:** optimistic apply in `usePlayAction` / `useDrawAction` — run
-the engine client-side, commit to local state immediately, reconcile against the
-authoritative `state:update`. The rejected-move rollback hook
-(`markUncertainAndResync`) already exists. This is the biggest remaining
-smoothness win and the one that would make MP feel like Daily Fritz.
+**Full plan: `docs/mp-jit-2-optimistic-local-apply-plan.md`.** Optimistic apply
+in `usePlayAction` / `usePassAction` / `useDrawAction` using
+`@racehorse/game-core`'s `applyMove` directly on the client's `GameState` (same
+engine, same rules the server enforces), reconciled against the authoritative
+`state:update` via the existing watermark / `fetchGameState` machinery.
 
-**Not started.** Needs its own design pass (rollback UX for a rejected move,
-draw-sequence prediction without knowing the boneyard order, score animation
-reconciliation).
+**Not started — plan awaiting review, no implementation code yet.**
 
 ## MP-JIT-3 — opponent-move presentation + board re-render (follow-up candidate)
 
@@ -185,6 +187,67 @@ reconciliation).
 
 ---
 
+## UNRELATED LIVE FINDING — ranked multiplayer is 100% dormant in production
+
+**Surfaced 2026-09-07 while running MP-JIT-1's post-deploy verification. NOT a
+MP-JIT-1 regression** (see below). This belongs to the RK-8 / RK-9 "ranked-MP
+dormancy" thread in `HARDENING_PLAN.md` §8.3 — the "parked / undecided backfill"
+note there is now wrong in the worse direction and should be re-opened.
+
+**What was found** (service-role queries against prod `ranked_games`, 2026-09-07):
+
+- `source_type = 'live_room'`: **0 rows. Ever.** Not one multiplayer live-room
+  ranked game has ever been written via the `insertRankedGameIdempotent`
+  `on_conflict` path.
+- `game_type = 'multiplayer'` rows: **most recent is 2026-07-09** — two months
+  ago — and every one has `source_type: null` (pre-migration history).
+- `source_type = 'verified_single_player'`: 105 rows, current — Daily Fritz /
+  Ghost ranked writes work fine.
+
+So the RK-8 "Live re-confirm 2026-09-06 — every row since ~2026-08-10 carries
+`source_match_id`" was reading **100% `verified_single_player` volume**. The
+multiplayer ranked pipeline has recorded nothing since 2026-07-09.
+
+**Reproduced live, twice**, against the deployed Render instance (release
+`a6659316`) with `server/scripts/rankedMultiplayerRowProbe.ts` — two throwaway
+authenticated accounts, a real full human-vs-human match to game-over:
+
+- `matches` row written (correct `winner_user_id` / `loser_user_id` / scores).
+- `mp_authority_events` shows `private_game_over_persist_succeeded {attempt: 1}`
+  — the game-over persist **completed without error on the first try**.
+- **`ranked_games`: 0 rows.**
+
+The **same probe against a local server running the identical code + the same
+prod Supabase writes all 3** (`ranked_games` ×2 via `on_conflict`,
+`source_type: live_room`, rating applied). So:
+
+- **Not RK-9** — no retry exhaustion; succeeded attempt 1.
+- **Not MP-JIT-1** — MP-JIT-1 does not touch `gameOverPersistence.ts` or
+  `roomSession.ts`'s game-over branch; the local run of post-MP-JIT-1 code
+  writes the row fine.
+- **Not move-log verification** — no `private_move_log_verification_failed`
+  event; a multi-hand local game passes verification and writes the row.
+
+**Prime remaining suspect** (from reading `persistGameOverOnce`): the ranked
+insert is gated on `if (profile && opponentId !== FRITZ_SYSTEM_ID &&
+humanGlickoEligible)`. `profile` comes from a `supabaseFetch('/rest/v1/profiles
+?id=eq.<userId>')` **inside `persistGameOverOnce`**. A falsy `profile` skips the
+insert *silently* and `persistGameOverOnce` still returns normally →
+`private_game_over_persist_succeeded`. An ephemeral user demonstrably *does* get
+a `profiles` row (verified directly), and the local run finds it — so the
+deployed-only failure is environment-specific: candidates are `SUPABASE_POOLER_URL`
+routing on Render (the `profiles` read goes somewhere that returns empty),
+another Render-only env/config difference, or a concurrency effect on the busy
+instance. **Pinning it needs the deployed server's logs / Sentry**, which this
+investigation did not have access to.
+
+**This is not blocked by, and does not block, MP-JIT-1** — MP-JIT-1 is a pure
+latency change on the live-move broadcast path, orthogonal to game-over
+persistence. But it is a serious standalone production defect: **no competitive
+multiplayer rating has been recorded in two months.**
+
+---
+
 ## Test coverage
 
 - `registerGameplayActionHandlers.test.ts` — mid-hand move broadcasts + no
@@ -195,5 +258,10 @@ reconciliation).
   engine) — "mid-hand move: broadcasts before persist…" (MP-JIT-1 contract);
   "restart before the async persist lands: server rehydrates one move behind"
   (the accepted risk, pinned).
+- `server/scripts/multiplayerProcessRestartChaos.ts` (`npm run
+  chaos:multiplayer-restart`) — real server spawn → match → SIGKILL mid-hand →
+  respawn → reconnect + re-join → assert `hydrated`, clients converge, match
+  plays on; reports whether the rehydrated sequence regressed. (Was a dead
+  package.json entry pointing at a non-existent file; written for this change.)
 - Full server suite (1297) + client suite (1553) + `check:architecture` (20/20)
   green with the change.
