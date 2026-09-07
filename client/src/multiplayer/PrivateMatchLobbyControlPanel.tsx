@@ -19,17 +19,11 @@ import {
 import type { PendingChallenge, PrivateMatchLobbyPhase } from './privateMatchLobbyScreenTypes';
 import {
   IconBolt,
-  IconChevronDown,
-  IconClock,
   IconController,
   IconCopy,
   IconDominoSm,
-  IconEye,
-  IconKey,
   IconShield,
-  IconSliders,
   IconTarget,
-  IconUsers,
   LockIcon,
 } from './PrivateMatchLobbyIcons';
 
@@ -73,22 +67,6 @@ export interface PrivateMatchLobbyControlPanelProps {
   sendFriendChallenge?: (target: FriendChallengeTarget) => Promise<SendFriendChallengeResult>;
 }
 
-function renderChoiceBadge(active: boolean, locked: boolean) {
-  if (!active) return null;
-  if (locked) {
-    return (
-      <span className="pml-choice-locked" aria-hidden>
-        ✓ Locked
-      </span>
-    );
-  }
-  return (
-    <span className="pml-choice-check" aria-hidden>
-      ✓
-    </span>
-  );
-}
-
 export function PrivateMatchLobbyControlPanel({
   phase,
   isConnecting,
@@ -124,10 +102,6 @@ export function PrivateMatchLobbyControlPanel({
     setLobbyTab,
     dealFormat,
     setDealFormat,
-    privacy,
-    setPrivacy,
-    timedTurnsUi,
-    setTimedTurnsUi,
     copiedInvite,
     showFriendPicker,
     setShowFriendPicker,
@@ -171,223 +145,203 @@ export function PrivateMatchLobbyControlPanel({
     pendingInviteName,
   });
 
-  const matchSettingsStrip = (
-    <div className="pml-settings-strip" role="group" aria-label="Match settings">
-      <button type="button" className="pml-mini-tile" disabled>
-        <span className="pml-mini-tile-icon" aria-hidden>
-          <IconTarget />
-        </span>
-        <span className="pml-mini-tile-body">
-          <span className="pml-mini-tile-label">Win target</span>
-          <span className="pml-mini-tile-value">First to {winTarget}</span>
-        </span>
-        <span className="pml-mini-tile-chev" aria-hidden>
-          <IconChevronDown />
-        </span>
-      </button>
-      <button
-        type="button"
-        className="pml-mini-tile"
-        onClick={() => setTimedTurnsUi((v) => (v === 'untimed' ? '30s' : 'untimed'))}
-        title="Coming soon"
-        aria-label="Timed turns — coming soon"
-      >
-        <span className="pml-mini-tile-icon" aria-hidden>
-          <IconClock />
-        </span>
-        <span className="pml-mini-tile-body">
-          <span className="pml-mini-tile-label">Timed turns</span>
-          <span className="pml-mini-tile-value">{timedTurnsUi === 'untimed' ? 'Untimed' : '30s / turn'}</span>
-        </span>
-        <span className="pml-mini-tile-chev" aria-hidden>
-          <IconChevronDown />
-        </span>
-      </button>
-      <div className="pml-mini-tile pml-mini-tile--static">
-        <span className="pml-mini-tile-icon" aria-hidden>
-          <IconShield />
-        </span>
-        <span className="pml-mini-tile-body">
-          <span className="pml-mini-tile-label">Rated match</span>
-          <span className="pml-mini-tile-value">{isRatedEligible ? 'Rated' : 'Unrated'}</span>
-        </span>
-        <span
-          className={`pml-rated-badge${isRatedEligible ? ' is-rated' : ' is-unrated'}`}
-          aria-hidden
-        >
-          {isRatedEligible ? 'Rated' : 'Unrated'}
-        </span>
-      </div>
-      <div className="pml-mini-tile pml-mini-tile--static">
-        <span className="pml-mini-tile-icon" aria-hidden>
-          <IconEye />
-        </span>
-        <span className="pml-mini-tile-body">
-          <span className="pml-mini-tile-label">Spectators</span>
-          <span className="pml-mini-tile-value pml-mini-tile-value--muted">Coming soon</span>
-        </span>
-      </div>
-    </div>
-  );
+  const formatLabel = dealFormat === 14 ? '14-Tile' : '7-Tile';
+  const hasRoom = phase === 'room' && Boolean(joinedRoom);
 
-  const renderFormatChoices = (locked: boolean) => (
-    <div className={`pml-tile-row${locked ? ' pml-tile-row--locked' : ''}`}>
-      <button
-        type="button"
-        className={`pml-choice${dealFormat === 7 ? ' is-active' : ''}${locked && dealFormat === 7 ? ' is-locked' : ''}`}
-        onClick={() => !locked && setDealFormat(7)}
-        disabled={locked}
-      >
-        {renderChoiceBadge(dealFormat === 7, locked)}
-        <div className="pml-choice-icon" aria-hidden>
-          <IconDominoSm format={7} />
-        </div>
-        <div className="pml-choice-title">7 Tiles</div>
-        <div className="pml-choice-sub">Classic 7-tile format</div>
-      </button>
-      <button
-        type="button"
-        className={`pml-choice${dealFormat === 14 ? ' is-active' : ''}${locked && dealFormat === 14 ? ' is-locked' : ''}`}
-        onClick={() => !locked && setDealFormat(14)}
-        disabled={locked}
-      >
-        {renderChoiceBadge(dealFormat === 14, locked)}
-        <div className="pml-choice-icon" aria-hidden>
-          <IconDominoSm format={14} />
-        </div>
-        <div className="pml-choice-title">14 Tiles</div>
-        <div className="pml-choice-sub">Extended 14-tile format</div>
-      </button>
-      <button type="button" className="pml-choice is-disabled" disabled>
-        <div className="pml-choice-icon" aria-hidden>
-          <IconSliders />
-        </div>
-        <div className="pml-choice-title">Custom Rules</div>
-        <div className="pml-choice-sub">Coming soon</div>
-      </button>
-    </div>
-  );
-
-  const renderPrivacyChoices = (locked: boolean) => (
-    <div className={`pml-tile-row${locked ? ' pml-tile-row--locked' : ''}`}>
-      <button
-        type="button"
-        className={`pml-choice${privacy === 'code' ? ' is-active' : ''}${locked && privacy === 'code' ? ' is-locked' : ''}`}
-        onClick={() => !locked && setPrivacy('code')}
-        disabled={locked}
-      >
-        {renderChoiceBadge(privacy === 'code', locked)}
-        <div className="pml-choice-icon" aria-hidden>
-          <IconKey />
-        </div>
-        <div className="pml-choice-title">Room Code</div>
-        <div className="pml-choice-sub">Join via six-character code</div>
-      </button>
-      <button
-        type="button"
-        className={`pml-choice${privacy === 'invite' ? ' is-active' : ''}${locked && privacy === 'invite' ? ' is-locked' : ''}`}
-        onClick={() => !locked && setPrivacy('invite')}
-        disabled={locked}
-      >
-        {renderChoiceBadge(privacy === 'invite', locked)}
-        <div className="pml-choice-icon" aria-hidden>
-          <LockIcon />
-        </div>
-        <div className="pml-choice-title">Invite Link</div>
-        <div className="pml-choice-sub">Share a private invite link</div>
-      </button>
-      <button type="button" className="pml-choice is-disabled" disabled>
-        <div className="pml-choice-icon" aria-hidden>
-          <IconUsers />
-        </div>
-        <div className="pml-choice-title">Friends Only</div>
-        <div className="pml-choice-sub">Coming soon</div>
-      </button>
-    </div>
-  );
-
-  const invitePlayerBlock = isRoomHost || phase === 'room' ? (
-    <div className="pml-section-invite-block">
-      {isRoomHost && (
+  // Section 1 — Match format. Mirrors Quick Match's eyebrow + heading + body,
+  // then a single segmented control for the one real choice (7 vs 14 tiles).
+  const formatSection = (
+    <div className="pml-section">
+      <div className="fritz-section-label">Format</div>
+      <h2 className="pml-section-heading">Private 1v1</h2>
+      {hasRoom ? (
+        <span className="pml-format-lock">{formatLabel} · locked in</span>
+      ) : (
         <>
-          <div className="pml-section-label">4. Invite player</div>
-          <div className="pml-invite-actions-strip">
-            <div className="pml-invite-cell pml-invite-cell--copy">
-              <Button
-                variant="outline"
-                type="button"
-                className="pml-invite-copy-full"
-                onClick={() => handleCopyInviteLink(onCopyInviteLink)}
-              >
-                {copiedInvite ? 'Copied!' : 'Copy invite link'}
-              </Button>
-            </div>
-            {isRatedEligible && (
-              <Button
-                variant="outline"
-                type="button"
-                className="pml-invite-copy-full"
-                onClick={() => setShowFriendPicker((prev) => !prev)}
-              >
-                {showFriendPicker ? 'Close Friend List' : 'Invite a Friend'}
-              </Button>
-            )}
+          <p className="pml-section-body">
+            A direct duel against a friend. No rating gate — anyone with the code can join.
+          </p>
+          <div className="pml-format-seg" role="group" aria-label="Tile count">
+            <button
+              type="button"
+              className={`pml-format-seg__opt${dealFormat === 7 ? ' is-on' : ''}`}
+              aria-pressed={dealFormat === 7}
+              onClick={() => setDealFormat(7)}
+            >
+              7 Tiles
+            </button>
+            <button
+              type="button"
+              className={`pml-format-seg__opt${dealFormat === 14 ? ' is-on' : ''}`}
+              aria-pressed={dealFormat === 14}
+              onClick={() => setDealFormat(14)}
+            >
+              14 Tiles
+            </button>
           </div>
-
-          {isRatedEligible && showFriendPicker && (
-            <div className="pml-friend-picker-dropdown">
-              {friendsLoading && (
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
-                  Loading online friends…
-                </div>
-              )}
-              {friendsError && (
-                <div style={{ fontSize: '12px', color: 'var(--accent-red)', padding: '6px' }}>
-                  {friendsError}
-                </div>
-              )}
-              {!friendsLoading && !friendsError && friends.length === 0 && (
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '6px' }}>
-                  No friends online right now.
-                </div>
-              )}
-              {!friendsLoading &&
-                !friendsError &&
-                friends.map((friend) => {
-                  const cState = getFriendChallengeUiState(
-                    friend.username,
-                    friend.userId,
-                    creatingUserId,
-                    pendingChallenge,
-                  );
-                  return (
-                    <div key={friend.userId} className="pml-friend-row">
-                      <span className="pml-friend-row__name">@{friend.username}</span>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
-                        disabled={isChallengeButtonDisabled(cState, friend.presence_status)}
-                        onClick={() => handleSendChallenge(friend)}
-                      >
-                        {challengeButtonLabel(cState)}
-                      </Button>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
         </>
       )}
-      {phase === 'room' ? (
-        <div className="pml-invite-leave-row">
-          <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
-            ← Leave Room
-          </button>
-        </div>
-      ) : null}
     </div>
-  ) : null;
+  );
+
+  // Section 2 — Invite. Present from first render; before the room exists it is a
+  // placeholder, after create the room code + invite actions fill in place (no
+  // sliding top bar, no appended "4. Invite player" block).
+  const inviteSection = (
+    <div className="pml-section pml-section--invite">
+      <div className="fritz-section-label">Invite</div>
+      {!hasRoom ? (
+        <>
+          <h2 className="pml-section-heading">Create a room</h2>
+          <p className="pml-section-body">
+            Generate a code your friend enters on their device to join the lobby.
+          </p>
+          <div className="pml-invite-placeholder" aria-hidden>
+            <LockIcon />
+            <span>Your room code and invite links appear here once the lobby is live.</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="pml-roomcode-cell">
+            <div className="pml-roomcode-cell__text">
+              <span className="pml-roomcode-cell__label">Room code</span>
+              <span className="pml-roomcode-bar-code" aria-live="polite">
+                {joinedRoom}
+              </span>
+            </div>
+            {onCopyRoomCode ? (
+              <button
+                type="button"
+                className="pml-roomcode-cell__copy"
+                onClick={onCopyRoomCode}
+                aria-label="Copy room code"
+              >
+                <IconCopy />
+                Copy
+              </button>
+            ) : null}
+          </div>
+
+          {isRoomHost ? (
+            <>
+              <div className="pml-invite-actions">
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="pml-invite-action"
+                  onClick={() => handleCopyInviteLink(onCopyInviteLink)}
+                >
+                  {copiedInvite ? 'Copied!' : 'Copy invite link'}
+                </Button>
+                {isRatedEligible ? (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="pml-invite-action"
+                    onClick={() => setShowFriendPicker((prev) => !prev)}
+                  >
+                    {showFriendPicker ? 'Close friend list' : 'Invite a friend'}
+                  </Button>
+                ) : null}
+              </div>
+
+              {isRatedEligible && showFriendPicker ? (
+                <div className="pml-friend-picker-dropdown">
+                  {friendsLoading && (
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', padding: '6px' }}>
+                      Loading online friends…
+                    </div>
+                  )}
+                  {friendsError && (
+                    <div style={{ fontSize: '12px', color: 'var(--accent-red)', padding: '6px' }}>
+                      {friendsError}
+                    </div>
+                  )}
+                  {!friendsLoading && !friendsError && friends.length === 0 && (
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '6px' }}>
+                      No friends online right now.
+                    </div>
+                  )}
+                  {!friendsLoading &&
+                    !friendsError &&
+                    friends.map((friend) => {
+                      const cState = getFriendChallengeUiState(
+                        friend.username,
+                        friend.userId,
+                        creatingUserId,
+                        pendingChallenge,
+                      );
+                      return (
+                        <div key={friend.userId} className="pml-friend-row">
+                          <span className="pml-friend-row__name">@{friend.username}</span>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
+                            disabled={isChallengeButtonDisabled(cState, friend.presence_status)}
+                            onClick={() => handleSendChallenge(friend)}
+                          >
+                            {challengeButtonLabel(cState)}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          <div className="pml-invite-leave-row">
+            <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
+              ← Leave Room
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // Section 3 — Match summary. Same treatment as Quick Match's summary strip.
+  const summarySection = (
+    <div className="pml-section">
+      <div className="fritz-section-label">Match Summary</div>
+      <div className="fritz-summary-strip">
+        <div className="fritz-summary-item">
+          <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
+            <IconTarget />
+          </div>
+          <div>
+            <div className="fritz-summary-value">First to {winTarget}</div>
+            <div className="fritz-summary-key">Target</div>
+          </div>
+        </div>
+        <div className="fritz-summary-divider" aria-hidden />
+        <div className="fritz-summary-item">
+          <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
+            <IconDominoSm format={dealFormat} />
+          </div>
+          <div>
+            <div className="fritz-summary-value">{formatLabel}</div>
+            <div className="fritz-summary-key">Format</div>
+          </div>
+        </div>
+        <div className="fritz-summary-divider" aria-hidden />
+        <div className="fritz-summary-item">
+          <div
+            className="fritz-summary-icon"
+            style={{ color: isRatedEligible ? 'var(--tier-elite)' : 'var(--tier-standard)' }}
+          >
+            <IconShield />
+          </div>
+          <div>
+            <div className="fritz-summary-value">{isRatedEligible ? 'Rated' : 'Unranked'}</div>
+            <div className="fritz-summary-key">Rating</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="pvf-control-panel pml-mp-panel">
@@ -411,28 +365,6 @@ export function PrivateMatchLobbyControlPanel({
           >
             Join lobby
           </button>
-        </div>
-      ) : null}
-      {phase === 'room' && joinedRoom ? (
-        <div className="pml-roomcode-bar" aria-label="Your room code">
-          <div className="pml-roomcode-bar-inner">
-            <span className="pml-roomcode-bar-label">Your room code</span>
-            <div className="pml-roomcode-bar-row">
-              <span className="pml-roomcode-bar-code" aria-live="polite">
-                {joinedRoom}
-              </span>
-              {onCopyRoomCode ? (
-                <button
-                  type="button"
-                  className="pml-roomcode-bar-button"
-                  onClick={onCopyRoomCode}
-                  aria-label="Copy room code"
-                >
-                  <IconCopy />
-                </button>
-              ) : null}
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -504,22 +436,9 @@ export function PrivateMatchLobbyControlPanel({
 
         {phase === 'lobby' && lobbyTab === 'create' ? (
           <>
-            <div>
-              <div className="pml-section-label">1. Match format</div>
-              {renderFormatChoices(false)}
-            </div>
-
-            <div>
-              <div className="pml-section-label">2. Lobby privacy</div>
-              {renderPrivacyChoices(false)}
-            </div>
-
-            <div>
-              <div className="pml-section-label">3. Match settings</div>
-              {matchSettingsStrip}
-            </div>
-
-            {invitePlayerBlock}
+            {formatSection}
+            {inviteSection}
+            {summarySection}
           </>
         ) : null}
 
@@ -585,22 +504,9 @@ export function PrivateMatchLobbyControlPanel({
 
         {phase === 'room' ? (
           <>
-            <div>
-              <div className="pml-section-label">1. Match format</div>
-              {renderFormatChoices(true)}
-            </div>
-
-            <div>
-              <div className="pml-section-label">2. Lobby privacy</div>
-              {renderPrivacyChoices(true)}
-            </div>
-
-            <div>
-              <div className="pml-section-label">3. Match settings</div>
-              {matchSettingsStrip}
-            </div>
-
-            {invitePlayerBlock}
+            {formatSection}
+            {inviteSection}
+            {summarySection}
 
             {roomRecoveryState !== 'idle' ? (
               <div className="pml-muted-card">
