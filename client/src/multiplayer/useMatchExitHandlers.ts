@@ -116,6 +116,7 @@ export function useMatchExitHandlers(
       logger.operational('leave-game', 'ack/error', { roomCode: activeRoomCode, error: message });
       handleMatchAbandonFailure(message, { shellSetActionError, showToast });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing deps are a stable ref plus stable setters
   }, [
     clearRecoverableRoomState,
     currentTournamentContext,

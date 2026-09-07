@@ -832,6 +832,7 @@ function MultiplayerGameShellComponent({
       players.length === 2 &&
       players.every((p) => Boolean(p.userId)),
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- multiplayerRatingSummary is a plain object literal; the downstream memo tolerates the identity churn
   const multiplayerRatingSummary =
     multiplayerRatingEligible && state?.gameOver
       ? {

@@ -266,6 +266,7 @@ export function usePlayerPlacementHandler({
 
     commitResult();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ports is a stable runtime handle
   }, [
     applyAndNotify,
     appendGhostMove,

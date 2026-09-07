@@ -302,6 +302,7 @@ export function usePlayerNoMoveEffect({
     return () => {
       // Progress renders from this draw sequence should not cancel its final pass/block result.
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ports and userPlayMoves are stable for the effect scope; it keys on the no-move trigger
   }, [
     acceptGuidedTranscriptTurn,
     appendGhostMove,

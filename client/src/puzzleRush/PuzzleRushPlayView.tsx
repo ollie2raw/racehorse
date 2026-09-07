@@ -103,6 +103,7 @@ export function PuzzleRushPlayView({
     setDone(false);
     runningScoreRef.current = 0;
     moveTraceRef.current = [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on puzzle.puzzleId + puzzle.ordinal; the rest of the puzzle object is stable per ordinal
   }, [puzzle.puzzleId, puzzle.ordinal]);
 
   const legalMoves = useMemo(() => {

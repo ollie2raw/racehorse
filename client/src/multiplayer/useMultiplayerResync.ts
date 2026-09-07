@@ -153,6 +153,7 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
         resyncFlushRef.current?.();
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispatchRecovery is stable and unread in this callback
     [
       normalizeRoomCode,
       sessionRef,

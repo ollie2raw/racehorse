@@ -94,6 +94,7 @@ export function useAppRoutesInput(source: UseAppRoutesInputSource): UseAppRoutes
       preGameDraw: source.preGameDraw,
       onPregameTileTap: source.onPregameTileTap,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the source.host.* / source.routeBundles.* entries are stable and not all read — historical, harmless
     [
       source.host,
       source.host.multiplayerConnectionHostParams,

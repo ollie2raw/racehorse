@@ -69,6 +69,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep auth is read only when the returned handler fires, not during the useCallback body
   const handleOpenAuthModal = useCallback(() => auth.setAuthModalOpen(true), [auth.setAuthModalOpen]);
   // App.tsx owns sign-out: it tears down room recovery and multiplayer state
   // alongside the Supabase call.
@@ -198,6 +199,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
         setTournamentSubView: tournament.setTournamentSubView,
       },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the memo keys on the specific source fields it reads; adding the parent objects would rebuild it every render
     [
       auth.authUser,
       auth.authProfile,

@@ -203,6 +203,7 @@ export function useAuthoringCapture({
       });
       return next;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is fritzSessionReplyRef, a stable ref (see the comment: it must NOT be in deps)
   }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]);
 
   // ── Authoring V1: persist session to localStorage on every steps change ─────
@@ -216,6 +217,7 @@ export function useAuthoringCapture({
       matchSnapshot: JSON.stringify(matchRef.current),
     };
     saveAuthoringSession(session);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is matchRef, a stable ref
   }, [isAuthoringMode, authoringSteps]);
 
   // ── Authoring V2: keep events ref in sync ────────────────────────────────
@@ -238,6 +240,7 @@ export function useAuthoringCapture({
       lastEventIndex: authoringV2Events.length - 1,
     };
     lessonV2ApiRef.current?.saveV2AuthoringSession(session);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is matchRef, a stable ref
   }, [isAuthoringV2Mode, authoringV2Events, authoringV2HandStarts, match]);
 
   // ── Authoring V2: capture LessonV2HandStart when a new hand begins ───────
@@ -318,6 +321,7 @@ export function useAuthoringCapture({
         return [...base, newStep];
       });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is fritzSessionReplyRef, a stable ref
     [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand],
   );
 

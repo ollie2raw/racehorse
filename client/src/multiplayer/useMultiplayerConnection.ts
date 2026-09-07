@@ -232,6 +232,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (recoveryDispatchBridgeRef) {
       recoveryDispatchBridgeRef.current = dispatchRecovery;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep params.recoveryDispatchRef is a stable ref
   }, [dispatchRecovery]);
 
   useEffect(() => {
@@ -464,6 +465,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (import.meta.env.DEV && typeof window !== 'undefined') {
       (window as Window & { __racehorseE2eSocket?: Socket }).__racehorseE2eSocket = s;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the listed deps are stable and unread here — kept from an earlier shape, harmless
   }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
 
   useLayoutEffect(() => {

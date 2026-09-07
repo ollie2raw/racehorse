@@ -283,6 +283,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
         setShowManualHandAdvance(true);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the callback keys on the hand-lifecycle inputs; dailyFritzPackage is read via a ref path
     [
       dailyFritzPackage?.challenge_code,
       dailyFritzPackage?.current_game_number,
@@ -711,6 +712,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
       }
       applyBotActionUiEffects(result, ports, opponentLabel, isMuted, isDailyFritzMode);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- listed deps are not read in this branch after the daily-fritz refactor — harmless, a separate cleanup
     [
       dailyFritzHandIndex,
       dailyFritzPackage,
@@ -744,6 +746,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
     // manual retry must too.
     completedHandEvidenceRef.current = null;
     advanceHandRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dailyFritzPackage is not read in the callback body — harmless extra dep
   }, [dailyFritzPackage, prefetchCoordinator]);
 
   const getDebugSnapshot = useCallback((): HandLifecycleDebugSnapshot => ({

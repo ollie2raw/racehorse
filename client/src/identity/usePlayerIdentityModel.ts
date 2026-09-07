@@ -135,6 +135,7 @@ export function usePlayerIdentityModel(request: PlayerIdentityRequest): PlayerId
     });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on the specific request fields that should re-seed the model, not the whole request object
   }, [request.currentUserId, request.subjectUserId, request.subjectUsername]);
 
   return state;

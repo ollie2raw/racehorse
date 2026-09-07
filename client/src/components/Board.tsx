@@ -691,6 +691,7 @@ function BoardComponent(
       logLayoutDebug(validPositions.length, selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null, nextLayout);
     }
     return nextLayout;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the layout memo keys on the inputs that change its geometry; boardTileCount/camera.scale are derived from those and would only add churn
   }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions, isResettingBoard]);
   const placementZones = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation

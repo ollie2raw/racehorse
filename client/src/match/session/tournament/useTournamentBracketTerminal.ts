@@ -75,6 +75,7 @@ export function useTournamentBracketTerminal({
         void tournament.openBracket(tid);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on the tournament fields it acts on; the whole object changes on every poll
   }, [
     appMode,
     authUserId,

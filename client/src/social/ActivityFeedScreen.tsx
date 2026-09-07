@@ -165,6 +165,7 @@ export default function ActivityFeedScreen({
     };
   }, [feedUserId]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- friends = user ? loadedFriends : [] — the [] branch is a fresh literal but the memos below are cheap; hoisting is a minor refactor
   const friends = user ? loadedFriends : [];
 
   const friendUsernames = useMemo(

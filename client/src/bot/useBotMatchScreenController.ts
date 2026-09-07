@@ -36,6 +36,7 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
   });
 
   const bootstrap = useBotMatchBootstrap({ props, guidedBoot });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect reads props.mode once on the relevant transition; keying on the whole props object would refire it every render
   useEffect(() => { if (props.mode === 'daily-fritz') props.onPublicStateChange?.(bootstrap.match); }, [bootstrap.match, props.mode, props.onPublicStateChange]);
 
   const refs = useBotMatchRefs({

@@ -307,6 +307,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
       boneyardCount: match.boneyard.length,
       boneyardOrder: match.boneyard.map((tile) => `${tile.low}-${tile.high}`),
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time bootstrap — reads the initial match snapshot on mount by design
   }, []);
 
   return {

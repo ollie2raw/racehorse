@@ -210,6 +210,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
       // eslint-disable-next-line react-hooks/immutability -- ref.current write inside an event callback, not render
       logicalGameplayActionRef.current = null;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on the state fields that gate the action, not the whole GameState (which changes every tick)
   }, [state?.sequence, state?.handNumber, state?.gameOver, state?.handOver, joinedRoom, logicalGameplayActionRef]);
 
   const { startGame, requestRematch } = useStartGameAndRematch({

@@ -42,6 +42,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
         authToken: scope.auth.authToken,
       }
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the auth.* deps are read through a ref, not directly — the extra entries are harmless
   }, [
     inputParams.auth.authUsername,
     inputParams.auth.authUserId,

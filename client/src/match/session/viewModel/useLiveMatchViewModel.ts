@@ -136,6 +136,7 @@ export function useLiveMatchViewModel(input: LiveMatchViewModelInput): LiveMatch
 
   const derived = useMemo(
     () => deriveLiveMatchViewModel({ ...rest, frozenHandOverBoard }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the memo spreads rest but keys on the fields it actually reads to avoid rebuilding the view model every render
     [
       rest.state,
       rest.legalMoves,

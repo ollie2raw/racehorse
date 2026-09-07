@@ -92,6 +92,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
       setLearnHowToPlayOpen(false);
       setAppMode('singlePlayerHub');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is setAppMode, a stable setter; the effect is a mode guard that must key only on appMode
   }, [appMode]);
 
   // Mode guard: JOURNEY_MODE_VISIBLE
@@ -99,6 +100,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
     if (!JOURNEY_MODE_VISIBLE && appMode === 'journey') {
       setAppMode('singlePlayerHub');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is setAppMode, a stable setter; mode guard keys only on appMode
   }, [appMode]);
 
   // Clear learnHowToPlayOpen when leaving learn
@@ -144,6 +146,7 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
 
     window.addEventListener('popstate', applyBrowserRoute);
     return () => window.removeEventListener('popstate', applyBrowserRoute);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing deps are stable setters; the one-shot bootstrap keys on its guard ref
   }, [setActiveTournamentId, setTournamentSubView]);
 
   // Sync URL to state

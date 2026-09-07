@@ -287,6 +287,7 @@ export function useDailyFritzSessionPersistence({
         serverSyncTimerRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is syncCheckpointToServer, a useCallback stable within the persistence lifecycle
   }, [
     attemptId,
     authorityRevision,
@@ -329,6 +330,7 @@ export function useDailyFritzSessionPersistence({
       window.removeEventListener('pagehide', flushAll);
       window.removeEventListener('beforeunload', flushAll);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is flushPendingCheckpointOnUnload, a stable useCallback; unload handler wiring
   }, [enabled, attemptId, verifiedMatchId]);
 
   useEffect(() => {

@@ -225,6 +225,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
       cancelled = true;
       controller.abort();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- identity/tournament are captured in the functional setState; the effect keys on the refresh trigger
   }, [
     authLoading,
     identity.kind,

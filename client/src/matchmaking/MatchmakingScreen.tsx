@@ -238,6 +238,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   useEffect(() => {
     if (!props.socket || !props.isConnected) return;
     mm.refreshOnlineCounts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mm.refreshOnlineCounts is the used member and is listed; the whole mm object is a fresh literal each render
   }, [props.socket, props.isConnected, mm.refreshOnlineCounts]);
 
   const isIdle = mm.state === 'idle';

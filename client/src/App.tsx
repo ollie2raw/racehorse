@@ -547,6 +547,7 @@ export default function App() {
     const handler = () => setAuthModalOpen(true);
     window.addEventListener('rh:session-expired', handler);
     return () => window.removeEventListener('rh:session-expired', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is setAuthModalOpen, a stable state setter — a no-op add; the effect is a one-time mount listener
   }, []);
 
   const {

@@ -87,6 +87,7 @@ export function useTournamentSessionLifecycle({
       tournamentId: tournament.recoveryMatch?.tournamentId,
       matchStatus: tournament.recoveryMatch?.matchStatus,
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
     appMode,
     attemptTournamentAttach,
@@ -117,6 +118,7 @@ export function useTournamentSessionLifecycle({
         tournament.clearPendingMatch();
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
     attemptTournamentAttach,
     setActiveTournamentId,
@@ -132,6 +134,7 @@ export function useTournamentSessionLifecycle({
     if (tournamentSubView === 'result' && activeTournamentId && !tournament.activeBracket) {
       void tournament.openBracket(activeTournamentId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [activeTournamentId, tournament.activeBracket, tournament.openBracket, tournamentSubView]);
 
   useEffect(() => {

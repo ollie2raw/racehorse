@@ -240,6 +240,7 @@ export default function NoBrainerLabScreen({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- persists the solve to storage on win and syncs the solved count back
       setSolvedCount(getNoBrainerSolvedCount(userId));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on practiceState.status and record.key — the fields that gate the solve — not the whole objects
   }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);
 
   if (!record || !practiceState) {
