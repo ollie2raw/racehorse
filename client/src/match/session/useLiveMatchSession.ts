@@ -307,6 +307,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     setRematchRequested,
     setSelectedTile: tileSelection.setSelectedTile,
     setDrawStepMyHand,
+    setDrawPulseIndex,
     showToast,
     onGameStart,
     appendMultiplayerMove,

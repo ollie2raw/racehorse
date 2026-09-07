@@ -349,4 +349,68 @@ describe('useLiveMatchActions - isGameplayActionBlocked is cosmetic/unblocked on
     });
   });
 
+  // MP-JIT-2 step 4 — DRAW: immediate face-down placeholder on click (visual
+  // only, no engine prediction, no rollback state).
+  describe('MP-JIT-2 DRAW placeholder', () => {
+    const drawState = () =>
+      makeState({
+        boneyard: [
+          { low: 0, high: 0 },
+          { low: 1, high: 1 },
+          { low: 2, high: 2 },
+          { low: 3, high: 3 },
+        ],
+        players: {
+          [YOU]: { id: YOU, hand: [{ low: 1, high: 2 }, { low: 3, high: 4 }], score: 0 },
+          [OPP]: { id: OPP, hand: [], score: 0 },
+        },
+      });
+
+    function drawParams(overrides: Partial<UseLiveMatchActionsParams> = {}) {
+      const setDrawStepMyHand = vi.fn();
+      const setDrawPulseIndex = vi.fn();
+      const params = makeParams({
+        canDraw: true,
+        state: drawState(),
+        stateRef: { current: drawState() },
+        legalMovesRef: { current: [] },
+        setDrawStepMyHand,
+        setDrawPulseIndex,
+        ...overrides,
+      });
+      return { params, setDrawStepMyHand, setDrawPulseIndex };
+    }
+
+    it('shows a face-down placeholder in the hand on click; the hook does not clear it on the success path', async () => {
+      const { params, setDrawStepMyHand, setDrawPulseIndex } = drawParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: true, sequence: 3 });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.draw();
+      });
+
+      expect(setDrawStepMyHand).toHaveBeenCalledWith([
+        { low: 1, high: 2 },
+        { low: 3, high: 4 },
+        { low: -1, high: -1 },
+      ]);
+      expect(setDrawPulseIndex).toHaveBeenCalledWith(2);
+      expect(setDrawStepMyHand).not.toHaveBeenCalledWith(null);
+    });
+
+    it('clears the placeholder on a rejected draw', async () => {
+      const { params, setDrawStepMyHand, setDrawPulseIndex } = drawParams();
+      vi.mocked(emitGameAction).mockResolvedValueOnce({ ok: false, error: 'Boneyard locked' });
+
+      const { result } = renderHook(() => useLiveMatchActions(params));
+      await act(async () => {
+        await result.current.draw();
+      });
+
+      expect(setDrawStepMyHand).toHaveBeenCalledWith(null);
+      expect(setDrawPulseIndex).toHaveBeenCalledWith(null);
+      expect(params.setActionError).toHaveBeenCalledWith('Boneyard locked');
+    });
+  });
 });

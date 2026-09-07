@@ -1,10 +1,41 @@
 # MP-JIT-2 — optimistic local apply for multiplayer MOVE / DRAW / PASS
 
-**Status: v1 SHIPPED 2026-09-07 — MOVE only.** PASS and DRAW stay reconcile-only
-(see "v1 scope" below). The rest of this doc is the original plan; deviations are
+**Status: SHIPPED 2026-09-07** — MOVE + PASS optimistic; DRAW immediate visual
+placeholder only. The rest of this doc is the original plan; deviations are
 noted inline.
 
-## v1 scope (what shipped)
+## Steps 2–4 (2026-09-07 follow-up)
+
+- **Step 2 — continued-turn legal moves.** A scoring/double play that keeps the
+  turn (no forced draw) previously blanked `legalMoves` for ~1 RTT.
+  `computeOptimisticPlayState` now returns `{ nextState, nextLegalMoves,
+  nextCanDraw }`; for a retained turn it computes `getLegalMoves(next, you)`
+  locally — the actor can continue immediately with no visible wait. A
+  turn that passed still yields `[]`.
+- **Step 3 — optimistic PASS.** `computeOptimisticPassState` mirrors MOVE (no
+  hidden information; the engine validates and hands the turn off
+  deterministically). `usePassAction` gets the same optimistic-apply /
+  rollback-on-`!ok` / commit-on-`ok` wiring. Blocked-hand results (`handOver`)
+  are deferred to the server. Snapshot/rollback machinery in
+  `useLiveMatchSession` is now generic (`runOptimisticAction`), shared by play
+  and pass.
+- **Step 4 — DRAW: immediate visual placeholder only.**
+  - **Shipped:** on DRAW click, one face-down placeholder tile
+    (`{ low: -1, high: -1 }`) is appended to the displayed hand
+    (`setDrawStepMyHand`) with the incoming-tile pulse (`setDrawPulseIndex`),
+    so the player sees "a tile is coming" on the same tick instead of a bare
+    pending state. `HandView.renderTile` renders a negative-pip tile as
+    `<DominoTile faceDown disabled>`. Cleared by the hook only on the error
+    paths; the success path is cleared by the authoritative `state:update` /
+    `game:draw_animation` exactly as before — **no new rollback state, no
+    engine prediction.**
+  - **Deferred:** predicting the drawn tile(s) (the boneyard is genuinely
+    hidden — `{-1,-1}` placeholders), and any change to the per-tile
+    flight/step animation from the boneyard (that remains driven by
+    `game:draw_animation`). A multi-draw chain still shows one placeholder
+    until the real steps arrive.
+
+## v1 scope (what shipped — MOVE core)
 
 - **`client/src/match/session/actions/optimisticPlay.ts`** — pure
   `computeOptimisticPlayState(state, you, tile, position)`: runs

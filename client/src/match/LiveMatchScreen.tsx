@@ -73,6 +73,22 @@ const HandView = React.memo(function HandView({
   const playableTileKeys = useMemo(() => buildPlayableTileKeys(legalMoves), [legalMoves]);
 
   const renderTile = (tile: Tile, idx: number) => {
+    // MP-JIT-2 step 4: an immediate face-down placeholder while a draw is in
+    // flight ({ low: -1 } convention). Non-interactive; the real tile replaces
+    // it when the authoritative update / draw animation arrives.
+    const isPlaceholder = tile.low < 0 || tile.high < 0;
+    if (isPlaceholder) {
+      return (
+        <DominoTile
+          key={`draw-placeholder-${idx}`}
+          tile={{ low: 0, high: 0 }}
+          size={tileSize}
+          faceDown
+          disabled
+          className={drawPulseIndex === idx ? 'new-draw' : ''}
+        />
+      );
+    }
     const isSel = selectedTile && tileEquals(tile, selectedTile);
     const { highlight, unplayable } = getHandTileLegality(tile, isMyTurn, playableTileKeys);
     return (

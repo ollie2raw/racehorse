@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { GameState, Move } from '../../../types';
+import type { GameState, Move, Tile } from '../../../types';
 import { drawAudit } from '../../../multiplayer/drawAudit';
 import { mpPerfBeginAction, mpPerfMarkAck } from '../../../multiplayer/mpPerf';
 import { emitGameAction } from '../../../multiplayer/roomTransport';
@@ -36,6 +36,9 @@ export type UseDrawActionParams = {
   showToast: (message: string, duration?: number) => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
   markUncertainAndResync: (requestId: string, error?: string) => void;
+  /** MP-JIT-2 step 4: immediate face-down placeholder while the draw is in flight. */
+  setDrawStepMyHand?: Dispatch<SetStateAction<Tile[] | null>>;
+  setDrawPulseIndex?: Dispatch<SetStateAction<number | null>>;
 };
 
 /** DRAW action handler, extracted verbatim from useLiveMatchActions. */
@@ -59,6 +62,8 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
     showToast,
     appendMultiplayerMove,
     markUncertainAndResync,
+    setDrawStepMyHand,
+    setDrawPulseIndex,
   } = params;
 
   return useCallback(async () => {
@@ -75,6 +80,14 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
     mpPerfBeginAction('draw', baselineSequence);
     setPendingUiAction('draw');
     setPendingActionRefDiag(true);
+    // MP-JIT-2 step 4 — immediate feedback only (NO engine prediction, NO
+    // rollback state): show one face-down placeholder tile arriving in the hand
+    // on click. The real drawn tile(s) replace it via the authoritative
+    // `state:update` / `game:draw_animation`. Cleared here only on the error
+    // paths; the success path is cleared by the projection, same as today.
+    const handBeforeDraw = stateNow?.players[you]?.hand ?? [];
+    setDrawStepMyHand?.([...handBeforeDraw, { low: -1, high: -1 } as Tile]);
+    setDrawPulseIndex?.(handBeforeDraw.length);
     const telemetry = buildGameplayMoveTelemetry({ stateNow, legalMovesNow, you });
     const handNumber = stateNow?.handNumber ?? 0;
     const signature = buildLogicalActionSignature({
@@ -119,6 +132,8 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
         error: resp?.error,
       });
       if (!resp?.ok) {
+        setDrawStepMyHand?.(null);
+        setDrawPulseIndex?.(null);
         if (resp?.uncertain) {
           markUncertainAndResync(
             requestId,
@@ -145,6 +160,8 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
       });
     } catch (e) {
       mpPerfMarkAck(false);
+      setDrawStepMyHand?.(null);
+      setDrawPulseIndex?.(null);
       if (logicalGameplayActionRef.current?.requestId === requestId) {
         logicalGameplayActionRef.current = {
           ...logicalGameplayActionRef.current,
@@ -176,5 +193,7 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
     setActionError,
     setPendingUiAction,
     markUncertainAndResync,
+    setDrawStepMyHand,
+    setDrawPulseIndex,
   ]);
 }

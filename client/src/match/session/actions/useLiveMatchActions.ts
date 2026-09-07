@@ -65,6 +65,7 @@ export type UseLiveMatchActionsParams = {
   setRematchRequested: Dispatch<SetStateAction<boolean>>;
   setSelectedTile: Dispatch<SetStateAction<Tile | null>>;
   setDrawStepMyHand: Dispatch<SetStateAction<Tile[] | null>>;
+  setDrawPulseIndex?: Dispatch<SetStateAction<number | null>>;
   showToast: (message: string, duration?: number) => void;
   onGameStart: () => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
@@ -131,6 +132,7 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     setRematchRequested,
     setSelectedTile,
     setDrawStepMyHand,
+    setDrawPulseIndex,
     showToast,
     onGameStart,
     appendMultiplayerMove,
@@ -243,6 +245,8 @@ export function useLiveMatchActions(params: UseLiveMatchActionsParams): UseLiveM
     showToast,
     appendMultiplayerMove,
     markUncertainAndResync,
+    setDrawStepMyHand,
+    setDrawPulseIndex,
   });
 
   const pass = usePassAction({
