@@ -204,6 +204,17 @@ loose logs. Only 12 of the 15 are mechanical:
 5. `refactor(log): route multiplayer + guided telemetry through logger` (−~36)
 6. `refactor(learn): replace console.assert with a thrown invariant` (−2)
 
+**Known residual — 4 `no-console` sites in the frozen `learn/` tree.**
+`learn/LearnScenarioScreen.tsx:83`, `learn/engine/rulesAdapter.ts:103` (a
+`console.assert`), `learn/guidedLessonNotes.ts:463`,
+`learn/guidedMatch/guidedMatchLessonLoader.ts:179`. Left untouched: `learn/` is
+on CLAUDE.md's never-touch-without-permission list and has active worktrees
+against it. **Convert when that system is next touched with permission.** This is
+consistent with how `no-console` is handled everywhere else — it never gets a
+zero-gate (only `react-hooks/*` does, in Phase 4), so these 4 live permanently
+under the ratcheting `npm run lint` budget alongside the other non-hooks
+warnings.
+
 **Deferred out of Phase 1b — 3 logs, see Phase 3 unit P3-A below.** The log at
 `usePlayAction.ts:117` and the two in `gameplayBlockDiagnostics.ts` stay
 byte-for-byte intact, scaffold included. Deleting the `usePlayAction` one without
