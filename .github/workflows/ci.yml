@@ -76,6 +76,9 @@ jobs:
       - name: Lint TS/JS
         run: npm run lint --prefix client
 
+      - name: Lint hooks (react-hooks regression gate — must stay at zero)
+        run: npm run lint:hooks --prefix client
+
       - name: Lint CSS
         run: npm run lint:css --prefix client
 

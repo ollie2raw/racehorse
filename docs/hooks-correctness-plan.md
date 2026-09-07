@@ -450,10 +450,55 @@ gameplay-blocking predicate, not diagnostics. `setPendingActionRefDiag`'s name i
 likewise inaccurate once the tracking goes. Renaming either touches 4 files; treat
 as optional follow-up, not part of P3-A.
 
-### Phase 4 — Gate it
+### Phase 3 result — react-hooks family cleared (2026-09-07)
 
-Per D-1: add `lint:hooks` at `--max-warnings 0`, drop `lint` to the residual
-`max-lines` count, wire both into the Client Validation CI job.
+| rule | before | after | how |
+|---|---:|---:|---|
+| `refs` | 88 | 0 | `23b1f2f4` — categorised disables (passed / lazyinit / mirror / read) + one scoped override for the dev debug overlay |
+| `purity` | 11 | 0 | `23b1f2f4` — `performance.now()` / `Date.now()` that are intentional (timing probes, useRef initializers, a countdown tick) |
+| `immutability` | 8 | 0 | `23b1f2f4` — every one is a `ref.current` write inside a callback or layout effect the rule mis-scopes as a render mutation |
+| `exhaustive-deps` | 49 | 0 | `e254a280` — per-site disables; every dep array unchanged |
+| `set-state-in-effect` | 51 | 0 | Phase 2 (2 frozen `learn/` sites get a scoped override) |
+
+**Pass 1's classification did not survive contact with the code, in the same way
+it didn't for `set-state-in-effect`.** The "B — real mechanical fixes" prediction
+for `refs` (25 mirror-writes + 22 render-reads) turned out to be, on reading each
+one: lazy-init singleton idioms the rule doesn't model, refs synced for async
+socket handlers (moving the write past paint is a real timing change), and reads
+in System-9-parked view-models. None was a clean render-phase move. Consistent
+with the D-2 decision and Pass 2, they got disables with per-site reasons.
+
+The genuinely valuable output of Phases 2–3 was the **4 Pass-1 bug fixes** and the
+**gate** below. Restructuring ~150 match-runtime hook sites for a linter was not.
+
+**Two follow-ups explicitly deferred, both real:**
+
+- **P3-A** (below) — remove the dead block-reason diagnostic from `usePlayAction`
+  (1 log + 9 params + 4 effects + 7 refs). It is a signature change to a
+  System-9-parked composed hook in the live MOVE path, test-first, for 3
+  `no-console` warnings that sit comfortably under budget. Not worth the risk in
+  this sweep; still worth doing on its own.
+- **`exhaustive-deps` audit** — the disables record that each array is unchanged
+  and *why* it's believed correct, but that is reasoning, not verification. A
+  real per-hook pass (confirm intent, fix any staleness) is the one piece of this
+  effort left genuinely undone.
+
+### Phase 4 — Gate it — **DONE (2026-09-07)**
+
+- `client/package.json`: `lint:hooks` runs eslint with `.eslintrc.hooks.json`
+  (react-hooks family only) at `--max-warnings 0`. `lint` ratcheted 377 → **51**
+  (40 `max-lines` per D-1 + 7 pre-existing `no-console` + 2 frozen `learn/`
+  `set-state` + 2 `preserve-manual-memoization`).
+- `.eslintrc.hooks.json`: `preserve-manual-memoization` dropped from the gate —
+  it is the compiler's own "I would skip this component" advisory, owned by
+  Phase 5. Scoped `off` overrides for `BotMatchBoardDebugOverlays.tsx` (`refs`)
+  and `AuthoringCoachPanel.tsx` (`set-state-in-effect`, frozen `learn/`).
+- `.github/workflows/ci.yml`: new **"Lint hooks (react-hooks regression gate)"**
+  step in Client Validation, right after "Lint TS/JS". A new un-reviewed
+  `react-hooks/*` warning now fails CI.
+
+Both gates green locally: `npm run lint` → 51 (exit 0), `npm run lint:hooks` → 0
+(exit 0).
 
 ### Phase 5 — React Compiler — **DO NOT START WITHOUT EXPLICIT APPROVAL**
 
