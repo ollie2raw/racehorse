@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import {
   buildFeedRowViewModel,
-  type FeedBadgeTone,
   type FeedIconKind,
+  type FeedRowViewModel,
 } from './activityFeedRowModel';
 import './activityFeed.css';
+import './socialBoard.css';
 
 export type ActivityFeedFilterTab = 'all' | 'friends' | 'wins' | 'streaks' | 'tournaments' | 'mentions';
 
@@ -77,59 +78,67 @@ function FilterTabIcon({ kind }: { kind: (typeof FILTER_TABS)[number]['icon'] })
   }
 }
 
-function FeedCategoryIcon({ kind }: { kind: FeedIconKind }) {
-  const cls = `rh-af-rich-cat rh-af-rich-cat--${kind}`;
-  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true as const };
-  switch (kind) {
-    case 'trophy':
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="M8 4h8v2a4 4 0 0 0 4 4h1v2a5 5 0 0 1-5 5h-1v3H9v-3H8a5 5 0 0 1-5-5V10h1a4 4 0 0 0 4-4V4Z" stroke="currentColor" strokeWidth="1.6" /></svg>
-        </span>
-      );
-    case 'puzzle':
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="M8 8h3V5H8v3Zm5 0h3V5h-3v3ZM8 16h3v3H8v-3Zm5 0h3v3h-3v-3Z" fill="currentColor" /></svg>
-        </span>
-      );
-    case 'flame':
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="M12 3s-4 4.5-4 8a4 4 0 0 0 8 0c0-2-1.5-3.5-2-4.5.5 1 1.5 2.5 1.5 4a2.5 2.5 0 0 1-5 0c0-2.5 2-5.5 2-5.5Z" stroke="currentColor" strokeWidth="1.6" /></svg>
-        </span>
-      );
-    case 'medal':
-    case 'crown':
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="M5 18h14l-1.2-9-3.3 3.5L12 6 9.5 12.5 6.2 9 5 18Z" stroke="currentColor" strokeWidth="1.6" /></svg>
-        </span>
-      );
-    case 'swords':
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="m4 20 8-8m4-4 4-4m0 8 4 4M14 6l4-4m-6 14-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-        </span>
-      );
-    case 'robot':
-      return (
-        <span className={cls}>
-          <svg {...common}><rect x="6" y="8" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" /><circle cx="10" cy="13" r="1" fill="currentColor" /><circle cx="14" cy="13" r="1" fill="currentColor" /><path d="M12 4v4" stroke="currentColor" strokeWidth="1.6" /></svg>
-        </span>
-      );
-    case 'mention':
-    default:
-      return (
-        <span className={cls}>
-          <svg {...common}><path d="M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-4 4v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-        </span>
-      );
-  }
-}
+type BoardOutcome = 'win' | 'loss' | 'neutral';
 
-function badgeClass(tone: FeedBadgeTone): string {
-  return `rh-af-rich-badge rh-af-rich-badge--${tone}`;
+const BOARD_MODE_LABEL: Record<FeedItem['type'], string> = {
+  win: 'Match',
+  loss: 'Match',
+  streak: 'Streak',
+  tournament: 'Tournament',
+  puzzle: 'Puzzle Rush',
+  daily_fritz: 'Daily Fritz',
+};
+
+/** Everything the board's five-column row needs, derived from the shared
+ *  view model plus the raw item — outcome tone, a signed margin, a plain
+ *  mode label. No new data fetch; same metadata the feed already carries. */
+function boardRow(item: FeedItem, vm: FeedRowViewModel): {
+  modeLabel: string;
+  outcome: BoardOutcome;
+  margin: string | undefined;
+  badge: { label: string; kind: 'skunk' | 'win' | 'loss' | 'neutral' } | undefined;
+} {
+  const meta = item.metadata;
+  const won =
+    item.type === 'win' ||
+    meta.won === true ||
+    meta.result === 'win' ||
+    (item.type === 'tournament' && String(meta.placement ?? '').toLowerCase().includes('1st'));
+  const lost = item.type === 'loss' || meta.won === false || meta.result === 'loss';
+  const outcome: BoardOutcome = won ? 'win' : lost ? 'loss' : 'neutral';
+
+  let margin: string | undefined;
+  const a = Number(meta.score ?? meta.player_score);
+  const b = Number(meta.opponent_score ?? meta.fritz_score);
+  if (Number.isFinite(a) && Number.isFinite(b)) {
+    const diff = a - b;
+    margin = `${diff > 0 ? '+' : diff < 0 ? '−' : ''}${Math.abs(diff)}`;
+  } else if (vm.ratingDelta) {
+    margin = vm.ratingDelta;
+  } else if (vm.pointsLine) {
+    margin = vm.pointsLine;
+  }
+
+  let badge: { label: string; kind: 'skunk' | 'win' | 'loss' | 'neutral' } | undefined;
+  const src = vm.badge ?? vm.modeBadge;
+  if (src) {
+    const kind =
+      src.tone === 'skunk' || (src.tone === 'gold' && /skunk/i.test(src.label))
+        ? 'skunk'
+        : outcome === 'win'
+          ? 'win'
+          : outcome === 'loss'
+            ? 'loss'
+            : 'neutral';
+    badge = { label: src.label, kind };
+  }
+
+  return {
+    modeLabel: vm.modeBadge?.label ?? BOARD_MODE_LABEL[item.type],
+    outcome,
+    margin,
+    badge,
+  };
 }
 
 interface ActivityFeedFilterTabsProps {
@@ -139,17 +148,17 @@ interface ActivityFeedFilterTabsProps {
 
 export function ActivityFeedFilterTabs({ filter, onFilterChange }: ActivityFeedFilterTabsProps) {
   return (
-    <nav className="rh-af-filters social-tabs-row" role="tablist" aria-label="Activity filters">
+    <nav className="rh-sb-filters" role="tablist" aria-label="Activity filters">
       {FILTER_TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
           role="tab"
           aria-selected={filter === tab.id}
-          className={`rh-af-filter social-filter-tab${filter === tab.id ? ' rh-af-filter--active active' : ''}`}
+          className="rh-sb-filter"
           onClick={() => onFilterChange(tab.id)}
         >
-          <span className="rh-af-filter-icon">
+          <span className="rh-sb-filter__icon" aria-hidden="true">
             <FilterTabIcon kind={tab.icon} />
           </span>
           {tab.label}
@@ -163,6 +172,9 @@ interface ActivityFeedPanelProps {
   user: User | null;
   filter: ActivityFeedFilterTab;
   friendUsernames?: Set<string>;
+  /** Lower/exact handle of the signed-in player — the row that matches
+   *  gets the gold left bar. Best-effort; absent just means no self row. */
+  selfUsername?: string;
   onViewProfile: (username: string) => void;
   emptyAction?: React.ReactNode;
   onFeedChange?: (feed: FeedItem[]) => void;
@@ -222,10 +234,12 @@ export default function ActivityFeedPanel({
   user,
   filter,
   friendUsernames = new Set(),
+  selfUsername,
   onViewProfile,
   emptyAction,
   onFeedChange,
 }: ActivityFeedPanelProps) {
+  const selfHandle = selfUsername?.toLowerCase() ?? null;
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,110 +272,142 @@ export default function ActivityFeedPanel({
   const visibleItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const canLoadMore = visibleCount < filtered.length;
 
-  return (
-    <div className="rh-af-panel social-feed-panel">
-      <div className="rh-af-feed-card rh-social-card">
-        <div className="rh-af-feed social-feed-scroll">
-          {loading && (
-            <div className="rh-af-status rh-af-status--loading" aria-live="polite">
-              <span className="rh-af-status-kicker">Loading</span>
-              <strong>Building your social feed…</strong>
-              <p>Recent wins, rival updates, and tournament results will appear here.</p>
-            </div>
-          )}
-          {!loading && error && (
-            <div className="rh-af-status rh-af-status--error" role="alert">
-              <span className="rh-af-status-kicker">Feed unavailable</span>
-              <strong>{error}</strong>
-              <button type="button" className="rh-af-status-btn" onClick={() => void load()}>
-                Retry
-              </button>
-            </div>
-          )}
-          {!loading && !error && filtered.length === 0 && (
-            <div className="rh-af-empty">
-              <span className="rh-af-status-kicker">No activity yet</span>
-              <strong>
-                {filter === 'mentions'
-                  ? 'Mentions will show up here when rivals tag you.'
-                  : 'Play a match or follow rivals to start your feed.'}
-              </strong>
-              <p>
-                {filter === 'mentions'
-                  ? 'Follow active players to turn this into a real conversation.'
-                  : 'Wins, streaks, Daily Fritz runs, and tournament results will land here first.'}
-              </p>
-              {emptyAction}
-            </div>
-          )}
-          {!loading && !error && visibleItems.map((item) => {
-            const vm = buildFeedRowViewModel(item);
-            const hue = avatarHue(item.username);
-            return (
-              <article key={item.id} className="rh-af-rich-row" data-feed-type={item.type}>
-                <button
-                  type="button"
-                  className="rh-af-rich-avatar"
-                  style={{ ['--rh-af-avatar-hue' as string]: String(hue) } as CSSProperties}
-                  onClick={() => onViewProfile(item.username)}
-                  aria-label={`View ${item.username}'s profile`}
-                >
-                  {initials(item.username)}
-                </button>
-                <FeedCategoryIcon kind={vm.icon} />
-                <div className="rh-af-rich-main">
-                  <p className="rh-af-rich-line">
-                    <button type="button" className="rh-af-rich-user" onClick={() => onViewProfile(item.username)}>
-                      {item.username}
-                    </button>
-                    <span className="rh-af-rich-action">{vm.action}</span>
-                  </p>
-                  <div className="rh-af-rich-meta">
-                    {vm.modeBadge ? (
-                      <span className={badgeClass(vm.modeBadge.tone)}>{vm.modeBadge.label}</span>
-                    ) : null}
-                    <p className="rh-af-rich-secondary">{vm.secondary}</p>
-                  </div>
-                </div>
-                <div className="rh-af-rich-stats">
-                  {vm.scoreLine ? <span className="rh-af-rich-score">{vm.scoreLine}</span> : null}
-                  {vm.pointsLine ? <span className="rh-af-rich-points">{vm.pointsLine}</span> : null}
-                  {vm.ratingDelta ? <span className="rh-af-rich-delta">{vm.ratingDelta}</span> : null}
-                  {vm.streakCount ? (
-                    <span className="rh-af-rich-streaks" aria-label={`${vm.streakCount} win streak`}>
-                      {Array.from({ length: vm.streakCount }, (_, i) => (
-                        <span key={i} className="rh-af-rich-streak-dot" aria-hidden="true">✓</span>
-                      ))}
-                    </span>
-                  ) : null}
-                  {vm.badge ? (
-                    <span className={badgeClass(vm.badge.tone)}>{vm.badge.label}</span>
-                  ) : null}
-                  {vm.showViewButton ? (
-                    <button type="button" className="rh-af-rich-view-btn">View</button>
-                  ) : null}
-                </div>
-                <div className="rh-af-rich-end">
-                  <time dateTime={item.created_at}>{timeAgo(item.created_at)}</time>
-                  <span className="rh-af-rich-chevron" aria-hidden="true">›</span>
-                </div>
-              </article>
-            );
-          })}
-          {!loading && !error && canLoadMore ? (
-            <div className="rh-af-load-more-wrap">
-              <button
-                type="button"
-                className="rh-af-load-more"
-                onClick={() => setVisibleCount((count) => count + 10)}
-              >
-                Load Older Activity
-                <span className="rh-af-load-more-chevron" aria-hidden="true">⌄</span>
-              </button>
-            </div>
-          ) : null}
+  if (loading) {
+    return (
+      <section className="rh-sb-table" aria-label="Activity feed">
+        <div className="rh-sb-feed-state" aria-live="polite">
+          <span className="rh-sb-feed-state__kicker">Loading</span>
+          <strong>Building your social feed…</strong>
+          <p>Recent wins, rival updates, and tournament results will appear here.</p>
         </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="rh-sb-table" aria-label="Activity feed">
+        <div className="rh-sb-feed-state" role="alert">
+          <span className="rh-sb-feed-state__kicker">Feed unavailable</span>
+          <strong>{error}</strong>
+          <p>
+            <button type="button" className="rh-sb-btn" onClick={() => void load()}>Retry</button>
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <section className="rh-sb-table" aria-label="Activity feed">
+        <div className="rh-sb-feed-state">
+          <span className="rh-sb-feed-state__kicker">No activity yet</span>
+          <strong>
+            {filter === 'mentions'
+              ? 'Mentions will show up here when rivals tag you.'
+              : 'Play a match or follow rivals to start your feed.'}
+          </strong>
+          <p>
+            {filter === 'mentions'
+              ? 'Follow active players to turn this into a real conversation.'
+              : 'Wins, streaks, Daily Fritz runs, and tournament results will land here first.'}
+          </p>
+          {emptyAction}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rh-sb-table" aria-label="Activity feed">
+      <div className="rh-sb-thead rh-sb-row-grid" aria-hidden="true">
+        <span>Who</span>
+        <span>What happened</span>
+        <span>Score</span>
+        <span>Mode</span>
+        <span className="rh-sb-thead__when">When</span>
       </div>
-    </div>
+
+      {visibleItems.map((item) => {
+        const vm = buildFeedRowViewModel(item);
+        const row = boardRow(item, vm);
+        const isSelf = selfHandle != null && item.username.toLowerCase() === selfHandle;
+        const outcomeClass =
+          row.outcome === 'win' ? ' is-win' : row.outcome === 'loss' ? ' is-loss' : '';
+        return (
+          <button
+            type="button"
+            key={item.id}
+            className={`rh-sb-row rh-sb-row-grid${isSelf ? ' rh-sb-row--self' : ''}`}
+            onClick={() => onViewProfile(item.username)}
+          >
+            <span className="rh-sb-who">
+              <span
+                className="rh-sb-avatar"
+                aria-hidden="true"
+                style={{ '--rh-sb-avatar-hue': String(avatarHue(item.username)) } as React.CSSProperties}
+              >
+                {initials(item.username)}
+              </span>
+              <span className="rh-sb-who__copy">
+                <span className="rh-sb-who__name">
+                  <span className="rh-sb-who__handle">{item.username}</span>
+                  {isSelf ? <span className="rh-sb-you">You</span> : null}
+                </span>
+                <span className="rh-sb-who__meta">{row.modeLabel}</span>
+              </span>
+            </span>
+
+            <span className="rh-sb-what">
+              {vm.action}
+              {row.badge ? (
+                <span className={`rh-sb-badge rh-sb-badge--${row.badge.kind}`}>{row.badge.label}</span>
+              ) : null}
+              {vm.secondary ? (
+                <span className={`rh-sb-what__sub${row.badge?.kind === 'skunk' ? ' is-accent' : outcomeClass}`}>
+                  {vm.secondary}
+                </span>
+              ) : null}
+            </span>
+
+            <span className="rh-sb-score">
+              {vm.scoreLine ? (
+                <span className="rh-sb-score__line">{vm.scoreLine.replace(' - ', '–')}</span>
+              ) : null}
+              {row.margin ? (
+                <span
+                  className={`rh-sb-score__margin${
+                    row.badge?.kind === 'skunk' ? ' is-accent' : outcomeClass
+                  }`}
+                >
+                  {row.margin}
+                </span>
+              ) : null}
+            </span>
+
+            <span>
+              <span className="rh-sb-mode">{row.modeLabel}</span>
+            </span>
+
+            <span className="rh-sb-when">
+              <time dateTime={item.created_at}>{timeAgo(item.created_at).replace(' ago', '')}</time>
+            </span>
+          </button>
+        );
+      })}
+
+      {canLoadMore ? (
+        <div className="rh-sb-tfoot">
+          <button
+            type="button"
+            className="rh-sb-btn"
+            onClick={() => setVisibleCount((count) => count + 10)}
+          >
+            Load earlier activity
+          </button>
+        </div>
+      ) : null}
+    </section>
   );
 }

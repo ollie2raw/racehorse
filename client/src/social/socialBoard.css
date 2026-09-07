@@ -1,0 +1,475 @@
+/* ------------------------------------------------------------------
+   Social Board — the leaderboard "board" treatment applied to Social.
+   Same feed, same rail panels, same filters — only the visual system
+   moves: square records, hairline dividers, one connected stat strip,
+   a display masthead, and gold reserved for signal (your row, #1, a
+   skunk, the primary CTA).
+
+   Tokens only (client/src/styles/tokens.css). The --rh-sb-* custom
+   properties below are scoped to .rh-sb-page (not a :root block) and
+   map straight onto the documented palette in client/CLAUDE.md §3.
+   ------------------------------------------------------------------ */
+
+.rh-sb-page {
+  --rh-sb-line: rgba(255, 255, 255, 0.08);
+  --rh-sb-line-soft: rgba(255, 255, 255, 0.05);
+  --rh-sb-line-strong: rgba(255, 255, 255, 0.14);
+  --rh-sb-ink: rgba(255, 255, 255, 0.95);
+  --rh-sb-subtle: rgba(255, 255, 255, 0.72);
+  --rh-sb-muted: rgba(255, 255, 255, 0.6);
+  --rh-sb-label: rgba(255, 255, 255, 0.42);
+  --rh-sb-dim: rgba(255, 255, 255, 0.35);
+  --rh-sb-surface: rgba(10, 16, 28, 0.6);
+  --rh-sb-grid: rgba(255, 255, 255, 0.02);
+
+  --rh-sb-accent: var(--tier-elite);
+  --rh-sb-accent-border: rgba(231, 182, 74, 0.42);
+  --rh-sb-accent-dim: rgba(231, 182, 74, 0.14);
+  --rh-sb-accent-row: rgba(231, 182, 74, 0.05);
+  --rh-sb-accent-row-hover: rgba(231, 182, 74, 0.07);
+
+  --rh-sb-win: var(--tier-rookie);
+  --rh-sb-loss: #ff4d6d;
+
+  --rh-sb-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* The board wants a lean, connected shell — drop the hub's rounded
+   glass main column so the table can butt against the masthead. */
+.rh-sb-page .rh-sf-main-column,
+.rh-sb-page .social-main-column {
+  gap: 14px;
+}
+
+/* ------------------------------------------------------------ masthead */
+
+.rh-sb-masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 26px 22px;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-record) var(--radius-record) 0 0;
+  background-color: rgba(255, 255, 255, 0.012);
+  background-image:
+    linear-gradient(var(--rh-sb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rh-sb-grid) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+}
+
+.rh-sb-eyebrow {
+  display: block;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--rh-sb-label);
+}
+
+.rh-sb-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5vw, 60px);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  color: var(--rh-sb-ink);
+  text-wrap: balance;
+}
+
+.rh-sb-title__dot { color: var(--rh-sb-accent); }
+
+.rh-sb-tagline {
+  margin: 10px 0 0;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--rh-sb-muted);
+}
+
+.rh-sb-masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rh-sb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-control);
+  background: var(--rh-sb-surface);
+  color: var(--rh-sb-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 120ms var(--rh-sb-ease),
+    border-color 120ms var(--rh-sb-ease),
+    transform 120ms var(--rh-sb-ease);
+}
+
+.rh-sb-btn:hover { color: var(--rh-sb-ink); border-color: var(--rh-sb-line-strong); transform: translateY(-1px); }
+.rh-sb-btn:active { transform: scale(0.97); }
+.rh-sb-btn:focus-visible { outline: 2px solid var(--rh-sb-accent); outline-offset: 2px; }
+
+.rh-sb-btn--accent {
+  border-color: var(--rh-sb-accent);
+  background: var(--rh-sb-accent);
+  color: #1a1200;
+  font-weight: 700;
+}
+
+.rh-sb-btn--accent:hover { color: #1a1200; border-color: var(--rh-sb-accent); filter: brightness(1.07); }
+
+/* -------------------------------------------------------- stat strip */
+
+.rh-sb-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--rh-sb-line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-record) var(--radius-record);
+  background: var(--rh-sb-surface);
+}
+
+.rh-sb-meta__cell {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 18px;
+  border-left: 1px solid var(--rh-sb-line-soft);
+  min-width: 0;
+}
+
+.rh-sb-meta__cell:first-child { border-left: 0; }
+
+.rh-sb-meta__label {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rh-sb-label);
+}
+
+.rh-sb-meta__value {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--rh-sb-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-sb-meta__value.is-accent { color: var(--rh-sb-accent); }
+.rh-sb-meta__qual { font-family: var(--font-body); font-size: 11px; font-weight: 500; color: var(--rh-sb-dim); }
+
+/* ----------------------------------------------------------- filters */
+
+.rh-sb-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.rh-sb-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-control);
+  background: var(--rh-sb-surface);
+  color: var(--rh-sb-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color 120ms var(--rh-sb-ease),
+    border-color 120ms var(--rh-sb-ease),
+    background 120ms var(--rh-sb-ease);
+}
+
+.rh-sb-filter:hover { border-color: var(--rh-sb-accent-border); color: var(--rh-sb-subtle); }
+.rh-sb-filter:focus-visible { outline: 2px solid var(--rh-sb-accent); outline-offset: 2px; }
+
+.rh-sb-filter[aria-selected="true"] {
+  border-color: var(--rh-sb-accent-border);
+  background: var(--rh-sb-accent-dim);
+  color: var(--rh-sb-accent);
+}
+
+.rh-sb-filter__icon { display: inline-flex; width: 13px; height: 13px; }
+.rh-sb-filter__icon svg { width: 100%; height: 100%; }
+
+/* ------------------------------------------------------------- table */
+
+.rh-sb-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-record);
+  background: var(--rh-sb-surface);
+  overflow: hidden;
+}
+
+/* Five columns, like the leaderboard. The score column stops "what
+   happened" from absorbing every spare pixel and stranding the mode
+   tag against the right edge. */
+.rh-sb-row-grid {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 104px 128px 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+}
+
+.rh-sb-thead {
+  min-height: 34px;
+  border-bottom: 1px solid var(--rh-sb-line);
+  background: rgba(255, 255, 255, 0.014);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--rh-sb-label);
+}
+
+.rh-sb-thead__when { text-align: right; }
+
+.rh-sb-row {
+  position: relative;
+  width: 100%;
+  min-height: 60px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  border: 0;
+  border-bottom: 1px solid var(--rh-sb-line-soft);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms var(--rh-sb-ease);
+}
+
+.rh-sb-row:last-child { border-bottom: 0; }
+.rh-sb-row:hover { background: rgba(255, 255, 255, 0.02); }
+.rh-sb-row:focus-visible { outline: 2px solid var(--rh-sb-accent); outline-offset: -2px; }
+.rh-sb-row--self { background: var(--rh-sb-accent-row); }
+.rh-sb-row--self:hover { background: var(--rh-sb-accent-row-hover); }
+
+.rh-sb-row--self::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--rh-sb-accent);
+}
+
+.rh-sb-who { display: flex; align-items: center; gap: 11px; min-width: 0; }
+
+.rh-sb-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-record);
+  background: hsl(var(--rh-sb-avatar-hue, 220) 34% 26%);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.92);
+  text-transform: uppercase;
+}
+
+.rh-sb-who__copy { min-width: 0; }
+
+.rh-sb-who__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rh-sb-ink);
+}
+
+.rh-sb-who__handle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rh-sb-you {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--rh-sb-accent-border);
+  border-radius: var(--radius-record);
+  background: var(--rh-sb-accent-dim);
+  color: var(--rh-sb-accent);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.rh-sb-who__meta { margin-top: 2px; font-size: 11px; color: var(--rh-sb-dim); }
+
+.rh-sb-what { min-width: 0; font-size: 13px; color: var(--rh-sb-subtle); }
+.rh-sb-what strong { color: var(--rh-sb-ink); font-weight: 600; }
+.rh-sb-what__sub { margin-top: 2px; font-size: 11.5px; color: var(--rh-sb-muted); }
+.rh-sb-what__sub.is-win { color: var(--rh-sb-win); }
+.rh-sb-what__sub.is-loss { color: var(--rh-sb-loss); }
+.rh-sb-what__sub.is-accent { color: var(--rh-sb-accent); }
+
+/* Outcome badge. Gold is reserved: only a skunk earns it. */
+.rh-sb-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  margin-left: 7px;
+  padding: 0 5px;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-record);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rh-sb-muted);
+  vertical-align: 1px;
+}
+
+.rh-sb-badge--skunk { border-color: var(--rh-sb-accent-border); background: var(--rh-sb-accent-dim); color: var(--rh-sb-accent); }
+.rh-sb-badge--win { border-color: rgba(74, 222, 128, 0.4); color: var(--rh-sb-win); }
+.rh-sb-badge--loss { border-color: rgba(255, 77, 109, 0.36); color: var(--rh-sb-loss); }
+
+.rh-sb-score { font-variant-numeric: tabular-nums; }
+
+.rh-sb-score__line {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--rh-sb-ink);
+}
+
+.rh-sb-score__margin { font-size: 11.5px; font-weight: 600; color: var(--rh-sb-muted); }
+.rh-sb-score__margin.is-win { color: var(--rh-sb-win); }
+.rh-sb-score__margin.is-loss { color: var(--rh-sb-loss); }
+.rh-sb-score__margin.is-accent { color: var(--rh-sb-accent); }
+
+/* Mode is a neutral hairline tag, never gold. */
+.rh-sb-mode {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--rh-sb-line);
+  border-radius: var(--radius-record);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rh-sb-muted);
+  white-space: nowrap;
+}
+
+.rh-sb-when {
+  text-align: right;
+  font-size: 12px;
+  color: var(--rh-sb-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-sb-tfoot {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  border-top: 1px solid var(--rh-sb-line);
+}
+
+.rh-sb-feed-state {
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.rh-sb-feed-state__kicker {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rh-sb-label);
+}
+
+.rh-sb-feed-state strong { display: block; font-size: 15px; color: var(--rh-sb-ink); }
+.rh-sb-feed-state p { margin: 8px 0 0; font-size: 12.5px; color: var(--rh-sb-muted); }
+
+/* -------------------------------------------------------------- rail */
+
+.rh-sb-page .rh-sf-right-rail,
+.rh-sb-page .social-right-rail {
+  gap: 14px;
+}
+
+.rh-sb-page .rh-sf-widget,
+.rh-sb-page .rh-hub-rail-card,
+.rh-sb-page .social-right-card,
+.rh-sb-page .rh-social-card {
+  border-radius: var(--radius-record);
+  border: 1px solid var(--rh-sb-line);
+  background: var(--rh-sb-surface);
+  box-shadow: none;
+}
+
+.rh-sb-page .rh-sf-widget-title,
+.rh-sb-page .rh-hub-rail-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--rh-sb-label);
+}
+
+/* ---------------------------------------------------------- responsive */
+
+@media (max-width: 900px) {
+  .rh-sb-masthead { flex-direction: column; gap: 16px; padding: 20px 18px 18px; }
+  .rh-sb-masthead__actions { width: 100%; }
+  .rh-sb-btn { flex: 1; justify-content: center; }
+  .rh-sb-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rh-sb-meta__cell:nth-child(3) { border-left: 0; }
+  .rh-sb-meta__cell:nth-child(-n+2) { border-bottom: 1px solid var(--rh-sb-line-soft); }
+}
+
+/* The five-column grid needs a horizontal scroll on a phone — same
+   constraint the leaderboard board has. */
+@media (max-width: 620px) {
+  .rh-sb-table { overflow-x: auto; }
+  .rh-sb-thead,
+  .rh-sb-row { min-width: 560px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-sb-btn,
+  .rh-sb-row,
+  .rh-sb-filter { transition: none; }
+  .rh-sb-btn:hover,
+  .rh-sb-btn:active { transform: none; }
+}
