@@ -49,7 +49,7 @@ export function useHandRevealSequence(
     preGameDraw,
     inGame,
     handRevealShownRef,
-    handRevealTimerRef: _handRevealTimerRef,
+    handRevealTimerRef,
     showToast,
   } = params;
 
@@ -114,11 +114,29 @@ export function useHandRevealSequence(
   ]);
 
   useEffect(() => {
-    if (!inGame || !state || state.gameOver || !state.handOver || preGameDraw) return;
+    const clearPendingReveal = () => {
+      if (handRevealTimerRef.current) {
+        clearTimeout(handRevealTimerRef.current);
+        handRevealTimerRef.current = null;
+      }
+    };
+
+    // Leaving hand-over (or the game) genuinely invalidates a pending reveal.
+    if (!inGame || !state || state.gameOver || !state.handOver || preGameDraw) {
+      clearPendingReveal();
+      return;
+    }
+    // Already armed (or shown) for this hand. This is the echo case: MP-JIT's
+    // authoritative apply is a second `state` transition with the same
+    // handNumber. Returning clearTimeout as the cleanup used to cancel the
+    // pending reveal here, and this guard then stopped it being re-armed — so
+    // the hand-over reveal never appeared at all. Leave the timer running.
     if (handRevealShownRef.current === state.handNumber) return;
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     handRevealShownRef.current = state.handNumber;
-    const tid = window.setTimeout(() => {
+    clearPendingReveal();
+    handRevealTimerRef.current = window.setTimeout(() => {
+      handRevealTimerRef.current = null;
       setHandReveal((prev) => {
         if (prev && prev.handNumber === state.handNumber) {
           return prev;
@@ -133,8 +151,7 @@ export function useHandRevealSequence(
         };
       });
     }, 1400);
-    return () => window.clearTimeout(tid);
-  }, [inGame, state, you, preGameDraw, handRevealShownRef, setHandReveal]);
+  }, [inGame, state, you, preGameDraw, handRevealShownRef, handRevealTimerRef, setHandReveal]);
 
   useEffect(() => {
     if (!handReveal || !state || state.gameOver || !state.handOver || preGameDraw) return;
