@@ -169,6 +169,16 @@ async function playToGameOver(
       await sleep(50);
       continue;
     }
+    // Only decide a move once the acting client's own view has caught up to the
+    // reference sequence — acting on a stale `state:update` is how this probe
+    // used to send an illegal PASS/DRAW (RK-10).
+    if ((cur.latest?.state?.sequence ?? -1) !== ref.sequence) {
+      const ok = await waitFor(() => (cur.latest?.state?.sequence ?? -1) === ref.sequence, 4000);
+      if (!ok) {
+        await sleep(100);
+        continue;
+      }
+    }
     const legal = cur.latest?.legalMoves ?? [];
     const play = legal.find((m) => m.type === 'play' && m.tile && m.position);
     const action = play

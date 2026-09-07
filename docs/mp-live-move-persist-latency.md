@@ -187,64 +187,75 @@ engine, same rules the server enforces), reconciled against the authoritative
 
 ---
 
-## UNRELATED LIVE FINDING — ranked multiplayer is 100% dormant in production
+## RK-10 — the ranked-MP write dropped silently on a poisoned ghost move log
 
-**Surfaced 2026-09-07 while running MP-JIT-1's post-deploy verification. NOT a
-MP-JIT-1 regression** (see below). This belongs to the RK-8 / RK-9 "ranked-MP
-dormancy" thread in `HARDENING_PLAN.md` §8.3 — the "parked / undecided backfill"
-note there is now wrong in the worse direction and should be re-opened.
+**Surfaced 2026-09-07 during MP-JIT-1's post-deploy verification. Root-caused,
+fixed, and verified live the same day.** Full write-up is now **`HARDENING_PLAN.md`
+§8.3 RK-10** — this section is the short version.
 
-**What was found** (service-role queries against prod `ranked_games`, 2026-09-07):
+### The symptom
 
-- `source_type = 'live_room'`: **0 rows. Ever.** Not one multiplayer live-room
-  ranked game has ever been written via the `insertRankedGameIdempotent`
-  `on_conflict` path.
-- `game_type = 'multiplayer'` rows: **most recent is 2026-07-09** — two months
-  ago — and every one has `source_type: null` (pre-migration history).
-- `source_type = 'verified_single_player'`: 105 rows, current — Daily Fritz /
-  Ghost ranked writes work fine.
+- `ranked_games` with `source_type = 'live_room'`: **0 rows, ever** (service-role
+  query, 2026-09-07). Most recent `game_type = 'multiplayer'` row is
+  `2026-07-09`, all with `source_type: null`.
+- Three deployed two-account probe matches all wrote a `matches` row, fired
+  `private_game_over_persist_succeeded {attempt: 1}`, and wrote **no**
+  `ranked_games` row. The participant `profiles` rows existed the whole time.
+- Each of those three also fired `private_move_log_verification_failed`:
+  *"Move claims a draw/pass but a legal play existed for the reported hand and
+  board."*
 
-So the RK-8 "Live re-confirm 2026-09-06 — every row since ~2026-08-10 carries
-`source_match_id`" was reading **100% `verified_single_player` volume**. The
-multiplayer ranked pipeline has recorded nothing since 2026-07-09.
+### Root cause
 
-**Reproduced live, twice**, against the deployed Render instance (release
-`a6659316`) with `server/scripts/rankedMultiplayerRowProbe.ts` — two throwaway
-authenticated accounts, a real full human-vs-human match to game-over:
+`server/src/rooms.ts`'s PASS handler appended the ghost move log entry and
+incremented `room.ghostTurnIndex` **before** calling `applyMove({type:'pass'})`
+— which is the call that validates a pass (game-core throws *"Cannot pass when
+you have a legal play available"*). So a client that submitted an illegal PASS
+— stale legal moves after an opponent's move, a double-tap, any client/server
+legal-move disagreement — had the action **rejected** (`game:action → {ok:false}`)
+but left a poisoned `branch: 'pass'` entry in `room.ghostMoveLogs`.
 
-- `matches` row written (correct `winner_user_id` / `loser_user_id` / scores).
-- `mp_authority_events` shows `private_game_over_persist_succeeded {attempt: 1}`
-  — the game-over persist **completed without error on the first try**.
-- **`ranked_games`: 0 rows.**
+At game-over, `evaluateHumanMoveLogVerification` (`gameOverPersistence.ts`)
+replays each seat's ghost log with `verifyPlayerMoveLog(..., {strictHandContinuity:true})`.
+The poisoned pass entry fails ("a legal play existed"), `humanGlickoEligible`
+goes `false`, and the `ranked_games` insert is skipped — **while
+`persistGameOverOnce` still returns success**. The MOVE handler already
+validated first (engine → then log); only PASS had the wrong order.
 
-The **same probe against a local server running the identical code + the same
-prod Supabase writes all 3** (`ranked_games` ×2 via `on_conflict`,
-`source_type: live_room`, rating applied). So:
+The probe's own bot reproduced this on every deployed run because the real
+network hop made it act on stale `state:update` frames far more often than the
+fast local path — which is why local runs (identical code, same Supabase) wrote
+the row and deployed runs never did.
 
-- **Not RK-9** — no retry exhaustion; succeeded attempt 1.
-- **Not MP-JIT-1** — MP-JIT-1 does not touch `gameOverPersistence.ts` or
-  `roomSession.ts`'s game-over branch; the local run of post-MP-JIT-1 code
-  writes the row fine.
-- **Not move-log verification** — no `private_move_log_verification_failed`
-  event; a multi-hand local game passes verification and writes the row.
+### Fix
 
-**Prime remaining suspect** (from reading `persistGameOverOnce`): the ranked
-insert is gated on `if (profile && opponentId !== FRITZ_SYSTEM_ID &&
-humanGlickoEligible)`. `profile` comes from a `supabaseFetch('/rest/v1/profiles
-?id=eq.<userId>')` **inside `persistGameOverOnce`**. A falsy `profile` skips the
-insert *silently* and `persistGameOverOnce` still returns normally →
-`private_game_over_persist_succeeded`. An ephemeral user demonstrably *does* get
-a `profiles` row (verified directly), and the local run finds it — so the
-deployed-only failure is environment-specific: candidates are `SUPABASE_POOLER_URL`
-routing on Render (the `profiles` read goes somewhere that returns empty),
-another Render-only env/config difference, or a concurrency effect on the busy
-instance. **Pinning it needs the deployed server's logs / Sentry**, which this
-investigation did not have access to.
+`51cf9aca` — the PASS handler calls `applyMove` first and only appends the ghost
+move / advances `ghostTurnIndex` on success (matching the MOVE handler).
+`3d7f9c48` — `recordOperationalFailure('ranked_insert_skipped_no_profile' /
+'ranked_insert_returned_no_row', …)` so a future silent skip pages instead of
+hiding. Tests: `ghostMoveLogCapture.test.ts` (rejected illegal PASS leaves the
+log empty), `gameOverPersistence.test.ts` (skip fires telemetry, persist still
+succeeds).
 
-**This is not blocked by, and does not block, MP-JIT-1** — MP-JIT-1 is a pure
-latency change on the live-move broadcast path, orthogonal to game-over
-persistence. But it is a serious standalone production defect: **no competitive
-multiplayer rating has been recorded in two months.**
+### Live verification
+
+Deployed probe against release `51cf9aca` (`winningScore: 30`, real full match):
+**2 `ranked_games` rows, `source_type: "live_room"`, via the `on_conflict`
+path**, `rating_after` / `delta` applied (1500 → 1662.31 / 1337.69), `profiles`
+`ranked_games_played` incremented, **no `private_move_log_verification_failed`**,
+`private_game_over_persist_succeeded {attempt: 1}`, net-zero cleanup. First
+`source_type='live_room'` row in production, ever.
+
+### The 2-month gap
+
+Not entirely one bug. `source_type` columns were only written unconditionally
+from **2026-09-06** (RK-8's flag deletion) — before that, even a successful MP
+ranked write landed with `source_type: null`, so "0 `live_room` rows before
+2026-09-06" is RK-8, not RK-10. From 2026-09-06 onward, RK-10 would drop any MP
+game that contained one illegal PASS. Real MP volume is near-zero pre-launch, so
+how often real players hit RK-10 in that window is unknown — but the mechanism
+is real, was reproduced every time, and is now fixed. Backfill of the historical
+`ranked_games` gap is a separate decision (see §8.3 RK-8/RK-10 note).
 
 ---
 
