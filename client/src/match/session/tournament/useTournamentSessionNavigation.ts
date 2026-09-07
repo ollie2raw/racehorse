@@ -10,6 +10,7 @@ import type { TournamentAttachRuntime } from '../../../multiplayer/runtime/tourn
 import type { TournamentAttachRefs } from './useTournamentAttachRefs';
 import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentHookApi, TournamentSubView } from './tournamentMatchSessionTypes';
+import { logger } from '../../../utils/logger';
 
 type UseTournamentSessionNavigationParams = {
   attachRuntime: TournamentAttachRuntime;
@@ -73,7 +74,7 @@ export function useTournamentSessionNavigation({
       markTournamentGameOverConsumed(matchId);
       attachedTournamentMatchIdRef.current = null;
       pendingTournamentAttachMatchIdRef.current = null;
-      console.log('[tournament:complete] clearing live room state', {
+      logger.operational('tournament:complete', 'clearing live room state', {
         roomCode: roomCode ?? sessionRef.current.context.roomCode,
       });
       clearRecoverableRoomStateRef.current();
@@ -88,7 +89,7 @@ export function useTournamentSessionNavigation({
       if (tournamentCompleted || round === 3) {
         markTournamentTerminal({ tournamentId });
       }
-      console.log('[tournament:complete] routing to result', {
+      logger.operational('tournament:complete', 'routing to result', {
         tournamentId,
         matchId,
         nextView,
@@ -132,7 +133,7 @@ export function useTournamentSessionNavigation({
   const exitToTournamentHub = useCallback(
     (reason: string) => {
       const tid = activeTournamentId ?? tournament.activeTournamentId ?? null;
-      console.log('[tournament:exit] back-to-tournament clicked', { reason, tournamentId: tid });
+      logger.operational('tournament:exit', 'back-to-tournament clicked', { reason, tournamentId: tid });
       if (tid) {
         dismissedTournamentIdsRef.current.add(tid);
         if (reason !== 'bracket_back') {
@@ -155,7 +156,7 @@ export function useTournamentSessionNavigation({
       setAppMode('tournament');
       setTournamentResult(null);
       setTournamentResultError(null);
-      console.log('[tournament:exit] cleared stale tournament state', {
+      logger.operational('tournament:exit', 'cleared stale tournament state', {
         reason,
         tournamentId: tid,
       });
@@ -192,23 +193,23 @@ export function useTournamentSessionNavigation({
           roomCode: currentTournamentContext.roomCode ?? joinedRoom,
         });
         markTournamentGameOverConsumed(currentTournamentContext.matchId);
-        console.log('[tournament:postgame] cleared gameover state', {
+        logger.operational('tournament:postgame', 'cleared gameover state', {
           roomCode: currentTournamentContext.roomCode ?? joinedRoom,
           matchId: currentTournamentContext.matchId,
         });
         if (nextView === 'result') {
-          console.log('[tournament:postgame] final result clicked', {
+          logger.operational('tournament:postgame', 'final result clicked', {
             tournamentId: currentTournamentContext.tournamentId,
             matchId: currentTournamentContext.matchId,
           });
         } else {
-          console.log('[tournament:postgame] returning to bracket', {
+          logger.operational('tournament:postgame', 'returning to bracket', {
             tournamentId: currentTournamentContext.tournamentId,
             matchId: currentTournamentContext.matchId,
           });
         }
       }
-      console.log('[app:navigation] tournament match close/home', {
+      logger.operational('app:navigation', 'tournament match close/home', {
         fromMode: appModeRef.current,
         toMode: 'tournament',
         path: typeof window !== 'undefined' ? window.location.pathname : '',

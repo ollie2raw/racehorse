@@ -176,33 +176,33 @@ export function useTournamentAttachFlow({
         });
 
         if (guard.reason === 'no-match') {
-          console.log('[tournament:attach-client] skip/no-match');
+          logger.operational('tournament:attach-client', 'skip/no-match');
           return false;
         }
         if (guard.reason === 'socket-disconnected') {
-          console.log('[tournament:attach-client] skip/socket-disconnected', { matchId });
+          logger.operational('tournament:attach-client', 'skip/socket-disconnected', { matchId });
           if (!opts?.manual) {
             connectRef.current();
           }
           return false;
         }
         if (guard.reason === 'already-pending') {
-          console.log('[tournament:attach-client] skip/already-pending', { matchId });
+          logger.operational('tournament:attach-client', 'skip/already-pending', { matchId });
           return false;
         }
         if (guard.reason === 'already-attached') {
-          console.log('[tournament:attach-client] skip/already-attached', {
+          logger.operational('tournament:attach-client', 'skip/already-attached', {
             matchId,
             appMode: appModeRef.current,
           });
           return false;
         }
         if (guard.reason === 'backoff') {
-          console.log('[tournament:attach-client] skip/backoff', { matchId });
+          logger.operational('tournament:attach-client', 'skip/backoff', { matchId });
           return false;
         }
         if (guard.reason === 'match-completed') {
-          console.log('[tournament:recovery] ignored completed match', { matchId });
+          logger.operational('tournament:recovery', 'ignored completed match', { matchId });
           tournament.clearRecoveryMatch();
           return false;
         }
@@ -211,7 +211,7 @@ export function useTournamentAttachFlow({
         setTournamentAttachPhase('pending');
         setTournamentAttachError(null);
 
-        console.log('[tournament:attach-client] start', {
+        logger.operational('tournament:attach-client', 'start', {
           matchId,
           tournamentId: opts?.tournamentId ?? null,
           status: opts?.matchStatus ?? null,
@@ -235,7 +235,7 @@ export function useTournamentAttachFlow({
             });
             const roster = Array.isArray(resp.players) ? resp.players : [];
             const localPlayerId = typeof resp.you === 'string' ? resp.you : '';
-            console.log('[tournament:attach-client] ack/success', {
+            logger.operational('tournament:attach-client', 'ack/success', {
               matchId,
               roomCode: resp.roomCode,
               matchStatus: resp.matchStatus ?? opts?.matchStatus ?? null,
@@ -253,7 +253,7 @@ export function useTournamentAttachFlow({
             } else if (opts?.tournamentId) {
               setActiveTournamentId(opts.tournamentId);
             }
-            console.log('[tournament:attach-client] applying join response', {
+            logger.operational('tournament:attach-client', 'applying join response', {
               roomCode: resp.roomCode,
               handCount,
             });
@@ -270,7 +270,7 @@ export function useTournamentAttachFlow({
               state: hydratedState as { players?: Record<string, { hand?: unknown[] }> },
             });
             const playerIds = (hydratedState as { playerIds?: string[] } | null | undefined)?.playerIds;
-            console.log('[tournament:hydrate-check]', {
+            logger.operational('tournament', 'hydrate-check', {
               roomCode: resp.roomCode,
               localUserId: multiplayerIdentityUserId,
               localPlayerSeat: hydratedYou,
@@ -303,7 +303,7 @@ export function useTournamentAttachFlow({
               setTournamentAttachError(null);
               return true;
             }
-            console.log('[tournament:attach-client] switching-to-multiplayer', {
+            logger.operational('tournament:attach-client', 'switching-to-multiplayer', {
               matchId,
               roomCode: resp.roomCode,
             });
@@ -323,7 +323,7 @@ export function useTournamentAttachFlow({
           };
           setTournamentAttachPhase('failed');
           setTournamentAttachError(errorMessage);
-          console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
+          logger.operational('tournament:attach-client', 'ack/error', { matchId, error: errorMessage });
           if (errorMessage === 'match_completed') {
             const tournamentId = opts?.tournamentId ?? activeTournamentId ?? null;
             if (tournamentId) {
@@ -365,9 +365,9 @@ export function useTournamentAttachFlow({
           setTournamentAttachPhase('failed');
           setTournamentAttachError(isTimeout ? 'Join timed out. Try again.' : message);
           if (isTimeout) {
-            console.log('[tournament:attach-client] ack/timeout', { matchId });
+            logger.operational('tournament:attach-client', 'ack/timeout', { matchId });
           } else {
-            console.log('[tournament:attach-client] ack/error', { matchId, error: message });
+            logger.operational('tournament:attach-client', 'ack/error', { matchId, error: message });
           }
           showToast(isTimeout ? 'Join timed out. Try again.' : message, 2500);
           return false;
