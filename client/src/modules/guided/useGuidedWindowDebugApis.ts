@@ -82,24 +82,24 @@ export function useGuidedWindowDebugApis(args: UseGuidedWindowDebugApisArgs): vo
       exportFrozenLessonAudit: () => exportFrozenLessonAudit(frozenLesson),
       printFrozenLessonAudit: () => {
         const audit = exportFrozenLessonAudit(frozenLesson);
-        console.log('[guided-frozen-audit]', audit);
+        logger.info('guided-frozen-audit', 'audit exported', { audit });
         return audit;
       },
       exportFrozenLessonBoardDiffs: () => exportFrozenLessonBoardDiffs(frozenLesson),
       printFrozenLessonBoardDiffs: () => {
         const diffs = exportFrozenLessonBoardDiffs(frozenLesson);
-        console.log('[guided-frozen-board-diffs]', diffs);
+        logger.info('guided-frozen-board-diffs', 'diffs exported', { diffs });
         return diffs;
       },
       exportFrozenLessonTranscriptSkeleton: () => {
         const draft = buildOriginalTranscriptDraftFromFrozenLesson(frozenLesson);
-        console.log('[guided-frozen-transcript-skeleton]', draft);
+        logger.info('guided-frozen-transcript-skeleton', 'skeleton built', { draft });
         return draft;
       },
     };
 
     win.__guidedFrozenAudit = api;
-    console.log('[guided-frozen-audit] ready on window.__guidedFrozenAudit');
+    logger.info('guided-frozen-audit', 'ready on window.__guidedFrozenAudit');
 
     return () => {
       delete win.__guidedFrozenAudit;
@@ -252,7 +252,7 @@ export function useGuidedWindowDebugApis(args: UseGuidedWindowDebugApisArgs): vo
       },
     };
 
-    console.log('[guided-transcript-authoring] ready on window.__guidedTranscriptAuthoring');
+    logger.info('guided-transcript-authoring', 'ready on window.__guidedTranscriptAuthoring');
 
     return () => {
       delete win.__guidedTranscriptAuthoring;
@@ -261,14 +261,13 @@ export function useGuidedWindowDebugApis(args: UseGuidedWindowDebugApisArgs): vo
 
   useEffect(() => {
     if (!isGuidedMode) return;
-    console.log(
-      '[guided-debug] final rendered match hand =',
-      match.players.you.hand.map((t) => `${t.low}|${t.high}`),
-    );
-    console.log(
-      '[guided-debug] init source =', guidedInitSourceRef.current,
-      '| currentPlayer =', match.currentPlayer,
-    );
+    logger.info('guided-debug', 'final rendered match hand', {
+      hand: match.players.you.hand.map((t) => `${t.low}|${t.high}`),
+    });
+    logger.info('guided-debug', 'init source', {
+      source: guidedInitSourceRef.current,
+      currentPlayer: match.currentPlayer,
+    });
     if (frozenLesson) {
       const frozenStep0 = frozenLesson.steps[0]?.playerHand ?? [];
       const renderedKeys = match.players.you.hand.map((t) => `${t.low}|${t.high}`).slice().sort().join(',');
@@ -280,7 +279,7 @@ export function useGuidedWindowDebugApis(args: UseGuidedWindowDebugApisArgs): vo
           source: guidedInitSourceRef.current,
         });
       } else {
-        console.log('[guided-debug] ✓ hands match — rendered hand matches frozen step0 hand');
+        logger.info('guided-debug', 'hands match — rendered hand matches frozen step0 hand');
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
