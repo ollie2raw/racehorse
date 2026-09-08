@@ -7,7 +7,8 @@ import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalT
 import type { DailyFritzStartResponse } from '../../dailyFritz/api';
 import type { DailyFritzSetOverlayViewModel } from '../../dailyFritz/setOverlayViewModel';
 import type { GhostCompletionResult } from '../../ghost/api';
-import type { AppMode, Move, PlacementPosition, Tile } from '../../types';
+import type { AppMode, BoardState, Move, PlacementPosition, Tile } from '../../types';
+import type { MatchHistoryScrubberState } from '../../modules/replay/index.ts';
 import type { DailyFritzLeaderboardRow } from '../../dailyFritz/api';
 import type { GuidedMatchFinalDebrief } from '../../learn/guidedMatch/guidedMatchFinalDebrief';
 import type { HandOverTileReveal } from '../../components/handOver/handOverCopy';
@@ -129,6 +130,10 @@ export type MatchHudViewModel = {
 export type BoardViewModel = {
   boardRef: RefObject<BoardHandle | null>;
   boneyardRef: RefObject<HTMLDivElement | null>;
+  /** Board to render: the live board, or a projected historical board while scrubbing. */
+  displayBoard: BoardState | null;
+  /** True while the player is parked on a past move — board interaction is suppressed. */
+  viewingHistory: boolean;
   ghostBoardPulse: boolean;
   openEnds: number[];
   openEndsSum: number;
@@ -324,12 +329,19 @@ export type DebugViewModel = {
   lastBotChoice: BotChoice | null;
 };
 
+export type MatchHistoryScrubberViewModel = {
+  /** Whether the scrubber applies to this match mode (solo PvF / Ghost / Daily Fritz, in play). */
+  enabled: boolean;
+  state: MatchHistoryScrubberState;
+};
+
 export type BotMatchScreenViewModel = {
   match: BotMatchState;
   navigation: BotMatchNavigationViewModel;
   layout: BotMatchLayoutViewModel;
   hud: MatchHudViewModel;
   board: BoardViewModel;
+  historyScrubber: MatchHistoryScrubberViewModel;
   hand: HandViewModel;
   coach: CoachViewModel;
   overlays: OverlayViewModel;

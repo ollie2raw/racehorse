@@ -1,3 +1,14 @@
+.rh-scrubber-dock {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+  pointer-events: none;
+}
+
+.rh-scrubber-dock .rh-scrubber {
+  pointer-events: auto;
+}
+
 .rh-scrubber {
   display: flex;
   align-items: center;

@@ -17,6 +17,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     turns,
     rating,
     navigation,
+    historyScrubber,
   } = args;
 
   const {
@@ -129,9 +130,25 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     fritzPresentation: turns.fritzPresentation ?? null,
   };
 
+  // The scrubber is a solo-play affordance only: no guided lesson, authoring,
+  // journey trial, lesson layout, pre-game draw, or finished game.
+  const historyScrubberEnabled =
+    !isGuidedMode &&
+    !isAuthoringMode &&
+    !isAuthoringV2Mode &&
+    !isGuidedV2Mode &&
+    !isJourneyTrial &&
+    !turns.isLessonLayoutMode &&
+    !preGameDrawActive &&
+    !match.gameOver;
+  const viewingHistory = historyScrubberEnabled && historyScrubber.viewingHistory;
+  const displayBoard = viewingHistory ? historyScrubber.historyBoard : match.board;
+
   const board = {
     boardRef: refs.boardRef,
     boneyardRef: refs.boneyardRef,
+    displayBoard,
+    viewingHistory,
     ghostBoardPulse: ghost.ghostBoardPulse,
     openEnds: presentation.openEnds,
     openEndsSum: presentation.openEndsSum,
@@ -324,6 +341,10 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     layout,
     hud,
     board,
+    historyScrubber: {
+      enabled: historyScrubberEnabled,
+      state: historyScrubber,
+    },
     hand,
     coach,
     overlays,

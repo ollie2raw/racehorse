@@ -14,7 +14,7 @@ import { useGhostRuntime } from '../modules/ghost/useGhostRuntime.ts';
 import { useDailyFritzRuntime } from '../modules/daily/useDailyFritzRuntime.ts';
 import { useReviewRuntime } from '../modules/review/useReviewRuntime.ts';
 import { useFritzRatingDisplay } from '../modules/fritz/useFritzRatingDisplay.ts';
-import { useReplayRecorder } from '../modules/replay/index.ts';
+import { useReplayRecorder, useMatchHistoryScrubber } from '../modules/replay/index.ts';
 import { useLocalRunSession } from '../modules/bot-turn/index.ts';
 
 export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatchScreenViewProps {
@@ -54,6 +54,8 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
   );
 
   const localRun = useLocalRunSession(refs.setDrawSequenceActiveBoth);
+
+  const historyScrubber = useMatchHistoryScrubber(replay.moveLog);
 
   const authoring = useAuthoringCapture({
     isAuthoringMode: guidedBoot.isAuthoringMode,
@@ -159,5 +161,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     turns,
     rating,
     navigation,
+    historyScrubber,
   });
 }
