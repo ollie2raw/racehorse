@@ -145,7 +145,7 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .room-reactions,
   .rr-list,
   .rr-emotes,

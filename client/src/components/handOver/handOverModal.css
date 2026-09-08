@@ -492,7 +492,7 @@
   font-weight: 400;
 }
 
-@media (max-width: 800px) {
+@media (--below-wide) {
   .hand-over-modal__panel {
     padding: 22px 22px 20px;
     gap: 14px;

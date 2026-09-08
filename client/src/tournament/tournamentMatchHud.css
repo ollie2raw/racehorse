@@ -64,7 +64,7 @@
   z-index: 9;
 }
 
-@media (max-width: 600px) {
+@media (--phone) {
   .screen.game-screen .tmh .daily-fritz-progress-pill {
     position: relative !important;
     left: auto !important;

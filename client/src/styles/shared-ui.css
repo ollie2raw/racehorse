@@ -671,7 +671,7 @@
 }
 
 /* ─── Responsive Match ─── */
-@media (max-width: 960px) {
+@media (--below-wide) {
   .learn-match-grid {
     flex-direction: column;
     gap: 16px;

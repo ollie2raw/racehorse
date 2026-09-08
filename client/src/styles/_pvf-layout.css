@@ -794,7 +794,7 @@
   }
   .pvf-title { font-size: 36px; }
 }
-@media (max-width: 640px) {
+@media (--phone) {
   .pvf-layout { padding:12px 16px calc(32px + var(--rh-bottom-tab-offset)) !important; }
   .pvf-title { font-size:40px; }
 }

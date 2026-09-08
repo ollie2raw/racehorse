@@ -195,7 +195,7 @@
 }
 
 .dfl-page .rh-hub-filter {
-  height: 30px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: var(--dfl-radius);
   border-color: var(--dfl-line);
@@ -702,7 +702,7 @@
   }
 }
 
-@media (max-width: 860px) {
+@media (--below-wide) {
   .dfl-inner {
     padding: 16px 14px 14px;
   }

@@ -297,7 +297,7 @@
   margin-bottom: 0;
 }
 
-@media (max-width: 600px) {
+@media (--phone) {
   .rh-htp-article {
     padding: var(--space-lg) var(--space-md) var(--space-xl);
     font-size: 16px;

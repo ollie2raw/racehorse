@@ -1157,7 +1157,7 @@
   z-index: 0;
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .learn-player-screen .layout-screen-inner,
   .learn-player-screen .layout-screen-content.screen-shell {
     height: auto;

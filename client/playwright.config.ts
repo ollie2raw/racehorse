@@ -4,7 +4,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(clientDir, '..');
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
+// The reachability harness runs on its own port with a guaranteed-fresh dev
+// server (reuseExistingServer:false below). A stale server on :5173 — one left
+// running from before a postcss.config.js / breakpoint change — silently serves
+// unresolved `@media (--phone)` etc. and makes the whole matrix a lie. Isolating
+// the port + forcing a rebuild is the fix.
+const REACHABILITY = !!process.env.REACHABILITY;
+const CLIENT_PORT = REACHABILITY ? 5233 : 5173;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${CLIENT_PORT}`;
 const PHONE = { width: 390, height: 844 } as const;
 
 export default defineConfig({
@@ -41,7 +48,27 @@ export default defineConfig({
           },
         ]
       : []),
-    { name: 'chromium', testIgnore: /mobile-390.*\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      testIgnore: [/mobile-390.*\.spec\.ts/, /mobile-reachability\.spec\.ts/],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Repo-wide mobile reachability harness (tap targets + h-overflow across
+    // 21 routes × 3 viewports). Sets its own viewport per test. Opt-in via
+    // REACHABILITY=1 (npm run e2e:reachability) so it stays out of the blocking
+    // `e2e` gate until its matrix is green. See docs/breakpoints.md.
+    ...(process.env.REACHABILITY
+      ? [
+          {
+            name: 'mobile-reachability',
+            testMatch: /mobile-reachability\.spec\.ts/,
+            use: { ...devices['Desktop Chrome'] },
+            // Each test settles, then measures twice 500ms apart; live-socket
+            // routes can burn the full settle cap. 90s keeps well clear.
+            timeout: 90_000,
+          },
+        ]
+      : []),
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
@@ -63,10 +90,12 @@ export default defineConfig({
           },
         },
         {
-          command: 'npm run dev',
+          command: `npm run dev -- --port ${CLIENT_PORT} --strictPort`,
           cwd: clientDir,
-          url: 'http://localhost:5173',
-          reuseExistingServer: !process.env.CI,
+          url: `http://localhost:${CLIENT_PORT}`,
+          // Reachability always builds fresh — never inherit a stale server's
+          // unresolved custom-media. Other projects keep the reuse convenience.
+          reuseExistingServer: REACHABILITY ? false : !process.env.CI,
           timeout: 60_000,
           env: {
             ...process.env,

@@ -1775,8 +1775,10 @@
 .pml-start-btn.rh-btn {
   width: 100%;
   justify-content: center;
-  min-height: 36px;
-  height: 36px;
+  /* Standard 44px tap target (Button md). The rule overrides the primitive's
+   * own height, so it has to restate the minimum. */
+  min-height: 44px;
+  height: 44px;
   font-family: 'Outfit', sans-serif;
   font-size: 15px;
   font-weight: 900;
@@ -2572,7 +2574,7 @@
   color: var(--text-primary);
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .mp-hub-shell.mp-hub-shell--pvf {
     padding: 16px 16px 24px;
   }
@@ -2693,7 +2695,7 @@
   opacity: 0.9;
 }
 
-@media (max-width: 768px) {
+@media (--phone) {
   .pml-info-bar {
     grid-template-columns: 1fr;
     gap: 10px;

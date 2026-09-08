@@ -16,7 +16,7 @@
   margin: 0;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .ghost-setup-grid {
     grid-template-columns: 1fr;
   }
@@ -469,7 +469,7 @@
   filter: grayscale(0.5);
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .ghost-explainer-title {
     font-size: 1.25rem;
   }

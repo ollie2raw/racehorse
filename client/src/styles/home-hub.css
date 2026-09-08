@@ -973,7 +973,10 @@
   appearance: none;
   width: fit-content;
   min-width: 0;
-  min-height: 0;
+  /* >=44px tap target — the rule zeroes the primitive's height:44px, so the
+   * 11px padding + 12px text alone left it ~34px. Content is already
+   * flex-centered, so min-height just pads the hit area. */
+  min-height: 44px;
   height: auto;
   display: inline-flex;
   align-items: center;
@@ -1307,7 +1310,7 @@
   width: 100%;
 }
 
-@media (max-width: 980px) {
+@media (--below-wide) {
   .home-lobby-screen {
     padding-inline: 18px;
   }
@@ -1855,7 +1858,7 @@
   }
 }
 
-@media (max-width: 980px) {
+@media (--below-wide) {
   .tournament-screen .tournament-grid-entry,
   .tournament-screen .tournament-grid-waiting,
   .tournament-screen .tournament-grid-running {
@@ -1874,7 +1877,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (--phone) {
   .mode-join-row {
     grid-template-columns: 1fr;
   }
@@ -1884,7 +1887,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .tournament-layout-2col {
     grid-template-columns: 1fr;
   }

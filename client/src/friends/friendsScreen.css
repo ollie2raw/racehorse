@@ -589,7 +589,7 @@
 }
 
 /* ── Responsive ── */
-@media (max-width: 700px) {
+@media (--phone) {
   .friends-page-list-pane {
     width: 100%;
   }

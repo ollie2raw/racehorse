@@ -818,7 +818,7 @@
   flex: 1;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .learn-howto-v2__track {
     width: 100%;
   }
@@ -853,7 +853,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .learn-howto-v2__intro-beats {
     grid-template-columns: 1fr;
   }

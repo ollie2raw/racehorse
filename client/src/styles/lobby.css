@@ -195,7 +195,7 @@
   transform: translateY(-1px);
 }
 
-@media (max-width: 980px) {
+@media (--below-wide) {
   .welcome-modal-card {
     width: 96vw;
     max-width: 96vw;

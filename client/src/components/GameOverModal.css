@@ -451,7 +451,7 @@
   background: transparent;
 }
 
-@media (max-width: 860px) {
+@media (--below-wide) {
   .rh-go-card--guided-split {
     width: calc(100vw - 20px);
     padding: 20px 16px;
@@ -470,7 +470,7 @@
   }
 }
 
-@media (max-width: 700px) {
+@media (--phone) {
   .rh-go-card {
     width: calc(100vw - 20px);
     padding: 20px 14px;

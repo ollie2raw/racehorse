@@ -452,7 +452,7 @@
   color: #fff;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .rh-af-rich-row {
     grid-template-columns: 44px 24px minmax(0, 1fr);
     grid-template-rows: auto auto auto;

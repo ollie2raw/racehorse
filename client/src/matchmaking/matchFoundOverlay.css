@@ -129,7 +129,7 @@
   align-items: stretch;
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .mm-found-grid {
     grid-template-columns: 1fr;
   }
@@ -515,7 +515,7 @@
   border: 1px solid var(--border-subtle);
 }
 
-@media (max-width: 700px) {
+@media (--phone) {
   .mm-found-stats {
     grid-template-columns: 1fr;
   }
@@ -618,7 +618,7 @@
   padding-top: 4px;
 }
 
-@media (max-width: 700px) {
+@media (--phone) {
   .mm-found-foot {
     grid-template-columns: repeat(2, 1fr);
   }

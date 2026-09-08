@@ -164,7 +164,7 @@
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .tr-shell {
     padding: 20px 12px;
   }

@@ -224,7 +224,7 @@
 }
 
 /* Responsive / Mobile styles */
-@media (max-width: 900px) {
+@media (--below-wide) {
   .streak-strip {
     flex-direction: column;
     align-items: stretch;

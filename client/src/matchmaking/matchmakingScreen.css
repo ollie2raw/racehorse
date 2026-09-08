@@ -456,7 +456,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .pvf-layout.mp-hub-pvf-layout {
     padding-left: 20px !important;
     padding-right: 20px !important;

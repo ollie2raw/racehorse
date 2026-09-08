@@ -107,7 +107,7 @@
   text-overflow: ellipsis;
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .mp-topbar {
     padding: 8px 16px 10px;
     flex-wrap: wrap;

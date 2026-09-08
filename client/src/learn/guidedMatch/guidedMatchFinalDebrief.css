@@ -124,7 +124,7 @@
   color: rgba(247, 242, 235, 0.92);
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .guided-match-final-debrief {
     padding: 10px 12px 11px;
   }

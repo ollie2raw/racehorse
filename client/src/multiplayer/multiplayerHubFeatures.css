@@ -49,7 +49,7 @@
   min-height: calc(11px * 1.35);
 }
 
-@media (max-width: 720px) {
+@media (--phone) {
   .mm-features {
     grid-template-columns: 1fr;
   }

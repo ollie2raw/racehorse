@@ -728,7 +728,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (--phone) {
   .home-journey-entry__actions {
     flex-direction: column;
     align-items: stretch;

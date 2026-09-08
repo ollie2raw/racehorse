@@ -1206,7 +1206,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (--below-wide) {
   .learn-howto-welcome__cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1220,7 +1220,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (--phone) {
   .learn-howto-hero__title {
     font-size: clamp(2.35rem, 10vw, 3.25rem);
   }

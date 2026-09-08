@@ -105,7 +105,8 @@
 }
 
 .rh-hub-filter {
-  height: 36px;
+  /* >=44px tap target — native buttons centre their own content. */
+  min-height: 44px;
   padding: 0 16px;
   border: 1px solid var(--hub-panel-border);
   border-radius: var(--hub-radius-pill);

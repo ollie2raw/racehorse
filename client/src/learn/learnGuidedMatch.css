@@ -1221,7 +1221,7 @@
   }
 }
 
-@media (max-width: 820px) {
+@media (--below-wide) {
   .learn-guided-pvf__panel.pvf-control-panel {
     padding: 16px !important;
   }
