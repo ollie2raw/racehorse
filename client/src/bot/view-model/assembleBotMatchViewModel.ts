@@ -53,7 +53,6 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     isGhostMode,
     isDailyFritzMode,
     isJourneyTrial,
-    isDailyPuzzleRun,
     isStandaloneFritzMatch,
     isPlayVsFritzGameOver,
     showPostGameOverlays,
@@ -87,7 +86,6 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     isAuthoringV2Mode,
     isGuidedV2Mode,
     isJourneyTrial,
-    isDailyPuzzleRun,
     isStandaloneFritzMatch,
     isPlayVsFritzGameOver,
     guidedV2BootError,
@@ -279,16 +277,6 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       guidedMatchCandidateSaveStatus: turns.guidedMatchCandidateSaveStatus,
       dailyFritzRank: dailyFritz.dailyFritzRank,
       dailyFritzLeaderboard: dailyFritz.dailyFritzLeaderboard,
-      isDailyPuzzleRun,
-      userId: userId ?? null,
-      // Daily-puzzle "Today's Top Scores" state — still surfaced for the
-      // isDailyPuzzleRun-gated BotGameOverModal block (currently unreachable;
-      // see CODE_QUALITY_PLAN.md F1 + the deferred daily_puzzle* cluster).
-      // Sourced directly from the runtime that owns the useState; the deleted
-      // useDailyPuzzleLeaderboardSync hook was a pure pass-through of these.
-      dailyLeaderboardLoading: dailyFritz.dailyLeaderboardLoading,
-      dailyLeaderboardError: dailyFritz.dailyLeaderboardError,
-      dailyLeaderboard: dailyFritz.dailyLeaderboard,
       ghostRatingDeltaLabel: ghost.ghostRatingDeltaLabel,
       ghostResultMessage: ghost.ghostResultMessage,
       canSaveGuidedMatchCandidate: turns.canSaveGuidedMatchCandidate,

@@ -17,7 +17,6 @@ const formatGhostName = (rawName: string) => {
 import type { GuidedMatchFinalDebrief } from '../learn/guidedMatch/guidedMatchFinalDebrief';
 import type { GuidedMatchCaptureStatus } from '../learn/guidedMatch/guidedMatchCapture';
 import type { GhostCompletionResult } from '../ghost/api';
-import type { DailyPuzzleLeaderboardEntry } from '../dailyPuzzle/api';
 import type { AppMode } from '../appRouteTypes';
 import type { DailyFritzLeaderboardRow } from '../dailyFritz/api';
 
@@ -53,17 +52,11 @@ export interface BotGameOverModalProps {
   ghostResultError: string | null;
   dailyFritzRank: number | null;
   dailyFritzLeaderboard: DailyFritzLeaderboardRow[];
-  isDailyPuzzleRun: boolean;
-  userId: string | null;
-  dailyLeaderboardLoading: boolean;
-  dailyLeaderboardError: string | null;
-  dailyLeaderboard: DailyPuzzleLeaderboardEntry[];
   ghostRatingDeltaLabel: string | null;
   ghostResultMessage: string;
   canSaveGuidedMatchCandidate: boolean;
   isGuidedMode: boolean;
   ghostResult: GhostCompletionResult | null;
-
 
   onExitMatch: () => void;
   onGoHome: () => void;
@@ -98,11 +91,6 @@ export const BotGameOverModal: React.FC<BotGameOverModalProps> = ({
   ghostResultError,
   dailyFritzRank,
   dailyFritzLeaderboard,
-  isDailyPuzzleRun,
-  userId,
-  dailyLeaderboardLoading,
-  dailyLeaderboardError,
-  dailyLeaderboard,
   ghostRatingDeltaLabel,
   ghostResultMessage,
   canSaveGuidedMatchCandidate,
@@ -355,60 +343,6 @@ export const BotGameOverModal: React.FC<BotGameOverModalProps> = ({
               </div>
             ))}
           </div>
-        </div>
-      )}
-      {isDailyPuzzleRun && (
-        <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
-          {!userId && (
-            <p className="lobby-server" style={{ margin: '0 0 8px' }}>
-              Log in to submit your score.
-            </p>
-          )}
-          {dailyLeaderboardLoading && (
-            <p className="lobby-server" style={{ margin: 0 }}>
-              Loading leaderboard...
-            </p>
-          )}
-          {!dailyLeaderboardLoading && dailyLeaderboardError && (
-            <p className="lobby-server" style={{ margin: 0 }}>
-              {dailyLeaderboardError}
-            </p>
-          )}
-          {!dailyLeaderboardLoading &&
-            !dailyLeaderboardError &&
-            dailyLeaderboard.length === 0 && (
-              <p className="lobby-server" style={{ margin: 0 }}>
-                No scores posted yet.
-              </p>
-            )}
-          {!dailyLeaderboardLoading && dailyLeaderboard.length > 0 && (
-            <div style={{ display: 'grid', gap: 6 }}>
-              {dailyLeaderboard.map((entry, idx) => {
-                const isCurrentUser = Boolean(userId) && entry.userId === userId;
-                return (
-                  <div
-                    key={`${entry.userId}-${idx}`}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '52px 1fr auto',
-                      gap: 8,
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 8px',
-                      background: isCurrentUser
-                        ? 'rgba(255, 215, 0, 0.16)'
-                        : 'rgba(255, 255, 255, 0.04)',
-                    }}
-                  >
-                    <span>#{idx + 1}</span>
-                    <span>@{entry.username}</span>
-                    <span>{entry.bestScore}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
     </GameOverModal>

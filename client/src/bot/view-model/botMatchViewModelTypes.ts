@@ -6,7 +6,6 @@ import type { PivotalReviewSession, PivotalTurnReflection } from '../../training
 import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector';
 import type { DailyFritzStartResponse } from '../../dailyFritz/api';
 import type { DailyFritzSetOverlayViewModel } from '../../dailyFritz/setOverlayViewModel';
-import type { DailyPuzzleLeaderboardEntry } from '../../dailyPuzzle/api';
 import type { GhostCompletionResult } from '../../ghost/api';
 import type { AppMode, Move, PlacementPosition, Tile } from '../../types';
 import type { DailyFritzLeaderboardRow } from '../../dailyFritz/api';
@@ -90,7 +89,6 @@ export type BotMatchLayoutViewModel = {
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
   isJourneyTrial: boolean;
-  isDailyPuzzleRun: boolean;
   isStandaloneFritzMatch: boolean;
   isPlayVsFritzGameOver: boolean;
   guidedV2BootError: string | null;
@@ -272,11 +270,6 @@ export type ModalOverlayViewModel = {
   guidedMatchCandidateSaveStatus: string | null;
   dailyFritzRank: number | null;
   dailyFritzLeaderboard: DailyFritzLeaderboardRow[];
-  isDailyPuzzleRun: boolean;
-  userId: string | null;
-  dailyLeaderboardLoading: boolean;
-  dailyLeaderboardError: string | null;
-  dailyLeaderboard: DailyPuzzleLeaderboardEntry[];
   ghostRatingDeltaLabel: string | null;
   ghostResultMessage: string;
   canSaveGuidedMatchCandidate: boolean;

@@ -4,7 +4,6 @@ import { startGhostMatchSession } from './ghostContracts.ts';
 type UseGhostMatchSessionStartArgs = {
   userId: string | null | undefined;
   isGhostMode: boolean;
-  isDailyPuzzleRun: boolean;
   matchGameOver: boolean;
   verifiedMatchId: string | null;
   activeLocalMatchId: string;
@@ -15,7 +14,6 @@ type UseGhostMatchSessionStartArgs = {
 export function useGhostMatchSessionStart({
   userId,
   isGhostMode,
-  isDailyPuzzleRun,
   matchGameOver,
   verifiedMatchId,
   activeLocalMatchId,
@@ -23,7 +21,7 @@ export function useGhostMatchSessionStart({
   setVerifiedMatchId,
 }: UseGhostMatchSessionStartArgs): void {
   useEffect(() => {
-    if (!userId || !isGhostMode || isDailyPuzzleRun) return;
+    if (!userId || !isGhostMode) return;
     if (matchGameOver || verifiedMatchId) return;
     let cancelled = false;
     void startGhostMatchSession({
@@ -43,7 +41,6 @@ export function useGhostMatchSessionStart({
     };
   }, [
     activeLocalMatchId,
-    isDailyPuzzleRun,
     isGhostMode,
     matchGameOver,
     opponentUserId,

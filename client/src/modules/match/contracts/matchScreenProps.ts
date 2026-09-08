@@ -13,7 +13,6 @@ export interface BotMatchScreenProps {
   dealSize: BotDealSize;
   fritzTier?: FritzTier;
   mode?: 'bot' | 'ghost' | 'daily-fritz';
-  dailyPuzzleDate?: string | null;
   userId?: string | null;
   username?: string | null;
   winningScore?: number;

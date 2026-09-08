@@ -131,7 +131,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     presentation,
     ghost,
     review,
-    dailyFritz,
     replayRecorder: replay.recorder,
     setGuidedMatchCandidateSaveStatus: turns.setGuidedMatchCandidateSaveStatus,
     isGuidedV2Mode: guidedBoot.isGuidedV2Mode,

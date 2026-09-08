@@ -112,10 +112,6 @@ export function useDailyFritzRuntime({
     resumablePersistedDailyFritzMatch?.handResult ?? null,
   );
 
-  const [dailyLeaderboard, setDailyLeaderboard] = useState<import('../../dailyPuzzle/api.ts').DailyPuzzleLeaderboardEntry[]>([]);
-  const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
-  const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
-
   const persistenceSession = dailyFritzSession ?? {
     cursor: {
       gameNumber: (dailyFritzPackage?.current_game_number ?? 1) as 1,
@@ -240,12 +236,6 @@ export function useDailyFritzRuntime({
     preGameDraw,
     scriptedPlayerTileId,
     scriptedFritzTileId,
-    dailyLeaderboard,
-    setDailyLeaderboard,
-    dailyLeaderboardLoading,
-    setDailyLeaderboardLoading,
-    dailyLeaderboardError,
-    setDailyLeaderboardError,
   };
 }
 

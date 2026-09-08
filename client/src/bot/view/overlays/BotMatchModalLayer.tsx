@@ -127,11 +127,6 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         ghostResultError={modals.ghostResultError}
         dailyFritzRank={modals.dailyFritzRank}
         dailyFritzLeaderboard={modals.dailyFritzLeaderboard}
-        isDailyPuzzleRun={modals.isDailyPuzzleRun}
-        userId={modals.userId}
-        dailyLeaderboardLoading={modals.dailyLeaderboardLoading}
-        dailyLeaderboardError={modals.dailyLeaderboardError}
-        dailyLeaderboard={modals.dailyLeaderboard}
         ghostRatingDeltaLabel={modals.ghostRatingDeltaLabel}
         ghostResultMessage={modals.ghostResultMessage}
         canSaveGuidedMatchCandidate={modals.canSaveGuidedMatchCandidate}
