@@ -1,6 +1,6 @@
 # Responsive breakpoints — the one system
 
-All responsive CSS in `client/src/` uses **four** named breakpoints. Do not
+All responsive CSS in `client/src/` uses **three** named breakpoints. Do not
 write raw `@media (max-width: …)` / `(min-width: …)` queries in new code.
 
 | Custom media          | Resolves to                                          | Meaning |
@@ -8,7 +8,10 @@ write raw `@media (max-width: …)` / `(min-width: …)` queries in new code.
 | `--phone`             | `(max-width: 768px)`                                  | Phone. One column, bottom tab bar, full-bleed panels. |
 | `--desk`              | `(min-width: 769px)`                                  | Desktop and up. The complement of `--phone` — together they tile the whole range with no gap or overlap. This is the existing "769px desk line". |
 | `--below-wide`        | `(max-width: 900px)`                                  | Not a wide viewport. Collapse multi-column grids to a single column; used by hub/landing layouts that need to reflow earlier than the phone breakpoint. |
-| `--landscape-short`   | `(orientation: landscape) and (max-height: 480px)`    | In-game board on a landscape phone. Height-gated so it does **not** match a landscape tablet or a short desktop window. |
+
+The in-game rendering subsystem is **not** part of this system — its landscape
+rules keep the literal `(max-width: 900px) and (orientation: landscape)` query.
+See "Excluded from the system" below.
 
 ## Usage
 
@@ -55,26 +58,21 @@ rule previously at `max-width: 640px` now triggers at 768px; one at 980px now at
 find/replace. The rules whose *body* looked width-range-specific rather than
 generically phone-shaped are listed below for visual verification.
 
-## Behavior change — landscape query (not a mechanical rename)
+## Landscape query — unchanged (no `--landscape-short`)
 
-The old in-game landscape query was:
+PR #110's commit message and an earlier draft of this doc claimed a
+`--landscape-short` `(orientation: landscape) and (max-height: 480px)` token
+had *replaced* the in-game `(max-width: 900px) and (orientation: landscape)`
+query. **That never shipped** (issue #111): no rule ever consumed the token,
+the in-game landscape rules were never touched (excluded subsystem), and
+`rotate-overlay.css`'s only change resolved to byte-identical CSS. The dead
+token was removed here.
 
-```css
-@media (max-width: 900px) and (orientation: landscape) { … }
-```
-
-This **falsely matched a portrait tablet** held in a wide browser window, and
-any landscape viewport up to 900px wide regardless of height. The new
-`--landscape-short` is:
-
-```css
-@media (orientation: landscape) and (max-height: 480px) { … }
-```
-
-which requires an actually-short viewport — i.e. a phone in landscape. **Flag
-for visual verification** on: a landscape phone (should still get the compact
-in-game board treatment), a portrait tablet (should now NOT), and a small
-landscape desktop window (should now NOT).
+If the height-gated query is worth adopting for the in-game subsystem later,
+that's a deliberate, separately-scoped change to
+`match/match-live-theme.css`, `styles/match-live-hud.css`,
+`styles/walnut-live.css`, and `styles/board/board-layout.css` — not a token
+reinstatement.
 
 ## Needs visual check
 
