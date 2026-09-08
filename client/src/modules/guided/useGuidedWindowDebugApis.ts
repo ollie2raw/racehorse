@@ -282,5 +282,6 @@ export function useGuidedWindowDebugApis(args: UseGuidedWindowDebugApisArgs): vo
         logger.info('guided-debug', 'hands match — rendered hand matches frozen step0 hand');
       }
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount audit (rendered hand vs frozen step0); re-running on match/lesson churn would spam the mismatch log (F5)
+  }, []);
 }

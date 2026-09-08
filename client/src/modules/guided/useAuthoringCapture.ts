@@ -149,7 +149,8 @@ export function useAuthoringCapture({
     // NOTE: Do NOT clear fritzSessionReplyRef here. The ref holds Fritz's reply
     // events from the bot turn that just finished, and those events need to be
     // flushed into the PREVIOUS authored step by the flush effect below.
-  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- turn-start latch: reads authoringSteps the moment the player's turn begins; adding it as a dep re-latches the snapshot after every Save-Note press, which the stepIdx lock above exists to prevent (F5)
+  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]);
 
   useEffect(() => {
     if (!isAuthoringV2Mode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
@@ -258,7 +259,8 @@ export function useAuthoringCapture({
       logger.info('v2-capture', 'hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
       return [...prev, handStart];
     });
-  }, [isAuthoringV2Mode, match.handNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires on match.handNumber change only; match is read directly (matchRef lags a tick) and adding it re-captures the hand-start on every match update (F5)
+  }, [isAuthoringV2Mode, match.handNumber]);
 
   /**
    * Authoring: record the current player turn as an authored step.
