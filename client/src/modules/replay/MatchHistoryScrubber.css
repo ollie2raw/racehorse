@@ -1,0 +1,65 @@
+.rh-scrubber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-body);
+  user-select: none;
+}
+
+.rh-scrubber--viewing {
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+.rh-scrubber-step.rh-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.rh-scrubber-label {
+  min-width: 118px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-scrubber:not(.rh-scrubber--viewing) .rh-scrubber-label {
+  color: var(--tier-standard);
+}
+
+.rh-scrubber-live.rh-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rh-scrubber-live-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--tier-standard);
+  color: var(--bg-obsidian);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
