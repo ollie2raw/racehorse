@@ -35,6 +35,7 @@
     "check:multiplayer-cycles": "depcruise src/multiplayer --config .dependency-cruiser.multiplayer-cycles.json --output-type err",
     "check:socket-registry": "npx tsx scripts/validateSocketEventRegistry.ts",
     "check:architecture": "npx tsx scripts/checkArchitectureInvariants.ts",
+    "check:server-fresh": "node scripts/checkServerFresh.mjs",
     "check:bot-match-lazy": "node scripts/checkBotMatchLazyBoundaries.mjs --dist",
     "test": "vitest run",
     "test:watch": "vitest",

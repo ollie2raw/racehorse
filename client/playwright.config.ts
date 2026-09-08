@@ -16,6 +16,9 @@ const PHONE = { width: 390, height: 844 } as const;
 
 export default defineConfig({
   testDir: './e2e',
+  // Aborts the run if the client dev server is serving stale config (issue
+  // #119) — see e2e/globalSetup.ts.
+  globalSetup: './e2e/globalSetup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
