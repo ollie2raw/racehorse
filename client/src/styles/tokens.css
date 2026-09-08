@@ -234,9 +234,11 @@
      @media (--phone)           { ... }   phone: one column, bottom tabs
      @media (--desk)            { ... }   desktop and up (the existing line)
      @media (--below-wide)      { ... }   not a wide viewport: collapse grids
-     @media (--landscape-short) { ... }   in-game board on a landscape phone
+
+   The in-game landscape rules deliberately keep their literal
+   `(max-width: 900px) and (orientation: landscape)` query — that subsystem
+   is excluded from this system. See docs/breakpoints.md.
    ------------------------------------------------------------------ */
 @custom-media --phone (max-width: 768px);
 @custom-media --desk (min-width: 769px);
 @custom-media --below-wide (max-width: 900px);
-@custom-media --landscape-short (orientation: landscape) and (max-height: 480px);
