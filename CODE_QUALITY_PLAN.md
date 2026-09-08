@@ -1036,6 +1036,106 @@ imports) plus the self-import at `useGuidedV2CoordinationState.ts:6`. The
 cycle). Step 2 grades what to trim; Step 3 trims only the ratified scope. F5's
 exhaustive-deps `why`-comment residual folds into this pass if greenlit.
 
+### CQ9.2.F3 F3 — Step-2 graded proposal (2026-09-08, **read-only, awaits ratification**)
+
+Built on the `§CQ9.1.7` Step-1 map. No code touched. Scope bounded by the 4
+bypass patterns + 1 self-import already identified. **Zero `learn/` surface** —
+the barrel trim is orthogonal to the `learn/` coupling (no `learn/` barrel, no
+cycle, confirmed Step 1). **Zero runtime behaviour change** — pure
+export-surface edit.
+
+#### Grades
+
+**KEEP — the real external contract (8 symbols).** What `bot/*` and
+`modules/match/*` legitimately consume *through* the barrel:
+
+| Symbol | Kind | Sole external barrel consumer(s) |
+|---|---|---|
+| `useAuthoringCapture` | value | `bot/useBotMatchScreenController.ts` |
+| `useGuidedLessonBoot` | value | `bot/useBotMatchScreenController.ts` |
+| `useGuidedMatchRuntime` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedMatchCommandEffects` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedMatchCaptureRuntime` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedV2CoordinationState` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `UseGuidedLessonBootResult` | type | 9 files across `bot/`, `modules/match`, `modules/ghost`, `modules/daily`, `modules/review`, `modules/fritz` |
+| `GuidedPlacementResult` | type | `modules/player-turn/types.ts` |
+
+**TRIM from the barrel (45 symbols).** No external importer; every internal
+consumer already imports by file path (verified — only exception is the one
+self-import fixed below), so removal breaks nothing. They stay exported from
+their own defining files.
+
+- **Values (26):** `buildBotMatchStateFromV2Event`, `parseV2EventHands`,
+  `resolveNextPlayerAfterV2Event`, `buildCoachPreviewText`,
+  `formatLessonTileLabel`, `getGuidedV1AuthoredStepByIndex`,
+  `getGuidedV1OrderedAuthoredSteps`, `guidedWinnerIdFromScores`,
+  `notifyGuidedV2EventToasts`, `parseGuidedLessonCoachContent`,
+  `parseGuidedTranscriptState`, `sameTileKeyMultiset`,
+  `splitCoachingSummaryBlock`, `syncGuidedBoneyardCount`,
+  `computeGuidedCoachTip`, `computeGuidedScoringTiles`,
+  `buildGuidedCoachPresentation`, `buildGuidedCoachingFlags`,
+  `buildLessonCoachPanelContent`, `buildLessonCoachVm`,
+  `buildLessonRecommendedTileKey`, `computeActivePlacementMoves`,
+  `useGuidedV2PlaybackEffects`, `useGuidedV1ReplayEffect`,
+  `useGuidedWindowDebugApis`, `useGuidedPlacementHandlers`.
+- **Types (19):** `AuthoringFritzCapturePayload`, `UseAuthoringCaptureParams`,
+  `GuidedInitSource`, `UseGuidedLessonBootArgs`, `UseGuidedMatchRuntimeArgs`,
+  `UseGuidedMatchRuntimeBaseResult`, `UseGuidedMatchRuntimeResult`,
+  `GuidedV2CoordinationState`, `UseGuidedMatchCommandEffectsArgs`,
+  `BuildGuidedCoachPresentationInput`, `GuidedCoachPresentation`,
+  `GuidedCoachingFlags`, `LessonCoachPanelContent`,
+  `UseGuidedV2PlaybackEffectsArgs`, `UseGuidedV1ReplayEffectArgs`,
+  `UseGuidedWindowDebugApisArgs`, `UseGuidedMatchCaptureRuntimeArgs`,
+  `UseGuidedMatchCaptureRuntimeResult`, `GuidedPlacementHandlerDeps`.
+  The `UseGuidedMatch*` / `GuidedV2CoordinationState` types **do** have external
+  consumers, but every one imports from the defining file
+  (`useGuidedMatchRuntimeTypes.ts` — not itself barrel-exported —,
+  `useGuidedV2CoordinationState.ts`, …), never via the barrel. The barrel path
+  for these is dead.
+
+Barrel shrinks **57 lines → ~14** (8 symbols from 4 files).
+
+**FIX — bypass / hygiene (fold into the same pass):**
+
+1. **Self-import** — `modules/guided/useGuidedV2CoordinationState.ts:6`:
+   `import type { UseGuidedLessonBootResult } from './index.ts'` →
+   `from './useGuidedLessonBoot.ts'`. An internal file importing its own barrel
+   is wrong regardless of the trim.
+2. **Dead re-export** — `modules/match/index.ts:22–26` re-exports
+   `useAuthoringCapture` + `AuthoringFritzCapturePayload` +
+   `UseAuthoringCaptureParams` from `../guided/useAuthoringCapture.ts`.
+   **Zero consumers** (verified: every `useAuthoringCapture` import resolves to
+   the guided barrel or the file directly, never `modules/match`). Delete —
+   same class as F18 → grade **FIX NOW**.
+3. **Name collision** — `bot/BotGuidedMatchPanel.tsx:5` local
+   `interface LessonCoachPanelContent` vs the canonical in
+   `guidedCoachPresentationTypes.ts`. Rename the local. Grade **STYLE**, low
+   priority — safe to defer if it widens the diff.
+
+**F5 fold-in (from `§CQ9.1.2`):** the 8 `react-hooks/exhaustive-deps` disables
+in `modules/guided/` lacking a one-line `why` — add the comment. No logic
+change.
+
+#### Risk / cost
+
+- **Risk: LOW.** Pure export-surface + one import-path fix + one dead-shim
+  delete. No `learn/`, no runtime, no protected multiplayer surface. TypeScript
+  turns any missed consumer into a compile error, not a silent break.
+- **Cost:** ~1 pass. Edits: `index.ts` (delete ~43 lines), 1 self-import line,
+  `modules/match/index.ts` (delete 5 lines), ~8 `why` comments, optionally 1
+  rename.
+- **Step-3 verification bar (same as F1):** `tsc -b`, full client + server
+  vitest, lint (0 errors), `lint:css`, `check:architecture`, `check:deps`,
+  `check:bot-match-lazy` (guided is on the bot lazy-chunk path — the trim must
+  not change what the standard bot entry statically pulls).
+
+#### Not in scope
+
+Restructuring `modules/guided/*` internals, the `learn/` coupling, or the
+`match-turn-stack` → guided file-path type imports (precise, type-only;
+converting them to a barrel path would *increase* coupling). Step 3 trims the
+ratified list only.
+
 ## CQ9.2 Graded findings list — **Step 2, written 2026-09-05, awaiting ratification as `D-CQ-1`**
 
 Every Step-1 candidate assigned exactly one grade. **Nothing here is a
