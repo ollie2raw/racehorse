@@ -591,3 +591,67 @@ path, and every open challenge row is already unstartable) — but its routes ar
 **unmounted dead code on `main`** (`HARDENING_PLAN.md`, FC-DEAD-1), so INV-19
 and this detector are deliberately scoped to Daily Fritz; if the feature is
 revived, the tolerance path is part of that revival, not this guardrail.
+
+---
+
+## 8. Bundle-boundary checks must run against a fresh build, not the source graph
+
+**Rule:** the `BotMatchScreen` lazy-load boundary is verified two ways, and only
+one is authoritative. `checkBotMatchLazyBoundaries.mjs` **source-graph mode**
+walks static `import` statements from `BotMatchScreen.tsx` and flags a
+hard-coded list of known-heavy analyzer files; **`--dist` mode** scans the
+actual production chunks Rollup emitted. Source-graph mode *cannot see chunk
+assignment* — a module that is not itself on the forbidden list but is **shared
+between the bot path and the analyzer and gets hoisted by Rollup into the
+`analyzer-*` chunk** produces a static `BotMatchScreen → analyzer-*` edge that
+only `--dist` catches. So: any change that adds an import reachable from
+`BotMatchScreen` must be verified with `npm run build && npm run
+check:bot-match-lazy` (which passes `--dist`) — a bare
+`node scripts/checkBotMatchLazyBoundaries.mjs` or a stale `dist/` is not a
+check.
+
+**Closes:** the local-verification gap behind **PR #129** (mid-match move
+scrubber). `useMatchHistoryScrubber` imported `derivePostMoveReviewBoard` from
+`src/analyzer/reviewBoardState.ts` — a pure board projection `moveAnalyzer` also
+imports. Rollup hoisted the shared module into `analyzer-*`, giving
+`BotMatchScreen-*.js` a static `import … from "./analyzer-*.js"`. The bare
+source-graph script (run locally, no `--dist`) passed because `reviewBoardState`
+is not `moveAnalyzer`/`handSegmentation`/`consequenceChain`/`analysisTypes`. CI's
+`--dist` run caught it — but only on the *second* CI run, because the check runs
+after the e2e step in the Client Validation job and the first run's e2e failure
+stopped the job before it (the `ci-steps-hide-behind-earlier-failures` pattern).
+Fixed by moving the file to `src/modules/replay/reviewBoardState.ts` and pinning
+it to the `move-logger` chunk via `vite.config.ts` `manualChunks` — the same
+pattern already used for `botEngine` / `botHeuristics` / `moveLogger`, all
+play-path helpers `moveAnalyzer` imports.
+
+**Enforcement — BUILT:**
+- `.github/workflows/ci.yml` runs `npm run check:bot-match-lazy` (→
+  `checkBotMatchLazyBoundaries.mjs --dist`) as a **required** step in the Client
+  Validation job, *after* `npm run build --prefix client`. This has always been
+  the authoritative gate; a violation fails the merge.
+- **`--dist` now refuses a stale build.** `scanDistChunks` compares the newest
+  mtime under `src/` against the newest under `dist/assets/` and throws
+  `dist/ is older than src/ … Run npm run build first` rather than scanning an
+  out-of-date chunk set. This is what turns "run the check" into "run the check
+  meaningfully" — a stale `dist/` was previously a silent false-pass.
+- **Bare (source-graph) mode now prints a `⚠` banner** on every run stating that
+  it cannot see chunk assignment and will false-pass a hoisted shared module,
+  and that CI runs `--dist`.
+- **Negative test:** `checkBotMatchLazyBoundaries.test.ts` covers
+  `chunkHasForbiddenStaticImport` (static `analyzer-*` import flagged, lazy
+  `import()` / mapDeps metadata allowed) and `newestMtime` (0 for a missing
+  dir, positive for a real one — the stale-dist guard's primitive). Verified
+  against the repo: fresh build → pass; `touch src/bot/BotMatchScreen.tsx` →
+  stale-build throw.
+
+**Known limitation, stated plainly.** Source-graph mode's forbidden-file list
+(`moveAnalyzer|handSegmentation|consequenceChain|analysisTypes`) is still a
+hand-maintained approximation — it exists only as a fast local pre-filter and
+will keep drifting from reality. It is **not** trustworthy on its own and the
+banner now says so; the `--dist` build scan is the real check and the only one
+CI gates on. The stale-dist guard is mtime-based: a `git checkout` that resets
+all mtimes to the same instant, followed by a build, leaves `dist/` newer — the
+realistic CI and local sequence — but an unusual filesystem-clock or
+touch-everything scenario could theoretically defeat it. It is a guard against
+the common "forgot to rebuild" mistake, not a content hash.

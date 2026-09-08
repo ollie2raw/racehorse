@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   chunkHasForbiddenStaticImport,
   isAnalyzerChunkRequest,
   isForbiddenRuntimeModule,
   isLessonV2ChunkRequest,
+  newestMtime,
 } from './checkBotMatchLazyBoundaries.mjs';
+
+const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe('checkBotMatchLazyBoundaries helpers', () => {
   it('detects forbidden runtime module paths', () => {
@@ -19,6 +24,11 @@ describe('checkBotMatchLazyBoundaries helpers', () => {
 
     const lazy = 'const d=(i,m,d=(m.f||(m.f=["assets/analyzer-BBq.js"])))=>i.map(i=>d[i]);import("./game-reviewer.js");';
     expect(chunkHasForbiddenStaticImport(lazy)).toEqual([]);
+  });
+
+  it('newestMtime: 0 for a missing dir, positive for a real one — the stale-dist guard', () => {
+    expect(newestMtime(path.join(scriptsDir, 'does-not-exist'))).toBe(0);
+    expect(newestMtime(scriptsDir)).toBeGreaterThan(0);
   });
 
   it('matches lesson-v2 and analyzer network URLs for dev and prod', () => {
