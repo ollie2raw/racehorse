@@ -26,12 +26,47 @@ import { fileURLToPath } from 'node:url';
  * no assertion. The red/green matrix is written to
  * e2e/screenshots/mobile-reachability/matrix.json after a full run.
  *
- * Auth-gated routes (stats/friends/social/settings/...) render their signed-out
- * gate as a guest; the gate itself must still pass both contracts.
+ * Two passes:
+ *  - default (guest): auth-gated routes (stats/friends/social/settings/...)
+ *    render their signed-out gate; the gate itself must still pass. Blocking.
+ *  - REACHABILITY_AUTHED=1 (npm run e2e:reachability:authed): reuses the
+ *    .auth/daily-fritz-qa.json fixture so those routes render real content.
+ *    Local-only, informational, auto-skips without a current fixture. See
+ *    issue #116.
  */
 
 const e2eDir = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.join(e2eDir, 'screenshots', 'mobile-reachability');
+const AUTHED = !!process.env.REACHABILITY_AUTHED;
+const authStatePath = path.resolve(process.cwd(), '.auth/daily-fritz-qa.json');
+const outDir = path.join(
+  e2eDir,
+  'screenshots',
+  AUTHED ? 'mobile-reachability-authed' : 'mobile-reachability',
+);
+
+/** The `sb-<ref>-auth-token` localStorage entry from the QA fixture, if current. */
+function readAuthTokenFromFixture(filePath: string): { name: string; value: string } | null {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const state = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+      origins?: Array<{ localStorage?: Array<{ name?: string; value?: string }> }>;
+    };
+    for (const origin of state.origins ?? []) {
+      for (const entry of origin.localStorage ?? []) {
+        if (!entry.name?.startsWith('sb-') || !entry.name.endsWith('-auth-token') || !entry.value) {
+          continue;
+        }
+        const session = JSON.parse(entry.value) as { expires_at?: unknown };
+        if (typeof session.expires_at === 'number' && session.expires_at > Date.now() / 1000 + 60) {
+          return { name: entry.name, value: entry.value };
+        }
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
 
 const MIN_TAP = 44;
 const MIN_SPACING = 24;
@@ -82,8 +117,24 @@ type Cell = { route: string; bp: string; pass: boolean; violations: Violation[] 
 const jsonlPath = path.join(outDir, 'cells.jsonl');
 
 test.beforeEach(async ({ page }) => {
-  // Past the welcome gate, with a stable guest identity so identity-derived UI
-  // renders instead of a first-run prompt.
+  if (AUTHED) {
+    // Reuse the QA fixture's Supabase session, injected for whatever origin the
+    // reachability server runs on (storageState is per-origin; addInitScript is
+    // not). Auto-skip if there's no current fixture — run `npm run
+    // qa:capture-auth` to make one.
+    const token = readAuthTokenFromFixture(authStatePath);
+    test.skip(
+      !token,
+      'authed reachability needs a current .auth/daily-fritz-qa.json (npm run qa:capture-auth)',
+    );
+    await page.addInitScript((entry) => {
+      window.localStorage.setItem('hasSeenWelcome', '1');
+      window.localStorage.setItem(entry!.name, entry!.value);
+    }, token);
+    return;
+  }
+  // Guest pass: past the welcome gate, with a stable guest identity so
+  // identity-derived UI renders instead of a first-run prompt.
   await page.addInitScript(() => {
     window.localStorage.setItem('hasSeenWelcome', '1');
     window.localStorage.setItem('racehorse_guest_identity_v1', 'guest_e2e_reach_stable');
@@ -256,6 +307,9 @@ for (const bp of BREAKPOINTS) {
 }
 
 test.afterAll(async () => {
+  // Nothing to assemble if every test skipped (e.g. the authed pass with no
+  // .auth fixture) — cells.jsonl was never created.
+  if (!fs.existsSync(jsonlPath)) return;
   fs.mkdirSync(outDir, { recursive: true });
   // Assemble from the JSONL, keeping the last cell written per route|bp.
   const byKey = new Map<string, Cell>();

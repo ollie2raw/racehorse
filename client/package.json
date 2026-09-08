@@ -44,6 +44,8 @@
     "preview": "vite preview",
     "e2e": "playwright test",
     "e2e:reachability": "REACHABILITY=1 playwright test --project=mobile-reachability",
+    "e2e:reachability:authed": "REACHABILITY_AUTHED=1 playwright test --project=mobile-reachability-authed",
+    "seed:reachability-qa": "node scripts/seedReachabilityQaData.mjs",
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "size-check": "node scripts/check-bundle-size.mjs"
