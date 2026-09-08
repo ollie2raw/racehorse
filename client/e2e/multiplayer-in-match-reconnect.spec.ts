@@ -18,6 +18,7 @@ import {
   waitForGuestDisconnectSignal,
   attachServerStateProbe,
   readLastServerStateSnapshot,
+  readServerStateLog,
   wipeNonIdentityLocalStorage,
   installStaleMoveProbe,
   readStaleMoveAck,
@@ -142,7 +143,7 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     await guestContext.close();
   });
 
-  test('B2 — race window: a stale-tab MOVE fired concurrently with the second tab\'s takeover is still rejected, never applied', async ({
+  test('B2 — race window: a stale-tab MOVE fired concurrently with the second tab\'s takeover never mutates authoritative state after migration', async ({
     browser,
   }, testInfo) => {
     // Test B proves rejection AFTER the second tab has fully settled into the
@@ -153,6 +154,9 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     // (Promise.all, no await between them) instead of sequentially, so the
     // server sees them essentially at once rather than cleanly ordered by
     // Playwright's own await scheduling.
+    //
+    // What this asserts, and why it is POST-migration only: see the long
+    // comment on the invariant block near the end of the test.
     const runId = testInfo.testId;
     const identity = makeRunIdentity('a', runId);
     const primaryContext = await browser.newContext();
@@ -165,10 +169,20 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     await seedPlayerIdentity(guestContext, makeRunIdentity('b', runId));
     const guestPage = await guestContext.newPage();
     await joinPrivateLobby(guestPage, roomCode);
-    await startPrivateMatchFromLobby(primaryPage, guestPage);
+    // Attach the authoritative-state probe BEFORE the match starts (as test A
+    // does) so it captures the match-start `state:update` broadcast — the probe
+    // only records events fired after its listener is attached, and no further
+    // broadcast happens until the race.
     await attachServerStateProbe(guestPage);
+    await startPrivateMatchFromLobby(primaryPage, guestPage);
 
-    const sequenceBeforeRace = (await readLastServerStateSnapshot(guestPage))?.sequence ?? null;
+    // Confirm the probe is actually receiving broadcasts before starting the
+    // race, so the post-migration comparison below has real data.
+    await expect
+      .poll(async () => (await readLastServerStateSnapshot(guestPage))?.sequence ?? null, {
+        timeout: 30_000,
+      })
+      .not.toBeNull();
 
     const secondaryContext = await browser.newContext();
     await seedPlayerIdentity(secondaryContext, identity);
@@ -182,7 +196,7 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
     // on the wire and at the server, rather than being cleanly serialized by
     // this test's own control flow.
     let secondaryTakeoverDone = false;
-    const [, staleAckResult] = await Promise.all([
+    const [, staleRace] = await Promise.all([
       (async () => {
         await secondaryPage.goto('/');
         await resumeMultiplayerAfterReload(secondaryPage, roomCode);
@@ -228,50 +242,100 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
           }
           acks.push(await readStaleMoveAck(primaryPage));
         }
-        return acks;
+        return { acks, attempts: attempt };
       })(),
     ]);
 
     expect(await readLastRoomCode(secondaryPage)).toBe(roomCode);
-
-    // Every single ack across the whole race window must be an explicit
-    // rejection. Even one `ok: true` proves the exploitable window the task
-    // is asking about — a stale seat mutating a live match's board/score.
-    // Attempts fired before migration completes may legitimately still
-    // belong to the primary tab (it was the valid seat holder up to that
-    // instant) and get rejected for an ordinary game-rule reason (not its
-    // turn, doesn't hold that tile) rather than a seat-authority reason —
-    // distinct, benign paths every real player can hit. What must be true
-    // for every single attempt across the whole race window, with zero
-    // exceptions, is ok !== true — this is the actual safety property, not
-    // which specific rejection reason applies.
-    for (const ack of staleAckResult) {
-      expect(ack).toBeTruthy();
-      expect(ack?.ok).toBe(false);
-      expect(typeof ack?.error === 'string' && ack.error.length > 0).toBe(true);
-    }
-    // Real-network timing across dozens of round trips doesn't reliably land
-    // an attempt in the exact post-migration instant on every CI run — that
-    // precise race condition (a stale socket's cached seat mapping surviving
-    // past roster migration) is proven deterministically, without timing
-    // luck, by resolveActorSeatId.test.ts's
-    // "does NOT resolve a seat for a socket holding a stale cached playerId
-    // after that seat has been migrated" case (red before the
-    // roomSession.ts fix, green after). What THIS test proves under real
-    // concurrent browser/network load is the outer safety invariant those
-    // two pieces of evidence together close: no attempt, anywhere across the
-    // whole real takeover race, ever returns ok: true.
-    expect(staleAckResult.every((ack) => ack?.ok === false)).toBe(true);
-    void sequenceBeforeRace;
-
     await expect(guestPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
     await expect(secondaryPage.locator(GAME_SCREEN_LOCATOR)).toBeVisible();
 
-    // Resource-cleanup half of this test: the old socket must actually be
-    // gone by the time the race settles, not left connected indefinitely.
+    // The race must actually have fired stale actions from the superseded
+    // socket, or the invariant below is vacuous.
+    expect(
+      staleRace.attempts,
+      'B2 fired zero stale actions — the race window collapsed before any MOVE was emitted',
+    ).toBeGreaterThanOrEqual(1);
+
+    // Fence: the old socket must be force-disconnected after supersession
+    // (resource cleanup — roomSocketAttach.ts). Once it is, seat migration is
+    // unambiguously complete and the old socket is neutralised.
     await expect
       .poll(async () => readE2eSocketConnected(primaryPage), { timeout: 20_000 })
       .toBe(false);
+
+    // ── The invariant ──────────────────────────────────────────────────────
+    //
+    // WHY this asserts the POST-migration window ONLY, and never the
+    // pre-migration one — do not "fix" this back to checking the whole race:
+    //
+    // The stale probe fires MOVE { tile: [0|0], position: 'left' }. BEFORE the
+    // seat migrates, the primary socket is still the legitimate seat holder.
+    // If it is that player's turn on an empty board and they happen to hold
+    // [0|0] (~1 in 4 with a 7-tile hand from a double-six set), that early
+    // "stale" MOVE is a perfectly legal move by the real player: the server
+    // accepts it (ack.ok: true) and the board grows by a tile. That is not a
+    // bug. Asserting "every ack across the race is a rejection" or "board
+    // unchanged across the whole race" trips on this on ~25% of runs — it was
+    // the original flake in this test.
+    //
+    // Only AFTER migration is the old socket definitively unauthorised, and
+    // that is where "no stale action mutates authoritative state" is both true
+    // and deterministic (neither real player is acting; the old socket is
+    // disconnected; and resolveActorSeatId.test.ts proves the seat-mapping
+    // side without timing luck). So: take the settled post-migration state,
+    // fire more stale MOVEs at it, and require the state to be frozen.
+    const settleForPostMigration = async () => {
+      // Match is not progressing (both players idle) — a short settle is enough
+      // for any in-flight state:update to land.
+      await guestPage.waitForTimeout(2_000);
+      const snap = await readLastServerStateSnapshot(guestPage);
+      expect(snap, 'guest authoritative-state probe captured nothing post-migration').not.toBeNull();
+      return snap!;
+    };
+    const settledPostMigration = await settleForPostMigration();
+    const logLenAtSettle = (await readServerStateLog(guestPage)).length;
+
+    // Best-effort: fire more stale MOVEs now that the seat has migrated. The
+    // old socket is disconnected so these usually get no ack at all — that is
+    // the safety property working (a neutralised socket cannot reach the
+    // server). Any ack that DOES come back must not be an acceptance.
+    const postMigrationAcks: Array<{ ok?: boolean; error?: string } | null> = [];
+    for (let i = 0; i < 5; i += 1) {
+      await primaryPage.evaluate(() => {
+        (window as unknown as { __e2eStaleMoveAck?: unknown }).__e2eStaleMoveAck = undefined;
+      });
+      await emitStaleMoveNow(primaryPage, roomCode).catch(() => undefined);
+      await primaryPage.waitForTimeout(300);
+      postMigrationAcks.push(await readStaleMoveAck(primaryPage));
+    }
+
+    testInfo.annotations.push({
+      type: 'b2-stale',
+      description: JSON.stringify({
+        attempts: staleRace.attempts,
+        raceAcks: staleRace.acks,
+        postMigrationAcks,
+      }),
+    });
+
+    expect(
+      postMigrationAcks.some((ack) => ack?.ok === true),
+      'a stale-socket MOVE was ACCEPTED after seat migration — seat authority is broken',
+    ).toBe(false);
+
+    // Authoritative state is frozen against the post-migration stale actions:
+    // the board did not grow, scores did not move, the turn did not change —
+    // not at the end, and not transiently at any intermediate snapshot.
+    const finalState = await readLastServerStateSnapshot(guestPage);
+    const logSinceSettle = (await readServerStateLog(guestPage)).slice(logLenAtSettle - 1);
+    expect(finalState?.boardLen).toBe(settledPostMigration.boardLen);
+    expect(finalState?.scores).toEqual(settledPostMigration.scores);
+    expect(finalState?.currentPlayerIndex).toBe(settledPostMigration.currentPlayerIndex);
+    expect(
+      Math.max(settledPostMigration.boardLen ?? 0, ...logSinceSettle.map((s) => s.boardLen ?? 0)),
+      'a stale MOVE grew the authoritative board after migration (even if later reverted)',
+    ).toBe(settledPostMigration.boardLen ?? 0);
 
     await primaryContext.close();
     await secondaryContext.close();
