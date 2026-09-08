@@ -515,6 +515,13 @@ export async function readLastServerStateSnapshot(page: Page): Promise<E2eServer
   });
 }
 
+/** The full ordered log of authoritative `state:update` snapshots seen so far. */
+export async function readServerStateLog(page: Page): Promise<E2eServerStateSnapshot[]> {
+  return page.evaluate(
+    () => (window as { __e2eServerStateLog?: E2eServerStateSnapshot[] }).__e2eServerStateLog ?? [],
+  );
+}
+
 export async function wipeNonIdentityLocalStorage(page: Page) {
   await page.evaluate((keys) => {
     const keep = new Set(keys);
