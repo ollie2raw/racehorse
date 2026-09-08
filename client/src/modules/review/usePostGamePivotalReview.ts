@@ -1,10 +1,15 @@
 /**
  * usePostGamePivotalReview
  *
- * Manages post-game analysis and pivotal review state for BotMatchScreen.
+ * Manages post-game analysis and review state for BotMatchScreen.
  *
- * Owns: deferred move log analysis, game reviewer open/close,
- * pivotal turn review wizard state, and post-game review prompt.
+ * Live behaviour: deferred move-log analysis, game-reviewer open/close, and the
+ * post-game "review your game" prompt.
+ *
+ * It also holds the pivotal-turn review *wizard* state (open/summary), but that
+ * path is inert on `main` — `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and nothing
+ * calls `setPivotalReviewOpen(true)` (CQ9.2 F16/F20). `pivotalSelection` returns
+ * null while the flag is off.
  *
  * Activated only when botPostGameReviewEligible is true.
  * When false, deferred analysis never runs and all state stays at defaults.
@@ -24,6 +29,7 @@ import {
   type PivotalTurnReflection,
 } from '../../training/pivotalReview/pivotalReviewStorage.ts';
 import { selectPivotalTurnsFromAnalysis } from '../../training/pivotalReview/pivotalTurnSelector.ts';
+import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { logger } from '../../utils/logger.ts';
 
 export type UsePostGamePivotalReviewParams = {
@@ -108,7 +114,9 @@ export function usePostGamePivotalReview({
   ]);
 
   const pivotalSelection = useMemo(() => {
-    if (!postGameAnalysis) return null;
+    // Only the wizard consumes this; skip the work when it's flagged off — the
+    // result can't render (CQ9.2 F17).
+    if (!PIVOTAL_REVIEW_WIZARD_ENABLED || !postGameAnalysis) return null;
     return selectPivotalTurnsFromAnalysis(postGameAnalysis, moveLog, { winningScore });
   }, [postGameAnalysis, moveLog, winningScore]);
 
