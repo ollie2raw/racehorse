@@ -131,6 +131,16 @@ phone rules apply, and the matrix comes back green over a broken app. The first
 green matrix for this work was exactly that false pass; the `.rh-hub-filter`
 defect below only surfaced once the harness got its own fresh server.
 
+The rest of the Playwright surface (the `chromium` / `mobile-390` projects,
+which reuse whatever is on :5173 locally) and manual browser checks are covered
+by a **freshness gate** (issue #119): a dev-only Vite plugin serves a
+fingerprint of the restart-requiring config (`postcss.config.js`,
+`vite.config.ts`, `tailwind.config.js`, installed deps) plus the checkout's
+branch\@sha at `GET /__server_fingerprint`; `e2e/globalSetup.ts` and
+`npm run check:server-fresh` recompute it from the working tree and **abort
+loudly** — naming both the server's and the working tree's branch\@sha — if
+they differ.
+
 ### Status: green, 20 routes × 3 viewports (2026-09-07, verified on a
 ### freshly-started :5233 server — `lsof :5233` confirmed empty pre-run)
 

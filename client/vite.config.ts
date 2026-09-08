@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 // @ts-expect-error — build script module, not part of the app's TS program.
 import { resolveAppVersion } from './scripts/appVersion.mjs';
+// @ts-expect-error — build script module, not part of the app's TS program.
+import { localServerMeta } from './scripts/serverFreshness.mjs';
 
 // Injects <link rel="preload" fetchpriority="high"> for hero images used as
 // CSS backgrounds on the home screen so Lighthouse discovers LCP resources
@@ -26,6 +28,24 @@ function preloadHeroImagePlugin(): Plugin {
       });
       if (!preloads.length) return html;
       return html.replace('</head>', `  ${preloads.join('\n  ')}\n  </head>`);
+    },
+  };
+}
+
+// Dev-only. Serves the restart-requiring-config fingerprint + checkout identity
+// (computed once at startup) so `check:server-fresh` and the Playwright
+// globalSetup can abort loudly instead of testing against a stale server.
+// See scripts/serverFreshness.mjs and issue #119.
+function configFingerprintPlugin(): Plugin {
+  return {
+    name: 'config-fingerprint',
+    apply: 'serve',
+    configureServer(server) {
+      const body = JSON.stringify(localServerMeta());
+      server.middlewares.use('/__server_fingerprint', (_req, res) => {
+        res.setHeader('content-type', 'application/json');
+        res.end(body);
+      });
     },
   };
 }
@@ -58,6 +78,7 @@ export default defineConfig({
       },
     }),
     preloadHeroImagePlugin(),
+    configFingerprintPlugin(),
   ],
   // Baked in rather than read from the environment at runtime: Vite only
   // exposes VITE_-prefixed variables, so Vercel's VERCEL_GIT_COMMIT_SHA could
