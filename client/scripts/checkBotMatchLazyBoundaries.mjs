@@ -123,9 +123,34 @@ function scanSourceGraph() {
   return violations;
 }
 
+/** Newest mtime under a directory tree (ms), or 0 if the dir is missing. */
+export function newestMtime(dir) {
+  if (!fs.existsSync(dir)) return 0;
+  let newest = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    const mtime = entry.isDirectory()
+      ? newestMtime(full)
+      : fs.statSync(full).mtimeMs;
+    if (mtime > newest) newest = mtime;
+  }
+  return newest;
+}
+
 function scanDistChunks() {
   if (!fs.existsSync(DIST_ASSETS)) {
-    throw new Error('dist/assets not found — run npm run build before --dist');
+    throw new Error('dist/assets not found — run `npm run build` before --dist');
+  }
+
+  // A stale dist silently false-passes: the chunk scan is only meaningful
+  // against a build of the current source (this is exactly how PR #129's
+  // reviewBoardState chunk-hoisting slipped a local check — see
+  // ENGINEERING_GUARDRAILS.md §8).
+  if (newestMtime(SRC_ROOT) > newestMtime(DIST_ASSETS)) {
+    throw new Error(
+      'dist/ is older than src/ — the --dist chunk scan would check a stale build. ' +
+        'Run `npm run build` first.',
+    );
   }
 
   const violations = [];
@@ -161,6 +186,14 @@ function main() {
 
   if (checkDist) {
     violations.push(...scanDistChunks());
+  } else {
+    console.warn(
+      '⚠ source-graph mode only — this cannot see Rollup chunk assignment, so a ' +
+        'module shared with the analyzer that gets hoisted into the analyzer chunk ' +
+        'will FALSE-PASS here. CI runs `npm run check:bot-match-lazy` (which passes ' +
+        '--dist); run `npm run build && npm run check:bot-match-lazy` for the ' +
+        'authoritative check.',
+    );
   }
 
   if (violations.length === 0) {
