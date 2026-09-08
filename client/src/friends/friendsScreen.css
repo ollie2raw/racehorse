@@ -292,7 +292,14 @@
 /* ── Action buttons (inline in list rows) ── */
 .friends-page-action-btn {
   appearance: none;
-  padding: 4px 10px;
+  /* >=44px tap target (WCAG 2.5.5) — the label stays small; the hit area
+     doesn't. Matches the min-height treatment on .rh-nav-tab / .rh-back-button
+     / .rh-hub-filter. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 4px 12px;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -308,6 +315,11 @@
 
 .friends-page-action-btn:hover {
   filter: brightness(1.2);
+}
+
+.friends-page-action-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .friends-page-action-btn--invite {
@@ -625,6 +637,8 @@
     display: inline-flex !important;
     align-items: center;
     gap: 8px;
+    /* >=44px tap target — the divider border sits below the padded hit area. */
+    min-height: 44px;
     background: none;
     border: none;
     cursor: pointer;
@@ -634,7 +648,7 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--tier-standard, #3B82F6);
-    padding: 0 0 12px;
+    padding: 4px 0 12px;
     margin-bottom: 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     width: 100%;
