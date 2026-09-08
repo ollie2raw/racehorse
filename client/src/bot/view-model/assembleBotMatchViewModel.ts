@@ -1,5 +1,6 @@
 import type { CreateBotMatchViewModelArgs } from './createBotMatchViewModelArgs.ts';
 import { buildHandRevealTileReveals } from './buildHandRevealTileReveals.ts';
+import { resolveHistoryScrubberView } from './resolveHistoryScrubberView.ts';
 import type { BotMatchScreenViewModel } from './botMatchViewModelTypes.ts';
 
 export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): BotMatchScreenViewModel {
@@ -17,6 +18,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     turns,
     rating,
     navigation,
+    historyScrubber,
   } = args;
 
   const {
@@ -129,9 +131,28 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     fritzPresentation: turns.fritzPresentation ?? null,
   };
 
+  const {
+    enabled: historyScrubberEnabled,
+    viewingHistory,
+    displayBoard,
+  } = resolveHistoryScrubberView({
+    scrubber: historyScrubber,
+    liveBoard: match.board,
+    isGuidedMode,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    isJourneyTrial,
+    isLessonLayoutMode: turns.isLessonLayoutMode,
+    preGameDrawActive,
+    gameOver: match.gameOver,
+  });
+
   const board = {
     boardRef: refs.boardRef,
     boneyardRef: refs.boneyardRef,
+    displayBoard,
+    viewingHistory,
     ghostBoardPulse: ghost.ghostBoardPulse,
     openEnds: presentation.openEnds,
     openEndsSum: presentation.openEndsSum,
@@ -154,10 +175,11 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     handAreaRef: refs.handAreaRef,
     handTileSize: presentation.handTileSize,
     lessonHandRowCount: presentation.lessonHandRowCount,
-    selectedTile,
+    selectedTile: viewingHistory ? null : selectedTile,
     setSelectedTile,
     setSelectedController,
-    handActive: presentation.handActive,
+    // Parked on a past move: the hand is view-only until "back to live".
+    handActive: presentation.handActive && !viewingHistory,
     botTurn: presentation.botTurn,
     drawSequenceActive: turns.drawSequenceActive,
     drawPulseIndex: turns.drawPulseIndex,
@@ -324,6 +346,10 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     layout,
     hud,
     board,
+    historyScrubber: {
+      enabled: historyScrubberEnabled,
+      state: historyScrubber,
+    },
     hand,
     coach,
     overlays,

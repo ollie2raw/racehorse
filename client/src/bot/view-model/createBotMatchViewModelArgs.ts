@@ -11,6 +11,7 @@ import type { UseFritzRatingDisplayResult } from '../../modules/fritz/useFritzRa
 import type { UseMatchNavigationResult } from '../../modules/match/hooks/useMatchNavigation.ts';
 import type { useAuthoringCapture } from '../../modules/guided/useAuthoringCapture.ts';
 import type { useMatchUiChrome } from '../useMatchUiChrome.ts';
+import type { MatchHistoryScrubberState } from '../../modules/replay/index.ts';
 
 type UseAuthoringCaptureResult = ReturnType<typeof useAuthoringCapture>;
 type UseMatchUiChromeResult = ReturnType<typeof useMatchUiChrome>;
@@ -29,4 +30,5 @@ export type CreateBotMatchViewModelArgs = {
   turns: UseMatchTurnStackResult;
   rating: UseFritzRatingDisplayResult;
   navigation: UseMatchNavigationResult;
+  historyScrubber: MatchHistoryScrubberState;
 };

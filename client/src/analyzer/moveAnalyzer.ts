@@ -14,7 +14,7 @@ import type {
 } from './analysisTypes';
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
-import { derivePostMoveReviewBoard } from './reviewBoardState';
+import { derivePostMoveReviewBoard } from '../modules/replay/reviewBoardState.ts';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
 

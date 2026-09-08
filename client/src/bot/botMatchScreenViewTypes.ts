@@ -3,6 +3,7 @@ export type {
   BotMatchLayoutViewModel,
   MatchHudViewModel,
   BoardViewModel,
+  MatchHistoryScrubberViewModel,
   HandViewModel,
   CoachViewModel,
   ModalOverlayViewModel,

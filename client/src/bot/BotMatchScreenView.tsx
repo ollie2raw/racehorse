@@ -27,6 +27,7 @@ export function BotMatchScreenView({
   layout,
   hud,
   board,
+  historyScrubber,
   hand,
   coach,
   overlays,
@@ -130,6 +131,10 @@ export function BotMatchScreenView({
       getDebugSnapshot={debug.getDebugSnapshot}
       dailyFritzSubmitSucceededRef={debug.dailyFritzSubmitSucceededRef}
       boardRef={board.boardRef}
+      displayBoard={board.displayBoard}
+      viewingHistory={board.viewingHistory}
+      historyScrubberEnabled={historyScrubber.enabled}
+      historyScrubber={historyScrubber.state}
       lessonBoardPlacementMoves={board.lessonBoardPlacementMoves}
       activePlacementMoves={board.activePlacementMoves}
       selectedTile={board.selectedTile}

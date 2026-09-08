@@ -132,6 +132,10 @@ export default defineConfig({
           if (id.includes('/src/modules/fritz/fritzConfig')) return 'fritz-config';
           // Move log helpers used during play — isolate from analyzer so bot match does not fetch analysis code.
           if (id.includes('/src/game/moveLogger')) return 'move-logger';
+          // Post-move board projection: shared by play (mid-match scrubber) and
+          // analysis (moveAnalyzer replay oracle). Keep it with move-logger so the
+          // standard bot path never statically pulls the analyzer chunk.
+          if (id.includes('/src/modules/replay/reviewBoardState')) return 'move-logger';
           // Review UI is lazy-loaded — keep Board/DominoTile out of the analysis engine chunk.
           if (id.includes('/src/analyzer/GameReviewer')) return 'game-reviewer';
           if (id.includes('/src/analyzer/reviewSidebarCopy')) return 'game-reviewer';

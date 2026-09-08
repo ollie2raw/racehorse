@@ -7,7 +7,9 @@ import {
 import type { BoardHandle } from '../../../components';
 import { ErrorBoundary } from '../../../components/ErrorBoundary.tsx';
 import { PreGameTileDrawBoard } from '../../../match/preGameDraw/PreGameTileDrawBoard.tsx';
-import type { Move, PlacementPosition, Tile } from '../../../types.ts';
+import type { BoardState, Move, PlacementPosition, Tile } from '../../../types.ts';
+import { MatchHistoryScrubber } from '../../../modules/replay/index.ts';
+import type { MatchHistoryScrubberState } from '../../../modules/replay/index.ts';
 import type { AuthoredStep } from '../../../learn/guidedAuthoring.ts';
 import type { FrozenLesson } from '../../../learn/guidedAuthoring.ts';
 import type { GuidedMatchCaptureStatus } from '../../../learn/guidedMatch/guidedMatchCapture.ts';
@@ -57,6 +59,10 @@ export type BotMatchBoardStageProps = {
   getDebugSnapshot: () => HandLifecycleDebugSnapshot;
   dailyFritzSubmitSucceededRef: RefObject<boolean>;
   boardRef: RefObject<BoardHandle | null>;
+  displayBoard: BoardState | null;
+  viewingHistory: boolean;
+  historyScrubberEnabled: boolean;
+  historyScrubber: MatchHistoryScrubberState;
   lessonBoardPlacementMoves: Move[];
   activePlacementMoves: Move[];
   selectedTile: Tile | null;
@@ -70,6 +76,8 @@ export type BotMatchBoardStageProps = {
   onRequestLeave: () => void;
 };
 
+function noop() {}
+
 export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
   const {
     preGameDrawActive,
@@ -81,6 +89,10 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
     boneyardRef,
     boneyardDisplayCount = null,
     boardRef,
+    displayBoard,
+    viewingHistory,
+    historyScrubberEnabled,
+    historyScrubber,
     lessonBoardPlacementMoves,
     activePlacementMoves,
     selectedTile,
@@ -105,7 +117,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
 
   return (
     <>
-      {scoreToast && <BotMatchScoreToastOverlay scoreToast={scoreToast} />}
+      {scoreToast && !viewingHistory && <BotMatchScoreToastOverlay scoreToast={scoreToast} />}
       <BotMatchBoardDebugOverlays
         enableGuidedMatchCandidateCapture={props.enableGuidedMatchCandidateCapture}
         isJourneyTrial={props.isJourneyTrial}
@@ -127,8 +139,13 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
           <BoneyardCountPill ref={boneyardRef} count={boneyardDisplayCount ?? match.boneyard.length} />
         </div>
       )}
+      {historyScrubberEnabled && (
+        <div className="rh-scrubber-dock" data-ui="scrubber-dock">
+          <MatchHistoryScrubber scrubber={historyScrubber} />
+        </div>
+      )}
       <BotMatchGhostBoardOverlays
-        isGhostMode={props.isGhostMode}
+        isGhostMode={props.isGhostMode && !viewingHistory}
         ghostAgreementType={props.ghostAgreementType}
         ghostPlayedTile={props.ghostPlayedTile}
       />
@@ -167,17 +184,24 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
         <Board
           ref={boardRef}
           showZoomTray={isLessonLayoutMode}
-          board={match.board}
-          legalMoves={isLessonLayoutMode ? lessonBoardPlacementMoves : activePlacementMoves}
-          selectedTile={selectedTile}
+          board={viewingHistory ? displayBoard : match.board}
+          legalMoves={
+            viewingHistory
+              ? []
+              : isLessonLayoutMode
+                ? lessonBoardPlacementMoves
+                : activePlacementMoves
+          }
+          selectedTile={viewingHistory ? null : selectedTile}
           handNumber={match.handNumber}
           handOver={match.handOver}
           gameOver={match.gameOver}
-          lastPlayedTile={lastPlayedTile}
-          onPositionClick={onPositionClick}
+          lastPlayedTile={viewingHistory ? null : lastPlayedTile}
+          onPositionClick={viewingHistory ? noop : onPositionClick}
           tileSize={84}
           profileDailyFritz={enableDailyFritzProfiling}
-          fitMode="default"
+          fitMode={viewingHistory ? 'guided' : 'default'}
+          containFullBoard={viewingHistory}
         />
       </ErrorBoundary>
       {!isLessonLayoutMode && (

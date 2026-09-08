@@ -1,7 +1,7 @@
 import { simulatePlacement } from '@racehorse/game-core';
-import type { BoardState, Tile } from '../types.ts';
-import type { MoveEntry } from '../game/moveLogger.ts';
-import { normalizeBoardRenderState } from '../game/moveLogger.ts';
+import type { BoardState, Tile } from '../../types.ts';
+import type { MoveEntry } from '../../game/moveLogger.ts';
+import { normalizeBoardRenderState } from '../../game/moveLogger.ts';
 
 /**
  * Move logs intentionally retain the pre-action board for evaluation. Game Review,
