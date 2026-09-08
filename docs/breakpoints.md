@@ -106,9 +106,16 @@ phone landscape 844×390):
 
 1. **Tap targets** — every visible interactive element has a computed
    `getBoundingClientRect()` whose smaller side is ≥ 44px, unless it clears the
-   WCAG 2.5.8 spacing exemption (no other target within a 24px radius of its
-   centre). Measured on the element, never a container.
+   WCAG 2.5.8 spacing exemption: its centre is ≥ 24px from the centre of every
+   other target (24px circles centred on each do not overlap). Centre-to-centre,
+   the actual standard — an earlier centre-to-edge variant flaked near its
+   threshold. Measured on the element, never a container.
 2. **Horizontal overflow** — `documentElement.scrollWidth ≤ clientWidth`.
+
+**Determinism** (it's a blocking gate — a flaky assertion is worse than none):
+each route settles past `document.fonts.ready` + a geometry-quiet window (12s
+cap for live-socket routes that never fully quiet), then is measured **twice,
+500ms apart**; only violations in both samples count. Per-test timeout 90s.
 
 Run: `npm run e2e:reachability` (opt-in via `REACHABILITY=1` / its own
 Playwright project). **This is a blocking CI gate** (as of 2026-09-07) — the

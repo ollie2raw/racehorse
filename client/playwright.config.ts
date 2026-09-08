@@ -63,6 +63,9 @@ export default defineConfig({
             name: 'mobile-reachability',
             testMatch: /mobile-reachability\.spec\.ts/,
             use: { ...devices['Desktop Chrome'] },
+            // Each test settles, then measures twice 500ms apart; live-socket
+            // routes can burn the full settle cap. 90s keeps well clear.
+            timeout: 90_000,
           },
         ]
       : []),
