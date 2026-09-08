@@ -7,7 +7,6 @@ import type { UseBotMatchRefsResult } from './useBotMatchRefs.ts';
 import type { UseMatchPresentationResult } from './useMatchPresentation.ts';
 import type { UseGhostRuntimeResult } from '../../ghost/useGhostRuntime.ts';
 import type { UseReviewRuntimeResult } from '../../review/useReviewRuntime.ts';
-import type { UseDailyFritzRuntimeResult } from '../../daily/useDailyFritzRuntime.ts';
 import type { ReplayRecorder } from '../../replay/index.ts';
 
 export type UseMatchNavigationArgs = {
@@ -17,7 +16,6 @@ export type UseMatchNavigationArgs = {
   presentation: UseMatchPresentationResult;
   ghost: UseGhostRuntimeResult;
   review: UseReviewRuntimeResult;
-  dailyFritz: UseDailyFritzRuntimeResult;
   replayRecorder: ReplayRecorder;
   setGuidedMatchCandidateSaveStatus: (status: string | null) => void;
   isGuidedV2Mode: boolean;
@@ -33,7 +31,6 @@ export function useMatchNavigation({
   presentation,
   ghost,
   review,
-  dailyFritz,
   replayRecorder,
   setGuidedMatchCandidateSaveStatus,
   isGuidedV2Mode,
@@ -82,7 +79,6 @@ export function useMatchNavigation({
     setPivotalReviewOpen,
     setPivotalReviewSummary,
   } = review;
-  const { setDailyLeaderboard, setDailyLeaderboardError, setDailyLeaderboardLoading } = dailyFritz;
 
   const exitMatch = useCallback(() => {
     invalidateLocalRuns();
@@ -129,9 +125,6 @@ export function useMatchNavigation({
     setGhostResultError(null);
     setGuidedMatchCandidateSaveStatus(null);
     setMovesUsed(0);
-    setDailyLeaderboard([]);
-    setDailyLeaderboardError(null);
-    setDailyLeaderboardLoading(false);
     replayRecorder.replaceLog([]);
     setGhostMoveLog([]);
     moveCounterRef.current = 1;
@@ -178,9 +171,6 @@ export function useMatchNavigation({
     setGhostResultError,
     setGuidedMatchCandidateSaveStatus,
     setMovesUsed,
-    setDailyLeaderboard,
-    setDailyLeaderboardError,
-    setDailyLeaderboardLoading,
     replayRecorder,
     setGhostMoveLog,
     moveCounterRef,

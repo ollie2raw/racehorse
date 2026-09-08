@@ -11,7 +11,6 @@ const fritzMatch: BotPostGameReviewContext = {
   mode: 'bot',
   isGhostMode: false,
   isDailyFritzMode: false,
-  isDailyPuzzleRun: false,
   isGuidedMode: false,
   isAuthoringMode: false,
   isAuthoringV2Mode: false,

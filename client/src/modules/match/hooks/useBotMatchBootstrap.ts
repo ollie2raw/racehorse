@@ -54,7 +54,6 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     winningScore = 60,
     opponentName = 'Fritz',
     userId = null,
-    dailyPuzzleDate = null,
     journeyTrial = null,
     matchInstanceKey = null,
     dailyFritzPackage = null,
@@ -150,13 +149,11 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
       isAuthoringV2Mode,
       isGuidedV2Mode,
       isJourneyTrial: Boolean(journeyTrial),
-      isDailyPuzzleRun: Boolean(dailyPuzzleDate),
       isStandaloneFritzMatch: Boolean(
         userId
         && !journeyTrial
         && mode !== 'ghost'
         && mode !== 'daily-fritz'
-        && !dailyPuzzleDate
         && !isGuidedMode
         && !isAuthoringMode
         && !isAuthoringV2Mode
@@ -174,7 +171,6 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
       isAuthoringV2Mode,
       isGuidedV2Mode,
       journeyTrial,
-      dailyPuzzleDate,
       userId,
       enableGuidedMatchCandidateCapture,
       preGameDrawActive,
@@ -281,19 +277,17 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
 
   const isGhostMode = mode === 'ghost';
   const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
-  const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isJourneyTrial = Boolean(journeyTrial);
   const isPlayVsFritzGameOver =
     mode === 'bot' &&
     !isGhostMode &&
     !isDailyFritzMode &&
-    !isDailyPuzzleRun &&
     !isGuidedMode &&
     !isAuthoringMode &&
     !isAuthoringV2Mode &&
     !isGuidedV2Mode;
   const isStandaloneFritzMatch = Boolean(
-    userId && !isJourneyTrial && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
+    userId && !isJourneyTrial && !isGhostMode && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode,
   );
   const showPostGameOverlays = match.gameOver;
@@ -317,7 +311,6 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     winningScore,
     opponentName,
     userId,
-    dailyPuzzleDate,
     journeyTrial,
     dailyFritzPackage,
     matchInstanceKey,
@@ -358,7 +351,6 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     isGhostMode,
     isDailyFritzMode,
     opponentLabel,
-    isDailyPuzzleRun,
     isJourneyTrial,
     isPlayVsFritzGameOver,
     isStandaloneFritzMatch,

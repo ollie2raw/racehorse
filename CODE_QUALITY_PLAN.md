@@ -978,6 +978,63 @@ with explicit per-finding greenlight (touches working code / protected surface)
 | **F14** | 4 | `useLiveMatchSession.ts:245` | `resp.legalMoves as Move[]` cast with only an `Array.isArray` guard, no element validation. | The server is the move-legality authority (GC-INV-1) — every move is re-validated server-side regardless of what the client's `legalMoves` array contains. Client-side element validation would be pure defense-in-depth against a benign display glitch. `state` *is* validated (`projectMultiplayerGameState`). |
 | **F16** | 1 | `PIVOTAL_REVIEW_WIZARD_ENABLED` + the wizard half of `usePostGamePivotalReview` + `training/pivotalReview/pivotalTurnSelector` / `pivotalReviewStorage` / `BotPivotalReviewPortal` / `BotReviewSummaryPortal` | Feature-flagged-off + **unfinished** (no `setPivotalReviewOpen(true)` anywhere). | Investigation 2: parked, not abandoned — it lives in an *actively-toggled* beta-gate flag file, and the sibling post-game-review feature was *explicitly* deferred for beta as recently as 2026-08-15 (`97e47ae0`, "the analyzer is not ready for players"). **Residual note (must survive to a future session):** flipping the flag is NOT sufficient to ship the wizard — the "open" UI was never built. |
 
+### ADDENDUM — `daily_puzzle*` / `isDailyPuzzleRun` bot-plumbing cluster → **D-CQ-5, ratified 2026-09-08 on the trace below**
+
+The client-screen half (25 files + `dailyPuzzle.css`) shipped `§CQ9.1.6.2`
+(`de14ade6`). This closes the **remaining** client half — the
+`isDailyPuzzleRun` plumbing threaded through the live bot-match path — as a
+graded finding, **same class as F1** (wired but structurally unreachable).
+
+**Reachability, traced the FC-DEAD-1 way (not from the name):**
+
+- `<BotMatchScreen>` is rendered at **exactly two sites** —
+  `routes/soloPlayRoutes.tsx:335` (Fritz / guided / journey) and `:467`
+  (Ghost). **Neither passes `dailyPuzzleDate`** (`grep 'dailyPuzzleDate='
+  src/**/*.tsx` → empty).
+- `dailyPuzzleDate?: string | null` is an **optional** prop
+  (`modules/match/contracts/matchScreenProps.ts:16`), **defaulted to `null`**
+  (`useBotMatchBootstrap.ts:57`).
+- ∴ `isDailyPuzzleRun = Boolean(dailyPuzzleDate)` is a **permanent `false`
+  constant** at every one of its ~15 gate sites. No `<DailyPuzzleScreen>`
+  render site remains, `/daily` is in no route file, no `lazy()` / dynamic
+  `import()` supplies it.
+- The `dailyLeaderboard*` state in `useDailyFritzRuntime` (already traced in
+  CQ9.3's F1 pre-commit note) has **no live writer** — only mode-agnostic
+  resets-to-default in `useMatchNavigation.ts:132–134` — and is read only by
+  the unreachable `{isDailyPuzzleRun && …}` "Today's Top Scores" block in
+  `BotGameOverModal`.
+- The 9 ladder API fns in `dailyPuzzle/api.ts`
+  (`getDailyPuzzleForDate`, `getDailyPuzzleByDateSeed`, `upsertDailyPuzzle`,
+  `upsertDailyPuzzleCompletion`, `getTodayDailyPuzzleLadder`,
+  `startDailyPuzzleLadder`, `submitDailyPuzzleSlot`, `completeDailyPuzzleLadder`,
+  `fetchDailyPuzzleLadderLeaderboard`) — **0 non-test, non-self callers**
+  (verified per-fn). Their private helpers (`requestServerJson`,
+  `coercePuzzleRow`, `withTimeout`) + input/response types are used *only* by
+  them.
+
+**Grade: FIX NOW (delete).** Deletion boundary:
+
+| Surface | Change |
+|---|---|
+| `modules/match/contracts/matchScreenProps.ts` | drop `dailyPuzzleDate?` |
+| `modules/match/hooks/useBotMatchBootstrap.ts` | drop the param, `isDailyPuzzleRun` derivation (×2), the `&& !dailyPuzzleDate` / `&& !isDailyPuzzleRun` guards collapse (always-true), the return field |
+| `bot/view-model/botMatchViewModelTypes.ts` | drop `isDailyPuzzleRun` (×2) + `dailyLeaderboard{,Loading,Error}` |
+| `bot/view-model/assembleBotMatchViewModel.ts` | drop the `isDailyPuzzleRun` pass (×3) + the `dailyLeaderboard*` re-source block + the explanatory comment |
+| `bot/BotGameOverModal.tsx` | drop the `isDailyPuzzleRun` / `dailyLeaderboard*` props + the `{isDailyPuzzleRun && (…)}` block + the `DailyPuzzleLeaderboardEntry` import |
+| `bot/view/overlays/BotMatchModalLayer.tsx` | drop the 4 pass-throughs |
+| `modules/match/matchCapabilitiesFromProps.ts` | drop `isDailyPuzzleRun` input + the `overlays.add('daily-puzzle-legacy')` branch (the protocol enum member stays — shared-package call) |
+| `modules/ghost/useGhostMatchSessionStart.ts` + `useGhostRuntime.ts` | drop `isDailyPuzzleRun` param + the `\|\| isDailyPuzzleRun` guard (always false) |
+| `training/pivotalReview/postGameReviewPolicy.ts` | drop `isDailyPuzzleRun` from `BotPostGameReviewContext` + the `!ctx.isDailyPuzzleRun &&` clause (always true) |
+| `modules/daily/useDailyFritzRuntime.ts` | drop the 3 `dailyLeaderboard*` `useState` + their 6 return entries |
+| `modules/match/hooks/useMatchNavigation.ts` | drop the destructure, the 3 reset calls, the 3 dep-array entries |
+| `dailyPuzzle/api.ts` | delete the 9 fns + `requestServerJson` / `coercePuzzleRow` / `withTimeout` + `UpsertPuzzleInput` / `UpsertDailyPuzzleCompletionInput` / `DailyPuzzleLeaderboardEntry` + the `getLocalDateKey` / `normalizeDateInputToLocalKey` re-export (line 513) + now-orphaned imports. **Keep** `normalizeBoardState` (+ its 6 private helpers) — one live consumer, `learn/engine/rulesAdapter.ts`. |
+
+**Bar: same as F1** — full client + server vitest, `tsc -b`,
+`check:architecture` green. Prod `daily_puzzle*` tables / server refs stay
+`HARDENING_PLAN.md`'s call.
+
+---
+
 ### daily-puzzle wider cluster — deferred scope (like FC-DEAD-1), not a graded finding yet
 
 F1 deletes the 2 audited `modules/daily-puzzle/` files. The surrounding dead
@@ -1082,7 +1139,8 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
 - [x] **Step 2 — graded findings list** (`§CQ9.2`, 19 findings + 1 deferred cluster) — written 2026-09-05.
 - [x] **Step 2 ratification** — `D-CQ-1` (2026-09-05): FIX-NOW scope only (F1, F8, F10, F18).
 - [x] **Step 3 — FIX-NOW scope shipped** — F10 `b7979243` · F8 `4254a235` · F18 `459871a5` · F1 `181624b7`. Each green (typecheck + full vitest 217/1502 + lint 401/401 + `check:architecture` 20/20). Not pushed.
-- [ ] REFACTOR / STYLE findings — await per-finding greenlight. (Shipped so far: F19 `D-CQ-4`. F21/F22/F23 shipped via the F6 pass, `D-CQ-2`/`D-CQ-3`. Still held: F3, F6-Tier-3, F11, F12.)
+- [ ] REFACTOR / STYLE findings — await per-finding greenlight. (Shipped: F19 `D-CQ-4`; F21/F22/F23 `D-CQ-2`/`D-CQ-3`; batch-1 F13/F17/F9/F20 + F4 greenlit 2026-09-08. Still held: F3, F6-Tier-3, F12. **F11 — STOP: 2 of the 5 `*ClassName` props (`handStackClassName`, `handFooterClassName`) ARE used — `NoBrainerLabScreen.tsx:402–403` passes them through `MatchLiveLayout`. Finding is wrong as written; not trimmed.**)
+- [x] **D-CQ-5** (2026-09-08): `daily_puzzle*` / `isDailyPuzzleRun` bot-plumbing cluster — graded FIX NOW, ratified on the addendum trace (two BotMatchScreen render sites, always-null `dailyPuzzleDate` prop, ~15 dead gate sites, 9 unused ladder API fns). Deleted per the boundary table.
 - [ ] Deferred `daily_puzzle*` client cluster — its own scoped pass.
 - [x] **F21** (`splitCoachingSummaryBlock` dropped-body bug, surfaced during F6 file 2) — FIX NOW, fixed + ratified `D-CQ-2`. One-line function fix, shared regex untouched, verified green. Not pushed.
 - [x] **F22** (`buildLessonRecommendedTileKey` frozen branch: no draw/pass guard + hyphen-vs-pipe key format → dead hand-tray highlight in frozen V1 mode; surfaced during F6 file 3) — FIX NOW, fixed + ratified `D-CQ-3`. Moot on `main` (frozen V1 mode is author-machine only). Not pushed.

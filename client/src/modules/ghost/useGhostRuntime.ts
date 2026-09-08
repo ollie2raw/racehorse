@@ -140,7 +140,6 @@ export function useGhostRuntime({
   useGhostMatchSessionStart({
     userId,
     isGhostMode,
-    isDailyPuzzleRun: bootstrap.isDailyPuzzleRun,
     matchGameOver: match.gameOver,
     verifiedMatchId,
     activeLocalMatchId,

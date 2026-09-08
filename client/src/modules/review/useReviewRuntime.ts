@@ -33,7 +33,6 @@ export function useReviewRuntime({
   const {
     isGhostMode,
     isDailyFritzMode,
-    isDailyPuzzleRun,
     isJourneyTrial,
   } = bootstrap;
 
@@ -44,7 +43,6 @@ export function useReviewRuntime({
     mode: bootstrap.mode,
     isGhostMode,
     isDailyFritzMode,
-    isDailyPuzzleRun,
     isGuidedMode,
     isAuthoringMode,
     isAuthoringV2Mode,

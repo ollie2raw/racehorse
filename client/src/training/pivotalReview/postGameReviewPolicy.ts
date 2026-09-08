@@ -21,7 +21,6 @@ export type BotPostGameReviewContext = {
   mode: string;
   isGhostMode: boolean;
   isDailyFritzMode: boolean;
-  isDailyPuzzleRun: boolean;
   isGuidedMode: boolean;
   isAuthoringMode: boolean;
   isAuthoringV2Mode: boolean;
@@ -36,7 +35,6 @@ export function isPlayVsFritzResultOverlayMode(ctx: BotPostGameReviewContext): b
     ctx.mode === 'bot' &&
     !ctx.isGhostMode &&
     !ctx.isDailyFritzMode &&
-    !ctx.isDailyPuzzleRun &&
     !ctx.isGuidedMode &&
     !ctx.isAuthoringMode &&
     !ctx.isAuthoringV2Mode &&

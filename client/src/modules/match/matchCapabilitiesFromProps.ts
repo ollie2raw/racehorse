@@ -15,7 +15,6 @@ export type BotMatchCapabilityInput = {
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
   isJourneyTrial: boolean;
-  isDailyPuzzleRun: boolean;
   isStandaloneFritzMatch: boolean;
   enableGuidedMatchCandidateCapture: boolean;
   preGameDrawActive: boolean;
@@ -43,9 +42,6 @@ export function buildMatchCapabilitiesFromBotProps(
   }
   if (input.isStandaloneFritzMatch) {
     overlays.add('ranked-pvf');
-  }
-  if (input.isDailyPuzzleRun) {
-    overlays.add('daily-puzzle-legacy');
   }
   if (input.enableGuidedMatchCandidateCapture) {
     overlays.add('guided-capture');

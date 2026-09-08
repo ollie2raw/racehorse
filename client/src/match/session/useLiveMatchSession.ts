@@ -340,6 +340,8 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       if (rawState !== null) {
         const projected = projectMultiplayerGameState(rawState);
         if (!projected) {
+          // Caller (joinAckCoordinator) logs `!ok` and schedules a state
+          // resync — no throw or extra log needed here (CQ9.2 F13).
           return { ok: false, nextState: null };
         }
         nextState = projected;
