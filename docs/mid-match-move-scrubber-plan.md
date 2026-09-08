@@ -1,10 +1,43 @@
 # Mid-Match Move History Scrubber — Plan
 
 Date: 2026-09-08
-Status: **Investigated, not started.** Ready to pick up.
+Status: **Solo scope built** on `feat/mid-match-scrubber-solo` (2026-09-08, not
+pushed). PvF / Ghost / Daily Fritz only — multiplayer / tournament and the
+reconnect-backfill decision are deliberately out of this pass. See
+"Solo build — what shipped" below.
 Related: `docs/game-review-chess-parity-implementation-plan.md` (post-game
 review oracle — a separate, much larger effort; this feature shares none of
 its analysis machinery).
+
+---
+
+## Solo build — what shipped (`feat/mid-match-scrubber-solo`)
+
+5 commits, each scoped to a plan item, `tsc -b` / full client vitest 215-files-
+1616 / server vitest 218-1300 / lint 51-of-51 (0 errors) / lint:css /
+check:architecture 20-of-20 / check:deps / check:multiplayer-arch /
+check:socket-registry / check:bot-match-lazy all green.
+
+| Plan item | Commit | Notes |
+| :--- | :--- | :--- |
+| Lean scrubber (state) | `useMatchHistoryScrubber` hook | view-only cursor over `replay.moveLog`; `historyBoard` = `derivePostMoveReviewBoard(entry)` (reusable piece 1). No auto-snap on new moves; log-reset / shrink forces live. 13 tests. |
+| Lean scrubber (UI) | `MatchHistoryScrubber` control strip | `‹ / ›` + `Move N / M · Hand H` + `Back to live` w/ new-move badge. `rh-scrubber` scoped CSS, Button primitive, 44px targets. **Deviation:** the strip does *not* render its own `<Board>` (plan piece 2/3) — the existing bot board is swapped instead (see below). 6 tests. |
+| `viewingIndex` → swap display board | `wire history scrubber into solo BotMatchScreen` | **Plan inaccuracy corrected:** the plan assumed a `boardForDisplay` seam already existed in `bot/createBotMatchViewModel.ts`. It did not — the bot board renders `board={match.board}` directly in `BotMatchBoardStage`. This commit introduces the seam: `assembleBotMatchViewModel` computes `displayBoard` and threads it + `viewingHistory` through the `board` VM to `BotMatchBoardStage`, which renders `<Board>` off `displayBoard` with `containFullBoard` while scrubbing. Still within the ~1d estimate. |
+| Lock interaction while viewing | `lock hand + board overlays while viewing history` | hand tray forced `handActive=false` (all tiles disabled), selected tile cleared, ghost overlays + score toast suppressed. **The solo surface has no manual draw/pass buttons** (draw is engine-automatic via `usePlayerNoMoveEffect`) — that half of the plan item is multiplayer-only. Gate logic extracted to pure `resolveHistoryScrubberView` (11 tests). |
+| Back-to-live on new move | (folded into the hook) | no auto-snap; `movesBehindLive` drives the pill count. |
+| Hand-boundary handling | (folded into hook + UI) | `viewedHandNumber` from `MoveEntry.handNumber`; label shows `· Hand H`. Cross-boundary board changes are per-entry projections — already correct. |
+| Edge cases | — | optimistic-rollback = MP-only, skipped. Hand-over overlay occludes the dock and the log persists across hands, so walking back into a finished hand works once the modal is dismissed — no extra handling needed. |
+| Tests + 44px reachability | `e2e — solo scrubber steps history + 44px tap targets` | Playwright spec in the default `e2e` gate: drives a PvF first move, asserts dock appears, `‹` measures ≥44×44, step-back shows `Move N / M`, hand disabled, `Back to live` restores `Live`. |
+
+**Gating:** the scrubber is enabled only when NOT guided / authoring / journey /
+lesson-layout / pre-game-draw / game-over — i.e. genuine solo play in the three
+in-scope modes.
+
+**No hidden multiplayer coupling** was found in the solo surfaces:
+`BotMatchScreen` (PvF / Ghost / Daily Fritz) is fully separate from
+`multiplayer/`; `ReplayRecorder` already logs both players; the projection +
+`<Board>` are pure client. The only surprise was the missing display-board seam
+(above), which was in-estimate to add.
 
 ---
 
