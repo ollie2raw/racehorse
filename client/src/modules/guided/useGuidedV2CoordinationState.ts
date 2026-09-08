@@ -3,7 +3,7 @@ import {
   getLessonV2Module,
   isLessonV2Preloaded,
 } from '../match/bootstrap/lessonV2LazyRegistry.ts';
-import type { UseGuidedLessonBootResult } from './index.ts';
+import type { UseGuidedLessonBootResult } from './useGuidedLessonBoot.ts';
 
 export type GuidedV2CoordinationState = {
   guidedV2EventIndex: number;

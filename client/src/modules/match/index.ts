@@ -19,11 +19,6 @@ export { useMatchPresentation } from './hooks/useMatchPresentation.ts';
 export type { UseMatchPresentationArgs, UseMatchPresentationResult } from './hooks/useMatchPresentation.ts';
 export { useMatchNavigation } from './hooks/useMatchNavigation.ts';
 export type { UseMatchNavigationArgs, UseMatchNavigationResult } from './hooks/useMatchNavigation.ts';
-export { useAuthoringCapture } from '../guided/useAuthoringCapture.ts';
-export type {
-  AuthoringFritzCapturePayload,
-  UseAuthoringCaptureParams,
-} from '../guided/useAuthoringCapture.ts';
 export { useMatchTurnStack } from './hooks/useMatchTurnStack.ts';
 export type { UseMatchTurnStackArgs, UseMatchTurnStackResult } from './hooks/useMatchTurnStack.ts';
 export { useHandLifecycle, autoAdvanceMs } from './hooks/useHandLifecycle.ts';

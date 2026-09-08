@@ -925,6 +925,224 @@ history — none get deleted; listed for completeness.
    removed `api.ts` `upsert*` fns) are now gone too — those tables have **zero**
    writers anywhere now.
 
+### CQ9.1.7 F3 — `modules/guided/index.ts` barrel export surface (Step-1 map, 2026-09-08)
+
+**Read-only. No grading, no fix proposal — that's Step 2 and needs ratification.**
+Extends `§CQ9.1.2 (1)`, which flagged the barrel as over-broad but did not map it
+symbol-by-symbol. Filed as issue **#125**.
+
+**The barrel.** `client/src/modules/guided/index.ts`, 57 lines, **34 value
+exports + 19 type exports = 53 symbols**, re-exported from 13 internal files.
+
+**External importers of the barrel — 11 non-test files + 2 test files.** Almost
+all of them import exactly one *type*, `UseGuidedLessonBootResult`:
+
+| Importer | Symbols (via barrel) | Kind |
+|---|---|---|
+| `bot/useBotMatchScreenController.ts:7` | `useAuthoringCapture`, `useGuidedLessonBoot` | value |
+| `modules/match/hooks/useMatchTurnStack.ts:5-10` | `useGuidedMatchCaptureRuntime`, `useGuidedMatchRuntime`, `useGuidedMatchCommandEffects`, `useGuidedV2CoordinationState` | value |
+| `modules/match/hooks/useMatchTurnStack.ts:37` | `UseGuidedLessonBootResult` | type |
+| `bot/view-model/createBotMatchViewModelArgs.ts:2` | `UseGuidedLessonBootResult` | type |
+| `modules/match/match-turn-stack/types.ts:6` | `UseGuidedLessonBootResult` | type |
+| `modules/match/hooks/useMatchPresentation.ts:40` | `UseGuidedLessonBootResult` | type |
+| `modules/match/hooks/useBotMatchBootstrap.ts:22` | `UseGuidedLessonBootResult` | type |
+| `modules/player-turn/types.ts:12` | `GuidedPlacementResult` | type |
+| `modules/ghost/useGhostRuntime.ts:21` | `UseGuidedLessonBootResult` | type |
+| `modules/daily/useDailyFritzRuntime.ts:22` | `UseGuidedLessonBootResult` | type |
+| `modules/review/useReviewRuntime.ts:8` | `UseGuidedLessonBootResult` | type |
+| `modules/fritz/useFritzRatingDisplay.ts:7` | `UseGuidedLessonBootResult` | type |
+| `modules/match/hooks/useMatchPresentation.test.tsx:6` | `UseGuidedLessonBootResult` | type (test) |
+
+**Net external surface actually crossing the barrel = 8 symbols:**
+`useAuthoringCapture`, `useGuidedLessonBoot`, `useGuidedMatchRuntime`,
+`useGuidedMatchCommandEffects`, `useGuidedMatchCaptureRuntime`,
+`useGuidedV2CoordinationState` (values) + `UseGuidedLessonBootResult`,
+`GuidedPlacementResult` (types).
+
+**The other 45 exported symbols have no external importer** — barrel-exported but
+consumed only from within `modules/guided/`. This includes all of
+`guidedV2State.ts` (3), the 11 `guidedBotMatchHelpers.ts` helpers,
+`buildGuidedCoachPresentation.ts` (6), `computeGuidedCoachTip.ts` (2),
+`useGuidedV2PlaybackEffects`, `useGuidedV1ReplayEffect`,
+`useGuidedWindowDebugApis`, `useGuidedPlacementHandlers`, and the ~19 type
+exports other than the two above.
+
+**External imports that BYPASS the barrel (import guided internals directly) —
+these are why a naive trim would break the build:**
+
+- `modules/match/index.ts:22,26` **re-exports** `useAuthoringCapture` + its param
+  types from `../guided/useAuthoringCapture.ts` (a second public path to the same
+  symbol).
+- `modules/match/bootstrap/resolveInitialBotMatchState.ts:15` — value import
+  `parseGuidedTranscriptState` from `../../guided/guidedBotMatchHelpers.ts`
+  (barrel also exports it; caller uses the file path).
+- `modules/match/match-turn-stack/*` (7 files: `assembleMatchTurnStackResult.ts`,
+  `buildGuidedRuntimeArgs.ts`, `buildGuidedCommandEffectsArgs.ts`,
+  `buildPlayerTurnArgs.ts`, `buildBotTurnArgs.ts`, `buildHandLifecycleArgs.ts`,
+  `types.ts`) + `useMatchTurnStack.ts:29,38` — type imports of
+  `UseGuidedMatchRuntimeResult`, `UseGuidedMatchRuntimeArgs`,
+  `UseGuidedMatchRuntimeBaseResult`, `GuidedV2CoordinationState`,
+  `UseGuidedMatchCommandEffectsArgs`, `UseGuidedMatchCaptureRuntimeResult`,
+  `useAuthoringCapture` (typeof) — sourced from
+  `../../guided/useGuidedMatchRuntimeTypes.ts`,
+  `../../guided/useGuidedV2CoordinationState.ts`,
+  `../../guided/useGuidedMatchCaptureRuntime.ts`,
+  `../../guided/useAuthoringCapture.ts` directly, **not** the barrel. Note
+  `useGuidedMatchRuntimeTypes.ts` is **not itself barrel-exported** — the barrel
+  re-exports the runtime types from `useGuidedMatchRuntime.ts` instead, so
+  `match-turn-stack` has no barrel path for them even if it wanted one.
+- `bot/view-model/createBotMatchViewModelArgs.ts:12` — `typeof useAuthoringCapture`
+  from the file directly (line 2 of the same file uses the barrel for
+  `UseGuidedLessonBootResult`).
+
+**Internal barrel self-import (a finding):**
+`modules/guided/useGuidedV2CoordinationState.ts:6` imports
+`UseGuidedLessonBootResult` from `./index.ts` — an internal module file importing
+its own barrel.
+
+**Name collision (a finding):** `bot/BotGuidedMatchPanel.tsx:5` declares its own
+`interface LessonCoachPanelContent` (and `LessonCoachVm`), unrelated by
+declaration to the barrel's `LessonCoachPanelContent`
+(`guidedCoachPresentationTypes.ts`). Structural typing bridges them at the call
+site; the duplicated name is a readability trap.
+
+**The `modules/guided/* → learn/` coupling (the reason this isn't a drive-by).**
+27 import lines across 8 guided files reach into protected `client/src/learn/`:
+
+| Target (`learn/…`) | Lines | Mostly |
+|---|---|---|
+| `learn/lessonV2.ts` | 11 | `import type` (`LessonV2`, `LessonV2Event`, `LessonV2HandStart`, …) |
+| `learn/guidedAuthoring.ts` | 10 | `import type` (`AuthoredStep`, `FrozenLesson`, `GuidedTranscript`, `GuidedTurn`) + value imports in `useGuidedLessonBoot.ts`, `useAuthoringCapture.ts`, `useGuidedWindowDebugApis.ts`, `guidedTestFixtures.ts` |
+| `learn/guidedMatch/guidedMatchFinalDebrief.ts` | 2 | type |
+| `learn/guidedMatch/guidedMatchCapture.ts` | 2 | value (`useGuidedMatchCaptureRuntime.ts`) |
+| `learn/guidedMatch/guidedMatchCandidateStorage.ts` | 1 | value `upsertGuidedMatchCandidate` |
+| `learn/guidedMatch/guidedMatchCandidateValidation.ts` | 1 | value `validateGuidedMatchCandidate` |
+
+19 of the 27 lines are explicitly `import type`; the rest are multi-line
+type-import continuations plus ~6 genuine value imports (all in
+`useGuidedMatchCaptureRuntime.ts`, `useGuidedLessonBoot.ts`,
+`useAuthoringCapture.ts`, `useGuidedWindowDebugApis.ts`). **`learn/` has no
+barrel** — every import targets the defining file directly, so none of these
+"cross the barrel"; there is nothing to reroute. **Zero imports the other
+direction** (`grep "modules/guided" src/learn` → 0) — no cycle.
+
+**Step-1 conclusion (no grade):** the barrel's real external contract is 8
+symbols; 45 are internal-only re-exports. A trim is mechanically bounded by the
+4 bypass patterns above (the `modules/match/index.ts` re-export, the
+`resolveInitialBotMatchState` value import, the `match-turn-stack` type imports
+from non-barrel-exported files, and the two `useAuthoringCapture` typeof
+imports) plus the self-import at `useGuidedV2CoordinationState.ts:6`. The
+`learn/` coupling is deep but orthogonal to the barrel (no `learn/` barrel; no
+cycle). Step 2 grades what to trim; Step 3 trims only the ratified scope. F5's
+exhaustive-deps `why`-comment residual folds into this pass if greenlit.
+
+### CQ9.2.F3 F3 — Step-2 graded proposal → **ratified D-CQ-6, shipped 2026-09-08**
+
+**Status: RATIFIED as D-CQ-6 and implemented** on branch `chore/cq9.2-f3-barrel-trim`
+(not pushed). Scope shipped = the KEEP/TRIM split below + the two FIX items +
+F5's `why`-comments. **Excluded, still-open STYLE:** the `LessonCoachPanelContent`
+name collision (item 3 below) — noted, not touched this pass. Full verification
+bar green (see the D-CQ-6 decisions-log row). The proposal text is kept below as
+the record of what was graded.
+
+Built on the `§CQ9.1.7` Step-1 map. No code touched. Scope bounded by the 4
+bypass patterns + 1 self-import already identified. **Zero `learn/` surface** —
+the barrel trim is orthogonal to the `learn/` coupling (no `learn/` barrel, no
+cycle, confirmed Step 1). **Zero runtime behaviour change** — pure
+export-surface edit.
+
+#### Grades
+
+**KEEP — the real external contract (8 symbols).** What `bot/*` and
+`modules/match/*` legitimately consume *through* the barrel:
+
+| Symbol | Kind | Sole external barrel consumer(s) |
+|---|---|---|
+| `useAuthoringCapture` | value | `bot/useBotMatchScreenController.ts` |
+| `useGuidedLessonBoot` | value | `bot/useBotMatchScreenController.ts` |
+| `useGuidedMatchRuntime` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedMatchCommandEffects` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedMatchCaptureRuntime` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `useGuidedV2CoordinationState` | value | `modules/match/hooks/useMatchTurnStack.ts` |
+| `UseGuidedLessonBootResult` | type | 9 files across `bot/`, `modules/match`, `modules/ghost`, `modules/daily`, `modules/review`, `modules/fritz` |
+| `GuidedPlacementResult` | type | `modules/player-turn/types.ts` |
+
+**TRIM from the barrel (45 symbols).** No external importer; every internal
+consumer already imports by file path (verified — only exception is the one
+self-import fixed below), so removal breaks nothing. They stay exported from
+their own defining files.
+
+- **Values (26):** `buildBotMatchStateFromV2Event`, `parseV2EventHands`,
+  `resolveNextPlayerAfterV2Event`, `buildCoachPreviewText`,
+  `formatLessonTileLabel`, `getGuidedV1AuthoredStepByIndex`,
+  `getGuidedV1OrderedAuthoredSteps`, `guidedWinnerIdFromScores`,
+  `notifyGuidedV2EventToasts`, `parseGuidedLessonCoachContent`,
+  `parseGuidedTranscriptState`, `sameTileKeyMultiset`,
+  `splitCoachingSummaryBlock`, `syncGuidedBoneyardCount`,
+  `computeGuidedCoachTip`, `computeGuidedScoringTiles`,
+  `buildGuidedCoachPresentation`, `buildGuidedCoachingFlags`,
+  `buildLessonCoachPanelContent`, `buildLessonCoachVm`,
+  `buildLessonRecommendedTileKey`, `computeActivePlacementMoves`,
+  `useGuidedV2PlaybackEffects`, `useGuidedV1ReplayEffect`,
+  `useGuidedWindowDebugApis`, `useGuidedPlacementHandlers`.
+- **Types (19):** `AuthoringFritzCapturePayload`, `UseAuthoringCaptureParams`,
+  `GuidedInitSource`, `UseGuidedLessonBootArgs`, `UseGuidedMatchRuntimeArgs`,
+  `UseGuidedMatchRuntimeBaseResult`, `UseGuidedMatchRuntimeResult`,
+  `GuidedV2CoordinationState`, `UseGuidedMatchCommandEffectsArgs`,
+  `BuildGuidedCoachPresentationInput`, `GuidedCoachPresentation`,
+  `GuidedCoachingFlags`, `LessonCoachPanelContent`,
+  `UseGuidedV2PlaybackEffectsArgs`, `UseGuidedV1ReplayEffectArgs`,
+  `UseGuidedWindowDebugApisArgs`, `UseGuidedMatchCaptureRuntimeArgs`,
+  `UseGuidedMatchCaptureRuntimeResult`, `GuidedPlacementHandlerDeps`.
+  The `UseGuidedMatch*` / `GuidedV2CoordinationState` types **do** have external
+  consumers, but every one imports from the defining file
+  (`useGuidedMatchRuntimeTypes.ts` — not itself barrel-exported —,
+  `useGuidedV2CoordinationState.ts`, …), never via the barrel. The barrel path
+  for these is dead.
+
+Barrel shrinks **57 lines → ~14** (8 symbols from 4 files).
+
+**FIX — bypass / hygiene (fold into the same pass):**
+
+1. **Self-import** — `modules/guided/useGuidedV2CoordinationState.ts:6`:
+   `import type { UseGuidedLessonBootResult } from './index.ts'` →
+   `from './useGuidedLessonBoot.ts'`. An internal file importing its own barrel
+   is wrong regardless of the trim.
+2. **Dead re-export** — `modules/match/index.ts:22–26` re-exports
+   `useAuthoringCapture` + `AuthoringFritzCapturePayload` +
+   `UseAuthoringCaptureParams` from `../guided/useAuthoringCapture.ts`.
+   **Zero consumers** (verified: every `useAuthoringCapture` import resolves to
+   the guided barrel or the file directly, never `modules/match`). Delete —
+   same class as F18 → grade **FIX NOW**.
+3. **Name collision** — `bot/BotGuidedMatchPanel.tsx:5` local
+   `interface LessonCoachPanelContent` vs the canonical in
+   `guidedCoachPresentationTypes.ts`. Rename the local. Grade **STYLE**, low
+   priority — safe to defer if it widens the diff.
+
+**F5 fold-in (from `§CQ9.1.2`):** the 8 `react-hooks/exhaustive-deps` disables
+in `modules/guided/` lacking a one-line `why` — add the comment. No logic
+change.
+
+#### Risk / cost
+
+- **Risk: LOW.** Pure export-surface + one import-path fix + one dead-shim
+  delete. No `learn/`, no runtime, no protected multiplayer surface. TypeScript
+  turns any missed consumer into a compile error, not a silent break.
+- **Cost:** ~1 pass. Edits: `index.ts` (delete ~43 lines), 1 self-import line,
+  `modules/match/index.ts` (delete 5 lines), ~8 `why` comments, optionally 1
+  rename.
+- **Step-3 verification bar (same as F1):** `tsc -b`, full client + server
+  vitest, lint (0 errors), `lint:css`, `check:architecture`, `check:deps`,
+  `check:bot-match-lazy` (guided is on the bot lazy-chunk path — the trim must
+  not change what the standard bot entry statically pulls).
+
+#### Not in scope
+
+Restructuring `modules/guided/*` internals, the `learn/` coupling, or the
+`match-turn-stack` → guided file-path type imports (precise, type-only;
+converting them to a barrel path would *increase* coupling). Step 3 trims the
+ratified list only.
+
 ## CQ9.2 Graded findings list — **Step 2, written 2026-09-05, awaiting ratification as `D-CQ-1`**
 
 Every Step-1 candidate assigned exactly one grade. **Nothing here is a
@@ -951,10 +1169,10 @@ with explicit per-finding greenlight (touches working code / protected surface)
 
 | # | Cat | File | Finding | Why not FIX NOW |
 |---|---|---|---|---|
-| **F12** | 5 | `client/src/match/session/useLiveMatchSession.ts` | ~95-key grab-bag return — leaks every internal `setState*` and every ref to consumers. | Real "senior wouldn't approve" smell, but grouping the return (`{ state, refs, actions, viewModel }`) rewrites a spread consumed across a large socket-adjacent prop tree. High blast radius; `match/session/` is socket-lifecycle-coupled (treat like protected `multiplayer/`). |
+| **F12** | 5 | `client/src/match/session/useLiveMatchSession.ts` | ~95-key grab-bag return — leaks every internal `setState*` and every ref to consumers. | Real "senior wouldn't approve" smell, but grouping the return (`{ state, refs, actions, viewModel }`) rewrites a spread consumed across a large socket-adjacent prop tree. High blast radius; `match/session/` is socket-lifecycle-coupled (treat like protected `multiplayer/`). **HELD — tracking issue #127** (pairs with #128/F15). |
 | **F19** | 3 | `client/src/modules/review/usePostGamePivotalReview.ts:84` | `.catch(() => setPostGameAnalysisPending(false))` swallows the analyzer import/run failure — the "review your game" prompt then silently never appears, with no log. | Add a `logger.warn`. Small, but it *is* changing error-handling behaviour in a live path — wants a look, not a blind FIX NOW. Low urgency (review is a nice-to-have). **SHIPPED — greenlit + `D-CQ-4` (2026-09-05).** `logger.warn('usePostGamePivotalReview', …, { error })` added in the catch, guarded by `if (cancelled) return` (no warn on unmount/dep-change). Happy path unchanged. **Caveat:** `logger.warn` is DEV-only console (`import.meta.env.DEV`) — this gives grep-ability while debugging, not a production Sentry trace; `reportOptionalChunkFailure` would add a prod breadcrumb if that's wanted later. New vitest `usePostGamePivotalReview.test.tsx` (2 cases: reject → warn fires with the error + pending still clears + analysis null; resolve → no warn + analysis populated). |
-| **F3** | 1 / 6 | `client/src/modules/guided/index.ts` | Barrel exports ~40 symbols; only ~6–7 have an importer outside `modules/guided/`. The rest are internal-only. | Trimming the barrel to its real external surface is safe mechanically but `modules/guided/` has 25 imports into protected `learn/` and the barrel is the module's contract — wants a deliberate pass, not a drive-by. |
-| **F6** | 9 | `client/src/modules/guided/` (whole area) | ~3,516 LOC, **one** vitest file (`useGuidedLessonBoot.test.tsx`). V2 playback, placement handlers, coach-presentation builder, authoring capture — all untested. | The single largest coverage gap in scope, but writing tests for a live lesson runtime coupled to protected `learn/` is a project, not a step. Needs its own scoped effort + greenlight. |
+| **F3** | 1 / 6 | `client/src/modules/guided/index.ts` | Barrel exports ~40 symbols; only ~6–7 have an importer outside `modules/guided/`. The rest are internal-only. | Trimming the barrel to its real external surface is safe mechanically but `modules/guided/` has 25 imports into protected `learn/` and the barrel is the module's contract — wants a deliberate pass, not a drive-by. **RATIFIED D-CQ-6 (2026-09-08), shipped on `chore/cq9.2-f3-barrel-trim`.** Barrel 57→14 lines (8 kept / 45 trimmed); self-import + dead `modules/match/index.ts` re-export fixed; F5 `why`-comments folded in. `LessonCoachPanelContent` rename excluded — still-open STYLE. Step-1 map `§CQ9.1.7`, graded proposal `§CQ9.2.F3`. Closes #125. |
+| **F6** | 9 | `client/src/modules/guided/` (whole area) | ~3,516 LOC, **one** vitest file (`useGuidedLessonBoot.test.tsx`). V2 playback, placement handlers, coach-presentation builder, authoring capture — all untested. | The single largest coverage gap in scope, but writing tests for a live lesson runtime coupled to protected `learn/` is a project, not a step. Needs its own scoped effort + greenlight. **Tier 1 partly landed; Tier 2/3 HELD — tracking issue #126.** |
 | **F11** | 6 | `client/src/match/board/InGameBoardFrame.tsx` | 12 props, 5 of them `*ClassName` escape hatches (`studioShellClassName`, `boardZoneClassName`, `handDockClassName`, `handStackClassName`, `handFooterClassName`) that its **only** caller (`MatchLiveLayout`) never passes. | Speculative generality. Trimming is safe but touches a load-bearing layout component (7 downstream consumers via `MatchLiveLayout`) — verify no other caller wants them first. |
 
 ### STYLE (recorded, generally not worth a dedicated change)
@@ -964,7 +1182,7 @@ with explicit per-finding greenlight (touches working code / protected surface)
 | **F4** | 8 | `modules/guided/useGuidedWindowDebugApis.ts`, `useGuidedMatchRuntime.ts` | `console.log` in shipped code (`[guided-frozen-audit] ready…`, `[guided-transcript-authoring] ready…`, `[guided-debug] …`, `[guided-fallback] …`). Contributes to the 401-warning lint budget. Route through `logger` or gate on a dev flag. |
 | **F9** | 1 | `client/src/match/board/index.ts` | `InGameBoardHud` is barrel-exported but imported only inside `MatchLiveLayout` (same module). Drop it from the barrel; keep the component. |
 | **F13** | 3 | `useLiveMatchSession.ts:228–253` | `applyJoinResponseGameState` returns `{ ok: false }` on projection failure with no log at that site (caller `joinAckCoordinator.ts:104` logs + schedules resync — benign, see investigation 1). Add a one-line comment ("caller resyncs on `!ok`") or its own `logger.warn` for grep-ability. |
-| **F15** | 9 | `useLiveMatchSession.ts` | No direct test of the composition / the unmount cleanup effect / `applyJoinResponseGameState` (the 6 sub-hooks *are* tested). A thin composition test is nice-to-have. |
+| **F15** | 9 | `useLiveMatchSession.ts` | No direct test of the composition / the unmount cleanup effect / `applyJoinResponseGameState` (the 6 sub-hooks *are* tested). A thin composition test is nice-to-have. **Not a drop-in — needs the ~25-field mock harness. HELD — tracking issue #128** (sequence before #127/F12). |
 | **F17** | 1 | `modules/review/usePostGamePivotalReview.ts:100–103` | `pivotalSelection` `useMemo` runs `selectPivotalTurnsFromAnalysis` on every analysis even though `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and the result can't render. Gate it on the flag. |
 | **F-misc** | 2 | guided / learn / bot-turn | 3 scattered small multiset helpers (`sameTileKeyMultiset`, `multisetDiff`, an inline subtract). Consolidate into one `tileMultiset` util. Low value. |
 | **F20** | 6 | `modules/review/usePostGamePivotalReview.ts` docstring | Docstring says it "owns … pivotal review wizard state" but with the wizard flag off + no open trigger it is mostly "post-game analysis + analyzer open/close." Name/doc over-promise vs live behaviour. |
@@ -974,7 +1192,7 @@ with explicit per-finding greenlight (touches working code / protected surface)
 
 | # | Cat | File | Finding | Why ACCEPT |
 |---|---|---|---|---|
-| **F5** | 8 | `modules/guided/` (8 `react-hooks/exhaustive-deps` disables) | Deliberate "run this effect on `handNumber` change only, not on `coach`/`match` identity churn" pattern. The trade (a known, bounded stale-closure risk) is the correct call for playback-sequencing effects. **Residual:** each disable should carry a one-line `why` comment where it doesn't already (folded into F3's pass if that's greenlit). |
+| **F5** | 8 | `modules/guided/` (8 `react-hooks/exhaustive-deps` disables) | Deliberate "run this effect on `handNumber` change only, not on `coach`/`match` identity churn" pattern. The trade (a known, bounded stale-closure risk) is the correct call for playback-sequencing effects. **Residual — DONE:** all 8 bare disables now carry a one-line `-- why (F5)` comment; folded into the D-CQ-6 pass. |
 | **F14** | 4 | `useLiveMatchSession.ts:245` | `resp.legalMoves as Move[]` cast with only an `Array.isArray` guard, no element validation. | The server is the move-legality authority (GC-INV-1) — every move is re-validated server-side regardless of what the client's `legalMoves` array contains. Client-side element validation would be pure defense-in-depth against a benign display glitch. `state` *is* validated (`projectMultiplayerGameState`). |
 | **F16** | 1 | `PIVOTAL_REVIEW_WIZARD_ENABLED` + the wizard half of `usePostGamePivotalReview` + `training/pivotalReview/pivotalTurnSelector` / `pivotalReviewStorage` / `BotPivotalReviewPortal` / `BotReviewSummaryPortal` | Feature-flagged-off + **unfinished** (no `setPivotalReviewOpen(true)` anywhere). | Investigation 2: parked, not abandoned — it lives in an *actively-toggled* beta-gate flag file, and the sibling post-game-review feature was *explicitly* deferred for beta as recently as 2026-08-15 (`97e47ae0`, "the analyzer is not ready for players"). **Residual note (must survive to a future session):** flipping the flag is NOT sufficient to ship the wizard — the "open" UI was never built. |
 
@@ -1139,9 +1357,10 @@ the `dailyLeaderboard*` `useState` in `useDailyFritzRuntime` + its resets in
 - [x] **Step 2 — graded findings list** (`§CQ9.2`, 19 findings + 1 deferred cluster) — written 2026-09-05.
 - [x] **Step 2 ratification** — `D-CQ-1` (2026-09-05): FIX-NOW scope only (F1, F8, F10, F18).
 - [x] **Step 3 — FIX-NOW scope shipped** — F10 `b7979243` · F8 `4254a235` · F18 `459871a5` · F1 `181624b7`. Each green (typecheck + full vitest 217/1502 + lint 401/401 + `check:architecture` 20/20). Not pushed.
-- [ ] REFACTOR / STYLE findings — await per-finding greenlight. (Shipped: F19 `D-CQ-4`; F21/F22/F23 `D-CQ-2`/`D-CQ-3`; batch-1 F13/F17/F9/F20 + F4 greenlit 2026-09-08. Still held: F3, F6-Tier-3, F12. **F11 — STOP: 2 of the 5 `*ClassName` props (`handStackClassName`, `handFooterClassName`) ARE used — `NoBrainerLabScreen.tsx:402–403` passes them through `MatchLiveLayout`. Finding is wrong as written; not trimmed.**)
-- [x] **D-CQ-5** (2026-09-08): `daily_puzzle*` / `isDailyPuzzleRun` bot-plumbing cluster — graded FIX NOW, ratified on the addendum trace (two BotMatchScreen render sites, always-null `dailyPuzzleDate` prop, ~15 dead gate sites, 9 unused ladder API fns). Deleted per the boundary table.
-- [ ] Deferred `daily_puzzle*` client cluster — its own scoped pass.
+- [ ] REFACTOR / STYLE findings — await per-finding greenlight. (Shipped: F19 `D-CQ-4`; F21/F22/F23 `D-CQ-2`/`D-CQ-3`; batch-1 F13/F17/F9/F20 + F4 + D-CQ-5 via PR #124 (merged `de7256ae`); scrubber F3-adjacent work via PR #129 (merged `b2da1578`); **F3 barrel trim `D-CQ-6`** on `chore/cq9.2-f3-barrel-trim` (F5 `why`-comments folded in). Still held: F6-Tier-3, F12. Still-open STYLE: `LessonCoachPanelContent` name collision (deferred out of D-CQ-6). **F11 — STOP: 2 of the 5 `*ClassName` props (`handStackClassName`, `handFooterClassName`) ARE used — `NoBrainerLabScreen.tsx:402–403` passes them through `MatchLiveLayout`. Finding is wrong as written; not trimmed.**)
+- [x] **D-CQ-5** (2026-09-08): `daily_puzzle*` / `isDailyPuzzleRun` bot-plumbing cluster — graded FIX NOW, ratified on the addendum trace (two BotMatchScreen render sites, always-null `dailyPuzzleDate` prop, ~15 dead gate sites, 9 unused ladder API fns). Deleted per the boundary table. Shipped via PR #124 (commit `c7eca0b2`, 17 files −438 LOC). See §CQ9.2 ADDENDUM.
+- [ ] **Held findings filed as tracking issues (2026-09-08)** — F3 → **#125** (barrel Step 2/3; Step-1 map = `§CQ9.1.7`), F6 Tier-2/3 → **#126**, F12 → **#127**, F15 → **#128**. Parked explicitly, same discipline as #116/#117.
+- [x] **F3 — barrel trim shipped as D-CQ-6** (2026-09-08, `chore/cq9.2-f3-barrel-trim`, not pushed). Step-1 map `§CQ9.1.7`; graded proposal `§CQ9.2.F3`; ratification + full verification in the D-CQ-6 decisions-log row. Barrel 57→14; self-import + dead `modules/match` re-export fixed; F5 `why`-comments done. `LessonCoachPanelContent` rename left as open STYLE.
 - [x] **F21** (`splitCoachingSummaryBlock` dropped-body bug, surfaced during F6 file 2) — FIX NOW, fixed + ratified `D-CQ-2`. One-line function fix, shared regex untouched, verified green. Not pushed.
 - [x] **F22** (`buildLessonRecommendedTileKey` frozen branch: no draw/pass guard + hyphen-vs-pipe key format → dead hand-tray highlight in frozen V1 mode; surfaced during F6 file 3) — FIX NOW, fixed + ratified `D-CQ-3`. Moot on `main` (frozen V1 mode is author-machine only). Not pushed.
 - [x] **F23** (`.replace('|','-')` vs `formatLessonTileLabel`'s `/\|/g` in the same file) — STYLE; resolved by F22's fix (the `.replace` is gone). Logged for the record.
@@ -1454,6 +1673,7 @@ addendum → 6 `useGuidedLessonBoot` extension → 7 `useGuidedV2CoordinationSta
 
 | D | Date | Decision | Reasoning |
 |---|---|---|---|
+| **D-CQ-6** | 2026-09-08 | **F3 ratified — `modules/guided/index.ts` barrel trimmed to its real external contract.** Scope: the KEEP/TRIM split from `§CQ9.2.F3` (8 kept: `useAuthoringCapture`, `useGuidedLessonBoot`, `useGuidedMatchRuntime`, `useGuidedMatchCommandEffects`, `useGuidedMatchCaptureRuntime`, `useGuidedV2CoordinationState`, `UseGuidedLessonBootResult`, `GuidedPlacementResult`; 45 internal-only re-exports removed — each still exported from its own file, every internal guided consumer already imports by path) + the two FIX items: the self-import `useGuidedV2CoordinationState.ts:6` (`./index.ts` → `./useGuidedLessonBoot.ts`) and the **dead re-export** `modules/match/index.ts:22–26` (`useAuthoringCapture` + 2 types, zero consumers — deleted, same class as F18) + F5's 8 `exhaustive-deps` `why`-comments in `modules/guided/`. Barrel: 57 lines → 14. **Excluded from this pass (still-open STYLE):** the `bot/BotGuidedMatchPanel.tsx` local `LessonCoachPanelContent` vs the canonical `guidedCoachPresentationTypes.ts` name collision — noted, not touched. | Pure export-surface + one import-path fix + one dead-shim delete. **Zero `learn/` surface** (no `learn/` barrel, no cycle — Step-1 confirmed), **zero runtime behaviour change**. TypeScript turns any missed consumer into a compile error. Verified green: `tsc -b`, client vitest 215/1616, server vitest 218/1300, lint 51/51 (0 errors), `lint:css`, `check:architecture` 20/20, `check:deps` (3407→3388 dep edges), `check:multiplayer-arch`, `check:socket-registry`, **`check:bot-match-lazy` including `--dist` on a fresh build** (per the ENGINEERING_GUARDRAILS.md §8 discipline established by PR #129). Own branch `chore/cq9.2-f3-barrel-trim`, not pushed. |
 | **D-CQ-4** | 2026-09-05 | **F19 greenlit and shipped** (separate commit, own scope — not folded into F6). `usePostGamePivotalReview`'s deferred-analysis `.catch` now calls `logger.warn('usePostGamePivotalReview', 'post-game analysis failed …', { error })`, gated on `if (cancelled) return` so an unmount / dep-change doesn't log. Happy path (analysis resolves) is untouched; the failure path still clears `postGameAnalysisPending`. New `usePostGamePivotalReview.test.tsx` — 2 cases (reject: warn fires with the error message + pending clears + `postGameAnalysis` null; resolve: no warn + analysis populated). **Known limitation:** `logger.warn` only writes to the console in DEV — it satisfies "leave a grep-able trace when debugging" but does NOT surface a production failure to Sentry; `reportOptionalChunkFailure` (the established optional-dynamic-import pattern, Sentry breadcrumb) is the follow-up if prod visibility is wanted. | Cheapest, lowest-risk REFACTOR-table item: one line in a catch, no protected surface, no happy-path change, low urgency (review is a nice-to-have). Human greenlit it explicitly as standalone work between F6 files. Verified green: `tsc -b`, client vitest 222/1640, server vitest 218/1292, lint 401/401, `check:architecture` 20/20. Not pushed at commit time. |
 | **D-CQ-3** | 2026-09-05 | **F22 added, graded FIX NOW, fixed; F23 added (STYLE), resolved by the same fix.** F22: `buildLessonRecommendedTileKey`'s frozen-lesson branch (a) returned `'draw'`/`'pass'` verbatim as a tile key (no guard, unlike its two siblings) → a *"Play draw"* coach chip, and (b) emitted the hyphen display form (`"6-6"`) as a *key*, so `bot/BotHandTray.tsx`'s `=== toTileKey(tile)` (pipe form) never matched → the recommended-tile highlight is dead in frozen V1 lesson mode. Consumer trace: the return value has exactly one behavioural consumer (`BotHandTray` equality check for the highlight) plus `formatLessonTileLabel` for the chip label; a non-tile / wrong-format value causes a silent no-match (highlight) and a cosmetic wrong chip — no crash, no *wrong* highlight. **Moot on `main`**: V1 frozen mode is localStorage/author-machine only (no bundled lesson; players get bundled V2), so `isGuidedFrozenLessonMode` is always false for real users — same "real but moot until reachable" call as F21/D-CQ-2. Fixed anyway: one line, zero behaviour change while unreachable, mirrors the `draw`/`pass` guard `buildLessonCoachVm` already applies. F23 (`.replace('\|','-')` single vs `formatLessonTileLabel`'s `/\|/g`): the `.replace` is deleted entirely by F22's fix → resolved, logged STYLE for the record. F6 file-3 commit `6467c01e` had pinned both as "behaviour notes (not bugs)" — the pipe/hyphen consumer mismatch makes (b) a real bug; file-3's two frozen tests updated to assert the fixed behaviour (`"6\|6"`, and `null` for draw/pass). | Surfaced during F6 test authoring, same as F21. Grade driven by the consumer trace as instructed: not a crash or a *wrong* highlight, but a real dead-highlight + cosmetic-chip defect on a currently-unreachable path, and the guard clause is trivial + consistency-improving. Verified green (`tsc -b`, full vitest, lint 401/401, `check:architecture` 20/20). Not pushed. |
 | **D-CQ-2** | 2026-09-05 | **F21 added and graded FIX NOW; fixed.** `splitCoachingSummaryBlock` read `match[2]` (a non-existent capture group) for the coaching body, collapsing it to `''` on every inline `@summary … ---` block. Intended semantics confirmed against the only consumer chain (→ `parseGuidedLessonCoachContent`; nothing reads `match.index`/`match[0].length`): `body` = the remainder after the `---` line. Fix is one line in the function — `body: raw.slice((match.index ?? 0) + match[0].length)` — the shared `COACHING_SUMMARY_BLOCK_RE` constant (re-exported through 3 barrels) is left untouched. The `\s*`-crosses-newline fragility on a whitespace-only summary line (report item 2) was considered and **left as-is**: both the match and no-match paths yield `summary: null` for a blank summary, so it is observably equivalent — not worth a change to the shared constant. F6 file-2 commit `a12fdfc2` pinned the bug with `NOTE(latent)` tests; this commit replaces them with correct-behaviour assertions (summary extracted + body = real remainder). | Surfaced during F6 test authoring. Moot on `main` today — no `@summary`-format authored content exists and `LessonV2Event.coachingSummary` is the live path — so it stays in this plan, not `HARDENING_PLAN.md`, exactly like the `verifyDailyFritzHand` `requireStateDigests` finding ("real but moot until the code path is reachable"). Cheap to fix now, expensive to rediscover once someone authors an `@summary` lesson and silently loses the body. Zero behaviour change while unreachable; verified green (`tsc -b`, full vitest 219/1570, lint 401/401, `check:architecture` 20/20). Not pushed. |

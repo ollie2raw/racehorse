@@ -148,7 +148,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
   useEffect(() => {
     if (!isGuidedMode || !handReveal || matchGameOver) return;
     coach.buildSummary(handReveal.pointsAwarded, match.players.you.score, handReveal.winner === 'you');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per handReveal; coach and match.players.you.score are read at reveal time and must not re-trigger the summary on their identity churn (F5)
   }, [handReveal, isGuidedMode, matchGameOver]);
 
   useEffect(() => {
@@ -166,7 +166,7 @@ export function useGuidedMatchRuntime(args: UseGuidedMatchRuntimeArgs): UseGuide
         setLessonStepIndex(firstStepIdx);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- new-hand realignment keyed on match.handNumber; coach and the isOffAuthoredLine read are excluded so a coach re-render doesn't reset the hand mid-play (F5)
   }, [match.handNumber, isGuidedMode, frozenLesson]);
 
   const { coachingFlags } = coachPresentation;

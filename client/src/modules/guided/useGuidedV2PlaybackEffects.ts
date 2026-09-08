@@ -164,7 +164,8 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- V2 Fritz-playback step: fires once per guidedV2EventIndex tick and schedules the next; the omitted deps (setMatch, schedule*/queueSound callbacks, opponentLabel, full match) are deliberate — including them re-fires mid-animation and double-plays the event (F5)
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]);
 
   useEffect(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return;
@@ -251,7 +252,8 @@ export function useGuidedV2PlaybackEffects(args: UseGuidedV2PlaybackEffectsArgs)
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- V2 player-playback step: keyed on guidedV2EventIndex only, same rationale as the Fritz step above — churny deps re-fire mid-animation and double-play the event (F5)
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]);
 
   useEffect(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return;

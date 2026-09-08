@@ -67,7 +67,8 @@ export function useGuidedMatchCaptureRuntime(
     guidedMatchCaptureRef.current = capture;
     setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(capture));
     setGuidedMatchCandidateSaveStatus(null);
-  }, [activeLocalMatchId, enableGuidedMatchCandidateCapture]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilds the capture object only on toggle / local-match-id change; match is snapshotted into createGuidedMatchCapture and must not rebuild on every match update (F5)
+  }, [activeLocalMatchId, enableGuidedMatchCandidateCapture]);
 
   const captureGuidedMatchCandidateAction = useCallback((
     actor: 'player' | 'fritz',
