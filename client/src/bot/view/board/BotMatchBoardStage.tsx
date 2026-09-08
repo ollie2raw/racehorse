@@ -117,7 +117,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
 
   return (
     <>
-      {scoreToast && <BotMatchScoreToastOverlay scoreToast={scoreToast} />}
+      {scoreToast && !viewingHistory && <BotMatchScoreToastOverlay scoreToast={scoreToast} />}
       <BotMatchBoardDebugOverlays
         enableGuidedMatchCandidateCapture={props.enableGuidedMatchCandidateCapture}
         isJourneyTrial={props.isJourneyTrial}
@@ -145,7 +145,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
         </div>
       )}
       <BotMatchGhostBoardOverlays
-        isGhostMode={props.isGhostMode}
+        isGhostMode={props.isGhostMode && !viewingHistory}
         ghostAgreementType={props.ghostAgreementType}
         ghostPlayedTile={props.ghostPlayedTile}
       />

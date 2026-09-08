@@ -1,5 +1,6 @@
 import type { CreateBotMatchViewModelArgs } from './createBotMatchViewModelArgs.ts';
 import { buildHandRevealTileReveals } from './buildHandRevealTileReveals.ts';
+import { resolveHistoryScrubberView } from './resolveHistoryScrubberView.ts';
 import type { BotMatchScreenViewModel } from './botMatchViewModelTypes.ts';
 
 export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): BotMatchScreenViewModel {
@@ -130,19 +131,22 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     fritzPresentation: turns.fritzPresentation ?? null,
   };
 
-  // The scrubber is a solo-play affordance only: no guided lesson, authoring,
-  // journey trial, lesson layout, pre-game draw, or finished game.
-  const historyScrubberEnabled =
-    !isGuidedMode &&
-    !isAuthoringMode &&
-    !isAuthoringV2Mode &&
-    !isGuidedV2Mode &&
-    !isJourneyTrial &&
-    !turns.isLessonLayoutMode &&
-    !preGameDrawActive &&
-    !match.gameOver;
-  const viewingHistory = historyScrubberEnabled && historyScrubber.viewingHistory;
-  const displayBoard = viewingHistory ? historyScrubber.historyBoard : match.board;
+  const {
+    enabled: historyScrubberEnabled,
+    viewingHistory,
+    displayBoard,
+  } = resolveHistoryScrubberView({
+    scrubber: historyScrubber,
+    liveBoard: match.board,
+    isGuidedMode,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    isJourneyTrial,
+    isLessonLayoutMode: turns.isLessonLayoutMode,
+    preGameDrawActive,
+    gameOver: match.gameOver,
+  });
 
   const board = {
     boardRef: refs.boardRef,
@@ -171,10 +175,11 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     handAreaRef: refs.handAreaRef,
     handTileSize: presentation.handTileSize,
     lessonHandRowCount: presentation.lessonHandRowCount,
-    selectedTile,
+    selectedTile: viewingHistory ? null : selectedTile,
     setSelectedTile,
     setSelectedController,
-    handActive: presentation.handActive,
+    // Parked on a past move: the hand is view-only until "back to live".
+    handActive: presentation.handActive && !viewingHistory,
     botTurn: presentation.botTurn,
     drawSequenceActive: turns.drawSequenceActive,
     drawPulseIndex: turns.drawPulseIndex,
