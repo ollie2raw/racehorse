@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 .vercel
 .env*.local
-# Reachability harness output: 63 diagnostic screenshots + matrix, regenerated each run
+# Reachability harness output: diagnostic screenshots + matrix, regenerated each run
 e2e/screenshots/mobile-reachability/
+e2e/screenshots/mobile-reachability-authed/

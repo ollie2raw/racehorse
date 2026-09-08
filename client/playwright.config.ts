@@ -9,7 +9,7 @@ const repoRoot = path.resolve(clientDir, '..');
 // running from before a postcss.config.js / breakpoint change — silently serves
 // unresolved `@media (--phone)` etc. and makes the whole matrix a lie. Isolating
 // the port + forcing a rebuild is the fix.
-const REACHABILITY = !!process.env.REACHABILITY;
+const REACHABILITY = !!process.env.REACHABILITY || !!process.env.REACHABILITY_AUTHED;
 const CLIENT_PORT = REACHABILITY ? 5233 : 5173;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${CLIENT_PORT}`;
 const PHONE = { width: 390, height: 844 } as const;
@@ -60,7 +60,7 @@ export default defineConfig({
     // 21 routes × 3 viewports). Sets its own viewport per test. Opt-in via
     // REACHABILITY=1 (npm run e2e:reachability) so it stays out of the blocking
     // `e2e` gate until its matrix is green. See docs/breakpoints.md.
-    ...(process.env.REACHABILITY
+    ...(process.env.REACHABILITY && !process.env.REACHABILITY_AUTHED
       ? [
           {
             name: 'mobile-reachability',
@@ -68,6 +68,20 @@ export default defineConfig({
             use: { ...devices['Desktop Chrome'] },
             // Each test settles, then measures twice 500ms apart; live-socket
             // routes can burn the full settle cap. 90s keeps well clear.
+            timeout: 90_000,
+          },
+        ]
+      : []),
+    // Authenticated reachability pass (issue #116) — same matrix, signed in via
+    // the .auth/daily-fritz-qa.json fixture so /friends, /stats, /settings etc.
+    // render real content. Local-only, informational; auto-skips without a
+    // fixture. `npm run e2e:reachability:authed`.
+    ...(process.env.REACHABILITY_AUTHED
+      ? [
+          {
+            name: 'mobile-reachability-authed',
+            testMatch: /mobile-reachability\.spec\.ts/,
+            use: { ...devices['Desktop Chrome'] },
             timeout: 90_000,
           },
         ]

@@ -123,6 +123,16 @@ matrix is green and any regression fails the Client Validation job. Writes
 `e2e/screenshots/mobile-reachability/` (gitignored); CI uploads the matrix as
 an artifact.
 
+The guest pass measures auth-gated routes (`/friends`, `/stats`, `/settings`,
+…) at their **signed-out gate** — the populated screen behind it is not
+covered (issue #116). An **authenticated pass** —
+`npm run e2e:reachability:authed` — reuses the `.auth/daily-fritz-qa.json`
+fixture so those routes render real content. It is **local-only and
+informational** for now: it auto-skips without a current fixture
+(`npm run qa:capture-auth` to make one), and `client/scripts/seedReachabilityQaData.mjs`
+gives the QA account the friend rows `/friends` needs. Not wired into CI — that
+is a later call once it's proven stable (issue #116 options B/C).
+
 **Server isolation (load-bearing):** the harness runs on port **5233** with
 `reuseExistingServer: false` and `vite --strictPort`, so every run builds a
 fresh dev server. A stale server on :5173 — one left running from before a
