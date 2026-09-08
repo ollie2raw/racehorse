@@ -77,17 +77,18 @@ reinstatement.
 ## Needs visual check
 
 These rule bodies changed trigger width and are not obviously
-resolution-agnostic. Verify at 768px once browser tooling is available.
+resolution-agnostic.
 
-**HIGH — structural layout change, most likely to regress:**
+**VERIFIED:**
 
-- `friends/friendsScreen.css` — master/detail two-pane → single-pane collapse.
-  Was `max-width: 767px`, now `--phone` (768). The 1px shift is trivial; the
-  reason it's HIGH is that the rule flips a two-pane layout to one pane with a
-  list/detail toggle — a structural change, not a sizing tweak — so it's the
-  one most able to actually break something at the seam.
+- `friends/friendsScreen.css` — master/detail two-pane → single-pane collapse,
+  `max-width: 700px` → `--phone` (768): a 68px widening, so 701–768px viewports
+  now get the single-pane list/detail toggle. **Checked on a real signed-in
+  account at 700/734/768/769 (issue #112, closed): collapses and toggles
+  correctly, profile loads, back returns to the list, two-pane intact at ≥769.**
+  Sub-44px row controls found in the process were fixed in #115.
 
-**MEDIUM — sizing/reflow at a shifted trigger:**
+**MEDIUM — sizing/reflow at a shifted trigger (not yet checked):**
 
 - `tournament/tournamentMatchHud.css` — in-game HUD pill repositioning, was
   `max-width: 600px`, now 768. Widens the compact-pill treatment by 168px.
