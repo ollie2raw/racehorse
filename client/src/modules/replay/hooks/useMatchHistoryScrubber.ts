@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { derivePostMoveReviewBoard } from '../../../analyzer/reviewBoardState.ts';
+import { derivePostMoveReviewBoard } from '../reviewBoardState.ts';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import type { BoardState } from '../../../types.ts';
 
