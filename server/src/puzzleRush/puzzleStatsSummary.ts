@@ -13,6 +13,8 @@
  * gap. `rush_runs` has deny-all RLS, so this must be computed server-side.
  */
 
+import { shiftDateKey } from '../shared/pacificDate';
+
 export interface PuzzleDayResult {
   /** `YYYY-MM-DD` (Pacific calendar day). */
   date: string;
@@ -38,12 +40,6 @@ export interface PuzzleStatsSummary {
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-function addDays(dateKey: string, deltaDays: number): string {
-  const date = new Date(`${dateKey}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + deltaDays);
-  return date.toISOString().slice(0, 10);
-}
-
 export function buildPuzzleStatsSummary(input: {
   /** Today's Pacific calendar day (`YYYY-MM-DD`). */
   todayDateKey: string;
@@ -63,7 +59,7 @@ export function buildPuzzleStatsSummary(input: {
 
   // Streak: anchor on today if complete, else yesterday, then walk back.
   let currentStreak = 0;
-  const yesterdayKey = addDays(todayDateKey, -1);
+  const yesterdayKey = shiftDateKey(todayDateKey, -1);
   const anchor = completedDays.has(todayDateKey)
     ? todayDateKey
     : completedDays.has(yesterdayKey)
@@ -73,7 +69,7 @@ export function buildPuzzleStatsSummary(input: {
     let cursor = anchor;
     while (completedDays.has(cursor)) {
       currentStreak += 1;
-      cursor = addDays(cursor, -1);
+      cursor = shiftDateKey(cursor, -1);
     }
   }
 
@@ -83,12 +79,12 @@ export function buildPuzzleStatsSummary(input: {
   let runLength = 0;
   let prevDay: string | null = null;
   for (const day of sortedDays) {
-    runLength = prevDay != null && addDays(prevDay, 1) === day ? runLength + 1 : 1;
+    runLength = prevDay != null && shiftDateKey(prevDay, 1) === day ? runLength + 1 : 1;
     if (runLength > bestStreak) bestStreak = runLength;
     prevDay = day;
   }
 
-  const weekFloor = addDays(todayDateKey, -6);
+  const weekFloor = shiftDateKey(todayDateKey, -6);
   let completionsThisWeek = 0;
   for (const day of completedDays) {
     if (day >= weekFloor && day <= todayDateKey) completionsThisWeek += 1;

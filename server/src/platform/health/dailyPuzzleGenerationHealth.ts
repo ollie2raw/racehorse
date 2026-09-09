@@ -1,3 +1,5 @@
+import { shiftDateKey } from '../../shared/pacificDate';
+
 /**
  * `/ready.checks.dailyPuzzleGeneration` — is the Daily Puzzle **generation
  * pipeline** still producing content?
@@ -31,14 +33,6 @@ export type DailyPuzzleGenerationHealthSnapshot = {
   alertReason: string | null;
 };
 
-/** Add `days` calendar days to a `YYYY-MM-DD` string. Pure day math, timezone-free. */
-export function addDaysToIsoDate(iso: string, days: number): string {
-  const [year, month, day] = iso.split('-').map(Number);
-  const dt = new Date(Date.UTC(year, month - 1, day));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
 /** Whole calendar days from `fromIso` to `toIso` (negative if `toIso` is earlier). */
 export function daysBetweenIsoDates(fromIso: string, toIso: string): number {
   const [fy, fm, fd] = fromIso.split('-').map(Number);
@@ -53,7 +47,7 @@ export function assessDailyPuzzleGenerationHealth(
   furthestPublishedDate: string | null,
   minLookaheadDays: number = DAILY_PUZZLE_GENERATION_MIN_LOOKAHEAD_DAYS,
 ): DailyPuzzleGenerationHealthSnapshot {
-  const requiredThroughDate = addDaysToIsoDate(todayPt, minLookaheadDays);
+  const requiredThroughDate = shiftDateKey(todayPt, minLookaheadDays);
   const lookaheadDays = furthestPublishedDate
     ? daysBetweenIsoDates(todayPt, furthestPublishedDate)
     : null;
