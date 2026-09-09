@@ -85,6 +85,36 @@ export async function recordMpAuthorityEventBestEffort(row: MpAuthorityEventReco
   }
 }
 
+/**
+ * How many `private_move_log_verification_failed` events one user has produced in
+ * the trailing window. Counts only rows whose `payload.userId` matches — so it
+ * accumulates from the point that field started being written (like DF-G2's
+ * `countRecentDailyFritzVerificationFailures`). Used to escalate the Sentry
+ * alert from `warning` to `error` for a repeat pattern (a tamper signal, not a
+ * verifier edge case). Best-effort — returns 0 on any failure.
+ */
+export async function countRecentMoveLogVerificationFailuresForUser(
+  userId: string,
+  options: { days?: number; cap?: number } = {},
+): Promise<number> {
+  if (!userId) return 0;
+  const days = Math.max(1, Math.min(90, Math.floor(options.days ?? 7)));
+  const cap = Math.max(1, Math.min(200, Math.floor(options.cap ?? 50)));
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  try {
+    const rows = await supabaseFetch<Array<{ id: string }>>(
+      `/rest/v1/mp_authority_events?select=id` +
+        `&event=eq.private_move_log_verification_failed` +
+        `&payload->>userId=eq.${encodeURIComponent(userId)}` +
+        `&ts=gte.${encodeURIComponent(since)}&limit=${cap}`,
+      { method: 'GET', timeoutMs: 2_500, circuitBreakable: true },
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function queryMpAuthorityFunnelMetrics(): Promise<MpAuthorityFunnelMetricRow[]> {
   const rows = await supabaseFetch<Array<Record<string, unknown>>>(
     '/rest/v1/mp_authority_funnel_metrics?select=event_date,event,total',
