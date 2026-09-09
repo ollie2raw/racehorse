@@ -798,7 +798,6 @@ export function LiveMatchScreen({
                     display: (isHandActive || tournamentMatch || (state.handNumber === 0 && !!preGameDrawState)) ? 'flex' : 'none',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 12,
                   }}
                 >
                   {state.handNumber === 0 && preGameDrawState ? (
