@@ -39,9 +39,12 @@
 /*
  * Docked in the turn cluster: anchored to its right edge and taken out of
  * flow so it never shifts the centred GAME / turn pills, however wide the
- * "Move X / Y" readout gets.
+ * "Move X / Y" readout gets. The component is only ever rendered inside the
+ * HUD centre cluster (a positioned `.wl-center-status`), so the modifier is
+ * always on — carried as a class rather than an ancestor selector so this
+ * file stays clear of the frozen `wl-*` namespace.
  */
-.wl-center-status .rh-scrubber {
+.rh-scrubber--docked {
   position: absolute;
   left: 100%;
   top: 50%;

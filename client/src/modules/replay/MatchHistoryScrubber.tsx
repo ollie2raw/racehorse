@@ -45,7 +45,7 @@ export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
 
   return (
     <div
-      className={`rh-scrubber${viewingHistory ? ' rh-scrubber--viewing' : ''}`}
+      className={`rh-scrubber rh-scrubber--docked${viewingHistory ? ' rh-scrubber--viewing' : ''}`}
       data-ui="match-history-scrubber"
     >
       <Button
