@@ -44,8 +44,31 @@ import {
   timedDailyFritzMutationPost,
   throwApiResult,
 } from './dailyFritzMutations';
+import {
+  DailyFritzEndOfRunError,
+  DailyFritzNextHandHttpError,
+  resolveDailyFritzApiError,
+  throwDailyFritzAuthorityError,
+} from './apiErrors';
 
-export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
+// The error surface and the client-storage helpers moved to their own modules
+// (REFACTOR_OPPORTUNITIES R3); re-export them here so existing `dailyFritz/api`
+// consumers keep working — new code should import from the split modules.
+export {
+  DAILY_FRITZ_MISSING_GAME_RECEIPTS_MESSAGE,
+  DailyFritzAuthorityRecoveryError,
+  DailyFritzEndOfRunError,
+  DailyFritzNextHandHttpError,
+  formatDailyFritzNextHandUserMessage,
+  isRecoverableDailyFritzAuthorityCode,
+  isRetryableDailyFritzNextHandError,
+} from './apiErrors';
+export {
+  clearDailyFritzClientStorage,
+  clearDailyFritzMatchSnapshots,
+  clearDailyFritzTodayCache,
+  DAILY_FRITZ_TODAY_CACHE_PREFIX,
+} from './clientStorage';
 
 function dfClientDebug(..._args: unknown[]): void {
   void _args;
@@ -58,48 +81,6 @@ function dfInitLog(_event: string, _payload?: Record<string, unknown>): void {
 
 function isDailyFritzInitPath(path: string): boolean {
   return path === '/api/daily-fritz/today' || path === '/api/daily-fritz/start';
-}
-
-/** Clears only the Daily Fritz "today" hub cache (sessionStorage). */
-export function clearDailyFritzTodayCache(userId: string): void {
-  if (typeof window === 'undefined' || !userId) return;
-  try {
-    window.sessionStorage.removeItem(`${DAILY_FRITZ_TODAY_CACHE_PREFIX}${userId}`);
-  } catch {
-    /* noop */
-  }
-}
-
-/** Clears in-match localStorage checkpoints for Daily Fritz. */
-export function clearDailyFritzMatchSnapshots(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const key = window.localStorage.key(i);
-      if (key?.startsWith('racehorse:daily-fritz:') && !key.startsWith(DAILY_FRITZ_TODAY_CACHE_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
-  } catch {
-    /* noop */
-  }
-}
-
-/** Clears Daily Fritz today cache + in-match saves. Prefer clearDailyFritzTodayCache on soft retries. */
-export function clearDailyFritzClientStorage(userId: string): void {
-  clearDailyFritzTodayCache(userId);
-  clearDailyFritzMatchSnapshots();
-}
-
-function resolveDailyFritzApiError(path: string, error: string, status?: number): Error {
-  if (error.startsWith('<!DOCTYPE') || error.startsWith('<html')) {
-    return new Error(
-      `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`,
-    );
-  }
-  return new Error(error || `${path} failed with ${status ?? 'unknown'}`);
 }
 
 type RequestJsonOptions = RequestInit & {
@@ -215,70 +196,6 @@ async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
 
 async function timedApiPost<T>(path: string, body: unknown, timeoutMs?: number): Promise<ApiResult<T>> {
   return timedDailyFritzMutationPost<T>(path, body, timeoutMs);
-}
-
-const DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES = new Set([
-  'fritz_action_mismatch',
-  'fritz_state_mismatch',
-  'fritz_policy_version_mismatch',
-  'fritz_policy_contract_mismatch',
-  'missing_fritz_state_digest',
-  'stale_revision',
-  'command_slot_conflict',
-  'missing_game_receipts',
-]);
-
-export const DAILY_FRITZ_MISSING_GAME_RECEIPTS_MESSAGE =
-  'Earlier Daily Fritz games are missing verification receipts. Resume from an earlier game or contact support.';
-
-export function isRecoverableDailyFritzAuthorityCode(code: string | null | undefined): boolean {
-  return Boolean(code && DAILY_FRITZ_RECOVERABLE_AUTHORITY_CODES.has(code));
-}
-
-export class DailyFritzAuthorityRecoveryError extends Error {
-  readonly status: number | null;
-  readonly verifierCode: string;
-  readonly authorityRevision: number | null;
-  readonly authoritativeState: Record<string, unknown> | null;
-
-  constructor(
-    message: string,
-    status: number | null,
-    verifierCode: string,
-    authorityRevision: number | null = null,
-    authoritativeState: Record<string, unknown> | null = null,
-  ) {
-    super(message);
-    this.name = 'DailyFritzAuthorityRecoveryError';
-    this.status = status;
-    this.verifierCode = verifierCode;
-    this.authorityRevision = authorityRevision;
-    this.authoritativeState = authoritativeState;
-  }
-}
-
-function throwDailyFritzAuthorityError<T>(result: ApiResult<T>): T {
-  if (result.error && result.errorCode && isRecoverableDailyFritzAuthorityCode(result.errorCode)) {
-    throw new DailyFritzAuthorityRecoveryError(
-      result.error,
-      result.status ?? null,
-      result.errorCode,
-      Number.isInteger(result.errorData?.authority_revision)
-        ? Number(result.errorData?.authority_revision)
-        : null,
-      result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
-        ? result.errorData.authoritative_state as Record<string, unknown>
-        : null,
-    );
-  }
-  if (result.error === DAILY_FRITZ_MISSING_GAME_RECEIPTS_MESSAGE && result.status === 409) {
-    throw new DailyFritzAuthorityRecoveryError(
-      result.error,
-      result.status,
-      'missing_game_receipts',
-    );
-  }
-  return throwApiResult(result);
 }
 
 export interface DailyFritzLeaderboardRow {
@@ -543,19 +460,6 @@ export async function fetchDailyFritzLeaderboard(date: string): Promise<DailyFri
   return response.leaderboard;
 }
 
-/**
- * Thrown when the server signals there are no more hands left in this Daily
- * Fritz run (HTTP 409 "No hands remain…").  This is a terminal, non-retryable
- * condition — the client must transition to match-complete, not show an error.
- */
-export class DailyFritzEndOfRunError extends Error {
-  readonly statusCode = 409;
-  constructor(message: string) {
-    super(message);
-    this.name = 'DailyFritzEndOfRunError';
-  }
-}
-
 const DAILY_FRITZ_NEXT_HAND_DEBUG_INGEST =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
 
@@ -573,45 +477,6 @@ function dfNextHandIngest(payload: {
     .catch((error) => reportOptionalChunkFailure('devtools/dailyFritzDebugIngest', error));
 }
 
-/** Production copy for modal; dev keeps the raw message for debugging. */
-export function formatDailyFritzNextHandUserMessage(raw: string): string {
-  if (import.meta.env.DEV) return raw;
-  const lower = raw.toLowerCase();
-  if (raw === 'Failed to fetch' || lower.includes('networkerror') || lower.includes('load failed')) {
-    return "Couldn't load the next hand. Check connection and retry.";
-  }
-  if (lower.includes('timed out loading the next daily fritz hand')) {
-    return "Couldn't load the next hand. Check connection and retry.";
-  }
-  return raw.length > 220 ? "Couldn't load the next hand. Check connection and retry." : raw;
-}
-
-export class DailyFritzNextHandHttpError extends Error {
-  readonly status: number | null;
-  readonly verifierCode: string | null;
-  readonly authorityRevision: number | null;
-  readonly authoritativeState: Record<string, unknown> | null;
-
-  constructor(
-    message: string,
-    status: number | null,
-    verifierCode: string | null = null,
-    authorityRevision: number | null = null,
-    authoritativeState: Record<string, unknown> | null = null,
-  ) {
-    super(message);
-    this.name = 'DailyFritzNextHandHttpError';
-    this.status = status;
-    this.verifierCode = verifierCode;
-    this.authorityRevision = authorityRevision;
-    this.authoritativeState = authoritativeState;
-  }
-}
-
-export function isRetryableDailyFritzNextHandError(error: unknown): boolean {
-  if (!(error instanceof DailyFritzNextHandHttpError)) return true;
-  return error.status === null || error.status === 408 || error.status === 429 || error.status >= 500;
-}
 
 export async function nextDailyFritzHand(input: {
   attemptId: string;
