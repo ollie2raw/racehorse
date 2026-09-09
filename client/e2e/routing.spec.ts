@@ -60,6 +60,19 @@ test.describe('browser routing', () => {
     await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
   });
 
+  test('a bad tournament id shows a real error and a way back, not a spinner', async ({ page }) => {
+    // `route-smoke` is not a UUID → the bracket fetch 400s `invalid_tournament_id`.
+    // Before P1-1/P1-2 this was a permanent "Loading bracket…" with 6 uncaught
+    // promise rejections and no message.
+    await page.goto('/tournament/route-smoke');
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText(/could not be found/i, { timeout: 15_000 });
+    await expect(alert.getByRole('button', { name: /back to tournament home/i })).toBeVisible();
+    await expect(page.getByText('Loading bracket…')).toHaveCount(0);
+    // The raw server code must not appear as copy.
+    await expect(page.getByText(/invalid_tournament_id/)).toHaveCount(0);
+  });
+
   test('browser back restores the previous routed screen', async ({ page }) => {
     await page.goto('/solo');
     await page.locator('.sp-solo-mode-card').filter({ hasText: 'Play vs Fritz' }).click();

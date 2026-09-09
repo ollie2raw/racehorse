@@ -155,6 +155,9 @@ export function useTournament({ userId }: Args) {
   const [upcoming, setUpcoming] = useState<ScheduledTournament[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [activeBracket, setActiveBracket] = useState<BracketView | null>(null);
+  // A failed bracket load, tagged with the id it belongs to so a stale error
+  // never bleeds onto a different tournament's screen.
+  const [bracketError, setBracketError] = useState<{ tournamentId: string; code: string } | null>(null);
   const [pendingMatch, setPendingMatch] = useState<MatchReadyEvent | null>(null);
   const [recoveryMatch, setRecoveryMatch] = useState<TournamentMeResponse['activeAssignedMatch']>(null);
   const [tournamentPhase, setTournamentPhase] = useState<TournamentMeResponse['currentTournamentPhase']>(null);
@@ -205,8 +208,17 @@ export function useTournament({ userId }: Args) {
   }, []);
 
   const fetchAndApplyBracket = useCallback(async (tournamentId: string) => {
-    const view = await api.fetchBracket(tournamentId);
-    applyActiveBracket(view);
+    try {
+      const view = await api.fetchBracket(tournamentId);
+      applyActiveBracket(view);
+      setBracketError((prev) => (prev?.tournamentId === tournamentId ? null : prev));
+    } catch (err) {
+      // Never rethrow: every caller does `void tournament.openBracket(id)`, so a
+      // rejection here is an uncaught promise rejection the user never sees. A
+      // visible error state is the fix (FEATURE_COMPLETENESS_AUDIT.md P1-2).
+      const code = err instanceof Error && err.message ? err.message : 'bracket_load_failed';
+      setBracketError({ tournamentId, code });
+    }
   }, [applyActiveBracket]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
@@ -455,6 +467,7 @@ export function useTournament({ userId }: Args) {
     upcoming,
     registrations,
     activeBracket,
+    bracketError,
     pendingMatch,
     recoveryMatch,
     tournamentPhase,

@@ -19,6 +19,7 @@ import {
   isBracketMatchCompletedForDisplay,
 } from './tournamentBracketDisplay';
 import { isTournamentBotId } from './displayNames';
+import { tournamentErrorCopy } from './tournamentErrorCopy';
 import type {
   BracketView,
   Registration,
@@ -35,6 +36,8 @@ export interface TournamentBracketScreenProps {
   identity: Identity;
   tournamentId: string;
   bracket: BracketView | null;
+  /** A failed bracket load, tagged with the id it belongs to (see useTournament). */
+  bracketError?: { tournamentId: string; code: string } | null;
   tournamentPhase?: TournamentUserPhase | null;
   assignedMatch?: TournamentAssignedMatch | null;
   countdownAt?: string | null;
@@ -600,6 +603,11 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
   const bracket: BracketView | null =
     props.bracket?.tournament.id === props.tournamentId ? props.bracket : null;
 
+  const loadErrorCode =
+    !bracket && props.bracketError?.tournamentId === props.tournamentId
+      ? props.bracketError.code
+      : null;
+
   const bracketDisplay = useMemo<BracketDisplayContext>(
     () => ({
       isBracketLobby,
@@ -856,7 +864,16 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
             </section>
           </div>
         ) : !isWaitingRoom ? (
-          <p className="tb-empty">Loading bracket…</p>
+          loadErrorCode ? (
+            <div className="tb-empty tb-empty--error" role="alert">
+              <p>{tournamentErrorCopy(loadErrorCode)}</p>
+              <button className="tb-terminal-banner__cta" type="button" onClick={props.onExitToHub}>
+                Back to Tournament Home
+              </button>
+            </div>
+          ) : (
+            <p className="tb-empty">Loading bracket…</p>
+          )
         ) : null}
 
         {isTerminalBracket ? (
