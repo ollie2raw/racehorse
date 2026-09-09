@@ -47,6 +47,7 @@ test.describe('browser routing', () => {
       '/learn/how-to-play',
       '/tournament/route-smoke',
       '/tournament/route-smoke/result',
+      '/puzzle-rush',
     ];
 
     for (const path of paths) {
@@ -71,6 +72,27 @@ test.describe('browser routing', () => {
     await expect(page.getByText('Loading bracket…')).toHaveCount(0);
     // The raw server code must not appear as copy.
     await expect(page.getByText(/invalid_tournament_id/)).toHaveCount(0);
+  });
+
+  test('Puzzle Rush (the Daily Puzzle) has a URL and browser-back returns home', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: "Today's Race" })).toBeVisible();
+
+    await page
+      .getByRole('region', { name: 'Daily Puzzle' })
+      .getByRole('button', { name: /play|continue|view results/i })
+      .click();
+
+    await expect(page).toHaveURL(/\/puzzle-rush$/);
+
+    // Fresh load of that URL restores the mode, not home.
+    await page.reload();
+    await expect(page).toHaveURL(/\/puzzle-rush$/);
+    await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: "Today's Race" })).toBeVisible();
   });
 
   test('browser back restores the previous routed screen', async ({ page }) => {

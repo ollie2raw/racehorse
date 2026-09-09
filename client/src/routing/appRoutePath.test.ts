@@ -64,6 +64,18 @@ describe('app route paths', () => {
     expect(buildAppPath({ ...base, mode: 'ghost' })).toBe('/');
   });
 
+  it('round-trips Puzzle Rush — the Daily Puzzle, and the only primary mode that had no URL (P1-3)', () => {
+    expect(resolveAppRoute('/puzzle-rush')).toEqual({ mode: 'puzzleRush' });
+    expect(buildAppPath({
+      multiplayerView: 'quick',
+      profileUsername: null,
+      learnHowToPlay: false,
+      tournamentId: null,
+      tournamentView: 'hub',
+      mode: 'puzzleRush',
+    })).toBe('/puzzle-rush');
+  });
+
   it('round-trips the settings route', () => {
     // The nav dropdown pushes this path, so resolve and build must agree or
     // a reload of /settings would land the user on home.
