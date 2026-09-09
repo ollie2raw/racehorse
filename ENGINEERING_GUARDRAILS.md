@@ -346,13 +346,7 @@ every system this plan has covered has shipped the same way: merge to
 (or a bad migration, or a bad guardrail) has no smaller blast radius to
 land in first.
 
-**Enforcement — NOT YET BUILT AT ALL.** No code today ships anywhere but
-straight to 100% prod. There is no staging environment, no canary/
-percentage rollout, no feature-flag-gated deploy path, on either the
-Render (server) or Vercel (client) side of this project. Flagged
-explicitly as a known gap, not a false "coming soon" — building this is a
-real infrastructure project (a second Render service + environment, or a
-feature-flag system, or both), not a script, and hasn't been scoped.
+**Enforcement — DECIDED NOT TO BUILD A CANARY ENVIRONMENT (D-26, 2026-09-08); the lighter alternative is adopted instead, itself only partly built.** No code ships anywhere but straight to 100% prod, and that is now a deliberate posture, not an unscoped gap. There is no staging environment, no canary/percentage rollout, no feature-flag-gated deploy path, on either the Render (server) or Vercel (client) side of this project, and none is planned at current scale.
 
 **Step-1 scoping written 2026-09-05 — `docs/guardrail-5-staging-canary-scoping.md`.**
 Confirmed deploy reality (Render free / Vercel Hobby, both auto-deploy on
@@ -362,13 +356,41 @@ run against AD-1 / SA-6 / DF-STALE-1 — **none of the three would have caught
 any of them** (two schema drift, one temporal staleness; a shadow-DB canary
 would have *masked* the schema-drift ones). Every real incident this plan has
 had was caught by an assertion against live prod state (Guardrails #1/#6/#7),
-not by an environment. **Recommendation: do not build a canary environment at
-this scale.** Adopt (A) the Vercel preview deployments that almost certainly
-already exist, as a pre-merge habit + optional PR smoke, and (B) a light
-formalization of the server feature-flag pattern that already works
-(`RANKED_GAMES_*_COLUMN_ENABLED` is the proof). Revisit the environment
-question off Render free tier or at ~50+ peak concurrent / ~1 deploy-a-day
-with live multiplayer. Awaiting a direction call before any Step-2 build.
+not by an environment.
+
+**Decision (D-26, `HARDENING_PLAN.md` decisions log): ratify the scoping doc's own recommendation as written.**
+- **Adopted — Option A.** Vercel preview deployments as the pre-merge habit
+  for client-affecting changes: open the preview, run the relevant runbook QA
+  slice, before merging. **Not yet confirmed by a human** — whether preview
+  deployments are actually on and PRs get the preview comment, and the
+  scoping doc's noted `.vercel/project.json` mislink, are still open
+  follow-up items, not blocked on anything but someone checking. A
+  PR-triggered smoke workflow against the preview URL is a reasonable
+  phase-2, not required now.
+- **Adopted — Option B, light version. Already shipped 2026-09-05** as
+  `docs/server-feature-flags.md` (a flag manifest + the convention that
+  materially new logic in a high-stakes server handler ships behind a
+  default-OFF flag). This is a **staged-enable** safety valve (flip off in
+  seconds, no redeploy) — explicitly *not* a staged-audience one, and not a
+  substitute for Option C. `RANKED_GAMES_SOURCE_COLUMNS_ENABLED`'s own
+  history (`HARDENING_PLAN.md` §8.3 RK-8: shipped as a default-off-by-mistake
+  flag, found reachable-by-env-var-mistake, default flipped, then the flag
+  deleted once the write became unconditional) is the worked proof this
+  pattern earns its keep.
+- **Rejected at this scale — Option C**, a second Render service as a
+  server-side canary. ~$7+/mo of new recurring cost (the project's first)
+  plus a permanent two-environment maintenance burden (schema sync, env
+  sync, seed data, RLS/RPC mirroring, CSP edits) — for a mechanism that would
+  not have caught any of the three real incidents checked against it, and
+  would have *masked* the two schema-drift ones.
+
+**Revisit triggers (named so this isn't re-litigated from scratch):** move
+off Render free tier (multi-instance becomes real), **or** sustained load
+such that "a bad deploy is live for ~90s before the smoke test fails it"
+affects a material number of sessions — **~50+ concurrent users at peak, or
+~1 deploy/day with real live-multiplayer usage**. Until either triggers, the
+blast radius of "bad deploy → smoke test red in ≤2 min → roll back" is small
+enough that Option C's cost/complexity is not justified.
 
 ---
 
