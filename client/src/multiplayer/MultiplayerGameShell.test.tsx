@@ -311,3 +311,43 @@ describe('MultiplayerGameShell post-game rating refresh', () => {
     expect(getGameSnapshot().routeProps.multiplayerRatingSummary?.pending).toBe(false);
   });
 });
+
+describe('MultiplayerGameShell — history scrubber gating', () => {
+  afterEach(() => {
+    resetGameSnapshot();
+  });
+
+  function renderWith(overrides: Partial<MultiplayerGameShellProps> = {}) {
+    resetGameSnapshot();
+    const joinedRoomResponseRef = {
+      current: {
+        ok: true,
+        roomCode: 'ROOM123',
+        you: YOU,
+        players: [{ id: YOU }, { id: OPP }],
+        state: makeState({ sequence: 5 }),
+      } as RoomAckResponse,
+    };
+    render(
+      <MultiplayerGameShell
+        {...makeDefaultProps({ joinedRoomResponseRef, shellDelegatesRef: createRef<any>(), ...overrides })}
+      />,
+    );
+    return getGameSnapshot();
+  }
+
+  it('enables the scrubber for a player in a live standard match', () => {
+    expect(renderWith().routeProps.historyScrubberEnabled).toBe(true);
+  });
+
+  it('disables the scrubber for a spectator', () => {
+    // `you` is not among the seated players → spectating.
+    expect(renderWith({ you: 'p3' }).routeProps.historyScrubberEnabled).toBe(false);
+  });
+
+  it('disables the scrubber for a tournament match', () => {
+    expect(
+      renderWith({ tournamentMatch: { isTournament: true } as any }).routeProps.historyScrubberEnabled,
+    ).toBe(false);
+  });
+});

@@ -1,76 +1,110 @@
-.rh-scrubber-dock {
-  display: flex;
-  justify-content: center;
-  margin-top: 6px;
-  pointer-events: none;
-}
-
-.rh-scrubber-dock .rh-scrubber {
-  pointer-events: auto;
-}
+/*
+ * Compact move-history stepper for the match top HUD. Sits beside the turn
+ * pill; never in the board flow. Kept small so scrubbing never reflows the HUD.
+ */
 
 .rh-scrubber {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 1px;
+  padding: 3px;
   border-radius: var(--radius-control);
   background: rgba(10, 16, 28, 0.6);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-family: var(--font-body);
+  font-family: var(--font-display);
   user-select: none;
+  /* The HUD centre cluster is pointer-events:none — re-enable for the control. */
+  pointer-events: auto;
 }
 
 .rh-scrubber--viewing {
   border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(23, 37, 66, 0.66);
 }
 
 .rh-scrubber-step.rh-btn {
-  min-width: 44px;
-  min-height: 44px;
+  height: 28px;
+  min-width: 28px;
   padding: 0;
+  border-radius: var(--radius-control);
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
 }
 
-.rh-scrubber-label {
-  min-width: 118px;
-  text-align: center;
-  font-family: var(--font-display);
-  font-size: 14px;
+.rh-scrubber-step.rh-btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-scrubber-readout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 46px;
+  padding: 0 6px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.95);
   font-variant-numeric: tabular-nums;
 }
 
-.rh-scrubber:not(.rh-scrubber--viewing) .rh-scrubber-label {
+.rh-scrubber-readout--live {
   color: var(--tier-standard);
 }
 
+.rh-scrubber-pos {
+  color: var(--tier-standard);
+}
+
+.rh-scrubber-sep {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.rh-scrubber-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--tier-standard);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+}
+
 .rh-scrubber-live.rh-btn {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  height: 28px;
+  min-width: 28px;
+  margin-left: 2px;
+  padding: 0 6px;
+  gap: 3px;
+  border-radius: var(--radius-control);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.1);
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--tier-standard);
+}
+
+.rh-scrubber-live.rh-btn:hover {
+  background: rgba(59, 130, 246, 0.18);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .rh-scrubber-live-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
   border-radius: var(--radius-pill);
   background: var(--tier-standard);
   color: var(--bg-obsidian);
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }

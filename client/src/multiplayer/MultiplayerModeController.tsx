@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import type { BoardHandle } from '../components';
 import type { GameState, Move, PlacementPosition, Tile } from '../types';
+import type { MoveEntry } from '../game/moveLogger';
 import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 import type { MatchFoundPayload } from '../matchmaking/types';
 import type { TournamentMatchContext } from '../match/session/useTournamentMatchSession';
@@ -87,6 +88,8 @@ export type MultiplayerLiveMatchView = {
   boardSelectedTile: Tile | null;
   lastPlayedTile: Tile | null;
   boardShowOpenEndGlow: boolean;
+  multiplayerMoveLog: readonly MoveEntry[];
+  historyScrubberEnabled: boolean;
   play: (position: PlacementPosition) => void;
   myHand: Tile[];
   handSelectedTile: Tile | null;
@@ -239,6 +242,8 @@ export default function MultiplayerModeController({
     boardSelectedTile,
     lastPlayedTile,
     boardShowOpenEndGlow,
+    multiplayerMoveLog,
+    historyScrubberEnabled,
     play,
     myHand,
     handSelectedTile,
@@ -454,6 +459,8 @@ export default function MultiplayerModeController({
               lastPlayedTile,
               boardShowOpenEndGlow,
               onPositionClick: play,
+              moveLog: multiplayerMoveLog,
+              historyScrubberEnabled,
             }}
             hand={{
               myHand,

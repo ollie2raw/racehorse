@@ -16,6 +16,8 @@ import {
 
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MatchLiveLayout } from './board';
+import { MatchHistoryScrubber, useMatchHistoryScrubber } from '../modules/replay';
+import type { MoveEntry } from '../game/moveLogger';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import HandOverModal from '../components/handOver/HandOverModal';
@@ -343,6 +345,11 @@ function renderScoreToastMessage(message: string) {
   );
 }
 
+const EMPTY_MOVE_LOG: readonly MoveEntry[] = [];
+const NO_LEGAL_MOVES: Move[] = [];
+
+function ignorePositionClick() {}
+
 export function LiveMatchScreen({
   shell,
   identity,
@@ -385,6 +392,8 @@ export function LiveMatchScreen({
     lastPlayedTile,
     boardShowOpenEndGlow,
     onPositionClick,
+    moveLog,
+    historyScrubberEnabled,
   } = board;
   const {
     myHand,
@@ -449,6 +458,23 @@ export function LiveMatchScreen({
   const preGameDrawState = preGameDraw?.preGameDraw;
   const onPregameTileTap = preGameDraw?.onPregameTileTap;
   const showGameOverOverlay = Boolean(state?.gameOver);
+
+  // Mid-match move-history scrubber (multiplayer only; tournament / spectator
+  // pass historyScrubberEnabled=false). View-only: parks the rendered board on
+  // a past move without touching game state.
+  const historyScrubber = useMatchHistoryScrubber(moveLog ?? EMPTY_MOVE_LOG);
+  const scrubberActive =
+    Boolean(historyScrubberEnabled) &&
+    isHandActive &&
+    !state?.gameOver &&
+    !preGameDrawState &&
+    historyScrubber.total > 0;
+  const viewingHistory = scrubberActive && historyScrubber.viewingHistory;
+  const shownBoard = viewingHistory ? historyScrubber.historyBoard : boardForDisplay;
+  const shownLegalMoves = viewingHistory ? NO_LEGAL_MOVES : boardLegalMoves;
+  const shownSelectedTile = viewingHistory ? null : boardSelectedTile;
+  const shownLastPlayedTile = viewingHistory ? null : lastPlayedTile;
+  const handlePositionClick = viewingHistory ? ignorePositionClick : onPositionClick;
 
   const prevMyScore = useRef<number | null>(null);
   const prevOpponentScore = useRef<number | null>(null);
@@ -772,6 +798,7 @@ export function LiveMatchScreen({
                     display: (isHandActive || tournamentMatch || (state.handNumber === 0 && !!preGameDrawState)) ? 'flex' : 'none',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: 12,
                   }}
                 >
                   {state.handNumber === 0 && preGameDrawState ? (
@@ -824,6 +851,9 @@ export function LiveMatchScreen({
                       {isMyTurn ? 'Your move' : 'Opponent thinking'}
                     </span>
                   ) : null}
+                  {scrubberActive && !tournamentMatch && (
+                    <MatchHistoryScrubber scrubber={historyScrubber} />
+                  )}
                 </div>
               }
               hudRight={
@@ -983,13 +1013,13 @@ export function LiveMatchScreen({
                     <Board
                       ref={boardRef}
                       showZoomTray={false}
-                      board={boardForDisplay}
-                      legalMoves={boardLegalMoves}
-                      selectedTile={boardSelectedTile}
-                      lastPlayedTile={lastPlayedTile}
-                      onPositionClick={onPositionClick}
+                      board={shownBoard}
+                      legalMoves={shownLegalMoves}
+                      selectedTile={shownSelectedTile}
+                      lastPlayedTile={shownLastPlayedTile}
+                      onPositionClick={handlePositionClick}
                       tileSize={84}
-                      showOpenEndGlow={boardShowOpenEndGlow}
+                      showOpenEndGlow={boardShowOpenEndGlow && !viewingHistory}
                     />
                   )}
                   </ErrorBoundary>

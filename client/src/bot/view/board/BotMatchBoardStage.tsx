@@ -8,8 +8,6 @@ import type { BoardHandle } from '../../../components';
 import { ErrorBoundary } from '../../../components/ErrorBoundary.tsx';
 import { PreGameTileDrawBoard } from '../../../match/preGameDraw/PreGameTileDrawBoard.tsx';
 import type { BoardState, Move, PlacementPosition, Tile } from '../../../types.ts';
-import { MatchHistoryScrubber } from '../../../modules/replay/index.ts';
-import type { MatchHistoryScrubberState } from '../../../modules/replay/index.ts';
 import type { AuthoredStep } from '../../../learn/guidedAuthoring.ts';
 import type { FrozenLesson } from '../../../learn/guidedAuthoring.ts';
 import type { GuidedMatchCaptureStatus } from '../../../learn/guidedMatch/guidedMatchCapture.ts';
@@ -61,8 +59,6 @@ export type BotMatchBoardStageProps = {
   boardRef: RefObject<BoardHandle | null>;
   displayBoard: BoardState | null;
   viewingHistory: boolean;
-  historyScrubberEnabled: boolean;
-  historyScrubber: MatchHistoryScrubberState;
   lessonBoardPlacementMoves: Move[];
   activePlacementMoves: Move[];
   selectedTile: Tile | null;
@@ -91,8 +87,6 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
     boardRef,
     displayBoard,
     viewingHistory,
-    historyScrubberEnabled,
-    historyScrubber,
     lessonBoardPlacementMoves,
     activePlacementMoves,
     selectedTile,
@@ -137,11 +131,6 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
         <div className="rh-board-meta-bar" data-ui="board-meta">
           <BoardOpenEndsPill board={match.board} openEndsSum={openEndsSum} />
           <BoneyardCountPill ref={boneyardRef} count={boneyardDisplayCount ?? match.boneyard.length} />
-        </div>
-      )}
-      {historyScrubberEnabled && (
-        <div className="rh-scrubber-dock" data-ui="scrubber-dock">
-          <MatchHistoryScrubber scrubber={historyScrubber} />
         </div>
       )}
       <BotMatchGhostBoardOverlays

@@ -133,8 +133,6 @@ export function BotMatchScreenView({
       boardRef={board.boardRef}
       displayBoard={board.displayBoard}
       viewingHistory={board.viewingHistory}
-      historyScrubberEnabled={historyScrubber.enabled}
-      historyScrubber={historyScrubber.state}
       lessonBoardPlacementMoves={board.lessonBoardPlacementMoves}
       activePlacementMoves={board.activePlacementMoves}
       selectedTile={board.selectedTile}
@@ -169,6 +167,7 @@ export function BotMatchScreenView({
       dailyFritzPackage={hud.dailyFritzPackage}
       turnLabel={turnLabel}
       botTurn={hud.botTurn}
+      historyScrubber={historyScrubber.enabled ? historyScrubber.state : null}
     />
   ) : null;
 

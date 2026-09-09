@@ -3,6 +3,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { BoardHandle } from '../components';
 import type { GameState, Move, Tile } from '../types';
 import type { PlacementPosition } from '../types';
+import type { MoveEntry } from '../game/moveLogger';
 import type { PreGameDrawState } from '../match/preGameDraw/preGameDrawLogic';
 
 type HandEndedPayload = {
@@ -57,6 +58,8 @@ export type MultiplayerGameRouteProps = {
   boardSelectedTile: Tile | null;
   lastPlayedTile: Tile | null;
   boardShowOpenEndGlow: boolean;
+  multiplayerMoveLog: readonly MoveEntry[];
+  historyScrubberEnabled: boolean;
   play: (position: PlacementPosition) => Promise<void>;
   myHand: Tile[];
   handSelectedTile: Tile | null;
@@ -122,6 +125,8 @@ export const EMPTY_ROUTE_PROPS: MultiplayerGameRouteProps = {
   boardSelectedTile: null,
   lastPlayedTile: null,
   boardShowOpenEndGlow: false,
+  multiplayerMoveLog: [],
+  historyScrubberEnabled: false,
   play: async () => {},
   myHand: [],
   handSelectedTile: null,

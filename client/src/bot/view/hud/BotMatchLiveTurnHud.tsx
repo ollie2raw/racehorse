@@ -1,10 +1,14 @@
 import type { DailyFritzStartResponse } from '../../../dailyFritz/api.ts';
+import { MatchHistoryScrubber } from '../../../modules/replay/index.ts';
+import type { MatchHistoryScrubberState } from '../../../modules/replay/index.ts';
 
 type BotMatchLiveTurnHudProps = {
   isDailyFritzMode: boolean;
   dailyFritzPackage: DailyFritzStartResponse | null;
   turnLabel: string;
   botTurn: boolean;
+  /** Move-history stepper, when the scrubber applies to this match. */
+  historyScrubber?: MatchHistoryScrubberState | null;
 };
 
 export function BotMatchLiveTurnHud({
@@ -12,6 +16,7 @@ export function BotMatchLiveTurnHud({
   dailyFritzPackage,
   turnLabel,
   botTurn,
+  historyScrubber = null,
 }: BotMatchLiveTurnHudProps) {
   return (
     <div
@@ -26,6 +31,9 @@ export function BotMatchLiveTurnHud({
       )}
       {turnLabel && (
         <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>{turnLabel}</span>
+      )}
+      {historyScrubber && historyScrubber.total > 0 && (
+        <MatchHistoryScrubber scrubber={historyScrubber} />
       )}
     </div>
   );

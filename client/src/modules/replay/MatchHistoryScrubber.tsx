@@ -7,9 +7,14 @@ export interface MatchHistoryScrubberProps {
 }
 
 /**
- * View-only control strip for stepping through the current match's move history.
- * Presentational: all cursor logic lives in `useMatchHistoryScrubber`. The board
- * itself is swapped by the match view model, not rendered here.
+ * Compact move-history stepper. Lives in the match top HUD beside the turn
+ * pill — never in the board flow — so it can't shift the board off-centre.
+ *
+ * Presentational only: all cursor logic lives in `useMatchHistoryScrubber`.
+ * The board itself is swapped by the consuming screen, not rendered here.
+ * The expanded "Move X / Hand Y" detail is deliberately dropped from the
+ * visible control (it stays in the labels) to keep the HUD from reflowing
+ * while the player scrubs.
  */
 export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
   const {
@@ -27,6 +32,17 @@ export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
 
   if (total === 0) return null;
 
+  const readoutTitle = viewingHistory
+    ? viewedHandNumber != null
+      ? `Move ${position} of ${total}, hand ${viewedHandNumber}`
+      : `Move ${position} of ${total}`
+    : 'Following the live board';
+
+  const backToLiveLabel =
+    movesBehindLive > 0
+      ? `Back to live, ${movesBehindLive} new ${movesBehindLive === 1 ? 'move' : 'moves'}`
+      : 'Back to live';
+
   return (
     <div
       className={`rh-scrubber${viewingHistory ? ' rh-scrubber--viewing' : ''}`}
@@ -42,14 +58,23 @@ export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
         <span aria-hidden="true">‹</span>
       </Button>
 
-      <span className="rh-scrubber-label" aria-live="polite">
+      <span
+        className={`rh-scrubber-readout${viewingHistory ? '' : ' rh-scrubber-readout--live'}`}
+        aria-live="polite"
+        aria-label={viewingHistory ? readoutTitle : undefined}
+        title={readoutTitle}
+      >
         {viewingHistory ? (
           <>
-            Move {position} / {total}
-            {viewedHandNumber != null ? ` · Hand ${viewedHandNumber}` : ''}
+            <span className="rh-scrubber-pos">{position}</span>
+            <span className="rh-scrubber-sep" aria-hidden="true">/</span>
+            <span className="rh-scrubber-total">{total}</span>
           </>
         ) : (
-          'Live'
+          <>
+            <span className="rh-scrubber-dot" aria-hidden="true" />
+            Live
+          </>
         )}
       </span>
 
@@ -65,16 +90,12 @@ export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
 
       {viewingHistory ? (
         <Button
-          variant="secondary"
+          variant="ghost"
           className="rh-scrubber-live"
           onClick={backToLive}
-          aria-label={
-            movesBehindLive > 0
-              ? `Back to live, ${movesBehindLive} new ${movesBehindLive === 1 ? 'move' : 'moves'}`
-              : 'Back to live'
-          }
+          aria-label={backToLiveLabel}
         >
-          Back to live
+          <span aria-hidden="true">⟲</span>
           {movesBehindLive > 0 ? (
             <span className="rh-scrubber-live-count">{movesBehindLive}</span>
           ) : null}

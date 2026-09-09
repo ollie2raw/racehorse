@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import type { BoardHandle } from '../components';
+import type { MoveEntry } from '../game/moveLogger';
 import type { RoomChatEvent, RoomEmoteEvent } from '../multiplayer/protocol';
 import type { PreGameDrawState } from './preGameDraw/preGameDrawLogic';
 import type { TournamentMatchContext } from './session/useTournamentMatchSession';
@@ -71,6 +72,10 @@ export type LiveMatchScreenBoardProps = {
   lastPlayedTile: Tile | null;
   boardShowOpenEndGlow: boolean;
   onPositionClick: (position: PlacementPosition) => void;
+  /** Full match move log — drives the mid-match history scrubber when non-empty. */
+  moveLog?: readonly MoveEntry[];
+  /** Whether the scrubber applies here (off for spectators and tournament matches). */
+  historyScrubberEnabled?: boolean;
 };
 
 /** Player hand rack and tile selection. */

@@ -32,11 +32,11 @@ describe('MatchHistoryScrubber', () => {
     render(<MatchHistoryScrubber scrubber={state()} />);
     expect(screen.getByText('Live')).toBeTruthy();
     expect(screen.getByLabelText('Next move').hasAttribute('disabled')).toBe(true);
-    expect(screen.queryByText('Back to live')).toBeNull();
+    expect(screen.queryByLabelText(/Back to live/)).toBeNull();
   });
 
-  it('shows move position + hand and a back-to-live control when viewing history', () => {
-    render(
+  it('shows a compact move counter and a back-to-live control when viewing history', () => {
+    const { container } = render(
       <MatchHistoryScrubber
         scrubber={state({
           viewingHistory: true,
@@ -49,9 +49,13 @@ describe('MatchHistoryScrubber', () => {
         })}
       />,
     );
-    expect(screen.getByText(/Move 3 \/ 6/)).toBeTruthy();
-    expect(screen.getByText(/Hand 2/)).toBeTruthy();
-    expect(screen.getByText('3')).toBeTruthy(); // the new-moves badge
+    // Position / total render as discrete spans, not "Move 3 / 6" prose.
+    expect(container.querySelector('.rh-scrubber-pos')?.textContent).toBe('3');
+    expect(container.querySelector('.rh-scrubber-total')?.textContent).toBe('6');
+    expect(screen.queryByText(/Move 3/)).toBeNull();
+    // Hand detail is carried on the readout's accessible name, not visible text.
+    expect(screen.getByLabelText('Move 3 of 6, hand 2')).toBeTruthy();
+    expect(screen.getByText('3', { selector: '.rh-scrubber-live-count' })).toBeTruthy();
     expect(screen.getByLabelText('Back to live, 3 new moves')).toBeTruthy();
   });
 
