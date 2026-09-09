@@ -1,6 +1,11 @@
 import type { ErrorEvent, EventHint } from '@sentry/node';
+import { createSentryVolumeGuard } from './sentryVolumeGuard';
 
 const REDACTED = '[Filtered]';
+
+// Shared across the process — one error loop must not exhaust the event quota
+// and blind us to everything else (PRE_LAUNCH_HARDENING.md §3.1).
+const volumeGuard = createSentryVolumeGuard();
 
 // Exact key match (not substring / not pattern) — kept deliberately narrow so it
 // can't over-redact adjacent fields (e.g. `password_set_at`, `email_confirmed`).
@@ -67,8 +72,12 @@ export function scrubSentryEventSensitiveData<T extends ErrorEvent>(event: T): T
   return event;
 }
 
-/** Sentry hook: strip checkpoint unload tokens before events leave the server. */
-export function sentryBeforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent {
+/**
+ * Sentry hook: drop events past the per-minute volume cap, then strip sensitive
+ * fields from what's left.
+ */
+export function sentryBeforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
   void _hint;
+  if (!volumeGuard.shouldForward(event)) return null;
   return scrubSentryEventSensitiveData(event);
 }
