@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { tournamentErrorCopy } from '../tournament/tournamentErrorCopy';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
@@ -57,6 +58,7 @@ export function TournamentRoute({
           identity={tIdentity}
           tournamentId={activeTournamentId}
           bracket={tournament.activeBracket}
+          bracketError={tournament.bracketError}
           tournamentPhase={tournament.tournamentPhase}
           assignedMatch={
             tournament.assignedMatch?.tournamentId === activeTournamentId
@@ -128,7 +130,7 @@ export function TournamentRoute({
                   setTournamentResultError(null);
                 })
                 .catch((err) => {
-                  setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
+                  setTournamentResultError(tournamentErrorCopy(err instanceof Error ? err.message : null));
                 })
                 .finally(() => setTournamentResultLoading(false));
             }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { AppMode } from '../../../types';
 import * as tournamentApi from '../../../tournament/tournamentApi';
+import { tournamentErrorCopy } from '../../../tournament/tournamentErrorCopy';
 import { isTerminalTournamentMatch, markTerminalTournamentMatch } from '../../../tournament/terminalMatches';
 import { clearLastRoomCode } from '../../recovery/matchRecovery';
 import type { TournamentAttachRuntime } from '../../../multiplayer/runtime/tournamentRuntime';
@@ -165,7 +166,7 @@ export function useTournamentSessionLifecycle({
       })
       .catch((err) => {
         if (cancelled) return;
-        setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
+        setTournamentResultError(tournamentErrorCopy(err instanceof Error ? err.message : null));
       })
       .finally(() => {
         if (!cancelled) setTournamentResultLoading(false);
