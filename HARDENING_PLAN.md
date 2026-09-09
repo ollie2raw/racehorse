@@ -6184,7 +6184,22 @@ one becomes live or blocks a numbered system.
   (`ENABLE_SPECTATOR_MODE` / `VITE_ENABLE_SPECTATOR_MODE` must be `'true'`; both
   default off). **Distinct from** `room:spectate` (the MP-G3 gap, System 2 — that
   one is always-on and was fixed). If spectator mode is ever enabled, it needs its
-  own Step-1 audit first.
+  own Step-1 audit first. **Confirmed OFF in prod, 2026-09-08 (S4,
+  `LAUNCH_READINESS_CHECKLIST.md`).** `VITE_ENABLE_SPECTATOR_MODE`: absent from
+  both live Vercel client projects (`racehorsedoms` — the production one serving
+  playracehorse.com — and `racehorsedominoes`), across all three environments
+  (Production/Preview/Development), confirmed via `vercel env ls`.
+  `ENABLE_SPECTATOR_MODE`: no Render dashboard access available this session, so
+  confirmed a different way — live-probed the running prod server
+  (`https://racehorse.onrender.com`) directly rather than leaving it unchecked.
+  `registerSpectatorHandlersIfEnabled()` is the sole gate on every spectator
+  socket handler (`spectator:list`/`join`/`leave`), confirmed by reading
+  `spectatorIntegration.ts`; connected a real socket and emitted `spectator:list`
+  (read-only, no auth needed) — no ack, ever, meaning no handler is registered.
+  Validated the probe methodology itself wasn't a false negative by emitting
+  `stats:weekly` (unconditionally registered, no flag, no auth) on the identical
+  connection — acked immediately with real data. Two independent, cross-checked
+  confirmations, both clean.
 - **`client/src/devtools/**`** (10 files, ~3k LOC — calibration / fairness / tier
   / "feels rigged" audits, benchmarks) — dev-scratch, no shipped route, no commit
   since 2026-06-22. Delete or ignore.
