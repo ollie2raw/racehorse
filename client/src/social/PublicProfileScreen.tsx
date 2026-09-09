@@ -19,9 +19,10 @@ interface PublicProfileScreenProps {
   showToast: (msg: string) => void;
   onChallenge?: (username: string) => void;
   onSpectate?: (roomCode: string) => void;
+  onOpenAuth?: () => void;
 }
 
-export default function PublicProfileScreen({ username, user, onClose, showToast, onChallenge, onSpectate }: PublicProfileScreenProps) {
+export default function PublicProfileScreen({ username, user, onClose, showToast, onChallenge, onSpectate, onOpenAuth }: PublicProfileScreenProps) {
   const identityState = usePlayerIdentityModel({ subjectUserId: null, subjectUsername: username, currentUserId: user?.id ?? null });
   const model = identityState.model;
   const [addingFriend, setAddingFriend] = useState(false);
@@ -40,7 +41,31 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
   }
 
   if (!model || model.sourceStatus.public_profile === 'error' || model.sourceStatus.public_profile === 'unavailable') {
-    return <div className="rh-pp-screen"><div className="rh-pp-header"><button type="button" className="rh-pp-back" onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button></div><div className="rh-pp-error-state" role="alert">{identityState.error ?? 'Player not found.'}</div></div>;
+    // Profiles are auth-gated by design, so a signed-out visitor following a
+    // shared link always lands here — that is a sign-in gate, not an error, and
+    // it needs a way forward (P1-4).
+    const isGuestGate = !user;
+    return (
+      <div className="rh-pp-screen">
+        <div className="rh-pp-header">
+          <button type="button" className="rh-pp-back" onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
+          <span className="rh-pp-breadcrumb">Player Profile</span>
+        </div>
+        <div className="rh-pp-error-state" role="alert">
+          <p className="rh-pp-error-state__message">
+            {isGuestGate
+              ? 'Sign in to view player profiles.'
+              : (identityState.error ?? `We couldn’t find a player called “${username}”.`)}
+          </p>
+          <div className="rh-pp-error-state__actions">
+            {isGuestGate && onOpenAuth ? (
+              <button type="button" className="rh-pp-error-state__cta" onClick={onOpenAuth}>Sign in</button>
+            ) : null}
+            <button type="button" className="rh-pp-error-state__link" onClick={onClose}>Back to home</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const featuredRelationship = model.identitySignals.featured.some((signal) => signal.domain === 'rivalry');

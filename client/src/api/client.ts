@@ -147,9 +147,13 @@ async function apiFetch<T>(
     if (hadToken && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('rh:session-expired'));
     }
+    // "again" only makes sense if there was a session to expire. A guest hitting
+    // a protected endpoint (e.g. a shared /players/:username link) never had one
+    // — telling them their session expired is factually wrong (P1-4).
     return {
       data: null,
-      error: 'Session expired. Please sign in again.',
+      error: hadToken ? 'Session expired. Please sign in again.' : 'Sign in to continue.',
+      errorCode: hadToken ? 'session_expired' : 'auth_required',
       status: 401,
     };
   }

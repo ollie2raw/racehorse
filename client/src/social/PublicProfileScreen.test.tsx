@@ -90,6 +90,32 @@ describe('PublicProfileScreen identity presentation', () => {
     expect(screen.queryByText('Peak Rating')).toBeNull();
   });
 
+  it('shows a signed-out visitor a sign-in gate, not "session expired" (P1-4)', () => {
+    identityState.current = {
+      model: model({ sourceStatus: { ...model().sourceStatus, public_profile: 'error' } }),
+      loading: false,
+      error: 'Sign in to view player profiles.',
+    };
+    const onOpenAuth = vi.fn();
+    render(<PublicProfileScreen {...props} user={null} onOpenAuth={onOpenAuth} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign in to view player profiles.');
+    expect(screen.queryByText(/session expired/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(onOpenAuth).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
+  });
+
+  it('shows a signed-in visitor a distinct not-found state for an unknown username (P1-4)', () => {
+    identityState.current = {
+      model: model({ sourceStatus: { ...model().sourceStatus, public_profile: 'error' } }),
+      loading: false,
+      error: 'We couldn’t find a player called “ghostuser”.',
+    };
+    render(<PublicProfileScreen {...props} username="ghostuser" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t find a player called “ghostuser”.');
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+  });
+
   it('provides a final-shape loading region', () => {
     identityState.current = { model: model(), loading: true, error: null };
     render(<PublicProfileScreen {...props} />);

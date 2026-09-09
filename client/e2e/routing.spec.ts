@@ -70,6 +70,15 @@ test.describe('browser routing', () => {
     await expect(page.getByRole('heading', { name: /single player/i })).toBeVisible();
   });
 
+  test('a signed-out visitor to a profile link sees a sign-in gate, not "session expired" (P1-4)', async ({ page }) => {
+    await page.goto('/players/route-smoke');
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText(/sign in to view player profiles/i, { timeout: 15_000 });
+    await expect(page.getByText(/session expired/i)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to home' })).toBeVisible();
+  });
+
   test('Social opens the global rating leaderboard', async ({ page }) => {
     await page.goto('/social');
     await page.getByRole('button', { name: 'View Leaderboard' }).click();
