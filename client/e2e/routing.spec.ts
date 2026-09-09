@@ -45,9 +45,9 @@ test.describe('browser routing', () => {
       '/players/route-smoke',
       '/daily-fritz/leaderboard',
       '/learn/how-to-play',
+      '/puzzle-rush',
       '/tournament/route-smoke',
       '/tournament/route-smoke/result',
-      '/puzzle-rush',
     ];
 
     for (const path of paths) {
