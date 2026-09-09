@@ -190,7 +190,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  /* 44px is the min tap-target height (same floor as the rest of the mobile
+     CSS — match-in-game.css / home-hub.css / rh-mobile-chrome.css all use
+     min-height: 44px for touch targets). The unpadded 30px height passed the
+     phone-portrait/tablet-portrait reachability breakpoints only because
+     WCAG 2.5.8's spacing exemption covered it there (enough gap between
+     filter chips); at phone-landscape the filters pack onto one row tightly
+     enough to lose that exemption, surfacing the real defect. Fixing the
+     height directly, not relying on the exemption to keep holding. */
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--rh-sb-line);
   border-radius: var(--radius-control);
