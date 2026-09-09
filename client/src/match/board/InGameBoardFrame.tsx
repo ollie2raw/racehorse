@@ -9,9 +9,6 @@ export interface InGameBoardFrameProps {
   handFooter?: ReactNode;
   boardStageRef?: RefObject<HTMLDivElement | null>;
   boardStageClassName?: string;
-  studioShellClassName?: string;
-  boardZoneClassName?: string;
-  handDockClassName?: string;
   handStackClassName?: string;
   handFooterClassName?: string;
 }
@@ -23,21 +20,12 @@ export function InGameBoardFrame({
   handFooter,
   boardStageRef,
   boardStageClassName,
-  studioShellClassName,
-  boardZoneClassName,
-  handDockClassName,
   handStackClassName,
   handFooterClassName,
 }: InGameBoardFrameProps) {
   return (
-    <div
-      className={`rh-live-studio-shell${studioShellClassName ? ` ${studioShellClassName}` : ''}`}
-      data-ui="live-studio-shell"
-    >
-      <div
-        className={`rh-live-board-zone${boardZoneClassName ? ` ${boardZoneClassName}` : ''}`}
-        data-ui="live-board-zone"
-      >
+    <div className="rh-live-studio-shell" data-ui="live-studio-shell">
+      <div className="rh-live-board-zone" data-ui="live-board-zone">
         <div
           ref={boardStageRef}
           className={`wl-stage-shell${boardStageClassName ? ` ${boardStageClassName}` : ''}`}
@@ -51,10 +39,7 @@ export function InGameBoardFrame({
           data-ui="live-hand-stack"
         >
           {handDock ? (
-            <div
-              className={`rh-live-hand-deck${handDockClassName ? ` ${handDockClassName}` : ''}`}
-              data-ui="live-hand-deck"
-            >
+            <div className="rh-live-hand-deck" data-ui="live-hand-deck">
               {handDock}
             </div>
           ) : null}
