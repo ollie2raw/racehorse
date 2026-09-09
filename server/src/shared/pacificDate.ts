@@ -55,6 +55,20 @@ export function getPacificDateKeyDaysFromNow(daysFromNow: number): string {
   return getPacificDateKey(new Date(Date.now() + daysFromNow * 86400000));
 }
 
+/**
+ * Add `deltaDays` calendar days to a `YYYY-MM-DD` date key. Pure UTC day math —
+ * timezone-free, DST-free; the key is a calendar day, not an instant.
+ *
+ * Five server modules each carried their own copy of this (`addDateKeyDays`,
+ * two `addDays`, `addDaysToIsoDate`, `previousDailyFritzRunDate`).
+ */
+export function shiftDateKey(dateKey: string, deltaDays: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
+}
+
 export function getNextPacificWarmupAt(hour = 0, minute = 2): Date {
   const now = new Date();
   const pacific = getPacificDateTimeParts(now);

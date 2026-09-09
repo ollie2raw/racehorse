@@ -1,3 +1,5 @@
+import { shiftDateKey } from './shared/pacificDate';
+
 export const HOME_WEEK_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
 export interface HomeDailyCompletionEntry {
@@ -47,12 +49,6 @@ export function createHomeDailyCompletionMap(
   return map;
 }
 
-function addDateKeyDays(dateKey: string, deltaDays: number): string {
-  const date = new Date(`${dateKey}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + deltaDays);
-  return date.toISOString().slice(0, 10);
-}
-
 function getWeekdayIndexForPacificDate(date: Date): number {
   const weekday = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -69,9 +65,9 @@ export function buildHomeDailySummary(
   now: Date = new Date(),
 ): HomeDailySummaryPayload {
   const todayWeekIndex = getWeekdayIndexForPacificDate(now);
-  const weekStart = addDateKeyDays(todayDateKey, -todayWeekIndex);
+  const weekStart = shiftDateKey(todayDateKey, -todayWeekIndex);
   const week = HOME_WEEK_LABELS.map((label, index) => {
-    const dateKey = addDateKeyDays(weekStart, index);
+    const dateKey = shiftDateKey(weekStart, index);
     const entry = completionMap[dateKey] ?? { fritz: false, puzzle: false, complete: false };
     const isFuture = dateKey > todayDateKey;
     const complete = isFuture ? false : entry.complete;
@@ -88,7 +84,7 @@ export function buildHomeDailySummary(
 
   const weeklyCompletedCount = week.filter((day) => day.complete).length;
   const todayComplete = Boolean(completionMap[todayDateKey]?.complete);
-  const yesterdayKey = addDateKeyDays(todayDateKey, -1);
+  const yesterdayKey = shiftDateKey(todayDateKey, -1);
   const yesterdayComplete = Boolean(completionMap[yesterdayKey]?.complete);
 
   let currentStreakCount = 0;
@@ -97,7 +93,7 @@ export function buildHomeDailySummary(
     let cursor = anchorDateKey;
     while (completionMap[cursor]?.complete) {
       currentStreakCount += 1;
-      cursor = addDateKeyDays(cursor, -1);
+      cursor = shiftDateKey(cursor, -1);
     }
   }
 

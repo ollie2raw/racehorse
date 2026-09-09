@@ -1,4 +1,5 @@
 import { applyMove, getLegalMoves } from './game/engine';
+import { shiftDateKey } from './shared/pacificDate';
 import { computeOpenEndsSum } from './game/openEndsGeometry';
 import type { GameState, Move, PlayMove, PlacementPosition } from './game/types';
 
@@ -134,12 +135,6 @@ function isIsoDate(value: string): boolean {
 
 function formatDateUtc(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-function addDays(dateSeed: string, days: number): string {
-  const date = new Date(`${dateSeed}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return formatDateUtc(date);
 }
 
 function hashString(value: string): number {
@@ -1704,7 +1699,7 @@ async function main(): Promise<void> {
     throw new Error('SUPABASE_SERVICE_KEY is required.');
   }
 
-  const finalDate = addDays(options.from, options.days - 1);
+  const finalDate = shiftDateKey(options.from, options.days - 1);
   const existingDates = await fetchExistingPuzzleDates(
     supabaseUrl,
     serviceKey,
@@ -1714,7 +1709,7 @@ async function main(): Promise<void> {
   let hadFailures = false;
 
   for (let offset = 0; offset < options.days; offset += 1) {
-    const dateSeed = addDays(options.from, offset);
+    const dateSeed = shiftDateKey(options.from, offset);
     const generators: Array<{
       puzzleType: DailyPuzzleType;
       build: (seed: string, attempt: number) => CuratedDailyPuzzle;

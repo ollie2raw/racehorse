@@ -1,5 +1,6 @@
 import { supabaseFetch } from '../../supabaseUtils';
 import { childLogger } from '../../logger';
+import { shiftDateKey } from '../../shared/pacificDate';
 import type { DailyFritzDayHealthMetrics } from '../routes/dailyFritzHealthPolicy';
 
 const log = childLogger('daily-fritz');
@@ -155,10 +156,7 @@ export function formatDailyFritzRunDatePacific(date = new Date()): string {
 }
 
 export function previousDailyFritzRunDate(runDate: string): string {
-  const [year, month, day] = runDate.split('-').map(Number);
-  const anchor = new Date(Date.UTC(year, month - 1, day, 20, 0, 0));
-  anchor.setUTCDate(anchor.getUTCDate() - 1);
-  return anchor.toISOString().slice(0, 10);
+  return shiftDateKey(runDate, -1);
 }
 
 export function buildDailyFritzHealthDeltas(
