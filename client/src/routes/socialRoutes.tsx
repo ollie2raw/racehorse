@@ -289,7 +289,7 @@ export function ProfileRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser } = auth;
+  const { authUser, handleOpenAuthModal } = auth;
   const {
     showToast,
     profileTarget,
@@ -311,6 +311,7 @@ export function ProfileRoute({
             setProfileOriginMode(null);
             setAppMode(nextMode);
           }}
+          onOpenAuth={handleOpenAuthModal}
           onChallenge={() => setAppMode('multiplayer')}
         />
       </Suspense>

@@ -364,14 +364,23 @@ export async function fetchPublicProfile(username: string): Promise<{ profile: P
     cacheKey: `${cacheScope}:${normalizedUsername}`,
     ttlMs: PUBLIC_PROFILE_TTL_MS,
     load: async () => {
-      try {
-        const data = await apiFetch<PublicProfileApiResponse>(
-          `/api/profile/${encodeURIComponent(normalizedUsername)}`,
-        );
-        return { profile: mapPublicProfileFromApi(data), error: null };
-      } catch (err) {
-        return { profile: null, error: err instanceof Error ? err.message : 'Player not found.' };
+      // Not the throwing `apiFetch` helper: the status/code decides the copy.
+      // Profiles are auth-gated by design, so a guest always 401s here — that is
+      // a sign-in gate, not "session expired", and a real 404 must read as a
+      // distinct not-found rather than an auth failure (P1-4).
+      const result = await apiGet<PublicProfileApiResponse>(
+        `/api/profile/${encodeURIComponent(normalizedUsername)}`,
+      );
+      if (!result.error && result.data) {
+        return { profile: mapPublicProfileFromApi(result.data), error: null };
       }
+      if (result.status === 401 || result.errorCode === 'auth_required') {
+        return { profile: null, error: 'Sign in to view player profiles.' };
+      }
+      if (result.status === 404) {
+        return { profile: null, error: `We couldn’t find a player called “${normalizedUsername}”.` };
+      }
+      return { profile: null, error: result.error ?? 'Player profile unavailable.' };
     },
   });
 }
