@@ -1,10 +1,4 @@
-import { apiGet } from '../../api/client';
-
-async function throwingGet<T>(path: string): Promise<T> {
-  const result = await apiGet<T>(path);
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
-}
+import { apiGetOrThrow } from '../../api/client';
 
 export interface HomeDailySummaryWeekDay {
   dateKey: string;
@@ -26,5 +20,5 @@ export interface HomeDailySummaryResponse {
 }
 
 export async function getHomeDailySummary(): Promise<HomeDailySummaryResponse> {
-  return throwingGet<HomeDailySummaryResponse>('/api/home/daily-summary');
+  return apiGetOrThrow<HomeDailySummaryResponse>('/api/home/daily-summary');
 }

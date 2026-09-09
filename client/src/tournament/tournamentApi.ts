@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from '../api/client';
+import { apiDeleteOrThrow, apiGetOrThrow, apiPostOrThrow } from '../api/client';
 import type {
   BracketView,
   Registration,
@@ -7,50 +7,23 @@ import type {
   TournamentResultView,
 } from './types';
 
-async function throwingGet<T>(path: string, auth = true): Promise<T> {
-  const result = await apiGet<T>(path, { auth });
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
-}
-
-async function throwingPost<T>(path: string, body: unknown = {}): Promise<T> {
-  const result = await apiPost<T>(path, body);
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
-}
-
-async function throwingDelete<T>(path: string, body: unknown = {}): Promise<T> {
-  const result = await apiDelete<T>(path, body);
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
-}
-
 export async function fetchUpcoming(): Promise<ScheduledTournament[]> {
-  const r = await throwingGet<{ ok: boolean; tournaments: ScheduledTournament[] }>(
-    '/api/tournaments/upcoming',
-    false,
-  );
+  const r = await apiGetOrThrow<{ ok: boolean; tournaments: ScheduledTournament[] }>('/api/tournaments/upcoming', { auth: false });
   return r.tournaments;
 }
 
 export async function fetchBracket(tournamentId: string): Promise<BracketView> {
-  const r = await throwingGet<{ ok: boolean; view: BracketView }>(
-    `/api/tournaments/${encodeURIComponent(tournamentId)}/bracket`,
-    false,
-  );
+  const r = await apiGetOrThrow<{ ok: boolean; view: BracketView }>(`/api/tournaments/${encodeURIComponent(tournamentId)}/bracket`, { auth: false });
   return r.view;
 }
 
 export async function fetchMyRegistrations(userId: string): Promise<Registration[]> {
-  const r = await throwingGet<{ ok: boolean; registrations: Registration[] }>(
-    `/api/tournaments/my?userId=${encodeURIComponent(userId)}`,
-    false,
-  );
+  const r = await apiGetOrThrow<{ ok: boolean; registrations: Registration[] }>(`/api/tournaments/my?userId=${encodeURIComponent(userId)}`, { auth: false });
   return r.registrations;
 }
 
 export async function fetchMe(): Promise<TournamentMeResponse> {
-  const r = await throwingGet<{
+  const r = await apiGetOrThrow<{
     ok: boolean;
     registrations: Registration[];
     activeAssignedMatch: TournamentMeResponse['activeAssignedMatch'];
@@ -70,22 +43,19 @@ export async function fetchMe(): Promise<TournamentMeResponse> {
 }
 
 export async function fetchResult(tournamentId: string): Promise<TournamentResultView> {
-  const r = await throwingGet<{ ok: boolean; result: TournamentResultView }>(
-    `/api/tournaments/${encodeURIComponent(tournamentId)}/result`,
-    false,
-  );
+  const r = await apiGetOrThrow<{ ok: boolean; result: TournamentResultView }>(`/api/tournaments/${encodeURIComponent(tournamentId)}/result`, { auth: false });
   return r.result;
 }
 
 export async function registerForTournament(tournamentId: string, _userId: string): Promise<void> {
-  await throwingPost<{ ok: boolean }>(
+  await apiPostOrThrow<{ ok: boolean }>(
     `/api/tournaments/${encodeURIComponent(tournamentId)}/register`,
     {},
   );
 }
 
 export async function withdrawFromTournament(tournamentId: string, _userId: string): Promise<void> {
-  await throwingDelete<{ ok: boolean }>(
+  await apiDeleteOrThrow<{ ok: boolean }>(
     `/api/tournaments/${encodeURIComponent(tournamentId)}/register`,
     {},
   );

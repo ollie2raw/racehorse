@@ -16,6 +16,12 @@ vi.mock('../api/client', () => ({
   apiGet: (...args: unknown[]) => apiGet(...args),
   apiPost: vi.fn(),
   apiDelete: vi.fn(),
+  // Thin throw-on-error wrapper over the same mocked apiGet, matching the real one.
+  apiGetOrThrow: async (path: string, options?: unknown) => {
+    const r = await apiGet(path, options);
+    if (r.error) throw new Error(r.error);
+    return r.data;
+  },
 }));
 
 import { fetchRivals } from './socialApi';

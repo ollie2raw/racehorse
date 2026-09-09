@@ -1,4 +1,4 @@
-import { apiGet } from '../api/client';
+import { apiGet, apiGetOrThrow } from '../api/client';
 import { supabase } from '../lib/supabase';
 import { getCachedSession } from '../auth/sessionToken';
 
@@ -15,13 +15,6 @@ async function authCacheScope(): Promise<string> {
     };
   });
   return userId ?? 'anon';
-}
-
-/** Throws on HTTP/auth failure — caught by exported loaders that return `{ error }`. */
-async function apiFetch<T>(path: string): Promise<T> {
-  const result = await apiGet<T>(path);
-  if (result.error) throw new Error(result.error);
-  return result.data as T;
 }
 
 type CacheEntry<T> = {
@@ -247,7 +240,7 @@ export async function fetchFriendsWithPresence(): Promise<{ friends: FriendWithP
     ttlMs: FRIENDS_WITH_PRESENCE_TTL_MS,
     load: async () => {
       try {
-        const data = await apiFetch<{ ok: boolean; friends: FriendWithPresence[] }>('/api/social/friends/with-presence');
+        const data = await apiGetOrThrow<{ ok: boolean; friends: FriendWithPresence[] }>('/api/social/friends/with-presence');
         return { friends: data.friends, error: null };
       } catch (err) {
         return { friends: [], error: err instanceof Error ? err.message : 'Failed to load friends.' };
@@ -265,7 +258,7 @@ export async function fetchActivityFeed(): Promise<{ feed: FeedItem[]; error: st
     ttlMs: ACTIVITY_FEED_TTL_MS,
     load: async () => {
       try {
-        const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed');
+        const data = await apiGetOrThrow<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed');
         return { feed: data.feed, error: null };
       } catch (err) {
         return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };
@@ -283,7 +276,7 @@ export async function fetchGlobalLeaderboard(): Promise<{ leaderboard: GlobalLea
     ttlMs: GLOBAL_LEADERBOARD_TTL_MS,
     load: async () => {
       try {
-        const data = await apiFetch<{ ok: boolean; leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null }>('/api/social/leaderboard/global');
+        const data = await apiGetOrThrow<{ ok: boolean; leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null }>('/api/social/leaderboard/global');
         return { leaderboard: data.leaderboard, self: data.self, error: null };
       } catch (err) {
         return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
@@ -294,7 +287,7 @@ export async function fetchGlobalLeaderboard(): Promise<{ leaderboard: GlobalLea
 
 export async function fetchFriendsLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[]; error: string | null }> {
   try {
-    const data = await apiFetch<{ ok: boolean; leaderboard: LeaderboardEntry[] }>('/api/social/leaderboard/friends');
+    const data = await apiGetOrThrow<{ ok: boolean; leaderboard: LeaderboardEntry[] }>('/api/social/leaderboard/friends');
     return { leaderboard: data.leaderboard, error: null };
   } catch (err) {
     return { leaderboard: [], error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
@@ -303,7 +296,7 @@ export async function fetchFriendsLeaderboard(): Promise<{ leaderboard: Leaderbo
 
 export async function fetchWeeklyLeaderboard(): Promise<{ leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null; error: string | null }> {
   try {
-    const data = await apiFetch<{ ok: boolean; leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null }>('/api/social/leaderboard/weekly');
+    const data = await apiGetOrThrow<{ ok: boolean; leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null }>('/api/social/leaderboard/weekly');
     return { leaderboard: data.leaderboard, self: data.self, error: null };
   } catch (err) {
     return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
@@ -312,7 +305,7 @@ export async function fetchWeeklyLeaderboard(): Promise<{ leaderboard: WeeklyLea
 
 export async function fetchModeLeaderboard(mode: string): Promise<{ leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null; error: string | null }> {
   try {
-    const data = await apiFetch<{ ok: boolean; leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null }>(`/api/social/leaderboard/mode/${encodeURIComponent(mode)}`);
+    const data = await apiGetOrThrow<{ ok: boolean; leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null }>(`/api/social/leaderboard/mode/${encodeURIComponent(mode)}`);
     return { leaderboard: data.leaderboard, self: data.self, error: null };
   } catch (err) {
     return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
@@ -328,7 +321,7 @@ export async function fetchRivals(): Promise<{ rivals: RivalEntry[]; error: stri
     ttlMs: RIVALS_TTL_MS,
     load: async () => {
       try {
-        const data = await apiFetch<{ ok: boolean; rivals: RivalEntry[] }>('/api/social/rivals');
+        const data = await apiGetOrThrow<{ ok: boolean; rivals: RivalEntry[] }>('/api/social/rivals');
         return { rivals: data.rivals, error: null };
       } catch (err) {
         return { rivals: [], error: err instanceof Error ? err.message : 'Failed to load rivals.' };
@@ -346,7 +339,7 @@ export async function fetchUserActivity(userId: string): Promise<{ feed: FeedIte
     ttlMs: USER_ACTIVITY_TTL_MS,
     load: async () => {
       try {
-        const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>(`/api/social/feed/user/${encodeURIComponent(userId)}`);
+        const data = await apiGetOrThrow<{ ok: boolean; feed: FeedItem[] }>(`/api/social/feed/user/${encodeURIComponent(userId)}`);
         return { feed: data.feed, error: null };
       } catch (err) {
         return { feed: [], error: err instanceof Error ? err.message : 'Activity unavailable.' };
@@ -364,7 +357,7 @@ export async function fetchPublicProfile(username: string): Promise<{ profile: P
     cacheKey: `${cacheScope}:${normalizedUsername}`,
     ttlMs: PUBLIC_PROFILE_TTL_MS,
     load: async () => {
-      // Not the throwing `apiFetch` helper: the status/code decides the copy.
+      // Not the throw-on-error helper: the status/code decides the copy.
       // Profiles are auth-gated by design, so a guest always 401s here — that is
       // a sign-in gate, not "session expired", and a real 404 must read as a
       // distinct not-found rather than an auth failure (P1-4).
