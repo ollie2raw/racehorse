@@ -44,31 +44,42 @@ describe('useMatchHistoryScrubber', () => {
     expect(result.current.viewingIndex).toBeNull();
   });
 
-  it('stepBack from live lands on the last logged move', () => {
+  it('stepBack from live moves one real move back (never a no-op)', () => {
     const { result } = renderHook(() => useMatchHistoryScrubber(log(4)));
     act(() => result.current.stepBack());
+    // The last move's board IS the live board, so a single back-step lands on
+    // the move before it — index total-2, not total-1.
     expect(result.current.viewingHistory).toBe(true);
-    expect(result.current.viewingIndex).toBe(3);
-    expect(result.current.position).toBe(4);
+    expect(result.current.viewingIndex).toBe(2);
+    expect(result.current.position).toBe(3);
     expect(result.current.total).toBe(4);
+    expect(result.current.movesBehindLive).toBe(1);
   });
 
   it('steps backward and forward through the log', () => {
     const { result } = renderHook(() => useMatchHistoryScrubber(log(4)));
     act(() => result.current.stepBack());
+    expect(result.current.viewingIndex).toBe(2);
+    act(() => result.current.stepBack());
+    expect(result.current.viewingIndex).toBe(1);
+    act(() => result.current.stepForward());
+    expect(result.current.viewingIndex).toBe(2);
+  });
+
+  it('stepForward onto the live move returns to live', () => {
+    const { result } = renderHook(() => useMatchHistoryScrubber(log(4)));
     act(() => result.current.stepBack());
     expect(result.current.viewingIndex).toBe(2);
     act(() => result.current.stepForward());
-    expect(result.current.viewingIndex).toBe(3);
-  });
-
-  it('stepForward past the last logged move returns to live', () => {
-    const { result } = renderHook(() => useMatchHistoryScrubber(log(4)));
-    act(() => result.current.stepBack());
-    expect(result.current.viewingIndex).toBe(3);
-    act(() => result.current.stepForward());
     expect(result.current.viewingIndex).toBeNull();
     expect(result.current.viewingHistory).toBe(false);
+  });
+
+  it('needs at least two moves before stepBack does anything', () => {
+    const { result } = renderHook(() => useMatchHistoryScrubber(log(1)));
+    expect(result.current.canStepBack).toBe(false);
+    act(() => result.current.stepBack());
+    expect(result.current.viewingIndex).toBeNull();
   });
 
   it('does not step before the first move', () => {
@@ -79,10 +90,10 @@ describe('useMatchHistoryScrubber', () => {
     expect(result.current.viewingIndex).toBe(0);
   });
 
-  it('jumpTo clamps to the valid range', () => {
+  it('jumpTo clamps to the viewable range (up to the move before live)', () => {
     const { result } = renderHook(() => useMatchHistoryScrubber(log(3)));
     act(() => result.current.jumpTo(99));
-    expect(result.current.viewingIndex).toBe(2);
+    expect(result.current.viewingIndex).toBe(1);
     act(() => result.current.jumpTo(-5));
     expect(result.current.viewingIndex).toBe(0);
   });

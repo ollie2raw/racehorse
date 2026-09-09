@@ -41,6 +41,11 @@ export function useMatchHistoryScrubber(
   moveLog: readonly MoveEntry[],
 ): MatchHistoryScrubberState {
   const total = moveLog.length;
+  // The last move's post-state IS the live board, so the deepest a history
+  // cursor can sit is the move *before* it. "Live" is null, or any index at
+  // or past the last move — stepping onto the last move means stepping to live.
+  const lastIndex = total - 1;
+  const deepestIndex = total - 2;
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
 
   // Adjust-state-on-prop-change: the log was reset or trimmed under the cursor.
@@ -49,28 +54,30 @@ export function useMatchHistoryScrubber(
   }
 
   const effectiveIndex =
-    viewingIndex !== null && viewingIndex < total ? viewingIndex : null;
+    viewingIndex !== null && viewingIndex < lastIndex ? viewingIndex : null;
 
   const stepBack = useCallback(() => {
     setViewingIndex((prev) => {
-      if (prev === null || prev >= total) return total > 0 ? total - 1 : null;
+      if (deepestIndex < 0) return null; // fewer than two moves — nothing to view
+      if (prev === null || prev >= lastIndex) return deepestIndex;
       return Math.max(0, prev - 1);
     });
-  }, [total]);
+  }, [deepestIndex, lastIndex]);
 
   const stepForward = useCallback(() => {
     setViewingIndex((prev) => {
-      if (prev === null || prev >= total) return null;
-      return prev + 1 >= total ? null : prev + 1;
+      if (prev === null) return null;
+      const next = prev + 1;
+      return next >= lastIndex ? null : next; // stepping onto the live move = live
     });
-  }, [total]);
+  }, [lastIndex]);
 
   const jumpTo = useCallback(
     (index: number) => {
-      if (total === 0) return;
-      setViewingIndex(Math.max(0, Math.min(total - 1, Math.trunc(index))));
+      if (total < 2) return;
+      setViewingIndex(Math.max(0, Math.min(deepestIndex, Math.trunc(index))));
     },
-    [total],
+    [deepestIndex, total],
   );
 
   const backToLive = useCallback(() => setViewingIndex(null), []);
@@ -92,7 +99,7 @@ export function useMatchHistoryScrubber(
     viewedHandNumber:
       effectiveIndex === null ? null : moveLog[effectiveIndex].handNumber ?? null,
     movesBehindLive: effectiveIndex === null ? 0 : total - 1 - effectiveIndex,
-    canStepBack: effectiveIndex === null ? total > 0 : effectiveIndex > 0,
+    canStepBack: effectiveIndex === null ? total >= 2 : effectiveIndex > 0,
     canStepForward: effectiveIndex !== null,
     stepBack,
     stepForward,
