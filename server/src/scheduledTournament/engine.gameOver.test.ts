@@ -4,6 +4,11 @@ vi.mock('../social/activityWriter', () => ({
   writeTournamentActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
+const sentryCaptureMessage = vi.fn();
+vi.mock('@sentry/node', () => ({
+  captureMessage: (...args: unknown[]) => sentryCaptureMessage(...args),
+}));
+
 import { applyTournamentGameOverFromRoom } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
 import { inMemoryMatchRpcForArrayStore } from './inMemoryMatchRpc.testkit';
@@ -157,6 +162,103 @@ describe('applyTournamentGameOverFromRoom', () => {
     const updated = await persistence.fetchMatchById('match-direct');
     expect(updated?.status).toBe('completed');
     expect(updated?.winner_id).toBe('u1');
+  });
+
+  it('alerts (T-15) when the completion RPC rejects a non-participant winner', async () => {
+    const persistence = makeGameOverPersistence({ ...liveMatch });
+    (persistence as { completeTournamentMatch: unknown }).completeTournamentMatch = async () => {
+      throw new Error('winner_not_participant');
+    };
+    const io = makeIoMock();
+    const { applyMatchResult } = await import('./engine');
+
+    await expect(
+      applyMatchResult(
+        io,
+        { matchId: 'match-direct', winnerId: 'u3', player1Score: 30, player2Score: 10, winnerSource: 'game_over' },
+        persistence,
+      ),
+    ).rejects.toThrow('winner_not_participant');
+
+    expect(sentryCaptureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('winner_not_participant'),
+      expect.objectContaining({
+        level: 'error',
+        fingerprint: ['tournament-invariant-violation', 'winner_not_participant', 'match-direct'],
+        tags: expect.objectContaining({ tournament_alert: 'invariant_violation' }),
+      }),
+    );
+  });
+
+  it('alerts (T-15) when the bracket advance target is missing', async () => {
+    const persistence = makeGameOverPersistence({ ...liveMatch });
+    (persistence as { completeTournamentMatch: unknown }).completeTournamentMatch = async () => ({
+      status: 'completed',
+      winner_id: 'u1',
+      winner_source: 'game_over',
+      player1_score: 30,
+      player2_score: 10,
+      applied: true,
+      conflict: false,
+      advance_target_missing: true,
+      advanced_to_match_id: null,
+      advanced_to_slot: null,
+      advanced_to_status: null,
+      tournament_completed: false,
+      round_now_complete: false,
+      placements: null,
+    });
+    const io = makeIoMock();
+    const { applyMatchResult } = await import('./engine');
+
+    await applyMatchResult(
+      io,
+      { matchId: 'match-direct', winnerId: 'u1', player1Score: 30, player2Score: 10, winnerSource: 'game_over' },
+      persistence,
+    );
+
+    expect(sentryCaptureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('advance_target_missing'),
+      expect.objectContaining({
+        level: 'error',
+        fingerprint: ['tournament-invariant-violation', 'advance_target_missing', 'match-direct'],
+      }),
+    );
+  });
+
+  it('alerts (T-15) on double advancement — advanced match id with no resulting status', async () => {
+    const persistence = makeGameOverPersistence({ ...liveMatch });
+    (persistence as { completeTournamentMatch: unknown }).completeTournamentMatch = async () => ({
+      status: 'completed',
+      winner_id: 'u1',
+      winner_source: 'game_over',
+      player1_score: 30,
+      player2_score: 10,
+      applied: true,
+      conflict: false,
+      advance_target_missing: false,
+      advanced_to_match_id: 'match-sf1',
+      advanced_to_slot: 'player1',
+      advanced_to_status: null,
+      tournament_completed: false,
+      round_now_complete: false,
+      placements: null,
+    });
+    const io = makeIoMock();
+    const { applyMatchResult } = await import('./engine');
+
+    await applyMatchResult(
+      io,
+      { matchId: 'match-direct', winnerId: 'u1', player1Score: 30, player2Score: 10, winnerSource: 'game_over' },
+      persistence,
+    );
+
+    expect(sentryCaptureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('double_advancement'),
+      expect.objectContaining({
+        fingerprint: ['tournament-invariant-violation', 'double_advancement', 'match-direct'],
+      }),
+    );
   });
 
   it('returns false without throwing when no tournament match resolves', async () => {

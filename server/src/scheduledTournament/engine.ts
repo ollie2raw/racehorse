@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
@@ -15,6 +16,42 @@ import {
 import type { MatchRow, SeededPlayer } from './types';
 
 const log = childLogger('tournament:engine');
+
+/**
+ * T-15: bracket-integrity invariant violations (T-INV-2 / T-INV-5 / T-INV-6).
+ * These "should be impossible" — the atomic completion RPC enforces them — but
+ * if one ever fires in prod it means the bracket is corrupt and a player is
+ * stranded, so it must page rather than sit silently in `log.warn`. Each is
+ * fingerprinted per match so a single bad bracket is one Sentry issue, not N.
+ */
+export const TOURNAMENT_INVARIANT_RPC_ERRORS = new Set([
+  'winner_not_participant',
+  'no_advance_target',
+]);
+
+function alertTournamentInvariantViolation(
+  kind: string,
+  match: { id: string; tournament_id: string; round?: number | null; match_number?: number | null },
+  extra: Record<string, unknown>,
+): void {
+  Sentry.captureMessage(`[tournament] bracket invariant violation — ${kind}`, {
+    level: 'error',
+    fingerprint: ['tournament-invariant-violation', kind, match.id],
+    tags: {
+      tournament_alert: 'invariant_violation',
+      tournament_invariant: kind,
+      tournament_id: match.tournament_id,
+      match_id: match.id,
+    },
+    extra: {
+      matchId: match.id,
+      tournamentId: match.tournament_id,
+      round: match.round ?? null,
+      matchNumber: match.match_number ?? null,
+      ...extra,
+    },
+  });
+}
 
 const MIN_HUMANS_TO_START = 1;
 const BOT_ID_PREFIX = 'bot:fritz:';
@@ -448,18 +485,39 @@ export async function applyMatchResult(
   const match = await persistence.fetchMatchById(params.matchId);
   if (!match) throw new Error('Match not found');
 
-  const result = await persistence.completeTournamentMatch({
-    matchId: match.id,
-    winnerId: params.winnerId,
-    winnerSource: params.winnerSource ?? (params.byeWalkover ? null : 'game_over'),
-    statusReason: params.statusReason ?? null,
-    reportedPlayer1Score: params.player1Score,
-    reportedPlayer2Score: params.player2Score,
-    noShowUserId: params.noShowUserId ?? null,
-    forfeitUserId: params.forfeitUserId ?? null,
-    byeWalkover: params.byeWalkover ?? false,
-    actor: params.winnerSource ?? (params.byeWalkover ? 'bye_walkover' : 'game_over'),
-  });
+  let result: Awaited<ReturnType<typeof persistence.completeTournamentMatch>>;
+  try {
+    result = await persistence.completeTournamentMatch({
+      matchId: match.id,
+      winnerId: params.winnerId,
+      winnerSource: params.winnerSource ?? (params.byeWalkover ? null : 'game_over'),
+      statusReason: params.statusReason ?? null,
+      reportedPlayer1Score: params.player1Score,
+      reportedPlayer2Score: params.player2Score,
+      noShowUserId: params.noShowUserId ?? null,
+      forfeitUserId: params.forfeitUserId ?? null,
+      byeWalkover: params.byeWalkover ?? false,
+      actor: params.winnerSource ?? (params.byeWalkover ? 'bye_walkover' : 'game_over'),
+    });
+  } catch (err) {
+    const code = err instanceof Error ? err.message : String(err);
+    if (TOURNAMENT_INVARIANT_RPC_ERRORS.has(code)) {
+      log.error({
+        event: 'tournament_invariant_violation',
+        kind: code,
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        attemptedWinnerId: params.winnerId,
+      }, `tournament invariant violation (T-15): ${code}`);
+      alertTournamentInvariantViolation(code, match, {
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+        player1Id: match.player1_id,
+        player2Id: match.player2_id,
+      });
+    }
+    throw err;
+  }
 
   if (!result.applied) {
     if (result.conflict) {
@@ -521,10 +579,32 @@ export async function applyMatchResult(
       round: match.round,
       matchNumber: match.match_number,
     }, 'match completed but its next-round row is missing — bracket may be corrupt');
+    alertTournamentInvariantViolation('advance_target_missing', match, {
+      round: match.round,
+      matchNumber: match.match_number,
+      winnerId: result.winner_id,
+    });
     return;
   }
 
   if (result.advanced_to_match_id) {
+    if (!result.advanced_to_status) {
+      // The advance UPDATE matched no row: the fed slot is already occupied by a
+      // *different* winner (double advancement / T-INV-5). The completion above
+      // is durable, so we do not roll back — but this bracket is now corrupt.
+      log.error({
+        event: 'tournament_invariant_violation',
+        kind: 'double_advancement',
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        nextMatchId: result.advanced_to_match_id,
+      }, 'tournament invariant violation (T-15): double_advancement');
+      alertTournamentInvariantViolation('double_advancement', match, {
+        nextMatchId: result.advanced_to_match_id,
+        slot: result.advanced_to_slot,
+        winnerId: result.winner_id,
+      });
+    }
     log.info({
       fromMatchId: match.id,
       nextMatchId: result.advanced_to_match_id,
