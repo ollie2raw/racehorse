@@ -22,8 +22,16 @@
 -- read their own archived attempt. All client write access (grants + policies)
 -- is removed.
 --
--- Not touched (separate parked items DF-CAND-3 / DF-CAND-4): `daily_puzzles`,
--- `daily_puzzle_scores`, `daily_puzzle_submissions`, `daily_puzzle_completions`.
+-- Not touched by this migration (separate parked items DF-CAND-3 / DF-CAND-4):
+-- `daily_puzzles`, `daily_puzzle_scores`, `daily_puzzle_submissions`.
+--
+-- NOTE (corrected 2026-09-08, FEATURE_COMPLETENESS_AUDIT.md P1-1): an earlier
+-- version of this list also named `daily_puzzle_completions` as "not touched".
+-- That table is in fact **absent from production** — a direct PostgREST probe
+-- returns `PGRST205 Could not find the table 'public.daily_puzzle_completions'`.
+-- Whatever dropped it happened outside this migration set. The client `/stats`
+-- read that targeted it (`statsApi.ts`) has been repointed at
+-- `/api/puzzle-rush/stats-summary`; do not reintroduce a reader for it.
 --
 -- Idempotent. Self-asserting. Safe to run more than once.
 

@@ -28,6 +28,11 @@ import {
 } from '../stores/puzzleRushStore';
 import { getUsernameForUserId } from '../stores/dailyPuzzleStore';
 import { getPacificDateKey } from '../../shared/pacificDate';
+import {
+  listPuzzleRushDayResultsForUser,
+  listLegacyDailyPuzzleDayResultsForUser,
+} from '../stores/puzzleStatsStore';
+import { buildPuzzleStatsSummary } from '../../puzzleRush/puzzleStatsSummary';
 
 function prodSafeError(error: unknown, fallback: string): string {
   if (process.env.NODE_ENV === 'production') return fallback;
@@ -312,6 +317,40 @@ export function registerPuzzleRushRoutes(app: Application): void {
     } catch (error) {
       capture500(error, { route: 'puzzle-rush/today' });
       res.status(500).json({ error: prodSafeError(error, 'Failed to load Puzzle Rush status.') });
+    }
+  });
+
+  /**
+   * "Daily Puzzle" statistics for `/stats` (own) and `/players/:username`.
+   *
+   * Computed from `rush_runs` unioned with the frozen Ladder-era history, since
+   * `rush_runs` has deny-all RLS and the browser cannot read it directly.
+   * Replaces a client read of `daily_puzzle_completions`, a table that no longer
+   * exists in production (FEATURE_COMPLETENESS_AUDIT.md P1-1).
+   */
+  app.get('/api/puzzle-rush/stats-summary', async (req, res) => {
+    try {
+      const userId = await getAuthenticatedUserId(req);
+      if (!userId) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+
+      const [rushDays, legacyDays] = await Promise.all([
+        listPuzzleRushDayResultsForUser(userId),
+        listLegacyDailyPuzzleDayResultsForUser(userId),
+      ]);
+
+      const summary = buildPuzzleStatsSummary({
+        todayDateKey: getPacificDateKey(),
+        rushDays,
+        legacyDays,
+      });
+
+      res.json({ ok: true, ...summary });
+    } catch (error) {
+      capture500(error, { route: 'puzzle-rush/stats-summary' });
+      res.status(500).json({ error: prodSafeError(error, 'Failed to load Puzzle Rush stats.') });
     }
   });
 

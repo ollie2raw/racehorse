@@ -31,7 +31,6 @@ export type PlayerIdentitySignalType =
   | 'puzzle_current_streak'
   | 'puzzle_best_today'
   | 'puzzle_best_ever'
-  | 'puzzle_perfect_days'
   | 'learning_journey_progress'
   | 'learning_active_chapter'
   | 'rivalry_viewer_head_to_head'
@@ -130,7 +129,6 @@ export type PlayerIdentityModel = {
     bestScoreToday: number | null;
     bestScoreEver: number | null;
     bestScore: number | null;
-    perfectDays: number | null;
   };
   dailyFritz: {
     completions: number | null;

@@ -39,8 +39,6 @@ function renderSignal(signal: PlayerIdentitySignal, isCurrentUser: boolean): Hig
       return signal.details.kind === 'score' ? { heading: 'TODAY’S PUZZLE BEST', value: String(signal.details.score), evidence: 'Today-only Daily Puzzle score' } : null;
     case 'puzzle_best_ever':
       return signal.details.kind === 'score' ? { heading: 'PUZZLE BEST', value: String(signal.details.score), evidence: 'All-time Daily Puzzle score' } : null;
-    case 'puzzle_perfect_days':
-      return signal.details.kind === 'count' ? { heading: 'PERFECT PUZZLE DAYS', value: String(signal.details.count), evidence: signal.evidence } : null;
     case 'learning_journey_progress':
       return signal.details.kind === 'journey' ? { heading: 'JOURNEY PROGRESS', value: `${signal.details.completed} of ${signal.details.total} nodes`, evidence: signal.evidence } : null;
     case 'learning_active_chapter':

@@ -59,10 +59,10 @@ describe('player identity signals', () => {
     expect(signals.map((item) => `${item.label} ${item.evidence}`).join(' ')).not.toMatch(/dominant|brilliant|weak|elite strategist|slayer/i);
   });
 
-  it('handles Puzzle completions, streak, score precedence, and perfect days', () => {
-    const model = build({ puzzle: { ...createEmptyPlayerIdentityModel().puzzle, completions: 12, currentStreak: 4, bestScoreToday: 72, bestScoreEver: 95, bestScore: 95, perfectDays: 3 } });
+  it('handles Puzzle completions, streak, and score precedence', () => {
+    const model = build({ puzzle: { ...createEmptyPlayerIdentityModel().puzzle, completions: 12, currentStreak: 4, bestScoreToday: 72, bestScoreEver: 95, bestScore: 95 } });
     const signals = derivePlayerIdentitySignals(model).all;
-    expect(signalTypes(model)).toEqual(expect.arrayContaining(['puzzle_completions', 'puzzle_current_streak', 'puzzle_best_ever', 'puzzle_best_today', 'puzzle_perfect_days']));
+    expect(signalTypes(model)).toEqual(expect.arrayContaining(['puzzle_completions', 'puzzle_current_streak', 'puzzle_best_ever', 'puzzle_best_today']));
     expect(signals.find((item) => item.type === 'puzzle_best_ever')?.value).toBe(95);
   });
 
@@ -89,7 +89,7 @@ describe('player identity signals', () => {
 
   it('limits featured signals to five with no more than two per domain', () => {
     const base = createEmptyPlayerIdentityModel();
-    const model = build({ competitive: { ...base.competitive, rating: 1500, peakRating: 1500, rankedGames: 100, bestStreak: 8, currentStreak: 3, recentForm: ['win', 'win', 'loss', 'win'] }, fritz: { ...base.fritz, totalWins: 20, totalLosses: 4, averageScore: 88, bestScore: 101, difficultyRecords: ['rookie', 'standard', 'elite', 'master'].map((difficulty) => ({ difficulty, wins: 5, losses: 1, games: 6 })) }, puzzle: { ...base.puzzle, completions: 12, currentStreak: 4, bestScoreEver: 95, bestScoreToday: 72, perfectDays: 3 }, learning: { completedNodes: 18, totalNodes: 25, activeChapterId: 'c', activeChapterTitle: 'Chapter' }, rivalry: { closestRival: { userId: 'u9', username: 'Rival', gamesPlayed: 28, winsAgainst: 14, lossesAgainst: 14, rating: null }, currentViewerHeadToHead: null } });
+    const model = build({ competitive: { ...base.competitive, rating: 1500, peakRating: 1500, rankedGames: 100, bestStreak: 8, currentStreak: 3, recentForm: ['win', 'win', 'loss', 'win'] }, fritz: { ...base.fritz, totalWins: 20, totalLosses: 4, averageScore: 88, bestScore: 101, difficultyRecords: ['rookie', 'standard', 'elite', 'master'].map((difficulty) => ({ difficulty, wins: 5, losses: 1, games: 6 })) }, puzzle: { ...base.puzzle, completions: 12, currentStreak: 4, bestScoreEver: 95, bestScoreToday: 72 }, learning: { completedNodes: 18, totalNodes: 25, activeChapterId: 'c', activeChapterTitle: 'Chapter' }, rivalry: { closestRival: { userId: 'u9', username: 'Rival', gamesPlayed: 28, winsAgainst: 14, lossesAgainst: 14, rating: null }, currentViewerHeadToHead: null } });
     const featured = derivePlayerIdentitySignals(model).featured;
     expect(featured.length).toBeLessThanOrEqual(5);
     expect(Math.max(...['competitive', 'fritz', 'puzzle', 'learning', 'rivalry'].map((domain) => featured.filter((item) => item.domain === domain).length))).toBeLessThanOrEqual(2);

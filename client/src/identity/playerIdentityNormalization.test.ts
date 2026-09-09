@@ -46,7 +46,7 @@ describe('player identity normalization', () => {
       rankingProfile: { glicko_rating: 1400, glicko_rd: 80, provisional: false, ranked_games_played: 4, peak_rating: 1450, rank: null, currentWinStreak: 2 },
       fritz: { gamesPlayed: 2, wins: 1, losses: 1, winRate: 50, currentStreak: 0, bestStreak: 1, bestWinMargin: null, averagePointsScored: 87.5, highestScore: 100, gamesThisWeek: 0, ratingChangeThisWeek: 0, bestWinMarginThisWeek: null, tierRecords: { rookie: { wins: 1, losses: 0, gamesPlayed: 1 }, standard: { wins: 0, losses: 1, gamesPlayed: 1 }, elite: { wins: 0, losses: 0, gamesPlayed: 0 }, master: { wins: 0, losses: 0, gamesPlayed: 0 } } },
       ghost: { rating: 900, gamesPlayed: 2, wins: 1, losses: 1, winRate: 50, bestWinMargin: 12, gamesThisWeek: 0, ratingChangeThisWeek: 0, bestWinMarginThisWeek: null },
-      puzzle: { currentStreak: 2, completions: 4, completionsThisWeek: 1, bestScoreToday: 61, bestScoreEver: 95, perfectDays: 1 },
+      puzzle: { currentStreak: 2, completions: 4, completionsThisWeek: 1, bestScoreToday: 61, bestScoreEver: 95 },
     };
     const model = applyPersonalInsights(createEmptyPlayerIdentityModel(100), insights);
     expect(model.fritz.averageScore).toBe(87.5);

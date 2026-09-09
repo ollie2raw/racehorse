@@ -70,7 +70,6 @@ export interface PuzzleStatsSummary {
   completionsThisWeek: number;
   bestScoreToday: number | null;
   bestScoreEver: number | null;
-  perfectDays: number;
 }
 
 export interface RankingProfile {
