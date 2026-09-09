@@ -253,3 +253,62 @@ export async function apiDelete<T>(
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 }
+
+/**
+ * Throw-on-error variants of the request helpers above.
+ *
+ * Several feature API modules (`tournamentApi`, `ghost/api`, `homeDailySummaryApi`,
+ * `socialApi`) each declared their own 3-line `throwingGet` / `throwingPost`
+ * wrapper over `apiGet` / `apiPost`. Same shape every time: call, `throw` on
+ * `result.error`, return `result.data as T`. These are the shared version.
+ *
+ * `onError` lets a caller wrap the message before it throws (ghost turns a
+ * transport failure into a "start the server" hint); the default throws a plain
+ * `Error(message)`.
+ */
+type ApiThrowExtras = { onError?: (message: string, status?: number) => never };
+
+function throwApiError(
+  message: string,
+  status: number | undefined,
+  onError: ApiThrowExtras['onError'],
+): never {
+  if (onError) return onError(message, status);
+  throw new Error(message);
+}
+
+export async function apiGetOrThrow<T>(
+  path: string,
+  options?: { auth?: boolean; signal?: AbortSignal; headers?: Record<string, string> } & ApiThrowExtras,
+): Promise<T> {
+  const { onError, ...rest } = options ?? {};
+  const result = await apiGet<T>(path, rest);
+  if (result.error) throwApiError(result.error, result.status, onError);
+  return result.data as T;
+}
+
+export async function apiPostOrThrow<T>(
+  path: string,
+  body: unknown = {},
+  options?: {
+    auth?: boolean;
+    keepalive?: boolean;
+    signal?: AbortSignal;
+    headers?: Record<string, string>;
+  } & ApiThrowExtras,
+): Promise<T> {
+  const { onError, ...rest } = options ?? {};
+  const result = await apiPost<T>(path, body, rest);
+  if (result.error) throwApiError(result.error, result.status, onError);
+  return result.data as T;
+}
+
+export async function apiDeleteOrThrow<T>(
+  path: string,
+  body: unknown = {},
+  options?: ApiThrowExtras,
+): Promise<T> {
+  const result = await apiDelete<T>(path, body);
+  if (result.error) throwApiError(result.error, result.status, options?.onError);
+  return result.data as T;
+}

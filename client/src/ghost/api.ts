@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '../api/client';
+import { apiGetOrThrow, apiPostOrThrow } from '../api/client';
 import type { PlacementPosition, Tile } from '../types';
 
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
@@ -14,17 +14,9 @@ function throwGhostError(error: string): never {
   throw new Error(error);
 }
 
-async function throwingGet<T>(path: string): Promise<T> {
-  const result = await apiGet<T>(path);
-  if (result.error) throwGhostError(result.error);
-  return result.data as T;
-}
-
-async function throwingPost<T>(path: string, body: unknown): Promise<T> {
-  const result = await apiPost<T>(path, body);
-  if (result.error) throwGhostError(result.error);
-  return result.data as T;
-}
+const throwingGet = <T>(path: string) => apiGetOrThrow<T>(path, { onError: throwGhostError });
+const throwingPost = <T>(path: string, body: unknown) =>
+  apiPostOrThrow<T>(path, body, { onError: throwGhostError });
 
 export type GhostMoveLogEntry = {
   turn: number;
