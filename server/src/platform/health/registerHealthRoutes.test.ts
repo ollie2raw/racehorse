@@ -137,6 +137,30 @@ describe('GET /ready — dailyPuzzleGeneration is observed but not gating', () =
     expect(body.ok).toBe(false);
   });
 
+  it('bounds the supabase readiness probe: short timeout + circuit-breakable', async () => {
+    const request = makeHarness();
+    await request('GET', '/ready');
+
+    const readinessCall = supabaseFetchMock.mock.calls.find(
+      ([path]) => typeof path === 'string' && path.startsWith('/rest/v1/profiles?select=id'),
+    );
+    expect(readinessCall).toBeDefined();
+    const opts = readinessCall![1] as { timeoutMs?: number; circuitBreakable?: boolean };
+    expect(opts.circuitBreakable).toBe(true);
+    expect(opts.timeoutMs).toBeLessThanOrEqual(2_000);
+  });
+
+  it('still 503s /ready (does not hang) when the probe is short-circuited by an open breaker', async () => {
+    supabaseFetchMock
+      .mockReset()
+      .mockRejectedValue(new Error('Supabase circuit breaker is open — skipping read: /rest/v1/profiles'));
+    const request = makeHarness();
+    const { status, body } = await request('GET', '/ready');
+
+    expect(status).toBe(503);
+    expect(body.ok).toBe(false);
+  });
+
   it('does not probe or alert when required env is missing', async () => {
     delete process.env.SUPABASE_URL;
     const probe = vi.fn(async () => '2027-09-01');

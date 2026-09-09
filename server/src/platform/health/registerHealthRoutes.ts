@@ -43,12 +43,22 @@ function getProcessErrorLogPayload(error: unknown): { name?: string; message: st
   return { message: typeof error === 'string' ? error : JSON.stringify(error) };
 }
 
+/**
+ * Hard ceiling for the readiness probe. Render polls `/ready` frequently; a
+ * Supabase that is slow rather than down must not let those requests pile up.
+ * `supabaseFetch` aborts at `timeoutMs`, and `circuitBreakable` lets the shared
+ * breaker fail this read fast (no socket at all) once Supabase has been failing
+ * — so a sustained outage costs one timeout, not one per health check.
+ */
+const SUPABASE_READINESS_TIMEOUT_MS = 2_000;
+
 async function getSupabaseReadiness(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
   const startedAt = Date.now();
   try {
     await supabaseFetch('/rest/v1/profiles?select=id&limit=1', {
       method: 'GET',
-      timeoutMs: 3_000,
+      timeoutMs: SUPABASE_READINESS_TIMEOUT_MS,
+      circuitBreakable: true,
       headers: { Prefer: 'return=minimal' },
     });
     return { ok: true, latencyMs: Date.now() - startedAt };
