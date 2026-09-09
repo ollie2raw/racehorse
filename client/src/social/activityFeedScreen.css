@@ -727,7 +727,16 @@
 .rh-sf-widget-link {
   display: inline-flex;
   width: 100%;
-  min-height: 42px;
+  /* 44px min tap-target floor — was 2px short. Same convention as
+     socialBoard.css's .rh-sb-filter fix: touched CSS in the same grid
+     (.rh-sf-layout-grid, which collapses to a single stacked column below
+     1080px, covering all three reachability breakpoints) can shift this
+     element's position enough to gain or lose the WCAG 2.5.8 spacing
+     exemption that was masking the undersized target — confirmed by
+     measurement, .rh-sb-filter's own 30->44px bump shifted this element
+     28px down the page. Fixing the size directly, not relying on
+     neighboring layout to keep the exemption holding. */
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 6px;
