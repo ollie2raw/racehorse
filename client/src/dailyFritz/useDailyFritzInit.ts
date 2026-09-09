@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
-  clearDailyFritzClientStorage,
-  clearDailyFritzTodayCache,
   DAILY_FRITZ_INIT_TIMEOUT_MS,
-  DAILY_FRITZ_TODAY_CACHE_PREFIX,
   getTodayDailyFritz,
   recordDailyFritzTelemetry,
   type DailyFritzTodayResponse,
 } from './api';
+import {
+  clearDailyFritzClientStorage,
+  clearDailyFritzTodayCache,
+  DAILY_FRITZ_TODAY_CACHE_PREFIX,
+} from './clientStorage';
 import {
   DAILY_FRITZ_INIT_SLOW_MS,
   dfInitLog,

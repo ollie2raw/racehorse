@@ -2,13 +2,15 @@ export {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
   DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
+  nextDailyFritzHand,
+} from '../../dailyFritz/api.ts';
+export {
   DailyFritzEndOfRunError,
   DailyFritzNextHandHttpError,
   formatDailyFritzNextHandUserMessage,
   isRecoverableDailyFritzAuthorityCode,
   isRetryableDailyFritzNextHandError,
-  nextDailyFritzHand,
-} from '../../dailyFritz/api.ts';
+} from '../../dailyFritz/apiErrors.ts';
 export type {
   DailyFritzLeaderboardRow,
   DailyFritzNextHandResponse,
