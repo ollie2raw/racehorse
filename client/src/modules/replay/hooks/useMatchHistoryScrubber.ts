@@ -36,11 +36,18 @@ export interface MatchHistoryScrubberState {
  * New moves landing while the player views history do NOT snap them away
  * (`movesBehindLive` drives a "back to live" pill instead). A log reset
  * (rematch / new game) or a log that shrinks below the cursor forces live.
+ *
+ * Only tile placements are steppable — draws and passes don't move the board,
+ * so stepping onto one would look like a dead click.
  */
 export function useMatchHistoryScrubber(
   moveLog: readonly MoveEntry[],
 ): MatchHistoryScrubberState {
-  const total = moveLog.length;
+  const placements = useMemo(
+    () => moveLog.filter((entry) => entry.action === 'place'),
+    [moveLog],
+  );
+  const total = placements.length;
   // The last move's post-state IS the live board, so the deepest a history
   // cursor can sit is the move *before* it. "Live" is null, or any index at
   // or past the last move — stepping onto the last move means stepping to live.
@@ -86,8 +93,8 @@ export function useMatchHistoryScrubber(
     () =>
       effectiveIndex === null
         ? null
-        : derivePostMoveReviewBoard(moveLog[effectiveIndex]),
-    [moveLog, effectiveIndex],
+        : derivePostMoveReviewBoard(placements[effectiveIndex]),
+    [placements, effectiveIndex],
   );
 
   return {
@@ -97,7 +104,7 @@ export function useMatchHistoryScrubber(
     position: effectiveIndex === null ? total : effectiveIndex + 1,
     total,
     viewedHandNumber:
-      effectiveIndex === null ? null : moveLog[effectiveIndex].handNumber ?? null,
+      effectiveIndex === null ? null : placements[effectiveIndex].handNumber ?? null,
     movesBehindLive: effectiveIndex === null ? 0 : total - 1 - effectiveIndex,
     canStepBack: effectiveIndex === null ? total >= 2 : effectiveIndex > 0,
     canStepForward: effectiveIndex !== null,

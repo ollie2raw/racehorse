@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest';
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import { useMatchHistoryScrubber } from './useMatchHistoryScrubber.ts';
 
-function entry(moveNumber: number, handNumber: number): MoveEntry {
+function entry(
+  moveNumber: number,
+  handNumber: number,
+  action: MoveEntry['action'] = 'place',
+): MoveEntry {
   return {
     moveNumber,
     handNumber,
     player: moveNumber % 2 === 1 ? 'you' : 'opponent',
-    action: 'place',
+    action,
     tile: [moveNumber % 7, (moveNumber + 1) % 7],
     position: 'left',
     boardEnds: [0, 0],
@@ -73,6 +77,28 @@ describe('useMatchHistoryScrubber', () => {
     act(() => result.current.stepForward());
     expect(result.current.viewingIndex).toBeNull();
     expect(result.current.viewingHistory).toBe(false);
+  });
+
+  it('counts and steps through tile placements only — draws and passes are skipped', () => {
+    // place, draw, place, pass, place  →  3 steppable positions
+    const entries = [
+      entry(1, 1, 'place'),
+      entry(2, 1, 'draw'),
+      entry(3, 1, 'place'),
+      entry(4, 1, 'pass'),
+      entry(5, 1, 'place'),
+    ];
+    const { result } = renderHook(() => useMatchHistoryScrubber(entries));
+    expect(result.current.total).toBe(3);
+
+    act(() => result.current.stepBack());
+    expect(result.current.viewingIndex).toBe(1);
+    expect(result.current.position).toBe(2);
+    expect(result.current.total).toBe(3);
+
+    act(() => result.current.stepBack());
+    expect(result.current.viewingIndex).toBe(0);
+    expect(result.current.canStepBack).toBe(false);
   });
 
   it('needs at least two moves before stepBack does anything', () => {
