@@ -5,6 +5,7 @@ vi.mock('../supabaseUtils', () => ({ supabaseFetch: vi.fn() }));
 import { supabaseFetch } from '../supabaseUtils';
 import {
   MP_AUTHORITY_EVENT_WRITE_TIMEOUT_MS,
+  countRecentMoveLogVerificationFailuresForUser,
   flushMpAuthorityEventPersistForTests,
   groupMpAuthorityFunnelMetrics,
   pacificEventDate,
@@ -150,5 +151,28 @@ describe('mp.authority event store', () => {
       { eventDate: '2026-08-20', event: 'private_lobby_created', total: 1 },
       { eventDate: '2026-08-20', event: 'private_match_started', total: 1 },
     ]);
+  });
+
+  describe('countRecentMoveLogVerificationFailuresForUser', () => {
+    it('queries mp_authority_events scoped to the event, user and window', async () => {
+      vi.mocked(supabaseFetch).mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]);
+      const n = await countRecentMoveLogVerificationFailuresForUser('user-abc', { days: 7 });
+      expect(n).toBe(3);
+      const url = vi.mocked(supabaseFetch).mock.calls[0][0] as string;
+      expect(url).toContain('/rest/v1/mp_authority_events');
+      expect(url).toContain('event=eq.private_move_log_verification_failed');
+      expect(url).toContain('payload->>userId=eq.user-abc');
+      expect(url).toMatch(/ts=gte\./);
+    });
+
+    it('returns 0 for an empty userId without a query', async () => {
+      expect(await countRecentMoveLogVerificationFailuresForUser('')).toBe(0);
+      expect(supabaseFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns 0 (never throws) when the query fails', async () => {
+      vi.mocked(supabaseFetch).mockRejectedValue(new Error('supabase down'));
+      await expect(countRecentMoveLogVerificationFailuresForUser('user-x')).resolves.toBe(0);
+    });
   });
 });

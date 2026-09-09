@@ -17,6 +17,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const capturedLogs: Array<{ context?: string; msg?: string; [k: string]: unknown }> = [];
+const sentryCaptureMessage = vi.fn();
+
+vi.mock('@sentry/node', () => ({ captureMessage: (...a: unknown[]) => sentryCaptureMessage(...a) }));
 
 vi.mock('../logger', () => ({
   childLogger: (context: string) => ({
@@ -349,6 +352,17 @@ describe('redundant producers on one match (T-INV-1/2/3/5)', () => {
     for (const l of conflictLogs) {
       expect(l.recordedWinnerId).toBe(recordedWinner);
       expect(l.attemptedWinnerId).toBe(otherPlayer);
+    }
+
+    // T-15 / H2: was log-only. Both disagreements now alert, fingerprinted by
+    // matchId so they collapse into one Sentry issue rather than a burst.
+    const conflictAlerts = sentryCaptureMessage.mock.calls.filter(
+      ([, opts]) => (opts as { tags?: Record<string, string> })?.tags?.tournament_alert === 'match_winner_conflict',
+    );
+    expect(conflictAlerts).toHaveLength(2);
+    for (const [msg, opts] of conflictAlerts) {
+      expect(msg).toContain('winner conflict');
+      expect((opts as { fingerprint?: string[] }).fingerprint).toEqual(['tournament-winner-conflict', qf0.id]);
     }
 
     assertBracketConsistentForStore(store, {

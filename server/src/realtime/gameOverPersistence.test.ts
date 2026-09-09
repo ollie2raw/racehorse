@@ -21,6 +21,8 @@ const {
   verifyPlayerMoveLogMock,
   emitMpAuthorityFunnelMock,
   recordOperationalFailureMock,
+  sentryCaptureMessageMock,
+  countRecentMoveLogFailuresMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -38,6 +40,8 @@ const {
   verifyPlayerMoveLogMock: vi.fn(),
   emitMpAuthorityFunnelMock: vi.fn(),
   recordOperationalFailureMock: vi.fn(),
+  sentryCaptureMessageMock: vi.fn(),
+  countRecentMoveLogFailuresMock: vi.fn(async () => 0),
 }));
 
 vi.mock('../ghost/verifier', () => ({
@@ -93,6 +97,14 @@ vi.mock('../logger', () => ({
 
 vi.mock('../multiplayer/mpAuthorityTelemetry', () => ({
   emitMpAuthorityFunnel: (...args: unknown[]) => emitMpAuthorityFunnelMock(...args),
+}));
+
+vi.mock('../multiplayer/mpAuthorityEventStore', () => ({
+  countRecentMoveLogVerificationFailuresForUser: (...args: unknown[]) => countRecentMoveLogFailuresMock(...args),
+}));
+
+vi.mock('@sentry/node', () => ({
+  captureMessage: (...args: unknown[]) => sentryCaptureMessageMock(...args),
 }));
 
 vi.mock('../operationalTelemetry', () => ({
@@ -622,7 +634,40 @@ describe('createGameOverPersistScheduler', () => {
             sourceMatchId: 'match-1',
             reason: 'fabricated board_state',
             entryIndex: 0,
+            // H2: userId on the persisted row so the alert can count per user,
+            // and the opponent so a Fritz failure isn't confused with a human one.
+            userId: 'user-a',
+            opponent: 'fritz',
           }),
+        }),
+      );
+      // H2: a Sentry alert, fingerprinted by user so repeats collapse into one issue.
+      await vi.waitFor(() => expect(sentryCaptureMessageMock).toHaveBeenCalled());
+      expect(sentryCaptureMessageMock).toHaveBeenCalledWith(
+        expect.stringContaining('move log failed verification'),
+        expect.objectContaining({
+          level: 'warning',
+          fingerprint: ['mp-move-log-verification-failed', 'user-a'],
+          tags: expect.objectContaining({ mp_alert: 'move_log_verification_failed', opponent: 'fritz' }),
+          extra: expect.objectContaining({ userRecentMoveLogFailures: 0 }),
+        }),
+      );
+    });
+
+    it('escalates the move-log alert to error + a repeat tag past the threshold', async () => {
+      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      verifyPlayerMoveLogMock.mockReturnValue({ ok: false, reason: 'fabricated', entryIndex: 0 });
+      countRecentMoveLogFailuresMock.mockResolvedValue(4);
+
+      await runPersist(buildFritzInput());
+
+      await vi.waitFor(() => expect(sentryCaptureMessageMock).toHaveBeenCalled());
+      expect(sentryCaptureMessageMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          level: 'error',
+          tags: expect.objectContaining({ mp_alert: 'move_log_verification_failed_repeat' }),
+          extra: expect.objectContaining({ userRecentMoveLogFailures: 4 }),
         }),
       );
     });

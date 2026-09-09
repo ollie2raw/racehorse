@@ -1,4 +1,6 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
+import { countRecentMoveLogVerificationFailuresForUser } from '../multiplayer/mpAuthorityEventStore';
 import type { Server } from 'socket.io';
 import { completeGhostGame } from '../ghost/service';
 import { verifyPlayerMoveLog } from '../ghost/verifier';
@@ -58,6 +60,65 @@ function verifySeatMoveLog(moveLog: GhostMoveLogEntry[]): GhostMoveLogVerificati
   return verifyPlayerMoveLog(moveLog, { strictHandContinuity: true });
 }
 
+/**
+ * A live-room move log failing verification is recorded (funnel row) but not
+ * blocked — the result stands, Glicko is suppressed. An honest client
+ * effectively never produces one, so a run of failures for one account is a
+ * tamper pattern rather than a string of one-offs. Mirrors DF-G2: the Sentry
+ * alert is fingerprinted by user so repeats collapse into a single issue, and
+ * escalates `warning → error` + a `_repeat` tag past the threshold.
+ */
+export const MOVE_LOG_VERIFICATION_REPEAT_OFFENDER_THRESHOLD = 3;
+
+function reportMoveLogVerificationFailure(params: {
+  userId: string | null;
+  roomCode: string;
+  sourceMatchId: string;
+  seatId: string;
+  reason: string;
+  entryIndex: number;
+  opponentIsFritz: boolean;
+}): void {
+  emitMpAuthorityFunnel('private_move_log_verification_failed', {
+    roomCode: params.roomCode,
+    seatId: params.seatId,
+    failureCode: 'move_log_verification_failed',
+    extra: {
+      sourceMatchId: params.sourceMatchId,
+      reason: params.reason,
+      entryIndex: params.entryIndex,
+      opponent: params.opponentIsFritz ? 'fritz' : 'human',
+      ...(params.userId ? { userId: params.userId } : {}),
+    },
+  });
+
+  // Best-effort alert — never block or throw on the game-over path.
+  void (async () => {
+    const recentFailures = params.userId
+      ? await countRecentMoveLogVerificationFailuresForUser(params.userId)
+      : 0;
+    const repeat = recentFailures >= MOVE_LOG_VERIFICATION_REPEAT_OFFENDER_THRESHOLD;
+    Sentry.captureMessage('[mp] live-room move log failed verification — recorded without Glicko', {
+      level: repeat ? 'error' : 'warning',
+      fingerprint: ['mp-move-log-verification-failed', params.userId ?? params.seatId],
+      tags: {
+        mp_alert: repeat ? 'move_log_verification_failed_repeat' : 'move_log_verification_failed',
+        opponent: params.opponentIsFritz ? 'fritz' : 'human',
+      },
+      extra: {
+        roomCode: params.roomCode,
+        sourceMatchId: params.sourceMatchId,
+        seatId: params.seatId,
+        userId: params.userId,
+        reason: params.reason,
+        entryIndex: params.entryIndex,
+        userRecentMoveLogFailures: recentFailures,
+        repeatOffenderThreshold: MOVE_LOG_VERIFICATION_REPEAT_OFFENDER_THRESHOLD,
+      },
+    });
+  })().catch(() => { /* alerting is best-effort */ });
+}
+
 type HumanMoveLogVerificationFailure = {
   seatId: string;
   reason: string;
@@ -91,15 +152,14 @@ function evaluateHumanMoveLogVerification(
         },
         'human live-room move log failed verification — recording without Glicko',
       );
-      emitMpAuthorityFunnel('private_move_log_verification_failed', {
+      reportMoveLogVerificationFailure({
+        userId: seat.userId,
         roomCode,
+        sourceMatchId,
         seatId: failure.seatId,
-        failureCode: 'move_log_verification_failed',
-        extra: {
-          sourceMatchId,
-          reason: failure.reason,
-          entryIndex: failure.entryIndex,
-        },
+        reason: failure.reason,
+        entryIndex: failure.entryIndex,
+        opponentIsFritz: false,
       });
       return { eligible: false, failure };
     }
@@ -306,15 +366,14 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
               reason: fritzVerification.reason,
               entryIndex: fritzVerification.entryIndex,
             }, 'fritz in-room move log failed verification — recording without Glicko');
-            emitMpAuthorityFunnel('private_move_log_verification_failed', {
+            reportMoveLogVerificationFailure({
+              userId: p.me.userId,
               roomCode: room.code,
+              sourceMatchId,
               seatId: p.me.id,
-              failureCode: 'move_log_verification_failed',
-              extra: {
-                sourceMatchId,
-                reason: fritzVerification.reason,
-                entryIndex: fritzVerification.entryIndex,
-              },
+              reason: fritzVerification.reason,
+              entryIndex: fritzVerification.entryIndex,
+              opponentIsFritz: true,
             });
           }
           const humanApplyGlicko = humanGlickoEligible ? undefined : false;

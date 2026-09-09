@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
@@ -475,6 +476,27 @@ export async function applyMatchResult(
         attemptedWinnerId: params.winnerId,
         attemptedSource: params.winnerSource ?? 'game_over',
       }, 'tournament_match_winner_conflict');
+      // T-15: was log-only, so it surfaced only when someone read the logs after
+      // a player complained. Fingerprinted by matchId so N retries of the same
+      // conflict collapse into one Sentry issue rather than a burst of unrelated
+      // alerts; a spike *across* matches (many issues) is the systemic signal.
+      // Not user-attributed — this is a state-machine/concurrency bug, not a
+      // tamper, and tournament conflicts have no queryable store to count per
+      // tournament (log-only), so per-actor escalation à la DF-G2 doesn't apply.
+      Sentry.captureMessage('[tournament] winner conflict — two producers disagreed on a completed match', {
+        level: 'warning',
+        fingerprint: ['tournament-winner-conflict', match.id],
+        tags: {
+          tournament_alert: 'match_winner_conflict',
+          tournament_id: match.tournament_id,
+          match_id: match.id,
+        },
+        extra: {
+          recordedWinnerId: result.winner_id,
+          attemptedWinnerId: params.winnerId,
+          attemptedSource: params.winnerSource ?? 'game_over',
+        },
+      });
     } else {
       log.info({
         matchId: match.id,
