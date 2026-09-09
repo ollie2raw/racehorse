@@ -1,26 +1,39 @@
 /*
- * Compact move-history stepper for the match top HUD. Sits beside the turn
- * pill; never in the board flow. Kept small so scrubbing never reflows the HUD.
+ * Move-history stepper for the match top HUD. Sits beside the turn pill —
+ * never in the board flow — and is styled to match the GAME / YOUR MOVE
+ * pills: full pill radius, matte obsidian, a hairline of gold.
  */
 
 .rh-scrubber {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
-  padding: 3px;
-  border-radius: var(--radius-control);
-  background: rgba(10, 16, 28, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 2px;
+  height: 38px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: rgba(9, 13, 22, 0.92);
+  border: 1px solid rgba(231, 182, 74, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 30px rgba(0, 0, 0, 0.32);
   font-family: var(--font-display);
   user-select: none;
   /* The HUD centre cluster is pointer-events:none — re-enable for the control. */
   pointer-events: auto;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
+/* Parked on a past move — the pill warms up a touch to signal "off live". */
 .rh-scrubber--viewing {
-  border-color: rgba(59, 130, 246, 0.45);
-  background: rgba(23, 37, 66, 0.66);
+  background: rgba(20, 16, 8, 0.92);
+  border-color: rgba(231, 182, 74, 0.52);
+  box-shadow:
+    inset 0 0 14px rgba(231, 182, 74, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 30px rgba(0, 0, 0, 0.32);
 }
 
 /*
@@ -36,88 +49,129 @@
   margin-left: 12px;
 }
 
+/* Chevron steppers — circular, quiet until hovered. */
 .rh-scrubber-step.rh-btn {
-  height: 28px;
-  min-width: 28px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   padding: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 19px;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(247, 226, 181, 0.42);
 }
 
 .rh-scrubber-step.rh-btn:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.95);
+  color: #f2dc9a;
+  background: rgba(231, 182, 74, 0.1);
 }
 
 .rh-scrubber-readout {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  min-width: 46px;
+  gap: 7px;
+  min-width: 62px;
   padding: 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.95);
   font-variant-numeric: tabular-nums;
 }
 
+/* "Live" state — green pip + cream label, the way a broadcast marks "on air". */
 .rh-scrubber-readout--live {
-  color: var(--tier-standard);
-}
-
-.rh-scrubber-pos {
-  color: var(--tier-standard);
-}
-
-.rh-scrubber-sep {
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: rgba(247, 226, 181, 0.92);
 }
 
 .rh-scrubber-dot {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-pill);
-  background: var(--tier-standard);
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+  background: #5ad98c;
+  box-shadow: 0 0 8px rgba(90, 217, 140, 0.7);
+  animation: rh-scrubber-pulse 2.4s ease-in-out infinite;
 }
 
+@keyframes rh-scrubber-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(90, 217, 140, 0.7);
+  }
+  50% {
+    opacity: 0.4;
+    box-shadow: 0 0 3px rgba(90, 217, 140, 0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-scrubber-dot {
+    animation: none;
+  }
+}
+
+/* Viewing state — position in bright gold, total dimmed. */
+.rh-scrubber-pos {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #f2dc9a;
+}
+
+.rh-scrubber-sep {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(247, 226, 181, 0.28);
+}
+
+.rh-scrubber-total {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(247, 226, 181, 0.48);
+}
+
+/* Return-to-live — gold-outlined circle with a corner count badge. */
 .rh-scrubber-live.rh-btn {
-  height: 28px;
-  min-width: 28px;
-  margin-left: 2px;
-  padding: 0 6px;
-  gap: 3px;
-  border-radius: var(--radius-control);
-  border-color: rgba(59, 130, 246, 0.4);
-  background: rgba(59, 130, 246, 0.1);
+  position: relative;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  margin-left: 3px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(231, 182, 74, 0.5);
+  background: rgba(231, 182, 74, 0.09);
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
-  color: var(--tier-standard);
+  color: #f2dc9a;
 }
 
 .rh-scrubber-live.rh-btn:hover {
-  background: rgba(59, 130, 246, 0.18);
-  color: rgba(255, 255, 255, 0.95);
+  background: rgba(231, 182, 74, 0.18);
+  color: #f2dc9a;
 }
 
 .rh-scrubber-live-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 15px;
   height: 15px;
-  padding: 0 4px;
+  padding: 0 3px;
   border-radius: var(--radius-pill);
-  background: var(--tier-standard);
+  background: var(--tier-elite);
   color: var(--bg-obsidian);
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  border: 1.5px solid var(--bg-obsidian);
 }
