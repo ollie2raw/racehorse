@@ -33,7 +33,7 @@ export function createEmptyPlayerIdentityModel(generatedAt = Date.now()): Player
     subject: { userId: null, username: null, avatarUrl: null, presence: 'unknown', currentMode: null, isCurrentUser: false, friendshipStatus: 'unknown' },
     competitive: { rating: null, peakRating: null, globalRank: null, provisional: null, rankedGames: null, wins: null, losses: null, winRate: null, currentStreak: null, bestStreak: null, recentForm: [], recentMatches: [] },
     fritz: { totalWins: null, totalLosses: null, winRate: null, averageScore: null, bestScore: null, difficultyRecords: [] },
-    puzzle: { completions: null, currentStreak: null, bestScoreToday: null, bestScoreEver: null, bestScore: null, perfectDays: null },
+    puzzle: { completions: null, currentStreak: null, bestScoreToday: null, bestScoreEver: null, bestScore: null },
     dailyFritz: { completions: null, wins: null, bestFinish: null, bestMargin: null },
     learning: { completedNodes: null, totalNodes: null, activeChapterId: null, activeChapterTitle: null },
     rivalry: { closestRival: null, currentViewerHeadToHead: null },
@@ -146,7 +146,6 @@ export function applyPersonalInsights(model: PlayerIdentityModel, insights: Pers
       bestScoreToday: numberOrNull(puzzle.bestScoreToday),
       bestScoreEver: numberOrNull(puzzle.bestScoreEver),
       bestScore: numberOrNull(puzzle.bestScoreEver),
-      perfectDays: nonNegativeOrNull(puzzle.perfectDays),
     },
     ghost: {
       rating: numberOrNull(ghost.rating),

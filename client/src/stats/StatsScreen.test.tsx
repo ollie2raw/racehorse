@@ -18,7 +18,7 @@ function model(): PlayerIdentityModel {
     subject: { ...base.subject, userId: 'user-1', username: 'Maya', isCurrentUser: true, friendshipStatus: 'self' },
     competitive: { ...base.competitive, rating: 1400, peakRating: 1450, globalRank: 10, provisional: false, rankedGames: 20, wins: 12, losses: 8, winRate: 60, currentStreak: 2, bestStreak: 5 },
     fritz: { ...base.fritz, totalWins: 8, totalLosses: 4, winRate: 66.7, averageScore: 87.5, bestScore: 100, difficultyRecords: [{ difficulty: 'rookie', wins: 4, losses: 1, games: 5 }] },
-    puzzle: { ...base.puzzle, completions: 12, currentStreak: 4, bestScoreToday: 72, bestScoreEver: 95, bestScore: 95, perfectDays: 3 },
+    puzzle: { ...base.puzzle, completions: 12, currentStreak: 4, bestScoreToday: 72, bestScoreEver: 95, bestScore: 95 },
     ghost: { ...base.ghost, rating: 900, gamesPlayed: 4, wins: 2, losses: 2, winRate: 50, bestWinMargin: 14 },
     sourceStatus: { ...base.sourceStatus, personal_insights: 'ready', journey: 'ready' },
   };
@@ -51,7 +51,7 @@ describe('StatsScreen normalized presentation', () => {
 
   it('renders a compact empty Puzzle state without invented zero metrics', () => {
     const empty = model();
-    empty.puzzle = { ...empty.puzzle, completions: 0, currentStreak: 0, bestScoreToday: null, bestScoreEver: null, bestScore: null, perfectDays: 0 };
+    empty.puzzle = { ...empty.puzzle, completions: 0, currentStreak: 0, bestScoreToday: null, bestScoreEver: null, bestScore: null };
     identityState.current = { model: empty, loading: false, error: null };
     render(<StatsScreen {...props} />);
     expect(screen.getByText('Complete a Daily Puzzle to begin building your record.')).toBeTruthy();

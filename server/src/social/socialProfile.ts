@@ -3,6 +3,12 @@ import { supabaseFetch } from '../supabaseUtils';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 import { requireAuth } from './socialAuth';
 import { getPresence } from './presenceRegistry';
+import { getPacificDateKey } from '../shared/pacificDate';
+import {
+  listPuzzleRushDayResultsForUser,
+  listLegacyDailyPuzzleDayResultsForUser,
+} from '../http/stores/puzzleStatsStore';
+import { buildPuzzleStatsSummary } from '../puzzleRush/puzzleStatsSummary';
 
 export function registerSocialProfileRoutes(socialRouter: Router): void {
   socialRouter.get('/:username', async (req, res) => {
@@ -108,27 +114,22 @@ export function registerSocialProfileRoutes(socialRouter: Router): void {
       const isFriend = friendRow?.status === 'accepted';
       const hasPendingRequest = friendRow?.status === 'pending';
 
-      const puzzleRows = await supabaseFetch<Array<{ total_score: number | null; completed_at: string }>>(
-        `/rest/v1/daily_puzzle_attempts?user_id=eq.${enc}&status=eq.completed` +
-        `&select=total_score,completed_at&order=completed_at.asc&limit=365`,
-      ).catch(() => [] as Array<{ total_score: number | null; completed_at: string }>);
-      const puzzles_completed = puzzleRows.length;
-      const best_puzzle_score = puzzleRows.reduce((max, r) => Math.max(max, r.total_score ?? 0), 0) || null;
-
-      const puzzleDates = [...new Set(puzzleRows.map((r) => r.completed_at.slice(0, 10)))];
-      let best_streak = 0;
-      let streakCur = 0;
-      for (let i = 0; i < puzzleDates.length; i++) {
-        if (i === 0) {
-          streakCur = 1;
-        } else {
-          const prev = new Date(`${puzzleDates[i - 1]}T00:00:00Z`);
-          const curr = new Date(`${puzzleDates[i]}T00:00:00Z`);
-          const diff = Math.round((curr.getTime() - prev.getTime()) / 86400000);
-          streakCur = diff === 1 ? streakCur + 1 : 1;
-        }
-        best_streak = Math.max(best_streak, streakCur);
-      }
+      // Puzzle Rush *is* the Daily Puzzle since 2026-08-20. Read `rush_runs`
+      // (current era) unioned with the frozen Ladder attempts, not the retired
+      // `daily_puzzle_attempts` alone — which showed stale-but-plausible numbers
+      // for anyone who has played Rush (FEATURE_COMPLETENESS_AUDIT.md P1-1).
+      const [puzzleRushDays, puzzleLegacyDays] = await Promise.all([
+        listPuzzleRushDayResultsForUser(targetId).catch(() => []),
+        listLegacyDailyPuzzleDayResultsForUser(targetId).catch(() => []),
+      ]);
+      const puzzleSummary = buildPuzzleStatsSummary({
+        todayDateKey: getPacificDateKey(),
+        rushDays: puzzleRushDays,
+        legacyDays: puzzleLegacyDays,
+      });
+      const puzzles_completed = puzzleSummary.completions;
+      const best_puzzle_score = puzzleSummary.bestScoreEver;
+      const best_streak = puzzleSummary.bestStreak;
 
       const fritzRows = await supabaseFetch<Array<{ won: boolean; final_score: number | null }>>(
         `/rest/v1/daily_fritz_attempts?user_id=eq.${enc}&status=eq.completed` +

@@ -21,7 +21,7 @@ function model(overrides: Partial<PlayerIdentityModel> = {}): PlayerIdentityMode
     subject: { ...base.subject, userId: 'maya-1', username: 'Maya', presence: 'online', friendshipStatus: 'none' },
     competitive: { ...base.competitive, rating: 1420, peakRating: 1480, globalRank: 27, provisional: false, wins: 8, losses: 3, rankedGames: 11, winRate: 72.7, bestStreak: 5, recentForm: ['win', 'loss', 'win'], recentMatches: [{ opponentUsername: 'Alex', result: 'win', score: 100, opponentScore: 80, mode: 'online', playedAt: '2026-07-10T12:00:00Z' }] },
     fritz: { ...base.fritz, totalWins: 4, totalLosses: 2, winRate: 66.7, bestScore: 95 },
-    puzzle: { ...base.puzzle, completions: 8, currentStreak: 4, bestScore: 92, perfectDays: 2 },
+    puzzle: { ...base.puzzle, completions: 8, currentStreak: 4, bestScore: 92 },
     milestones: [{ type: 'rating_peak', value: 1480, achieved: false }, { type: 'best_streak', value: 5, achieved: true }],
     sourceStatus: { ...base.sourceStatus, public_profile: 'ready' },
     ...overrides,

@@ -8,7 +8,6 @@ export function PuzzlePerformanceSection({ puzzle }: { puzzle: PlayerIdentityMod
   const played = hasModeActivity([
     puzzle.completions,
     puzzle.currentStreak,
-    puzzle.perfectDays,
     puzzle.bestScoreEver,
   ]);
 
@@ -26,7 +25,6 @@ export function PuzzlePerformanceSection({ puzzle }: { puzzle: PlayerIdentityMod
           <StatsFigure value={puzzle.bestScoreToday} label="best today" />
         )}
         <StatsFigure value={puzzle.bestScoreEver ?? DASH} label="best ever" />
-        <StatsFigure value={puzzle.perfectDays ?? DASH} label="perfect days" />
       </StatsFigureGrid>
     </StatsModeCard>
   );

@@ -25,7 +25,6 @@ const allSignals: PlayerIdentitySignal[] = [
   makeSignal('puzzle_current_streak', { kind: 'streak', games: 4 }),
   makeSignal('puzzle_best_today', { kind: 'score', score: 72, scope: 'today' }),
   makeSignal('puzzle_best_ever', { kind: 'score', score: 95, scope: 'all_time' }),
-  makeSignal('puzzle_perfect_days', { kind: 'count', count: 3 }),
   makeSignal('learning_journey_progress', { kind: 'journey', completed: 18, total: 25 }, 'self_only'),
   makeSignal('learning_active_chapter', { kind: 'chapter', title: 'The Fritz Trail' }, 'self_only'),
   makeSignal('rivalry_viewer_head_to_head', { kind: 'record', wins: 4, losses: 6, games: 10 }),
@@ -56,7 +55,7 @@ describe('PlayerIdentityHighlights', () => {
   });
 
   it('uses neutral public peak copy and defensively hides self-only signals', () => {
-    render(<PlayerIdentityHighlights signals={[allSignals[0], allSignals[16], allSignals[19]]} isCurrentUser={false} />);
+    render(<PlayerIdentityHighlights signals={[allSignals[0], allSignals[16], allSignals[18]]} isCurrentUser={false} />);
     expect(screen.getByText('AT PEAK RATING')).toBeTruthy();
     expect(screen.queryByText('AT YOUR PEAK')).toBeNull();
     expect(screen.queryByText('JOURNEY PROGRESS')).toBeNull();

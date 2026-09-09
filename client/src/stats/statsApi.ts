@@ -7,18 +7,16 @@ import {
   buildStatsSummary,
   deriveFritzSummary,
   deriveGhostSummary,
-  derivePuzzleSummary,
   formatWeekLabel,
   getWeekStart,
   isGhostRatingEligible,
   type GhostGameSummaryRow,
   type MatchSummaryRow,
-  type PuzzleCompletionRow,
-  type PuzzleScoreRow,
 } from './statsDerivations';
 import type {
   FritzStatsSummary,
   PersonalStatsInsights,
+  PuzzleStatsSummary,
   RankingProfile,
   RecordMatchInput,
   StatsSummary,
@@ -99,6 +97,39 @@ export async function fetchPersonalStatsInsights(
   return fetchPersonalStatsInsightsByUserId(user.id);
 }
 
+const EMPTY_PUZZLE_SUMMARY: PuzzleStatsSummary = {
+  currentStreak: 0,
+  completions: 0,
+  completionsThisWeek: 0,
+  bestScoreToday: null,
+  bestScoreEver: null,
+};
+
+/**
+ * Daily Puzzle (Puzzle Rush) stats, computed server-side from `rush_runs`
+ * unioned with frozen Ladder history. A failure degrades to zeros rather than
+ * failing the whole insights load — the same tolerance the old direct read had.
+ */
+export async function fetchPuzzleStatsSummary(): Promise<PuzzleStatsSummary> {
+  const result = await apiGet<{
+    ok?: boolean;
+    completions?: number;
+    currentStreak?: number;
+    completionsThisWeek?: number;
+    bestScoreToday?: number | null;
+    bestScoreEver?: number | null;
+  }>('/api/puzzle-rush/stats-summary');
+  const raw = result.data;
+  if (result.error || !raw || raw.ok !== true) return EMPTY_PUZZLE_SUMMARY;
+  return {
+    completions: Number(raw.completions ?? 0),
+    currentStreak: Number(raw.currentStreak ?? 0),
+    completionsThisWeek: Number(raw.completionsThisWeek ?? 0),
+    bestScoreToday: raw.bestScoreToday == null ? null : Number(raw.bestScoreToday),
+    bestScoreEver: raw.bestScoreEver == null ? null : Number(raw.bestScoreEver),
+  };
+}
+
 export async function fetchPersonalStatsInsightsByUserId(
   userId: string,
 ): Promise<{ data: PersonalStatsInsights | null; error: string | null }> {
@@ -134,29 +165,12 @@ export async function fetchPersonalStatsInsightsByUserId(
 
   const ghost = deriveGhostSummary(ghostRows, base.ghostRating, weekStart);
 
-  let completionRows: PuzzleCompletionRow[] = [];
-  let scoreRows: PuzzleScoreRow[] = [];
-  try {
-    const [completionResp, scoreResp] = await Promise.all([
-      supabase
-        .from('daily_puzzle_completions')
-        .select('puzzle_date, current_streak, score, perfect, updated_at')
-        .eq('user_id', userId)
-        .order('puzzle_date', { ascending: false }),
-      supabase
-        .from('daily_puzzle_scores')
-        .select('puzzle_date, best_score, updated_at')
-        .eq('user_id', userId)
-        .order('puzzle_date', { ascending: false }),
-    ]);
-    if (!completionResp.error) completionRows = (completionResp.data ?? []) as PuzzleCompletionRow[];
-    if (!scoreResp.error) scoreRows = (scoreResp.data ?? []) as PuzzleScoreRow[];
-  } catch {
-    completionRows = [];
-    scoreRows = [];
-  }
-
-  const puzzle = derivePuzzleSummary(completionRows, scoreRows, weekStart);
+  // Puzzle Rush *is* the Daily Puzzle since 2026-08-20; its `rush_runs` table has
+  // deny-all RLS, so the browser cannot read it. The server unions it with the
+  // frozen Ladder-era history. The old direct read hit `daily_puzzle_completions`
+  // — a table that no longer exists in production, 404ing on every /stats load
+  // and leaving streak / completions hardcoded 0 (FEATURE_COMPLETENESS_AUDIT P1-1).
+  const puzzle = await fetchPuzzleStatsSummary();
 
   return {
     data: {

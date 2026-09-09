@@ -8,7 +8,6 @@ import type {
   FritzTierKey,
   FritzTierRecord,
   GhostStatsSummary,
-  PuzzleStatsSummary,
   StatsSummary,
 } from './statsTypes';
 
@@ -27,20 +26,6 @@ export type GhostGameSummaryRow = {
   final_score: number | null;
   opponent_score: number | null;
   played_at?: string | null;
-};
-
-export type PuzzleCompletionRow = {
-  puzzle_date: string | null;
-  current_streak: number | null;
-  score: number | null;
-  perfect: boolean | null;
-  updated_at?: string | null;
-};
-
-export type PuzzleScoreRow = {
-  puzzle_date: string | null;
-  best_score: number | null;
-  updated_at?: string | null;
 };
 
 export function dedupeOnlineMatchRows<T extends MatchSummaryRow>(rows: T[]): T[] {
@@ -73,13 +58,6 @@ export function getWeekStart(now = new Date()): Date {
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(now.getDate() - diffToMonday);
   return weekStart;
-}
-
-function toLocalDateKey(value: Date): string {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const day = `${value.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function emptyTierRecord(): FritzTierRecord {
@@ -236,42 +214,6 @@ export function deriveGhostSummary(
     gamesThisWeek,
     ratingChangeThisWeek,
     bestWinMarginThisWeek,
-  };
-}
-
-export function derivePuzzleSummary(
-  completionRows: PuzzleCompletionRow[],
-  scoreRows: PuzzleScoreRow[],
-  weekStart: Date,
-): PuzzleStatsSummary {
-  const todayKey = toLocalDateKey(new Date());
-  const completions = completionRows.length;
-  const perfectDays = completionRows.filter((row) => Boolean(row.perfect)).length;
-  const currentStreak =
-    [...completionRows]
-      .sort((a, b) => String(b.puzzle_date ?? '').localeCompare(String(a.puzzle_date ?? '')))[0]
-      ?.current_streak ?? 0;
-  const completionsThisWeek = completionRows.filter((row) => {
-    const value = row.updated_at ?? row.puzzle_date ?? '';
-    const ms = new Date(value).getTime();
-    return Number.isFinite(ms) && ms >= weekStart.getTime();
-  }).length;
-  const bestScoreToday =
-    scoreRows.find((row) => row.puzzle_date === todayKey)?.best_score == null
-      ? null
-      : Number(scoreRows.find((row) => row.puzzle_date === todayKey)?.best_score ?? 0);
-  const bestScoreEver =
-    scoreRows.length > 0
-      ? Math.max(...scoreRows.map((row) => Number(row.best_score ?? 0)))
-      : null;
-
-  return {
-    currentStreak: Number(currentStreak ?? 0),
-    completions,
-    completionsThisWeek,
-    bestScoreToday,
-    bestScoreEver,
-    perfectDays,
   };
 }
 

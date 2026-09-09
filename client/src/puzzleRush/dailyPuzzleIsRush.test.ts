@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import homeSource from '../screens/HomeScreen.tsx?raw';
 import soloRoutesSource from '../routes/soloPlayRoutes.tsx?raw';
 import singlePlayerHubSource from '../screens/SinglePlayerHubScreen.tsx?raw';
+import statsApiSource from '../stats/statsApi.ts?raw';
 
 // The retired 5-slot ladder's screens/helpers were deleted (CODE_QUALITY_PLAN.md
 // §CQ9.1.6). This glob is the door-count: only the 8 files Puzzle Rush / home /
@@ -88,6 +89,17 @@ describe('retired ladder entry points', () => {
     const route = soloRoutesSource.slice(start, end);
     expect(route).toContain("setAppMode('home')");
     expect(route).not.toContain("setAppMode('daily')");
+  });
+
+  it('the /stats puzzle block reads Puzzle Rush, not the retired ladder tables', () => {
+    // `daily_puzzle_completions` no longer exists in production — a browser read
+    // of it 404'd on every /stats load, swallowed, leaving streak/completions
+    // hardcoded 0 (FEATURE_COMPLETENESS_AUDIT.md P1-1). The client must go
+    // through the server, which unions rush_runs with frozen history.
+    const table = 'daily_puzzle_completions';
+    expect(statsApiSource.split('\n').filter((line) => line.includes(`'${table}'`))).toEqual([]);
+    expect(statsApiSource).not.toContain(".from('daily_puzzle_scores')");
+    expect(statsApiSource).toContain('/api/puzzle-rush/stats-summary');
   });
 
   it('nothing outside the retired daily routes navigates to the ladder', () => {
