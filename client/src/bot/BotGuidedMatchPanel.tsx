@@ -2,7 +2,18 @@ import React from 'react';
 import { AnimatedScore } from '../components';
 import type { BotMatchState } from '../modules/match/runtime/botEngine.ts';
 
-export interface LessonCoachPanelContent {
+/**
+ * F3/D-CQ-6 (CODE_QUALITY_PLAN.md §CQ9.2.F3): this used to share the name
+ * `LessonCoachPanelContent` with the canonical, unrelated type in
+ * `modules/guided/guidedCoachPresentationTypes.ts` — a structural-typing
+ * trap, since the two shapes had already diverged (every field here is
+ * optional; every field there is required) despite the identical field set.
+ * Renamed to make the local, looser shape unambiguous. No other file
+ * imports this type by name (confirmed), so this is a pure rename, not a
+ * consolidation onto the canonical type — the shapes stay independent
+ * because they're genuinely not the same contract.
+ */
+export interface BotGuidedCoachPanelContent {
   progressChipLabel?: string;
   title?: string;
   showMore?: boolean;
@@ -20,7 +31,7 @@ export interface BotGuidedMatchPanelProps {
   showLeaveConfirm: boolean;
   setShowLeaveConfirm: (show: boolean) => void;
   showFritzCoachingPanel: boolean;
-  lessonCoachPanelContent: LessonCoachPanelContent | null;
+  lessonCoachPanelContent: BotGuidedCoachPanelContent | null;
   lessonCoachProgressLabel: string;
   lessonCoachProgressPct: number;
   showFullCoachTip: boolean;
