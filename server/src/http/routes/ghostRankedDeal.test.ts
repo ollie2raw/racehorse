@@ -468,3 +468,120 @@ describe('ranked non-Fritz Ghost start/complete deal authority', () => {
     warn.mockRestore();
   });
 });
+
+describe('SA-4 (HARDENING_PLAN.md §11.3): /api/ghost/complete concurrency lock', () => {
+  beforeEach(() => {
+    glickoWrites.length = 0;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('two genuinely concurrent completions for the same matchId apply the Glicko change exactly once', async () => {
+    const harness = makeHarness();
+    const started = await harness.request('POST', '/api/bot-matches/local/start', {
+      userId: USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      fritzTier: 'elite',
+      winningScore: 10,
+      dealSize: 7,
+      matchStarter: 'you',
+    });
+    const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
+    const honest = playHonestRankedGame(snapshot);
+    const body = {
+      userId: USER_ID,
+      matchId: started.body.matchId,
+      opponentUserId: FRITZ_ELITE_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      finalScore: 200,
+      opponentScore: 0,
+      moveLog: toGhostBodyLog(honest.moveLog),
+      playerMoveLog: toGhostBodyLog(honest.moveLog.filter((entry) => entry.actor === 'you')),
+    };
+
+    // Neither request is awaited before the other starts — this reproduces
+    // the real SA-4 race (a double-submit, a flaky client retry, two tabs):
+    // both requests read verifiedMatch.status before either has a chance to
+    // write it back to 'completed'.
+    const [first, second] = await Promise.all([
+      harness.request('POST', '/api/ghost/complete', body),
+      harness.request('POST', '/api/ghost/complete', body),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    // Exactly one request actually ran completeGhostGame (one Glicko
+    // application); the other observed the already-completed match and
+    // replayed the stored result instead of re-processing it.
+    expect(harness.completeCalls).toHaveLength(1);
+    expect(glickoWrites).toEqual([
+      {
+        playerScore: honest.playerScore,
+        opponentScore: honest.opponentScore,
+        matchId: started.body.matchId,
+      },
+    ]);
+    const replayedFlags = [first.body.replayed === true, second.body.replayed === true];
+    expect(replayedFlags.filter(Boolean)).toHaveLength(1);
+    // Both responses carry the same final result — the second request got
+    // the first request's real outcome, not a fabricated or empty one.
+    expect(first.body.result.playerScore).toBe(honest.playerScore);
+    expect(second.body.result.playerScore).toBe(honest.playerScore);
+  });
+
+  it('two genuinely concurrent completions for different matchIds are not serialized against each other', async () => {
+    const harness = makeHarness();
+    // One real deal snapshot, replayed honestly for both matches — the point
+    // here is matchId isolation, not deal content, so reusing the snapshot
+    // is fine; each match still gets its own distinct matchId below (the
+    // harness's /api/bot-matches/local/start mock always hands back the same
+    // fixture matchId, so two real matches are built directly instead).
+    const started = await harness.request('POST', '/api/bot-matches/local/start', {
+      userId: USER_ID,
+      localMatchId: LOCAL_MATCH_ID,
+      fritzTier: 'elite',
+      winningScore: 10,
+      dealSize: 7,
+      matchStarter: 'you',
+    });
+    const snapshot = harness.startVerifiedSinglePlayerMatch.mock.calls[0]?.[0].dealSnapshot as RankedDealSnapshot;
+    const honestA = playHonestRankedGame(snapshot);
+    const honestB = playHonestRankedGame(snapshot);
+    const matchA = makeMatch({ matchId: 'match-a', localMatchId: 'local-a', dealSnapshot: snapshot });
+    const matchB = makeMatch({ matchId: 'match-b', localMatchId: 'local-b', dealSnapshot: snapshot });
+    harness.matches.set(matchA.matchId, matchA);
+    harness.matches.set(matchB.matchId, matchB);
+
+    const [first, second] = await Promise.all([
+      harness.request('POST', '/api/ghost/complete', {
+        userId: USER_ID,
+        matchId: matchA.matchId,
+        opponentUserId: FRITZ_ELITE_ID,
+        localMatchId: 'local-a',
+        finalScore: 200,
+        opponentScore: 0,
+        moveLog: toGhostBodyLog(honestA.moveLog),
+        playerMoveLog: toGhostBodyLog(honestA.moveLog.filter((entry) => entry.actor === 'you')),
+      }),
+      harness.request('POST', '/api/ghost/complete', {
+        userId: USER_ID,
+        matchId: matchB.matchId,
+        opponentUserId: FRITZ_ELITE_ID,
+        localMatchId: 'local-b',
+        finalScore: 200,
+        opponentScore: 0,
+        moveLog: toGhostBodyLog(honestB.moveLog),
+        playerMoveLog: toGhostBodyLog(honestB.moveLog.filter((entry) => entry.actor === 'you')),
+      }),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    // Each real match is completed exactly once — the lock is per-matchId,
+    // not a global serializer.
+    expect(harness.completeCalls).toHaveLength(2);
+    expect(glickoWrites).toHaveLength(2);
+  });
+});

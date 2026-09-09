@@ -17,6 +17,7 @@ import {
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 import { setPublicShortCache } from './cacheControl';
 import { verifyPlayerMoveLog } from '../../ghost/verifier';
+import { withGhostCompletionLock } from '../../ghost/ghostCompletionLock';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -212,6 +213,12 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
     }
 
     try {
+      // SA-4 (HARDENING_PLAN.md §11.3): matchId-scoped lock around the
+      // entire read-check-mutate-write sequence below, closing the
+      // read-verifiedMatch.status-then-write-it-completed race a genuinely
+      // concurrent double-completion (double-submit, flaky retry, two tabs)
+      // could otherwise hit.
+      await withGhostCompletionLock(matchId, async () => {
       const authenticatedUserId = await getAuthenticatedUserId(req);
       if (!authenticatedUserId) {
         res.status(401).json({ error: 'Unauthorized' });
@@ -354,6 +361,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         }).catch(() => {});
       }
       res.json({ ok: true, result });
+      });
     } catch (error) {
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to complete ghost game.',
