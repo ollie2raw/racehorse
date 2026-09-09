@@ -39,7 +39,7 @@ async function startFritzMatch(page: Page) {
  * "give Fritz N seconds then force the player move" race is not safe).
  */
 async function ensureFirstMoveLogged(page: Page) {
-  const dock = page.locator('[data-ui="scrubber-dock"]');
+  const dock = page.locator('[data-ui="match-history-scrubber"]');
   // A playable hand tile's accessible name is exactly "Domino N-N"; an
   // unplayable one is "Domino N-N, not playable" — the `$` anchor excludes it.
   const playable = page
@@ -67,7 +67,7 @@ test('scrubber steps through history view-only and returns to live', async ({ pa
   await startFritzMatch(page);
   await ensureFirstMoveLogged(page);
 
-  const dock = page.locator('[data-ui="scrubber-dock"]');
+  const dock = page.locator('[data-ui="match-history-scrubber"]');
   await expect(dock).toBeVisible();
   await expect(dock.getByText('Live')).toBeVisible();
 
@@ -78,7 +78,9 @@ test('scrubber steps through history view-only and returns to live', async ({ pa
   expect(box!.height).toBeGreaterThanOrEqual(44);
 
   await prev.click();
-  await expect(dock.getByText(/Move \d+ \/ \d+/)).toBeVisible();
+  // The readout renders position/total as discrete spans; the "Move N of M"
+  // string is the accessible label, not visible prose.
+  await expect(dock.getByLabel(/Move \d+ of \d+/)).toBeVisible();
 
   // Hand is view-only while parked in history: every hand tile is disabled.
   await expect(page.locator('.hand-area .domino-tile:not(.disabled)')).toHaveCount(0);
