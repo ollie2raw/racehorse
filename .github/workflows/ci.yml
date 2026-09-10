@@ -97,6 +97,9 @@ jobs:
       - name: Architecture invariant enforcement
         run: npm run check:architecture --prefix client
 
+      - name: Journey content validation (real shipped chapter content)
+        run: npm run qa:journey-content --prefix client
+
       - name: Client tests
         run: npm run test:all --prefix client
 
