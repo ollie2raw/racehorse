@@ -181,6 +181,13 @@
 
 /* ── Mode cards ─────────────────────────────────────────────────── */
 
+.rh-stats-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: calc(var(--space-sm) * -0.5) 0 var(--space-xs);
+}
+
 .rh-stats-grid {
   display: grid;
   grid-template-columns: 1fr;

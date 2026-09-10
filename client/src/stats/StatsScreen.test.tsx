@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { User } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyPlayerIdentityModel } from '../identity/playerIdentityNormalization';
@@ -10,6 +10,11 @@ const { identityState } = vi.hoisted(() => ({ identityState: { current: null as 
 vi.mock('../identity/usePlayerIdentityModel', () => ({ usePlayerIdentityModel: () => identityState.current }));
 // The page carries the site nav now rather than its own bare topbar.
 vi.mock('../components/GlobalNav', () => ({ GlobalNav: () => null }));
+// The recap panel is exercised in WeeklyStatsScreen.test.tsx; here we only
+// prove the trigger wiring.
+vi.mock('./WeeklyStatsScreen', () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Weekly stats">recap</div> : null),
+}));
 
 function model(): PlayerIdentityModel {
   const base = createEmptyPlayerIdentityModel(100);
@@ -71,5 +76,12 @@ describe('StatsScreen normalized presentation', () => {
     // No longer a dialog: it is a route page with the site nav above it.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('opens the Weekly Recap panel from its trigger', () => {
+    render(<StatsScreen {...props} />);
+    expect(screen.queryByRole('dialog', { name: 'Weekly stats' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Weekly Recap' }));
+    expect(screen.getByRole('dialog', { name: 'Weekly stats' })).toBeTruthy();
   });
 });
