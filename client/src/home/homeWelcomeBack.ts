@@ -112,7 +112,7 @@ export function calculateWelcomeBack(
       'Daily Puzzle complete',
       puzzleEvent.payload.score === null ? 'Your result is ready to review.' : `You scored ${puzzleEvent.payload.score} points.`,
       'puzzle',
-      'daily',
+      'puzzleRush',
     ));
   }
 

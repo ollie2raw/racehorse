@@ -136,7 +136,7 @@ function secondaryModes(scores: ModeScores, primaryMode: HomePersonalizationPrim
   const routeFor: Record<HomePersonalizationPrimaryMode, HomePersonalization['secondaryModes'][number]> = {
     journey: 'journey',
     daily_fritz: 'dailyFritz',
-    daily_puzzle: 'daily',
+    daily_puzzle: 'puzzleRush',
     multiplayer: 'multiplayer',
     tournament: 'tournament',
     friends: 'friends',

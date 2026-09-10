@@ -92,8 +92,6 @@ export type AppMode =
   | 'bot'
   | 'ghostSetup'
   | 'ghost'
-  | 'daily'
-  | 'dailyPuzzleLeaderboard'
   | 'dailyFritz'
   | 'dailyFritzLeaderboard'
   | 'puzzleRush'

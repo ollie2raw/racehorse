@@ -25,8 +25,6 @@ export const APP_PRIMARY_TABS: AppPrimaryTab[] = [
       'ghostSetup',
       'dailyFritz',
       'dailyFritzLeaderboard',
-      'daily',
-      'dailyPuzzleLeaderboard',
     ],
   },
   {

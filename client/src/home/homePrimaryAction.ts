@@ -173,7 +173,7 @@ export function selectHomePrimaryAction(
         ? `Puzzle ${puzzleStarted.payload.nextAvailableSlotIndex} is ready.`
         : 'Your daily puzzle is in progress.',
       cta: 'Continue',
-      route: 'daily',
+      route: 'puzzleRush',
       priority: PRIORITY.continueDailyPuzzle,
       expiresAt: null,
       stableId: puzzleStarted.id,
@@ -223,7 +223,7 @@ export function selectHomePrimaryAction(
       title: 'Play Daily Puzzle',
       reason: 'Today’s three puzzles are ready.',
       cta: 'Play',
-      route: 'daily',
+      route: 'puzzleRush',
       priority: PRIORITY.playDailyPuzzle,
       expiresAt: null,
       stableId: `daily-puzzle:${puzzle.runDate ?? 'today'}`,

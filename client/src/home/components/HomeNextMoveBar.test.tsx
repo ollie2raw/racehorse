@@ -7,10 +7,10 @@ import { HomeNextMoveBar } from './HomeNextMoveBar';
 const actions: HomePrimaryAction[] = [
   { type: 'continue_tournament', title: 'Tournament Match', reason: 'Quarterfinal ready.', cta: 'Enter Match', route: 'tournament', priority: 90, expiresAt: null, tournamentId: 't1', matchId: 'm1' },
   { type: 'continue_daily_fritz', title: 'Continue Daily Fritz', reason: 'Game 2 is waiting.', cta: 'Continue', route: 'dailyFritz', priority: 70, expiresAt: null },
-  { type: 'continue_daily_puzzle', title: 'Continue Daily Puzzle', reason: 'Puzzle 2 is ready.', cta: 'Continue', route: 'daily', priority: 60, expiresAt: null },
+  { type: 'continue_daily_puzzle', title: 'Continue Daily Puzzle', reason: 'Puzzle 2 is ready.', cta: 'Continue', route: 'puzzleRush', priority: 60, expiresAt: null },
   { type: 'continue_lesson', title: 'Continue Learning', reason: 'Lesson 5 is waiting.', cta: 'Continue', route: 'journey', priority: 40, expiresAt: null, chapterId: 'chapter-5' },
   { type: 'play_daily_fritz', title: "Today's Race", reason: 'The series is ready.', cta: 'Play', route: 'dailyFritz', priority: 30, expiresAt: null },
-  { type: 'play_daily_puzzle', title: 'Daily Puzzle', reason: "Today's puzzle is ready.", cta: 'Play', route: 'daily', priority: 20, expiresAt: null },
+  { type: 'play_daily_puzzle', title: 'Daily Puzzle', reason: "Today's puzzle is ready.", cta: 'Play', route: 'puzzleRush', priority: 20, expiresAt: null },
   { type: 'challenge_online_rival', title: 'Challenge Maya', reason: 'Maya is online.', cta: 'Open Friends', route: 'friends', priority: 10, expiresAt: null, rivalId: 'maya' },
   { type: 'play_recommended_mode', title: 'Ready to play?', reason: 'Jump into Play vs Fritz.', cta: 'Play', route: 'singlePlayerHub', priority: 0, expiresAt: null },
 ];
