@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
-import { getTodayDailyFritz, type DailyFritzTodayResponse } from './api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { getTodayDailyFritz } from './api';
 import DailyFritzLeaderboardScreen from './DailyFritzLeaderboardScreen';
 import { DailyFritzLeaderboardLoading } from './DailyFritzLeaderboardLoading';
 
@@ -32,37 +32,15 @@ export default function DailyFritzLeaderboardRoute({
   onOpenAuth,
   onSignOut,
 }: DailyFritzLeaderboardRouteProps) {
-  const [runDate, setRunDate] = useState<string | null>(null);
-  // Kept so the screen can seed from this response instead of fetching
-  // /api/daily-fritz/today a second time for byte-identical data.
-  const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await Promise.resolve();
-      if (cancelled) return;
-      setLoading(true);
-      void getTodayDailyFritz()
-        .then((response) => {
-          if (cancelled) return;
-          setToday(response);
-          setRunDate(response.run_date || pacificRunDateFallback());
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setToday(null);
-          setRunDate(pacificRunDateFallback());
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // `today` is kept so the screen can seed from this response instead of
+  // fetching /api/daily-fritz/today a second time for byte-identical data.
+  const { data, loading, error } = useAsyncData(() => getTodayDailyFritz(), []);
+  const today = data ?? null;
+  const runDate = data
+    ? data.run_date || pacificRunDateFallback()
+    : error
+      ? pacificRunDateFallback()
+      : null;
 
   if (loading || !runDate) {
     return <DailyFritzLeaderboardLoading onBack={onClose} />;

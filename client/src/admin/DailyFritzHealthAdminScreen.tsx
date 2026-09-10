@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 
 const ADMIN_KEY_STORAGE = 'racehorse:daily-fritz-admin-key';
@@ -102,47 +103,25 @@ async function fetchDailyFritzHealth(key: string): Promise<HealthResponse> {
 export default function DailyFritzHealthAdminScreen() {
   const [adminKey, setAdminKey] = useState(resolveInitialAdminKey);
   const [draftKey, setDraftKey] = useState('');
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const refreshHealth = useCallback((key: string) => {
-    void (async () => {
-      setLoading(true);
-      setError(null);
+  const { data, loading, error: fetchError, refetch } = useAsyncData<HealthResponse>(
+    async () => {
       try {
-        setHealth(await fetchDailyFritzHealth(key));
+        return await fetchDailyFritzHealth(adminKey);
       } catch (err: unknown) {
-        setHealth(null);
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
+        // Preserve the pre-hook `err instanceof Error ? err.message : String(err)`.
+        throw new Error(err instanceof Error ? err.message : String(err));
       }
-    })();
-  }, []);
+    },
+    [adminKey],
+    { enabled: Boolean(adminKey) },
+  );
 
-  useEffect(() => {
-    if (!adminKey) return;
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchDailyFritzHealth(adminKey);
-        if (!cancelled) setHealth(data);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setHealth(null);
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [adminKey]);
+  // The hand-rolled version nulled `health` on both sign-out and fetch failure
+  // (catch → `setHealth(null)`); the hook retains `data`, so reproduce both:
+  // gate on `adminKey` (sign-out) and on the absence of an error.
+  const error = adminKey ? fetchError : null;
+  const health = adminKey && !error ? data ?? null : null;
 
   const handleUnlock = (event: React.FormEvent) => {
     event.preventDefault();
@@ -156,9 +135,6 @@ export default function DailyFritzHealthAdminScreen() {
   const handleSignOut = () => {
     clearStoredAdminKey();
     setAdminKey('');
-    setHealth(null);
-    setError(null);
-    setLoading(false);
   };
 
   return (
@@ -209,7 +185,7 @@ export default function DailyFritzHealthAdminScreen() {
         <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             type="button"
-            onClick={() => refreshHealth(adminKey)}
+            onClick={() => void refetch()}
             disabled={loading}
             style={{
               padding: '6px 12px',
