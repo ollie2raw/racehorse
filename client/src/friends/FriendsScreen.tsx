@@ -462,22 +462,27 @@ export default function FriendsScreen({
                   const roomCode = presenceInfo?.roomCode ?? null;
                   const isSelected = selectedFriend?.id === friend.id;
                   return (
-                    <button
+                    <div
                       key={friend.id}
-                      type="button"
                       className={`friends-page-row friends-page-row--selectable${isSelected ? ' friends-page-row--selected' : ''}`}
-                      onClick={() => handleSelectFriend(friend)}
                     >
-                      <div className="friends-page-row__left">
-                        <PresenceDot status={presenceStatus} />
-                        <div>
-                          <div className="friends-page-row__name">@{friend.username}</div>
-                          <div className="friends-page-row__meta">
-                            {presenceStatus === 'in_game' ? 'In Game' : presenceStatus === 'online' ? 'Online' : 'Offline'}
+                      <button
+                        type="button"
+                        className="friends-page-row__select"
+                        aria-pressed={isSelected}
+                        onClick={() => handleSelectFriend(friend)}
+                      >
+                        <div className="friends-page-row__left">
+                          <PresenceDot status={presenceStatus} />
+                          <div>
+                            <div className="friends-page-row__name">@{friend.username}</div>
+                            <div className="friends-page-row__meta">
+                              {presenceStatus === 'in_game' ? 'In Game' : presenceStatus === 'online' ? 'Online' : 'Offline'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="friends-page-row__actions" onClick={(e) => e.stopPropagation()}>
+                      </button>
+                      <div className="friends-page-row__actions">
                         {presenceStatus === 'in_game' && roomCode && onSpectate ? (
                           <button
                             type="button"
@@ -542,7 +547,7 @@ export default function FriendsScreen({
                           Remove
                         </button>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
