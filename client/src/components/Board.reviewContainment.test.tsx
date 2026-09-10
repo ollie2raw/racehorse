@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { BoardState, PlacedTile } from '../types.ts';
-import { Board, calculateBoardFitScale, computeBoardLayout } from './Board.tsx';
+import { Board } from './Board.tsx';
+import { calculateBoardFitScale, computeBoardLayout } from './board/boardLayout.ts';
 
 function placed(low: number, high: number, orientation = 'horizontal-normal'): PlacedTile {
   return { tile: { low, high }, orientation: orientation as PlacedTile['orientation'] };
