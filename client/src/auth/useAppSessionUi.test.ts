@@ -74,7 +74,6 @@ describe('useAppSessionUi — initial state', () => {
     expect(result.current.authModalOpen).toBe(false);
     expect(result.current.usernameModalOpen).toBe(false);
     expect(result.current.signingOut).toBe(false);
-    expect(result.current.weeklyStatsOpen).toBe(false);
   });
 
   it('exposes setters for all modal state', () => {
@@ -85,7 +84,6 @@ describe('useAppSessionUi — initial state', () => {
     expect(typeof result.current.setAuthModalOpen).toBe('function');
     expect(typeof result.current.setUsernameModalOpen).toBe('function');
     expect(typeof result.current.setSigningOut).toBe('function');
-    expect(typeof result.current.setWeeklyStatsOpen).toBe('function');
     expect(typeof result.current.setOnboardingDismissed).toBe('function');
     expect(typeof result.current.setGhostOpponentName).toBe('function');
     expect(typeof result.current.setGhostOpponentUserId).toBe('function');

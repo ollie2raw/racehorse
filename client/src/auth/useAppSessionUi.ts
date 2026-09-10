@@ -32,8 +32,6 @@ export type UseAppSessionUiResult = {
   setUsernameModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   signingOut: boolean;
   setSigningOut: React.Dispatch<React.SetStateAction<boolean>>;
-  weeklyStatsOpen: boolean;
-  setWeeklyStatsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   welcomeOpen: boolean;
   setWelcomeOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
@@ -48,10 +46,9 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  // welcomeOpen (set from the hasSeenWelcome flag below) and weeklyStatsOpen are
-  // exposed for a welcome / weekly-stats modal that has no UI consumer yet — they
-  // used to be routed through the unused `homeOverlays` route bundle (removed).
-  const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
+  // welcomeOpen is set from the hasSeenWelcome flag below but has no UI consumer
+  // yet (the first-visit welcome modal — a product decision). It used to be
+  // routed through the unused `homeOverlays` route bundle (removed in S8).
   const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(() => {
@@ -127,8 +124,6 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
     setUsernameModalOpen,
     signingOut,
     setSigningOut,
-    weeklyStatsOpen,
-    setWeeklyStatsOpen,
     welcomeOpen,
     setWelcomeOpen,
   };
