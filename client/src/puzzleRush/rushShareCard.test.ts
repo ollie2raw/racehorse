@@ -1,98 +1,78 @@
 import { describe, it, expect } from 'vitest';
-import { buildRushShareText } from './rushShareCard';
+import { buildRushShareText, PUZZLE_RUSH_PUZZLES_PER_RUN } from './rushShareCard';
 import { SITE_DOMAIN } from '../lib/siteUrl';
 
 describe('buildRushShareText', () => {
-  it('shows puzzle number, one emoji per puzzle, solve count, and time', () => {
-    const text = buildRushShareText({
-      score: 250,
-      solved: 2,
-      puzzles: [
-        { solved: true },
-        { solved: false },
-        { solved: true },
-      ],
-      secondsBanked: 2,
-      runDate: '2026-08-31',
-    });
-    expect(text).toContain('Racehorse Puzzle Rush #144');
-    expect(text).toContain('🟩🟥🟩');
-    expect(text).toContain('2 solved');
-    expect(text).toContain('2s');
-    expect(text).toContain(SITE_DOMAIN);
+  it('renders puzzle number, a fixed 15-cell 🟩/🟥 grid, solve count, and site', () => {
+    const text = buildRushShareText({ solved: 11, runDate: '2026-09-09' });
+    expect(text).toBe(
+      [
+        'Racehorse Puzzle Rush #153',
+        '🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥',
+        '',
+        '11 solved',
+        SITE_DOMAIN,
+      ].join('\n'),
+    );
   });
 
-  it('formats minutes and seconds correctly', () => {
-    const text = buildRushShareText({
-      score: 900,
-      solved: 7,
-      puzzles: [
-        { solved: true },
-        { solved: true },
-        { solved: true },
-        { solved: true },
-        { solved: true },
-        { solved: true },
-        { solved: true },
-      ],
-      secondsBanked: 125, // 2m 5s
-      runDate: '2026-08-31',
-    });
-    expect(text).toContain('2m 5s');
+  it('grid is always exactly PUZZLE_RUSH_PUZZLES_PER_RUN cells', () => {
+    for (const solved of [0, 1, 7, 14, 15]) {
+      const grid = buildRushShareText({ solved, runDate: '2026-09-09' }).split('\n')[1];
+      const cells = [...grid.matchAll(/🟩|🟥/g)].length;
+      expect(cells).toBe(PUZZLE_RUSH_PUZZLES_PER_RUN);
+      expect((grid.match(/🟩/g) ?? []).length).toBe(solved);
+      expect((grid.match(/🟥/g) ?? []).length).toBe(PUZZLE_RUSH_PUZZLES_PER_RUN - solved);
+    }
   });
 
-  it('omits time when no bonuses earned', () => {
-    const text = buildRushShareText({
-      score: 250,
-      solved: 2,
-      puzzles: [
-        { solved: true },
-        { solved: false },
-      ],
-      secondsBanked: 0,
-      runDate: '2026-08-31',
-    });
-    // Should only show solve count, no time bonuses
-    const lines = text.split('\n');
-    expect(lines[2]).toBe('2 solved');
-    expect(text).not.toMatch(/\d+[ms]\s/); // No "5s " or "2m " pattern
+  it('a perfect run is all 🟩, no 🟥', () => {
+    const text = buildRushShareText({ solved: 15, runDate: '2026-09-09' });
+    expect(text.split('\n')[1]).toBe('🟩'.repeat(15));
+    expect(text).toContain('15 solved');
   });
 
-  it('calculates puzzle number from run_date', () => {
-    const text = buildRushShareText({
-      score: 10,
-      solved: 1,
-      puzzles: [{ solved: true }],
-      secondsBanked: 0,
-      runDate: '2026-04-10',
-    });
-    expect(text).toContain('#1');
+  it('a zero-solve run is all 🟥', () => {
+    expect(buildRushShareText({ solved: 0 }).split('\n')[1]).toBe('🟥'.repeat(15));
   });
 
-  it('defaults to puzzle #1 when run_date is missing', () => {
-    const text = buildRushShareText({
-      score: 10,
-      solved: 1,
-      puzzles: [{ solved: true }],
-      secondsBanked: 0,
-    });
-    expect(text).toContain('#1');
+  it('clamps a solve count outside 0..15 and rounds a non-integer', () => {
+    expect(buildRushShareText({ solved: 99 }).split('\n')[1]).toBe('🟩'.repeat(15));
+    expect(buildRushShareText({ solved: -3 }).split('\n')[1]).toBe('🟥'.repeat(15));
+    expect(buildRushShareText({ solved: 10.6 }).split('\n')[3]).toBe('11 solved');
   });
 
-  it('handles max-length run (15 puzzles) without truncation', () => {
-    const puzzles = Array(15).fill(null).map((_, i) => ({ solved: i < 13 }));
-    const text = buildRushShareText({
-      score: 1200,
-      solved: 13,
-      puzzles,
-      secondsBanked: 45,
-      runDate: '2026-08-31',
+  it('calculates the puzzle number from run_date, defaulting to #1', () => {
+    expect(buildRushShareText({ solved: 1, runDate: '2026-04-10' })).toContain('#1');
+    expect(buildRushShareText({ solved: 1 })).toContain('#1');
+    expect(buildRushShareText({ solved: 1, runDate: 'not-a-date' })).toContain('#1');
+  });
+
+  // The reason this builder exists: RushResultsView (end of run) and
+  // PuzzleRushLeaderboardScreen (later, from the persisted board row) used to
+  // format share text separately and disagreed — the leaderboard emitted
+  // squares with no fail marker. Both now derive the input from the same two
+  // run facts, so the output must be byte-identical for the same run.
+  it('RushResultsView and PuzzleRushLeaderboardScreen emit identical text for one run', () => {
+    // One finished run, as each surface sees it.
+    const run = { puzzlesSolved: 9, runDate: '2026-08-31' };
+
+    // RushResultsView: `{ solved: completion.run.puzzlesSolved ?? 0, runDate: completion.run.runDate }`
+    const completion = { run: { ...run } };
+    const fromResultsView = buildRushShareText({
+      solved: completion.run.puzzlesSolved ?? 0,
+      runDate: completion.run.runDate,
     });
-    const emojiLine = text.split('\n')[1];
-    const greenCount = (emojiLine.match(/🟩/g) ?? []).length;
-    const redCount = (emojiLine.match(/🟥/g) ?? []).length;
-    expect(greenCount).toBe(13);
-    expect(redCount).toBe(2);
-    expect(text).toContain('13 solved');
+
+    // PuzzleRushLeaderboardScreen: `{ solved: selfRow.puzzlesSolved, runDate: data.runDate }`
+    const selfRow = { puzzlesSolved: run.puzzlesSolved };
+    const leaderboardResponse = { runDate: run.runDate };
+    const fromLeaderboard = buildRushShareText({
+      solved: selfRow.puzzlesSolved,
+      runDate: leaderboardResponse.runDate,
+    });
+
+    expect(fromResultsView).toBe(fromLeaderboard);
+    expect(fromResultsView).toContain('🟥'); // both carry the fail marker now
   });
 });

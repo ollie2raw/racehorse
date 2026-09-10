@@ -2,28 +2,27 @@ import { SITE_DOMAIN } from '../lib/siteUrl';
 
 const PUZZLE_RUSH_LAUNCH_DATE = new Date('2026-04-10');
 
+/** Mirrors `PUZZLE_RUSH_CONFIG.run.puzzlesPerRun` (server/src/puzzleRush/config.ts). */
+export const PUZZLE_RUSH_PUZZLES_PER_RUN = 15;
+
 /**
  * Share text for a finished Puzzle Rush run.
  *
- * Puzzle number, one emoji per puzzle attempted (🟩 = solved, 🟥 = missed/skipped),
- * solve count, and site URL.
+ * Emitted **identically** by two surfaces — `RushResultsView` (right after the
+ * run) and `PuzzleRushLeaderboardScreen` (later, from the persisted leaderboard
+ * row). They're built from only the two facts both surfaces reliably have: the
+ * run date and the server's authoritative solve count. A fixed 15-cell grid,
+ * 🟩 = solved / 🟥 = not — so every player's share is the same shape and reads
+ * at a glance without the caption.
+ *
+ * Not included: banked seconds and a per-puzzle pass/fail breakdown. Neither is
+ * persisted with the run, so the leaderboard row cannot reproduce them and the
+ * two surfaces would diverge.
  */
-
-export interface RushSharePuzzle {
-  /** Whether this puzzle was solved (true) or missed/skipped (false). */
-  solved: boolean;
-}
-
 export interface RushShareInput {
-  /** The server's replayed total. The only score worth sharing. */
-  score: number;
-  /** Server's actual solve count for the run. */
+  /** The server's replayed solve count for the run. */
   solved: number;
-  /** Per-puzzle result (ordinal order). */
-  puzzles: RushSharePuzzle[];
-  /** Seconds gained from time bonuses. */
-  secondsBanked: number;
-  /** YYYY-MM-DD run date for puzzle numbering. */
+  /** YYYY-MM-DD run date, for puzzle numbering. */
   runDate?: string;
 }
 
@@ -37,30 +36,19 @@ export function calculatePuzzleNumber(runDate: string | undefined): number {
   return Math.max(1, daysSinceLaunch + 1);
 }
 
-function buildEmojiRow(puzzles: RushSharePuzzle[]): string {
-  return puzzles.map((p) => (p.solved ? '🟩' : '🟥')).join('');
-}
-
-function formatTime(secondsBanked: number): string {
-  if (secondsBanked <= 0) return '';
-  const minutes = Math.floor(secondsBanked / 60);
-  const seconds = secondsBanked % 60;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
-}
-
 export function buildRushShareText(input: RushShareInput): string {
   const puzzleNumber = calculatePuzzleNumber(input.runDate);
-  const emojiRow = buildEmojiRow(input.puzzles);
-  const solveText = `${input.solved} solved`;
-  const timeText = formatTime(input.secondsBanked);
-  const statLine = [solveText, timeText].filter(Boolean).join(' · ');
+  const solved = Math.max(
+    0,
+    Math.min(PUZZLE_RUSH_PUZZLES_PER_RUN, Math.round(input.solved || 0)),
+  );
+  const grid = '🟩'.repeat(solved) + '🟥'.repeat(PUZZLE_RUSH_PUZZLES_PER_RUN - solved);
 
   return [
     `Racehorse Puzzle Rush #${puzzleNumber}`,
-    emojiRow,
+    grid,
     '',
-    statLine,
+    `${solved} solved`,
     SITE_DOMAIN,
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 }
