@@ -95,9 +95,12 @@ export function MatchHistoryScrubber({ scrubber }: MatchHistoryScrubberProps) {
           onClick={backToLive}
           aria-label={backToLiveLabel}
         >
-          <span aria-hidden="true">⟲</span>
+          <span className="rh-scrubber-dot" aria-hidden="true" />
+          <span>Live</span>
           {movesBehindLive > 0 ? (
-            <span className="rh-scrubber-live-count">{movesBehindLive}</span>
+            <span className="rh-scrubber-live-count" aria-hidden="true">
+              +{movesBehindLive}
+            </span>
           ) : null}
         </Button>
       ) : null}

@@ -55,7 +55,7 @@ describe('MatchHistoryScrubber', () => {
     expect(screen.queryByText(/Move 3/)).toBeNull();
     // Hand detail is carried on the readout's accessible name, not visible text.
     expect(screen.getByLabelText('Move 3 of 6, hand 2')).toBeTruthy();
-    expect(screen.getByText('3', { selector: '.rh-scrubber-live-count' })).toBeTruthy();
+    expect(screen.getByText('+3', { selector: '.rh-scrubber-live-count' })).toBeTruthy();
     expect(screen.getByLabelText('Back to live, 3 new moves')).toBeTruthy();
   });
 

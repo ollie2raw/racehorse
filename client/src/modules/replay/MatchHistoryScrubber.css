@@ -53,11 +53,11 @@
 }
 
 /*
- * Chevron steppers — circular, quiet until hovered. The button is a full
- * 44×44 tap target (mobile floor / reachability gate), but `background-clip`
- * + padding keep the visible chevron and its hover disc at ~30px so the strip
- * still reads at the 38px HUD-pill height. Same 44px-hit / smaller-visual
- * pattern the other pill buttons use.
+ * Chevron steppers — quiet until hovered, when only the glyph brightens
+ * (no hover disc — at the 44px tap size it spilled past the 38px pill edge).
+ * The button keeps a full 44×44 tap target (mobile floor / reachability gate);
+ * padding keeps the visible chevron small, and negative margins on the strip
+ * pull the tap boxes in so the pill stays tight around the readout.
  */
 .rh-scrubber-step.rh-btn {
   flex-shrink: 0;
@@ -66,30 +66,43 @@
   height: 44px;
   padding: 6px;
   border-radius: var(--radius-pill);
-  background-clip: content-box;
+  background: transparent;
   font-family: var(--font-display);
   font-size: 19px;
   line-height: 1;
   color: rgba(247, 226, 181, 0.42);
 }
 
-.rh-scrubber-step.rh-btn:hover:not(:disabled) {
+.rh-scrubber-step.rh-btn:hover:not(:disabled),
+.rh-scrubber-step.rh-btn:focus-visible:not(:disabled) {
   color: #f2dc9a;
-  background: rgba(231, 182, 74, 0.1);
+  background: transparent;
+}
+
+.rh-scrubber-step.rh-btn:first-child {
+  margin-right: -10px;
+}
+
+/* The forward chevron — second stepper, whether or not a back-to-live
+   button follows it — pulls in from the readout the same way. */
+.rh-scrubber-step.rh-btn ~ .rh-scrubber-step.rh-btn {
+  margin-left: -10px;
 }
 
 .rh-scrubber-readout {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-width: 62px;
-  padding: 0 6px;
+  gap: 6px;
+  min-width: 34px;
+  padding: 0 2px;
   font-variant-numeric: tabular-nums;
 }
 
 /* "Live" state — green pip + cream label, the way a broadcast marks "on air". */
 .rh-scrubber-readout--live {
+  min-width: 0;
+  padding: 0;
   font-size: 12.5px;
   font-weight: 800;
   letter-spacing: 0.17em;
@@ -145,19 +158,30 @@
   color: rgba(247, 226, 181, 0.48);
 }
 
-/* Return-to-live — gold-outlined circle with a corner count badge. */
+/*
+ * Return-to-live — a small "● LIVE" chip. It reads as the destination
+ * ("tap to go back to the live board"), and matches the green-pip + cream
+ * label the readout already uses for the live state, so the same signal
+ * means the same thing in both places. The "+N" is how many moves have
+ * landed since you stepped away.
+ */
 .rh-scrubber-live.rh-btn {
-  position: relative;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  margin-left: 3px;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+  height: 26px;
+  margin-left: 5px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
   border: 1px solid rgba(231, 182, 74, 0.5);
   background: rgba(231, 182, 74, 0.09);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
   line-height: 1;
   color: #f2dc9a;
 }
@@ -167,22 +191,16 @@
   color: #f2dc9a;
 }
 
+/* Smaller than the readout's pip — it sits inside a chip, not the strip. */
+.rh-scrubber-live .rh-scrubber-dot {
+  width: 5px;
+  height: 5px;
+}
+
 .rh-scrubber-live-count {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
-  border-radius: var(--radius-pill);
-  background: var(--tier-elite);
-  color: var(--bg-obsidian);
-  font-family: var(--font-display);
-  font-size: 9.5px;
-  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-size: 10px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  border: 1.5px solid var(--bg-obsidian);
+  color: rgba(247, 226, 181, 0.5);
 }
