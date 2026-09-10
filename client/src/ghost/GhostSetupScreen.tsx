@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useAsyncData } from '../hooks/useAsyncData';
 import type { GhostProfileSummary } from './api';
 import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './api';
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
@@ -80,9 +81,6 @@ export default function GhostSetupScreen({
   onOpenAuth,
   onSignOut,
 }: GhostSetupScreenProps) {
-  const [summary, setSummary] = useState<GhostProfileSummary | null>(null);
-  const [loading, setLoading] = useState(Boolean(userId));
-  const [error, setError] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRecord[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(userId);
   const [selectedUsername, setSelectedUsername] = useState<string>('Your Ghost');
@@ -93,6 +91,17 @@ export default function GhostSetupScreen({
     [],
   );
   const heroSrc = useDeferredAsset('ghost-setup-hero', loadHeroAsset);
+
+  const { data: summaryData, loading, error: summaryError } = useAsyncData<GhostProfileSummary | null>(
+    () => (selectedUserId ? fetchGhostProfileSummary(selectedUserId) : Promise.resolve(null)),
+    [selectedUserId],
+    { enabled: Boolean(selectedUserId), errorMessage: 'Unable to load Ghost Mode.' },
+  );
+  // The hand-rolled version cleared summary/error whenever no ghost was selected;
+  // the hook retains them, so gate on the same condition at read time.
+  const summary = selectedUserId ? summaryData ?? null : null;
+  const error = selectedUserId ? summaryError : null;
+
   const isViewingOwnGhost = selectedUserId === userId;
   const isLocked = Boolean(userId) && isViewingOwnGhost && fritzGamesPlayed < UNLOCK_THRESHOLD;
   const canPlay = Boolean(summary) && !loading && !isLocked;
@@ -122,33 +131,6 @@ export default function GhostSetupScreen({
       });
     }
   }, [userId]);
-
-  useEffect(() => {
-    if (!selectedUserId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the summary panel when no user is selected; the effect runs the async summary fetch
-      setLoading(false);
-      setSummary(null);
-      setError(null);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    void fetchGhostProfileSummary(selectedUserId)
-      .then((data) => {
-        if (!active) return;
-        setSummary(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : 'Unable to load Ghost Mode.');
-        setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedUserId]);
 
   const handleSelectFriend = (friend: FriendRecord | null) => {
     if (!friend) {

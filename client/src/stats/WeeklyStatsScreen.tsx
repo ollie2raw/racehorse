@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { useAsyncData } from '../hooks/useAsyncData';
 import type { WeeklyRecap } from './statsApi';
+
+const WEEKLY_RECAP_GENERIC_ERROR = 'Unable to load weekly recap.';
 
 type WeeklyStatsScreenProps = {
   open: boolean;
@@ -13,41 +15,32 @@ export default function WeeklyStatsScreen({
   onClose,
   user,
 }: WeeklyStatsScreenProps) {
-  const [recap, setRecap] = useState<WeeklyRecap | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error: fetchError } = useAsyncData<WeeklyRecap | null>(
+    async () => {
+      if (!open || !user) return null;
+      let resp: { data: WeeklyRecap | null; error: string | null };
+      try {
+        const { fetchWeeklyRecap } = await import('./statsApi');
+        resp = await fetchWeeklyRecap(user);
+      } catch {
+        // The hand-rolled version's `.catch` discarded the real error and
+        // always showed the generic string — keep that.
+        throw new Error(WEEKLY_RECAP_GENERIC_ERROR);
+      }
+      // Known API error → surface it; missing data with no error → generic.
+      if (resp.error || !resp.data) {
+        throw new Error(resp.error ?? WEEKLY_RECAP_GENERIC_ERROR);
+      }
+      return resp.data;
+    },
+    [open, user],
+    { enabled: open && Boolean(user) },
+  );
 
-  useEffect(() => {
-    if (!open || !user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the recap when the panel closes; the effect runs the async recap fetch
-      setRecap(null);
-      setError(null);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    void import('./statsApi')
-      .then(({ fetchWeeklyRecap }) => fetchWeeklyRecap(user))
-      .then((resp) => {
-        if (!active) return;
-        setLoading(false);
-        if (resp.error || !resp.data) {
-          setError(resp.error ?? 'Unable to load weekly recap.');
-          setRecap(null);
-          return;
-        }
-        setRecap(resp.data);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoading(false);
-        setError('Unable to load weekly recap.');
-      });
-    return () => {
-      active = false;
-    };
-  }, [open, user]);
+  // The hand-rolled version cleared recap/error the moment the panel closed;
+  // the hook retains them, so gate on the same condition at read time.
+  const recap = open && user ? data ?? null : null;
+  const error = open && user ? fetchError : null;
 
   const recapSections = recap
     ? [

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import {
   buildFeedRowViewModel,
@@ -165,24 +166,6 @@ function filterItems(
   }
 }
 
-function feedItemsEqual(a: FeedItem[], b: FeedItem[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let index = 0; index < a.length; index += 1) {
-    const left = a[index];
-    const right = b[index];
-    if (
-      left.id !== right.id ||
-      left.username !== right.username ||
-      left.type !== right.type ||
-      left.created_at !== right.created_at
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 export default function ActivityFeedPanel({
   user,
   filter,
@@ -192,31 +175,41 @@ export default function ActivityFeedPanel({
   emptyAction,
   onFeedChange,
 }: ActivityFeedPanelProps) {
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
 
-  const load = useCallback(async () => {
-    if (!user) {
-      onFeedChange?.([]);
-      return;
-    }
-    setLoading(true);
-    const result = await fetchActivityFeed();
-    setLoading(false);
-    if (result.error) {
-      setError(result.error);
-      onFeedChange?.([]);
-      return;
-    }
-    setFeed((current) => (feedItemsEqual(current, result.feed) ? current : result.feed));
-    setVisibleCount((current) => (current === 10 ? current : 10));
-    onFeedChange?.(result.feed);
-  }, [onFeedChange, user]);
+  const hasUser = Boolean(user);
+  const { data, loading, error, refetch } = useAsyncData<FeedItem[]>(
+    async () => {
+      const result = await fetchActivityFeed();
+      if (result.error) throw new Error(result.error);
+      return result.feed;
+    },
+    [user?.id],
+    { enabled: hasUser },
+  );
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets pagination inside the feed-fetch callback this effect runs
-  useEffect(() => { void load(); }, [load]);
+  const feed = useMemo(() => data ?? [], [data]);
+
+  // `onFeedChange` is a plain prop callback — keep it out of the bridge effect's
+  // deps so a parent passing an inline function doesn't re-fire it every render.
+  const onFeedChangeRef = useRef(onFeedChange);
+  useEffect(() => {
+    onFeedChangeRef.current = onFeedChange;
+  });
+
+  // Bridge the fetched feed up to the parent + reset pagination on a fresh load.
+  // Fires only when the fetched data / error / signed-in state actually changes.
+  useEffect(() => {
+    if (!hasUser || error) {
+      onFeedChangeRef.current?.([]);
+      return;
+    }
+    if (data) {
+      onFeedChangeRef.current?.(data);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate pagination reset when a new feed lands (matches the pre-hook load())
+      setVisibleCount(10);
+    }
+  }, [data, error, hasUser]);
 
   const filtered = useMemo(
     () => filterItems(feed, filter, friendUsernames),
@@ -244,7 +237,7 @@ export default function ActivityFeedPanel({
           <span className="rh-sb-feed-state__kicker">Feed unavailable</span>
           <strong>{error}</strong>
           <p>
-            <button type="button" className="rh-sb-btn" onClick={() => void load()}>Retry</button>
+            <button type="button" className="rh-sb-btn" onClick={() => void refetch()}>Retry</button>
           </p>
         </div>
       </section>
