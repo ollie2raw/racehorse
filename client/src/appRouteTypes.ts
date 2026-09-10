@@ -126,18 +126,6 @@ export type AppRoutesSocialProps = {
   toast: string;
 };
 
-/** Home screen accordion hover state and welcome/weekly-stats overlays. */
-export type AppRoutesHomeOverlayProps = {
-  activeHomeMode: 'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn';
-  setActiveHomeMode: Dispatch<
-    SetStateAction<'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'>
-  >;
-  welcomeOpen: boolean;
-  setWelcomeOpen: Dispatch<SetStateAction<boolean>>;
-  weeklyStatsOpen: boolean;
-  setWeeklyStatsOpen: Dispatch<SetStateAction<boolean>>;
-};
-
 /** Multiplayer route: connection bundle, mode controller view, and in-match errors. */
 export type AppRoutesMultiplayerProps = {
   error: string;
@@ -180,7 +168,6 @@ export type AppRoutesProps = {
   botMatch: AppRoutesBotMatchProps;
   ghost: AppRoutesGhostProps;
   social: AppRoutesSocialProps;
-  homeOverlays: AppRoutesHomeOverlayProps;
   multiplayer: AppRoutesMultiplayerProps;
   tournament: AppRoutesTournamentProps;
 };
@@ -193,7 +180,6 @@ export type AppRoutesHostRouteBundles = {
   botMatch: AppRoutesBotMatchProps;
   ghost: AppRoutesGhostProps;
   social: Omit<AppRoutesSocialProps, 'toast' | 'connect'> & { toast: string };
-  homeOverlays: AppRoutesHomeOverlayProps;
   tournament: AppRoutesTournamentProps;
   multiplayerRoute: Pick<AppRoutesMultiplayerProps, 'mpSubView' | 'error' | 'setError'>;
 };

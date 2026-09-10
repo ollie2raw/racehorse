@@ -16,7 +16,6 @@ const APP_ROUTES_BUNDLE_KEYS: (keyof AppRoutesProps)[] = [
   'botMatch',
   'ghost',
   'social',
-  'homeOverlays',
   'multiplayer',
   'tournament',
 ];
@@ -28,14 +27,13 @@ const HOST_ROUTE_BUNDLE_KEYS: (keyof AppRoutesHostRouteBundles)[] = [
   'botMatch',
   'ghost',
   'social',
-  'homeOverlays',
   'tournament',
   'multiplayerRoute',
 ];
 
 describe('appRouteTypes prop bundles', () => {
-  it('AppRoutesProps exposes exactly 10 domain bundles (replacing 84 flat props)', () => {
-    expect(APP_ROUTES_BUNDLE_KEYS).toHaveLength(10);
+  it('AppRoutesProps exposes exactly 9 domain bundles (replacing the former 84 flat props)', () => {
+    expect(APP_ROUTES_BUNDLE_KEYS).toHaveLength(9);
     expect(APP_ROUTES_BUNDLE_KEYS).toEqual([
       'shell',
       'navigation',
@@ -44,17 +42,16 @@ describe('appRouteTypes prop bundles', () => {
       'botMatch',
       'ghost',
       'social',
-      'homeOverlays',
       'multiplayer',
       'tournament',
     ]);
   });
 
-  it('AppRoutesHostRouteBundles groups host-source route fields into 9 sub-bundles', () => {
-    expect(HOST_ROUTE_BUNDLE_KEYS).toHaveLength(9);
+  it('AppRoutesHostRouteBundles groups host-source route fields into 8 sub-bundles', () => {
+    expect(HOST_ROUTE_BUNDLE_KEYS).toHaveLength(8);
   });
 
-  it('flat bundle field counts sum to former 84-prop surface', () => {
+  it('flat bundle field counts sum to the route-prop surface', () => {
     type ShellKeys = keyof AppRoutesShellProps;
     type NavKeys = keyof AppRoutesNavigationProps;
     const fieldCounts = {
@@ -65,13 +62,12 @@ describe('appRouteTypes prop bundles', () => {
       botMatch: 8 satisfies number,
       ghost: 6 satisfies number,
       social: 9 satisfies number,
-      homeOverlays: 6 satisfies number,
       multiplayer: 9 satisfies number,
       tournament: 17 satisfies number,
     };
 
     const total = Object.values(fieldCounts).reduce((sum, n) => sum + n, 0);
-    expect(total).toBe(84);
+    expect(total).toBe(78);
 
     // Guard against accidental key renames dropping coverage
     const _shell: Record<ShellKeys, unknown> = {

@@ -53,7 +53,7 @@ export type UseAppRoutesPropsSource = {
 
 export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesProps {
   const { host, routeBundles } = source;
-  const { navigation, auth, learn, botMatch, ghost, social, homeOverlays, tournament, multiplayerRoute } =
+  const { navigation, auth, learn, botMatch, ghost, social, tournament, multiplayerRoute } =
     routeBundles;
 
   const appRootClassName = 'app large-mode';
@@ -368,7 +368,6 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       setProfileOriginMode: social.setProfileOriginMode,
       toast: social.toast,
     },
-    homeOverlays,
     multiplayer: {
       error: multiplayerRoute.error,
       actionError: source.actionError,
