@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrandLogo } from './BrandLogo';
 import { Button } from './primitives';
 import { AppBottomTabBar } from './nav/AppBottomTabBar';
+import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './nav/appPrimaryTabs';
 import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
@@ -45,21 +46,9 @@ interface GlobalNavProps {
   solidDarkChrome?: boolean;
 }
 
-const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
-  { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
-  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'journey', 'botSetup', 'ghostSetup', 'dailyFritz', 'daily'] },
-  { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
-  { label: 'Social', mode: 'feed', activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats'] },
-  { label: 'Learn', mode: 'learn', activeModes: ['learn', 'noBrainer'] },
-];
-
-const TAB_COLORS: Record<string, string> = {
-  'Single Player': '#9B6CFF', // Purple
-  'Multiplayer': '#3FA7FF',   // Blue
-  'Learn': '#19D8A2',         // Green
-  'Tournament': '#F5A524',    // Gold
-  'Social': '#0ea5e9',        // Cyan
-};
+// Desktop nav and the mobile bottom tab bar are driven by the SAME table
+// (`APP_PRIMARY_TABS`) so they can't disagree about which tab is active — the
+// two hand-maintained copies had drifted (audit §3 S4).
 
 /** `mode` navigates; its absence means sign out. */
 const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode }[] = [
@@ -281,9 +270,9 @@ export function GlobalNav({
             </div>
           ) : (
             <div className={`flex items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
-              {TABS.map((tab) => {
+              {APP_PRIMARY_TABS.map((tab) => {
                 const isActive = tab.activeModes.includes(currentMode as AppMode);
-                const accentColor = (isActive && activeColor) || TAB_COLORS[tab.label] || 'var(--tier-elite)';
+                const accentColor = (isActive && activeColor) || APP_PRIMARY_TAB_COLORS[tab.label] || 'var(--tier-elite)';
                 const textColor = isActive
                   ? (tab.label === 'Social' && activeColor ? 'var(--text-primary)' : accentColor)
                   : 'var(--text-muted)';
