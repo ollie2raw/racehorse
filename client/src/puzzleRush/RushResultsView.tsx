@@ -73,15 +73,9 @@ export function RushResultsView({
   const shareText = useMemo(
     () =>
       shareable
-        ? buildRushShareText({
-            score: serverScore,
-            solved: solved ?? 0,
-            puzzles: results.map((r) => ({ solved: r.solved })),
-            secondsBanked,
-            runDate: completion?.run.runDate,
-          })
+        ? buildRushShareText({ solved: solved ?? 0, runDate: completion?.run.runDate })
         : '',
-    [shareable, serverScore, solved, results, secondsBanked, completion],
+    [shareable, solved, completion],
   );
 
   const [shareDone, setShareDone] = useState(false);

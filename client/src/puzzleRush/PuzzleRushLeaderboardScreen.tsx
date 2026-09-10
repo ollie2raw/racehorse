@@ -7,8 +7,7 @@ import { avatarHue, getInitials } from '../components/hub/playerInitialsAvatarUt
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import type { AppMode } from '../types';
 import { fetchPuzzleRushLeaderboard } from './api';
-import { calculatePuzzleNumber } from './rushShareCard';
-import { SITE_DOMAIN } from '../lib/siteUrl';
+import { buildRushShareText } from './rushShareCard';
 import type { PuzzleRushLeaderboardEntry, PuzzleRushLeaderboardResponse } from './types';
 // Fritz's board depends on all three, in this order: the tokens the dfl-*
 // rules reference, then the rh-hub-* page/panel/FilterPills layout, then the
@@ -187,18 +186,10 @@ export function PuzzleRushLeaderboardScreen({
   // Only today's official run is shareable, and only what the player actually
   // posted today — not their all-time best. `selfRow` under the Today filter is
   // the caller's row on `data.daily`, so it exists iff they have an official
-  // run today.
+  // run today. Shares the exact `buildRushShareText` format RushResultsView emits.
   const shareText = useMemo(() => {
     if (filter !== 'today' || !selfRow || !data) return '';
-    const puzzleNumber = calculatePuzzleNumber(data.runDate);
-    const emojiBoxes = Array(selfRow.puzzlesSolved).fill('🟩').join('');
-    return [
-      `Racehorse Puzzle Rush #${puzzleNumber}`,
-      emojiBoxes,
-      '',
-      `${selfRow.puzzlesSolved} solved`,
-      SITE_DOMAIN,
-    ].filter(Boolean).join('\n');
+    return buildRushShareText({ solved: selfRow.puzzlesSolved, runDate: data.runDate });
   }, [data, filter, selfRow]);
 
   const handleShareResult = useCallback(() => {
