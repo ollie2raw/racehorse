@@ -1,102 +1,74 @@
-# Sentry alerting — dashboard setup (H5)
+# Sentry alerting — configuration record (H5)
 
-PRE_LAUNCH_HARDENING.md §4 item 5. This is **config, not code** — it must be done
-in the Sentry and Render dashboards. Everything below is a one-time setup;
-budget ~5 minutes.
+PRE_LAUNCH_HARDENING.md §4 item 5. **Config, not code.** As of **2026-09-09 this
+is fully configured and verified in the dashboard** — the sections below are the
+as-built record plus the steps to reproduce/audit it.
 
-Context: the code side (H1–H4) is done — client + server `beforeSend` volume
-guard, per-user aggregation on the MP move-log + tournament alerts, tournament
-invariant (T-15) alerts, and a bounded `/ready` probe. None of it does anything
-in production unless the steps below are true.
-
----
-
-## 0. Prerequisite — confirm the server DSN is actually set (CRITICAL)
-
-The **client** DSN is confirmed live (it is in the deployed bundle:
-`o4511656845312000.ingest.us.sentry.io`). The **server** only initialises Sentry
-when `SENTRY_DSN` is present *and* `NODE_ENV=production` (`server/src/index.ts`).
-`SENTRY_DSN` is **not** in `/ready`'s env map, so it may be unset — in which case
-every server-side alert (MP move-log verification, tournament winner-conflict,
-tournament invariant violations, Supabase circuit-breaker) is silently disabled.
-
-1. Sentry → **Settings → Projects →** (the server project) **→ Client Keys (DSN)** — copy the DSN.
-   - If there is only one project and it is the React one, create a second
-     project: **Projects → Create Project → Platform: Node.js**, name it
-     `racehorse-server`. Use its DSN below.
-2. Render → dashboard → the **racehorse** web service → **Environment** →
-   **Add Environment Variable**:
-   - Key: `SENTRY_DSN`
-   - Value: the server project DSN from step 1
-3. **Save, Manual Deploy → Deploy latest commit** (env changes need a redeploy).
-4. Verify: after deploy, Sentry → the server project → **Issues**. Within a few
-   minutes of normal traffic you should see the project marked as having
-   received its first event (or trigger one — see step 4 below).
+Context: the code side (H1–H4 / PRs #149–152) is done — client + server
+`beforeSend` volume guard, per-user aggregation on the MP move-log + tournament
+alerts, T-15 tournament invariant alerts, and a bounded `/ready` probe. This
+document is what makes those actually reach a human.
 
 ---
 
-## 1. Issue-alert rule → a real channel
+## Current state (verified 2026-09-09)
 
-Sentry → **Alerts → Create Alert → Issues** (one rule per project, or a single
-rule if both projects share an org-wide notification).
-
-- **When:** "A new issue is created" **OR** "The issue changes state from resolved to unresolved"
-- **If (optional but recommended):** add a second condition —
-  "The issue's level is equal to `error` or higher" — so `warning`-level
-  aggregation notes (first offence of an abuser, etc.) don't page, but the
-  escalated `_repeat` / `error` versions do.
-- **Then:** "Send a notification to [Slack / email / PagerDuty]".
-  - Slack: **Settings → Integrations → Slack → Add Workspace**, then pick the
-    channel here. A dedicated `#racehorse-alerts` is ideal.
-  - No Slack: set the action to **Send an email** to your address — still real-time.
-- **Action interval:** 30 min (dedupes a storm to one message per issue per 30 min).
-- Name it `prod new issue → #racehorse-alerts` and **Save Rule**.
-
-Repeat for the second project, or use an **org-level** rule that covers all
-projects if the plan allows.
-
-### Recommended tag-scoped rules (optional, 1 min each)
-
-The code sets these tags — a rule filtered on any of them goes straight to a
-"someone is abusing us / the bracket is corrupt" channel:
-
-| Tag | Meaning |
+| Thing | Value |
 |---|---|
-| `mp_alert:move_log_verification_failed_repeat` | same user failed move-log verification ≥3× in 7 days |
-| `tournament_alert:match_winner_conflict` | two producers disagreed on a completed match |
-| `tournament_alert:invariant_violation` | bracket invariant (T-INV-2/5/6) violated — player stranded |
+| Sentry project | **one shared `node-express` project** — client (`@sentry/react`) and server (`@sentry/node`) send to the **same DSN**. There is no separate frontend project. |
+| `SENTRY_DSN` on Render | **set** (confirmed: identical to the client `VITE_SENTRY_DSN` in the prod bundle → server-side capture is live). |
+| Baseline alert rule | **live** — trigger: issue is **new or regresses**; filter: **level ≥ `error`**; action: **email the `#racehorse` team**; **30-minute** per-issue throttle. |
+| Tag-scoped rules | **3 live**, each routed **individually to the maintainer** (not the team alias): `mp_alert:move_log_verification_failed_repeat`, `tournament_alert:match_winner_conflict`, `tournament_alert:invariant_violation`. |
+| Spike protection | **ON**. |
+| Plan / quota | **Developer (free)** — **5,000 errors/mo**; **23 used** this cycle at check time; **no payment method on file** (quota is a hard drop-ceiling, zero spend risk). |
+
+The tags come from the code: PR #150 sets `mp_alert` / `tournament_alert`
+(`match_winner_conflict`); PR #151 sets `tournament_alert: invariant_violation`
+(with `tournament_invariant` naming the specific violation).
 
 ---
 
-## 2. Spike protection — ON
+## How it was set up / how to audit it
 
-Sentry → **Settings → Projects →** (each project) **→ Spike Protection** →
-toggle **Enabled**.
+### 0. Server DSN (the one that silently breaks everything)
 
-- This is separate from the code-side `beforeSend` volume guard (which caps
-  ~20 events/min/instance before they leave the process). Spike protection is
-  Sentry's server-side backstop against a bill/quota blowout.
-- Also check **Settings → Subscription → Usage & Billing** — the free plan is
-  **5,000 errors/month**. Set an **On-Demand / spend cap** of `$0` if you do not
-  want to pay for overages (events past quota are dropped, not billed).
+The **server** only initialises Sentry when `SENTRY_DSN` is present *and*
+`NODE_ENV=production` (`server/src/index.ts`). To confirm it is set: Render →
+the **racehorse** web service → **Environment** → `SENTRY_DSN` present, and its
+value matches the client DSN host (`o4511656845312000.ingest.us.sentry.io`).
+Both SDKs point at the same project — that is intentional; do **not** split them.
 
----
+### 1. Baseline issue-alert rule
 
-## 3. Confirm `beforeSend` is not silently dropping everything
+Sentry → **Alerts → Rules**. The rule:
 
-After the server redeploy, in Sentry → server project → **Issues**, trigger a
-test error (e.g. hit a route that throws in a safe way, or temporarily add and
-remove a `Sentry.captureMessage('sentry wiring test')` call). Confirm it lands.
-The volume guard only drops *after* 20 events in a rolling minute, so a single
-test event always gets through.
+- **When:** "A new issue is created" **OR** "the issue changes state from resolved to unresolved"
+- **If:** "The event's level is equal to `error`" (so `warning`-level first-offence
+  aggregation notes don't page — only the escalated `error` / `_repeat` versions do)
+- **Then:** "Send a notification to the `#racehorse` team" (email)
+- **Action interval:** 30 min
 
----
+### 2. Tag-scoped rules (the abuse / corruption signals)
 
-## 4. One-line checklist
+Three separate rules, one per tag, each **Then → notify the maintainer directly**:
 
-- [ ] `SENTRY_DSN` set on the Render service + redeployed
-- [ ] Server project exists and has received an event
-- [ ] Issue-alert rule → Slack/email, action interval 30 min
-- [ ] (optional) tag-scoped rules for `*_repeat` / `winner_conflict` / `invariant_violation`
-- [ ] Spike protection enabled on both projects
-- [ ] On-demand spend cap set (or accepted) for the 5k/mo free quota
+| Rule filter | Meaning |
+|---|---|
+| tag `mp_alert` equals `move_log_verification_failed_repeat` | same user failed move-log verification ≥3× in 7 days |
+| tag `tournament_alert` equals `match_winner_conflict` | two producers disagreed on a completed match |
+| tag `tournament_alert` equals `invariant_violation` | bracket invariant (T-INV-2/5/6) violated — player stranded |
+
+### 3. Spike protection + plan
+
+- **Settings → Projects →** the project **→ Spike Protection** → **Enabled**.
+- **Settings → Subscription** — Developer (free), 5k errors/mo. No on-demand
+  budget / payment method, so overage events are dropped, never billed. The
+  code-side `beforeSend` volume guard (H1) is what keeps an error loop from
+  reaching the ceiling in the first place.
+
+### 4. Sanity check
+
+Trigger one event (a safe throwaway `Sentry.captureMessage('wiring test')` or a
+known-safe throwing route) and confirm it lands in **Issues** and the baseline
+rule emails the team. The volume guard only drops after 20 events in a rolling
+minute, so a single test event always gets through.
