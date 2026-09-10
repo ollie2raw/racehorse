@@ -151,3 +151,37 @@ multiplayer refactor needs it as a prerequisite.**
 Of the three D-items, **D5's incremental path is the safest and highest
 value-per-risk** — it has real e2e coverage, an established mechanical pattern,
 and no camera/lock-discipline landmine.
+
+---
+
+## 6. Correction after a closer look (2026-09-10) — PRs 1–4 do NOT hold up
+
+Attempted PRs 1–4. On inspection the "S8-shaped chips" mostly evaporate:
+
+1. **App.tsx has only 5 `useEffect`s in 1064 lines.** It is not effect soup — it
+   is clean hook-composition + the `appRoutesHostSource` object. Of the 5
+   effects, 3 are multiplayer/auth lifecycle (`joinedRoom` sequence-ref reset,
+   joined-room persist policy, session-expired → auth modal) — protected /
+   PR-5 territory — and 2 are trivial (toast cleanup, invite-code bootstrap).
+   **There is no "mode/route reconciliation effect cluster" to extract into
+   `useAppNavigationSync`.** (PR 4 — cancelled.)
+2. **Tournament auto-navigation is already extracted** into
+   `useTournamentMatchSession` — App.tsx just calls it with `setAppMode`.
+   Nothing to pull out.
+3. **The `board` / `hand` prop bundles are not in App.tsx.** Those props
+   (`boardForDisplay`, `multiplayerMoveLog`, `historyScrubberEnabled`, …) are
+   **computed in `MultiplayerGameShell.tsx`** (`client/src/multiplayer/` —
+   CLAUDE.md-protected "socket lifecycle code; do not restructure") and flow
+   through the multiplayer runtime bridge. Bundling them is a protected-layer
+   refactor, not an App.tsx chip. (PRs 1–2 — cancelled.)
+4. **`MultiplayerGameShell` is `React.memo`'d** and `useAppRoutesInput` is a
+   large `useMemo`. Assembling their props into fresh object literals **breaks
+   memoization** — a re-render regression, not a mechanical no-op. Any bundling
+   needs a matching `useMemo` in App.tsx, which is net-neutral churn (−15 funnel
+   lines, +1 memo, zero behaviour change), not a win. (PR 3 — not worth it.)
+
+**Revised recommendation: there is no safe incremental D5 path.** S8 (#165)
+already took the one genuinely dead bundle. What remains is inherent to App.tsx
+being the composition root — the connection-lifecycle hook (PR 5) is the only
+real D5 work, and it needs the dedicated session. App.tsx is in decent shape as
+it stands (5 effects, stable, 2 commits in 2026-09); leave it until PR 5.
