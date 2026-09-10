@@ -21,6 +21,7 @@ import { useSocketConnectionState } from './multiplayer/useSocketConnectionState
 import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
 import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
 import { AuthModalsLayer, MultiplayerShellErrorFallback } from './AppOverlays';
+import { WelcomeModal } from './components/WelcomeModal';
 import { MultiplayerGameShell } from './multiplayer/MultiplayerGameShell';
 import { AppRoutesGamePropsHost } from './multiplayer/AppRoutesGamePropsHost';
 import type { MultiplayerShellDelegates } from './multiplayer/multiplayerGameShellTypes';
@@ -191,6 +192,8 @@ export default function App() {
     setUsernameModalOpen,
     signingOut,
     setSigningOut,
+    welcomeOpen,
+    setWelcomeOpen,
   } = useAppSessionUi({ authUser: authUser ? { id: authUser.id, email: authUser.email ?? '' } : null, authProfile, authLoading, justVerified, showToast });
 
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
@@ -810,7 +813,25 @@ export default function App() {
     [handleSignOut, setAppMode],
   );
 
+  const dismissWelcome = useCallback(() => {
+    try {
+      window.localStorage.setItem('hasSeenWelcome', '1');
+    } catch {
+      // private-mode / storage-disabled — the modal just reopens next visit
+    }
+    setWelcomeOpen(false);
+  }, [setWelcomeOpen]);
+
   const authModalsLayer = (
+    <>
+    <WelcomeModal
+      open={welcomeOpen}
+      onDismiss={dismissWelcome}
+      onNavigate={(mode) => {
+        dismissWelcome();
+        setAppMode(mode);
+      }}
+    />
     <AuthModalsLayer
       authModalOpen={authModalOpen}
       supabaseEnabled={supabaseEnabled}
@@ -836,6 +857,7 @@ export default function App() {
       onUsernameSignOut={handleSignOut}
       signingOut={signingOut}
     />
+    </>
   );
 
   const multiplayerLobbyHostProps = useMultiplayerLobbyHostProps({
