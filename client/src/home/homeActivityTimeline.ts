@@ -116,7 +116,7 @@ export function buildHomeActivityTimeline(
       occurredAt: null,
       priority: HOME_ACTIVITY_EVENT_PRIORITIES.daily_puzzle_started,
       source: 'daily_puzzle',
-      route: 'daily',
+      route: 'puzzleRush',
       status: 'active',
       payload: { score: puzzle.score, nextAvailableSlotIndex: puzzle.nextAvailableSlotIndex, runDate: puzzle.runDate },
     });
@@ -131,7 +131,7 @@ export function buildHomeActivityTimeline(
       occurredAt,
       priority: HOME_ACTIVITY_EVENT_PRIORITIES.daily_puzzle_completed,
       source: 'daily_puzzle',
-      route: 'daily',
+      route: 'puzzleRush',
       status: 'completed',
       payload: { score: puzzle.score, runDate: puzzle.runDate },
     });
