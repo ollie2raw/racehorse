@@ -12,10 +12,18 @@ project) × **readiness** (safe-now / needs-product-input / needs-human-or-dashb
 **Bottom line up front:** the launch bar is met (`LAUNCH_READINESS` §1 empty),
 every numbered System in `HARDENING_PLAN` and every R-item in
 `REFACTOR_OPPORTUNITIES` §2 is closed, and `FEATURE_COMPLETENESS` §2 + §3 (S1–S8)
-are done or deferred. **Nothing on this list is both cheap and safe-now** — the
-cheap items are all already done (see §0) or need a human/product call; the
-substantive items are all `needs-dedicated-session`. Tonight's §3 run cleared the
-last of the executable backlog.
+are done or deferred. Almost nothing on this list is both cheap and safe-now —
+the cheap items are mostly already done (see §0) or need a human/product call,
+and the substantive items are all `needs-dedicated-session`. The one exception
+is **§1a** below.
+
+---
+
+## §1a — Cheap AND safe-now (surfaced 2026-09-10, not from the four audits)
+
+| # | Item | Size | Notes |
+|---|---|---|---|
+| 0 | **Journey has no discoverable home-screen entry.** `/journey` (6 chapters, 108 nodes — a shipped premium mode) is reachable only by deep link or by returning from a journey challenge. It is not on the home mode-tab strip, the Single Player hub (Fritz + Ghost only), or the Learn hub. `APP_PRIMARY_TABS` lists `journey` under the Single Player tab's `activeModes` (so `/journey` highlights "Solo") but nothing navigates there. Same discoverability gap as the welcome modal, but independent of it. | cheap · safe-now | Add an entry: a Journey card on the Single Player hub (alongside Fritz / Ghost), or a home "Today's Race"-adjacent card, or a Learn-hub tile. Copy exists ("A long march through Fritz…"). No protected files; `SinglePlayerHubScreen.tsx` already has the card pattern. Surfaced while drafting the welcome-modal copy (#171) — **not tied to that decision.** |
 
 ---
 
@@ -54,8 +62,8 @@ Fix the docs when convenient; no work needed.
 
 | # | Item | Source | Notes |
 |---|---|---|---|
-| 10 | **Welcome modal / onboarding** — a real shipped feature (first-visit mode-picker dialog) dropped by accident in the June 2026 `e8d3c23d` App split. State (`welcomeOpen`, `hasSeenWelcome` effect) survives in `useAppSessionUi`, wired to nothing. `phase-ac-client-polish-audit.md` classified it **IMPROVE**. See `welcome-modal-decision-package-2026-09-10.md`. | `FEATURE_COMPLETENESS` §5.3 (adjacent) | Resurrect (needs new copy vs current mode lineup) / formally cut / leave parked. |
-| 11 | **`WeeklyStatsScreen`** — extracted + migrated + tested, rendered by nothing (trigger died in the same June split). Data layer is done (`fetchWeeklyRecap` → live personal-stats-insights, same as `/stats`). Reviving = a trigger + render site only. | (same split) | Wire it up or delete the half-feature. Cheap if revived. |
+| 10 | **Welcome modal / onboarding** — a real shipped feature (first-visit mode-picker dialog) dropped by accident in the June 2026 `e8d3c23d` App split. State (`welcomeOpen`, `hasSeenWelcome` effect) survives in `useAppSessionUi`, wired to nothing. `phase-ac-client-polish-audit.md` classified it **IMPROVE**. See `welcome-modal-decision-package-*.md` + `welcome-modal-copy-drafts-*.md` (4 directions, PR #171). | `FEATURE_COMPLETENESS` §5.3 (adjacent) | Awaiting a copy-direction decision, then a build. |
+| 11 | ~~`WeeklyStatsScreen`~~ — **DONE (PR #170)**. Wired to a "Weekly Recap" trigger on `/stats`; dead `weeklyStatsOpen` removed from `useAppSessionUi`. | (same split) | — |
 | 12 | **Public profiles are auth-gated** — is that the intent? Sharing a profile link with a signed-out person gets them a gate. #142 fixed the *message*; the gate itself is a product call. | `FEATURE_COMPLETENESS` §5.2 | |
 | 13 | **Learn → "Lesson Library · COMING SOON"** — inert card on a primary nav route advertising an unbuilt feature. Same for Single Player hub's "More modes coming soon" and Match Found's "Per-match stats coming soon". | `FEATURE_COMPLETENESS` §5.3 | Build / remove / leave as honest placeholder. |
 | 14 | **`DefaultErrorFallback` says "Your progress has been saved."** unconditionally on every caught error. Rewording is easy; deciding the right copy is the open part. | `LAUNCH_READINESS` §3.5 | |
@@ -127,13 +135,14 @@ trigger. **Do not touch without new live evidence.**
 
 ## The one-paragraph answer
 
-Nothing is blocking and nothing cheap is left to just-do. The remaining work is
-three buckets: **(a)** a handful of one-time human/dashboard confirmations (§1 —
-CAPTCHA posture, `vercel env ls`, preview-deploys-on, the reaper deploy check);
-**(b)** product decisions on half-built or placeholder surfaces (§2 — welcome
-modal, WeeklyStatsScreen, "coming soon" cards, the auth-modal fallback); and
-**(c)** the genuinely large projects (§3 — D2/D4/D5, System 9's 5 items,
-FC-DEAD-1 deletion, F12/F15, and end-to-end mode coverage), of which **D5's
-incremental path and a Fritz/Puzzle-Rush completion spec are the best
-value-per-risk**. Everything else (§4) is a ratified REVISIT-IF-SCALE / ACCEPT
-that should not be touched without new evidence.
+Nothing is blocking. One cheap safe-now engineering item — **§1a: Journey has no
+home-screen entry**. Everything else is three buckets: **(a)** a handful of
+one-time human/dashboard confirmations (§1 — CAPTCHA posture, `vercel env ls`,
+preview-deploys-on, the reaper deploy check); **(b)** product decisions on
+half-built or placeholder surfaces (§2 — welcome modal, "coming soon" cards, the
+auth-modal fallback — *WeeklyStatsScreen wired up in #170*); and **(c)** the
+genuinely large projects (§3 — D2/D4/D5, System 9's 5 items, FC-DEAD-1 deletion,
+F12/F15, and end-to-end mode coverage), of which **a Fritz/Puzzle-Rush completion
+spec is the best value-per-risk** (D5's incremental path did **not** hold up —
+see the D5 scoping doc §6). Everything else (§4) is a ratified REVISIT-IF-SCALE /
+ACCEPT that should not be touched without new evidence.
