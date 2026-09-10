@@ -53,6 +53,21 @@ function stakeLabelFromElapsed(elapsedMs: number): string {
 const RING_R = 52;
 const RING_C = 2 * Math.PI * RING_R;
 
+type SeatStats = { wins: number; losses: number; draws: number; streak: number };
+
+/** Visible "W · L · D" line, or an em-dash placeholder while unknown. */
+function recordText(s: SeatStats | null): string {
+  return s ? `${s.wins} · ${s.losses} · ${s.draws}` : '— · — · —';
+}
+
+/** Accessible name for the record line — spells out what "W · L · D" means,
+ *  and says so plainly when the lookup hasn't landed (or failed). */
+function recordLabel(s: SeatStats | null): string {
+  return s
+    ? `Win–loss–draw record: ${s.wins} wins, ${s.losses} losses, ${s.draws} draws`
+    : 'Win–loss–draw record: not available';
+}
+
 /**
  * Full-screen match-found layout: dual player columns, center countdown ring,
  * match facts row, footer parameters. Shown after `queue:matched`.
@@ -67,8 +82,8 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
     setSecondsLeft(totalSeconds);
   }
 
-  const [youStats, setYouStats] = useState<{ record: string; streak: number } | null>(null);
-  const [oppStats, setOppStats] = useState<{ record: string; streak: number } | null>(null);
+  const [youStats, setYouStats] = useState<SeatStats | null>(null);
+  const [oppStats, setOppStats] = useState<SeatStats | null>(null);
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -88,11 +103,17 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
         const ratingProfile = profileResp.data;
         const stats = statsResp.data;
         if (ratingProfile || stats) {
-          const record = stats ? `${stats.wins} · ${stats.losses} · 0` : '0 · 0 · 0';
-          const streak = ratingProfile?.currentWinStreak ?? 0;
-          setYouStats({ record, streak });
+          setYouStats({
+            wins: stats?.wins ?? 0,
+            losses: stats?.losses ?? 0,
+            draws: 0,
+            streak: ratingProfile?.currentWinStreak ?? 0,
+          });
         }
-      }).catch(() => {});
+        // else: leave youStats null — the record line reads "not available".
+      }).catch(() => {
+        // Transient overlay; a failed lookup keeps the "not available" record.
+      });
     }
   }, [yourUserId]);
 
@@ -106,11 +127,17 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
         const ratingProfile = profileResp.data;
         const stats = statsResp.data;
         if (ratingProfile || stats) {
-          const record = stats ? `${stats.wins} · ${stats.losses} · 0` : '0 · 0 · 0';
-          const streak = ratingProfile?.currentWinStreak ?? 0;
-          setOppStats({ record, streak });
+          setOppStats({
+            wins: stats?.wins ?? 0,
+            losses: stats?.losses ?? 0,
+            draws: 0,
+            streak: ratingProfile?.currentWinStreak ?? 0,
+          });
         }
-      }).catch(() => {});
+        // else: leave oppStats null — the record line reads "not available".
+      }).catch(() => {
+        // Transient overlay; a failed lookup keeps the "not available" record.
+      });
     }
   }, [payload.opponent.userId]);
 
@@ -151,8 +178,8 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
                   </span>
                   <span>Rated</span>
                 </p>
-                <p className="mm-found-seat__record" aria-label="Record placeholder">
-                  {youStats ? youStats.record : '— · — · —'}
+                <p className="mm-found-seat__record" aria-label={recordLabel(youStats)}>
+                  {recordText(youStats)}
                 </p>
                 <p className="mm-found-seat__elo-row">
                   <span className="mm-found-seat__elo-num">{formatElo(payload.yourRating)}</span>
@@ -207,8 +234,8 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
                   </span>
                   <span>Rated</span>
                 </p>
-                <p className="mm-found-seat__record" aria-label="Record placeholder">
-                  {oppStats ? oppStats.record : '— · — · —'}
+                <p className="mm-found-seat__record" aria-label={recordLabel(oppStats)}>
+                  {recordText(oppStats)}
                 </p>
                 <p className="mm-found-seat__elo-row">
                   <span className="mm-found-seat__elo-num mm-found-seat__elo-num--blue">
