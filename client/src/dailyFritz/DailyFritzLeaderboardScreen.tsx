@@ -7,6 +7,7 @@ import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import { fetchFriends } from '../friends/friendsApi';
 import FilterPills from '../social/hub/FilterPills';
 import { avatarHue, getInitials } from '../components/hub/playerInitialsAvatarUtils';
+import { useAsyncData } from '../hooks/useAsyncData';
 import {
   fetchDailyFritzLeaderboard,
   getTodayDailyFritz,
@@ -226,9 +227,19 @@ export default function DailyFritzLeaderboardScreen({
   onBack,
   onNavigate,
 }: DailyFritzLeaderboardScreenProps) {
-  const [rows, setRows] = useState<DailyFritzLeaderboardRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // The hand-rolled version deliberately swallowed the real error and always
+  // showed this one string — keep that by rethrowing a fixed-message Error.
+  const { data: rowsData, loading, error } = useAsyncData<DailyFritzLeaderboardRow[]>(
+    async () => {
+      try {
+        return await fetchDailyFritzLeaderboard(runDate);
+      } catch {
+        throw new Error('Couldn’t load the leaderboard. Please try again.');
+      }
+    },
+    [runDate],
+  );
+  const rows = useMemo(() => rowsData ?? [], [rowsData]);
   const [filter, setFilter] = useState<LeaderboardFilter>('global');
   const [friendUsernames, setFriendUsernames] = useState<Set<string>>(new Set());
   const [countdownTick, setCountdownTick] = useState(0);
@@ -252,26 +263,6 @@ export default function DailyFritzLeaderboardScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [countdownTick],
   );
-
-  const loadLeaderboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchDailyFritzLeaderboard(runDate);
-      setRows(data);
-    } catch (err) {
-      void err;
-      setError('Couldn’t load the leaderboard. Please try again.');
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [runDate]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets friend usernames on sign-out; the effect runs the async friends fetch
-    void loadLeaderboard();
-  }, [loadLeaderboard]);
 
   useEffect(() => {
     if (!user?.id) {

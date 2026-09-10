@@ -1,6 +1,7 @@
 import { track } from '../lib/analytics';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components';
+import { useAsyncData } from '../hooks/useAsyncData';
 import FilterPills from '../social/hub/FilterPills';
 import { avatarHue, getInitials } from '../components/hub/playerInitialsAvatarUtils';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from '../dailyFritz/format';
@@ -156,31 +157,14 @@ export function PuzzleRushLeaderboardScreen({
   onNavigate?: (mode: AppMode) => void;
   currentUsername?: string | null;
 }) {
-  const [data, setData] = useState<PuzzleRushLeaderboardResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, error, loading } = useAsyncData<PuzzleRushLeaderboardResponse>(
+    () => fetchPuzzleRushLeaderboard(),
+    [],
+    { errorMessage: 'Could not load the leaderboard.' },
+  );
   const [filter, setFilter] = useState<Filter>('today');
   const [resetSeconds, setResetSeconds] = useState(() => secondsUntilNextPacificMidnight(new Date()));
   const [shareDone, setShareDone] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetchPuzzleRushLeaderboard();
-        if (!cancelled) setData(response);
-      } catch (caught) {
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : 'Could not load the leaderboard.');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setResetSeconds(secondsUntilNextPacificMidnight(new Date())), 1000);

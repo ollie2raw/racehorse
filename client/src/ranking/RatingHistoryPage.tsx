@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Area,
   CartesianGrid,
@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import LayoutScreen from '../ui/LayoutScreen';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { fetchRatingHistory, fetchRankingLeaderboard, type LeaderboardEntry, type RatingHistoryResponse } from './api';
 
 interface RatingHistoryPageProps {
@@ -72,58 +73,25 @@ export default function RatingHistoryPage({
   username,
   onBack,
 }: RatingHistoryPageProps) {
-  const [history, setHistory] = useState<RatingHistoryResponse | null>(null);
-  const [loading, setLoading] = useState(Boolean(userId));
-  const [error, setError] = useState<string | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardUnavailable, setLeaderboardUnavailable] = useState(false);
+  const { data: history, loading, error } = useAsyncData<RatingHistoryResponse | null>(
+    async () => {
+      if (!userId) return null;
+      const result = await fetchRatingHistory(userId);
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    [userId],
+    { enabled: Boolean(userId), errorMessage: 'Unable to load rating history.' },
+  );
 
-  useEffect(() => {
-    if (!userId) return;
+  const { data: leaderboardData } = useAsyncData(
+    async () => (await fetchRankingLeaderboard(20)).data,
+    [],
+  );
+  const leaderboard: LeaderboardEntry[] = leaderboardData?.leaderboard ?? [];
+  const leaderboardUnavailable = Boolean(leaderboardData?.leaderboard_load_failed);
 
-    let active = true;
-    void (async () => {
-      await Promise.resolve();
-      if (!active) return;
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await fetchRatingHistory(userId);
-        if (!active) return;
-        setLoading(false);
-        if (result.error) {
-          setError(result.error);
-          setHistory(null);
-          return;
-        }
-        setHistory(result.data);
-      } catch (err) {
-        if (!active) return;
-        setLoading(false);
-        setError(err instanceof Error ? err.message : 'Unable to load rating history.');
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [userId]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchRankingLeaderboard(20).then((result) => {
-      if (!active) return;
-      if (result.data?.leaderboard_load_failed) {
-        setLeaderboardUnavailable(true);
-      } else {
-        setLeaderboard(result.data?.leaderboard ?? []);
-      }
-    });
-    return () => { active = false; };
-  }, []);
-
-  const displayHistory = userId ? history : null;
+  const displayHistory = userId ? history ?? null : null;
   const displayLoading = userId ? loading : false;
   const displayError = userId ? error : 'Sign in to view your rating history.';
 
