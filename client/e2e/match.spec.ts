@@ -67,25 +67,11 @@ test.describe('Match lifecycle — Play vs Fritz', () => {
   });
 });
 
-test.describe('Match lifecycle — Daily Puzzle', () => {
-  test.skip('daily puzzle loads a playable board state — pending real E2E auth setup, see docs/diagnostic-daily-puzzle-e2e-failure-report.md', async ({ page }) => {
-    await page.goto('/daily');
-    await expect(page.locator('.daily-puzzle-root').first()).toBeVisible({ timeout: 20_000 });
-
-    // If lobby page is visible and shows start/resume button, click it to enter puzzle board
-    const startBtn = page.getByRole('button', { name: /Start Daily Ladder|Resume Daily/i });
-    try {
-      await startBtn.waitFor({ state: 'visible', timeout: 10_000 });
-      await startBtn.click();
-    } catch (e) {
-      // Not visible or already past this screen
-    }
-
-    // Must show the genuine puzzle board state — not blank, not loading, and not an error
-    const boardSelector = '.game-screen, .board-area, .nbl-board-canvas';
-    await expect(page.locator(boardSelector).first()).toBeVisible({ timeout: 15_000 });
-  });
-});
+// The "Match lifecycle — Daily Puzzle" block was removed here: it drove the
+// retired Daily Puzzle Ladder (`/daily` → "Start Daily Ladder"), gone since
+// 2026-08-20. The Daily Puzzle is now Puzzle Rush; an end-to-end run-completion
+// spec for it is deferred in FEATURE_COMPLETENESS_AUDIT.md §5.1 alongside the
+// other missing mode walkthroughs.
 
 test.describe('Match lifecycle — Pregame draw', () => {
   test('picking a draw tile reveals it and advances the draw phase', async ({ page }) => {
