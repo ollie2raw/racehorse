@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { fetchPuzzleRushToday, startPuzzleRush } from './api';
 import { PuzzleRushLeaderboardScreen } from './PuzzleRushLeaderboardScreen';
 import { PuzzleRushHubView } from './PuzzleRushHubView';
@@ -13,7 +14,6 @@ import { useRushRun } from './useRushRun';
 import type {
   PuzzleRushStage,
   PuzzleRushStartResponse,
-  PuzzleRushTodayResponse,
   RushPuzzleResult,
 } from './types';
 import './puzzleRush.css';
@@ -39,26 +39,17 @@ export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) 
   const [phase, setPhase] = useState<Phase>('intro');
   const [startResponse, setStartResponse] = useState<PuzzleRushStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [today, setToday] = useState<PuzzleRushTodayResponse | null>(null);
   // Bumped when a run finishes, so returning to the hub re-reads /today and
   // the new personal best / streak show without a hard refresh.
   const [todayNonce, setTodayNonce] = useState(0);
 
-  useEffect(() => {
-    if (phase !== 'intro') return undefined;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetchPuzzleRushToday();
-        if (!cancelled) setToday(response);
-      } catch {
-        // A hub that cannot read its stats still has to let you play.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, todayNonce]);
+  // Soft fetch: a hub that cannot read its stats still has to let you play, so
+  // an error is ignored and the last good `today` (if any) stays on screen.
+  const { data: today } = useAsyncData(
+    () => fetchPuzzleRushToday(),
+    [todayNonce],
+    { enabled: phase === 'intro' },
+  );
 
   const beginRun = useCallback(async () => {
     setPhase('starting');
