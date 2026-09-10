@@ -191,10 +191,6 @@ export default function App() {
     setUsernameModalOpen,
     signingOut,
     setSigningOut,
-    weeklyStatsOpen,
-    setWeeklyStatsOpen,
-    welcomeOpen,
-    setWelcomeOpen,
   } = useAppSessionUi({ authUser: authUser ? { id: authUser.id, email: authUser.email ?? '' } : null, authProfile, authLoading, justVerified, showToast });
 
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
@@ -730,9 +726,6 @@ export default function App() {
       ? `@${authUser.email.split('@')[0]}`
       : '@player';
   const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 800).toLocaleString();
-  const [activeHomeMode, setActiveHomeMode] = useState<
-    'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'
-  >('multiplayer');
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
 
@@ -955,14 +948,6 @@ export default function App() {
         profileOriginMode,
         setProfileOriginMode,
         toast,
-      },
-      homeOverlays: {
-        activeHomeMode,
-        setActiveHomeMode,
-        welcomeOpen,
-        setWelcomeOpen,
-        weeklyStatsOpen,
-        setWeeklyStatsOpen,
       },
       tournament: {
         tournament,

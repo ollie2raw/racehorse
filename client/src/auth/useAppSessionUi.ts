@@ -48,6 +48,9 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  // welcomeOpen (set from the hasSeenWelcome flag below) and weeklyStatsOpen are
+  // exposed for a welcome / weekly-stats modal that has no UI consumer yet — they
+  // used to be routed through the unused `homeOverlays` route bundle (removed).
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
 

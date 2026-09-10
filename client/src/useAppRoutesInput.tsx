@@ -110,7 +110,6 @@ export function useAppRoutesInput(source: UseAppRoutesInputSource): UseAppRoutes
       source.routeBundles.botMatch,
       source.routeBundles.ghost,
       source.routeBundles.social,
-      source.routeBundles.homeOverlays,
       source.routeBundles.tournament,
       source.routeBundles.multiplayerRoute,
       source.friendInvitePopup,
