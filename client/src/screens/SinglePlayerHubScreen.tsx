@@ -259,16 +259,45 @@ export default function SinglePlayerHubScreen({
               </section>
             ))}
             </div>
-          </div>
 
-          <div className="relative z-10 mt-[112px] mb-[70px] flex items-center justify-center gap-2.5 opacity-40">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="mb-0.5">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            <span className="text-[11px] font-black tracking-[0.25em] text-[#727083] uppercase">
-              More modes coming soon
-            </span>
+            <section
+              className="sp-solo-journey-card relative box-border flex cursor-pointer flex-col overflow-hidden rounded-[20px] px-7 py-7"
+              onClick={() => onNavigate("journey")}
+            >
+              <div className="home-card-scrim" aria-hidden="true" />
+              <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
+                <div className="sp-solo-mode-card__text sp-solo-mode-card__text--journey">
+                  <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">
+                    The Campaign
+                  </p>
+                  <h2 className="mt-1 text-[36px] font-bold tracking-[-0.045em] text-[#C77DFF]">
+                    Journey
+                  </h2>
+                  <p className="mt-2 max-w-[52ch] text-[16px] leading-relaxed text-[#AAA6B4]">
+                    A long march through Fritz — six chapters of instinct, tempo, and score
+                    pressure. Not a daily sprint.
+                  </p>
+                </div>
+                <Button
+                  variant="tier-master"
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onNavigate("journey");
+                  }}
+                  className="self-start desk:self-auto"
+                  style={{ width: 188, height: 50, justifyContent: "space-between" }}
+                  type="button"
+                >
+                  <span>Start</span>
+                  <span
+                    style={{ fontSize: 22, lineHeight: 1, color: "#C77DFF", opacity: 0.9 }}
+                    aria-hidden="true"
+                  >
+                    ›
+                  </span>
+                </Button>
+              </div>
+            </section>
           </div>
         </main>
       </div>
