@@ -13,7 +13,6 @@
     "test:focused": "vitest run",
     "soak:concurrent-load": "tsx scripts/concurrentLoadSoak.ts",
     "soak:daily-fritz-authority": "tsx scripts/dailyFritzAuthoritySoak.ts",
-    "soak:fritz-challenge-authority": "tsx scripts/fritzChallengeAuthoritySoak.ts",
     "soak:daily-puzzle-authority": "tsx scripts/dailyPuzzleAuthoritySoak.ts",
     "backtest:human-move-log": "tsx scripts/backtestHumanMoveLogVerification.ts",
     "check:policy-manifest": "tsx scripts/checkPolicyManifest.ts",
