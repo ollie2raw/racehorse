@@ -106,8 +106,8 @@
 }
 
 .journey-card-container .sp-solo-mode-card__art {
-  object-position: 60% 0%;
-  transform: scale(1.15) translate(0%, -3%);
+  object-position: center top;
+  transform: scale(1.9) translate(-10%, 3%);
 }
 
 .journey-card-container {
