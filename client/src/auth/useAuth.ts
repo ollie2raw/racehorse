@@ -324,6 +324,37 @@ function useAuthInternal() {
 
   useEffect(() => {
     let active = true;
+
+    // Dev-only e2e auth bypass is a *complete* replacement for the real
+    // Supabase session, not a value to seed and then let live auth events
+    // reconcile against. Checking it here — before the real-session wiring
+    // below even exists — and returning early is what makes that true: the
+    // real getSession() bootstrap never runs and, critically,
+    // onAuthStateChange never subscribes, so its first INITIAL_SESSION
+    // event (session: null, since there's no real Supabase session) can't
+    // race the synchronous setUser/setAccessToken/setProfile calls above and
+    // silently revert them to signed-out. This used to be an early `return`
+    // inside `init()` below, several lines before the (still-unconditional)
+    // onAuthStateChange subscription — the subscription didn't know init()
+    // had already fully handled auth, so it always attached, and its first
+    // event settled the race non-deterministically (confirmed directly: a
+    // Playwright run showed a real UI flip back to "signed out" moments
+    // after the e2e branch had set the user).
+    const e2eAuth = readE2eDevAuth();
+    if (e2eAuth) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- dev-only e2e bypass: synchronously replaces the real session-bootstrap effect entirely (see comment above), not a value layered onto external-system sync
+      setUser(e2eAuth.user);
+      setAccessToken(e2eAuth.token);
+      setProfile({
+        id: e2eAuth.user.id,
+        username: 'e2e_daily_fritz',
+      });
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     /**
      * Set once a live auth event has delivered a real signed-in user. The
      * bootstrap `getSession()` call can stay pending long after it timed out,
@@ -379,20 +410,10 @@ function useAuthInternal() {
     };
 
     const init = async () => {
-      const e2eAuth = readE2eDevAuth();
-      if (e2eAuth) {
-        if (active) {
-          setUser(e2eAuth.user);
-          setAccessToken(e2eAuth.token);
-          setProfile({
-            id: e2eAuth.user.id,
-            username: 'e2e_daily_fritz',
-          });
-          setLoading(false);
-        }
-        return;
-      }
-
+      // e2eAuth is handled above, before this effect body even reaches here
+      // — the whole real-session branch (this function, the
+      // onAuthStateChange subscription, the visibilitychange listener) is
+      // skipped entirely in that case.
       if (!supabase) {
         if (active) {
           setUser(null);
