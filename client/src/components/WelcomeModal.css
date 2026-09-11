@@ -1,0 +1,73 @@
+.rh-welcome-lede {
+  margin: 0 0 20px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.rh-welcome-modes {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rh-welcome-modes li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-control);
+  background: rgba(10, 16, 28, 0.5);
+}
+
+.rh-welcome-mode-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-welcome-mode-desc {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.rh-welcome-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.rh-welcome-cta .rh-btn {
+  flex: 1 1 180px;
+}
+
+.rh-welcome-more {
+  margin: 0 0 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.rh-welcome-more-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+}
+
+.rh-welcome-dismiss {
+  display: flex;
+  justify-content: flex-end;
+}

@@ -17,6 +17,8 @@ async function seedDailyFritzE2eAuth(context: BrowserContext, userId: string) {
     ({ userKey, bearerKey, userId: id, token }) => {
       window.localStorage.setItem(userKey, id);
       window.localStorage.setItem(bearerKey, token);
+      // Pre-dismiss the first-visit welcome modal (backdrop blocks the hub).
+      window.localStorage.setItem('hasSeenWelcome', '1');
     },
     {
       userKey: E2E_USER_ID_KEY,

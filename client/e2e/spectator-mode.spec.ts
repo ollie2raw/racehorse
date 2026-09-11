@@ -58,6 +58,9 @@ test.describe('Spectator Mode', () => {
   test('real Daily Fritz opt-in is discoverable and read-only over sockets', async ({ browser }, testInfo) => {
     const playerContext = await browser.newContext({ storageState: authState, viewport: { width: 1280, height: 720 } });
     const spectatorContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    for (const ctx of [playerContext, spectatorContext]) {
+      await ctx.addInitScript(() => window.localStorage.setItem('hasSeenWelcome', '1'));
+    }
     const player = await playerContext.newPage();
     const spectator = await spectatorContext.newPage();
     const assertPlayerClean = guardRuntime(player);
