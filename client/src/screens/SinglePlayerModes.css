@@ -160,9 +160,12 @@
 /* Journey — the campaign. A wide banner under the Fritz/Ghost pair rather than
    a third card (which would leave the 3-col row sparse). */
 .sp-solo-journey-card {
+  position: relative;
+  isolation: isolate;
   max-width: 1080px;
   width: 100%;
   margin-inline: auto;
+  min-height: 168px;
   background: rgba(10, 16, 28, 0.6);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(168, 85, 247, 0.28);
@@ -173,6 +176,22 @@
   transition:
     box-shadow 200ms ease,
     filter 200ms ease;
+}
+
+/* Journey art — a short wide banner instead of the tall square cards, so the
+   character is framed as a right-edge portrait rather than sharing the
+   percentage-based slot the taller cards use. Text-protection dim lives with
+   the other cards' overrides below (the ".home-main.sp-solo-main" editorial
+   zone), same specificity pattern, so it wins over the generic 52% rule. */
+.journey-card-container .sp-solo-mode-card__art-slot {
+  left: auto;
+  right: 0;
+  width: 260px;
+}
+
+.journey-card-container .sp-solo-mode-card__art {
+  object-position: 50% 4%;
+  transform: scale(1.05) translate(0%, 2%);
 }
 
 .sp-solo-journey-card:hover {
@@ -260,6 +279,20 @@
   filter: brightness(1.52) contrast(1.08) saturate(1.2);
   object-position: 52% 0%;
   transform: scale(1.56) translate(5%, -8%);
+}
+
+/* Journey — narrow right-edge portrait, left-to-right fade instead of the
+   taller cards' left-band dim (the slot itself is already a fixed-width band,
+   not most of the card, so a full-bleed horizontal gradient reads correctly). */
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container .sp-solo-mode-card__art-slot::after {
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(4, 7, 12, 0.85) 0%,
+    rgba(4, 7, 12, 0.15) 55%,
+    rgba(4, 7, 12, 0) 100%
+  );
+  box-shadow: none;
 }
 
 @media (max-width: 1280px) {

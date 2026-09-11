@@ -132,8 +132,13 @@ export default function SinglePlayerHubScreen({
     () => import("../assets/singlePlayerHub/fritzghost2.webp"),
     [],
   );
+  const loadJourneyArt = useCallback(
+    () => import("../assets/singlePlayerHub/fritzjourney.webp"),
+    [],
+  );
   const artFritzSrc = useDeferredAsset("single-player-fritz-art", loadFritzArt);
   const artGhostSrc = useDeferredAsset("single-player-ghost-art", loadGhostArt);
+  const artJourneySrc = useDeferredAsset("single-player-journey-art", loadJourneyArt);
   const modeArtByKey = useMemo(
     () => ({
       botSetup: artFritzSrc,
@@ -261,11 +266,24 @@ export default function SinglePlayerHubScreen({
             </div>
 
             <section
-              className="sp-solo-journey-card relative box-border flex cursor-pointer flex-col overflow-hidden rounded-[20px] px-7 py-7"
+              className="sp-solo-journey-card journey-card-container relative box-border flex cursor-pointer flex-col overflow-hidden rounded-[20px] px-7 py-7"
               onClick={() => onNavigate("journey")}
             >
+              <div className="sp-solo-mode-card__art-slot" aria-hidden>
+                {artJourneySrc ? (
+                  <img
+                    src={artJourneySrc}
+                    alt=""
+                    className="sp-solo-mode-card__art"
+                    draggable={false}
+                    decoding="async"
+                    loading="lazy"
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
               <div className="home-card-scrim" aria-hidden="true" />
-              <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
+              <div className="relative z-10 flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between desk:pr-[220px]">
                 <div className="sp-solo-mode-card__text sp-solo-mode-card__text--journey">
                   <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">
                     The Campaign
