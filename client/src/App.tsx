@@ -359,14 +359,9 @@ export default function App() {
 
   // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
   const { fetchGameState } = useMultiplayerResync({
-    socketRef,
-    // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
-    sessionRef,
-    // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
-    dispatchSession,
-    roomIdentityRef,
-    rejoinInFlightRef,
-    applyJoinedRoomResponseRef,
+    // eslint-disable-next-line react-hooks/refs -- runtime object shared into a hook — its ref-slice .current fields are read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
+    runtime: multiplayerRuntime,
+    trySchedulePlayerReadyRef,
     dispatchRecovery,
     normalizeRoomCode,
     authProfileUsername: authProfile?.username,
@@ -375,7 +370,6 @@ export default function App() {
     mpSubView,
     joinedRoom,
     hasLiveGameState,
-    trySchedulePlayerReadyRef,
     roomOperationEpochRef,
   });
 

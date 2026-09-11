@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
-import type { Socket } from 'socket.io-client';
 import { logger } from '../utils/logger';
 import {
   recordResyncCompleted,
@@ -10,7 +9,7 @@ import {
 } from './mpTelemetry';
 import type { RecoveryEvent } from './recoveryMachine';
 import { dispatchSocketEvent } from './socketEventBus';
-import { emitRoomJoin, type RoomAckResponse } from './roomTransport';
+import { emitRoomJoin } from './roomTransport';
 import type { StateUpdatePayload } from './protocol';
 import { getOrCreateGuestDisplayName } from '../match/recovery/matchRecovery';
 import {
@@ -18,24 +17,34 @@ import {
   selectJoinedRoomCode,
   selectMatchStarted,
 } from './session/sessionStateMachine';
-import type { SessionEvent, SessionSnapshot } from './session/sessionTypes';
 import {
   beginRoomOperation,
   isCurrentRoomOperation,
   type RoomOperationEpochRef,
 } from './roomOperationEpoch';
+import type { MultiplayerRuntime } from './runtime/runtimeTypes';
 
 export type UseMultiplayerResyncParams = {
-  socketRef: MutableRefObject<Socket | null>;
-  sessionRef: MutableRefObject<SessionSnapshot>;
-  dispatchSession: (event: SessionEvent) => void;
-  roomIdentityRef: MutableRefObject<{
-    username: string;
-    userId: string | null;
-    authToken: string | null;
-  } | null>;
-  rejoinInFlightRef: MutableRefObject<boolean>;
-  applyJoinedRoomResponseRef: MutableRefObject<(resp: RoomAckResponse) => void>;
+  /**
+   * D5 runtime migration (2026-09-10): socketRef, sessionRef/dispatchSession,
+   * roomIdentityRef, rejoinInFlightRef, and applyJoinedRoomResponseRef now
+   * come from the composed runtime's slices (runtime.socket / .session /
+   * .room / .controller.reconnect / .recovery) instead of five individual
+   * App.tsx ref params — same ref objects by identity (see
+   * runtimeComposition.ts's create*Runtime functions), proven in
+   * useMultiplayerResyncRuntimeSliceIdentity.test.ts.
+   *
+   * trySchedulePlayerReadyRef and roomOperationEpochRef stay individual
+   * params — neither has a runtime slice today. trySchedulePlayerReadyRef
+   * lives in MultiplayerSessionRefsRuntime (gameplayRuntime.ts), a type no
+   * create*Runtime function actually builds; runtime.gameplay only ever
+   * exposes MultiplayerGameplayRefsRuntime's 3 unrelated fields. Both are
+   * pre-existing gaps, not introduced here — see
+   * D5-runtime-migration-scoping-2026-09-10.md §2's confirmed-gaps list.
+   */
+  runtime: MultiplayerRuntime;
+  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
+  roomOperationEpochRef: RoomOperationEpochRef;
   dispatchRecovery: (event: RecoveryEvent) => void;
   normalizeRoomCode: (value: unknown) => string;
   authProfileUsername: string | undefined;
@@ -44,8 +53,6 @@ export type UseMultiplayerResyncParams = {
   mpSubView: 'quick' | 'private';
   joinedRoom: string | null;
   hasLiveGameState: boolean;
-  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
-  roomOperationEpochRef: RoomOperationEpochRef;
 };
 
 export type UseMultiplayerResyncResult = {
@@ -65,12 +72,8 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
   const resyncFlushRef = useRef<(() => void) | null>(null);
 
   const {
-    socketRef,
-    sessionRef,
-    dispatchSession,
-    roomIdentityRef,
-    rejoinInFlightRef,
-    applyJoinedRoomResponseRef,
+    runtime,
+    trySchedulePlayerReadyRef,
     dispatchRecovery,
     normalizeRoomCode,
     authProfileUsername,
@@ -79,9 +82,13 @@ export function useMultiplayerResync(params: UseMultiplayerResyncParams): UseMul
     mpSubView,
     joinedRoom,
     hasLiveGameState,
-    trySchedulePlayerReadyRef,
     roomOperationEpochRef,
   } = params;
+  const { socketRef } = runtime.socket;
+  const { sessionRef, dispatchSession } = runtime.session;
+  const { roomIdentityRef } = runtime.room;
+  const { rejoinInFlightRef } = runtime.controller.reconnect;
+  const { applyJoinedRoomResponseRef } = runtime.recovery;
 
   /** Fetch full authoritative game state from the server (room:join ack). */
   const fetchGameState = useCallback(
