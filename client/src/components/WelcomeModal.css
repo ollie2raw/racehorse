@@ -1,9 +1,27 @@
-.rh-welcome-lede {
+.rh-welcome-start {
   margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--tier-elite);
+  border-radius: var(--radius-control);
+  background: rgba(10, 16, 28, 0.5);
+}
+
+.rh-welcome-start-label {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tier-elite);
+}
+
+.rh-welcome-start-desc {
+  margin: 0 0 14px;
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .rh-welcome-modes {
@@ -41,30 +59,12 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
-.rh-welcome-cta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.rh-welcome-cta .rh-btn {
-  flex: 1 1 180px;
-}
-
-.rh-welcome-more {
-  margin: 0 0 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-family: var(--font-body);
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.4);
-}
-
 .rh-welcome-more-label {
-  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
   font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .rh-welcome-dismiss {

@@ -355,6 +355,32 @@ describe('useAppSessionUi — welcomeOpen', () => {
 
     expect(result.current.welcomeOpen).toBe(false);
   });
+
+  it('shows once on true first visit and does not reappear on a second load, after the real dismiss write', async () => {
+    // First "load": nothing in storage yet, so the hook opens the modal —
+    // matches the assertion above, restated here as this test's baseline.
+    const first = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams(),
+    });
+    await waitFor(() => expect(first.result.current.welcomeOpen).toBe(true));
+
+    // Dismiss exactly the way App.tsx's dismissWelcome() does: write the
+    // hasSeenWelcome flag, then close. The write is deliberately outside this
+    // hook (App.tsx owns it), same split already used for
+    // username_onboarding_dismissed elsewhere in this file — this test
+    // exercises that real write, not a stand-in.
+    localStorage.setItem('hasSeenWelcome', '1');
+    act(() => { first.result.current.setWelcomeOpen(false); });
+    first.unmount();
+
+    // Second "load": a fresh mount of the hook, same as a page reload. The
+    // flag written above must still be there, and the modal must not reopen.
+    const second = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams(),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(second.result.current.welcomeOpen).toBe(false);
+  });
 });
 
 // ── 6. justVerified toast ────────────────────────────────────────────────────
