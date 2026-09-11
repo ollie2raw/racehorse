@@ -50,6 +50,9 @@ export async function seedPlayerIdentity(context: BrowserContext, identity: E2EP
     ({ guestId, username, guestKey, nameKey }) => {
       window.localStorage.setItem(guestKey, guestId);
       window.localStorage.setItem(nameKey, username);
+      // Pre-dismiss the first-visit welcome modal — its backdrop would block
+      // every hub interaction in these self-built contexts.
+      window.localStorage.setItem('hasSeenWelcome', '1');
     },
     {
       guestId: identity.guestId,

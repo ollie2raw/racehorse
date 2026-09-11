@@ -14,6 +14,22 @@ const CLIENT_PORT = REACHABILITY ? 5233 : 5173;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${CLIENT_PORT}`;
 const PHONE = { width: 390, height: 844 } as const;
 
+// The first-visit welcome modal (useAppSessionUi → welcomeOpen) renders a
+// full-screen backdrop that intercepts pointer events until dismissed. Every
+// spec that isn't specifically exercising it wants it pre-dismissed; seed the
+// `hasSeenWelcome` flag into the default context's storage. Specs that build
+// their own `browser.newContext()` seed it themselves (see
+// helpers/multiplayerMatch.ts). `welcome-modal.spec.ts` opts back out.
+const WELCOME_DISMISSED = {
+  cookies: [],
+  origins: [
+    {
+      origin: `http://localhost:${CLIENT_PORT}`,
+      localStorage: [{ name: 'hasSeenWelcome', value: '1' }],
+    },
+  ],
+};
+
 export default defineConfig({
   testDir: './e2e',
   // Aborts the run if the client dev server is serving stale config (issue
@@ -28,6 +44,7 @@ export default defineConfig({
     baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    storageState: WELCOME_DISMISSED,
   },
   projects: [
     {

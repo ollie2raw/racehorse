@@ -21,7 +21,7 @@ test.describe('Daily Fritz v2 official lifecycle',()=>{
   test.skip(!hasValidAuthState(authState),'A current authenticated Daily Fritz QA fixture is required');
   test('starts and resumes the exact official match snapshot',async({browser},testInfo)=>{
     test.setTimeout(90_000);
-    const context=await browser.newContext({storageState:authState,viewport:{width:1440,height:900}});const page=await context.newPage();const assertClean=runtimeGuard(page);
+    const context=await browser.newContext({storageState:authState,viewport:{width:1440,height:900}});await context.addInitScript(()=>window.localStorage.setItem('hasSeenWelcome','1'));const page=await context.newPage();const assertClean=runtimeGuard(page);
     try{
       await openDailyFritz(page);await page.screenshot({path:testInfo.outputPath('daily-fritz-pre-run.png'),fullPage:true});
       const action=page.locator('.df-pvf-start-btn');await expect(action).toBeEnabled();await action.click();
