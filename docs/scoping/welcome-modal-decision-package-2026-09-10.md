@@ -232,3 +232,112 @@ and cheaply if wanted.
 - No new welcome copy.
 - No decision on resurrect / cut / park.
 - No decision on where a `WeeklyStatsScreen` trigger should live.
+
+---
+
+## 7. Copy drafts (2026-09-11) — for review, not a decision
+
+Two options for a new first-visit modal, per §1's history and §2's mode
+list. **Not built, not wired to anything** — copy only. Both use the
+`<Modal>` primitive per `client/CLAUDE.md` (the original in §3 predates it
+and used raw inline styles — don't reuse that markup).
+
+### Grounding table — every claim below traces to real, current copy
+
+| Mode | Route | Line grounded in | Source |
+|---|---|---|---|
+| Daily Fritz | `/daily-fritz` | "Best of 3 series. Same deal for everyone." | `HomeScreen.tsx:235` (current card copy) |
+| Puzzle Rush | `/puzzle-rush` | "Beat the clock. Solve as many as you can." | `HomeScreen.tsx:270` (current card copy) |
+| Multiplayer | `/multiplayer` | Private room, room code, invite links; capped at 2 players (1v1) | `PrivateMatchLobbyControlPanel.tsx:201/218/448` (room-code UI copy) + `server/src/rooms.ts:530,782` (`room.players.length >= 2` / `!== 2` — confirms 1v1, not the old modal's unverified claim) |
+| Tournament | `/tournament` | "8-player bracket. First to 30 wins. One champion every 30 minutes." | `TournamentHubScreen.tsx:330` — **current mechanic, and it has changed**: it's now a fixed 8-player single-elimination bracket, not the old modal's "round-robin lobby (4+ players)." The §3 copy is stale and was not reused. |
+| Play vs Fritz | `/solo/fritz` | "Choose your tier and format, then start a match against Fritz." | `bot/PlayVsFritz.tsx:216` (current subtitle) |
+| Journey | `/journey` | "Master every position. Beat the campaign." (tagged "Flagship Campaign") | `journey/JourneyHomeEntryCard.tsx:67,69` |
+| Ghost | `/solo/ghost` | "Train a rolling model of how you play from Fritz matches, then spar against your ghost—or a friend's." | `ghost/GhostSetupScreen.tsx:264` (current subtitle, signed-in state) |
+| The Lab | `/practice` | "Some starting hands win in one turn — all 7 tiles in a single chain." | `learn/LearnHome.tsx` mode-card `desc` for `id: 'lab'` |
+| Learn / How to Play | `/learn` | "Walk through the rules and core instincts before your first coached hand." | `learn/LearnHome.tsx` mode-card `desc` for `id: 'howToPlay'` |
+
+**Flagged — insufficient material for a crisp one-liner:** the old modal's
+"Social" copy (`§3`: "tracks your wins, point diff, and streaks... weekly
+leaderboard" / "Add friends... challenge them directly") describes real
+features (`social/LeaderboardScreen.tsx`, `social/ActivityFeedScreen.tsx`
+both have friend-adding/challenging and leaderboard tabs) but there's no
+current single sentence anywhere in the codebase that describes "Social"
+as one thing — it's a leaderboard, a friends list, and an activity feed
+under one nav tab. Both drafts below describe it as two short clauses
+rather than inventing a unifying tagline.
+
+### Option A — Daily Fritz leads as "start here"
+
+```
+Welcome to Racehorse Dominoes
+
+Start here: Daily Fritz — best of 3, same deal for everyone, once a day.
+[Play Daily Fritz →]
+
+Everything else, whenever you want it:
+· Puzzle Rush — beat the clock, solve as many as you can.
+· Multiplayer — invite a friend with a room code, 1v1 live.
+· Tournament — 8-player bracket, first to 30 wins, a new champion every
+  30 minutes.
+· Play vs Fritz — pick a tier and format, practice offline anytime.
+· Journey — the flagship campaign: master every position, beat every
+  chapter.
+· Ghost — train a model of your own play from your Fritz matches, then
+  spar against it (or a friend's).
+· The Lab — spot one-turn, all-7-tile clears before they're offered.
+· Learn — walk through the rules before your first coached hand.
+· Social — your leaderboard, your friends, and what they're up to.
+
+[Let's play →]
+```
+
+Rationale: Daily Fritz is the one mode framed as a daily habit everywhere
+else in the product (`HomeScreen.tsx`'s "Today's Race" section, the streak
+strip), so leading with it here matches what the rest of the home screen
+already trains a returning user to expect. New users get one obvious first
+click instead of nine equal-weight options.
+
+### Option B — neutral mode grid, nothing singled out
+
+```
+Welcome to Racehorse Dominoes
+
+Pick a mode. Everything tracks automatically as you play.
+
+┌─────────────────┬─────────────────┬─────────────────┐
+│ Daily Fritz      │ Puzzle Rush      │ Multiplayer      │
+│ Best of 3, same  │ Beat the clock,  │ Invite a friend  │
+│ deal for         │ solve as many    │ with a room      │
+│ everyone.        │ as you can.      │ code, 1v1 live.  │
+├─────────────────┼─────────────────┼─────────────────┤
+│ Tournament       │ Play vs Fritz    │ Journey          │
+│ 8-player         │ Pick a tier and  │ Master every     │
+│ bracket, first   │ format, practice │ position, beat   │
+│ to 30 wins.      │ offline anytime. │ the campaign.    │
+├─────────────────┼─────────────────┼─────────────────┤
+│ Ghost            │ The Lab          │ Learn / Social   │
+│ Train a model of │ Spot one-turn,   │ How to play,     │
+│ your own play,   │ all-7-tile       │ your stats,      │
+│ then spar        │ clears before    │ friends, and     │
+│ against it.      │ they're offered. │ leaderboard.     │
+└─────────────────┴─────────────────┴─────────────────┘
+
+[Let's play →]
+```
+
+Rationale: matches the original 2026 modal's structure (a flat grid, no
+mode singled out) and the zero-state's own "five one-word tabs, equal
+weight" framing from §4 — closer to the *lineage* of what was cut than
+Option A, at the cost of not solving §4's "nothing says start here"
+problem it was built to diagnose.
+
+### Open questions for product, not resolved here
+
+- Both drafts fold Learn + Social into one line/cell for space; if either
+  is meant to be a primary destination rather than a footnote, it needs
+  its own line and this doc's grounding table doesn't have strong enough
+  source copy for Social specifically (see the flag above) — that'd need
+  new copy, not just condensed existing copy.
+- Neither draft revives `WeeklyStatsScreen` (§5) — it's a separate,
+  cheap, independently shippable trigger, not part of a first-visit
+  modal's job.
