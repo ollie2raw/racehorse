@@ -333,7 +333,7 @@ export default function App() {
     multiplayerRuntimeRef.current = createMultiplayerRuntime(runtimeBootstrapRef.current);
   }
   const multiplayerRuntime = multiplayerRuntimeRef.current;
-  const { sessionRef, dispatchSession } = multiplayerRuntime.session;
+  const { sessionRef } = multiplayerRuntime.session;
 
   const shellDelegateActions = useMultiplayerShellDelegates(shellDelegatesRef);
   const {
@@ -553,30 +553,17 @@ export default function App() {
     emitCreateRoom,
     applyJoinedRoomResponse,
     handleMatchmakingAutoJoin,
-  // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
+    /* eslint-disable react-hooks/refs -- runtime object shared into a hook — its ref-slice .current fields are read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2) */
   } = useMultiplayerRoomCallbacks({
-    pendingCreateResolversRef,
-    maxSequenceRef,
+    runtime: multiplayerRuntime,
     maxEventSequenceRef,
     roomMatchIdRef,
     roomOperationEpochRef,
-    resyncBufferedUpdateRef,
     shellDelegatesRef,
-    autoJoinAttemptedRef,
     appModeRef,
-    joinedRoomResponseRef,
-    roomPlayersRef,
-    roomIdentityRef,
-    youRef,
-    socketRef,
-    // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
-    sessionRef,
     applyRoomEventMetaRef,
     schedulePlayerReadyRef,
-    applyJoinedRoomResponseRef,
     trySchedulePlayerReadyRef,
-    // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
-    dispatchSession,
     dispatchRecovery,
     setJoinedRoom,
     setRoomCode,
@@ -604,6 +591,7 @@ export default function App() {
     applyTournamentMetadataFromJoin,
     tournament,
   });
+  /* eslint-enable react-hooks/refs */
 
   // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   resetMultiplayerRoomStateRef.current = resetMultiplayerRoomState;
