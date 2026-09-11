@@ -7,10 +7,6 @@
   max-width: 55%;
 }
 
-.sp-solo-mode-card__text--journey {
-  max-width: 58%;
-}
-
 /* Common Slot for all cards */
 .sp-solo-mode-card__art-slot {
   position: absolute;
@@ -103,6 +99,38 @@
     0 22px 46px rgba(0, 0, 0, 0.36);
 }
 
+/* Journey Card — same chrome as The Lab (tier-master purple), equal weight
+   and size to Fritz/Ghost as a third card in the row, not a banner underneath. */
+.journey-card-container .sp-solo-mode-card__art-slot {
+  left: 28%;
+}
+
+.journey-card-container .sp-solo-mode-card__art {
+  object-position: 50% 4%;
+  transform: scale(1.22) translate(4%, 2%);
+}
+
+.journey-card-container {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid rgba(199, 125, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(199, 125, 255, 0.4),
+    inset -1px 0 0 rgba(199, 125, 255, 0.18),
+    inset 0 -40px 70px rgba(0, 0, 0, 0.32),
+    0 18px 38px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 200ms ease, filter 200ms ease;
+}
+
+.journey-card-container:hover {
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(199, 125, 255, 0.58),
+    inset -1px 0 0 rgba(199, 125, 255, 0.26),
+    inset 0 -40px 70px rgba(0, 0, 0, 0.28),
+    0 22px 46px rgba(0, 0, 0, 0.36);
+}
+
 /* Stats row (not on home daily cards — styled to read with home typography) */
 .sp-solo-stat-label {
   font-family: var(--font-display);
@@ -148,58 +176,13 @@
   min-height: 332px;
 }
 
-/* Fritz + Ghost only — keep cards premium width instead of a sparse 3-col row */
-.sp-solo-grid--pair {
+/* Fritz + Ghost + Journey — one row of three equal-weight cards. */
+.sp-solo-grid--trio {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: 1080px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 1560px;
   width: 100%;
   margin-inline: auto;
-}
-
-/* Journey — the campaign. A wide banner under the Fritz/Ghost pair rather than
-   a third card (which would leave the 3-col row sparse). */
-.sp-solo-journey-card {
-  position: relative;
-  isolation: isolate;
-  max-width: 1080px;
-  width: 100%;
-  margin-inline: auto;
-  min-height: 168px;
-  background: rgba(10, 16, 28, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(168, 85, 247, 0.28);
-  box-shadow:
-    inset 0 1px 0 rgba(199, 125, 255, 0.34),
-    inset 1px 0 0 rgba(199, 125, 255, 0.14),
-    0 18px 38px rgba(0, 0, 0, 0.3);
-  transition:
-    box-shadow 200ms ease,
-    filter 200ms ease;
-}
-
-/* Journey art — a short wide banner instead of the tall square cards, so the
-   character is framed as a right-edge portrait rather than sharing the
-   percentage-based slot the taller cards use. Text-protection dim lives with
-   the other cards' overrides below (the ".home-main.sp-solo-main" editorial
-   zone), same specificity pattern, so it wins over the generic 52% rule. */
-.journey-card-container .sp-solo-mode-card__art-slot {
-  left: auto;
-  right: 0;
-  width: 260px;
-}
-
-.journey-card-container .sp-solo-mode-card__art {
-  object-position: 50% 4%;
-  transform: scale(1.05) translate(0%, 2%);
-}
-
-.sp-solo-journey-card:hover {
-  filter: brightness(1.04);
-  box-shadow:
-    inset 0 1px 0 rgba(199, 125, 255, 0.5),
-    inset 1px 0 0 rgba(199, 125, 255, 0.22),
-    0 22px 46px rgba(0, 0, 0, 0.36);
 }
 
 /* ─── /solo hub only: two-layer editorial zone (not Learn, not Home) ─── */
@@ -281,23 +264,15 @@
   transform: scale(1.56) translate(5%, -8%);
 }
 
-/* Journey — narrow right-edge portrait, left-to-right fade instead of the
-   taller cards' left-band dim (the slot itself is already a fixed-width band,
-   not most of the card, so a full-bleed horizontal gradient reads correctly). */
+/* Journey — match Lab's dim/scale treatment (same tier-master card family). */
 .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container .sp-solo-mode-card__art-slot::after {
-  width: 100%;
-  background: linear-gradient(
-    90deg,
-    rgba(4, 7, 12, 0.85) 0%,
-    rgba(4, 7, 12, 0.15) 55%,
-    rgba(4, 7, 12, 0) 100%
-  );
-  box-shadow: none;
+  width: 52%;
+  background: rgba(4, 7, 12, 0.23);
+  box-shadow: 48px 0 76px -14px rgba(4, 7, 12, 0.32);
 }
 
 @media (max-width: 1280px) {
-  .sp-solo-grid .sp-solo-mode-card__text,
-  .sp-solo-grid .sp-solo-mode-card__text--journey {
+  .sp-solo-grid .sp-solo-mode-card__text {
     max-width: 62%;
   }
 }

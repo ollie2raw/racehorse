@@ -25,6 +25,8 @@ type CardConfig = {
   desc: string;
   variant: "tier-elite" | "tier-standard" | "tier-master";
   chevronColor: string;
+  ctaLabel: string;
+  eyebrow?: string;
 };
 
 type StatIconName = "crown" | "bolt" | "clock" | "bars" | "puzzle";
@@ -80,16 +82,30 @@ const MODES: CardConfig[] = [
     desc: "Fritz doesn't go easy. Find out if you're good enough.",
     variant: "tier-elite",
     chevronColor: "#FFD76A",
+    ctaLabel: "Play",
   },
   {
     key: "ghostSetup" as AppMode,
     containerClass: "daily-puzzle-card-container",
-    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
+    sectionRounded: "rounded-[20px]",
     title: "Ghost Mode",
     titleColor: "#4FC3F7",
     desc: "Race against a model of your own game. Can you beat yourself?",
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
+    ctaLabel: "Play",
+  },
+  {
+    key: "journey" as AppMode,
+    containerClass: "journey-card-container",
+    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
+    title: "Journey",
+    titleColor: "#C77DFF",
+    desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
+    variant: "tier-master",
+    chevronColor: "#C77DFF",
+    ctaLabel: "Start",
+    eyebrow: "The Campaign",
   },
 ];
 
@@ -143,8 +159,9 @@ export default function SinglePlayerHubScreen({
     () => ({
       botSetup: artFritzSrc,
       ghostSetup: artGhostSrc,
+      journey: artJourneySrc,
     }),
-    [artFritzSrc, artGhostSrc],
+    [artFritzSrc, artGhostSrc, artJourneySrc],
   );
 
   return (
@@ -199,7 +216,7 @@ export default function SinglePlayerHubScreen({
           </div>
 
           <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
-            <div className="sp-solo-grid sp-solo-grid--pair items-stretch gap-5">
+            <div className="sp-solo-grid sp-solo-grid--trio items-stretch gap-5">
             {MODES.map((mode) => (
               <section
                 key={mode.key}
@@ -223,7 +240,15 @@ export default function SinglePlayerHubScreen({
                 <div className="home-card-content relative grid h-[268px] grid-rows-[1fr_auto] gap-7">
                   <div className="flex min-h-0 flex-col justify-center">
                     <div className="sp-solo-mode-card__text">
-                      <h2 className="text-[44px] font-bold tracking-[-0.055em]" style={{ color: mode.titleColor }}>
+                      {mode.eyebrow ? (
+                        <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">
+                          {mode.eyebrow}
+                        </p>
+                      ) : null}
+                      <h2
+                        className={`font-bold tracking-[-0.055em] ${mode.eyebrow ? "mt-1 text-[36px]" : "text-[44px]"}`}
+                        style={{ color: mode.titleColor }}
+                      >
                         {mode.title}
                       </h2>
                       <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
@@ -252,7 +277,7 @@ export default function SinglePlayerHubScreen({
                     style={{ width: 188, height: 50, justifyContent: "space-between" }}
                     type="button"
                   >
-                    <span>Play</span>
+                    <span>{mode.ctaLabel}</span>
                     <span
                       style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
                       aria-hidden="true"
@@ -264,58 +289,6 @@ export default function SinglePlayerHubScreen({
               </section>
             ))}
             </div>
-
-            <section
-              className="sp-solo-journey-card journey-card-container relative box-border flex cursor-pointer flex-col overflow-hidden rounded-[20px] px-7 py-7"
-              onClick={() => onNavigate("journey")}
-            >
-              <div className="sp-solo-mode-card__art-slot" aria-hidden>
-                {artJourneySrc ? (
-                  <img
-                    src={artJourneySrc}
-                    alt=""
-                    className="sp-solo-mode-card__art"
-                    draggable={false}
-                    decoding="async"
-                    loading="lazy"
-                    aria-hidden
-                  />
-                ) : null}
-              </div>
-              <div className="home-card-scrim" aria-hidden="true" />
-              <div className="relative z-10 flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between desk:pr-[220px]">
-                <div className="sp-solo-mode-card__text sp-solo-mode-card__text--journey">
-                  <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">
-                    The Campaign
-                  </p>
-                  <h2 className="mt-1 text-[36px] font-bold tracking-[-0.045em] text-[#C77DFF]">
-                    Journey
-                  </h2>
-                  <p className="mt-2 max-w-[52ch] text-[16px] leading-relaxed text-[#AAA6B4]">
-                    A long march through Fritz — six chapters of instinct, tempo, and score
-                    pressure. Not a daily sprint.
-                  </p>
-                </div>
-                <Button
-                  variant="tier-master"
-                  onClick={(e: React.MouseEvent) => {
-                    e.stopPropagation();
-                    onNavigate("journey");
-                  }}
-                  className="self-start desk:self-auto"
-                  style={{ width: 188, height: 50, justifyContent: "space-between" }}
-                  type="button"
-                >
-                  <span>Start</span>
-                  <span
-                    style={{ fontSize: 22, lineHeight: 1, color: "#C77DFF", opacity: 0.9 }}
-                    aria-hidden="true"
-                  >
-                    ›
-                  </span>
-                </Button>
-              </div>
-            </section>
           </div>
         </main>
       </div>
