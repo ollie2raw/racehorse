@@ -11,28 +11,37 @@ describe('WelcomeModal', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows the Direction B lineup when open', () => {
+  it('shows the Option A lineup when open — Daily Fritz leads, every other mode listed below', () => {
     render(<WelcomeModal open onDismiss={noop} onNavigate={noop} />);
-    expect(screen.getByRole('dialog', { name: "Welcome. Here's today." })).toBeInTheDocument();
-    expect(screen.getByText('Daily Fritz')).toBeInTheDocument();
-    expect(screen.getByText('Daily Puzzles')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Welcome to Racehorse Dominoes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play Daily Fritz' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Play Daily Puzzles' })).toBeInTheDocument();
+    // Every other mode gets its own line — none folded into a shared entry.
+    for (const mode of [
+      'Puzzle Rush',
+      'Multiplayer',
+      'Tournament',
+      'Play vs Fritz',
+      'Journey',
+      'Ghost',
+      'The Lab',
+      'Learn',
+      'Social',
+    ]) {
+      expect(screen.getByText(mode)).toBeInTheDocument();
+    }
   });
 
-  it('routes each daily CTA to its mode', () => {
+  it('routes the primary CTA to Daily Fritz', () => {
     const onNavigate = vi.fn();
     render(<WelcomeModal open onDismiss={noop} onNavigate={onNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: 'Play Daily Fritz' }));
     expect(onNavigate).toHaveBeenCalledWith('dailyFritz');
-    fireEvent.click(screen.getByRole('button', { name: 'Play Daily Puzzles' }));
-    expect(onNavigate).toHaveBeenCalledWith('puzzleRush');
   });
 
-  it('dismisses from "Got it" and from the close control', () => {
+  it('dismisses from "Let\'s play" and from the close control, never blocking either path', () => {
     const onDismiss = vi.fn();
     render(<WelcomeModal open onDismiss={onDismiss} onNavigate={noop} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    fireEvent.click(screen.getByRole('button', { name: "Let's play →" }));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onDismiss).toHaveBeenCalledTimes(2);
   });
