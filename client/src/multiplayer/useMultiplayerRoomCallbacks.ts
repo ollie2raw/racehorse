@@ -36,9 +36,9 @@ import { useJoinAckCoordinator } from './useJoinAckCoordinator';
 import type { JoinAckSnapshotResult } from './joinAckCoordinator';
 import { logger } from '../utils/logger';
 import type { MatchFoundPayload } from '../matchmaking/types';
-import type { SessionEvent, SessionSnapshot } from './session/sessionTypes';
 import type { MultiplayerShellDelegates } from './multiplayerGameShellTypes';
 import type { TournamentMatchContext } from '../match/session/tournament/tournamentMatchSessionTypes';
+import type { MultiplayerRuntime } from './runtime/runtimeTypes';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -53,29 +53,34 @@ type HandEndedPayload = {
 // ─── Params ──────────────────────────────────────────────────
 
 export type UseMultiplayerRoomCallbacksParams = {
-  // Refs
-  pendingCreateResolversRef: MutableRefObject<Array<(code: string | null) => void>>;
-  maxSequenceRef: MutableRefObject<number>;
+  /**
+   * D5 runtime migration (2026-09-10, following #183's useMultiplayerResync
+   * conversion): pendingCreateResolversRef/autoJoinAttemptedRef,
+   * maxSequenceRef/roomPlayersRef/roomIdentityRef/youRef/joinedRoomResponseRef,
+   * resyncBufferedUpdateRef/applyJoinedRoomResponseRef, socketRef, and
+   * sessionRef/dispatchSession now come from the composed runtime's slices
+   * (.controller.joinFlight / .room / .recovery / .socket / .session)
+   * instead of ten individual App.tsx ref params — same ref objects by
+   * identity, proven in
+   * useMultiplayerRoomCallbacksRuntimeSliceIdentity.test.ts.
+   *
+   * maxEventSequenceRef, roomMatchIdRef, roomOperationEpochRef,
+   * shellDelegatesRef, appModeRef, applyRoomEventMetaRef,
+   * schedulePlayerReadyRef, and trySchedulePlayerReadyRef stay individual
+   * params — none has a runtime slice today (confirmed gaps, not
+   * introduced here — see D5-runtime-migration-scoping-2026-09-10.md §2).
+   */
+  runtime: MultiplayerRuntime;
   maxEventSequenceRef: MutableRefObject<number>;
   roomMatchIdRef: MutableRefObject<string | null>;
   roomOperationEpochRef: MutableRefObject<number>;
-  resyncBufferedUpdateRef: MutableRefObject<import('./protocol').StateUpdatePayload | null>;
   shellDelegatesRef: MutableRefObject<MultiplayerShellDelegates | null>;
-  autoJoinAttemptedRef: MutableRefObject<boolean>;
   appModeRef: MutableRefObject<AppMode>;
-  joinedRoomResponseRef: MutableRefObject<RoomAckResponse | null>;
-  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
-  roomIdentityRef: MutableRefObject<{ username: string; userId: string | null; authToken: string | null } | null>;
-  youRef: MutableRefObject<string>;
-  socketRef: MutableRefObject<Socket | null>;
-  sessionRef: MutableRefObject<SessionSnapshot>;
   // Ref write-backs (4 refs that need every-render assignment)
   applyRoomEventMetaRef: MutableRefObject<(meta?: RoomEventMeta | null) => void>;
   schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
-  applyJoinedRoomResponseRef: MutableRefObject<(resp: RoomAckResponse) => void>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   // Dispatch / session
-  dispatchSession: (event: SessionEvent) => void;
   dispatchRecovery: (event: RecoveryEvent) => void;
   // State setters
   setJoinedRoom: (roomCode: string | null) => void;
@@ -138,26 +143,15 @@ export function useMultiplayerRoomCallbacks(
   params: UseMultiplayerRoomCallbacksParams,
 ): UseMultiplayerRoomCallbacksResult {
   const {
-    pendingCreateResolversRef,
-    maxSequenceRef,
+    runtime,
     maxEventSequenceRef,
     roomMatchIdRef,
     roomOperationEpochRef,
-    resyncBufferedUpdateRef,
     shellDelegatesRef,
-    autoJoinAttemptedRef,
     appModeRef,
-    joinedRoomResponseRef,
-    roomPlayersRef,
-    roomIdentityRef,
-    youRef,
-    socketRef,
-    sessionRef,
     applyRoomEventMetaRef,
     schedulePlayerReadyRef,
-    applyJoinedRoomResponseRef,
     trySchedulePlayerReadyRef,
-    dispatchSession,
     dispatchRecovery,
     setJoinedRoom,
     setRoomCode,
@@ -185,6 +179,15 @@ export function useMultiplayerRoomCallbacks(
     applyTournamentMetadataFromJoin,
     tournament,
   } = params;
+  const { socketRef } = runtime.socket;
+  const { sessionRef, dispatchSession } = runtime.session;
+  const { pendingCreateResolversRef, autoJoinAttemptedRef } = runtime.controller.joinFlight;
+  const { maxSequenceRef, roomPlayersRef, roomIdentityRef, youRef } = runtime.room;
+  // room.joinedRoomResponseRef is typed `unknown` at the runtime-slice layer
+  // (it stays decoupled from RoomAckResponse there); this hook only ever
+  // reads it as the same RoomAckResponse | null shape it always did.
+  const joinedRoomResponseRef = runtime.room.joinedRoomResponseRef as MutableRefObject<RoomAckResponse | null>;
+  const { resyncBufferedUpdateRef, applyJoinedRoomResponseRef } = runtime.recovery;
 
   const getInviteLink = useCallback((code: string) => {
     if (typeof window === 'undefined') return '';
