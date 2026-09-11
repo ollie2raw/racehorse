@@ -24,6 +24,7 @@ is **§1a** below.
 | # | Item | Size | Notes |
 |---|---|---|---|
 | 0 | **Journey has no discoverable home-screen entry.** `/journey` (6 chapters, 108 nodes — a shipped premium mode) is reachable only by deep link or by returning from a journey challenge. It is not on the home mode-tab strip, the Single Player hub (Fritz + Ghost only), or the Learn hub. `APP_PRIMARY_TABS` lists `journey` under the Single Player tab's `activeModes` (so `/journey` highlights "Solo") but nothing navigates there. Same discoverability gap as the welcome modal, but independent of it. | cheap · safe-now | Add an entry: a Journey card on the Single Player hub (alongside Fritz / Ghost), or a home "Today's Race"-adjacent card, or a Learn-hub tile. Copy exists ("A long march through Fritz…"). No protected files; `SinglePlayerHubScreen.tsx` already has the card pattern. Surfaced while drafting the welcome-modal copy (#171) — **not tied to that decision.** |
+| 1 | **`useAuth.ts` init race** — the dev-only e2e auth bypass (`readE2eDevAuth()`) and `supabase.auth.onAuthStateChange`'s first `INITIAL_SESSION` event (session: null in e2e mode) raced to set/clobber `user`/`profile`/`accessToken`; outcome depended on microtask ordering (confirmed non-deterministic directly, not just read — a Playwright run against `ghost-play-to-completion.spec.ts` showed the UI flip back to signed-out). Not from any of the four audits — surfaced during Ghost Mode e2e verification 2026-09-11. | not applicable | **DONE 2026-09-11 (#187).** Fixed by checking `readE2eDevAuth()` before the real-session bootstrap / `onAuthStateChange` subscription / `visibilitychange` listener are ever reached, so e2e-auth and real-session mode are structurally mutually exclusive branches of the same effect — no listener left to race against. New regression suite (`useAuth.e2eAuthRace.test.tsx`, first test coverage on this 898-line file) proves the mechanism, not just the outcome; mutation-tested (reverting the fix makes the core assertion fail as expected). |
 
 ---
 
@@ -62,7 +63,7 @@ Fix the docs when convenient; no work needed.
 
 | # | Item | Source | Notes |
 |---|---|---|---|
-| 10 | **Welcome modal / onboarding** — a real shipped feature (first-visit mode-picker dialog) dropped by accident in the June 2026 `e8d3c23d` App split. State (`welcomeOpen`, `hasSeenWelcome` effect) survives in `useAppSessionUi`, wired to nothing. `phase-ac-client-polish-audit.md` classified it **IMPROVE**. See `welcome-modal-decision-package-*.md` + `welcome-modal-copy-drafts-*.md` (4 directions, PR #171). | `FEATURE_COMPLETENESS` §5.3 (adjacent) | Awaiting a copy-direction decision, then a build. |
+| 10 | ~~**Welcome modal / onboarding**~~ — **DONE.** Built and shipped (#174, "Direction B") on top of the pre-existing `welcomeOpen` / `hasSeenWelcome` state in `useAppSessionUi`; that state had survived the June 2026 `e8d3c23d` App split wired to nothing until then. **Revised 2026-09-11 (#190)** to Option A copy — Daily Fritz leads as the one "start here" CTA, every other mode (Puzzle Rush, Multiplayer, Tournament, Play vs Fritz, Journey, Ghost, The Lab, Learn, Social) gets its own grounded one-line description below, none combined — per `welcome-modal-decision-package-2026-09-10.md` §7, which superseded the earlier, less-rigorously-grounded `welcome-modal-copy-drafts-*.md` (4 directions, PR #171). Same gating/dismiss mechanism throughout, no new mechanism introduced. `client/e2e/welcome-modal.spec.ts` exercises the real first-visit path end to end. | `FEATURE_COMPLETENESS` §5.3 (adjacent) | — |
 | 11 | ~~`WeeklyStatsScreen`~~ — **DONE (PR #170)**. Wired to a "Weekly Recap" trigger on `/stats`; dead `weeklyStatsOpen` removed from `useAppSessionUi`. | (same split) | — |
 | 12 | **Public profiles are auth-gated** — is that the intent? Sharing a profile link with a signed-out person gets them a gate. #142 fixed the *message*; the gate itself is a product call. | `FEATURE_COMPLETENESS` §5.2 | |
 | 13 | **Learn → "Lesson Library · COMING SOON"** — inert card on a primary nav route advertising an unbuilt feature. Same for Single Player hub's "More modes coming soon" and Match Found's "Per-match stats coming soon". | `FEATURE_COMPLETENESS` §5.3 | Build / remove / leave as honest placeholder. |
@@ -139,10 +140,14 @@ Nothing is blocking. One cheap safe-now engineering item — **§1a: Journey has
 home-screen entry**. Everything else is three buckets: **(a)** a handful of
 one-time human/dashboard confirmations (§1 — CAPTCHA posture, `vercel env ls`,
 preview-deploys-on, the reaper deploy check); **(b)** product decisions on
-half-built or placeholder surfaces (§2 — welcome modal, "coming soon" cards, the
-auth-modal fallback — *WeeklyStatsScreen wired up in #170*); and **(c)** the
-genuinely large projects (§3 — D2/D4/D5, System 9's 5 items, FC-DEAD-1 deletion,
-F12/F15, and end-to-end mode coverage), of which **a Fritz/Puzzle-Rush completion
-spec is the best value-per-risk** (D5's incremental path did **not** hold up —
-see the D5 scoping doc §6). Everything else (§4) is a ratified REVISIT-IF-SCALE /
-ACCEPT that should not be touched without new evidence.
+half-built or placeholder surfaces (§2 — "coming soon" cards, the auth-modal
+fallback — *WeeklyStatsScreen wired up in #170, welcome modal built in #174 and
+revised to Option A copy in #190*); and **(c)** the genuinely large projects
+(§3 — D2/D4/D5, System 9's 5 items, FC-DEAD-1 deletion, F12/F15, and
+end-to-end mode coverage — **all closed as of 2026-09-11 except F12/F15 and
+System 9's 5 parked items**, none of which were attempted). §1a's `useAuth.ts`
+init race (#187) and the end-to-end mode-coverage row's Fritz/Puzzle-Rush/
+Ghost/Lab specs (#180, #181, #186, plus the earlier Fritz spec) are also done;
+Tournament e2e is closed by decision, not built. Everything else (§4) is a
+ratified REVISIT-IF-SCALE / ACCEPT that should not be touched without new
+evidence.
