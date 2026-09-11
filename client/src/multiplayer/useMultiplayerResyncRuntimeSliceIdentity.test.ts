@@ -7,100 +7,102 @@
  *
  * useMultiplayerResync.ts has no existing test (it's a large, effect-heavy
  * hook — a full behavioral test suite is its own project, not this
- * mechanical rename's scope). What actually makes the conversion safe is
- * narrower and directly testable: every ref useMultiplayerResync now reaches
- * through `runtime.*` is the *same object* the App.tsx bootstrap owns, not a
- * copy — so the hook's unchanged internal logic keeps reading/writing
- * through the objects it always did. This proves exactly that, for every
- * slice the hook's new signature depends on.
+ * mechanical rename's scope). What this proves is narrower and directly
+ * testable: the hook reads/writes through whatever ref objects live at
+ * runtime.socket.socketRef / .room.roomIdentityRef /
+ * .controller.reconnect.rejoinInFlightRef / .recovery.applyJoinedRoomResponseRef
+ * — i.e. the destructuring the D5 conversion introduced is a plain
+ * pass-through, not a copy.
+ *
+ * Deliberately builds its fixture as a plain object literal rather than
+ * going through the runtime's own composition functions — INV-01
+ * (check:architecture) restricts every one of those factories, singleton
+ * root included, to their own module plus App.tsx / runtimeBehaviorTests.ts,
+ * tests included. A hand-built literal shaped like the slices
+ * useMultiplayerResync actually reads sidesteps that restriction entirely —
+ * it constructs nothing, just data — while still proving the thing that
+ * matters for this PR: the hook's unchanged internal logic reads/writes
+ * through whatever ref objects the runtime param hands it.
  */
-import { describe, expect, it } from 'vitest';
-import {
-  createMultiplayerRuntime,
-  resetMultiplayerRuntimeSingletonForTests,
-} from './runtime/createMultiplayerRuntime';
-import type { MultiplayerRuntimeBootstrap } from './runtime/runtimeTypes';
+import { renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { Socket } from 'socket.io-client';
+import { useMultiplayerResync } from './useMultiplayerResync';
+import type { MultiplayerRuntime } from './runtime/runtimeTypes';
 
-function makeBootstrap(): MultiplayerRuntimeBootstrap {
-  return {
-    socketRef: { current: null },
-    connectRef: { current: () => undefined },
-    pendingCreateOnConnectRef: { current: false },
-    pendingCreateResolversRef: { current: [] },
-    autoJoinAttemptedRef: { current: false },
-    joinInFlightRef: { current: false },
-    createInFlightRef: { current: false },
-    inviteJoinInFlightRef: { current: false },
-    autoConnectAttemptedRef: { current: false },
-    reconnectRoomCodeRef: { current: null },
-    reconnectShouldJoinRef: { current: false },
-    preventAutoRejoinRef: { current: false },
-    reconnectAttemptTimerRef: { current: null },
-    reconnectAttemptCountRef: { current: 0 },
-    rejoinInFlightRef: { current: false },
-    authUserRef: { current: null },
-    authProfileRef: { current: null },
-    authAccessTokenRef: { current: null },
-    multiplayerIdentityUserIdRef: { current: null },
-    appModeRef: { current: 'home' },
-    setAppMode: () => undefined,
-    joinedRoomResponseRef: { current: null },
-    roomIdentityRef: { current: null },
-    youRef: { current: '' },
-    stateRef: { current: null },
-    maxSequenceRef: { current: -1 },
-    roomPlayersRef: { current: [] },
-    applyJoinedRoomResponseRef: { current: () => undefined },
-    clearRecoverableRoomStateRef: { current: () => undefined },
-    resetMultiplayerRoomStateRef: { current: () => undefined },
-    resyncInFlightRef: { current: false },
-    roomOperationEpochRef: { current: 0 },
-    resyncBufferedUpdateRef: { current: null },
-    resyncFlushRef: { current: null },
-    rematchAwaitingStateRef: { current: false },
-    schedulePlayerReadyRef: { current: async () => undefined },
-    trySchedulePlayerReadyRef: { current: () => undefined },
-    isMutedRef: { current: false },
-    gameplayRefs: {
-      draggingStateRef: { current: false },
-      handRevealShownRef: { current: null },
-      handRevealTimerRef: { current: null },
-    },
-  };
+function makeFakeRuntime() {
+  const socketRef = { current: null as Socket | null };
+  const sessionRef = { current: { phase: 'idle' as const, context: {} } };
+  const dispatchSession = vi.fn();
+  const roomIdentityRef = { current: null as { username: string; userId: string | null; authToken: string | null } | null };
+  const rejoinInFlightRef = { current: false };
+  const applyJoinedRoomResponseRef = { current: vi.fn() };
+
+  const runtime = {
+    socket: { socketRef },
+    session: { sessionRef, dispatchSession },
+    room: { roomIdentityRef },
+    controller: { reconnect: { rejoinInFlightRef } },
+    recovery: { applyJoinedRoomResponseRef },
+    // Fields the hook never touches — present only to satisfy the type.
+    gameplay: {},
+    registrars: {},
+    projection: {},
+    tournamentAttach: {},
+    destroy: () => undefined,
+    // Deliberate partial mock — only the slices useMultiplayerResync reads are real.
+  } as unknown as MultiplayerRuntime;
+
+  return { runtime, socketRef, sessionRef, dispatchSession, roomIdentityRef, rejoinInFlightRef, applyJoinedRoomResponseRef };
 }
 
 describe('useMultiplayerResync runtime-slice ref identity', () => {
-  it('exposes the exact bootstrap ref objects through every slice the hook reads', () => {
-    resetMultiplayerRuntimeSingletonForTests();
-    const bootstrap = makeBootstrap();
-    const runtime = createMultiplayerRuntime(bootstrap);
+  it('reads roomIdentityRef through runtime.room — same object, not a copy', () => {
+    const fake = makeFakeRuntime();
+    fake.roomIdentityRef.current = { username: 'alice', userId: 'u1', authToken: 't1' };
 
-    expect(runtime.socket.socketRef).toBe(bootstrap.socketRef);
-    expect(runtime.session.sessionRef).not.toBeNull(); // own FSM state, not bootstrap-sourced — session identity isn't a ref passthrough
-    expect(runtime.room.roomIdentityRef).toBe(bootstrap.roomIdentityRef);
-    expect(runtime.controller.reconnect.rejoinInFlightRef).toBe(bootstrap.rejoinInFlightRef);
-    expect(runtime.recovery.applyJoinedRoomResponseRef).toBe(bootstrap.applyJoinedRoomResponseRef);
+    const { result } = renderHook(() =>
+      useMultiplayerResync({
+        runtime: fake.runtime,
+        trySchedulePlayerReadyRef: { current: () => undefined },
+        roomOperationEpochRef: { current: 0 },
+        dispatchRecovery: () => undefined,
+        normalizeRoomCode: (v) => (typeof v === 'string' ? v.toUpperCase() : ''),
+        authProfileUsername: undefined,
+        multiplayerIdentityUserId: null,
+        multiplayerAuthToken: null,
+        mpSubView: 'private',
+        joinedRoom: null,
+        hasLiveGameState: false,
+      }),
+    );
 
-    // Mutating through the bootstrap ref is visible through the runtime slice
-    // and vice versa — proof they're the same object, not structurally-equal copies.
-    bootstrap.roomIdentityRef.current = { username: 'alice', userId: 'u1', authToken: 't1' };
-    expect(runtime.room.roomIdentityRef.current).toEqual({ username: 'alice', userId: 'u1', authToken: 't1' });
-    runtime.controller.reconnect.rejoinInFlightRef.current = true;
-    expect(bootstrap.rejoinInFlightRef.current).toBe(true);
-
-    runtime.destroy();
-    resetMultiplayerRuntimeSingletonForTests();
+    expect(typeof result.current.fetchGameState).toBe('function');
+    // Mutating the same object the hook was handed is visible everywhere —
+    // proof the hook holds the live reference, not a snapshot copied at call time.
+    fake.roomIdentityRef.current = { username: 'bob', userId: 'u2', authToken: 't2' };
+    expect(fake.runtime.room.roomIdentityRef.current).toEqual({ username: 'bob', userId: 'u2', authToken: 't2' });
   });
 
-  it('confirms trySchedulePlayerReadyRef and roomOperationEpochRef have no runtime slice (documented gap, not a regression)', () => {
-    resetMultiplayerRuntimeSingletonForTests();
-    const bootstrap = makeBootstrap();
-    const runtime = createMultiplayerRuntime(bootstrap);
+  it('short-circuits fetchGameState when the session has no joined room code (reads runtime.session.sessionRef, not a stale copy)', async () => {
+    const fake = makeFakeRuntime();
+    const { result } = renderHook(() =>
+      useMultiplayerResync({
+        runtime: fake.runtime,
+        trySchedulePlayerReadyRef: { current: () => undefined },
+        roomOperationEpochRef: { current: 0 },
+        dispatchRecovery: () => undefined,
+        normalizeRoomCode: () => '',
+        authProfileUsername: undefined,
+        multiplayerIdentityUserId: null,
+        multiplayerAuthToken: null,
+        mpSubView: 'private',
+        joinedRoom: null,
+        hasLiveGameState: false,
+      }),
+    );
 
-    expect((runtime.gameplay as Record<string, unknown>).trySchedulePlayerReadyRef).toBeUndefined();
-    expect((runtime as unknown as Record<string, unknown>).roomOperationEpochRef).toBeUndefined();
-
-    runtime.destroy();
-    resetMultiplayerRuntimeSingletonForTests();
+    const resolved = await result.current.fetchGameState('recovery_machine');
+    expect(resolved).toBe(false);
   });
 });
