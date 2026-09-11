@@ -2,9 +2,7 @@
 import {
   forwardRef,
   memo,
-  useCallback,
   useImperativeHandle,
-  useRef,
   useState,
   type ForwardedRef,
 } from 'react';
@@ -14,13 +12,10 @@ import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 import { tileEquals } from '../game/tileUtils';
 import { isDouble } from '../game/openEndsGeometry';
 import { useRenderProfiler } from '../debug/renderProfiler';
-import {
-  recordDailyFritzBoardMetric,
-  traceCameraDebug,
-  traceDailyFritzBoardEvent,
-} from './boardDiagnostics';
+import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardDiagnostics';
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
+import { useBoardPointerControls } from './board/useBoardPointerControls';
 
 // ─── Board Component ─────────────────────────────────────────
 
@@ -103,8 +98,6 @@ function BoardComponent(
   // as the original single-component code; useBoardCamera owns the effects
   // that decide the camera, not the state itself.
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
@@ -150,100 +143,24 @@ function BoardComponent(
   const centerY =
     staticView && staticFitMainline ? 0 : (layout.minY + layout.maxY) / 2;
 
-  // Mouse wheel zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    markManualCamera();
-    setCamera((cam) => ({
-      ...cam,
-      scale: (() => {
-        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * delta));
-        traceCameraDebug('[camera-debug] setCamera', {
-          reason: 'wheel',
-          x: Number(cam.x.toFixed(2)),
-          y: Number(cam.y.toFixed(2)),
-          scale: Number(nextScale.toFixed(3)),
-        });
-        return nextScale;
-      })(),
-    }));
-  }, [markManualCamera, minCameraScale]);
-
-  // Pan handlers
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      if ((e.target as HTMLElement)?.closest('.placement-zone')) {
-        return;
-      }
-      markManualCamera();
-      setIsDragging(true);
-      dragStart.current = {
-        x: e.clientX,
-        y: e.clientY,
-        camX: camera.x,
-        camY: camera.y,
-      };
-    },
-    [camera.x, camera.y, markManualCamera],
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isDragging) return;
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
-      setCamera((cam) => ({
-        ...cam,
-        x: (() => {
-          const nextX = dragStart.current.camX + dx;
-          const nextY = dragStart.current.camY + dy;
-          traceCameraDebug('[camera-debug] setCamera', {
-            reason: 'drag',
-            x: Number(nextX.toFixed(2)),
-            y: Number(nextY.toFixed(2)),
-            scale: Number(cam.scale.toFixed(3)),
-          });
-          return nextX;
-        })(),
-        y: dragStart.current.camY + dy,
-      }));
-    },
-    [isDragging],
-  );
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
-  // Double-click to reset
-  const handleDoubleClick = useCallback(() => {
-    manualCameraRef.current = false;
-    fitCameraToContainer('double-click-reset', undefined, undefined, true);
-  }, [fitCameraToContainer, manualCameraRef]);
-
-  const applyZoomStep = useCallback((factor: number) => {
-    markManualCamera();
-    setCamera((cam) => ({
-      ...cam,
-      scale: (() => {
-        const nextScale = Math.min(2.4, Math.max(minCameraScale, cam.scale * factor));
-        traceCameraDebug('[camera-debug] setCamera', {
-          reason: 'manual-zoom',
-          x: Number(cam.x.toFixed(2)),
-          y: Number(cam.y.toFixed(2)),
-          scale: Number(nextScale.toFixed(3)),
-        });
-        return nextScale;
-      })(),
-    }));
-  }, [markManualCamera, minCameraScale]);
-
-  const resetCameraToFit = useCallback(() => {
-    manualCameraRef.current = false;
-    fitCameraToContainerRef.current('manual-reset', undefined, undefined, true);
-  }, [fitCameraToContainerRef, manualCameraRef]);
+  const {
+    isDragging,
+    handleWheel,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleDoubleClick,
+    applyZoomStep,
+    resetCameraToFit,
+  } = useBoardPointerControls({
+    camera,
+    setCamera,
+    minCameraScale,
+    manualCameraRef,
+    markManualCamera,
+    fitCameraToContainer,
+    fitCameraToContainerRef,
+  });
 
   useImperativeHandle(
     ref,
