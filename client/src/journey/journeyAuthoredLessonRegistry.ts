@@ -5,6 +5,8 @@ import { DOUBLES_ARENT_FREE_BUNDLE } from './lessons/doublesArentFree/doublesAre
 import { BLOCKED_HAND_TIEBREAK_BUNDLE } from './lessons/blockedHandTiebreak/blockedHandTiebreakBundle.ts';
 import { ENDGAME_HAND_SHAPE_BUNDLE } from './lessons/endgameHandShape/endgameHandShapeBundle.ts';
 import { DEFENSIVE_HOLDING_BUNDLE } from './lessons/defensiveHolding/defensiveHoldingBundle.ts';
+import { READING_THE_BONEYARD_BUNDLE } from './lessons/readingTheBoneyard/readingTheBoneyardBundle.ts';
+import { TEMPO_VS_SAFETY_BUNDLE } from './lessons/tempoVsSafety/tempoVsSafetyBundle.ts';
 
 export const PRODUCTION_AUTHORED_LESSON_BUNDLES: ReadonlyArray<JourneyAuthoredLessonBundle> = [
   OPEN_END_DISCIPLINE_BUNDLE,
@@ -13,6 +15,8 @@ export const PRODUCTION_AUTHORED_LESSON_BUNDLES: ReadonlyArray<JourneyAuthoredLe
   BLOCKED_HAND_TIEBREAK_BUNDLE,
   ENDGAME_HAND_SHAPE_BUNDLE,
   DEFENSIVE_HOLDING_BUNDLE,
+  READING_THE_BONEYARD_BUNDLE,
+  TEMPO_VS_SAFETY_BUNDLE,
 ];
 const BUNDLES_BY_CONTENT_ID = new Map(PRODUCTION_AUTHORED_LESSON_BUNDLES.map((bundle) => [String(bundle.contentId), bundle]));
 

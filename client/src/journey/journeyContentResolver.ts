@@ -30,6 +30,10 @@ import { ENDGAME_HAND_SHAPE_LESSON_DEFINITION } from './lessons/endgameHandShape
 import { validateEndgameHandShapeContent } from './lessons/endgameHandShape/endgameHandShapeValidation.ts';
 import { DEFENSIVE_HOLDING_LESSON_DEFINITION } from './lessons/defensiveHolding/defensiveHoldingLesson.ts';
 import { validateDefensiveHoldingContent } from './lessons/defensiveHolding/defensiveHoldingValidation.ts';
+import { READING_THE_BONEYARD_LESSON_DEFINITION } from './lessons/readingTheBoneyard/readingTheBoneyardLesson.ts';
+import { validateReadingTheBoneyardContent } from './lessons/readingTheBoneyard/readingTheBoneyardValidation.ts';
+import { TEMPO_VS_SAFETY_LESSON_DEFINITION } from './lessons/tempoVsSafety/tempoVsSafetyLesson.ts';
+import { validateTempoVsSafetyContent } from './lessons/tempoVsSafety/tempoVsSafetyValidation.ts';
 
 export type JourneyContentRegistryBuildInput = {
   canonicalChapters: JourneyChapterDefinition[];
@@ -233,6 +237,8 @@ export function buildJourneyContentRegistry(input: JourneyContentRegistryBuildIn
     if (definition.id === BLOCKED_HAND_TIEBREAK_LESSON_DEFINITION.id) errors.push(...validateBlockedHandTiebreakContent(definition));
     if (definition.id === ENDGAME_HAND_SHAPE_LESSON_DEFINITION.id) errors.push(...validateEndgameHandShapeContent(definition));
     if (definition.id === DEFENSIVE_HOLDING_LESSON_DEFINITION.id) errors.push(...validateDefensiveHoldingContent(definition));
+    if (definition.id === READING_THE_BONEYARD_LESSON_DEFINITION.id) errors.push(...validateReadingTheBoneyardContent(definition));
+    if (definition.id === TEMPO_VS_SAFETY_LESSON_DEFINITION.id) errors.push(...validateTempoVsSafetyContent(definition));
   }
   if (errors.length > 0) throw new Error(['Invalid Journey content registry:', ...[...new Set(errors)].sort()].join('\n'));
   const premiumByNode = new Map(premiumDefinitions.map((definition) => [String(definition.nodeId), definition]));
@@ -272,6 +278,8 @@ export const PRODUCTION_PREMIUM_LESSON_DEFINITIONS: JourneyLessonDefinition[] = 
   BLOCKED_HAND_TIEBREAK_LESSON_DEFINITION,
   ENDGAME_HAND_SHAPE_LESSON_DEFINITION,
   DEFENSIVE_HOLDING_LESSON_DEFINITION,
+  READING_THE_BONEYARD_LESSON_DEFINITION,
+  TEMPO_VS_SAFETY_LESSON_DEFINITION,
 ];
 export const PRODUCTION_JOURNEY_CONTENT_REGISTRY = buildJourneyContentRegistry({
   canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
