@@ -26,7 +26,18 @@
 }
 
 .rh-journey-trail-page {
+  /* Sets background only — GlobalNav is a child of this same wrapper, and
+     `color`/`font-family` here would inherit down into it (it happened: the
+     nav's avatar text picked up this page's cooler white instead of the
+     app's normal cream, reading as a stray tint on the whole nav). Text
+     color/font for the journey content live on the elements below instead,
+     which sit alongside GlobalNav in the DOM, not above it. */
   background: var(--rh-jt-bg-page);
+}
+
+.rh-journey-trail-scroll,
+.rh-journey-w-sheet,
+.rh-jt-rail {
   color: var(--rh-jt-text-primary);
   font-family: var(--font-body);
 }
