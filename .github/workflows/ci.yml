@@ -185,11 +185,23 @@ jobs:
       - name: Build server (socket smoke + rematch E2E need dist scoring helpers)
         run: npm run build --prefix server
 
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Mobile reachability gate (tap targets + h-overflow, 20 routes × 3 viewports)
         env:
           SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: npm run e2e:reachability --prefix client
+        run: |
+          npx playwright install chromium --with-deps
+          npm run e2e:reachability --prefix client
 
       - name: Upload reachability matrix
         if: always()
