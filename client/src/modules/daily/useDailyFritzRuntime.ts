@@ -48,6 +48,7 @@ export function useDailyFritzRuntime({
     dailyFritzSetOverlay = null,
     onDailyFritzGameComplete = null,
     userId = null,
+    matchRuleOverrides,
   } = props;
 
   const {
@@ -184,9 +185,20 @@ export function useDailyFritzRuntime({
         });
         return;
       }
-      setMatch(createBotMatchWithStarter(payload.remainingDeck, payload.winner, winningScore, dealSize));
+      setMatch(
+        createBotMatchWithStarter(payload.remainingDeck, payload.winner, winningScore, dealSize, matchRuleOverrides),
+      );
     },
-    [dealSize, winningScore, mode, dailyFritzPackage, isStandaloneFritzMatch, setPreGameDrawCompleted, setMatch],
+    [
+      dealSize,
+      winningScore,
+      mode,
+      dailyFritzPackage,
+      isStandaloneFritzMatch,
+      matchRuleOverrides,
+      setPreGameDrawCompleted,
+      setMatch,
+    ],
   );
 
   const dailyFritzScriptedDraw = dailyFritzScriptedDrawReady ? dailyFritzPackage : null;

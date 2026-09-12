@@ -5,7 +5,7 @@ import type { GhostProfileSummary } from '../../ghost/ghostContracts.ts';
 import type { AppMode } from '../../../types.ts';
 import type { BotDealSize } from '../runtime/botEngine.ts';
 import type { FritzTier } from '../../fritz/fritzConfig.ts';
-import type { BotMatchState } from '../runtime/botEngine.ts';
+import type { BotMatchState, MatchRuleOverrides } from '../runtime/botEngine.ts';
 
 export interface BotMatchScreenProps {
   onBack: () => void;
@@ -16,6 +16,8 @@ export interface BotMatchScreenProps {
   userId?: string | null;
   username?: string | null;
   winningScore?: number;
+  /** Optional gameplay-rule knobs (blockedHandRule, endHandBonus, scoringMultiple, scoreHandicap) — see `MatchRuleOverrides`. Currently sourced from Journey match variants. */
+  matchRuleOverrides?: MatchRuleOverrides;
   opponentName?: string;
   opponentUserId?: string | null;
   currentGlickoRating?: number | null;

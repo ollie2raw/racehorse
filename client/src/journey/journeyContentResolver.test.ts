@@ -355,3 +355,70 @@ describe('future Journey lesson contract validation', () => {
     expect(validateJourneyDescriptorSet([{ ...premium, chapterId: 'ch2-high-line' }, ...registry.descriptors.filter((descriptor) => descriptor.nodeId !== premium.nodeId)], [definition], context)).toContainEqual(expect.stringContaining('chapter mismatch'));
   });
 });
+
+describe('botMatchVariant resolution', () => {
+  function makeVariantChapter(action: { kind: 'botMatchVariant'; variantId: string }, nodeType: 'match' | 'boss' = 'match') {
+    return {
+      chapterId: 'test-chapter',
+      chapterNumber: 1,
+      title: 'Test Chapter',
+      subtitle: '',
+      description: '',
+      totalNodes: 1,
+      finalReward: 'Test Final Reward',
+      nextChapterCopy: '',
+      releaseStatus: 'playable' as const,
+      nodes: [
+        {
+          id: 'test-chapter-n01',
+          chapterId: 'test-chapter',
+          chapterTitle: 'Test Chapter',
+          order: 1,
+          title: 'Variant Match',
+          subtitle: 'A match using a named variant.',
+          nodeType,
+          difficulty: 'standard' as const,
+          requirements: [],
+          rewardText: 'Test Reward',
+          action,
+          completionCriteria: 'Win the match.',
+        },
+      ],
+    };
+  }
+
+  it('resolves a botMatchVariant action into a bot_match runtime carrying the variant knobs', () => {
+    const registry = buildJourneyContentRegistry({
+      canonicalChapters: [makeVariantChapter({ kind: 'botMatchVariant', variantId: 'no-score-blocked-hands' })],
+    });
+    const descriptor = registry.descriptorByNodeId.get(asNodeId('test-chapter-n01'));
+    expect(descriptor?.runtime).toEqual({
+      kind: 'bot_match',
+      fritzTier: 'master',
+      dealSize: 7,
+      trialFormat: 'fullMatch',
+      winningScore: 60,
+      blockedHandRule: 'noScore',
+      endHandBonus: 'none',
+      scoringMultiple: undefined,
+      scoreHandicap: undefined,
+    });
+  });
+
+  it('resolves a boss node using botMatchVariant into a boss_match runtime', () => {
+    const registry = buildJourneyContentRegistry({
+      canonicalChapters: [makeVariantChapter({ kind: 'botMatchVariant', variantId: 'handicap-underdog-blowout' }, 'boss')],
+    });
+    const descriptor = registry.descriptorByNodeId.get(asNodeId('test-chapter-n01'));
+    expect(descriptor?.runtime.kind).toBe('boss_match');
+    expect(descriptor?.runtime).toMatchObject({ scoreHandicap: { you: 0, bot: 15 } });
+  });
+
+  it('marks a botMatchVariant action unsupported when the variant id is unknown', () => {
+    const registry = buildJourneyContentRegistry({
+      canonicalChapters: [makeVariantChapter({ kind: 'botMatchVariant', variantId: 'does-not-exist' })],
+    });
+    const descriptor = registry.descriptorByNodeId.get(asNodeId('test-chapter-n01'));
+    expect(descriptor?.runtime.kind).toBe('unsupported');
+  });
+});

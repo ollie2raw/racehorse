@@ -20,6 +20,9 @@ import {
   isDouble as isCoreDouble,
   createDeterministicDoubleSixDeal,
   createDailyFritzJournal,
+  type BlockedHandRule,
+  type Config,
+  type EndHandBonus,
   type DailyFritzJournal,
 } from '@racehorse/game-core';
 import {
@@ -29,6 +32,7 @@ import {
   getCoreMoves,
   passCoreTurn,
   previewCorePlacement,
+  resolveMatchConfig,
   scoreCoreBoard,
 } from './gameCoreAdapter.ts';
 
@@ -53,6 +57,21 @@ export type BotActionError = {
 };
 export type BotDealSize = 7 | 14;
 
+/**
+ * Optional gameplay-rule knobs a match can be started with, on top of the
+ * standard tier/dealSize/winningScore trio. Every field maps directly onto a
+ * `packages/game-core` `Config` field that the engine already implements —
+ * this type just gives Journey (and any other caller) a single object to
+ * plumb through instead of hand-threading each knob separately.
+ */
+export interface MatchRuleOverrides {
+  blockedHandRule?: BlockedHandRule;
+  endHandBonus?: EndHandBonus;
+  scoringMultiple?: number;
+  /** One-time initial score seed applied only when hand 1 is dealt. */
+  scoreHandicap?: { you: number; bot: number };
+}
+
 export interface BotPlayerState {
   hand: Tile[];
   score: number;
@@ -75,6 +94,9 @@ export interface BotMatchState {
   lastHandWinner: BotPlayerId | null;
   lastHandReason: BotHandEndReason | null;
   dealSize: BotDealSize;
+  blockedHandRule?: BlockedHandRule;
+  endHandBonus?: EndHandBonus;
+  scoringMultiple?: number;
   /** Server-owned ranked deal seed. Subsequent hands must be derived from this, not Math.random. */
   dealSeed?: string | null;
   /** Local fallback deck if ranked /start fails after the pre-game draw. */
@@ -196,6 +218,7 @@ function createDealtHand(
   dealSize: BotDealSize,
   matchStarter: BotPlayerId = 'you',
   deck?: readonly Tile[],
+  ruleOverrides?: MatchRuleOverrides,
 ): BotMatchState {
   const shuffled = shuffle(deck ? [...deck] : generateDoubleSixSet());
   const youHand = shuffled.slice(0, dealSize);
@@ -228,6 +251,9 @@ function createDealtHand(
     lastHandWinner: null,
     lastHandReason: null,
     dealSize,
+    blockedHandRule: ruleOverrides?.blockedHandRule,
+    endHandBonus: ruleOverrides?.endHandBonus,
+    scoringMultiple: ruleOverrides?.scoringMultiple,
     matchStarter,
     opponentPassedOnEnds: [],
     opponentDrawCount: 0,
@@ -261,6 +287,7 @@ export function createFixedBotHand(
   dealSize: BotDealSize,
   handDeal: BotHandDeal,
   matchStarter: BotPlayerId = 'you',
+  ruleOverrides?: MatchRuleOverrides,
 ): BotMatchState {
   const currentPlayer = resolveHandStarter(matchStarter, handNumber);
   return {
@@ -285,6 +312,9 @@ export function createFixedBotHand(
     lastHandWinner: null,
     lastHandReason: null,
     dealSize,
+    blockedHandRule: ruleOverrides?.blockedHandRule,
+    endHandBonus: ruleOverrides?.endHandBonus,
+    scoringMultiple: ruleOverrides?.scoringMultiple,
     matchStarter,
     opponentPassedOnEnds: [],
     opponentDrawCount: 0,
@@ -293,8 +323,20 @@ export function createFixedBotHand(
   };
 }
 
-export function createBotMatch(winningScore = 60, dealSize: BotDealSize = 7): BotMatchState {
-  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize);
+export function createBotMatch(
+  winningScore = 60,
+  dealSize: BotDealSize = 7,
+  ruleOverrides?: MatchRuleOverrides,
+): BotMatchState {
+  return createDealtHand(
+    ruleOverrides?.scoreHandicap ?? { you: 0, bot: 0 },
+    1,
+    winningScore,
+    dealSize,
+    'you',
+    undefined,
+    ruleOverrides,
+  );
 }
 
 export function createBotMatchWithStarter(
@@ -302,6 +344,7 @@ export function createBotMatchWithStarter(
   matchStarter: BotPlayerId,
   winningScore = 60,
   dealSize: BotDealSize = 7,
+  ruleOverrides?: MatchRuleOverrides,
 ): BotMatchState {
   if (dealSize === 14) {
     throw new Error('Pre-game draw is not supported for 14-tile deals');
@@ -311,15 +354,24 @@ export function createBotMatchWithStarter(
       `Pre-game draw expects ${PRE_GAME_DRAW_REMAINING_TILE_COUNT} remaining tiles, got ${remainingDeck.length}`,
     );
   }
-  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, matchStarter, remainingDeck);
+  return createDealtHand(
+    ruleOverrides?.scoreHandicap ?? { you: 0, bot: 0 },
+    1,
+    winningScore,
+    dealSize,
+    matchStarter,
+    remainingDeck,
+    ruleOverrides,
+  );
 }
 
 export function createFixedBotMatch(
   handDeal: BotHandDeal,
   winningScore = 60,
   dealSize: BotDealSize = 7,
+  ruleOverrides?: MatchRuleOverrides,
 ): BotMatchState {
-  return createFixedBotMatchWithStarter(handDeal, 'you', winningScore, dealSize);
+  return createFixedBotMatchWithStarter(handDeal, 'you', winningScore, dealSize, ruleOverrides);
 }
 
 export function createFixedBotMatchWithStarter(
@@ -327,11 +379,29 @@ export function createFixedBotMatchWithStarter(
   matchStarter: BotPlayerId,
   winningScore = 60,
   dealSize: BotDealSize = 7,
+  ruleOverrides?: MatchRuleOverrides,
 ): BotMatchState {
-  return createFixedBotHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, handDeal, matchStarter);
+  return createFixedBotHand(
+    ruleOverrides?.scoreHandicap ?? { you: 0, bot: 0 },
+    1,
+    winningScore,
+    dealSize,
+    handDeal,
+    matchStarter,
+    ruleOverrides,
+  );
+}
+
+function carriedRuleOverrides(state: BotMatchState): MatchRuleOverrides {
+  return {
+    blockedHandRule: state.blockedHandRule,
+    endHandBonus: state.endHandBonus,
+    scoringMultiple: state.scoringMultiple,
+  };
 }
 
 export function startNextBotHand(state: BotMatchState): BotMatchState {
+  const ruleOverrides = carriedRuleOverrides(state);
   if (state.dealSeed) {
     return {
       ...createFixedBotHand(
@@ -341,6 +411,7 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
         state.dealSize,
         dealFromRankedSeed(state.dealSeed, state.handNumber + 1, state.dealSize),
         state.matchStarter ?? 'you',
+        ruleOverrides,
       ),
       dealSeed: state.dealSeed,
     };
@@ -351,6 +422,8 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
     state.winningScore,
     state.dealSize,
     state.matchStarter ?? 'you',
+    undefined,
+    ruleOverrides,
   );
 }
 
@@ -363,6 +436,7 @@ export function startNextFixedBotHand(state: BotMatchState, handDeal: BotHandDea
       state.dealSize,
       handDeal,
       state.matchStarter ?? 'you',
+      carriedRuleOverrides(state),
     ),
     dealSeed: state.dealSeed ?? null,
   };
@@ -458,9 +532,9 @@ export function placeTileOnBoard(
   return simulatePlacement(board, tile, position);
 }
 
-export function computePlayScore(board: BoardState): number {
+export function computePlayScore(board: BoardState, config?: Config): number {
   warnOpenEndsBoardIssues(board, 'computePlayScore');
-  return scoreCoreBoard(board);
+  return scoreCoreBoard(board, config);
 }
 
 /**
@@ -506,7 +580,7 @@ export function previewPlayMove(
 
   const nextBoard = previewCorePlacement(state.board, move.tile, move.position);
   const nextHand = removeTileOnce(state.players[player].hand, move.tile);
-  const immediateScore = computePlayScore(nextBoard);
+  const immediateScore = computePlayScore(nextBoard, resolveMatchConfig(state));
   const openSum = computeOpenEndsSum(nextBoard);
 
   return {

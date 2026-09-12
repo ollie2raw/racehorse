@@ -1,5 +1,6 @@
 import { getJourneyChapterById, getJourneyNodeById, JOURNEY_CHAPTER_DEFINITIONS } from './journeyChapters.ts';
 import { getJourneyBriefing, getJourneyPuzzle } from './journeyContentIndex.ts';
+import { getJourneyMatchVariant } from './journeyMatchVariants.ts';
 import type { JourneyChapterDefinition, JourneyNode } from './journeyTypes.ts';
 import {
   CORE_JOURNEY_RULESET_ID,
@@ -40,15 +41,34 @@ const asNodeId = (value: string) => value as JourneyNodeId;
 const asContentId = (value: string) => value as JourneyContentId;
 
 function botRuntime(node: JourneyNode): Extract<JourneyRuntimeCapability, { kind: 'bot_match' | 'boss_match' }> | null {
-  if (node.action.kind !== 'botMatch') return null;
-  const winningScore = node.action.winningScore ?? 60;
-  return {
-    kind: node.nodeType === 'boss' ? 'boss_match' : 'bot_match',
-    fritzTier: node.action.fritzTier,
-    dealSize: node.action.dealSize,
-    trialFormat: node.action.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch'),
-    winningScore,
-  };
+  const kind = node.nodeType === 'boss' ? 'boss_match' as const : 'bot_match' as const;
+  if (node.action.kind === 'botMatch') {
+    const winningScore = node.action.winningScore ?? 60;
+    return {
+      kind,
+      fritzTier: node.action.fritzTier,
+      dealSize: node.action.dealSize,
+      trialFormat: node.action.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch'),
+      winningScore,
+    };
+  }
+  if (node.action.kind === 'botMatchVariant') {
+    const variant = getJourneyMatchVariant(node.action.variantId);
+    if (!variant) return null;
+    const winningScore = variant.winningScore;
+    return {
+      kind,
+      fritzTier: variant.fritzTier,
+      dealSize: variant.dealSize,
+      trialFormat: variant.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch'),
+      winningScore,
+      blockedHandRule: variant.blockedHandRule,
+      endHandBonus: variant.endHandBonus,
+      scoringMultiple: variant.scoringMultiple,
+      scoreHandicap: variant.scoreHandicap,
+    };
+  }
+  return null;
 }
 
 function descriptorForLegacyNode(node: JourneyNode): Extract<JourneyContentDescriptor, { migrationClass: 'legacy' }> {
@@ -88,7 +108,7 @@ function descriptorForLegacyNode(node: JourneyNode): Extract<JourneyContentDescr
     completion = puzzle.boardState
       ? { kind: 'interactive_scenario_success', owner: 'journey_ui', puzzleId: puzzle.nodeId }
       : { kind: 'decision_correct', owner: 'journey_ui', puzzleId: puzzle.nodeId };
-  } else if ((node.nodeType === 'match' || node.nodeType === 'boss') && actionKind === 'botMatch') {
+  } else if ((node.nodeType === 'match' || node.nodeType === 'boss') && (actionKind === 'botMatch' || actionKind === 'botMatchVariant')) {
     const bot = botRuntime(node);
     if (bot) {
       supportStatus = 'supported';

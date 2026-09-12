@@ -10,6 +10,7 @@ import {
   getDisplayOpenEnds,
   getLegalMoves,
 } from '../runtime/botEngine.ts';
+import { resolveMatchConfig } from '../runtime/gameCoreAdapter.ts';
 import { asPlayMoves } from '../../../game/tileUtils.ts';
 import {
   playMatchLoseSound,
@@ -211,7 +212,7 @@ export function useMatchPresentation({
     const playedTilePoints = match.handOver
       && match.lastHandReason === 'domino'
       && match.board
-      ? computePlayScore(match.board)
+      ? computePlayScore(match.board, resolveMatchConfig(match))
       : 0;
     const scoreEvent = resolveCommittedScoreEvent(baseline.scores, currentScores, {
       handOver: match.handOver,

@@ -58,6 +58,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     matchInstanceKey = null,
     dailyFritzPackage = null,
     enableGuidedMatchCandidateCapture = false,
+    matchRuleOverrides,
   } = props;
 
   const {
@@ -191,6 +192,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     preGameDrawEligible,
     dailyFritzPackage,
     guidedInitSourceRef,
+    matchRuleOverrides,
   });
   // eslint-disable-next-line react-hooks/refs -- lazy-initialized singleton read during render — the React useRef-docs idiom (if (!ref.current) ref.current = new X()); the rule does not model it
   bootstrapInputRef.current = {
@@ -207,6 +209,7 @@ export function useBotMatchBootstrap({ props, guidedBoot }: UseBotMatchBootstrap
     preGameDrawEligible,
     dailyFritzPackage,
     guidedInitSourceRef,
+    matchRuleOverrides,
   };
 
   const initialDailyFritzSessionRef = useRef(initialDailyFritzSession);

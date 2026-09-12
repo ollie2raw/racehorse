@@ -100,6 +100,28 @@ function cloneBoard(board: CoreGameState['board']): BoardState | null {
   };
 }
 
+/**
+ * The `Config` a match is actually being played under, merging its rule
+ * overrides (see `MatchRuleOverrides`) onto `DEFAULT_CONFIG`. Both
+ * `toCoreGameState` (real move application) and `scoreCoreBoard` (preview /
+ * presentation scoring) must derive their `Config` from this single place —
+ * a second, independently-defaulted copy is how a rule override can look
+ * "applied" on `BotMatchState` while a preview or hint still silently scores
+ * under the defaults.
+ */
+export function resolveMatchConfig(state: BotMatchState) {
+  return {
+    ...DEFAULT_CONFIG,
+    tilesPerPlayer: state.dealSize,
+    deadTileCount: state.dealSize === 14 ? 0 : state.deadTiles.length,
+    winningScore: state.winningScore,
+    skipPregameDraw: true,
+    blockedHandRule: state.blockedHandRule ?? DEFAULT_CONFIG.blockedHandRule,
+    endHandBonus: state.endHandBonus ?? DEFAULT_CONFIG.endHandBonus,
+    scoringMultiple: state.scoringMultiple ?? DEFAULT_CONFIG.scoringMultiple,
+  };
+}
+
 export function toCoreGameState(state: BotMatchState, visibleParticipant?: BotPlayerId): CoreGameState {
   const currentPlayerIndex = state.currentPlayer === 'you' ? 0 : 1;
   const visibleHand = (participant: BotPlayerId): Tile[] =>
@@ -107,13 +129,7 @@ export function toCoreGameState(state: BotMatchState, visibleParticipant?: BotPl
       ? []
       : state.players[participant].hand.map(cloneTile);
   return {
-    config: {
-      ...DEFAULT_CONFIG,
-      tilesPerPlayer: state.dealSize,
-      deadTileCount: state.dealSize === 14 ? 0 : state.deadTiles.length,
-      winningScore: state.winningScore,
-      skipPregameDraw: true,
-    },
+    config: resolveMatchConfig(state),
     playerIds: ['you', 'bot'],
     players: {
       you: { id: 'you', hand: visibleHand('you'), score: state.players.you.score },
@@ -189,8 +205,8 @@ export function previewCorePlacement(
   return cloneBoard(simulateCorePlacement(board, tile, position))!;
 }
 
-export function scoreCoreBoard(board: BoardState): number {
-  return computeCorePlayScore(board, DEFAULT_CONFIG);
+export function scoreCoreBoard(board: BoardState, config: CoreGameState['config'] = DEFAULT_CONFIG): number {
+  return computeCorePlayScore(board, config);
 }
 
 function handEndDetails(

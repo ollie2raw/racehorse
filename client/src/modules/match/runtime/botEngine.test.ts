@@ -5,6 +5,7 @@ import {
   generateDoubleSixSet,
   resolveHandStarter,
   createBotMatch,
+  createBotMatchWithStarter,
   createFixedBotMatch,
   startNextBotHand,
   simulatePlacement,
@@ -324,6 +325,84 @@ describe('botEngine', () => {
     expect(res.handEnded).toBeDefined();
     expect(res.handEnded!.reason).toBe('blocked');
     expect(res.state.handOver).toBe(true);
+  });
+
+  it('21. createBotMatch applies an optional score handicap to initial scores', () => {
+    const state = createBotMatch(60, 7, { scoreHandicap: { you: 5, bot: -3 } });
+    expect(state.players.you.score).toBe(5);
+    expect(state.players.bot.score).toBe(-3);
+  });
+
+  it('22. createBotMatch defaults to zero scores when no handicap is given', () => {
+    const state = createBotMatch(60, 7);
+    expect(state.players.you.score).toBe(0);
+    expect(state.players.bot.score).toBe(0);
+  });
+
+  it('23. createBotMatch stores blockedHandRule, endHandBonus, and scoringMultiple overrides on state', () => {
+    const state = createBotMatch(60, 7, {
+      blockedHandRule: 'noScore',
+      endHandBonus: 'none',
+      scoringMultiple: 1,
+    });
+    expect(state.blockedHandRule).toBe('noScore');
+    expect(state.endHandBonus).toBe('none');
+    expect(state.scoringMultiple).toBe(1);
+  });
+
+  it('24. startNextBotHand carries rule overrides forward into the next hand', () => {
+    const initial = createBotMatch(60, 7, {
+      blockedHandRule: 'noScore',
+      endHandBonus: 'none',
+      scoringMultiple: 1,
+    });
+    const next = startNextBotHand(initial);
+    expect(next.blockedHandRule).toBe('noScore');
+    expect(next.endHandBonus).toBe('none');
+    expect(next.scoringMultiple).toBe(1);
+  });
+
+  it('25. createBotMatchWithStarter forwards rule overrides to the dealt state', () => {
+    const remainingDeck = generateDoubleSixSet().slice(0, 26);
+    const state = createBotMatchWithStarter(remainingDeck, 'bot', 60, 7, {
+      blockedHandRule: 'noScore',
+      scoreHandicap: { you: 2, bot: 0 },
+    });
+    expect(state.blockedHandRule).toBe('noScore');
+    expect(state.players.you.score).toBe(2);
+  });
+
+  it('26. scoringMultiple override changes the real score a move earns, not just the stored Config field', () => {
+    const handDeal = {
+      player_tiles: [dummyTile(5, 6)],
+      fritz_tiles: [],
+      boneyard: [],
+      locked: [],
+    };
+    const board = {
+      leftEnd: 5,
+      rightEnd: 2,
+      leftEndIsDouble: false,
+      rightEndIsDouble: false,
+      mainLine: [{ tile: dummyTile(5, 2), orientation: 'horizontal-normal' as const }],
+      hubDoubles: [],
+    };
+    const move: Move = { type: 'play', tile: dummyTile(5, 6), position: 'left' };
+
+    // Open ends sum to 6 + 2 = 8 after the play. Under the default scoringMultiple
+    // (5), 8 is not divisible by 5, so this scores 0 — same fixture as test 16.
+    const defaultState = createFixedBotMatch(handDeal, 60, 7);
+    defaultState.board = board;
+    defaultState.handOpen = true;
+    expect(previewPlayMove(defaultState, 'you', move)!.immediateScore).toBe(0);
+
+    // With scoringMultiple overridden to 1, every sum is divisible by 1, so the
+    // same move now scores its full open-ends sum (8) — proving the override
+    // reaches real scoring math, not just the stored Config field.
+    const overriddenState = createFixedBotMatch(handDeal, 60, 7, { scoringMultiple: 1 });
+    overriddenState.board = board;
+    overriddenState.handOpen = true;
+    expect(previewPlayMove(overriddenState, 'you', move)!.immediateScore).toBe(8);
   });
 
   function tEquals(a: Tile, b: Tile) {
