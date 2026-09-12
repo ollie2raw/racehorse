@@ -42,13 +42,6 @@ interface RacehorseJourneyScreenProps {
   onSignOut?: () => void;
 }
 
-const themeVars = {
-  '--rh-bg': '#050911',
-  '--rh-panel': '#09101A',
-  '--rh-brass': '#C9A84C',
-  '--rh-text': '#f0e6cc',
-} as CSSProperties;
-
 function nodeTypeLabel(type: JourneyNodeType): string {
   if (type === 'checkpoint') return 'Checkpoint';
   if (type === 'boss') return 'Boss Trial';
@@ -448,8 +441,7 @@ export default function RacehorseJourneyScreen({
 
   return (
     <div
-      className="relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root rh-journey-root"
-      style={themeVars}
+      className="relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] home-page-root rh-journey-root"
     >
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
