@@ -57,7 +57,8 @@ describe('describeSetStory', () => {
     ).toEqual({ label: 'Skunk finish', tone: 'skunk' });
   });
 
-  it('promotes a losing skunk over the sweep wording', () => {
+  it('calls a game-1 losing skunk "Skunked in one", not a finish', () => {
+    // A game-1 skunk closes the set instantly — nothing was "finished".
     expect(
       describeSetStory({
         won: false,
@@ -67,7 +68,47 @@ describe('describeSetStory', () => {
           game({ gameNumber: 1, playerWon: false, playerScore: 0, skunk: true, skunkBy: 'fritz' }),
         ],
       }),
+    ).toEqual({ label: 'Skunked in one', tone: 'skunked' });
+  });
+
+  it('calls a game-1 winning skunk "Skunk sweep", not a finish', () => {
+    expect(
+      describeSetStory({
+        won: true,
+        finalScore: 2,
+        opponentScore: 0,
+        games: [game({ gameNumber: 1, playerWon: true, fritzScore: 12, skunk: true, skunkBy: 'player' })],
+      }),
+    ).toEqual({ label: 'Skunk sweep', tone: 'skunk' });
+  });
+
+  it('still calls a game-2 losing skunk "Skunked by Fritz"', () => {
+    expect(
+      describeSetStory({
+        won: false,
+        finalScore: 0,
+        opponentScore: 2,
+        games: [
+          game({ gameNumber: 1, playerWon: false }),
+          game({ gameNumber: 2, playerWon: false, playerScore: 0, skunk: true, skunkBy: 'fritz' }),
+        ],
+      }),
     ).toEqual({ label: 'Skunked by Fritz', tone: 'skunked' });
+  });
+
+  it('calls a game-3 (decider) winning skunk "Skunk finish"', () => {
+    expect(
+      describeSetStory({
+        won: true,
+        finalScore: 2,
+        opponentScore: 1,
+        games: [
+          game({ gameNumber: 1, playerWon: false }),
+          game({ gameNumber: 2, playerWon: true }),
+          game({ gameNumber: 3, playerWon: true, fritzScore: 10, skunk: true, skunkBy: 'player' }),
+        ],
+      }),
+    ).toEqual({ label: 'Skunk finish', tone: 'skunk' });
   });
 
   it('ignores a skunk that runs against the set result', () => {

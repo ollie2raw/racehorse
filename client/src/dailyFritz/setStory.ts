@@ -16,16 +16,27 @@ export interface DailyFritzSetStory {
 
 type SetStoryInput = Pick<DailyFritzLeaderboardRow, 'won' | 'finalScore' | 'opponentScore' | 'games'>;
 
+function findSkunkGame(row: SetStoryInput) {
+  return row.games?.find((game) => game.skunk) ?? null;
+}
+
 function skunkSide(row: SetStoryInput): 'player' | 'fritz' | null {
-  const skunkGame = row.games?.find((game) => game.skunk);
+  const skunkGame = findSkunkGame(row);
   if (!skunkGame) return null;
   return skunkGame.skunkBy ?? (skunkGame.playerWon ? 'player' : 'fritz');
 }
 
 export function describeSetStory(row: SetStoryInput): DailyFritzSetStory {
   const skunk = skunkSide(row);
-  if (row.won && skunk === 'player') return { label: 'Skunk finish', tone: 'skunk' };
-  if (!row.won && skunk === 'fritz') return { label: 'Skunked by Fritz', tone: 'skunked' };
+  // A game-1 skunk closes the set instantly — it never "finishes" a set
+  // that was in progress, it just swept before games 2/3 could happen.
+  const isOpeningSkunk = findSkunkGame(row)?.gameNumber === 1;
+  if (row.won && skunk === 'player') {
+    return isOpeningSkunk ? { label: 'Skunk sweep', tone: 'skunk' } : { label: 'Skunk finish', tone: 'skunk' };
+  }
+  if (!row.won && skunk === 'fritz') {
+    return isOpeningSkunk ? { label: 'Skunked in one', tone: 'skunked' } : { label: 'Skunked by Fritz', tone: 'skunked' };
+  }
 
   const games = `${row.finalScore}-${row.opponentScore}`;
   if (row.won) {
