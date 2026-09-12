@@ -50,10 +50,9 @@ jobs:
       - name: Verify server dist can load game-core
         run: node -e "require('./server/dist/game/engine.js'); console.log('dist engine ok')"
 
-  client:
-    name: Client Validation
+  lint-and-static:
+    name: Lint & Static Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -100,11 +99,60 @@ jobs:
       - name: Journey content validation (real shipped chapter content)
         run: npm run qa:journey-content --prefix client
 
+  unit-tests:
+    name: Client Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
       - name: Client tests
         run: npm run test:all --prefix client
 
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
       - name: Build server (socket smoke + rematch E2E need dist scoring helpers)
         run: npm run build --prefix server
+
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Playwright E2E tests
         env:
@@ -114,6 +162,28 @@ jobs:
         run: |
           npx playwright install chromium --with-deps
           npm run e2e --prefix client
+
+  mobile-reachability:
+    name: Mobile Reachability Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Build server (socket smoke + rematch E2E need dist scoring helpers)
+        run: npm run build --prefix server
 
       - name: Mobile reachability gate (tap targets + h-overflow, 20 routes × 3 viewports)
         env:
@@ -129,10 +199,32 @@ jobs:
           path: client/e2e/screenshots/mobile-reachability/matrix.*
           if-no-files-found: ignore
 
+  build-and-audit:
+    name: Client Build & Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
       - name: Client build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
         run: npm run build --prefix client
+
+      - name: Bot match lazy-load boundaries
+        run: npm run check:bot-match-lazy --prefix client
 
       - name: Bundle size check
         run: npm run size-check --prefix client
@@ -161,9 +253,6 @@ jobs:
             --assert.assertions.categories:seo=["warn",{"minScore":0.9}] \
             --upload.target=temporary-public-storage \
           || true
-
-      - name: Bot match lazy-load boundaries
-        run: npm run check:bot-match-lazy --prefix client
 
   mp-private-soak:
     name: MP Private Authority Soak
