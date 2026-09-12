@@ -65,6 +65,22 @@ import './styles/board/index.css';
 void reportWebVitals();
 
 async function bootstrap() {
+  // DEV-ONLY manual test harness for PuzzleSprintModal — see
+  // src/journey/devHarness/PuzzleSprintDevHarness.tsx for why this exists.
+  // TEMPORARY: delete this branch (and that whole directory) once real
+  // content adopts PuzzleSprintModal (docs/scoping/journey-overhaul-2026-09-12.md
+  // §1, PR 6). Bypasses auth/router entirely; never reachable in production
+  // (import.meta.env.DEV is statically false in prod builds).
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('puzzleSprintDevHarness')) {
+    const { PuzzleSprintDevHarness } = await import('./journey/devHarness/PuzzleSprintDevHarness.tsx');
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <PuzzleSprintDevHarness />
+      </StrictMode>,
+    );
+    return;
+  }
+
   // Recovery tokens use a bare URL hash, so consume them before checking for an
   // old HashRouter route. Legacy "#/…" bookmarks are then promoted to real paths.
   await consumeSupabaseRecoveryHash();

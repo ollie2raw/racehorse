@@ -408,6 +408,12 @@ export default function RacehorseJourneyScreen({
         return;
       case 'unsupported':
         return;
+      case 'puzzle_sprint':
+        // Not wired to any UI yet — no content targets this capability (see
+        // docs/scoping/journey-overhaul-2026-09-12.md §1 / PR 2). Launching
+        // PuzzleSprintModal from here is deferred to the PR that actually
+        // adopts it in content.
+        return;
       default:
         return assertNever(descriptor.runtime);
     }
