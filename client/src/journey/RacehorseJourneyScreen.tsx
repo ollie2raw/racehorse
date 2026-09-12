@@ -1,5 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
-import { BookOpen, Check, Crown, Grid3x3, Lock, Puzzle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { FritzTier } from '../bot/fritzConfig';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
@@ -31,13 +30,9 @@ import type {
   JourneyNodeType,
   JourneyNodeWithStatus,
 } from './journeyTypes';
-import {
-  buildJourneyTrailLayout,
-  getJourneyTrailVisualProgress,
-} from './journeyTrailPath';
-import { getChapter1GridPlacement } from './journeyChapter1Layout';
-import { JOURNEY_CHAPTER_1_ID } from './journeyTypes';
+import { buildJourneyTrailLayout } from './journeyTrailLayout';
 import './racehorseJourney.css';
+import './racehorseJourneyTrail.css';
 
 interface RacehorseJourneyScreenProps {
   onBack: () => void;
@@ -92,61 +87,106 @@ function chapterModuleShortTitle(title: string): string {
   return title.replace(/^The /, '');
 }
 
-function JourneyNodeButton({
+/** A checkmark polyline matching the handoff's inline SVG exactly. */
+function DoneCheckmark() {
+  return (
+    <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true">
+      <polyline
+        points="1,7 6,12 17,1"
+        fill="none"
+        stroke="var(--rh-jt-green)"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function JourneyTrailNode({
   node,
-  selected,
+  index,
+  chapterShortTitle,
+  position,
   onSelect,
+  nodeRef,
 }: {
   node: JourneyNodeWithStatus;
-  selected: boolean;
+  index: number;
+  chapterShortTitle: string;
+  position: { x: number; y: number };
   onSelect: (nodeId: string) => void;
+  nodeRef: (el: HTMLDivElement | null) => void;
 }) {
-  const disabled = node.status === 'locked';
-  const Icon =
-    node.nodeType === 'checkpoint'
-      ? BookOpen
-      : node.nodeType === 'puzzle'
-        ? Puzzle
-        : node.nodeType === 'boss'
-          ? Crown
-          : Grid3x3;
+  const isBoss = node.nodeType === 'boss';
+  const ariaLabel = `${node.title}, ${statusLabel(node.status)}`;
 
-  return (
-    <div className="rh-journey-node-wrap">
-      <button
-        type="button"
-        className={`rh-journey-node rh-journey-node--${node.nodeType} rh-journey-node--${node.status}${
-          selected ? ' rh-journey-node--selected' : ''
-        }`}
-        disabled={disabled}
-        aria-current={node.status === 'current' ? 'step' : undefined}
-        aria-label={`${node.title}, ${statusLabel(node.status)}`}
-        onClick={() => onSelect(node.id)}
-      >
-        <span className="rh-journey-node__icon" aria-hidden="true">
-          <Icon size={node.nodeType === 'boss' ? 26 : 20} strokeWidth={2.2} />
-        </span>
-        {node.status === 'locked' && (
-          <span className="rh-journey-node__lock" aria-hidden="true">
-            <Lock size={10} strokeWidth={2.5} />
+  let inner: ReactNode;
+  if (isBoss) {
+    const bossModifier =
+      node.status === 'completed' ? 'boss-done' : node.status === 'current' || node.status === 'unlocked' ? 'boss-current' : null;
+    inner = (
+      <div className="rh-jt-node__inner rh-jt-node__inner--boss">
+        <button
+          type="button"
+          className={`rh-jt-node__mark rh-jt-node__mark--boss${bossModifier ? ` rh-jt-node__mark--${bossModifier}` : ''}`}
+          aria-label={ariaLabel}
+          onClick={() => onSelect(node.id)}
+        >
+          {node.status === 'completed' ? <DoneCheckmark /> : null}
+        </button>
+        {node.status === 'locked' ? (
+          <span className="rh-jt-node__caption rh-jt-node__caption--boss-locked">CHAPTER FINALE · LOCKED</span>
+        ) : (
+          <span
+            className={`rh-jt-node__name${node.status === 'current' || node.status === 'unlocked' ? ' rh-jt-node__name--current' : ''}`}
+          >
+            {node.title}
           </span>
         )}
-        {node.status === 'completed' ? (
-          <span className="rh-journey-node__check" aria-hidden="true">
-            <Check size={12} strokeWidth={3} />
-          </span>
-        ) : null}
-      </button>
-      <span
-        className={`rh-journey-node__label${
-          node.status === 'locked' ? ' rh-journey-node__label--dim' : ''
-        }`}
-      >
-        {node.title}
-      </span>
-      {node.status === 'completed' && node.badgeText ? (
-        <span className="rh-journey-node__reward">{node.badgeText}</span>
-      ) : null}
+      </div>
+    );
+  } else if (node.status === 'completed') {
+    inner = (
+      <div className="rh-jt-node__inner">
+        <button type="button" className="rh-jt-node__mark rh-jt-node__mark--done" aria-label={ariaLabel} onClick={() => onSelect(node.id)}>
+          <DoneCheckmark />
+        </button>
+        <span className="rh-jt-node__name">{node.title}</span>
+      </div>
+    );
+  } else if (node.status === 'current' || node.status === 'unlocked') {
+    inner = (
+      <div className="rh-jt-node__inner rh-jt-node__inner--current">
+        <span className="rh-jt-node__caption">
+          {chapterShortTitle.toUpperCase()} · {index + 1}
+        </span>
+        <button
+          type="button"
+          className="rh-jt-node__mark rh-jt-node__mark--current"
+          aria-current="step"
+          aria-label={ariaLabel}
+          onClick={() => onSelect(node.id)}
+        />
+        <span className="rh-jt-node__name rh-jt-node__name--current">{node.title}</span>
+      </div>
+    );
+  } else {
+    inner = (
+      <div className="rh-jt-node__inner rh-jt-node__inner--locked">
+        <button type="button" className="rh-jt-node__mark rh-jt-node__mark--locked" aria-label={ariaLabel} onClick={() => onSelect(node.id)} />
+        <span className="rh-jt-node__caption rh-jt-node__caption--locked">LOCKED</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={nodeRef}
+      className="rh-jt-node"
+      style={{ left: `${position.x}%`, top: `${position.y}px` } as CSSProperties}
+    >
+      {inner}
     </div>
   );
 }
@@ -207,16 +247,56 @@ export default function RacehorseJourneyScreen({
     [nodesWithStatus, activeNodeId],
   );
 
-  const progressPct = summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0;
+  const [sheetOpen, setSheetOpen] = useState(false);
   const trailLayout = useMemo(
-    () => buildJourneyTrailLayout(nodesWithStatus.length, activeChapter.chapterId),
-    [nodesWithStatus.length, activeChapter.chapterId],
+    () => buildJourneyTrailLayout(nodesWithStatus.length),
+    [nodesWithStatus.length],
   );
-  const trailProgressPct = useMemo(
-    () => getJourneyTrailVisualProgress(nodesWithStatus),
-    [nodesWithStatus],
-  );
-  const isChapter1Ladder = activeChapter.chapterId === JOURNEY_CHAPTER_1_ID;
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const nodeElRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeRailIndex, setActiveRailIndex] = useState(0);
+
+  // Right-edge scroll rail: highlight whichever node sits nearest the
+  // vertical center of the scroll container's own viewport.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const updateActive = () => {
+      const containerRect = container.getBoundingClientRect();
+      const centerY = containerRect.top + containerRect.height / 2;
+      let closestIndex = 0;
+      let closestDist = Infinity;
+      nodeElRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const center = rect.top + rect.height / 2;
+        const dist = Math.abs(center - centerY);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIndex = i;
+        }
+      });
+      setActiveRailIndex((current) => (current === closestIndex ? current : closestIndex));
+    };
+
+    updateActive();
+    container.addEventListener('scroll', updateActive, { passive: true });
+    return () => container.removeEventListener('scroll', updateActive);
+  }, [nodesWithStatus.length]);
+
+  // Center the current node in view on first load / chapter switch.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const currentIndex = nodesWithStatus.findIndex((node) => node.status === 'current');
+    const focalIndex = currentIndex >= 0 ? currentIndex : 0;
+    const focalPosition = trailLayout.positions[focalIndex];
+    if (!focalPosition) return;
+    container.scrollTop = Math.max(0, focalPosition.y - container.clientHeight / 2);
+  }, [activeChapter.chapterId, trailLayout, nodesWithStatus]);
+
   const canBegin =
     selectedNode != null && (selectedNode.status === 'current' || selectedNode.status === 'unlocked');
   const isBotTrialNode = selectedNode != null && isJourneyBotTrialNode(selectedNode);
@@ -267,6 +347,7 @@ export default function RacehorseJourneyScreen({
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
     selectNode(nodeId);
+    setSheetOpen(true);
   };
 
   const handleSelectChapter = (chapter: JourneyChapterWithStatus) => {
@@ -274,6 +355,7 @@ export default function RacehorseJourneyScreen({
     if (chapter.chapterId === activeChapter.chapterId) return;
     selectChapter(chapter.chapterId);
     setSelectedNodeId(null);
+    setSheetOpen(false);
     setBriefingModalOpen(false);
     setPuzzleModalOpen(false);
     setInteractivePuzzleOpen(false);
@@ -307,6 +389,7 @@ export default function RacehorseJourneyScreen({
       case 'lesson_sequence':
         if (descriptor.runtimeAvailability !== 'available') return;
         if (getJourneyPremiumHostKind(String(descriptor.contentId)) !== 'authored_board_lesson') return;
+        setSheetOpen(false);
         setActivePremiumLessonContentId(String(descriptor.contentId));
         return;
       case 'unsupported':
@@ -343,6 +426,11 @@ export default function RacehorseJourneyScreen({
     celebrateChapterCompletion(activeChapter.chapterId);
   };
 
+  const currentNode = nodesWithStatus.find((node) => node.status === 'current' || node.status === 'unlocked');
+  const activeChapterIndex = chaptersWithStatus.findIndex((chapter) => chapter.chapterId === activeChapter.chapterId);
+  const nextChapter = activeChapterIndex >= 0 ? chaptersWithStatus[activeChapterIndex + 1] : undefined;
+  const showNextChapterTeaser = !!nextChapter && nextChapter.runtimeStatus === 'locked';
+
   if (activePremiumLessonContentId) {
     const lessonDefinition = getJourneyLessonDefinition(activePremiumLessonContentId);
     if (lessonDefinition) {
@@ -373,7 +461,7 @@ export default function RacehorseJourneyScreen({
         <div className="home-bg__texture" />
       </div>
 
-      <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
+      <div className="home-shell relative mx-auto flex min-h-0 w-full flex-1 flex-col rh-journey-trail-page">
         <GlobalNav
           currentMode="journey"
           activeColor="#C9A84C"
@@ -382,62 +470,72 @@ export default function RacehorseJourneyScreen({
           onSignOut={onSignOut}
         />
 
-        <header className="rh-journey-header relative z-10">
-          <div className="rh-journey-command-strip">
-            <Button
-              variant="ghost"
-              className="rh-back-button rh-journey-command-strip__back"
-              onClick={onBack}
-              type="button"
-            >
-              ← Single Player
-            </Button>
-            <div className="rh-journey-command-strip__chapter">
-              <div className="rh-journey-module-strip" role="tablist" aria-label="Journey chapters">
-                {chaptersWithStatus.map((chapter) => {
-                  const isActive = chapter.chapterId === activeChapter.chapterId;
-                  const selectable = canSelectJourneyChapter(chapter);
-                  return (
-                    <button
-                      key={chapter.chapterId}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      aria-disabled={!selectable}
-                      disabled={!selectable}
-                      title={
-                        selectable
-                          ? chapter.title
-                          : `${chapter.title} — complete the previous chapter to unlock`
-                      }
-                      className={`rh-journey-module-pill rh-journey-module-pill--${chapter.runtimeStatus}${
-                        isActive ? ' rh-journey-module-pill--active' : ''
-                      }${selectable ? ' rh-journey-module-pill--selectable' : ''}`}
-                      onClick={() => handleSelectChapter(chapter)}
-                    >
-                      <span className="rh-journey-module-pill__num" aria-hidden="true">
-                        {chapter.chapterNumber}
-                      </span>
-                      <span className="rh-journey-module-pill__title">
-                        {chapterModuleShortTitle(chapter.title)}
-                      </span>
-                    </button>
-                  );
-                })}
+        <div className="rh-journey-trail-scroll relative z-10" ref={scrollRef}>
+          <div className="rh-jt-header">
+            <div className="rh-jt-header__left">
+              <Button variant="ghost" className="rh-jt-back" onClick={onBack} type="button">
+                ← Single Player
+              </Button>
+              <div className="rh-jt-title-block">
+                <div className="rh-jt-title-row">
+                  <span className="rh-jt-title-num">{String(activeChapter.chapterNumber).padStart(2, '0')}</span>
+                  <h1 className="rh-jt-title">{chapterModuleShortTitle(activeChapter.title)}</h1>
+                </div>
+                <div className="rh-jt-subtitle">{activeChapter.subtitle}</div>
               </div>
             </div>
-            <div className="rh-journey-command-strip__progress" aria-label="Chapter progress">
-              <span className="rh-journey-command-strip__progress-value">
-                {summary.completed} / {summary.total} nodes
+
+            <div className="rh-jt-stat-card">
+              <span className="rh-jt-stat-icon" aria-hidden="true">
+                ✓
               </span>
-              <div className="rh-journey-progress-rail" aria-hidden="true">
-                <div className="rh-journey-progress-fill" style={{ width: `${progressPct}%` }} />
+              <div>
+                <div className="rh-jt-stat-value">
+                  {summary.completed} / {summary.total}
+                </div>
+                <div className="rh-jt-stat-caption">NODES CLEARED</div>
+              </div>
+              <span className="rh-jt-stat-divider" aria-hidden="true" />
+              <span className="rh-jt-stat-icon" aria-hidden="true">
+                ▸
+              </span>
+              <div>
+                <div className="rh-jt-stat-value rh-jt-stat-value--name">{currentNode?.title ?? '—'}</div>
+                <div className="rh-jt-stat-caption">CURRENT NODE</div>
               </div>
             </div>
           </div>
 
+          <div className="rh-jt-tabs" role="tablist" aria-label="Journey chapters">
+            {chaptersWithStatus.map((chapter) => {
+              const isActive = chapter.chapterId === activeChapter.chapterId;
+              const selectable = canSelectJourneyChapter(chapter);
+              const pct = chapter.totalNodes > 0 ? Math.round((chapter.completedNodes / chapter.totalNodes) * 100) : 0;
+              return (
+                <button
+                  key={chapter.chapterId}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-disabled={!selectable}
+                  disabled={!selectable}
+                  title={selectable ? chapter.title : `${chapter.title} — complete the previous chapter to unlock`}
+                  className={`rh-jt-tab${isActive ? ' rh-jt-tab--active' : ''}`}
+                  onClick={() => handleSelectChapter(chapter)}
+                >
+                  <span className="rh-jt-tab__label">
+                    {String(chapter.chapterNumber).padStart(2, '0')} {chapterModuleShortTitle(chapter.title).toUpperCase()}
+                  </span>
+                  <span className="rh-jt-tab__track" aria-hidden="true">
+                    <span className="rh-jt-tab__fill" style={{ width: `${pct}%` }} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {activeChapterComplete ? (
-            <div className="rh-journey-chapter-complete-banner" role="status">
+            <div className="rh-journey-chapter-complete-banner relative z-10" role="status">
               <p className="rh-journey-chapter-complete-banner__title">
                 Chapter {activeChapter.chapterNumber} Complete
               </p>
@@ -450,171 +548,103 @@ export default function RacehorseJourneyScreen({
               </p>
             </div>
           ) : null}
-        </header>
 
-        <main className="rh-journey-main relative z-10">
-          <section
-            className={`rh-journey-map-panel${
-              isChapter1Ladder ? ' rh-journey-map-panel--ladder' : ''
-            }`}
-            aria-label={`${activeChapter.title} map`}
-          >
-            <div className="rh-journey-map-panel__head">
-              <div className="rh-journey-map-panel__head-left">
-                <p className="rh-journey-map-label">Campaign Board</p>
-                <h2 className="rh-journey-map-panel__title">{activeChapter.title}</h2>
-                <p className="rh-journey-map-panel__route-label">{activeChapter.title} Map</p>
-              </div>
-              <div className="rh-journey-map-panel__head-right">
-                <div className="rh-journey-map-panel__record">
-                  <span className="rh-journey-map-panel__record-label">Chapter</span>
-                  <strong className="rh-journey-map-panel__record-value">
-                    {summary.completed}/{summary.total}
-                  </strong>
-                </div>
-                <div className="rh-journey-map-legend" aria-label="Node state legend">
-                  <span className="rh-journey-map-legend__item rh-journey-map-legend__item--complete">Cleared</span>
-                  <span className="rh-journey-map-legend__item rh-journey-map-legend__item--current">Current</span>
-                  <span className="rh-journey-map-legend__item rh-journey-map-legend__item--locked">Ahead</span>
-                </div>
-              </div>
-            </div>
-            <div className="rh-journey-map-scroll">
-              <div className="rh-journey-table-surface" aria-hidden="true" />
-              <div
-                className={`rh-journey-trail${
-                  isChapter1Ladder ? ' rh-journey-trail--campaign-ladder' : ''
-                }`}
-                style={
-                  {
-                    '--journey-trail-progress': trailProgressPct,
-                    '--journey-trail-rows': trailLayout.rowCount,
-                  } as CSSProperties
-                }
-              >
-                {trailLayout.pathD ? (
-                  <svg
-                    className="rh-journey-trail-path"
-                    viewBox={trailLayout.viewBox}
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      className="rh-journey-trail-path__shadow"
-                      pathLength={100}
-                      d={trailLayout.pathD}
-                    />
-                    <path
-                      className="rh-journey-trail-path__future"
-                      pathLength={100}
-                      d={trailLayout.pathD}
-                    />
-                    <path
-                      className="rh-journey-trail-path__traveled"
-                      pathLength={100}
-                      style={{ strokeDasharray: `${trailProgressPct} 100` }}
-                      d={trailLayout.pathD}
-                    />
-                  </svg>
-                ) : null}
-                {nodesWithStatus.map((node, index) => {
-                  const position = trailLayout.positions[index] ?? { x: 50, y: 50 };
-                  const gridPlacement = isChapter1Ladder ? getChapter1GridPlacement(index) : null;
-                  return (
-                    <div
-                      key={node.id}
-                      className={`rh-journey-trail-step rh-journey-trail-step--${node.status}${
-                        node.nodeType === 'boss' ? ' rh-journey-trail-step--boss' : ''
-                      }`}
-                    style={
-                      (gridPlacement
-                        ? {
-                            gridColumn: gridPlacement.col,
-                            gridRow: gridPlacement.row,
-                          }
-                        : {
-                            '--trail-pos-x': `${position.x}%`,
-                            '--trail-pos-y': `${position.y}%`,
-                            '--trail-tile-anchor': '40px',
-                          }) as CSSProperties
-                    }
-                  >
-                    <JourneyNodeButton
-                      node={node}
-                      selected={activeNodeId === node.id}
-                      onSelect={handleSelectNode}
-                    />
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-
-          <section
-            className={`rh-journey-detail rh-journey-detail--panel${
-              selectedNode ? '' : ' rh-journey-detail--empty'
-            }`}
-            aria-label="Selected node details"
-          >
-            {selectedNode ? (
-              <>
-                <div
-                  className={`rh-journey-detail__main${
-                    selectedNode.nodeType === 'boss' ? ' rh-journey-detail__main--boss' : ''
-                  }`}
+          <div className="rh-jt-map-wrap">
+            <div className="rh-jt-map" style={{ height: `${trailLayout.containerHeight}px` }} aria-label={`${activeChapter.title} map`}>
+              {trailLayout.pathD ? (
+                <svg
+                  className="rh-jt-map-svg"
+                  width="100%"
+                  height={trailLayout.containerHeight}
+                  viewBox={`0 0 ${trailLayout.viewBoxWidth} ${trailLayout.containerHeight}`}
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
                 >
-                  {selectedNode.nodeType === 'boss' ? (
-                    <p className="rh-journey-detail__boss-label">Chapter Boss</p>
-                  ) : null}
+                  <path className="rh-jt-path-glow" d={trailLayout.pathD} />
+                  <path className="rh-jt-path-trail" d={trailLayout.pathD} />
+                </svg>
+              ) : null}
+              {nodesWithStatus.map((node, index) => {
+                const position = trailLayout.positions[index] ?? { x: 50, y: 0 };
+                return (
+                  <JourneyTrailNode
+                    key={node.id}
+                    node={node}
+                    index={index}
+                    chapterShortTitle={chapterModuleShortTitle(activeChapter.title)}
+                    position={position}
+                    onSelect={handleSelectNode}
+                    nodeRef={(el) => {
+                      nodeElRefs.current[index] = el;
+                    }}
+                  />
+                );
+              })}
+            </div>
 
-                  <div className="rh-journey-detail__meta">
-                    <span className={`rh-journey-chip rh-journey-chip--type-${selectedNode.nodeType}`}>
-                      {nodeTypeLabel(selectedNode.nodeType)}
+            {showNextChapterTeaser && nextChapter ? (
+              <div className="rh-jt-teaser">
+                <div>
+                  <div className="rh-jt-teaser__eyebrow">
+                    {String(nextChapter.chapterNumber).padStart(2, '0')} {chapterModuleShortTitle(nextChapter.title).toUpperCase()} · LOCKED
+                  </div>
+                  <div className="rh-jt-teaser__title">Chapter {nextChapter.chapterNumber}</div>
+                </div>
+                <span className="rh-jt-teaser__icon" aria-hidden="true" />
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="rh-jt-rail" aria-hidden="true">
+          {nodesWithStatus.map((node, index) => {
+            const isActive = index === activeRailIndex;
+            const dotModifier = node.status === 'completed' ? ' rh-jt-rail__dot--done' : node.status === 'current' || node.status === 'unlocked' ? ' rh-jt-rail__dot--current' : '';
+            return <span key={node.id} className={`rh-jt-rail__dot${isActive ? ' rh-jt-rail__dot--active' : ''}${dotModifier}`} />;
+          })}
+        </div>
+
+        <div className={`rh-journey-w-sheet${sheetOpen && selectedNode ? ' rh-journey-w-sheet--open' : ''}`}>
+          {selectedNode ? (
+            <div className="rh-journey-w-sheet__inner">
+              <button
+                type="button"
+                className="rh-journey-w-sheet__close"
+                aria-label="Close"
+                onClick={() => setSheetOpen(false)}
+              >
+                ×
+              </button>
+              <div className="rh-journey-w-sheet__top">
+                <div>
+                  <span className={`rh-journey-chip rh-journey-chip--type-${selectedNode.nodeType}`}>
+                    {nodeTypeLabel(selectedNode.nodeType)}
+                  </span>
+                  {selectedTrialRuntime ? (
+                    <span
+                      className={`rh-journey-chip rh-journey-tier--${selectedTrialRuntime.fritzTier}`}
+                      style={{ marginLeft: 6 }}
+                    >
+                      {selectedTrialRuntime.fritzTier.toUpperCase()}
                     </span>
-                    {selectedTrialRuntime ? (
-                      <span
-                        className={`rh-journey-chip rh-journey-tier--${selectedTrialRuntime.fritzTier}`}
-                      >
-                        {selectedTrialRuntime.fritzTier.toUpperCase()}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <h2 className="rh-journey-detail__title">{selectedNode.title}</h2>
-                  <p className="rh-journey-detail__subtitle">{selectedNode.subtitle}</p>
-
-                  <p className="rh-journey-detail__win-condition">
-                    {getJourneyWinConditionLabel(selectedNode)}
-                  </p>
-
-                  <div
-                    className={`rh-journey-detail__reward-card${
-                      selectedNode.status !== 'completed' ? ' rh-journey-detail__reward-card--locked' : ''
-                    }`}
-                  >
-                    <span className="rh-journey-detail__reward-label">Reward</span>
-                    <strong className="rh-journey-detail__reward-value">{selectedNode.rewardText}</strong>
-                  </div>
+                  ) : null}
+                  <h3 className="rh-journey-w-sheet__title">{selectedNode.title}</h3>
+                  <p className="rh-journey-w-sheet__sub">{selectedNode.subtitle}</p>
                 </div>
-
-                <div className="rh-journey-detail__actions">
-                  <Button
-                    variant="tier-elite"
-                    className={selectedNode.nodeType === 'boss' ? 'rh-journey-detail__cta--boss' : undefined}
-                    type="button"
-                    disabled={detailCtaDisabled}
-                    onClick={handleBegin}
-                  >
-                    {detailCtaLabel}
-                  </Button>
+                <div className="rh-journey-w-sheet__reward">
+                  <span>Reward</span>
+                  <strong>{selectedNode.rewardText}</strong>
                 </div>
-              </>
-            ) : (
-              <p>Select a trail node to view details.</p>
-            )}
-          </section>
-        </main>
+              </div>
+              <div className="rh-journey-w-sheet__bottom">
+                <span className="rh-journey-w-sheet__win">{getJourneyWinConditionLabel(selectedNode)}</span>
+                <Button variant="tier-elite" type="button" disabled={detailCtaDisabled} onClick={handleBegin}>
+                  {detailCtaLabel}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <JourneyBriefingModal

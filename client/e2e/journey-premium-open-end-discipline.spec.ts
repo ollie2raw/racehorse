@@ -37,10 +37,10 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 
 async function openLesson(page: Page) {
   await page.goto('/journey');
-  const nodeLabel = page.getByLabel('The Fritz Trail map').getByText('Double Trouble', { exact: true });
-  await expect(nodeLabel).toBeVisible({ timeout: 15_000 });
-  await nodeLabel.click();
-  await page.locator('.rh-journey-detail__actions').getByRole('button', { name: 'Play', exact: true }).click();
+  const nodeButton = page.getByLabel('Double Trouble, Current');
+  await expect(nodeButton).toBeVisible({ timeout: 15_000 });
+  await nodeButton.click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByText('Fritz’s Table', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /take a seat/i }).click();
   await page.getByRole('button', { name: /i see the open ends/i }).click();

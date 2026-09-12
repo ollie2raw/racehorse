@@ -1,0 +1,583 @@
+/* Journey — Trail Map presentation, implementing
+   design_handoff_journey_page/README.md at high fidelity. Colors/spacing are
+   the design's own spec values, held as local custom properties (same
+   pattern racehorseJourney.css already uses for --rh-journey-*) rather than
+   inlined, so component rules never hardcode a hex literal directly. */
+
+.rh-journey-root {
+  --rh-jt-bg-page: #0a0b0d;
+  --rh-jt-bg-card: #12151a;
+  --rh-jt-bg-teaser: #101216;
+  --rh-jt-border-06: rgba(255, 255, 255, 0.06);
+  --rh-jt-border-08: rgba(255, 255, 255, 0.08);
+  --rh-jt-border-10: rgba(255, 255, 255, 0.1);
+  --rh-jt-gold: #e8b23c;
+  --rh-jt-gold-bright: #f4c94f;
+  --rh-jt-gold-highlight: #ffdd8a;
+  --rh-jt-gold-shadow: #b9860f;
+  --rh-jt-green: var(--tier-rookie);
+  --rh-jt-text-primary: #f5f6f7;
+  --rh-jt-text-secondary: #c7cbd1;
+  --rh-jt-text-muted: #7c8492;
+  --rh-jt-text-disabled: #5c626c;
+  --rh-jt-text-locked: #454b54;
+  --rh-jt-text-boss-locked: #6a5f80;
+  --rh-jt-font-display: 'Oswald', var(--font-display);
+}
+
+.rh-journey-trail-page {
+  background: var(--rh-jt-bg-page);
+  color: var(--rh-jt-text-primary);
+  font-family: var(--font-body);
+}
+
+.rh-journey-trail-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Header row */
+.rh-jt-header {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px 24px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.rh-jt-header__left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.rh-jt-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--rh-jt-bg-card);
+  border: 1px solid var(--rh-jt-border-10);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #e6e8eb;
+  flex-shrink: 0;
+}
+
+.rh-jt-title-block {
+  min-width: 0;
+}
+
+.rh-jt-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.rh-jt-title-num {
+  color: var(--rh-jt-gold);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.rh-jt-title {
+  font-family: var(--rh-jt-font-display);
+  font-weight: 700;
+  font-size: 32px;
+  margin: 0;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.rh-jt-subtitle {
+  color: var(--rh-jt-text-muted);
+  font-size: 14px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.rh-jt-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--rh-jt-bg-card);
+  border: 1px solid var(--rh-jt-border-08);
+  border-radius: 10px;
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+
+.rh-jt-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(232, 178, 60, 0.12);
+  border: 1px solid rgba(232, 178, 60, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rh-jt-gold);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.rh-jt-stat-value {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--rh-jt-text-primary);
+  white-space: nowrap;
+}
+
+.rh-jt-stat-value--name {
+  font-size: 16px;
+}
+
+.rh-jt-stat-caption {
+  font-size: 11px;
+  color: var(--rh-jt-text-muted);
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+.rh-jt-stat-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--rh-jt-border-10);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+/* Chapter tabs */
+.rh-jt-tabs {
+  max-width: 1180px;
+  margin: 36px auto 0;
+  padding: 24px 24px 0;
+  border-top: 1px solid var(--rh-jt-border-06);
+  display: flex;
+  gap: 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rh-jt-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.rh-jt-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  white-space: nowrap;
+  padding-bottom: 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.rh-jt-tab:disabled {
+  cursor: not-allowed;
+}
+
+.rh-jt-tab__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--rh-jt-text-disabled);
+  text-align: left;
+}
+
+.rh-jt-tab--active .rh-jt-tab__label {
+  color: var(--rh-jt-gold);
+}
+
+.rh-jt-tab__track {
+  width: 100%;
+  height: 3px;
+  background: var(--rh-jt-border-06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.rh-jt-tab__fill {
+  height: 100%;
+  background: var(--rh-jt-gold);
+  border-radius: 2px;
+}
+
+/* Trail map */
+.rh-jt-map-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 24px 120px;
+  position: relative;
+}
+
+.rh-jt-map {
+  position: relative;
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 26px
+  );
+  border-radius: 16px;
+}
+
+.rh-jt-map-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* No vector-effect:non-scaling-stroke here — combined with a curved
+   multi-segment path it mispaints in this app's Chromium (see
+   svg-non-scaling-stroke-dasharray-bug memory). The map's viewBox height is
+   1:1 with its pixel height by construction, so a plain stroke-width in
+   viewBox units already renders at (close to) the intended pixel width. */
+.rh-jt-path-glow {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.rh-jt-path-trail {
+  fill: none;
+  stroke: var(--rh-jt-gold);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 6 12;
+}
+
+.rh-jt-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 180px;
+}
+
+.rh-jt-node__inner {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+}
+
+.rh-jt-node__inner--current,
+.rh-jt-node__inner--locked,
+.rh-jt-node__inner--boss {
+  flex-direction: column;
+}
+
+.rh-jt-node__mark {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rh-jt-node__mark--done {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #14181d;
+  border: 2px solid rgba(232, 178, 60, 0.55);
+}
+
+.rh-jt-node__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rh-jt-text-secondary);
+  text-align: center;
+}
+
+.rh-jt-node__caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--rh-jt-text-muted);
+  text-align: center;
+}
+
+.rh-jt-node__mark--current {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--rh-jt-gold-highlight),
+    var(--rh-jt-gold) 55%,
+    var(--rh-jt-gold-shadow) 100%
+  );
+  box-shadow:
+    0 0 0 6px rgba(232, 178, 60, 0.14),
+    0 0 40px rgba(232, 178, 60, 0.55);
+}
+
+.rh-jt-node__name--current {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--rh-jt-gold-bright);
+}
+
+.rh-jt-node__mark--locked {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px dashed rgba(255, 255, 255, 0.18);
+}
+
+.rh-jt-node__caption--locked {
+  color: var(--rh-jt-text-locked);
+}
+
+.rh-jt-node__mark--boss {
+  width: 92px;
+  height: 92px;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: linear-gradient(160deg, rgba(155, 124, 255, 0.12), rgba(232, 178, 60, 0.1));
+  border: 1.5px dashed rgba(232, 178, 60, 0.3);
+}
+
+.rh-jt-node__mark--boss.rh-jt-node__mark--boss-current {
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--rh-jt-gold-highlight),
+    var(--rh-jt-gold) 55%,
+    var(--rh-jt-gold-shadow) 100%
+  );
+  border: 1.5px solid rgba(232, 178, 60, 0.7);
+  box-shadow:
+    0 0 0 6px rgba(232, 178, 60, 0.14),
+    0 0 40px rgba(232, 178, 60, 0.55);
+}
+
+.rh-jt-node__mark--boss.rh-jt-node__mark--boss-done {
+  background: #14181d;
+  border: 1.5px solid rgba(232, 178, 60, 0.55);
+}
+
+.rh-jt-node__caption--boss-locked {
+  color: var(--rh-jt-text-boss-locked);
+}
+
+/* Locked next-chapter teaser */
+.rh-jt-teaser {
+  margin-top: 56px;
+  background: var(--rh-jt-bg-teaser);
+  border: 1px solid var(--rh-jt-border-06);
+  border-radius: 14px;
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  opacity: 0.6;
+}
+
+.rh-jt-teaser__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--rh-jt-text-disabled);
+  margin-bottom: 6px;
+}
+
+.rh-jt-teaser__title {
+  font-family: var(--rh-jt-font-display);
+  font-weight: 600;
+  font-size: 20px;
+  color: #8b909a;
+}
+
+.rh-jt-teaser__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px dashed rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+/* Scroll rail */
+.rh-jt-rail {
+  position: fixed;
+  right: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  /* Above .rh-journey-trail-scroll's z-index:10 for the same reason as the
+     mission sheet — a lower z-index here loses to that stacking context
+     regardless of DOM order and the dots render invisibly behind the map. */
+  z-index: 15;
+}
+
+.rh-jt-rail__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: all 0.2s;
+}
+
+.rh-jt-rail__dot--active {
+  width: 10px;
+  height: 10px;
+}
+
+.rh-jt-rail__dot--done {
+  background: var(--rh-jt-gold);
+}
+
+.rh-jt-rail__dot--current {
+  background: var(--rh-jt-gold-bright);
+}
+
+/* Mission overlay — the handoff explicitly leaves node-click destination
+   behavior to the app ("wired to the real navigation stack"); this is that
+   destination surface: a compact bottom sheet with the node's win condition,
+   reward, and CTA, opened on click rather than a permanent side panel. */
+.rh-journey-w-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Above .rh-journey-trail-scroll's z-index:10 (Tailwind relative z-10) —
+     otherwise that stacking context, not DOM order, decides the winner and
+     the scrollable map (including its SVG path) intercepts clicks meant for
+     this sheet, even while it's fully visible on top. */
+  z-index: 20;
+  transform: translateY(100%);
+  transition: transform 180ms var(--ease-premium);
+  pointer-events: none;
+}
+
+.rh-journey-w-sheet--open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.rh-journey-w-sheet__inner {
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 24px 22px;
+  background: var(--rh-jt-bg-card);
+  border: 1px solid var(--rh-jt-border-10);
+  border-bottom: none;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  box-shadow: var(--shadow-lg);
+}
+
+.rh-journey-w-sheet__close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  border: none;
+  background: none;
+  color: var(--rh-jt-text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rh-journey-w-sheet__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-right: 20px;
+}
+
+.rh-journey-w-sheet__title {
+  margin: 8px 0 4px;
+  font-family: var(--rh-jt-font-display);
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--rh-jt-text-primary);
+}
+
+.rh-journey-w-sheet__sub {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  color: var(--rh-jt-text-secondary);
+}
+
+.rh-journey-w-sheet__reward {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.rh-journey-w-sheet__reward span {
+  display: block;
+  font-size: 10.5px;
+  color: var(--rh-jt-text-muted);
+}
+
+.rh-journey-w-sheet__reward strong {
+  font-family: var(--rh-jt-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rh-jt-text-primary);
+}
+
+.rh-journey-w-sheet__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.rh-journey-w-sheet__win {
+  font-size: 12px;
+  color: var(--rh-jt-text-secondary);
+}
+
+@media (--phone) {
+  .rh-journey-w-sheet {
+    bottom: var(--rh-bottom-tab-offset, 0px);
+  }
+}
+
+@media (max-width: 640px) {
+  .rh-jt-title {
+    font-size: 26px;
+  }
+  .rh-jt-rail {
+    right: 10px;
+  }
+  .rh-journey-w-sheet__top {
+    flex-direction: column;
+  }
+  .rh-journey-w-sheet__reward {
+    text-align: left;
+  }
+  .rh-journey-w-sheet__bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
