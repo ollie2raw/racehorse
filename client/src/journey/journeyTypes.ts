@@ -40,6 +40,7 @@ export type JourneyNodeAction =
       trialFormat?: 'fullMatch' | 'shortRace';
       winningScore?: number;
     }
+  | { kind: 'botMatchVariant'; variantId: string }
   | { kind: 'puzzle'; puzzleId: string }
   | { kind: 'lesson'; lessonId: string };
 

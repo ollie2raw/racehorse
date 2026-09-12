@@ -1,7 +1,16 @@
+import type { BlockedHandRule, EndHandBonus } from '@racehorse/game-core';
 import type { AppMode } from '../types.ts';
 import type { BotDealSize } from '../bot/botEngine.ts';
 import type { FritzTier } from '../bot/fritzConfig.ts';
 import type { JourneyNodeAction, JourneyNodeType } from './journeyTypes.ts';
+
+/** The rule-override fields a `bot_match` / `boss_match` runtime carries on top of tier/dealSize/winningScore — see `client/src/journey/journeyMatchVariants.ts`. */
+export type JourneyMatchRuntimeRuleOverrides = {
+  blockedHandRule?: BlockedHandRule;
+  endHandBonus?: EndHandBonus;
+  scoringMultiple?: number;
+  scoreHandicap?: { you: number; bot: number };
+};
 
 export const CORE_JOURNEY_RULESET_ID = 'racehorse-core-journey' as const;
 
@@ -22,20 +31,20 @@ export type JourneyRuntimeCapability =
   | { kind: 'briefing_acknowledgement'; briefingId: string }
   | { kind: 'static_decision'; puzzleId: string }
   | { kind: 'interactive_board_decision'; puzzleId: string }
-  | {
+  | ({
       kind: 'bot_match';
       fritzTier: FritzTier;
       dealSize: BotDealSize;
       trialFormat: 'fullMatch' | 'shortRace';
       winningScore: number;
-    }
-  | {
+    } & JourneyMatchRuntimeRuleOverrides)
+  | ({
       kind: 'boss_match';
       fritzTier: FritzTier;
       dealSize: BotDealSize;
       trialFormat: 'fullMatch' | 'shortRace';
       winningScore: number;
-    }
+    } & JourneyMatchRuntimeRuleOverrides)
   | { kind: 'lesson_sequence'; lessonId: string }
   | { kind: 'external_navigation'; mode: AppMode; params?: Record<string, unknown> }
   | { kind: 'unsupported'; reason: string };
@@ -163,6 +172,7 @@ export function getRequestedCapability(action: JourneyNodeAction): JourneyRuntim
     case 'placeholder': return 'briefing_acknowledgement';
     case 'navigate': return 'external_navigation';
     case 'botMatch': return 'bot_match';
+    case 'botMatchVariant': return 'bot_match';
     case 'puzzle': return 'static_decision';
     case 'lesson': return 'lesson_sequence';
     default: return assertNever(action);

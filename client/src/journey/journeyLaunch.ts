@@ -45,6 +45,10 @@ export function buildJourneyBotTrial(node: JourneyNodeWithStatus): JourneyActive
     dealSize: runtime.dealSize,
     trialFormat: runtime.trialFormat,
     winningScore: runtime.winningScore,
+    blockedHandRule: runtime.blockedHandRule,
+    endHandBonus: runtime.endHandBonus,
+    scoringMultiple: runtime.scoringMultiple,
+    scoreHandicap: runtime.scoreHandicap,
     nodeTitle: node.title,
   };
 }

@@ -127,9 +127,8 @@ export function computePlayScore(board: BoardState, config: Config = DEFAULT_CON
  * Sum of pips converted to game points (nearest /5).
  */
 export function computeHandPenalty(hand: readonly Tile[], config: Config = DEFAULT_CONFIG): number {
-  void config;
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  return Math.round(total / 5);
+  return Math.round(total / config.scoringMultiple);
 }
 
 /**
@@ -140,9 +139,8 @@ export function computeGoOutBonusPoints(
   hand: readonly Tile[],
   config: Config = DEFAULT_CONFIG,
 ): number {
-  void config;
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  const awarded = Math.round(total / 5);
+  const awarded = Math.round(total / config.scoringMultiple);
   return awarded;
 }
 

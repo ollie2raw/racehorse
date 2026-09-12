@@ -69,3 +69,32 @@ describe('game-core browser adapter parity', () => {
     });
   });
 });
+
+describe('rule-override config forwarding', () => {
+  const dealFixture = {
+    player_tiles: [{ low: 1, high: 1 }],
+    fritz_tiles: [{ low: 6, high: 6 }, { low: 0, high: 5 }],
+    boneyard: [],
+    locked: [],
+  };
+
+  it('forwards blockedHandRule, endHandBonus, and scoringMultiple overrides onto Config', () => {
+    const state = createFixedBotHand({ you: 0, bot: 0 }, 1, 60, 7, dealFixture, 'you', {
+      blockedHandRule: 'noScore',
+      endHandBonus: 'none',
+      scoringMultiple: 1,
+    });
+    const { config } = toCoreGameState(state);
+    expect(config.blockedHandRule).toBe('noScore');
+    expect(config.endHandBonus).toBe('none');
+    expect(config.scoringMultiple).toBe(1);
+  });
+
+  it('defaults blockedHandRule, endHandBonus, and scoringMultiple when no override is given', () => {
+    const state = createFixedBotHand({ you: 0, bot: 0 }, 1, 60, 7, dealFixture);
+    const { config } = toCoreGameState(state);
+    expect(config.blockedHandRule).toBe('lowestPips');
+    expect(config.endHandBonus).toBe('sumOpponentPenalties');
+    expect(config.scoringMultiple).toBe(5);
+  });
+});

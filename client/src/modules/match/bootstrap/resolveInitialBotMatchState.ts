@@ -5,6 +5,7 @@ import {
   createFixedBotMatch,
   type BotMatchState,
   type BotDealSize,
+  type MatchRuleOverrides,
 } from '../runtime/botEngine.ts';
 import {
   generateAuthoringHandDeal,
@@ -37,6 +38,7 @@ export type ResolveInitialBotMatchStateInput = {
   preGameDrawEligible: boolean;
   dailyFritzPackage: DailyFritzStartResponse | null;
   guidedInitSourceRef: { current: 'full-matchStateJson' | 'reduced-snapshot' | 'seeded-deal' | 'random' | null };
+  matchRuleOverrides?: MatchRuleOverrides;
 };
 
 export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateInput): BotMatchState {
@@ -53,6 +55,7 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
     preGameDrawEligible,
     dailyFritzPackage,
     guidedInitSourceRef,
+    matchRuleOverrides,
   } = input;
 
   if (isAuthoringMode) {
@@ -97,6 +100,6 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
       ? createPreGameDrawShellMatch(winningScore, dealSize)
       : mode === 'daily-fritz' && dailyFritzPackage
         ? createDailyFritzOfficialMatch(dailyFritzPackage, winningScore)
-        : createBotMatch(winningScore, dealSize))
+        : createBotMatch(winningScore, dealSize, matchRuleOverrides))
   );
 }

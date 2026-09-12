@@ -38,7 +38,15 @@ export function useMatchNavigation({
   clearHandReveal,
   setLastBotChoice,
 }: UseMatchNavigationArgs) {
-  const { onBack, onNavigate, journeyTrial, onJourneyTrialComplete, onDailyFritzComplete, currentGlickoRating } = props;
+  const {
+    onBack,
+    onNavigate,
+    journeyTrial,
+    onJourneyTrialComplete,
+    onDailyFritzComplete,
+    currentGlickoRating,
+    matchRuleOverrides,
+  } = props;
   const {
     match,
     setMatch,
@@ -149,7 +157,7 @@ export function useMatchNavigation({
       setMatch(createPreGameDrawShellMatch(winningScore, dealSize));
     } else {
       setPreGameDrawCompleted(true);
-      setMatch(createBotMatch(winningScore, dealSize));
+      setMatch(createBotMatch(winningScore, dealSize, matchRuleOverrides));
     }
   }, [
     isGuidedV2Mode,
@@ -193,6 +201,7 @@ export function useMatchNavigation({
     setMatch,
     winningScore,
     dealSize,
+    matchRuleOverrides,
   ]);
 
   const goHome = useCallback(() => {

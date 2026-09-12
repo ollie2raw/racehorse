@@ -362,6 +362,16 @@ export function BotMatchRoute({
           dealSize={journeyChallenge?.dealSize ?? botDealSize}
           fritzTier={journeyChallenge?.fritzTier ?? botFritzTier}
           winningScore={journeyChallenge?.winningScore ?? 60}
+          matchRuleOverrides={
+            journeyChallenge
+              ? {
+                  blockedHandRule: journeyChallenge.blockedHandRule,
+                  endHandBonus: journeyChallenge.endHandBonus,
+                  scoringMultiple: journeyChallenge.scoringMultiple,
+                  scoreHandicap: journeyChallenge.scoreHandicap,
+                }
+              : undefined
+          }
           journeyTrial={
             journeyChallenge
               ? { nodeId: journeyChallenge.nodeId, nodeTitle: journeyChallenge.nodeTitle }
