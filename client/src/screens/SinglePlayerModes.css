@@ -102,12 +102,12 @@
 /* Journey Card — same chrome as The Lab (tier-master purple), equal weight
    and size to Fritz/Ghost as a third card in the row, not a banner underneath. */
 .journey-card-container .sp-solo-mode-card__art-slot {
-  left: 28%;
+  left: 0%;
 }
 
 .journey-card-container .sp-solo-mode-card__art {
   object-position: center top;
-  transform: scale(1.3) translate(-1%, 2%);
+  transform: scale(1.2) translate(110px, -28px);
 }
 
 .journey-card-container {

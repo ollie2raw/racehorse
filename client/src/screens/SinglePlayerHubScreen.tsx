@@ -74,9 +74,20 @@ function StatIcon({ icon }: { icon: StatIconName }) {
 
 const MODES: CardConfig[] = [
   {
+    key: "journey" as AppMode,
+    containerClass: "journey-card-container",
+    sectionRounded: "rounded-[20px] rounded-tl-[5px]",
+    title: "Journey",
+    titleColor: "#C77DFF",
+    desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
+    variant: "tier-master",
+    chevronColor: "#C77DFF",
+    ctaLabel: "Start",
+  },
+  {
     key: "botSetup" as AppMode,
     containerClass: "daily-fritz-card-container",
-    sectionRounded: "rounded-[20px] rounded-tl-[5px]",
+    sectionRounded: "rounded-[20px]",
     title: "Play vs Fritz",
     titleColor: "#E7B64A",
     desc: "Fritz doesn't go easy. Find out if you're good enough.",
@@ -87,25 +98,13 @@ const MODES: CardConfig[] = [
   {
     key: "ghostSetup" as AppMode,
     containerClass: "daily-puzzle-card-container",
-    sectionRounded: "rounded-[20px]",
+    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
     title: "Ghost Mode",
     titleColor: "#4FC3F7",
     desc: "Race against a model of your own game. Can you beat yourself?",
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
     ctaLabel: "Play",
-  },
-  {
-    key: "journey" as AppMode,
-    containerClass: "journey-card-container",
-    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
-    title: "Journey",
-    titleColor: "#C77DFF",
-    desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
-    variant: "tier-master",
-    chevronColor: "#C77DFF",
-    ctaLabel: "Start",
-    eyebrow: "The Campaign",
   },
 ];
 
