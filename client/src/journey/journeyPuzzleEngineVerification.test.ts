@@ -62,25 +62,17 @@ describe('verifyJourneyPuzzleAgainstEngine', () => {
     expect(issues).toEqual([]);
   });
 
-  it('documents a real, pre-existing bug: ch1-n03\'s claimed correct tile is not actually legal', () => {
+  it('confirms ch1-n03 is now engine-legal after the content fix', () => {
     // ch1-n03 is the one production puzzle with boardState populated today.
     // Its chain is [6,6]-[6,3]-[5,3]-[5,5]: both end tiles are doubles, so the
-    // chain's genuine open ends are 6 and 5 — not the "3 and 5" the puzzle's
-    // own scenario text and `ends` field claim. The authored correctTile
-    // (3-4) cannot legally be played against this board at all; the only
-    // hand tile that actually is legal is 5-6 — the tile the puzzle's own
-    // narrative frames as the impulsive *wrong* answer (choice "b": "Strike
-    // fast on 3-4"). This was never caught because InteractivePuzzleModal's
-    // answer check is a plain tile-equality comparison against `correctTile`,
-    // not a real engine legality check — exactly the gap this tool closes.
-    // Confirmed as a genuine content bug, not a false positive from this
-    // tool; fixing the content is out of scope here (content-only change,
-    // deferred — see docs/scoping/journey-overhaul-2026-09-12.md).
+    // chain's genuine open ends are 6 and 5. It used to claim "3 and 5" and a
+    // correctTile (3-4) that was not actually a legal move against this
+    // board — this tool caught that. The content has since been corrected
+    // (see the ch1-n03 content-fix PR) so this now asserts a clean bill of
+    // health, guarding against the same class of bug recurring.
     const puzzle = JOURNEY_PUZZLES['ch1-n03'];
     expect(puzzle).toBeDefined();
     expect(puzzle.boardState).toBeDefined();
-    expect(verifyJourneyPuzzleAgainstEngine(puzzle)).toEqual([
-      expect.objectContaining({ code: 'correct_tile_illegal' }),
-    ]);
+    expect(verifyJourneyPuzzleAgainstEngine(puzzle)).toEqual([]);
   });
 });
