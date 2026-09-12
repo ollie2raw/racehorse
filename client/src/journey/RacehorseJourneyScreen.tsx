@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import type { FritzTier } from '../bot/fritzConfig';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
-import { Button } from '../components/primitives';
+import { Button, Modal } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 import { useJourneyProgress } from './useJourneyProgress';
 import { getChapterProgressRecord, isPlayableChapterId } from './journeyChapters';
@@ -80,6 +80,17 @@ function chapterModuleShortTitle(title: string): string {
   return title.replace(/^The /, '');
 }
 
+/** A small padlock glyph for the locked chapter boss — gives the hexagon an
+    identity instead of reading as an empty placeholder shape. */
+function LockGlyph() {
+  return (
+    <svg width="20" height="22" viewBox="0 0 20 22" aria-hidden="true">
+      <rect x="2" y="9" width="16" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth={1.6} />
+      <path d="M5.5 9V6a4.5 4.5 0 0 1 9 0v3" fill="none" stroke="currentColor" strokeWidth={1.6} />
+    </svg>
+  );
+}
+
 /** A checkmark polyline matching the handoff's inline SVG exactly. */
 function DoneCheckmark() {
   return (
@@ -127,6 +138,7 @@ function JourneyTrailNode({
           onClick={() => onSelect(node.id)}
         >
           {node.status === 'completed' ? <DoneCheckmark /> : null}
+          {node.status === 'locked' ? <LockGlyph /> : null}
         </button>
         {node.status === 'locked' ? (
           <span className="rh-jt-node__caption rh-jt-node__caption--boss-locked">CHAPTER FINALE · LOCKED</span>
@@ -343,6 +355,15 @@ export default function RacehorseJourneyScreen({
     setSheetOpen(true);
   };
 
+  // The "Current Node" header stat looked like a button but did nothing —
+  // scroll that node into view on the map, then open its mission modal same
+  // as clicking it directly.
+  const handleJumpToCurrentNode = (nodeId: string) => {
+    const index = nodesWithStatus.findIndex((node) => node.id === nodeId);
+    nodeElRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    handleSelectNode(nodeId);
+  };
+
   const handleSelectChapter = (chapter: JourneyChapterWithStatus) => {
     if (!canSelectJourneyChapter(chapter)) return;
     if (chapter.chapterId === activeChapter.chapterId) return;
@@ -487,14 +508,25 @@ export default function RacehorseJourneyScreen({
                 </div>
                 <div className="rh-jt-stat-caption">NODES CLEARED</div>
               </div>
-              <span className="rh-jt-stat-divider" aria-hidden="true" />
-              <span className="rh-jt-stat-icon" aria-hidden="true">
-                ▸
-              </span>
-              <div>
-                <div className="rh-jt-stat-value rh-jt-stat-value--name">{currentNode?.title ?? '—'}</div>
-                <div className="rh-jt-stat-caption">CURRENT NODE</div>
-              </div>
+              {currentNode ? (
+                <>
+                  <span className="rh-jt-stat-divider" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="rh-jt-stat-card__jump"
+                    onClick={() => handleJumpToCurrentNode(currentNode.id)}
+                    aria-label={`Jump to current node: ${currentNode.title}`}
+                  >
+                    <span className="rh-jt-stat-icon" aria-hidden="true">
+                      ▸
+                    </span>
+                    <div>
+                      <div className="rh-jt-stat-value rh-jt-stat-value--name">{currentNode.title}</div>
+                      <div className="rh-jt-stat-caption">CURRENT NODE</div>
+                    </div>
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -596,47 +628,37 @@ export default function RacehorseJourneyScreen({
           })}
         </div>
 
-        <div className={`rh-journey-w-sheet${sheetOpen && selectedNode ? ' rh-journey-w-sheet--open' : ''}`}>
+        <Modal
+          open={sheetOpen && !!selectedNode}
+          onClose={() => setSheetOpen(false)}
+          title={selectedNode?.title}
+          maxWidth={420}
+          panelClassName="rh-jt-mission-panel"
+        >
           {selectedNode ? (
-            <div className="rh-journey-w-sheet__inner">
+            <div className="rh-jt-mission">
+              <p className="rh-jt-mission__eyebrow">
+                {nodeTypeLabel(selectedNode.nodeType)}
+                {selectedTrialRuntime ? ` · ${selectedTrialRuntime.fritzTier.toUpperCase()}` : ''}
+              </p>
+              <p className="rh-jt-mission__subtitle">{selectedNode.subtitle}</p>
+              <p className="rh-jt-mission__win">{getJourneyWinConditionLabel(selectedNode)}</p>
+              <div className="rh-jt-mission__divider" />
+              <div className="rh-jt-mission__reward">
+                <span>Reward</span>
+                <strong>{selectedNode.rewardText}</strong>
+              </div>
               <button
                 type="button"
-                className="rh-journey-w-sheet__close"
-                aria-label="Close"
-                onClick={() => setSheetOpen(false)}
+                className="rh-jt-mission__cta"
+                disabled={detailCtaDisabled}
+                onClick={handleBegin}
               >
-                ×
+                {detailCtaLabel}
               </button>
-              <div className="rh-journey-w-sheet__top">
-                <div>
-                  <span className={`rh-journey-chip rh-journey-chip--type-${selectedNode.nodeType}`}>
-                    {nodeTypeLabel(selectedNode.nodeType)}
-                  </span>
-                  {selectedTrialRuntime ? (
-                    <span
-                      className={`rh-journey-chip rh-journey-tier--${selectedTrialRuntime.fritzTier}`}
-                      style={{ marginLeft: 6 }}
-                    >
-                      {selectedTrialRuntime.fritzTier.toUpperCase()}
-                    </span>
-                  ) : null}
-                  <h3 className="rh-journey-w-sheet__title">{selectedNode.title}</h3>
-                  <p className="rh-journey-w-sheet__sub">{selectedNode.subtitle}</p>
-                </div>
-                <div className="rh-journey-w-sheet__reward">
-                  <span>Reward</span>
-                  <strong>{selectedNode.rewardText}</strong>
-                </div>
-              </div>
-              <div className="rh-journey-w-sheet__bottom">
-                <span className="rh-journey-w-sheet__win">{getJourneyWinConditionLabel(selectedNode)}</span>
-                <Button variant="tier-elite" type="button" disabled={detailCtaDisabled} onClick={handleBegin}>
-                  {detailCtaLabel}
-                </Button>
-              </div>
             </div>
           ) : null}
-        </div>
+        </Modal>
       </div>
 
       <JourneyBriefingModal

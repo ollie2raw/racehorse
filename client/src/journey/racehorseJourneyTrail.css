@@ -36,7 +36,6 @@
 }
 
 .rh-journey-trail-scroll,
-.rh-journey-w-sheet,
 .rh-jt-rail {
   color: var(--rh-jt-text-primary);
   font-family: var(--font-body);
@@ -168,6 +167,33 @@
   background: var(--rh-jt-border-10);
   margin: 0 6px;
   flex-shrink: 0;
+}
+
+.rh-jt-stat-card__jump {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: none;
+  background: none;
+  margin: -6px;
+  padding: 6px;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms var(--ease-premium), transform 120ms var(--ease-premium);
+}
+
+.rh-jt-stat-card__jump:hover {
+  background: rgba(232, 178, 60, 0.08);
+}
+
+.rh-jt-stat-card__jump:active {
+  transform: scale(0.98);
+}
+
+.rh-jt-stat-card__jump:hover .rh-jt-stat-icon {
+  background: rgba(232, 178, 60, 0.22);
+  border-color: rgba(232, 178, 60, 0.6);
 }
 
 /* Chapter tabs */
@@ -366,8 +392,14 @@
   width: 92px;
   height: 92px;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: linear-gradient(160deg, rgba(155, 124, 255, 0.12), rgba(232, 178, 60, 0.1));
+  /* An opaque backing under the tint — otherwise the translucent gradient
+     alone lets the trail path bleed through the hexagon behind it, reading
+     as a stray dash poking into an empty shape rather than a locked node. */
+  background:
+    linear-gradient(160deg, rgba(155, 124, 255, 0.16), rgba(232, 178, 60, 0.12)),
+    #14181d;
   border: 1.5px dashed rgba(232, 178, 60, 0.3);
+  color: rgba(232, 178, 60, 0.4);
 }
 
 .rh-jt-node__mark--boss.rh-jt-node__mark--boss-current {
@@ -466,112 +498,110 @@
   background: var(--rh-jt-gold-bright);
 }
 
-/* Mission overlay — the handoff explicitly leaves node-click destination
+/* Mission modal — the handoff explicitly leaves node-click destination
    behavior to the app ("wired to the real navigation stack"); this is that
-   destination surface: a compact bottom sheet with the node's win condition,
-   reward, and CTA, opened on click rather than a permanent side panel. */
-.rh-journey-w-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* Above .rh-journey-trail-scroll's z-index:10 (Tailwind relative z-10) —
-     otherwise that stacking context, not DOM order, decides the winner and
-     the scrollable map (including its SVG path) intercepts clicks meant for
-     this sheet, even while it's fully visible on top. */
-  z-index: 20;
-  transform: translateY(100%);
-  transition: transform 180ms var(--ease-premium);
-  pointer-events: none;
+   destination surface. Styled to match the Daily Fritz result "dossier"
+   (dailyFritzModalDossier.css: .dfd) rather than the shared GlassCard's
+   rounded, blurred, gradient-highlighted default — flat, square-cornered,
+   a record rather than a floating panel. */
+.rh-jt-mission-panel.rh-jt-mission-panel {
+  background-color: var(--rh-jt-bg-page);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 28px 28px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(231, 182, 74, 0.22);
+  border-radius: var(--radius-record);
+  box-shadow: 0 40px 90px -24px rgba(0, 0, 0, 0.95);
 }
 
-.rh-journey-w-sheet--open {
-  transform: translateY(0);
-  pointer-events: auto;
+.rh-jt-mission-panel.rh-jt-mission-panel::before {
+  display: none;
 }
 
-.rh-journey-w-sheet__inner {
-  position: relative;
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 20px 24px 22px;
-  background: var(--rh-jt-bg-card);
-  border: 1px solid var(--rh-jt-border-10);
-  border-bottom: none;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-  box-shadow: var(--shadow-lg);
-}
-
-.rh-journey-w-sheet__close {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  border: none;
-  background: none;
-  color: var(--rh-jt-text-muted);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.rh-journey-w-sheet__top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding-right: 20px;
-}
-
-.rh-journey-w-sheet__title {
-  margin: 8px 0 4px;
+.rh-jt-mission__eyebrow {
+  margin: 0 0 12px;
   font-family: var(--rh-jt-font-display);
-  font-weight: 600;
-  font-size: 22px;
-  color: var(--rh-jt-text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--rh-jt-gold);
 }
 
-.rh-journey-w-sheet__sub {
-  margin: 0;
-  max-width: 44ch;
-  font-size: 13px;
+.rh-jt-mission__subtitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--rh-jt-text-secondary);
 }
 
-.rh-journey-w-sheet__reward {
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.rh-journey-w-sheet__reward span {
-  display: block;
-  font-size: 10.5px;
+.rh-jt-mission__win {
+  margin: 0 0 22px;
+  font-size: 13px;
   color: var(--rh-jt-text-muted);
 }
 
-.rh-journey-w-sheet__reward strong {
+.rh-jt-mission__divider {
+  height: 1px;
+  margin-bottom: 20px;
+  background: var(--rh-jt-border-06);
+}
+
+.rh-jt-mission__reward {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.rh-jt-mission__reward span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--rh-jt-text-muted);
+}
+
+.rh-jt-mission__reward strong {
   font-family: var(--rh-jt-font-display);
   font-size: 15px;
   font-weight: 600;
   color: var(--rh-jt-text-primary);
 }
 
-.rh-journey-w-sheet__bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 16px;
+.rh-jt-mission__cta {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--rh-jt-gold);
+  border-radius: var(--radius-record);
+  background: var(--rh-jt-gold);
+  color: var(--text-on-elite);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 120ms var(--ease-premium), filter 120ms var(--ease-premium);
 }
 
-.rh-journey-w-sheet__win {
-  font-size: 12px;
-  color: var(--rh-jt-text-secondary);
+.rh-jt-mission__cta:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
 }
 
-@media (--phone) {
-  .rh-journey-w-sheet {
-    bottom: var(--rh-bottom-tab-offset, 0px);
-  }
+.rh-jt-mission__cta:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.rh-jt-mission__cta:disabled {
+  opacity: 0.5;
+  cursor: default;
+  background: rgba(231, 182, 74, 0.28);
+  border-color: rgba(231, 182, 74, 0.28);
+  color: rgba(4, 11, 23, 0.55);
 }
 
 @media (max-width: 640px) {
@@ -580,15 +610,5 @@
   }
   .rh-jt-rail {
     right: 10px;
-  }
-  .rh-journey-w-sheet__top {
-    flex-direction: column;
-  }
-  .rh-journey-w-sheet__reward {
-    text-align: left;
-  }
-  .rh-journey-w-sheet__bottom {
-    flex-direction: column;
-    align-items: stretch;
   }
 }
