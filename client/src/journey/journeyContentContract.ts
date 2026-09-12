@@ -46,6 +46,7 @@ export type JourneyRuntimeCapability =
       winningScore: number;
     } & JourneyMatchRuntimeRuleOverrides)
   | { kind: 'lesson_sequence'; lessonId: string }
+  | { kind: 'puzzle_sprint'; puzzleIds: string[]; timeLimitSec: number }
   | { kind: 'external_navigation'; mode: AppMode; params?: Record<string, unknown> }
   | { kind: 'unsupported'; reason: string };
 
@@ -56,6 +57,7 @@ export type JourneyCompletionAuthority =
   | { kind: 'bot_result'; owner: 'journey_match_bridge'; requiredResult: 'win' }
   | { kind: 'boss_result'; owner: 'journey_match_bridge'; requiredResult: 'win' }
   | { kind: 'lesson_controller_result'; owner: 'journey_lesson_controller' }
+  | { kind: 'puzzle_sprint_result'; owner: 'journey_ui' }
   | { kind: 'external_navigation'; owner: 'external_route'; completion: 'none' }
   | { kind: 'none'; owner: 'none'; reason: string };
 
