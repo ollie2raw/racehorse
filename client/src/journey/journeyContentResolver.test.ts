@@ -76,11 +76,11 @@ function makeLesson(id: string, nodeId: string, prerequisites: string[] = []): J
 }
 
 describe('Journey content resolver coverage', () => {
-  it('keeps the six production premium migration boundaries explicit', () => {
+  it('keeps the eight production premium migration boundaries explicit', () => {
     expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(108);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(102);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(6);
-    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(6);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(100);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(8);
+    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(8);
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].nodeId).toBe('ch1-n07');
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].id).not.toBe('ch1-n07');
   });
@@ -99,14 +99,14 @@ describe('Journey content resolver coverage', () => {
     expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(41);
     expect(summary.puzzleAnswerDistribution.totalPuzzles).toBe(48);
     expect(summary.normalizedContent).toMatchObject({
-      supported: 93,
+      supported: 95,
       legacyFallback: 0,
-      placeholder: 15,
+      placeholder: 13,
       unsupported: 0,
       coreJourneyRuleset: 108,
     });
     expect(summary.normalizedContent.capabilities).toMatchObject({
-      briefing_acknowledgement: 15,
+      briefing_acknowledgement: 13,
       static_decision: 45,
       interactive_board_decision: 1,
       bot_match: 35,
@@ -332,7 +332,7 @@ describe('future Journey lesson contract validation', () => {
 
   it('exposes isolated production and registry lookup collections', () => {
     expect(getJourneyLessonDefinition('premium:lesson-a')).toBeNull();
-    expect(getAllJourneyLessonDefinitions()).toHaveLength(6);
+    expect(getAllJourneyLessonDefinitions()).toHaveLength(8);
     expect(getAllJourneyLessonDefinitions()[0].id).toBe('journey:ch1:open-end-discipline');
     const registry = buildJourneyContentRegistry({ canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS, premiumLessonDefinitions: [makeLesson('premium:lookup', 'ch1-n02')] });
     const definitions = getAllJourneyLessonDefinitionsFromRegistry(registry);
