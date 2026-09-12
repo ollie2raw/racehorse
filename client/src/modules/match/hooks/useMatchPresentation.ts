@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
+import { DEFAULT_CONFIG } from '@racehorse/game-core';
 import type { Tile } from '../../../types.ts';
 import { buildPlayableTileKeys } from '../../../utils/handTileLegality.ts';
 import { logger } from '../../../utils/logger.ts';
@@ -10,7 +11,6 @@ import {
   getDisplayOpenEnds,
   getLegalMoves,
 } from '../runtime/botEngine.ts';
-import { resolveMatchConfig } from '../runtime/gameCoreAdapter.ts';
 import { asPlayMoves } from '../../../game/tileUtils.ts';
 import {
   playMatchLoseSound,
@@ -212,7 +212,7 @@ export function useMatchPresentation({
     const playedTilePoints = match.handOver
       && match.lastHandReason === 'domino'
       && match.board
-      ? computePlayScore(match.board, resolveMatchConfig(match))
+      ? computePlayScore(match.board, { ...DEFAULT_CONFIG, scoringMultiple: match.scoringMultiple ?? DEFAULT_CONFIG.scoringMultiple })
       : 0;
     const scoreEvent = resolveCommittedScoreEvent(baseline.scores, currentScores, {
       handOver: match.handOver,
@@ -235,6 +235,7 @@ export function useMatchPresentation({
     match.board,
     match.handOver,
     match.lastHandReason,
+    match.scoringMultiple,
     scoreIdentity,
     showScoreToast,
   ]);
