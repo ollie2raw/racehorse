@@ -24,6 +24,12 @@ import { COUNTING_WHATS_LEFT_LESSON_DEFINITION } from './lessons/countingWhatsLe
 import { validateCountingWhatsLeftContent } from './lessons/countingWhatsLeft/countingWhatsLeftValidation.ts';
 import { DOUBLES_ARENT_FREE_LESSON_DEFINITION } from './lessons/doublesArentFree/doublesArentFreeLesson.ts';
 import { validateDoublesArentFreeContent } from './lessons/doublesArentFree/doublesArentFreeValidation.ts';
+import { BLOCKED_HAND_TIEBREAK_LESSON_DEFINITION } from './lessons/blockedHandTiebreak/blockedHandTiebreakLesson.ts';
+import { validateBlockedHandTiebreakContent } from './lessons/blockedHandTiebreak/blockedHandTiebreakValidation.ts';
+import { ENDGAME_HAND_SHAPE_LESSON_DEFINITION } from './lessons/endgameHandShape/endgameHandShapeLesson.ts';
+import { validateEndgameHandShapeContent } from './lessons/endgameHandShape/endgameHandShapeValidation.ts';
+import { DEFENSIVE_HOLDING_LESSON_DEFINITION } from './lessons/defensiveHolding/defensiveHoldingLesson.ts';
+import { validateDefensiveHoldingContent } from './lessons/defensiveHolding/defensiveHoldingValidation.ts';
 
 export type JourneyContentRegistryBuildInput = {
   canonicalChapters: JourneyChapterDefinition[];
@@ -224,6 +230,9 @@ export function buildJourneyContentRegistry(input: JourneyContentRegistryBuildIn
     }
     if (definition.id === COUNTING_WHATS_LEFT_LESSON_DEFINITION.id) errors.push(...validateCountingWhatsLeftContent(definition));
     if (definition.id === DOUBLES_ARENT_FREE_LESSON_DEFINITION.id) errors.push(...validateDoublesArentFreeContent(definition));
+    if (definition.id === BLOCKED_HAND_TIEBREAK_LESSON_DEFINITION.id) errors.push(...validateBlockedHandTiebreakContent(definition));
+    if (definition.id === ENDGAME_HAND_SHAPE_LESSON_DEFINITION.id) errors.push(...validateEndgameHandShapeContent(definition));
+    if (definition.id === DEFENSIVE_HOLDING_LESSON_DEFINITION.id) errors.push(...validateDefensiveHoldingContent(definition));
   }
   if (errors.length > 0) throw new Error(['Invalid Journey content registry:', ...[...new Set(errors)].sort()].join('\n'));
   const premiumByNode = new Map(premiumDefinitions.map((definition) => [String(definition.nodeId), definition]));
@@ -256,7 +265,14 @@ export function buildJourneyContentRegistry(input: JourneyContentRegistryBuildIn
   };
 }
 
-export const PRODUCTION_PREMIUM_LESSON_DEFINITIONS: JourneyLessonDefinition[] = [OPEN_END_DISCIPLINE_LESSON_DEFINITION, COUNTING_WHATS_LEFT_LESSON_DEFINITION, DOUBLES_ARENT_FREE_LESSON_DEFINITION];
+export const PRODUCTION_PREMIUM_LESSON_DEFINITIONS: JourneyLessonDefinition[] = [
+  OPEN_END_DISCIPLINE_LESSON_DEFINITION,
+  COUNTING_WHATS_LEFT_LESSON_DEFINITION,
+  DOUBLES_ARENT_FREE_LESSON_DEFINITION,
+  BLOCKED_HAND_TIEBREAK_LESSON_DEFINITION,
+  ENDGAME_HAND_SHAPE_LESSON_DEFINITION,
+  DEFENSIVE_HOLDING_LESSON_DEFINITION,
+];
 export const PRODUCTION_JOURNEY_CONTENT_REGISTRY = buildJourneyContentRegistry({
   canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
   premiumLessonDefinitions: PRODUCTION_PREMIUM_LESSON_DEFINITIONS,

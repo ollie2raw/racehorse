@@ -2,8 +2,18 @@ import type { JourneyAuthoredLessonBundle } from './journeyAuthoredLessonBundle.
 import { OPEN_END_DISCIPLINE_BUNDLE } from './lessons/openEndDiscipline/openEndDisciplineBundle.ts';
 import { COUNTING_WHATS_LEFT_BUNDLE } from './lessons/countingWhatsLeft/countingWhatsLeftBundle.ts';
 import { DOUBLES_ARENT_FREE_BUNDLE } from './lessons/doublesArentFree/doublesArentFreeBundle.ts';
+import { BLOCKED_HAND_TIEBREAK_BUNDLE } from './lessons/blockedHandTiebreak/blockedHandTiebreakBundle.ts';
+import { ENDGAME_HAND_SHAPE_BUNDLE } from './lessons/endgameHandShape/endgameHandShapeBundle.ts';
+import { DEFENSIVE_HOLDING_BUNDLE } from './lessons/defensiveHolding/defensiveHoldingBundle.ts';
 
-export const PRODUCTION_AUTHORED_LESSON_BUNDLES: ReadonlyArray<JourneyAuthoredLessonBundle> = [OPEN_END_DISCIPLINE_BUNDLE, COUNTING_WHATS_LEFT_BUNDLE, DOUBLES_ARENT_FREE_BUNDLE];
+export const PRODUCTION_AUTHORED_LESSON_BUNDLES: ReadonlyArray<JourneyAuthoredLessonBundle> = [
+  OPEN_END_DISCIPLINE_BUNDLE,
+  COUNTING_WHATS_LEFT_BUNDLE,
+  DOUBLES_ARENT_FREE_BUNDLE,
+  BLOCKED_HAND_TIEBREAK_BUNDLE,
+  ENDGAME_HAND_SHAPE_BUNDLE,
+  DEFENSIVE_HOLDING_BUNDLE,
+];
 const BUNDLES_BY_CONTENT_ID = new Map(PRODUCTION_AUTHORED_LESSON_BUNDLES.map((bundle) => [String(bundle.contentId), bundle]));
 
 if (BUNDLES_BY_CONTENT_ID.size !== PRODUCTION_AUTHORED_LESSON_BUNDLES.length) throw new Error('Duplicate authored Journey lesson bundle content IDs.');
