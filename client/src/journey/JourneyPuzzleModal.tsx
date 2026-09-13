@@ -45,7 +45,7 @@ export function JourneyPuzzleModal({
   const showFeedback = reviewMode || displaySelectedId != null;
 
   return (
-    <Modal open={open} onClose={onClose} title={puzzle.title} maxWidth={580}>
+    <Modal open={open} onClose={onClose} title={puzzle.title} maxWidth={580} panelClassName="rh-jt-mission-panel">
       <div className="rh-journey-puzzle rh-journey-modal-panel">
         <p className="rh-journey-puzzle__eyebrow">{puzzle.eyebrow}</p>
         <p className="rh-journey-puzzle__scenario">{puzzle.scenario}</p>

@@ -19,7 +19,7 @@ export function JourneyBriefingModal({
   if (!briefing) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title={briefing.title} maxWidth={560}>
+    <Modal open={open} onClose={onClose} title={briefing.title} maxWidth={560} panelClassName="rh-jt-mission-panel">
       <div className="rh-journey-briefing rh-journey-modal-panel">
         <p className="rh-journey-briefing__eyebrow">{briefing.eyebrow}</p>
         <p className="rh-journey-briefing__intro">{briefing.intro}</p>

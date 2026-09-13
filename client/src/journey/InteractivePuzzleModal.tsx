@@ -82,7 +82,7 @@ export function InteractivePuzzleModal({
   const isSolved = displayReviewMode || displayResult === 'correct';
 
   return (
-    <Modal open={open} onClose={onClose} title={puzzle.title} maxWidth={580}>
+    <Modal open={open} onClose={onClose} title={puzzle.title} maxWidth={580} panelClassName="rh-jt-mission-panel">
       <div
         className={`rh-journey-modal-panel ipm-root${isSolved ? ' ipm-root--solved' : ''}`}
       >

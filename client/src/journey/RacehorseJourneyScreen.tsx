@@ -363,6 +363,11 @@ export default function RacehorseJourneyScreen({
     (selectedNode.status === 'completed' && !selectedPremiumHost) ||
     !(canBegin || canOpenBriefing || canOpenPuzzle || canOpenPuzzleSprint || canOpenPremiumLesson);
 
+  // Distinguishes "done, nothing left to do" from "locked, can't do it yet" —
+  // both disable the CTA, but they should not look the same (a completed
+  // node is a positive record, not a dead control).
+  const detailCtaCompleted = selectedNode?.status === 'completed' && !selectedPremiumHost;
+
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
     selectNode(nodeId);
@@ -675,7 +680,7 @@ export default function RacehorseJourneyScreen({
               </div>
               <button
                 type="button"
-                className="rh-jt-mission__cta"
+                className={`rh-jt-mission__cta${detailCtaCompleted ? ' rh-jt-mission__cta--done' : ''}`}
                 disabled={detailCtaDisabled}
                 onClick={handleBegin}
               >

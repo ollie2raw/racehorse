@@ -604,6 +604,16 @@
   color: rgba(4, 11, 23, 0.55);
 }
 
+/* A completed node is a record, not a dead control — full opacity, green
+   (the same success color the trail map and DoneCheckmark already use),
+   not the washed-out gold of a merely-disabled/locked CTA. */
+.rh-jt-mission__cta.rh-jt-mission__cta--done:disabled {
+  opacity: 1;
+  background: rgba(74, 222, 128, 0.12);
+  border-color: var(--rh-jt-green);
+  color: var(--rh-jt-green);
+}
+
 @media (max-width: 640px) {
   .rh-jt-title {
     font-size: 26px;

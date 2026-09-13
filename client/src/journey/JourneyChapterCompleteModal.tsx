@@ -30,6 +30,7 @@ export function JourneyChapterCompleteModal({
       onClose={onClose}
       title={`Chapter ${chapter.chapterNumber} Complete`}
       maxWidth={560}
+      panelClassName="rh-jt-mission-panel"
     >
       <div className="rh-journey-chapter-complete rh-journey-modal-panel">
         <p className="rh-journey-chapter-complete__eyebrow">{chapter.title} Cleared</p>
