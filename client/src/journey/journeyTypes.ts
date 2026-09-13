@@ -42,7 +42,8 @@ export type JourneyNodeAction =
     }
   | { kind: 'botMatchVariant'; variantId: string }
   | { kind: 'puzzle'; puzzleId: string }
-  | { kind: 'lesson'; lessonId: string };
+  | { kind: 'lesson'; lessonId: string }
+  | { kind: 'puzzleSprint'; puzzleIds: string[]; timeLimitSec: number };
 
 export interface JourneyNode {
   id: string;

@@ -177,6 +177,7 @@ export function getRequestedCapability(action: JourneyNodeAction): JourneyRuntim
     case 'botMatchVariant': return 'bot_match';
     case 'puzzle': return 'static_decision';
     case 'lesson': return 'lesson_sequence';
+    case 'puzzleSprint': return 'puzzle_sprint';
     default: return assertNever(action);
   }
 }

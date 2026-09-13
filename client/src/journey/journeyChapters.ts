@@ -36,7 +36,7 @@ export const JOURNEY_CHAPTER_DEFINITIONS: JourneyChapterDefinition[] = [
     title: 'The Fritz Trail',
     subtitle: 'Chapter 1 · Proving Ground',
     description:
-      'Twelve milestones from trailhead briefing to your first Grandmaster gate—the opening march of a much longer Journey.',
+      'Ten milestones from trailhead briefing to your first Grandmaster gate—the opening march of a much longer Journey.',
     totalNodes: CH1_FRITZ_TRAIL_NODES.length,
     finalReward: 'Fritz Trail Conqueror',
     nextChapterCopy: 'Clear this trail to reveal the next chapter of Racehorse Journey.',

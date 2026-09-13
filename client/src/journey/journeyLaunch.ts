@@ -1,6 +1,7 @@
 import type { JourneyActiveChallenge } from './journeyRuntime';
 import { hasJourneyBriefing } from './journeyBriefings';
 import { hasJourneyPuzzle } from './journeyPuzzles';
+import { hasJourneyPuzzleSprint } from './journeyPuzzleSprints';
 import { getJourneyContentDescriptor } from './journeyContentResolver';
 import type { JourneyRuntimeCapability } from './journeyContentContract';
 import type { JourneyNodeWithStatus } from './journeyTypes';
@@ -16,6 +17,11 @@ export function isJourneyPuzzleNode(node: JourneyNodeWithStatus): boolean {
     (descriptor?.runtime.kind === 'static_decision' || descriptor?.runtime.kind === 'interactive_board_decision') &&
     hasJourneyPuzzle(node.id)
   );
+}
+
+export function isJourneyPuzzleSprintNode(node: JourneyNodeWithStatus): boolean {
+  const descriptor = getJourneyContentDescriptor(node.id);
+  return descriptor?.runtime.kind === 'puzzle_sprint' && hasJourneyPuzzleSprint(node.id);
 }
 
 export function isJourneyBotTrialNode(node: JourneyNodeWithStatus): boolean {

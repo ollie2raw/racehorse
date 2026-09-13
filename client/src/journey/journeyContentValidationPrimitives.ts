@@ -14,11 +14,11 @@ export type JourneyContentValidationContext = {
 
 const RUNTIME_KINDS = new Set([
   'briefing_acknowledgement', 'static_decision', 'interactive_board_decision',
-  'bot_match', 'boss_match', 'lesson_sequence', 'external_navigation', 'unsupported',
+  'bot_match', 'boss_match', 'lesson_sequence', 'puzzle_sprint', 'external_navigation', 'unsupported',
 ]);
 const COMPLETION_KINDS = new Set([
   'briefing_acknowledged', 'decision_correct', 'interactive_scenario_success',
-  'bot_result', 'boss_result', 'lesson_controller_result', 'external_navigation', 'none',
+  'bot_result', 'boss_result', 'lesson_controller_result', 'puzzle_sprint_result', 'external_navigation', 'none',
 ]);
 const SUPPORT_STATUSES = new Set(['supported', 'legacyFallback', 'placeholder', 'unsupported']);
 const MIGRATION_CLASSES = new Set(['legacy', 'premium']);
@@ -273,12 +273,14 @@ function validateDescriptorValues(errors: string[], descriptor: JourneyContentDe
     briefing_acknowledgement: 'briefing_acknowledged', static_decision: 'decision_correct',
     interactive_board_decision: 'interactive_scenario_success', bot_match: 'bot_result',
     boss_match: 'boss_result', lesson_sequence: 'lesson_controller_result',
+    puzzle_sprint: 'puzzle_sprint_result',
     external_navigation: 'external_navigation', unsupported: 'none',
   };
   if (pairs[String(runtimeKind)] !== String(completionKind)) errors.push(`${id}: runtime ${String(runtimeKind)} is incompatible with completion ${String(completionKind)}`);
   const owners: Record<string, string> = {
     briefing_acknowledged: 'journey_ui', decision_correct: 'journey_ui', interactive_scenario_success: 'journey_ui',
     bot_result: 'journey_match_bridge', boss_result: 'journey_match_bridge', lesson_controller_result: 'journey_lesson_controller',
+    puzzle_sprint_result: 'journey_ui',
     external_navigation: 'external_route', none: 'none',
   };
   if (owners[String(completionKind)] !== String(completion.owner)) errors.push(`${id}: completion ${String(completionKind)} has incompatible owner`);

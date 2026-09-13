@@ -5,6 +5,7 @@ import {
   hasJourneyBriefing,
   hasJourneyPuzzle,
 } from './journeyContentIndex.ts';
+import { hasJourneyPuzzleSprint } from './journeyPuzzleSprints.ts';
 import { JOURNEY_CHAPTER_DEFINITIONS } from './journeyChapters.ts';
 import {
   CORE_JOURNEY_RULESET_ID,
@@ -295,11 +296,11 @@ function createDefaultValidationContext(): JourneyContentValidationContext {
 
 const VALID_RUNTIME_KINDS = new Set([
   'briefing_acknowledgement', 'static_decision', 'interactive_board_decision',
-  'bot_match', 'boss_match', 'lesson_sequence', 'external_navigation', 'unsupported',
+  'bot_match', 'boss_match', 'lesson_sequence', 'puzzle_sprint', 'external_navigation', 'unsupported',
 ]);
 const VALID_COMPLETION_KINDS = new Set([
   'briefing_acknowledged', 'decision_correct', 'interactive_scenario_success',
-  'bot_result', 'boss_result', 'lesson_controller_result', 'external_navigation', 'none',
+  'bot_result', 'boss_result', 'lesson_controller_result', 'puzzle_sprint_result', 'external_navigation', 'none',
 ]);
 const VALID_SUPPORT_STATUSES = new Set(['supported', 'legacyFallback', 'placeholder', 'unsupported']);
 const VALID_MIGRATION_CLASSES = new Set(['legacy', 'premium']);
@@ -492,6 +493,7 @@ function validateRuntimeAndCompletion(errors: string[], descriptor: unknown): vo
     bot_match: 'bot_result',
     boss_match: 'boss_result',
     lesson_sequence: 'lesson_controller_result',
+    puzzle_sprint: 'puzzle_sprint_result',
     external_navigation: 'external_navigation',
     unsupported: 'none',
   };
@@ -503,6 +505,7 @@ function validateRuntimeAndCompletion(errors: string[], descriptor: unknown): vo
     bot_result: 'journey_match_bridge',
     boss_result: 'journey_match_bridge',
     lesson_controller_result: 'journey_lesson_controller',
+    puzzle_sprint_result: 'journey_ui',
     external_navigation: 'external_route',
     none: 'none',
   };
@@ -676,10 +679,13 @@ function validateNodeFields(errors: string[], node: JourneyNode): void {
   }
 
   if (node.nodeType === 'puzzle') {
-    if (node.action.kind !== 'puzzle') {
-      pushNodeError(errors, node, 'puzzle node must use puzzle action');
-    }
-    if (!hasJourneyPuzzle(node.id)) {
+    if (node.action.kind === 'puzzleSprint') {
+      if (!hasJourneyPuzzleSprint(node.id)) {
+        pushNodeError(errors, node, 'missing puzzle-sprint content in journey puzzle-sprint registry');
+      }
+    } else if (node.action.kind !== 'puzzle') {
+      pushNodeError(errors, node, 'puzzle node must use puzzle or puzzleSprint action');
+    } else if (!hasJourneyPuzzle(node.id)) {
       pushNodeError(errors, node, 'missing puzzle content in journey puzzle registry');
     }
   }

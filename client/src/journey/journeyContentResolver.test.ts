@@ -77,8 +77,8 @@ function makeLesson(id: string, nodeId: string, prerequisites: string[] = []): J
 
 describe('Journey content resolver coverage', () => {
   it('keeps the eight production premium migration boundaries explicit', () => {
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(108);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(100);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(106);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(98);
     expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(8);
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(8);
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].nodeId).toBe('ch1-n07');
@@ -95,22 +95,23 @@ describe('Journey content resolver coverage', () => {
 
   it('reports the current inventory and normalized capability baseline', () => {
     const summary = summarizeJourneyContent();
-    expect(summary.totalNodeCount).toBe(108);
-    expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(41);
+    expect(summary.totalNodeCount).toBe(106);
+    expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(37);
     expect(summary.puzzleAnswerDistribution.totalPuzzles).toBe(48);
     expect(summary.normalizedContent).toMatchObject({
-      supported: 95,
+      supported: 92,
       legacyFallback: 0,
-      placeholder: 13,
+      placeholder: 14,
       unsupported: 0,
-      coreJourneyRuleset: 108,
+      coreJourneyRuleset: 106,
     });
     expect(summary.normalizedContent.capabilities).toMatchObject({
-      briefing_acknowledgement: 13,
+      briefing_acknowledgement: 14,
       static_decision: 45,
       interactive_board_decision: 1,
-      bot_match: 35,
+      bot_match: 31,
       boss_match: 6,
+      puzzle_sprint: 1,
     });
   });
 
@@ -154,7 +155,7 @@ describe('Journey content resolver coverage', () => {
     expect(getJourneyContentDescriptor('ch1-n02')?.completion).toEqual({
       kind: 'bot_result', owner: 'journey_match_bridge', requiredResult: 'win',
     });
-    expect(getJourneyContentDescriptor('ch1-n12')?.completion).toEqual({
+    expect(getJourneyContentDescriptor('ch1-n10')?.completion).toEqual({
       kind: 'boss_result', owner: 'journey_match_bridge', requiredResult: 'win',
     });
   });
@@ -246,8 +247,8 @@ describe('future Journey lesson contract validation', () => {
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
       premiumLessonDefinitions: [makeFutureLesson()],
     });
-    expect(registry.descriptors).toHaveLength(108);
-    expect(new Set(registry.descriptors.map((descriptor) => descriptor.nodeId)).size).toBe(108);
+    expect(registry.descriptors).toHaveLength(106);
+    expect(new Set(registry.descriptors.map((descriptor) => descriptor.nodeId)).size).toBe(106);
     const descriptor = registry.descriptors.find((entry) => entry.nodeId === 'ch1-n02');
     expect(descriptor?.migrationClass).toBe('premium');
     expect(descriptor?.contentId).toBe('premium:tempo-foundation');
@@ -324,7 +325,7 @@ describe('future Journey lesson contract validation', () => {
     expect(first.descriptors.map((descriptor) => descriptor.nodeId)).toEqual(second.descriptors.map((descriptor) => descriptor.nodeId));
     expect(first.premiumDefinitions.map((definition) => definition.id)).toEqual(['premium:lesson-a', 'premium:lesson-b']);
     expect(second.premiumDefinitions.map((definition) => definition.id)).toEqual(['premium:lesson-a', 'premium:lesson-b']);
-    expect(first.descriptors).toHaveLength(108);
+    expect(first.descriptors).toHaveLength(106);
     expect(first.premiumDefinitions).toHaveLength(2);
     expect(getJourneyLessonDefinitionFromRegistry(first, 'premium:lesson-a')?.id).toBe('premium:lesson-a');
     expect(getJourneyLessonDefinitionFromRegistry(first, 'ch1-n02')).toBeNull();
