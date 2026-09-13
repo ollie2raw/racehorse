@@ -1,2 +1,12 @@
 export { useReviewRuntime } from './useReviewRuntime.ts';
 export type { UseReviewRuntimeArgs, UseReviewRuntimeResult } from './useReviewRuntime.ts';
+export {
+  adaptLegacyOpponentMissingEvidence,
+  adaptPassOnEndBatches,
+  toReviewKnownMissingPipEvidence,
+} from './missingPipEvidenceAdapter.ts';
+export type {
+  LegacyOpponentMissingEvidenceRow,
+  LiveMissingPipObservation,
+  LivePassOnEndBatch,
+} from './missingPipEvidenceAdapter.ts';
