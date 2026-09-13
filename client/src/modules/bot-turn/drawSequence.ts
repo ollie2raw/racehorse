@@ -8,6 +8,10 @@ import {
   type BotMatchState,
   type BotPlayerId,
 } from '../match/runtime/botEngine.ts';
+import {
+  observeActorDrawPastOpenEnds,
+  observeActorPassOnOpenEnds,
+} from '../review/missingPipEvidenceAccumulate.ts';
 import { playDrawSound, queueSound } from '../../utils/sound.ts';
 
 export type RunDrawSequence = (
@@ -52,12 +56,18 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
   ): Promise<BotActionResult> => {
     let current = initialState;
     let drewAny = false;
+    let recordedDrawPast = false;
 
     while (asPlayMoves(getLegalMoves(current, player)).length === 0) {
       if (token && !isLocalRunCurrent(token)) break;
-      const beforeDraw = current;
+      // Stamp draw-past evidence on the pre-draw state only if a tile is actually drawn.
+      // (Locked-boneyard pass must not get a false drew_past_open_end row.)
+      const beforeDraw = recordedDrawPast
+        ? current
+        : observeActorDrawPastOpenEnds(current, player);
       const step = drawOne(beforeDraw, player);
       if (!step.drew) break;
+      recordedDrawPast = true;
       onStep?.({ actionKind: 'draw', beforeState: beforeDraw, result: step });
       drewAny = true;
       current = step.state;
@@ -81,7 +91,7 @@ export function createRunDrawSequence(deps: CreateRunDrawSequenceDeps): RunDrawS
     }
 
     if (asPlayMoves(getLegalMoves(current, player)).length === 0) {
-      const beforePass = current;
+      const beforePass = observeActorPassOnOpenEnds(current, player);
       const passResult = passTurn(beforePass, player);
       onStep?.({ actionKind: 'pass', beforeState: beforePass, result: passResult });
       return {

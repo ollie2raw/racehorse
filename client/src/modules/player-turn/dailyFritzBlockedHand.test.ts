@@ -83,4 +83,27 @@ describe('resolveDailyFritzBlockedHandPass', () => {
     expect(resolution.result.state.handOver).toBe(true);
     expect(resolution.result.handEnded?.reason).toBe('blocked');
   });
+
+  it('accumulates passed_on_open_end observations for both actors (A1)', () => {
+    const match = makeLockedStuckMatch({
+      consecutivePasses: 0,
+      reviewMissingPipObservations: [],
+    });
+    const resolution = resolveDailyFritzBlockedHandPass(match);
+    const rows = resolution.result.state.reviewMissingPipObservations ?? [];
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actorId: 'you',
+          reason: 'passed_on_open_end',
+          openEnds: [6],
+        }),
+        expect.objectContaining({
+          actorId: 'bot',
+          reason: 'passed_on_open_end',
+          openEnds: [6],
+        }),
+      ]),
+    );
+  });
 });

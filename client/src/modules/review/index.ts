@@ -10,3 +10,8 @@ export type {
   LiveMissingPipObservation,
   LivePassOnEndBatch,
 } from './missingPipEvidenceAdapter.ts';
+export {
+  appendReviewMissingPipObservation,
+  observeActorDrawPastOpenEnds,
+  observeActorPassOnOpenEnds,
+} from './missingPipEvidenceAccumulate.ts';

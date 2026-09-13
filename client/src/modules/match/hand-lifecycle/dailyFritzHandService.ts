@@ -166,6 +166,7 @@ export function tryApplyDailyFritzNextHand(
       opponentPassedOnEnds: [],
       opponentDrawCount: 0,
       opponentKnownMissing: [],
+      reviewMissingPipObservations: [],
     },
   };
 }
