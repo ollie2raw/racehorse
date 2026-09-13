@@ -134,6 +134,11 @@ export default defineConfig({
           env: {
             ...process.env,
             VITE_SERVER_URL: 'http://localhost:3001',
+            // journey-premium-*.spec.ts run anonymously and need to reach
+            // Journey content, which is otherwise gated to the admin
+            // account (see isAdminUser.ts) — never set outside this
+            // Playwright-launched dev server.
+            VITE_E2E_ADMIN_BYPASS: '1',
           },
         },
       ],
