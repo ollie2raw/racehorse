@@ -10,6 +10,9 @@ import { useDeferredAsset } from "../ui/useDeferredAsset";
 
 interface SinglePlayerHubScreenProps {
   userId?: string | null;
+  /** Journey is gated to the admin account while it's reworked — everyone
+      else sees the card grayed out with "Coming Soon" and can't open it. */
+  isAdmin?: boolean;
   onBack: () => void;
   onNavigate: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -74,20 +77,9 @@ function StatIcon({ icon }: { icon: StatIconName }) {
 
 const MODES: CardConfig[] = [
   {
-    key: "journey" as AppMode,
-    containerClass: "journey-card-container",
-    sectionRounded: "rounded-[20px] rounded-tl-[5px]",
-    title: "Journey",
-    titleColor: "#C77DFF",
-    desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
-    variant: "tier-master",
-    chevronColor: "#C77DFF",
-    ctaLabel: "Start",
-  },
-  {
     key: "botSetup" as AppMode,
     containerClass: "daily-fritz-card-container",
-    sectionRounded: "rounded-[20px]",
+    sectionRounded: "rounded-[20px] rounded-tl-[5px]",
     title: "Play vs Fritz",
     titleColor: "#E7B64A",
     desc: "Fritz doesn't go easy. Find out if you're good enough.",
@@ -98,13 +90,24 @@ const MODES: CardConfig[] = [
   {
     key: "ghostSetup" as AppMode,
     containerClass: "daily-puzzle-card-container",
-    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
+    sectionRounded: "rounded-[20px]",
     title: "Ghost Mode",
     titleColor: "#4FC3F7",
     desc: "Race against a model of your own game. Can you beat yourself?",
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
     ctaLabel: "Play",
+  },
+  {
+    key: "journey" as AppMode,
+    containerClass: "journey-card-container",
+    sectionRounded: "rounded-[20px] rounded-tr-[5px]",
+    title: "Journey",
+    titleColor: "#C77DFF",
+    desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
+    variant: "tier-master",
+    chevronColor: "#C77DFF",
+    ctaLabel: "Start",
   },
 ];
 
@@ -133,6 +136,7 @@ function statsForMode(
 
 export default function SinglePlayerHubScreen({
   userId = null,
+  isAdmin = false,
   onBack,
   onNavigate,
   onOpenAuth,
@@ -216,11 +220,14 @@ export default function SinglePlayerHubScreen({
 
           <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
             <div className="sp-solo-grid sp-solo-grid--trio items-stretch gap-5">
-            {MODES.map((mode) => (
+            {MODES.map((mode) => {
+              const isLocked = mode.key === "journey" && !isAdmin;
+              return (
               <section
                 key={mode.key}
-                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex cursor-pointer flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded}`}
-                onClick={() => onNavigate(mode.key)}
+                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded} ${isLocked ? "cursor-default opacity-45 grayscale" : "cursor-pointer"}`}
+                onClick={isLocked ? undefined : () => onNavigate(mode.key)}
+                aria-disabled={isLocked}
               >
                 <div className="sp-solo-mode-card__art-slot" aria-hidden>
                   {modeArtByKey[mode.key as keyof typeof modeArtByKey] ? (
@@ -250,7 +257,9 @@ export default function SinglePlayerHubScreen({
                       >
                         {mode.title}
                       </h2>
-                      <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
+                      {isLocked ? null : (
+                        <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
+                      )}
                     </div>
                     <div className="sp-solo-stats mt-6 flex flex-wrap items-center gap-x-10 gap-y-3">
                       {statsForMode(mode.key, hubStats).map((stat) => (
@@ -268,25 +277,29 @@ export default function SinglePlayerHubScreen({
                   </div>
                   <Button
                     variant={mode.variant}
+                    disabled={isLocked}
                     onClick={(e: React.MouseEvent) => {
                       e.stopPropagation();
-                      onNavigate(mode.key);
+                      if (!isLocked) onNavigate(mode.key);
                     }}
                     className="self-start"
                     style={{ width: 188, height: 50, justifyContent: "space-between" }}
                     type="button"
                   >
-                    <span>{mode.ctaLabel}</span>
-                    <span
-                      style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
-                      aria-hidden="true"
-                    >
-                      ›
-                    </span>
+                    <span>{isLocked ? "Coming Soon" : mode.ctaLabel}</span>
+                    {isLocked ? null : (
+                      <span
+                        style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
+                        aria-hidden="true"
+                      >
+                        ›
+                      </span>
+                    )}
                   </Button>
                 </div>
               </section>
-            ))}
+              );
+            })}
             </div>
           </div>
         </main>
