@@ -1,4 +1,4 @@
-import type { ReviewKnownMissingPipEvidence } from '@racehorse/game-core/review';
+import type { ReviewKnownMissingPipEvidence } from '@racehorse/game-core/reviewContracts';
 
 /**
  * Complete live observation of a player failing to play on open ends.

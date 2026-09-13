@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ReviewKnownMissingPipEvidence } from '@racehorse/game-core/review';
+import type { ReviewKnownMissingPipEvidence } from '@racehorse/game-core/reviewContracts';
 import {
   adaptLegacyOpponentMissingEvidence,
   adaptPassOnEndBatches,
