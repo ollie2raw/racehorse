@@ -419,3 +419,42 @@ to build first.
   outlier (3 tests, real played-out full matches) is the largest lever left
   once #3 and #4 land — likely a clock-mocking or turn-skip opportunity, but
   investigate before assuming either fix shape.
+- 2026-09-12 — **#3 (+ #1) merged: PR #205**, run
+  https://github.com/ollie2raw/racehorse/actions/runs/34726170575 fully
+  green. All 7 jobs pass; new critical path is the `e2e` job at ~13m (was
+  22m14s for the single job). The split's first real run did catch one real
+  bug — `mobile-reachability` had no browser install step on its own runner
+  (fixed in `331e6cb2` before merge, not a leftover issue).
+- **Open watch item (not a blocker on other work):** watch the next 2-3 real
+  PRs' CI runs after #205 to confirm the 5-job split stays stable — no new
+  flakiness introduced by the split itself, and timings roughly hold at
+  ~13m E2E-bound critical path. Once confirmed stable across 3-4 merged
+  PRs total (including #205), #4 (Playwright worker parallelization) is
+  clear to start — land only the Daily-Fritz-serial /
+  everything-else-parallel project split first, prove *that* stable over
+  several runs, before touching worker counts (per §4). **#4 has not
+  started.**
+
+## 7. Backlog — dead Sentry sourcemap upload condition
+
+Not scoped for immediate work; logging so it doesn't get lost.
+
+- **What's broken:** `build-and-audit`'s `Upload source maps to Sentry` step
+  (`ci.yml`) has `if: github.ref == 'refs/heads/main' && env.SENTRY_AUTH_TOKEN != ''`.
+  The step defines `SENTRY_AUTH_TOKEN` in its own step-level `env:` block,
+  but a step's own `env:` is not visible inside that same step's `if:`
+  (GitHub Actions context-availability rule) — there is no workflow- or
+  job-level `env:` in `ci.yml` that would otherwise expose it. Net effect:
+  `env.SENTRY_AUTH_TOKEN` in the condition is always empty, so the step is
+  always `skipped`, on `main` or anywhere, secret configured or not.
+  Confirmed on real runs (`gh run view 34723287748`, and again on `main`
+  post-merge of #205) — conclusion is `"skipped"` every time.
+- **The one-line real fix:** add a job-level `env:` block on `build-and-audit`
+  that sets `SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}` (job-level
+  env *is* visible to a step's own `if:`), then the existing condition starts
+  evaluating correctly. The step's own `env:` block can stay as-is (needed
+  for the `run:` commands regardless).
+- **Risk/urgency: low.** This only affects Sentry release tracking (source
+  maps for readable stack traces on the Sentry dashboard) — no effect on
+  app behavior, build correctness, or anything user-facing. Not blocking
+  anything; fix whenever convenient.
