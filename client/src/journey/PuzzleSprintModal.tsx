@@ -139,7 +139,7 @@ export function PuzzleSprintModal({
     selectedTile != null && tilesMatch(tile, selectedTile);
 
   return (
-    <Modal open={open} onClose={handleExit} title={title} maxWidth={580}>
+    <Modal open={open} onClose={handleExit} title={title} maxWidth={580} panelClassName="rh-jt-mission-panel">
       <div className="rh-journey-modal-panel rh-puzzle-sprint">
         <div className="rh-puzzle-sprint__hud">
           <span className="rh-puzzle-sprint__progress">

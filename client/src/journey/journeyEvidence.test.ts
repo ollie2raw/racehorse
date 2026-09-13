@@ -218,7 +218,7 @@ describe('Journey scores, legacy projection, and merge', () => {
       updatedAt: '2026-07-11T10:00:00.000Z',
     },
     projection = projectLegacyJourneyProgressToEvidence({ legacyProgress: progress, activeDescriptors: getAllJourneyContentDescriptors() });
-    expect(Object.keys(projection.store.recordsByContentId)).toHaveLength(108);
+    expect(Object.keys(projection.store.recordsByContentId)).toHaveLength(106);
     expect(Object.values(projection.store.recordsByContentId).every((record) => record.learningLevel === 'practiced')).toBe(true);
   });
 

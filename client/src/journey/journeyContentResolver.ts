@@ -1,5 +1,6 @@
 import { getJourneyChapterById, getJourneyNodeById, JOURNEY_CHAPTER_DEFINITIONS } from './journeyChapters.ts';
 import { getJourneyBriefing, getJourneyPuzzle } from './journeyContentIndex.ts';
+import { hasJourneyPuzzleSprint } from './journeyPuzzleSprints.ts';
 import { getJourneyMatchVariant } from './journeyMatchVariants.ts';
 import type { JourneyChapterDefinition, JourneyNode } from './journeyTypes.ts';
 import {
@@ -118,6 +119,11 @@ function descriptorForLegacyNode(node: JourneyNode): Extract<JourneyContentDescr
     completion = puzzle.boardState
       ? { kind: 'interactive_scenario_success', owner: 'journey_ui', puzzleId: puzzle.nodeId }
       : { kind: 'decision_correct', owner: 'journey_ui', puzzleId: puzzle.nodeId };
+  } else if (actionKind === 'puzzleSprint' && node.nodeType === 'puzzle' && hasJourneyPuzzleSprint(node.id)) {
+    supportStatus = 'supported';
+    actualCapability = 'puzzle_sprint';
+    runtime = { kind: 'puzzle_sprint', puzzleIds: node.action.puzzleIds, timeLimitSec: node.action.timeLimitSec };
+    completion = { kind: 'puzzle_sprint_result', owner: 'journey_ui' };
   } else if ((node.nodeType === 'match' || node.nodeType === 'boss') && (actionKind === 'botMatch' || actionKind === 'botMatchVariant')) {
     const bot = botRuntime(node);
     if (bot) {

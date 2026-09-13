@@ -12,6 +12,7 @@ import {
   isJourneyBotTrialNode,
   isJourneyCheckpointBriefingNode,
   isJourneyPuzzleNode,
+  isJourneyPuzzleSprintNode,
 } from './journeyLaunch';
 import { getJourneyBriefing } from './journeyBriefings';
 import { getJourneyContentDescriptor } from './journeyContentResolver';
@@ -21,8 +22,10 @@ import { JourneyLessonHost } from './lessonHost/JourneyLessonHost';
 import { assertNever } from './journeyContentContract';
 import { JourneyBriefingModal } from './JourneyBriefingModal';
 import { getJourneyPuzzle } from './journeyPuzzles';
+import { getJourneyPuzzleSprint } from './journeyPuzzleSprints';
 import { JourneyPuzzleModal } from './JourneyPuzzleModal';
 import { InteractivePuzzleModal } from './InteractivePuzzleModal';
+import { PuzzleSprintModal } from './PuzzleSprintModal';
 import { JourneyChapterCompleteModal } from './JourneyChapterCompleteModal';
 import type { JourneyActiveChallenge } from './journeyRuntime';
 import type {
@@ -220,6 +223,7 @@ export default function RacehorseJourneyScreen({
   const [briefingModalOpen, setBriefingModalOpen] = useState(false);
   const [puzzleModalOpen, setPuzzleModalOpen] = useState(false);
   const [interactivePuzzleOpen, setInteractivePuzzleOpen] = useState(false);
+  const [puzzleSprintOpen, setPuzzleSprintOpen] = useState(false);
   const [activePremiumLessonContentId, setActivePremiumLessonContentId] = useState<string | null>(null);
   const [premiumLessonInstance, setPremiumLessonInstance] = useState(0);
   const [chapterCompleteDismissed, setChapterCompleteDismissed] = useState(false);
@@ -308,11 +312,15 @@ export default function RacehorseJourneyScreen({
   const isCheckpointBriefingNode =
     selectedNode != null && isJourneyCheckpointBriefingNode(selectedNode);
   const isPuzzleNode = selectedNode != null && isJourneyPuzzleNode(selectedNode);
+  const isPuzzleSprintNode = selectedNode != null && isJourneyPuzzleSprintNode(selectedNode);
   const briefingReviewMode = selectedNode?.status === 'completed' && isCheckpointBriefingNode;
   const puzzleReviewMode = selectedNode?.status === 'completed' && isPuzzleNode;
+  const puzzleSprintReviewMode = selectedNode?.status === 'completed' && isPuzzleSprintNode;
   const activeBriefing =
     selectedNode && isCheckpointBriefingNode ? getJourneyBriefing(selectedNode.id) : null;
   const activePuzzle = selectedNode && isPuzzleNode ? getJourneyPuzzle(selectedNode.id) : null;
+  const activePuzzleSprint =
+    selectedNode && isPuzzleSprintNode ? getJourneyPuzzleSprint(selectedNode.id) : null;
   const selectedTrialRuntime = getJourneyTrialRuntime(selectedNode);
   const selectedDescriptor = selectedNode ? getJourneyContentDescriptor(selectedNode.id) : null;
   const selectedPremiumHost = selectedDescriptor?.migrationClass === 'premium'
@@ -327,6 +335,12 @@ export default function RacehorseJourneyScreen({
 
   const canOpenPuzzle =
     isPuzzleNode &&
+    (selectedNode?.status === 'current' ||
+      selectedNode?.status === 'unlocked' ||
+      selectedNode?.status === 'completed');
+
+  const canOpenPuzzleSprint =
+    isPuzzleSprintNode &&
     (selectedNode?.status === 'current' ||
       selectedNode?.status === 'unlocked' ||
       selectedNode?.status === 'completed');
@@ -347,7 +361,12 @@ export default function RacehorseJourneyScreen({
     !selectedNode ||
     selectedNode.status === 'locked' ||
     (selectedNode.status === 'completed' && !selectedPremiumHost) ||
-    !(canBegin || canOpenBriefing || canOpenPuzzle || canOpenPremiumLesson);
+    !(canBegin || canOpenBriefing || canOpenPuzzle || canOpenPuzzleSprint || canOpenPremiumLesson);
+
+  // Distinguishes "done, nothing left to do" from "locked, can't do it yet" —
+  // both disable the CTA, but they should not look the same (a completed
+  // node is a positive record, not a dead control).
+  const detailCtaCompleted = selectedNode?.status === 'completed' && !selectedPremiumHost;
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -373,6 +392,7 @@ export default function RacehorseJourneyScreen({
     setBriefingModalOpen(false);
     setPuzzleModalOpen(false);
     setInteractivePuzzleOpen(false);
+    setPuzzleSprintOpen(false);
   };
 
   const handleBegin = () => {
@@ -409,10 +429,7 @@ export default function RacehorseJourneyScreen({
       case 'unsupported':
         return;
       case 'puzzle_sprint':
-        // Not wired to any UI yet — no content targets this capability (see
-        // docs/scoping/journey-overhaul-2026-09-12.md §1 / PR 2). Launching
-        // PuzzleSprintModal from here is deferred to the PR that actually
-        // adopts it in content.
+        if (isPuzzleSprintNode && canOpenPuzzleSprint) setPuzzleSprintOpen(true);
         return;
       default:
         return assertNever(descriptor.runtime);
@@ -439,6 +456,13 @@ export default function RacehorseJourneyScreen({
     completeNode(selectedNode.id);
     setPuzzleModalOpen(false);
     setInteractivePuzzleOpen(false);
+  };
+
+  const handleCompletePuzzleSprint = (result: { correct: number; total: number }) => {
+    setPuzzleSprintOpen(false);
+    if (!selectedNode || puzzleSprintReviewMode) return;
+    if (selectedNode.status === 'locked' || selectedNode.status === 'completed') return;
+    if (result.total > 0 && result.correct >= Math.ceil(result.total / 2)) completeNode(selectedNode.id);
   };
 
   const handleDismissChapterComplete = () => {
@@ -656,7 +680,7 @@ export default function RacehorseJourneyScreen({
               </div>
               <button
                 type="button"
-                className="rh-jt-mission__cta"
+                className={`rh-jt-mission__cta${detailCtaCompleted ? ' rh-jt-mission__cta--done' : ''}`}
                 disabled={detailCtaDisabled}
                 onClick={handleBegin}
               >
@@ -700,6 +724,17 @@ export default function RacehorseJourneyScreen({
         />
       ) : null}
 
+      <PuzzleSprintModal
+        open={puzzleSprintOpen}
+        puzzles={activePuzzleSprint ?? []}
+        timeLimitSec={
+          selectedDescriptor?.runtime.kind === 'puzzle_sprint' ? selectedDescriptor.runtime.timeLimitSec : 60
+        }
+        title={selectedNode?.title}
+        onComplete={puzzleSprintReviewMode ? () => setPuzzleSprintOpen(false) : handleCompletePuzzleSprint}
+        onExit={() => setPuzzleSprintOpen(false)}
+      />
+
       <JourneyChapterCompleteModal
         open={chapterCompleteModalOpen}
         chapter={activeChapterComplete ? activeChapter : null}
@@ -708,3 +743,5 @@ export default function RacehorseJourneyScreen({
     </div>
   );
 }
+
+

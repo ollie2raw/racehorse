@@ -20,6 +20,7 @@ import { markJourneyNodeCompleted } from '../journey/journeyStorage';
 const SinglePlayerHubScreen = React.lazy(() => import('../screens/SinglePlayerHubScreen'));
 const PuzzleRushScreen = React.lazy(() => import('../puzzleRush/PuzzleRushScreen'));
 const RacehorseJourneyScreen = React.lazy(() => import('../journey/RacehorseJourneyScreen'));
+const JourneyComingSoonScreen = React.lazy(() => import('../screens/JourneyComingSoonScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('../practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('../bot/BotMatchScreen'));
 const PlayVsFritz = React.lazy(() => import('../bot/PlayVsFritz'));
@@ -506,13 +507,14 @@ export function SinglePlayerHubRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, handleOpenAuthModal, handleSignOut } = auth;
+  const { authUser, isAdmin, handleOpenAuthModal, handleSignOut } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="single-player-hub">
       <Suspense fallback={<ScreenLoader label="Loading Single Player…" />}>
         <SinglePlayerHubScreen
           userId={authUser?.id ?? null}
+          isAdmin={isAdmin}
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
@@ -559,8 +561,27 @@ export function JourneyRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { handleOpenAuthModal, handleSignOut } = auth;
+  const { isAdmin, handleOpenAuthModal, handleSignOut } = auth;
   const { setBotFritzTier, setBotDealSize } = botMatch;
+  // Journey is gated to the admin account while it's reworked (see
+  // JourneyComingSoonScreen) — everyone else, including direct navigation,
+  // lands on the coming-soon placeholder instead of the real trail.
+  if (!isAdmin) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Journey…" />}>
+          <ErrorBoundary context="journey-coming-soon">
+            <JourneyComingSoonScreen
+              onBack={() => setAppMode('singlePlayerHub')}
+              onNavigate={setAppMode}
+              onOpenAuth={handleOpenAuthModal}
+              onSignOut={handleSignOut}
+            />
+          </ErrorBoundary>
+        </Suspense>
+      </div>
+    );
+  }
   return withAuthModals(
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Journey…" />}>
