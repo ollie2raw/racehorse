@@ -225,7 +225,7 @@ export default function SinglePlayerHubScreen({
               return (
               <section
                 key={mode.key}
-                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded} ${isLocked ? "cursor-default opacity-45 grayscale" : "cursor-pointer"}`}
+                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded} ${isLocked ? "sp-solo-mode-card--locked cursor-default" : "cursor-pointer"}`}
                 onClick={isLocked ? undefined : () => onNavigate(mode.key)}
                 aria-disabled={isLocked}
               >
@@ -244,7 +244,7 @@ export default function SinglePlayerHubScreen({
                 </div>
                 <div className="home-card-scrim" aria-hidden="true" />
                 <div className="home-card-content relative grid h-[268px] grid-rows-[1fr_auto] gap-7">
-                  <div className="flex min-h-0 flex-col justify-center">
+                  <div className={`flex min-h-0 flex-col ${isLocked ? "justify-start pt-9" : "justify-center"}`}>
                     <div className="sp-solo-mode-card__text">
                       {mode.eyebrow ? (
                         <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">

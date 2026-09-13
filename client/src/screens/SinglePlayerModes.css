@@ -131,6 +131,53 @@
     0 22px 46px rgba(0, 0, 0, 0.36);
 }
 
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked {
+  border-color: rgba(120, 140, 170, 0.16);
+  background: rgba(7, 10, 16, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -34px 58px rgba(0, 0, 0, 0.34),
+    0 18px 38px rgba(0, 0, 0, 0.28);
+  filter: none;
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked:hover {
+  filter: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -34px 58px rgba(0, 0, 0, 0.34),
+    0 18px 38px rgba(0, 0, 0, 0.28);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__art {
+  filter: grayscale(1) brightness(0.42) contrast(1.12) saturate(0.34);
+  opacity: 0.82;
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__art-slot::after {
+  width: 70%;
+  background: rgba(4, 7, 12, 0.56);
+  box-shadow:
+    54px 0 84px -12px rgba(4, 7, 12, 0.7),
+    inset 0 0 90px rgba(0, 0, 0, 0.26);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__text h2 {
+  color: rgba(242, 238, 232, 0.64) !important;
+  text-shadow: 0 4px 28px rgba(0, 0, 0, 0.76);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .rh-btn {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(7, 10, 16, 0.72);
+  color: rgba(255, 255, 255, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 26px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.2em;
+}
+
 /* Stats row (not on home daily cards — styled to read with home typography) */
 .sp-solo-stat-label {
   font-family: var(--font-display);
