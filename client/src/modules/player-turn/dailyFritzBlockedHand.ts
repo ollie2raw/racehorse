@@ -5,6 +5,7 @@ import {
   type BotMatchState,
   type BotPlayerId,
 } from '../match/runtime/botEngine.ts';
+import { observeActorPassOnOpenEnds } from '../review/missingPipEvidenceAccumulate.ts';
 import { asPlayMoves } from '../../game/tileUtils.ts';
 
 export function isDailyFritzLockedBoneyardNoMove(match: BotMatchState): boolean {
@@ -35,7 +36,8 @@ export type DailyFritzBlockedHandResolution = {
 export function resolveDailyFritzBlockedHandPass(
   match: BotMatchState,
 ): DailyFritzBlockedHandResolution {
-  const playerPass = passTurn(match, 'you');
+  const playerBefore = observeActorPassOnOpenEnds(match, 'you');
+  const playerPass = passTurn(playerBefore, 'you');
   if (playerPass.error) {
     return { result: playerPass, passes: [] };
   }
@@ -45,7 +47,8 @@ export function resolveDailyFritzBlockedHandPass(
     return { result: playerPass, passes };
   }
 
-  const fritzPass = passTurn(playerPass.state, 'bot');
+  const botBefore = observeActorPassOnOpenEnds(playerPass.state, 'bot');
+  const fritzPass = passTurn(botBefore, 'bot');
   if (!fritzPass.error) {
     passes.push({ player: 'bot', before: playerPass.state });
   }

@@ -15,6 +15,7 @@ import type {
   PlacementPosition,
   Tile,
 } from '../../../types.ts';
+import type { LiveMissingPipObservation } from '../../review/missingPipEvidenceAdapter.ts';
 import {
   generateFullSet,
   isDouble as isCoreDouble,
@@ -108,6 +109,11 @@ export interface BotMatchState {
   opponentDrawCount?: number;
   opponentKnownMissing?: number[];
   opponentMissingEvidence?: Array<{ pip: number; handNumber: number; turnIndex: number }>;
+  /**
+   * V2-shaped missing-pip observations for both actors (pass + draw-past-open-end).
+   * Cleared on each new hand deal. Used by review capture (A2+); not DF journal.
+   */
+  reviewMissingPipObservations?: LiveMissingPipObservation[];
   /**
    * Official Daily Fritz verification evidence for the CURRENT hand, appended
    * inside each accepted engine command (see gameCoreAdapter's
@@ -259,6 +265,7 @@ function createDealtHand(
     opponentDrawCount: 0,
     opponentKnownMissing: [],
     opponentMissingEvidence: [],
+    reviewMissingPipObservations: [],
   };
 }
 
@@ -320,6 +327,7 @@ export function createFixedBotHand(
     opponentDrawCount: 0,
     opponentKnownMissing: [],
     opponentMissingEvidence: [],
+    reviewMissingPipObservations: [],
   };
 }
 

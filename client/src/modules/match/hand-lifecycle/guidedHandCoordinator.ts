@@ -33,6 +33,7 @@ export function planLocalHandAdvance(
       opponentPassedOnEnds: [],
       opponentDrawCount: 0,
       opponentKnownMissing: [],
+      reviewMissingPipObservations: [],
     },
   };
 }

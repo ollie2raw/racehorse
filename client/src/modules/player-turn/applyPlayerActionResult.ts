@@ -5,7 +5,13 @@ import {
 } from '../match/runtime/botEngine.ts';
 import { fairnessLog } from '../match/runtime/fairnessLog.ts';
 
-/** Merge opponent draw/pass tracking when the player draws or passes. */
+/** Merge opponent draw/pass tracking when the player draws or passes.
+ *
+ * A1 keeps this Fritz-heuristic path intact (`opponentPassedOnEnds` etc.).
+ * Review’s V2 bag (`reviewMissingPipObservations`) is written separately in
+ * `drawSequence` / DF blocked-hand — not here — so applyAndNotify does not
+ * double-count human observations after drawSequence already stamped them.
+ */
 export function mergePlayerDrawPassTracking(
   prev: BotMatchState,
   adjustedState: BotMatchState,
