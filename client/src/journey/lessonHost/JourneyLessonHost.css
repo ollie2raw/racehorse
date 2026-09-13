@@ -15,9 +15,19 @@
 .journey-lesson-host__demo-description { max-width:680px; margin:0 auto 10px; text-align:center; color:#cdd9eb; line-height:1.45; }
 .journey-lesson-host__demo-controls { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:12px; color:#cdd9eb; }
 .journey-lesson-host__consequence { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; color:#ffe8a1; font-size:14px; }
-.journey-lesson-host__board { position:relative; width:100%; min-height:300px; margin:6px 0 12px; overflow:hidden; border:1px solid rgba(104,168,214,.18); border-radius:8px; background:#07101d; }
+.journey-lesson-host__board { position:relative; width:100%; min-height:300px; margin:6px 0 12px; overflow:hidden; border:1px solid rgba(104,168,214,.18); border-radius:8px; background:#0b1524; }
 .journey-lesson-host__board .board-container { min-height:300px; }
-.journey-lesson-host__hand { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; padding:12px 0; }
+.journey-lesson-host__zone-label { text-align:center; width:100%; margin:0 0 4px; }
+/* The shared `.highlight` treatment (match-gameplay.css) is a transient
+   "just played" pulse that fades to near-nothing after ~2.4s — appropriate
+   mid-match, but the feedback text here stays on screen indefinitely and
+   explicitly says "highlighted on the board above". Freeze it static within
+   this component so the pointer is still there whenever the player reads it. */
+.journey-lesson-host__board .board-canvas .domino-tile.highlight .domino-body {
+  animation: none;
+  box-shadow: 0 0 0 3px rgba(255, 220, 80, 0.9), 0 0 18px 6px rgba(255, 200, 40, 0.5);
+}
+.journey-lesson-host__hand { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; padding:12px 0; border-top:1px dashed rgba(104,168,214,.18); }
 .journey-lesson-host__placement { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
 .journey-lesson-host__placement .is-selected { border-color:#d3b45b; color:#ffe8a1; }
 .journey-lesson-host__count { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin:14px 0 4px; padding:12px; border:1px solid rgba(104,168,214,.28); border-radius:8px; }
