@@ -23,6 +23,7 @@ import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
+import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
 import {
   buildPivotalReviewSession,
   savePivotalReviewSession,
@@ -91,6 +92,10 @@ export function usePostGamePivotalReview({
     // renders but its internal array mutates during live play, so this must
     // be a fresh read, not a hook dependency.
     const reviewSnapshots = reviewSnapshotRecorder?.getSnapshots();
+    // A6: persist the current session's snapshots so a refresh within this
+    // session can reopen them. Single overwrite here, at game-over, not
+    // during live play — see reviewSnapshotStorage.ts for why.
+    if (reviewSnapshots) saveReviewSnapshots(reviewSnapshots);
     void import('../../analyzer/moveAnalyzer.ts').then(({ analyzeMoveLogDeferred }) =>
       analyzeMoveLogDeferred(moveLog, true, {
         oracleMode: 'tier',
