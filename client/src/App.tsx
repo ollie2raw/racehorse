@@ -22,6 +22,7 @@ import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultipla
 import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
 import { AuthModalsLayer, MultiplayerShellErrorFallback } from './AppOverlays';
 import { WelcomeModal } from './components/WelcomeModal';
+import { WELCOME_MODAL_VISIBLE } from './components/welcomeModalPolicy.ts';
 import { MultiplayerGameShell } from './multiplayer/MultiplayerGameShell';
 import { AppRoutesGamePropsHost } from './multiplayer/AppRoutesGamePropsHost';
 import type { MultiplayerShellDelegates } from './multiplayer/multiplayerGameShellTypes';
@@ -806,14 +807,16 @@ export default function App() {
 
   const authModalsLayer = (
     <>
-    <WelcomeModal
-      open={welcomeOpen}
-      onDismiss={dismissWelcome}
-      onNavigate={(mode) => {
-        dismissWelcome();
-        setAppMode(mode);
-      }}
-    />
+    {WELCOME_MODAL_VISIBLE ? (
+      <WelcomeModal
+        open={welcomeOpen}
+        onDismiss={dismissWelcome}
+        onNavigate={(mode) => {
+          dismissWelcome();
+          setAppMode(mode);
+        }}
+      />
+    ) : null}
     <AuthModalsLayer
       authModalOpen={authModalOpen}
       supabaseEnabled={supabaseEnabled}

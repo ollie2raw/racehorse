@@ -22,6 +22,8 @@ interface WelcomeModalProps {
  * Copy is `docs/scoping/welcome-modal-decision-package-2026-09-10.md` §7,
  * Option A. Every line there traces to current in-app copy or server logic —
  * see that doc's grounding table before changing any of these descriptions.
+ *
+ * Currently gated off via `WELCOME_MODAL_VISIBLE` (parked for redesign).
  */
 export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps) {
   return (
