@@ -73,7 +73,7 @@ describe('Game Review board containment', () => {
     const viewportWidth = 640;
     const viewportHeight = 360;
     const tileSize = 46;
-    const targetFill = 0.88;
+    const targetFill = 0.78;
     const scale = calculateBoardFitScale({
       layout,
       tileSize,

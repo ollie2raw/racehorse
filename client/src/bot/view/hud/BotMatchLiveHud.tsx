@@ -12,6 +12,8 @@ type BotMatchLiveHudProps = {
   botTurn: boolean;
   onOpenScoreTrack: () => void;
   drawStepBotHandCount?: number | null;
+  /** Hide opponent rack during pregame draw — hands are not dealt yet. */
+  hideTileRack?: boolean;
 };
 
 export function BotMatchLiveHudLeft({
@@ -22,6 +24,7 @@ export function BotMatchLiveHudLeft({
   botTurn,
   onOpenScoreTrack,
   drawStepBotHandCount = null,
+  hideTileRack = false,
 }: BotMatchLiveHudProps) {
   const botHandCount = drawStepBotHandCount ?? match.players.bot.hand.length;
   return (
@@ -43,7 +46,9 @@ export function BotMatchLiveHudLeft({
           <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
         </div>
       </button>
-      <TileRack count={botHandCount} isActive={botTurn} variant="default" />
+      {hideTileRack ? null : (
+        <TileRack count={botHandCount} isActive={botTurn} variant="default" />
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import { buildReviewSidebarCopy } from './reviewSidebarCopy';
+import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
 interface GameReviewerProps {
@@ -132,16 +133,17 @@ export default function GameReviewer({
         aria-label="Game reviewer"
         onClick={onClose}
       >
-        <div className="gr-shell" onClick={(event) => event.stopPropagation()}>
+        <div className="gr-shell dfd dfd--wide" onClick={(event) => event.stopPropagation()}>
           <div className="gr-main">
             <div className="gr-header">
               <div className="gr-heading">
-                <h3 className="gr-title">{title}</h3>
+                <span className="dfd__eyebrow">Analysis record</span>
+                <h3 className="dfd__headline gr-title">{title}</h3>
                 <span className="gr-evidence-label">
                   {evidence.displayLabel} · {evidence.confidence} confidence
                 </span>
               </div>
-              <button type="button" className="mode-inline-btn" onClick={onClose}>
+              <button type="button" className="dfd__btn gr-close-btn" onClick={onClose}>
                 Close
               </button>
             </div>
@@ -150,13 +152,15 @@ export default function GameReviewer({
             <div className="gr-board-frame">
               <div className="gr-board-layer">
                 <Board
+                  key={`gr-board-${selectedHandNumber ?? 'all'}-${cursor}`}
                   board={current?.boardRenderStateAfterMove ?? null}
                   legalMoves={[]}
                   selectedTile={null}
                   onPositionClick={() => {}}
                   fitMode="guided"
                   containFullBoard
-                  tileSize={46}
+                  tileSize={42}
+                  showZoomTray
                 />
               </div>
               {showGhostTile && current?.engineBestMove?.tile ? (
@@ -175,7 +179,7 @@ export default function GameReviewer({
             <div className="gr-move-nav">
               <button
                 type="button"
-                className="mode-inline-btn"
+                className="dfd__btn gr-nav-btn"
                 onClick={() => setCursor((prev) => Math.max(0, prev - 1))}
                 disabled={cursor <= 0}
                 aria-label="Previous move"
@@ -189,7 +193,7 @@ export default function GameReviewer({
               </span>
               <button
                 type="button"
-                className="mode-inline-btn"
+                className="dfd__btn gr-nav-btn"
                 onClick={() => setCursor((prev) => Math.min(moves.length - 1, prev + 1))}
                 disabled={!moves.length || cursor >= moves.length - 1}
                 aria-label="Next move"

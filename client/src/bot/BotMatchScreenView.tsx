@@ -237,6 +237,7 @@ export function BotMatchScreenView({
                 match={match}
                 botTurn={hud.botTurn}
                 drawStepBotHandCount={hud.drawStepBotHandCount}
+                hideTileRack={hud.preGameDrawActive}
                 onOpenScoreTrack={() => layout.setScoreTrackOpen(true)}
               />
             )}

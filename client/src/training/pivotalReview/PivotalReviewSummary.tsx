@@ -9,6 +9,7 @@ import {
   type PivotalReviewSession,
 } from './pivotalReviewStorage';
 import type { PivotalTurnCandidate } from './pivotalTurnSelector';
+import '../../styles/dossierRecord.css';
 import './pivotalReviewSummary.css';
 import './postGameReviewPrompt.css';
 
@@ -54,7 +55,7 @@ export function PivotalReviewSummary({
 
   if (!open) return null;
 
-  const cardAccentClass = accent === 'blue' ? ' prs-card--blue' : '';
+  const accentClass = accent === 'blue' ? ' dfd--blue' : '';
 
   return (
     <GameOverlayPortal>
@@ -64,35 +65,33 @@ export function PivotalReviewSummary({
         aria-modal="true"
         aria-label="Review summary"
       >
-        <div
-          className={`game-over-card df-result-card prs-card${cardAccentClass}`}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="prs-panel">
-            <header className="prs-header">
-              <p className="df-result-eyebrow">Post-Game Review</p>
-              <h2 className="prs-title">Today&apos;s {lessons.length} lessons</h2>
-              <p className="prs-subtitle">
+        <div className={`dfd${accentClass}`} onClick={(event) => event.stopPropagation()}>
+          <div className="dfd__body prs-dossier-body">
+            <header>
+              <span className="dfd__eyebrow">Post-game review</span>
+              <h2 className="dfd__headline">Today&apos;s {lessons.length} lessons</h2>
+              <p className="dfd__sub">
                 {session.accuracy.toFixed(1)}% accuracy · final {session.youScore}–{session.opponentScore}
               </p>
             </header>
 
             <div className="prs-scroll">
-              <ol className="prs-lessons" aria-label="Pivotal turn lessons">
+              <ol className="dfd__games prs-lessons" aria-label="Pivotal turn lessons">
                 {lessons.map((lesson, index) => (
-                  <li key={`${session.id}-lesson-${index}`} className="prs-lesson">
-                    <span className="prs-lesson-index">Lesson {index + 1}</span>
-                    <p className="prs-lesson-copy">{lesson}</p>
+                  <li key={`${session.id}-lesson-${index}`} className="dfd__game prs-lesson">
+                    <span className="dfd__game-no">L{index + 1}</span>
+                    <span className="dfd__track dfd__track--win" />
+                    <span className="prs-lesson-copy">{lesson}</span>
                   </li>
                 ))}
               </ol>
 
               {recurringPattern ? (
-                <div className="prs-pattern" aria-label="Recurring miss pattern">
-                  <span className="prs-pattern-label">Your recurring pattern this week</span>
-                  <p className="prs-pattern-value">
+                <div className="dfd__meta" aria-label="Recurring miss pattern">
+                  <span className="dfd__meta-label">Your recurring pattern this week</span>
+                  <p className="dfd__note" style={{ marginTop: 4 }}>
                     → &ldquo;{recurringPattern.label}&rdquo;{' '}
-                    <span className="prs-pattern-count">({recurringPattern.count} times)</span>
+                    <span className="dfd__tag">({recurringPattern.count}×)</span>
                   </p>
                 </div>
               ) : null}
@@ -105,12 +104,10 @@ export function PivotalReviewSummary({
               />
             </div>
 
-            <div className="prs-footer">
-              <div className="prs-actions">
-                <button type="button" className="df-result-primary" onClick={onSaveAndClose}>
-                  Save &amp; Close
-                </button>
-              </div>
+            <div className="dfd__actions">
+              <button type="button" className="dfd__btn dfd__btn--primary" onClick={onSaveAndClose}>
+                Save &amp; Close
+              </button>
             </div>
           </div>
         </div>
