@@ -79,9 +79,21 @@ export function executeBotPlayMove(input: {
     result: BotActionResult,
     move: Move,
   ) => void;
+  recordReview?: (
+    preState: BotMatchState,
+    action: import('../review/ReviewSnapshotRecorder.ts').ReviewActorAction,
+  ) => void;
 }): BotActionResult {
   queueSound(() => playTileSound('deal', input.isMuted), 0);
-  const result = applyPlayMove(input.working, 'bot', input.resolution.move);
-  input.captureGuided(input.working, result, input.resolution.move);
+  const move = input.resolution.move;
+  if (move.type === 'play' && move.tile && move.position) {
+    input.recordReview?.(input.working, {
+      kind: 'play',
+      tile: move.tile,
+      position: move.position,
+    });
+  }
+  const result = applyPlayMove(input.working, 'bot', move);
+  input.captureGuided(input.working, result, move);
   return result;
 }

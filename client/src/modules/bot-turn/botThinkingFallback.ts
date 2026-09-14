@@ -61,6 +61,13 @@ export function executeBotThinkingFallback(input: {
   }
 
   const snapshot = collectBotTurnSnapshot(live);
+  if (fallbackPlay.tile && fallbackPlay.position) {
+    input.ports.recordBotReviewDecision(live, {
+      kind: 'play',
+      tile: fallbackPlay.tile as Tile,
+      position: fallbackPlay.position,
+    });
+  }
   const forcedResult = applyPlayMove(live, 'bot', fallbackPlay);
   if (forcedResult.error) {
     input.ports.showBoardToast(forcedResult.error.message, 'bot');

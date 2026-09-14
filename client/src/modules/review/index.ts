@@ -23,5 +23,9 @@ export type {
 export {
   ReviewSnapshotRecorder,
   buildPlayerReviewGameCommand,
+  buildReviewGameCommand,
 } from './ReviewSnapshotRecorder.ts';
-export type { PlayerReviewAction } from './ReviewSnapshotRecorder.ts';
+export type {
+  PlayerReviewAction,
+  ReviewActorAction,
+} from './ReviewSnapshotRecorder.ts';

@@ -1,4 +1,5 @@
 import type { BotTurnPorts } from '../../bot-turn/types.ts';
+import type { ReviewSnapshotRecorder } from '../../review/ReviewSnapshotRecorder.ts';
 
 export type BuildBotTurnPortsInput = {
   applyAndNotify: BotTurnPorts['applyAndNotify'];
@@ -18,6 +19,8 @@ export type BuildBotTurnPortsInput = {
   handleAuthoringV2FritzEvent: BotTurnPorts['onAuthoringV2FritzEvent'];
   isDailyFritzMode: boolean;
   handleDailyFritzBotMoveApplied: BotTurnPorts['onDailyFritzBotMoveApplied'];
+  reviewSnapshotRecorder: ReviewSnapshotRecorder;
+  reviewCaptureEnabled: boolean;
 };
 
 export function buildBotTurnPorts(input: BuildBotTurnPortsInput): BotTurnPorts {
@@ -26,6 +29,13 @@ export function buildBotTurnPorts(input: BuildBotTurnPortsInput): BotTurnPorts {
     appendMove: input.appendMove,
     appendGhostMove: input.appendGhostMove,
     captureGuidedMatchCandidateAction: input.captureGuidedMatchCandidateAction,
+    recordBotReviewDecision: (preState, action) => {
+      input.reviewSnapshotRecorder.recordBotDecision(
+        preState,
+        action,
+        input.reviewCaptureEnabled,
+      );
+    },
     flashLastPlayed: input.flashLastPlayed,
     setSelectedTile: input.setSelectedTile,
     setDrawSequenceActiveBoth: input.setDrawSequenceActiveBoth,
