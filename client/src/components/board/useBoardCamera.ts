@@ -141,7 +141,7 @@ export function useBoardCamera({
     const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
     const targetFill =
       containFullBoard
-        ? 0.88
+        ? 0.78
         : resolvedFitMode === 'guided'
         ? layoutSpanUnits <= 3
           ? 1.08

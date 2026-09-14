@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
-import { Button } from './primitives';
 import { GameOverlayPortal } from './GameOverlayPortal';
+import '../styles/dossierRecord.css';
 import './GameOverModal.css';
 
 export type GameOverMatchKind = 'single-player' | 'multiplayer';
@@ -42,6 +42,13 @@ interface GameOverModalProps {
   layout?: 'default' | 'guided-split';
 }
 
+function statToneClass(tone: SummaryStat['tone']): string {
+  if (tone === 'gold') return 'is-accent';
+  if (tone === 'red') return 'is-loss';
+  if (tone === 'blue') return 'is-accent';
+  return '';
+}
+
 export default function GameOverModal({
   open,
   ariaLabel,
@@ -59,21 +66,12 @@ export default function GameOverModal({
   onClose,
   children,
   matchKind = 'single-player',
-  tone = 'default',
   primaryAccent,
   layout = 'default',
 }: GameOverModalProps) {
   const isGuidedSplit = layout === 'guided-split';
-  const actionCount = Number(Boolean(extraActionLabel && onExtraAction)) + 1 + Number(Boolean(secondaryLabel && onSecondary));
   const resolvedPrimaryAccent = primaryAccent ?? (matchKind === 'multiplayer' ? 'blue' : 'gold');
-  const themeClass = matchKind === 'multiplayer' ? 'rh-go--mp' : 'rh-go--sp';
-  const primaryVariant = resolvedPrimaryAccent === 'blue' ? 'primary' : 'tier-elite';
-  const primaryMainClass =
-    resolvedPrimaryAccent === 'blue'
-      ? 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--blue'
-      : 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--gold';
-  const toneClass =
-    tone === 'gold' ? 'rh-go--tone-gold' : tone === 'blue' ? 'rh-go--tone-blue' : tone === 'red' ? 'rh-go--tone-red' : '';
+  const accentClass = resolvedPrimaryAccent === 'blue' || matchKind === 'multiplayer' ? ' dfd--blue' : '';
 
   useEffect(() => {
     if (!open || !onClose) return;
@@ -87,109 +85,106 @@ export default function GameOverModal({
   if (!open) return null;
 
   const header = (
-    <div className="game-over-header">
-      <div className="game-over-title-block">
-        <span className="game-over-kicker">{kicker ?? 'Match Complete'}</span>
-        <h2 className="victory-title">{title}</h2>
-      </div>
-      {onClose && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          aria-label="Close game over dialog"
-          className="rh-go-close"
-        >
-          Close
-        </Button>
-      )}
-    </div>
+    <header>
+      <span className="dfd__eyebrow">{kicker ?? 'Match Complete'}</span>
+      <h2 className="dfd__headline">{title}</h2>
+      {subtitle ? <p className="dfd__sub">{subtitle}</p> : null}
+    </header>
   );
 
-  const subtitleBlock = subtitle ? <p className="game-over-meta">{subtitle}</p> : null;
-
   const statsBlock = stats?.length ? (
-    <div className="rh-go-stats" aria-label="Match summary">
+    <dl className="dfd__stats" aria-label="Match summary">
       {stats.map((stat, idx) => (
-        <div key={idx} className={`rh-go-stat rh-go-stat--${stat.tone ?? 'default'}`}>
-          <span>{stat.label}</span>
-          <strong>{stat.value}</strong>
+        <div key={idx} className="dfd__stat">
+          <dt>{stat.label}</dt>
+          <dd className={statToneClass(stat.tone)}>{stat.value}</dd>
         </div>
       ))}
-    </div>
+    </dl>
   ) : null;
 
   const scoresBlock = (
-    <div className="final-scores">
+    <div className="dfd__standings" aria-label="Final scores">
       {scores.map((row, idx) => (
-        <div key={idx} className={`final-score ${row.winner ? 'winner' : ''}`}>
-          <span className="player-name-group">
-            <span className="player-name">{row.label}</span>
-            {row.showCrown && <span className="crown rh-go-crown" aria-hidden>👑</span>}
+        <div key={idx} className="dfd__standing">
+          <span>
+            {row.label}
+            {row.showCrown || row.winner ? <span className="dfd__tag">Winner</span> : null}
           </span>
-          <span className="score">{row.value}</span>
+          <span className={`dfd__standing-score${row.winner ? ' is-win' : ''}`}>{row.value}</span>
         </div>
       ))}
     </div>
   );
 
   const actionsBlock = (
-    <div className={`rh-go-actions rh-go-actions--${actionCount}`}>
-      {extraActionLabel && onExtraAction && (
-        <Button type="button" variant="outline" size="lg" className="rh-go-btn-full" onClick={onExtraAction}>
-          {extraActionLabel}
-        </Button>
-      )}
-      <Button type="button" variant={primaryVariant} size="lg" className={primaryMainClass} onClick={onPrimary}>
+    <div className="dfd__actions">
+      <button type="button" className="dfd__btn dfd__btn--primary" onClick={onPrimary}>
         {primaryLabel}
-      </Button>
-      {secondaryLabel && onSecondary && (
-        <Button type="button" variant="secondary" size="lg" className="rh-go-btn-full" onClick={onSecondary}>
-          {secondaryLabel}
-        </Button>
-      )}
+      </button>
+      {(secondaryLabel && onSecondary) || (extraActionLabel && onExtraAction) ? (
+        <div className="dfd__row">
+          {extraActionLabel && onExtraAction ? (
+            <button type="button" className="dfd__btn" onClick={onExtraAction}>
+              {extraActionLabel}
+            </button>
+          ) : null}
+          {secondaryLabel && onSecondary ? (
+            <button type="button" className="dfd__btn" onClick={onSecondary}>
+              {secondaryLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 
-  const cardClassName = `game-over-card rh-go-card${isGuidedSplit ? ' rh-go-card--guided-split' : ''}`;
+  const cardClass = `dfd${accentClass}${isGuidedSplit ? ' dfd--wide' : ''}`;
 
   return (
     <GameOverlayPortal>
       <div
-        className={`game-over-overlay rh-go ${themeClass} ${toneClass}${isGuidedSplit ? ' rh-go--guided-split' : ''}`.trim()}
+        className="game-over-overlay df-result-overlay"
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
       >
-      <div className={cardClassName} onClick={(e) => e.stopPropagation()}>
-        {isGuidedSplit ? (
-          <div className="rh-go-split">
-            <div className="rh-go-split__main">
+        <div className={cardClass} onClick={(e) => e.stopPropagation()}>
+          {isGuidedSplit ? (
+            <div className="dfd__split">
+              <div className="dfd__body">
+                {onClose ? (
+                  <button type="button" className="dfd__close" onClick={onClose} aria-label="Close game over dialog">
+                    Close
+                  </button>
+                ) : null}
+                {header}
+                {statsBlock}
+                {scoresBlock}
+                {actionsBlock}
+              </div>
+              {children ? (
+                <aside className="dfd__body" aria-label="Final lesson">
+                  {children}
+                </aside>
+              ) : null}
+            </div>
+          ) : (
+            <div className="dfd__body">
+              {onClose ? (
+                <button type="button" className="dfd__close" onClick={onClose} aria-label="Close game over dialog">
+                  Close
+                </button>
+              ) : null}
               {header}
-              {subtitleBlock}
               {statsBlock}
               {scoresBlock}
+              {children ? <div className="dfd__meta">{children}</div> : null}
               {actionsBlock}
             </div>
-            {children ? (
-              <aside className="rh-go-split__aside" aria-label="Final lesson">
-                {children}
-              </aside>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            {header}
-            {subtitleBlock}
-            {statsBlock}
-            {scoresBlock}
-            {children ? <div className="rh-go-addon">{children}</div> : null}
-            {actionsBlock}
-          </>
-        )}
+          )}
+        </div>
       </div>
-    </div>
     </GameOverlayPortal>
   );
 }

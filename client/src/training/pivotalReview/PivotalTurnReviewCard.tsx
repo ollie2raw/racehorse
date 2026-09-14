@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../../components';
-import type { AnalyzedMove, MoveRating } from '../../analyzer/moveAnalyzer';
+import type { AnalyzedMove } from '../../analyzer/moveAnalyzer';
 import { sameTileTuple } from '../../game/moveLogger';
 import { GameOverlayPortal } from '../../components/GameOverlayPortal';
 import type { PostGameReviewAccent } from './PostGameReviewPrompt';
@@ -12,6 +12,7 @@ import {
 import type { PivotalTurnReflection } from './pivotalReviewStorage';
 import type { PivotalTurnCandidate, PivotalTurnSelection } from './pivotalTurnSelector';
 import { buildMissReasonCoachingCopy } from './missReasonCoaching';
+import '../../styles/dossierRecord.css';
 import './pivotalTurnReviewCard.css';
 
 export type PivotalTurnReviewCardProps = {
@@ -20,15 +21,6 @@ export type PivotalTurnReviewCardProps = {
   selection: PivotalTurnSelection;
   onComplete: (reflections: PivotalTurnReflection[]) => void;
 };
-
-function colorForRating(rating: MoveRating): string {
-  if (rating === 'Brilliant') return '#00ff88';
-  if (rating === 'Great') return '#67e8f9';
-  if (rating === 'Good') return '#7dd3fc';
-  if (rating === 'Inaccuracy') return '#ffcc00';
-  if (rating === 'Mistake') return '#ffcc00';
-  return '#ff3333';
-}
 
 function tileLabel(tile?: [number, number]): string {
   if (!tile) return '—';
@@ -117,7 +109,7 @@ export function PivotalTurnReviewCard({
   const analyzedMove = candidate?.move ?? null;
   const reflection = reflections[stepIndex] ?? null;
   const isLastStep = stepIndex >= candidates.length - 1;
-  const cardAccentClass = accent === 'blue' ? ' ptr-card--blue' : '';
+  const cardAccentClass = accent === 'blue' ? ' dfd--blue' : '';
 
   const pointsDelta = useMemo(() => {
     if (!analyzedMove) return 0;
@@ -192,14 +184,14 @@ export function PivotalTurnReviewCard({
         aria-label={`Pivotal turn review ${stepIndex + 1} of ${candidates.length}`}
       >
         <div
-          className={`game-over-card df-result-card ptr-card${cardAccentClass}`}
+          className={`dfd ptr-dossier${cardAccentClass}`}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="ptr-card-panel">
-            <header className="ptr-card-header">
-              <p className="ptr-card-kicker">Pivotal Turn Review</p>
-              <h2 className="ptr-card-title">Turn {candidate.moveNumber}</h2>
-              <p className="ptr-card-context">
+          <div className="dfd__body ptr-dossier__body">
+            <header>
+              <span className="dfd__eyebrow">Pivotal turn review</span>
+              <h2 className="dfd__headline">Turn {candidate.moveNumber}</h2>
+              <p className="dfd__sub">
                 {scoreStateCopy(candidate.scoreYou, candidate.scoreOpp)} · {candidate.phase}
               </p>
             </header>
@@ -217,42 +209,44 @@ export function PivotalTurnReviewCard({
                 />
               </div>
 
-              <div className="ptr-move-compare" aria-label="Move comparison">
-                <div className="ptr-move-row">
-                  <span className="ptr-move-row-label">You played</span>
-                  <span className="ptr-move-row-value">{formatPlayedMove(analyzedMove)}</span>
-                </div>
-                <div className="ptr-move-row is-best">
-                  <span className="ptr-move-row-label">Best move</span>
-                  <span className="ptr-move-row-value">
-                    {formatBestMove(analyzedMove)}
-                    {pointsDelta > 0 ? ` (+${pointsDelta} pts)` : ''}
+              <div className="dfd__standings" aria-label="Move comparison">
+                <div className="dfd__standing">
+                  <span>You played</span>
+                  <span className="dfd__standing-score" style={{ fontSize: 14 }}>
+                    {formatPlayedMove(analyzedMove)}
                   </span>
                 </div>
-                <div className="ptr-move-row">
-                  <span className="ptr-move-row-label">Rating</span>
-                  <span className="ptr-move-row-value">
-                    <span
-                      className="ptr-rating-pill"
-                      style={{
-                        color: colorForRating(analyzedMove.rating),
-                        border: `1px solid ${colorForRating(analyzedMove.rating)}44`,
-                        background: `${colorForRating(analyzedMove.rating)}18`,
-                      }}
-                    >
-                      {analyzedMove.rating}
-                    </span>
+                <div className="dfd__standing">
+                  <span>
+                    Best move
+                    {pointsDelta > 0 ? <span className="dfd__tag">+{pointsDelta} pts</span> : null}
+                  </span>
+                  <span className="dfd__standing-score is-win" style={{ fontSize: 14 }}>
+                    {formatBestMove(analyzedMove)}
+                  </span>
+                </div>
+                <div className="dfd__standing">
+                  <span>Rating</span>
+                  <span className={`ptr-rating-chip is-${analyzedMove.rating.toLowerCase()}`}>
+                    {analyzedMove.rating}
                   </span>
                 </div>
               </div>
 
               {consequence ? (
-                <div className="ptr-consequence-block" aria-label="What happened next">
-                  <span className="ptr-miss-label">What happened next</span>
-                  <p className="ptr-consequence-copy">{consequence.rippleSummary}</p>
+                <div className="dfd__meta" aria-label="What happened next">
+                  <span className="dfd__meta-label">What happened next</span>
+                  <p className="dfd__note" style={{ marginTop: 4 }}>
+                    {consequence.rippleSummary}
+                  </p>
                   {handVerdict ? (
-                    <p className="ptr-consequence-hand">
-                      This hand: {handVerdict.winner === 'you' ? 'you won' : handVerdict.winner === 'opponent' ? 'Fritz won' : 'tied'}{' '}
+                    <p className="dfd__note">
+                      This hand:{' '}
+                      {handVerdict.winner === 'you'
+                        ? 'you won'
+                        : handVerdict.winner === 'opponent'
+                          ? 'Fritz won'
+                          : 'tied'}{' '}
                       ({handVerdict.pointsYou}–{handVerdict.pointsOpponent} hand points)
                     </p>
                   ) : null}
@@ -260,7 +254,7 @@ export function PivotalTurnReviewCard({
               ) : null}
 
               {analyzedMove.handSnapshot.length > 0 ? (
-                <div className="ptr-hand-snapshot">
+                <div className="dfd__tiles">
                   {analyzedMove.handSnapshot.map((tile, index) => (
                     <DominoTile
                       key={`ptr-hand-${index}-${tile[0]}-${tile[1]}`}
@@ -275,62 +269,66 @@ export function PivotalTurnReviewCard({
 
             <div className="ptr-card-footer">
               <div className="ptr-miss-section">
-              <span className="ptr-miss-label">Why did you miss this?</span>
-              <p className="ptr-miss-hint">Pick up to {MAX_MISS_REASONS_PER_TURN} reasons</p>
-              <div className="ptr-miss-chips" role="group" aria-label="Miss reasons">
-                {PIVOTAL_REVIEW_MISS_REASONS.map((reason) => {
-                  const selected = reflection.missReasons.includes(reason.id);
-                  const atCap =
-                    !selected && reflection.missReasons.length >= MAX_MISS_REASONS_PER_TURN;
-                  return (
-                    <button
-                      key={reason.id}
-                      type="button"
-                      className={`ptr-miss-chip${selected ? ' is-selected' : ''}`}
-                      aria-pressed={selected}
-                      disabled={atCap}
-                      onClick={() => toggleMissReason(reason.id)}
-                    >
-                      {reason.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {expandedReasonId ? (
-                <p className="ptr-miss-coaching">
-                  {buildMissReasonCoachingCopy(expandedReasonId, analyzedMove)}
+                <span className="dfd__meta-label">Why did you miss this?</span>
+                <p className="dfd__note" style={{ marginTop: 4 }}>
+                  Pick up to {MAX_MISS_REASONS_PER_TURN} reasons
                 </p>
-              ) : null}
-            </div>
+                <div className="ptr-miss-chips" role="group" aria-label="Miss reasons">
+                  {PIVOTAL_REVIEW_MISS_REASONS.map((reason) => {
+                    const selected = reflection.missReasons.includes(reason.id);
+                    const atCap =
+                      !selected && reflection.missReasons.length >= MAX_MISS_REASONS_PER_TURN;
+                    return (
+                      <button
+                        key={reason.id}
+                        type="button"
+                        className={`ptr-miss-chip${selected ? ' is-selected' : ''}`}
+                        aria-pressed={selected}
+                        disabled={atCap}
+                        onClick={() => toggleMissReason(reason.id)}
+                      >
+                        {reason.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {expandedReasonId ? (
+                  <p className="ptr-miss-coaching">
+                    {buildMissReasonCoachingCopy(expandedReasonId, analyzedMove)}
+                  </p>
+                ) : null}
+              </div>
 
-            <label className="ptr-miss-section">
-              <span className="ptr-miss-label">Optional note</span>
-              <input
-                type="text"
-                className="ptr-note-input"
-                value={reflection.note}
-                maxLength={120}
-                placeholder="One sentence — what will you remember?"
-                onChange={(event) => updateNote(event.target.value)}
-              />
-            </label>
+              <label className="ptr-miss-section">
+                <span className="dfd__meta-label">Optional note</span>
+                <input
+                  type="text"
+                  className="ptr-note-input"
+                  value={reflection.note}
+                  maxLength={120}
+                  placeholder="One sentence — what will you remember?"
+                  onChange={(event) => updateNote(event.target.value)}
+                />
+              </label>
 
-            <div className="ptr-nav">
-              <button
-                type="button"
-                className="df-result-secondary ptr-nav-btn"
-                disabled={stepIndex === 0}
-                onClick={goPrev}
-              >
-                ← Prev
-              </button>
-              <span className="ptr-nav-step">
-                Turn {stepIndex + 1}/{candidates.length}
-              </span>
-              <button type="button" className="df-result-primary ptr-nav-btn is-next" onClick={goNext}>
-                {isLastStep ? 'Finish Review' : 'Next →'}
-              </button>
-            </div>
+              <div className="dfd__actions ptr-nav">
+                <div className="dfd__row">
+                  <button
+                    type="button"
+                    className="dfd__btn"
+                    disabled={stepIndex === 0}
+                    onClick={goPrev}
+                  >
+                    ← Prev
+                  </button>
+                  <button type="button" className="dfd__btn dfd__btn--primary" onClick={goNext}>
+                    {isLastStep ? 'Finish Review' : 'Next →'}
+                  </button>
+                </div>
+                <p className="dfd__note" style={{ textAlign: 'center', marginTop: 4 }}>
+                  Turn {stepIndex + 1}/{candidates.length}
+                </p>
+              </div>
             </div>
           </div>
         </div>
