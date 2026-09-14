@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { UserProfile } from './useAuth';
 import { isTemporaryUsername } from './useAuth';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from '../ghost/api';
+import { WELCOME_MODAL_VISIBLE } from '../components/welcomeModalPolicy.ts';
 
 export type UseAppSessionUiParams = {
   authUser: { id: string; email: string } | null;
@@ -89,8 +90,9 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
     };
   }, [authUserId]);
 
-  // Open welcome modal on first visit
+  // Open welcome modal on first visit (parked behind WELCOME_MODAL_VISIBLE).
   useEffect(() => {
+    if (!WELCOME_MODAL_VISIBLE) return;
     if (typeof window === 'undefined') return;
     const hasSeen = window.localStorage.getItem('hasSeenWelcome');
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount read of the hasSeenWelcome localStorage flag
