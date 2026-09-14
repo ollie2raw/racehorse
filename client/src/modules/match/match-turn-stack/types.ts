@@ -1,6 +1,7 @@
 import type { MoveEntry } from '../../../game/moveLogger.ts';
 import type { useAuthoringCapture } from '../../guided/useAuthoringCapture.ts';
 import type { ReplayRecorder } from '../../replay/index.ts';
+import type { ReviewSnapshotRecorder } from '../../review/ReviewSnapshotRecorder.ts';
 import type { LocalRunSession } from '../../bot-turn/index.ts';
 import type { UseDailyFritzRuntimeResult } from '../../daily/useDailyFritzRuntime.ts';
 import type { UseGuidedLessonBootResult } from '../../guided/index.ts';
@@ -21,6 +22,8 @@ export type MatchTurnStackSources = {
   dailyFritz: UseDailyFritzRuntimeResult;
   authoring: UseAuthoringCaptureResult;
   replayRecorder: ReplayRecorder;
+  reviewSnapshotRecorder: ReviewSnapshotRecorder;
+  reviewCaptureEnabled: boolean;
   moveLog: readonly MoveEntry[];
   localRun: LocalRunSession;
   ghostProfile: GhostProfileSummary | null;

@@ -81,6 +81,7 @@ export function usePlayerNoMoveEffect({
     captureGuidedMatchCandidateAction,
     recordAuthoringStep,
     createV2Event,
+    recordPlayerReviewDecision,
   } = ports;
 
   const {
@@ -195,6 +196,7 @@ export function usePlayerNoMoveEffect({
             drawSnapshots.push(collectPlayerMoveSnapshot(step.beforeState, []));
             drawnTiles.push(step.result.drew?.tile ?? null);
           }
+          recordPlayerReviewDecision(step.beforeState, { kind: step.actionKind });
           captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
         });
         if (!isLocalRunCurrent(runToken)) return;
@@ -332,6 +334,7 @@ export function usePlayerNoMoveEffect({
     moveCounterRef,
     pushToast,
     recordAuthoringStep,
+    recordPlayerReviewDecision,
     runDrawSequence,
     setAuthoringV2Events,
     setDrawSequenceActiveBoth,

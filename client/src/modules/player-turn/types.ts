@@ -29,6 +29,11 @@ export type PlayerTurnPorts = {
     result: BotActionResult,
     move?: Move | null,
   ) => void;
+  /** A3: append one V2 snapshot for a player place/draw/pass decision (no-op when gated off). */
+  recordPlayerReviewDecision: (
+    preState: BotMatchState,
+    action: import('../review/ReviewSnapshotRecorder.ts').PlayerReviewAction,
+  ) => void;
   flashLastPlayed: (tile: Tile | null) => void;
   recordPlayerMove: (state: BotMatchState, move: Move) => void;
   pushToast: (msg: string, ms?: number) => void;

@@ -19,6 +19,7 @@ function makeStablePorts(overrides: Record<string, unknown> = {}) {
       acceptGuidedTranscriptTurn: vi.fn(),
       captureGuidedMatchCandidateAction: vi.fn(),
       recordAuthoringStep: vi.fn(),
+      recordPlayerReviewDecision: vi.fn(),
       createV2Event: vi.fn(),
       showBoardToast: vi.fn(),
     },

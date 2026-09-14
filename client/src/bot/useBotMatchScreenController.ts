@@ -110,6 +110,8 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     dailyFritz,
     authoring,
     replayRecorder: replay.recorder,
+    reviewSnapshotRecorder: review.reviewSnapshotRecorder,
+    reviewCaptureEnabled: review.reviewCaptureEnabled,
     moveLog: replay.moveLog,
     localRun,
     ghostProfile,

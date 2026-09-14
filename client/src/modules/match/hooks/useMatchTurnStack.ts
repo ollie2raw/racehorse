@@ -52,6 +52,8 @@ export type UseMatchTurnStackArgs = {
   dailyFritz: UseDailyFritzRuntimeResult;
   authoring: UseAuthoringCaptureResult;
   replayRecorder: ReplayRecorder;
+  reviewSnapshotRecorder: import('../../review/ReviewSnapshotRecorder.ts').ReviewSnapshotRecorder;
+  reviewCaptureEnabled: boolean;
   moveLog: readonly MoveEntry[];
   localRun: LocalRunSession;
   ghostProfile: GhostProfileSummary | null;
@@ -187,6 +189,9 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       applyAndNotify,
       triggerDrawStepAnimation,
       scheduleDrawStepAnimation,
+    }, {
+      recorder: sources.reviewSnapshotRecorder,
+      enabled: sources.reviewCaptureEnabled,
     }),
   );
 

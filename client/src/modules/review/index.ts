@@ -20,3 +20,8 @@ export type {
   CaptureReviewSnapshotAtDecisionArgs,
   CaptureReviewSnapshotIdentifiers,
 } from './captureReviewSnapshotAtDecision.ts';
+export {
+  ReviewSnapshotRecorder,
+  buildPlayerReviewGameCommand,
+} from './ReviewSnapshotRecorder.ts';
+export type { PlayerReviewAction } from './ReviewSnapshotRecorder.ts';

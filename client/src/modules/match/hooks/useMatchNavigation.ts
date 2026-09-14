@@ -134,6 +134,9 @@ export function useMatchNavigation({
     setGuidedMatchCandidateSaveStatus(null);
     setMovesUsed(0);
     replayRecorder.replaceLog([]);
+    review.reviewSnapshotRecorder.clear({
+      sessionId: createLocalMatchId(),
+    });
     setGhostMoveLog([]);
     moveCounterRef.current = 1;
     setCurrentAnalysis(null);
@@ -180,6 +183,7 @@ export function useMatchNavigation({
     setGuidedMatchCandidateSaveStatus,
     setMovesUsed,
     replayRecorder,
+    review.reviewSnapshotRecorder,
     setGhostMoveLog,
     moveCounterRef,
     setCurrentAnalysis,
