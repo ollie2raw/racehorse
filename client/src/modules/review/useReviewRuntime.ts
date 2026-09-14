@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import {
   isBotPostGameReviewEligible,
   isReviewCaptureEnabled,
@@ -63,15 +63,11 @@ export function useReviewRuntime({
 
   const reviewCaptureEnabled = isReviewCaptureEnabled(reviewModeContext);
 
-  const reviewSnapshotRecorderRef = useRef<ReviewSnapshotRecorder | null>(null);
-  if (!reviewSnapshotRecorderRef.current) {
+  // Stable session bag — read via recorder.getSnapshots() outside render (A5/A6).
+  const [reviewSnapshotRecorder] = useState(() => {
     const sessionId = createLocalMatchId();
-    reviewSnapshotRecorderRef.current = new ReviewSnapshotRecorder({
-      sessionId,
-      gameId: sessionId,
-    });
-  }
-  const reviewSnapshotRecorder = reviewSnapshotRecorderRef.current;
+    return new ReviewSnapshotRecorder({ sessionId, gameId: sessionId });
+  });
 
   const review = usePostGamePivotalReview({
     match,
@@ -101,7 +97,6 @@ export function useReviewRuntime({
     botPostGameReviewEligible,
     reviewCaptureEnabled,
     reviewSnapshotRecorder,
-    reviewSnapshots: reviewSnapshotRecorder.getSnapshots(),
     showPostGameReviewPrompt,
     showPlayVsFritzResultOverlay,
   };

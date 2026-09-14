@@ -4,7 +4,8 @@ import { join } from 'path';
 const LIMITS = {
   // Individual chunk limits (bytes)
   'AppRoutes': 200_000,      // was 1.4MB, now 73kB — guard against regression
-  'BotMatchScreen': 250_000, // 196kB currently
+  // A3 pulled reviewContracts into the match path via live snapshot capture.
+  'BotMatchScreen': 260_000,
   'index': 700_000,          // main bundle
   'lesson-v2': 1_400_000,    // huge lessonV2 chunk
 };
