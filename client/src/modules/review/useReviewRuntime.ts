@@ -76,6 +76,7 @@ export function useReviewRuntime({
     fritzTier,
     winningScore,
     showPostGameOverlays,
+    reviewSnapshotRecorder,
   });
 
   const showPostGameReviewPrompt =
