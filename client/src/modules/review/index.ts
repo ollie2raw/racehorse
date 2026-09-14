@@ -15,3 +15,8 @@ export {
   observeActorDrawPastOpenEnds,
   observeActorPassOnOpenEnds,
 } from './missingPipEvidenceAccumulate.ts';
+export { captureReviewSnapshotAtDecision } from './captureReviewSnapshotAtDecision.ts';
+export type {
+  CaptureReviewSnapshotAtDecisionArgs,
+  CaptureReviewSnapshotIdentifiers,
+} from './captureReviewSnapshotAtDecision.ts';
