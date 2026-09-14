@@ -143,6 +143,9 @@ export async function executeBotTurn(
           move,
         );
       },
+      recordReview: (preState, action) => {
+        input.ports.recordBotReviewDecision(preState, action);
+      },
     });
   }
 

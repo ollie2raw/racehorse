@@ -74,6 +74,7 @@ export async function runBotDrawPassSequence(input: {
         drawSnapshots.push(collectBotTurnSnapshot(step.beforeState));
         drawnTiles.push(step.result.drew?.tile ?? null);
       }
+      input.ports.recordBotReviewDecision(step.beforeState, { kind: step.actionKind });
       input.ports.captureGuidedMatchCandidateAction(
         'fritz',
         step.actionKind,
@@ -181,6 +182,9 @@ export async function runBotDrawPassSequence(input: {
           playResult,
           move,
         );
+      },
+      recordReview: (preState, action) => {
+        input.ports.recordBotReviewDecision(preState, action);
       },
     });
   }

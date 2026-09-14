@@ -10,6 +10,7 @@ import { createRunDrawSequence } from '../bot-turn/drawSequence.ts';
 import {
   ReviewSnapshotRecorder,
   buildPlayerReviewGameCommand,
+  buildReviewGameCommand,
 } from './ReviewSnapshotRecorder.ts';
 
 function openedMatchWithPlayableDoubleSix(): BotMatchState {
@@ -289,5 +290,146 @@ describe('ReviewSnapshotRecorder (A3)', () => {
     );
     expect(again?.identifiers.sessionId).toBe('s-new');
     expect(again?.identifiers.actionNumber).toBe(1);
+  });
+});
+
+describe('ReviewSnapshotRecorder bot actor (A4)', () => {
+  function botToPlay(): BotMatchState {
+    return {
+      ...openedMatchWithPlayableDoubleSix(),
+      currentPlayer: 'bot',
+      turnIndex: 1,
+      players: {
+        you: {
+          hand: [
+            { low: 0, high: 0 },
+            { low: 0, high: 2 },
+            { low: 0, high: 3 },
+            { low: 0, high: 4 },
+            { low: 0, high: 5 },
+            { low: 1, high: 2 },
+            { low: 1, high: 3 },
+          ],
+          score: 0,
+        },
+        bot: {
+          hand: [
+            { low: 6, high: 5 },
+            { low: 0, high: 1 },
+            { low: 2, high: 3 },
+            { low: 4, high: 4 },
+            { low: 1, high: 1 },
+            { low: 2, high: 2 },
+            { low: 3, high: 3 },
+          ],
+          score: 0,
+        },
+      },
+    };
+  }
+
+  function botForcedPass(): BotMatchState {
+    const base = createBotMatch(60, 7);
+    return {
+      ...base,
+      handOpen: true,
+      currentPlayer: 'bot',
+      turnIndex: 7,
+      handNumber: 2,
+      board: {
+        mainLine: [{ tile: { low: 6, high: 6 }, orientation: 'horizontal-normal' }],
+        leftEnd: 6,
+        rightEnd: 6,
+        leftEndIsDouble: true,
+        rightEndIsDouble: true,
+        hubDoubles: [],
+      },
+      players: {
+        you: { hand: [{ low: 3, high: 3 }], score: 0 },
+        bot: { hand: [{ low: 1, high: 1 }], score: 0 },
+      },
+      boneyard: [{ low: 0, high: 0 }, { low: 5, high: 5 }],
+      deadTiles: [{ low: 0, high: 0 }, { low: 5, high: 5 }],
+      reviewMissingPipObservations: [],
+    };
+  }
+
+  it('records a bot place snapshot with actorId bot and matching digests', () => {
+    const recorder = new ReviewSnapshotRecorder({ sessionId: 's-bot', gameId: 'g-bot' });
+    const pre = botToPlay();
+    const action = {
+      kind: 'play' as const,
+      tile: { low: 6, high: 5 },
+      position: 'right' as const,
+    };
+
+    const snap = recorder.recordBotDecision(pre, action, true);
+    expect(snap).not.toBeNull();
+    expect(snap!.identifiers.actorId).toBe('bot');
+    expect(snap!.identifiers.opponentId).toBe('you');
+
+    const command = buildReviewGameCommand(pre, 'bot', action, snap!.identifiers.decisionId);
+    const expected = createReviewPositionSnapshotV2({
+      authorityPreState: toCoreGameState(pre),
+      command,
+      identifiers: {
+        sessionId: 's-bot',
+        gameId: 'g-bot',
+        handId: `hand-${pre.handNumber}`,
+        decisionId: snap!.identifiers.decisionId,
+        mode: 'play-vs-fritz',
+        gameNumber: 1,
+        actionNumber: 1,
+      },
+    });
+    expect(snap!.integrity).toEqual(expected.integrity);
+
+    const applied = applyPlayMove(pre, 'bot', {
+      type: 'play',
+      tile: action.tile,
+      position: action.position,
+    });
+    expect(applied.error).toBeUndefined();
+  });
+
+  it('records bot pass and shares one actionNumber sequence with the player', async () => {
+    const recorder = new ReviewSnapshotRecorder({ sessionId: 's-both', gameId: 'g-both' });
+    const youPre = openedMatchWithPlayableDoubleSix();
+    recorder.recordPlayerDecision(
+      youPre,
+      { kind: 'play', tile: { low: 6, high: 5 }, position: 'right' },
+      true,
+    );
+
+    const botPre = botForcedPass();
+    const run = createRunDrawSequence({
+      setMatch: () => undefined,
+      isMuted: true,
+      isLocalRunCurrent: () => true,
+      triggerDrawStepAnimation: () => undefined,
+      drawStepMs: 0,
+    });
+    await run(botPre, 'bot', undefined, (step) => {
+      recorder.recordBotDecision(step.beforeState, { kind: step.actionKind }, true);
+    });
+
+    const snaps = recorder.getSnapshots();
+    expect(snaps).toHaveLength(2);
+    expect(snaps.map((s) => s.identifiers.actorId)).toEqual(['you', 'bot']);
+    expect(snaps.map((s) => s.actualAction.kind)).toEqual(['play', 'pass']);
+    expect(snaps[0]!.identifiers.actionNumber).toBe(1);
+    expect(snaps[1]!.identifiers.actionNumber).toBe(2);
+  });
+
+  it('no-ops bot capture when disabled', () => {
+    const recorder = new ReviewSnapshotRecorder({ sessionId: 's-off', gameId: 'g-off' });
+    expect(
+      recorder.recordBotDecision(
+        botToPlay(),
+        { kind: 'play', tile: { low: 6, high: 5 }, position: 'right' },
+        false,
+      ),
+    ).toBeNull();
+    expect(recorder.getSnapshots()).toHaveLength(0);
   });
 });

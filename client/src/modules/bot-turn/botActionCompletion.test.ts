@@ -12,6 +12,7 @@ function makePorts(appendMove: BotTurnPorts['appendMove']): BotTurnPorts {
     appendMove,
     appendGhostMove: vi.fn(),
     captureGuidedMatchCandidateAction: vi.fn(),
+    recordBotReviewDecision: vi.fn(),
     flashLastPlayed: vi.fn(),
     setSelectedTile: vi.fn(),
     setDrawSequenceActiveBoth: vi.fn(),

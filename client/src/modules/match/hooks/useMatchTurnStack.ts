@@ -214,6 +214,8 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       handleAuthoringV2FritzEvent: authoring.handleAuthoringV2FritzEvent,
       isDailyFritzMode: bootstrap.isDailyFritzMode,
       handleDailyFritzBotMoveApplied: sources.dailyFritz.handleDailyFritzBotMoveApplied,
+      reviewSnapshotRecorder: sources.reviewSnapshotRecorder,
+      reviewCaptureEnabled: sources.reviewCaptureEnabled,
     }),
     [
       playerTurn.applyAndNotify,
@@ -232,6 +234,8 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       authoring.handleAuthoringV2FritzEvent,
       bootstrap.isDailyFritzMode,
       sources.dailyFritz.handleDailyFritzBotMoveApplied,
+      sources.reviewSnapshotRecorder,
+      sources.reviewCaptureEnabled,
     ],
   );
 

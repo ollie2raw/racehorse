@@ -42,6 +42,11 @@ export type BotTurnPorts = {
     result: BotActionResult,
     move?: Move | null,
   ) => void;
+  /** A4: append one V2 snapshot for a bot place/draw/pass decision (no-op when gated off). */
+  recordBotReviewDecision: (
+    preState: BotMatchState,
+    action: import('../review/ReviewSnapshotRecorder.ts').ReviewActorAction,
+  ) => void;
   flashLastPlayed: (tile: Tile | null) => void;
   setSelectedTile: (tile: Tile | null) => void;
   setDrawSequenceActiveBoth: (val: boolean) => void;
