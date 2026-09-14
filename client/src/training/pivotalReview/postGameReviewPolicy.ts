@@ -51,6 +51,18 @@ export function isBotPostGameReviewEligible(ctx: BotPostGameReviewContext): bool
   );
 }
 
+/**
+ * Live V2 snapshot capture gate (Phase A3+).
+ *
+ * Mode-scoped only — does not require the beta post-game review UI / admin
+ * flag — so PVF sessions still accumulate snapshots while the analyzer stays
+ * hidden from players. Excludes Daily Fritz, ghost, guided, authoring, and
+ * Journey trial so DF verification payloads stay untouched.
+ */
+export function isReviewCaptureEnabled(ctx: BotPostGameReviewContext): boolean {
+  return isPlayVsFritzResultOverlayMode(ctx) && !ctx.isJourneyTrial;
+}
+
 export function isMultiplayerPostGameReviewEligible(input: {
   gameOver: boolean;
   isTournament: boolean;

@@ -3,6 +3,7 @@ import type { UseGuidedMatchRuntimeResult } from '../../guided/useGuidedMatchRun
 import type { UseHandLifecycleResult } from '../hand-lifecycle/types.ts';
 import type { MatchTurnStackSources } from './types.ts';
 import { DRAW_STEP_MS } from '../hooks/useBotMatchBootstrap.ts';
+import type { ReviewSnapshotRecorder } from '../../review/ReviewSnapshotRecorder.ts';
 
 type PlayerTurnCommands = Pick<
   UsePlayerTurnOrchestrationArgs,
@@ -15,6 +16,10 @@ export function buildPlayerTurnArgs(
   handLifecycle: Pick<UseHandLifecycleResult, 'notifyBotActionResult'>,
   appendMove: UsePlayerTurnOrchestrationArgs['ports']['appendMove'],
   commands: PlayerTurnCommands,
+  reviewCapture: {
+    recorder: ReviewSnapshotRecorder;
+    enabled: boolean;
+  },
 ): UsePlayerTurnOrchestrationArgs {
   const { bootstrap, refs, guidedBoot, presentation, ghost, authoring, chrome } = sources;
   const {
@@ -57,6 +62,9 @@ export function buildPlayerTurnArgs(
       recordAuthoringStep,
       handleGuidedPlacement: guidedRuntime.handleGuidedPlacement,
       captureGuidedMatchCandidateAction: guidedRuntime.captureGuidedMatchCandidateAction,
+      recordPlayerReviewDecision: (preState, action) => {
+        reviewCapture.recorder.recordPlayerDecision(preState, action, reviewCapture.enabled);
+      },
       flashLastPlayed,
       recordPlayerMove: guidedRuntime.coach.recordPlayerMove.bind(guidedRuntime.coach),
       pushToast,

@@ -1,8 +1,14 @@
-import { isBotPostGameReviewEligible } from '../../training/pivotalReview/postGameReviewPolicy.ts';
+import { useState } from 'react';
+import {
+  isBotPostGameReviewEligible,
+  isReviewCaptureEnabled,
+} from '../../training/pivotalReview/postGameReviewPolicy.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { usePostGamePivotalReview } from './usePostGamePivotalReview.ts';
+import { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { useAuth } from '../../auth/useAuth.ts';
 import { isAdminUser } from '../../auth/isAdminUser.ts';
+import { createLocalMatchId } from '../match/hooks/useBotMatchBootstrap.ts';
 import type { BotMatchScreenProps } from '../match/types.ts';
 import type { UseBotMatchBootstrapResult } from '../match/hooks/useBotMatchBootstrap.ts';
 import type { UseGuidedLessonBootResult } from '../guided/index.ts';
@@ -39,7 +45,7 @@ export function useReviewRuntime({
   const { user: authUser } = useAuth();
   const isAdmin = isAdminUser(authUser?.email);
 
-  const botPostGameReviewEligible = isBotPostGameReviewEligible({
+  const reviewModeContext = {
     mode: bootstrap.mode,
     isGhostMode,
     isDailyFritzMode,
@@ -48,7 +54,19 @@ export function useReviewRuntime({
     isAuthoringV2Mode,
     isGuidedV2Mode,
     isJourneyTrial,
+  };
+
+  const botPostGameReviewEligible = isBotPostGameReviewEligible({
+    ...reviewModeContext,
     isAdmin,
+  });
+
+  const reviewCaptureEnabled = isReviewCaptureEnabled(reviewModeContext);
+
+  // Stable session bag — read via recorder.getSnapshots() outside render (A5/A6).
+  const [reviewSnapshotRecorder] = useState(() => {
+    const sessionId = createLocalMatchId();
+    return new ReviewSnapshotRecorder({ sessionId, gameId: sessionId });
   });
 
   const review = usePostGamePivotalReview({
@@ -77,6 +95,8 @@ export function useReviewRuntime({
   return {
     ...review,
     botPostGameReviewEligible,
+    reviewCaptureEnabled,
+    reviewSnapshotRecorder,
     showPostGameReviewPrompt,
     showPlayVsFritzResultOverlay,
   };

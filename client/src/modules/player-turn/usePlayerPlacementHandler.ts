@@ -213,6 +213,13 @@ export function usePlayerPlacementHandler({
 
     const drawnTiles = listEmbeddedForcedDrawTiles(match, result.state);
     const commitResult = (): void => {
+      if (move!.tile && move!.position) {
+        ports.recordPlayerReviewDecision(match, {
+          kind: 'play',
+          tile: move!.tile,
+          position: move!.position,
+        });
+      }
       applyAndNotify(result);
       logger.info('guided', 'click-applied', {
         currentPlayerAfter: result.state.currentPlayer,

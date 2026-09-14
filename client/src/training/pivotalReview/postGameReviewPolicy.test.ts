@@ -4,6 +4,7 @@ import {
   isMultiplayerPostGameReviewEligible,
   isPlayVsFritzResultOverlayMode,
   isPostGameReviewEnabled,
+  isReviewCaptureEnabled,
   type BotPostGameReviewContext,
 } from './postGameReviewPolicy';
 
@@ -37,5 +38,12 @@ describe('post-game review beta gate', () => {
     expect(
       isMultiplayerPostGameReviewEligible({ gameOver: true, isTournament: false, isAdmin: true }),
     ).toBe(true);
+  });
+
+  it('captures V2 snapshots on PVF even when the review UI is beta-hidden', () => {
+    expect(isReviewCaptureEnabled({ ...fritzMatch, isAdmin: false })).toBe(true);
+    expect(isReviewCaptureEnabled({ ...fritzMatch, isDailyFritzMode: true })).toBe(false);
+    expect(isReviewCaptureEnabled({ ...fritzMatch, isJourneyTrial: true })).toBe(false);
+    expect(isReviewCaptureEnabled({ ...fritzMatch, isGhostMode: true })).toBe(false);
   });
 });
