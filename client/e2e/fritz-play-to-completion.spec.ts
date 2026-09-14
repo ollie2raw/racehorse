@@ -133,9 +133,9 @@ test('Play vs Fritz runs a full match to a result screen', async ({ page }) => {
 
   const result = page.getByRole('dialog', { name: 'Play vs Fritz result' });
   await expect(result).toBeVisible();
-  await expect(result.locator('.df-result-title')).toHaveText(/^(Victory|Defeat)$/);
+  await expect(result.locator('.dfd__headline')).toHaveText(/^(Victory|Defeat)$/);
   await expect(result.getByText('Final Score')).toBeVisible();
-  await expect(result.getByText('Final Standings')).toBeVisible();
+  await expect(result.locator('[aria-label="Final standings"]')).toBeVisible();
   await expect(result.getByRole('button', { name: /Rematch/i })).toBeVisible();
 
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
