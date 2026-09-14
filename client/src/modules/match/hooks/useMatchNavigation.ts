@@ -7,6 +7,7 @@ import type { UseBotMatchRefsResult } from './useBotMatchRefs.ts';
 import type { UseMatchPresentationResult } from './useMatchPresentation.ts';
 import type { UseGhostRuntimeResult } from '../../ghost/useGhostRuntime.ts';
 import type { UseReviewRuntimeResult } from '../../review/useReviewRuntime.ts';
+import { clearReviewSnapshots } from '../../review/reviewSnapshotStorage.ts';
 import type { ReplayRecorder } from '../../replay/index.ts';
 
 export type UseMatchNavigationArgs = {
@@ -137,6 +138,7 @@ export function useMatchNavigation({
     review.reviewSnapshotRecorder.clear({
       sessionId: createLocalMatchId(),
     });
+    clearReviewSnapshots();
     setGhostMoveLog([]);
     moveCounterRef.current = 1;
     setCurrentAnalysis(null);
