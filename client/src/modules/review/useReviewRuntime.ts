@@ -77,6 +77,7 @@ export function useReviewRuntime({
     winningScore,
     showPostGameOverlays,
     reviewSnapshotRecorder,
+    reviewCaptureEnabled,
   });
 
   const showPostGameReviewPrompt =

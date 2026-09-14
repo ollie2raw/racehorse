@@ -47,6 +47,15 @@ export type UsePostGamePivotalReviewParams = {
    * recorder (MP, other analyzeMoveLog call sites) are unaffected.
    */
   reviewSnapshotRecorder?: ReviewSnapshotRecorder;
+  /**
+   * A6 persistence gate — deliberately separate from botPostGameReviewEligible.
+   * That flag hides the (currently admin/beta-only) review UI; capture itself
+   * is enabled much more broadly (isReviewCaptureEnabled, mode-scoped only).
+   * Persistence must follow capture, not UI visibility, or snapshots are
+   * captured correctly in memory but silently never survive a refresh for
+   * every non-admin player. See the review-a6-persistence-gate-fix PR.
+   */
+  reviewCaptureEnabled: boolean;
 };
 
 export function usePostGamePivotalReview({
@@ -57,6 +66,7 @@ export function usePostGamePivotalReview({
   winningScore,
   showPostGameOverlays,
   reviewSnapshotRecorder,
+  reviewCaptureEnabled,
 }: UsePostGamePivotalReviewParams) {
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
@@ -79,6 +89,18 @@ export function usePostGamePivotalReview({
       return;
     }
 
+    // A6: persist the current session's snapshots so a refresh within this
+    // session can reopen them. Gated on capture-eligibility, not on the
+    // review-UI-eligibility check below — capture happens for any eligible
+    // mode regardless of whether the (currently hidden) review UI is visible
+    // to this player, so persistence must follow it, not the UI gate.
+    // Single overwrite here, at game-over, not during live play — see
+    // reviewSnapshotStorage.ts for why.
+    if (reviewCaptureEnabled) {
+      const capturedSnapshots = reviewSnapshotRecorder?.getSnapshots();
+      if (capturedSnapshots) saveReviewSnapshots(capturedSnapshots);
+    }
+
     const eligible = botPostGameReviewEligible;
     if (!eligible || !showPostGameOverlays || !moveLog.some((entry) => entry.player === 'you')) {
       setPostGameAnalysis(null);
@@ -92,10 +114,6 @@ export function usePostGamePivotalReview({
     // renders but its internal array mutates during live play, so this must
     // be a fresh read, not a hook dependency.
     const reviewSnapshots = reviewSnapshotRecorder?.getSnapshots();
-    // A6: persist the current session's snapshots so a refresh within this
-    // session can reopen them. Single overwrite here, at game-over, not
-    // during live play — see reviewSnapshotStorage.ts for why.
-    if (reviewSnapshots) saveReviewSnapshots(reviewSnapshots);
     void import('../../analyzer/moveAnalyzer.ts').then(({ analyzeMoveLogDeferred }) =>
       analyzeMoveLogDeferred(moveLog, true, {
         oracleMode: 'tier',
@@ -130,6 +148,7 @@ export function usePostGamePivotalReview({
     fritzTier,
     winningScore,
     reviewSnapshotRecorder,
+    reviewCaptureEnabled,
   ]);
 
   const pivotalSelection = useMemo(() => {
