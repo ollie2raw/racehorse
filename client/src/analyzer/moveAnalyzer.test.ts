@@ -413,8 +413,13 @@ describe('moveAnalyzer — A5 analyzer dual-read shim', () => {
     // reviewSnapshots: [] both resolve hasV2Snapshots to false and therefore
     // invoke evalStateBuilders.buildPlaceholderEvalState — the legacy
     // reconstruction entry point — with the exact same entry, the same
-    // number of times. That's proven directly via the spy, without touching
-    // the nondeterministic engine at all.
+    // number of times. Proven via the spy, with enrichWithFritz off: with it
+    // on, enrichMovesWithFritz runs its own Master-tier search first and
+    // embeds that nondeterministic score into entry.engineBestMove before
+    // this same entry reaches classifyMove/getMoveScores — so the captured
+    // call args would carry that noise even though the reconstruction path
+    // itself is unaffected by it. enrichWithFritz is irrelevant to what A5
+    // changed, so it's off here to isolate the actual claim.
     const board = mockBoardState(5, 5);
     const entry = createPlaceEntry({
       moveNumber: 1,
@@ -426,11 +431,11 @@ describe('moveAnalyzer — A5 analyzer dual-read shim', () => {
 
     const spy = vi.spyOn(evalStateBuilders, 'buildPlaceholderEvalState');
 
-    analyzeMoveLog([{ ...entry }], true, { oracleMode: 'tier', tierPlayed: 'standard' });
+    analyzeMoveLog([{ ...entry }], false, { oracleMode: 'tier', tierPlayed: 'standard' });
     const callsOmitted = spy.mock.calls.map((call) => call[0]);
     spy.mockClear();
 
-    analyzeMoveLog([{ ...entry }], true, {
+    analyzeMoveLog([{ ...entry }], false, {
       oracleMode: 'tier',
       tierPlayed: 'standard',
       reviewSnapshots: [],
