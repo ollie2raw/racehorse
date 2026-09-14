@@ -22,6 +22,7 @@ import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
+import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import {
   buildPivotalReviewSession,
   savePivotalReviewSession,
@@ -39,6 +40,12 @@ export type UsePostGamePivotalReviewParams = {
   fritzTier: FritzTier;
   winningScore: number;
   showPostGameOverlays: boolean;
+  /**
+   * A5: read at game-over time to feed analyzeMoveLogDeferred's
+   * reviewSnapshots option. Optional so callers that don't yet have a
+   * recorder (MP, other analyzeMoveLog call sites) are unaffected.
+   */
+  reviewSnapshotRecorder?: ReviewSnapshotRecorder;
 };
 
 export function usePostGamePivotalReview({
@@ -48,6 +55,7 @@ export function usePostGamePivotalReview({
   fritzTier,
   winningScore,
   showPostGameOverlays,
+  reviewSnapshotRecorder,
 }: UsePostGamePivotalReviewParams) {
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
@@ -79,11 +87,16 @@ export function usePostGamePivotalReview({
 
     let cancelled = false;
     setPostGameAnalysisPending(true);
+    // A5: read snapshots now, at game-over — the recorder is stable across
+    // renders but its internal array mutates during live play, so this must
+    // be a fresh read, not a hook dependency.
+    const reviewSnapshots = reviewSnapshotRecorder?.getSnapshots();
     void import('../../analyzer/moveAnalyzer.ts').then(({ analyzeMoveLogDeferred }) =>
       analyzeMoveLogDeferred(moveLog, true, {
         oracleMode: 'tier',
         tierPlayed: fritzTier,
         winningScore,
+        reviewSnapshots,
       }),
     ).then((analysis) => {
       if (cancelled) return;
@@ -111,6 +124,7 @@ export function usePostGamePivotalReview({
     moveLog,
     fritzTier,
     winningScore,
+    reviewSnapshotRecorder,
   ]);
 
   const pivotalSelection = useMemo(() => {

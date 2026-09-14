@@ -6,9 +6,11 @@ import {
   loadGameAnalysisHistory,
   saveGameAnalysis,
   enrichMovesWithFritz,
+  evalStateBuilders,
 } from './moveAnalyzer';
 import type { MoveEntry } from '../game/moveLogger';
 import type { BoardState } from '../types';
+import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/reviewContracts';
 
 const HISTORY_KEY = 'racehorse_move_analysis_history_v1';
 
@@ -343,5 +345,141 @@ describe('moveAnalyzer', () => {
     }
     const history = loadGameAnalysisHistory();
     expect(history.length).toBeLessThanOrEqual(40);
+  });
+});
+
+describe('moveAnalyzer — A5 analyzer dual-read shim', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const mockBoardState = (low: number, high: number): BoardState => ({
+    leftEnd: low,
+    rightEnd: high,
+    leftEndIsDouble: false,
+    rightEndIsDouble: false,
+    mainLine: [{ tile: { low, high }, orientation: 'horizontal-normal' }],
+    hubDoubles: [],
+  });
+
+  const createPlaceEntry = (args: {
+    moveNumber: number;
+    playedTile: [number, number];
+    handBefore: [number, number][];
+    boardEnds: [number, number];
+    boardRenderState: BoardState;
+  }): MoveEntry => ({
+    moveNumber: args.moveNumber,
+    player: 'you',
+    action: 'place',
+    tile: args.playedTile,
+    position: 'left',
+    handBefore: args.handBefore,
+    validMoves: args.handBefore,
+    boardEnds: args.boardEnds,
+    boardState: args.boardRenderState as any,
+    boardRenderState: args.boardRenderState as any,
+    handSnapshot: args.handBefore,
+  } as any);
+
+  // Minimal stand-in — A5 only checks presence/length of the array, not the
+  // per-snapshot shape (per-decision correlation is Phase B work).
+  const fakeReviewSnapshot = {} as ReviewPositionSnapshotV2;
+
+  it('(a) never invokes placeholder evalState generation when V2 snapshots are present', () => {
+    const board = mockBoardState(5, 5);
+    const entry = createPlaceEntry({
+      moveNumber: 1,
+      playedTile: [5, 5],
+      handBefore: [[5, 5], [1, 2]],
+      boardEnds: [5, 5],
+      boardRenderState: board,
+    });
+
+    const spy = vi.spyOn(evalStateBuilders, 'buildPlaceholderEvalState');
+
+    analyzeMoveLog([entry], true, { reviewSnapshots: [fakeReviewSnapshot] });
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('(b) invokes the identical legacy reconstruction path whether reviewSnapshots is omitted or an empty array', () => {
+    // The existing analyzer's Master-tier reference search (getMoveScores,
+    // enrichMovesWithFritz) is wall-clock budgeted (see botHeuristics.ts) and
+    // legitimately returns different raw scores across separate live calls
+    // under load — a pre-existing property of this codebase, unrelated to
+    // A5, that makes a deep-equal of two live GameAnalysis objects flaky.
+    // What A5 must guarantee instead: reviewSnapshots omitted and
+    // reviewSnapshots: [] both resolve hasV2Snapshots to false and therefore
+    // invoke evalStateBuilders.buildPlaceholderEvalState — the legacy
+    // reconstruction entry point — with the exact same entry, the same
+    // number of times. That's proven directly via the spy, without touching
+    // the nondeterministic engine at all.
+    const board = mockBoardState(5, 5);
+    const entry = createPlaceEntry({
+      moveNumber: 1,
+      playedTile: [5, 5],
+      handBefore: [[5, 5], [1, 2]],
+      boardEnds: [5, 5],
+      boardRenderState: board,
+    });
+
+    const spy = vi.spyOn(evalStateBuilders, 'buildPlaceholderEvalState');
+
+    analyzeMoveLog([{ ...entry }], true, { oracleMode: 'tier', tierPlayed: 'standard' });
+    const callsOmitted = spy.mock.calls.map((call) => call[0]);
+    spy.mockClear();
+
+    analyzeMoveLog([{ ...entry }], true, {
+      oracleMode: 'tier',
+      tierPlayed: 'standard',
+      reviewSnapshots: [],
+    });
+    const callsEmpty = spy.mock.calls.map((call) => call[0]);
+
+    expect(callsEmpty.length).toBeGreaterThan(0);
+    expect(callsEmpty.length).toBe(callsOmitted.length);
+    expect(callsEmpty).toEqual(callsOmitted);
+  });
+
+  it('(c) heuristic-derived analysis never carries evidence.source other than "heuristic", with or without V2 snapshots', () => {
+    const board = mockBoardState(5, 5);
+    const entry = createPlaceEntry({
+      moveNumber: 1,
+      playedTile: [5, 5],
+      handBefore: [[5, 5], [1, 2]],
+      boardEnds: [5, 5],
+      boardRenderState: board,
+    });
+
+    const withoutV2 = analyzeMoveLog([entry], true, {});
+    const withV2 = analyzeMoveLog([{ ...entry }], true, { reviewSnapshots: [fakeReviewSnapshot] });
+
+    expect(withoutV2.evidence?.source).toBe('heuristic');
+    expect(withV2.evidence?.source).toBe('heuristic');
+    // No 'exact' | 'search' evidence.source is reachable from this shim at all —
+    // GameAnalysis.evidence is statically typed as LegacyReviewEvaluationDisclosure,
+    // which only ever admits source: 'heuristic'. This assertion documents that
+    // invariant at the value level so it fails loudly if the type is ever widened.
+    expect(['exact', 'search']).not.toContain(withV2.evidence?.source);
+  });
+
+  it('buildEvalState returns null (no fabricated state) for an entry when V2 snapshots are present', () => {
+    const board = mockBoardState(5, 5);
+    const entry = createPlaceEntry({
+      moveNumber: 1,
+      playedTile: [5, 5],
+      handBefore: [[5, 5], [1, 2]],
+      boardEnds: [5, 5],
+      boardRenderState: board,
+    });
+
+    // With no legal-move ambiguity resolvable (evalState null), classifyMove
+    // falls back to the existing safe "could not reconstruct" path rather
+    // than ever computing Brilliant/exact off a fabricated state.
+    const analysis = analyzeMoveLog([entry], true, { reviewSnapshots: [fakeReviewSnapshot] });
+    expect(analysis.analyzedMoves[0].rating).not.toBe('Brilliant');
+    expect(analysis.analyzedMoves[0].score).toBe(72);
+    expect(analysis.analyzedMoves[0].bestBreakdown).toBeUndefined();
   });
 });

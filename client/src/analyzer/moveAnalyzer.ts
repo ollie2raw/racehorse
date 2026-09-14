@@ -88,6 +88,7 @@ function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): Required<Analyz
     oracleMode: options?.oracleMode ?? 'tier',
     tierPlayed: options?.tierPlayed ?? 'standard',
     winningScore: options?.winningScore ?? 60,
+    reviewSnapshots: options?.reviewSnapshots ?? [],
   };
 }
 
@@ -133,41 +134,64 @@ function uniqueTiles(tiles: TileTuple[]): TileTuple[] {
 // IMPORTANT: All engine scores (bestScore, playedScore) must use the SAME
 // evaluation function — chooseBotMove's internal scoring via previewPlayMove.
 // We never mix moveLogger's simple heuristic scores with the bot engine scores.
+//
+// A5 (game-review-oracle-upgrade-2026-09-13.md): buildPlaceholderEvalState below
+// fabricates opponent-hand-length and boneyard-size placeholders from V1
+// MoveEntry data alone. That's a lossy reconstruction, tolerable only when no
+// real ReviewPositionSnapshotV2 data exists for this game. When V2 snapshots
+// ARE present, buildEvalState refuses to call it — see the hasV2Snapshots
+// branch below. Exposed as a mutable object (not a plain function) so that
+// branch is verifiably reachable/unreachable from tests via vi.spyOn.
 
-function buildEvalState(entry: MoveEntry): BotMatchState | null {
-  if (!entry.boardRenderState) return null;
-  try {
-    const template = createBotMatch(60, 7);
-    // Invariant: boardRenderState and handBefore must both describe the same pre-move
-    // decision point. BotMatchScreen logs match.board (pre-move) with handBefore.
-    const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
-    return {
-      ...template,
-      board: entry.boardRenderState as unknown as typeof template.board,
-      currentPlayer: 'bot',
-      handOpen: entry.boardRenderState.mainLine.length > 0 || true,
-      handOver: false,
-      gameOver: false,
-      winningScore: 60,
-      consecutivePasses: 0,
-      // Use a realistic boneyard size so bot doesn't think the game is over
-      boneyard: new Array(14).fill({ low: 0, high: 0 }),
-      players: {
-        you: {
-          ...template.players.you,
-          hand: [],
-          score: 0,
+export const evalStateBuilders = {
+  buildPlaceholderEvalState(entry: MoveEntry): BotMatchState | null {
+    if (!entry.boardRenderState) return null;
+    try {
+      const template = createBotMatch(60, 7);
+      // Invariant: boardRenderState and handBefore must both describe the same pre-move
+      // decision point. BotMatchScreen logs match.board (pre-move) with handBefore.
+      const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
+      return {
+        ...template,
+        board: entry.boardRenderState as unknown as typeof template.board,
+        currentPlayer: 'bot',
+        handOpen: entry.boardRenderState.mainLine.length > 0 || true,
+        handOver: false,
+        gameOver: false,
+        winningScore: 60,
+        consecutivePasses: 0,
+        // Use a realistic boneyard size so bot doesn't think the game is over
+        boneyard: new Array(14).fill({ low: 0, high: 0 }),
+        players: {
+          you: {
+            ...template.players.you,
+            hand: [],
+            score: 0,
+          },
+          bot: {
+            ...template.players.bot,
+            hand,
+            score: 0,
+          },
         },
-        bot: {
-          ...template.players.bot,
-          hand,
-          score: 0,
-        },
-      },
-    };
-  } catch {
-    return null;
-  }
+      };
+    } catch {
+      return null;
+    }
+  },
+};
+
+/**
+ * A5 dual-read shim. `hasV2Snapshots` reflects whether the game being
+ * analyzed has any real ReviewPositionSnapshotV2 captured (A3/A4 wiring) —
+ * when true, the legacy placeholder-fabrication path is unreachable and this
+ * returns null (an explicit "insufficient data for legacy reconstruction"
+ * result) instead of inventing a fake opponent hand/boneyard. Callers already
+ * treat a null evalState as "could not reconstruct" — no new fallback needed.
+ */
+function buildEvalState(entry: MoveEntry, hasV2Snapshots: boolean): BotMatchState | null {
+  if (hasV2Snapshots) return null;
+  return evalStateBuilders.buildPlaceholderEvalState(entry);
 }
 
 function sameMoveByTileAndPosition(
@@ -221,6 +245,7 @@ function isTileInLoggedValidMoves(tile: TileTuple | undefined, entry: MoveEntry)
 function getMoveScores(
   entry: MoveEntry,
   gradeTier: FritzTier,
+  hasV2Snapshots: boolean,
 ): {
   bestMove: EngineBestMove | null;
   bestScore: number | null;
@@ -229,7 +254,7 @@ function getMoveScores(
   playedBreakdown: EngineBestMove['breakdown'] | null;
   exactMatch: boolean;
 } {
-  const evalState = buildEvalState(entry);
+  const evalState = buildEvalState(entry, hasV2Snapshots);
   if (!evalState) {
     return {
       bestMove: null,
@@ -371,7 +396,7 @@ function buildExplanation(
   return `Blunder. ${best} was far stronger than ${played}${reasonText}${warningText}.${suffix}`;
 }
 
-function classifyMove(entry: MoveEntry, gradeTier: FritzTier): {
+function classifyMove(entry: MoveEntry, gradeTier: FritzTier, hasV2Snapshots: boolean): {
   score: number;
   rating: MoveRating;
   bestTile?: TileTuple;
@@ -381,7 +406,7 @@ function classifyMove(entry: MoveEntry, gradeTier: FritzTier): {
   playedBreakdown: EngineBestMove['breakdown'] | null;
 } {
   const validTiles = uniqueTiles(entry.validMoves);
-  const moveEval = getMoveScores(entry, gradeTier);
+  const moveEval = getMoveScores(entry, gradeTier, hasV2Snapshots);
   const bestMove = moveEval.bestMove;
   const bestTile = bestMove?.tile;
 
@@ -528,7 +553,11 @@ function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   return 'D';
 }
 
-export function enrichMovesWithFritz(entries: MoveEntry[], referenceTier: FritzTier = 'master'): MoveEntry[] {
+export function enrichMovesWithFritz(
+  entries: MoveEntry[],
+  referenceTier: FritzTier = 'master',
+  hasV2Snapshots = false,
+): MoveEntry[] {
   const referenceDifficulty = botDifficultyForTier(referenceTier);
   return entries.map((entry) => {
     if (entry.player !== 'you') return entry;
@@ -536,7 +565,7 @@ export function enrichMovesWithFritz(entries: MoveEntry[], referenceTier: FritzT
     if (entry.engineBestMove) return entry;
 
     try {
-      const evalState = buildEvalState(entry);
+      const evalState = buildEvalState(entry, hasV2Snapshots);
       if (!evalState) return entry;
 
       const choice = chooseBotMove(toBotVisibleState(evalState), referenceDifficulty);
@@ -563,10 +592,11 @@ function analyzeHandMoves(
   handNumber: number,
   startingScores: { you: number; opponent: number },
   endingScores: { you: number; opponent: number },
+  hasV2Snapshots: boolean,
 ): HandAnalysis {
   const myMoves = handEntries.filter((entry) => entry.player === 'you');
   const analyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
-    const verdict = classifyMove(entry, gradeTier);
+    const verdict = classifyMove(entry, gradeTier, hasV2Snapshots);
     return {
       moveNumber: entry.moveNumber,
       action: entry.action,
@@ -684,8 +714,11 @@ export function analyzeMoveLog(
   const resolved = resolveAnalyzeOptions(options);
   const gradeTier = resolved.oracleMode === 'master' ? 'master' : resolved.tierPlayed;
   const referenceTier: FritzTier = 'master';
+  // A5: game-level presence check. Per-decision correlation between a
+  // MoveEntry and its ReviewPositionSnapshotV2 is Phase B (oracle) work.
+  const hasV2Snapshots = resolved.reviewSnapshots.length > 0;
   const processedEntries = enrichWithFritz
-    ? enrichMovesWithFritz(entries, referenceTier)
+    ? enrichMovesWithFritz(entries, referenceTier, hasV2Snapshots)
     : entries;
 
   const segments = segmentMoveLogByHand(processedEntries);
@@ -697,6 +730,7 @@ export function analyzeMoveLog(
       segment.handNumber,
       segment.startingScores,
       segment.endingScores,
+      hasV2Snapshots,
     ),
   );
 
