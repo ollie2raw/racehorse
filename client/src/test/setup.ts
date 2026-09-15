@@ -40,3 +40,21 @@ Object.defineProperty(window, 'localStorage', {
   configurable: true,
   writable: true,
 });
+
+// jsdom doesn't implement Worker — provide a minimal no-op stub so effects
+// that construct one (e.g. useReviewWorkerBatch's default createWorker)
+// don't crash tests that aren't exercising worker behavior at all. Tests
+// that need real worker message behavior inject a fake via
+// useReviewWorkerBatch's own createWorker parameter instead of relying on
+// this stub doing anything.
+class NoopWorker {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  postMessage(): void {}
+  terminate(): void {}
+}
+
+Object.defineProperty(window, 'Worker', {
+  value: NoopWorker,
+  configurable: true,
+  writable: true,
+});
