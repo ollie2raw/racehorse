@@ -34,6 +34,12 @@ jobs:
       - name: game-core tests
         run: npm run test -w @racehorse/game-core
 
+      - name: Build review-engine
+        run: npm run build -w @racehorse/review-engine
+
+      - name: review-engine tests
+        run: npm run test -w @racehorse/review-engine
+
       - name: Server tests
         env:
           TZ: America/Los_Angeles
