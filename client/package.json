@@ -53,6 +53,7 @@
   "dependencies": {
     "@racehorse/game-core": "*",
     "@racehorse/match-protocol": "*",
+    "@racehorse/review-engine": "*",
     "@sentry/react": "^10.70.0",
     "@supabase/supabase-js": "^2.97.0",
     "@types/canvas-confetti": "^1.9.0",
