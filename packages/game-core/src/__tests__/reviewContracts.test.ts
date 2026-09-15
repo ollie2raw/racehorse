@@ -25,7 +25,11 @@ const REQUIRED_CATEGORIES: readonly ReviewFixtureCategory[] = [
 
 describe('ReviewPositionSnapshotV2 fixture corpus', () => {
   it('contains one distinct deterministic game-log checkpoint for every Batch 0 scenario class', () => {
-    expect(REVIEW_FIXTURE_CORPUS).toHaveLength(REQUIRED_CATEGORIES.length);
+    // exact_endgame deliberately carries two fixtures (a feasible and an
+    // infeasible checkpoint, game-review-oracle-upgrade-2026-09-13.md B2) --
+    // every other category still has exactly one, so the corpus is
+    // REQUIRED_CATEGORIES.length plus that one deliberate extra.
+    expect(REVIEW_FIXTURE_CORPUS).toHaveLength(REQUIRED_CATEGORIES.length + 1);
     expect(new Set(REVIEW_FIXTURE_CORPUS.map((fixture) => fixture.id)).size).toBe(REVIEW_FIXTURE_CORPUS.length);
     expect(new Set(REVIEW_FIXTURE_CORPUS.map((fixture) => fixture.category))).toEqual(new Set(REQUIRED_CATEGORIES));
     for (const fixture of REVIEW_FIXTURE_CORPUS) {
@@ -92,13 +96,21 @@ describe('ReviewPositionSnapshotV2 fixture corpus', () => {
     expect(ambiguous.snapshot.preAction.boneyard.drawableCount).toBeGreaterThanOrEqual(3);
     expect(ambiguous.snapshot.legalActions.length).toBeGreaterThanOrEqual(3);
 
-    const endgame = byCategory.get('exact_endgame')!;
-    const totalHandTiles = endgame.authorityPreState.playerIds.reduce(
-      (sum, id) => sum + endgame.authorityPreState.players[id].hand.length,
-      0,
-    );
-    expect(totalHandTiles).toBeLessThanOrEqual(5);
-    expect(endgame.snapshot.preAction.boneyard.drawableCount).toBe(0);
+    // exact_endgame has two fixtures (an infeasible and a feasible checkpoint,
+    // B2) -- looked up by explicit id rather than the byCategory Map (which
+    // would silently resolve to whichever is last in array order) so both are
+    // checked unambiguously regardless of future insertion order.
+    const byId = new Map(REVIEW_FIXTURE_CORPUS.map((fixture) => [fixture.id, fixture]));
+    const infeasibleEndgame = byId.get('locked-yard-five-tile-endgame')!;
+    const feasibleEndgame = byId.get('locked-yard-feasible-endgame')!;
+    for (const endgame of [infeasibleEndgame, feasibleEndgame]) {
+      const totalHandTiles = endgame.authorityPreState.playerIds.reduce(
+        (sum, id) => sum + endgame.authorityPreState.players[id].hand.length,
+        0,
+      );
+      expect(totalHandTiles).toBeLessThanOrEqual(5);
+      expect(endgame.snapshot.preAction.boneyard.drawableCount).toBe(0);
+    }
 
     const blocked = byCategory.get('block')!;
     expect(blocked.snapshot.actualAction.kind).toBe('pass');
