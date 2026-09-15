@@ -52,3 +52,23 @@ export function correlateSnapshotsToMoveLog(
   }
   return result;
 }
+
+/**
+ * The inverse direction: moveNumber -> decisionId. A rendered move (e.g.
+ * GameReviewer's AnalyzedMove, which carries moveNumber but no decisionId)
+ * needs this direction to look up its own worker-batch result; wraps
+ * correlateSnapshotsToMoveLog rather than duplicating its matching logic.
+ * Intended to be computed once per render (memoized by the caller) and
+ * reused for a cheap per-move lookup, not recomputed per move.
+ */
+export function buildDecisionIdByMoveNumber(
+  snapshots: readonly ReviewPositionSnapshotV2[],
+  moveLog: readonly MoveEntry[],
+): ReadonlyMap<number, string> {
+  const byDecisionId = correlateSnapshotsToMoveLog(snapshots, moveLog);
+  const result = new Map<number, string>();
+  for (const [decisionId, entry] of byDecisionId) {
+    result.set(entry.moveNumber, decisionId);
+  }
+  return result;
+}

@@ -26,7 +26,7 @@ import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
 import { useReviewWorkerBatch } from './useReviewWorkerBatch.ts';
-import { correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
+import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
 import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
@@ -173,14 +173,27 @@ export function usePostGamePivotalReview({
   ]);
 
   // B5 UI wiring: streaming-capable worker batch, wired as additional state
-  // alongside GameAnalysis -- not consumed by GameReviewer's rendering, not
-  // merged into postGameAnalysis. See logReviewWorkerBatchDiagnostics.ts
-  // for the dev-only diagnostic surface this currently feeds; no
-  // rating/coaching-copy translation happens here (Phase C's decision).
+  // alongside GameAnalysis -- never merged into postGameAnalysis or
+  // GameAnalysis/AnalyzedMove's own shape. Originally dev-diagnostic-only;
+  // now also exposed below (reviewWorkerBatch, decisionIdByMoveNumber) as
+  // progressive-enhancement data a render layer can opt into per move --
+  // still no rating/coaching-copy translation happening in this hook
+  // itself (that's classifyHeuristicResult's job, called from the render
+  // layer, not here).
   const reviewWorkerBatch = useReviewWorkerBatch(
     reviewWorkerSnapshots,
     DEFAULT_REVIEW_DISPATCH_BUDGET,
     DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+  );
+
+  // Computed once here (this hook already holds both reviewWorkerSnapshots
+  // and moveLog in scope) rather than leaking the raw snapshots array to
+  // callers just so they can build this themselves -- a plain moveNumber ->
+  // decisionId map is the minimal, directly-usable shape a per-move
+  // selector needs.
+  const decisionIdByMoveNumber = useMemo(
+    () => buildDecisionIdByMoveNumber(reviewWorkerSnapshots, moveLog),
+    [reviewWorkerSnapshots, moveLog],
   );
 
   useEffect(() => {
@@ -270,6 +283,8 @@ export function usePostGamePivotalReview({
     setPivotalReviewSummary,
     postGameAnalysis,
     postGameAnalysisPending,
+    reviewWorkerBatch,
+    decisionIdByMoveNumber,
     pivotalSelection,
     skipPostGameReview,
     reopenPostGameReview,
