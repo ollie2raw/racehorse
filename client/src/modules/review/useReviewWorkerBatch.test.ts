@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { ReviewDispatchBudget } from '@racehorse/review-engine';
 import { useReviewWorkerBatch, type ReviewWorkerLike } from './useReviewWorkerBatch';
-import type { ReviewWorkerRequest, ReviewWorkerResponse } from '../../analyzer/reviewWorkerTypes';
+import type { ReviewWorkerRequest, ReviewWorkerResponse } from './reviewWorkerTypes';
 
 function makeSnapshot(decisionId: string): ReviewPositionSnapshotV2 {
   return {

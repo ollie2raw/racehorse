@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { ReviewDispatchBudget } from '@racehorse/review-engine';
-import type { ReviewWorkerRequest, ReviewWorkerResponse } from '../../analyzer/reviewWorkerTypes';
+import type { ReviewWorkerRequest, ReviewWorkerResponse } from './reviewWorkerTypes';
 
 export type ReviewBatchState = {
   readonly resultsByDecisionId: ReadonlyMap<string, ReviewEvaluationV1>;
@@ -25,7 +25,7 @@ export type ReviewWorkerLike = {
 };
 
 function defaultCreateWorker(): ReviewWorkerLike {
-  return new Worker(new URL('../../analyzer/reviewWorker.ts', import.meta.url), { type: 'module' });
+  return new Worker(new URL('./reviewWorker.ts', import.meta.url), { type: 'module' });
 }
 
 /**
@@ -73,21 +73,46 @@ export function useReviewWorkerBatch(
     createWorkerRef.current = createWorker;
   });
 
+  // React's documented "adjusting state when a prop changes" pattern
+  // (react.dev/reference/react/useState#storing-information-from-previous-renders):
+  // reset state synchronously during render, not inside an effect, when
+  // the batch inputs change identity. Tracked via *state* (read/write
+  // during render is what useState is for), not a ref -- reading a ref's
+  // `.current` during render is itself flagged by this repo's hooks lint
+  // gate (react-hooks/refs), which is why this isn't a ref-based check.
+  // This -- not the effect below -- is what resets `state` for a new
+  // batch; the effect only spawns the worker and applies message-driven
+  // updates. Deliberately avoids react-hooks/set-state-in-effect, which
+  // `lint:hooks` enforces at zero tolerance.
+  const [lastInputs, setLastInputs] = useState<{
+    snapshots: readonly ReviewPositionSnapshotV2[];
+    budget: ReviewDispatchBudget;
+    coverageThreshold: number;
+  } | null>(null);
+  if (
+    lastInputs === null ||
+    lastInputs.snapshots !== snapshots ||
+    lastInputs.budget !== budget ||
+    lastInputs.coverageThreshold !== coverageThreshold
+  ) {
+    setLastInputs({ snapshots, budget, coverageThreshold });
+    setState(
+      snapshots.length === 0
+        ? EMPTY_STATE
+        : {
+            resultsByDecisionId: new Map(),
+            errorsByDecisionId: new Map(),
+            pendingDecisionIds: new Set(snapshots.map((s) => s.identifiers.decisionId)),
+            done: false,
+          },
+    );
+  }
+
   useEffect(() => {
-    if (snapshots.length === 0) {
-      setState(EMPTY_STATE);
-      return;
-    }
+    if (snapshots.length === 0) return;
 
     const worker = createWorkerRef.current();
     workerRef.current = worker;
-
-    setState({
-      resultsByDecisionId: new Map(),
-      errorsByDecisionId: new Map(),
-      pendingDecisionIds: new Set(snapshots.map((s) => s.identifiers.decisionId)),
-      done: false,
-    });
 
     worker.onmessage = (event) => {
       const message = event.data;

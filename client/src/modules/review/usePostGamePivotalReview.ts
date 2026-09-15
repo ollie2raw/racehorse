@@ -31,7 +31,7 @@ import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnosti
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   DEFAULT_REVIEW_DISPATCH_BUDGET,
-} from '../../analyzer/reviewEngineConfig.ts';
+} from './reviewEngineConfig.ts';
 import {
   buildPivotalReviewSession,
   savePivotalReviewSession,
