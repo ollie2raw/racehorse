@@ -68,6 +68,7 @@ export default defineConfig({
       '@racehorse/game-core/review': path.resolve(repoRoot, '../packages/game-core/src/reviewContracts.ts'),
       '@racehorse/game-core': path.resolve(repoRoot, '../packages/game-core/src/index.ts'),
       '@racehorse/match-protocol': path.resolve(repoRoot, '../packages/match-protocol/src/index.ts'),
+      '@racehorse/review-engine': path.resolve(repoRoot, '../packages/review-engine/src/index.ts'),
     },
   },
   plugins: [

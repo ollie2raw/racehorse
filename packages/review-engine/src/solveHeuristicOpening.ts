@@ -278,7 +278,7 @@ function canExitWithinTwoOwnMoves(hand: readonly Tile[], board: BoardState | nul
   for (const t1 of hand) {
     const matches1 = ends.some((e) => t1.low === e || t1.high === e);
     if (!matches1) continue;
-    const boardAfter1 = simulatePlacement(board, t1, pickPosition(board, t1, ends));
+    const boardAfter1 = simulatePlacement(board, t1, pickPosition(board, t1));
     const handAfter1 = hand.filter((t) => t !== t1);
     if (handAfter1.length === 0) return true;
     const ends2 = getOpenEnds(boardAfter1).map((e) => e.matchValue);
@@ -296,7 +296,7 @@ function hasNearSafeFinishSetup(handAfter: readonly Tile[], board: BoardState | 
   const ends = getOpenEnds(board).map((e) => e.matchValue);
   for (const t of handAfter) {
     if (!ends.some((e) => t.low === e || t.high === e)) continue;
-    const boardAfter = simulatePlacement(board, t, pickPosition(board, t, ends));
+    const boardAfter = simulatePlacement(board, t, pickPosition(board, t));
     const lastTile = handAfter.find((other) => other !== t)!;
     const endsAfter = getOpenEnds(boardAfter).map((e) => e.matchValue);
     if (endsAfter.some((e) => lastTile.low === e || lastTile.high === e)) return true;
@@ -318,7 +318,7 @@ function hasHubWithTwoOpenBranchesOnPip(board: BoardState | null, pip: number): 
   return false;
 }
 
-function pickPosition(board: BoardState | null, tile: Tile, endValues: readonly number[]): 'left' | 'right' {
+function pickPosition(board: BoardState | null, tile: Tile): 'left' | 'right' {
   if (!board) return 'left';
   const ends = getOpenEnds(board);
   const left = ends.find((e) => e.position === 'left');
