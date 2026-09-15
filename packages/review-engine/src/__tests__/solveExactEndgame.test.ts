@@ -180,16 +180,19 @@ describe('solveExactEndgame (B2)', () => {
     expect(() => solveExactEndgame(snapshot, GENEROUS_BUDGET)).toThrow();
   });
 
-  it('is byte-stable: repeated calls on the same snapshot and budget deep-equal, including candidate order', () => {
-    const snapshot = feasibleSnapshot();
-    const first = solveExactEndgame(snapshot, GENEROUS_BUDGET);
-    const second = solveExactEndgame(snapshot, GENEROUS_BUDGET);
-    const third = solveExactEndgame(snapshot, GENEROUS_BUDGET);
+  it('is byte-stable: repeated calls on independently-constructed, deep-cloned snapshots deep-equal, including candidate order', () => {
+    // Each call gets its own deep clone of a fresh snapshot -- no shared
+    // object reference between calls -- so this can't be passing merely
+    // because the implementation happens not to mutate a shared input; it
+    // rules out real cross-call nondeterminism, not just in-memory mutation.
+    const first = solveExactEndgame(structuredClone(feasibleSnapshot()), GENEROUS_BUDGET);
+    const second = solveExactEndgame(structuredClone(feasibleSnapshot()), GENEROUS_BUDGET);
+    const third = solveExactEndgame(structuredClone(feasibleSnapshot()), GENEROUS_BUDGET);
     expect(second).toEqual(first);
     expect(third).toEqual(first);
   });
 
-  it('respects a tiny node budget: marks complete false and never exceeds maxNodes', () => {
+  it('respects a tiny node budget: marks complete false, does real bounded search work, and never exceeds maxNodes', () => {
     const snapshot = feasibleSnapshot();
     const tinyBudget = { maxNodes: 1 };
     const result = solveExactEndgame(snapshot, tinyBudget);
@@ -199,6 +202,10 @@ describe('solveExactEndgame (B2)', () => {
     // the recursive search, hard-capped so a visit that would exceed
     // maxNodes is never counted -- nodes can equal but never exceed maxNodes.
     expect(result!.nodes).toBeLessThanOrEqual(tinyBudget.maxNodes);
+    // A stub that gave up immediately without visiting any real position
+    // would also satisfy complete:false and nodes<=maxNodes -- require that
+    // the budget was actually spent doing search work, not just declared.
+    expect(result!.nodes).toBeGreaterThan(0);
   });
 
   it('breaks ties deterministically by canonical action key, not insertion order', () => {
