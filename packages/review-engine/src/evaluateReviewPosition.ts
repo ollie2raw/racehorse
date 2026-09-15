@@ -6,7 +6,11 @@ import type {
 import { REVIEW_EVALUATION_VERSION } from '@racehorse/game-core/review';
 import { solveExactEndgame, type ExactEndgameResult } from './solveExactEndgame';
 import { solveHeuristicOpening } from './solveHeuristicOpening';
-import { solveMidgameDeterminization, type MidgameDeterminizationResult } from './solveMidgameDeterminization';
+import {
+  solveMidgameDeterminization,
+  type MidgameConvergence,
+  type MidgameDeterminizationResult,
+} from './solveMidgameDeterminization';
 
 /**
  * B0 (game-review-oracle-upgrade-2026-09-13.md): fixed compute budget for a
@@ -132,6 +136,33 @@ function adaptMidgameDeterminizationResult(
     diagnostics: [
       `convergence: sameTopAction=${result.convergence.sameTopAction}, valueDelta=${result.convergence.valueDelta}`,
     ],
+    // Structured form of the same data the diagnostics entry above already
+    // carries as a formatted string -- both present, not one replacing the
+    // other, per Phase C's structured-signal decision.
+    convergence: result.convergence,
+  };
+}
+
+/**
+ * Annotates a heuristic-path result with why the dispatcher fell through to
+ * it -- solveHeuristicOpening itself has no way to know this (see
+ * heuristicFallbackReason's own doc comment on the type). `searchAttempt`
+ * carries the real, sub-threshold coverage/convergence from an abandoned
+ * B3 attempt (the 'coverage-below-threshold' case only) so that real signal
+ * isn't silently discarded in favor of B4's own honest-zero defaults;
+ * B4's own `nodes`/`depth`/`hiddenStateSamples`/`complete` values are left
+ * alone, since those describe B4's own (different) computation, not B3's.
+ */
+function withHeuristicFallbackReason(
+  result: ReviewEvaluationV1,
+  reason: NonNullable<ReviewEvaluationV1['heuristicFallbackReason']>,
+  searchAttempt?: { readonly coverage: number; readonly convergence: MidgameConvergence },
+): ReviewEvaluationV1 {
+  return {
+    ...result,
+    heuristicFallbackReason: reason,
+    search: searchAttempt ? { ...result.search, coverage: searchAttempt.coverage } : result.search,
+    convergence: searchAttempt ? searchAttempt.convergence : result.convergence,
   };
 }
 
@@ -179,7 +210,7 @@ export function evaluateReviewPosition(
   if (snapshot.preAction.boneyard.drawableCount === 0) {
     const exact = solveExactEndgame(snapshot, { maxNodes: budget.maxNodes });
     if (exact !== null) return adaptExactEndgameResult(snapshot, exact);
-    return solveHeuristicOpening(snapshot);
+    return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'locked-yard-infeasible');
   }
 
   const midgame = solveMidgameDeterminization(
@@ -188,9 +219,14 @@ export function evaluateReviewPosition(
     budget.seed,
     budget.maxPlyDepth,
   );
-  if (midgame === null) return solveHeuristicOpening(snapshot);
+  if (midgame === null) {
+    return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'globally-infeasible');
+  }
   if (midgame.coverage >= coverageThreshold) {
     return adaptMidgameDeterminizationResult(snapshot, midgame, budget.maxPlyDepth);
   }
-  return solveHeuristicOpening(snapshot);
+  return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'coverage-below-threshold', {
+    coverage: midgame.coverage,
+    convergence: midgame.convergence,
+  });
 }

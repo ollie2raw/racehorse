@@ -165,6 +165,7 @@ describe('evaluateReviewPosition dispatch (integration)', () => {
   it('locked yard, B2 infeasible -> falls straight to B4, B3 skipped entirely', () => {
     const result = evaluateReviewPosition(LOCKED_YARD_INFEASIBLE_SNAPSHOT, REALISTIC_BUDGET, PROVISIONAL_COVERAGE_THRESHOLD);
     expect(result.evidence.source).toBe('heuristic');
+    expect(result.heuristicFallbackReason).toBe('locked-yard-infeasible');
     expect(solveExactEndgameModule.solveExactEndgame).toHaveBeenCalledTimes(1);
     expect(solveMidgameDeterminizationModule.solveMidgameDeterminization).not.toHaveBeenCalled();
     expect(solveHeuristicOpeningModule.solveHeuristicOpening).toHaveBeenCalledTimes(1);
@@ -186,13 +187,60 @@ describe('evaluateReviewPosition dispatch (integration)', () => {
   it('midgame, coverage below threshold -> full fallthrough to B4, not a down-weighted search result', () => {
     const result = evaluateReviewPosition(AMBIGUOUS_MIDGAME_SNAPSHOT, REALISTIC_BUDGET, PROVISIONAL_COVERAGE_THRESHOLD);
     expect(result.evidence.source).toBe('heuristic');
+    expect(result.heuristicFallbackReason).toBe('coverage-below-threshold');
     expect(solveMidgameDeterminizationModule.solveMidgameDeterminization).toHaveBeenCalledTimes(1);
     expect(solveHeuristicOpeningModule.solveHeuristicOpening).toHaveBeenCalledTimes(1);
+  });
+
+  it('coverage-below-threshold merge: search.coverage and convergence on the final (heuristic) result reflect the real, sub-threshold B3 attempt, not B4\'s honest-zero', () => {
+    const result = evaluateReviewPosition(AMBIGUOUS_MIDGAME_SNAPSHOT, REALISTIC_BUDGET, PROVISIONAL_COVERAGE_THRESHOLD);
+    expect(result.evidence.source).toBe('heuristic');
+
+    // The real MidgameDeterminizationResult the dispatcher computed and
+    // then abandoned in favor of B4 -- read directly from the spy (which
+    // wraps the real implementation), not recomputed independently.
+    const midgameResult = vi.mocked(solveMidgameDeterminizationModule.solveMidgameDeterminization).mock.results[0]
+      .value;
+    expect(midgameResult).not.toBeNull();
+    expect(midgameResult!.coverage).toBeLessThan(PROVISIONAL_COVERAGE_THRESHOLD);
+    expect(midgameResult!.coverage).toBeGreaterThan(0);
+
+    expect(result.search.coverage).toBe(midgameResult!.coverage);
+    expect(result.convergence).toEqual(midgameResult!.convergence);
+  });
+
+  it('heuristic candidates carry real, differentiated rawScore values, not a placeholder', () => {
+    const result = evaluateReviewPosition(AMBIGUOUS_MIDGAME_SNAPSHOT, REALISTIC_BUDGET, PROVISIONAL_COVERAGE_THRESHOLD);
+    expect(result.evidence.source).toBe('heuristic');
+    const rawScores = result.candidates.map((c) => c.rawScore);
+    expect(rawScores.every((s) => typeof s === 'number')).toBe(true);
+    // Real spread across candidates (confirmed during Phase C research:
+    // this exact fixture produces genuinely different scores per action,
+    // not all-zero or all-equal placeholders).
+    expect(new Set(rawScores).size).toBeGreaterThan(1);
+  });
+
+  it('search-path convergence is structurally populated and matches the existing diagnostics string exactly (the promotion is not an independent, possibly-divergent computation)', () => {
+    const result = evaluateReviewPosition(
+      thinHandMidgameSnapshot(),
+      { ...REALISTIC_BUDGET, maxHiddenStateSamples: 10 },
+      PROVISIONAL_COVERAGE_THRESHOLD,
+    );
+    expect(result.evidence.source).toBe('search');
+    expect(result.convergence).toBeDefined();
+
+    const diagnosticsEntry = result.diagnostics.find((d) => d.startsWith('convergence:'));
+    expect(diagnosticsEntry).toBeDefined();
+    const match = diagnosticsEntry!.match(/sameTopAction=(true|false), valueDelta=(-?\d+(?:\.\d+)?)/);
+    expect(match).not.toBeNull();
+    expect(result.convergence!.sameTopAction).toBe(match![1] === 'true');
+    expect(result.convergence!.valueDelta).toBeCloseTo(Number(match![2]));
   });
 
   it('midgame, B3 globally infeasible -> falls to B4', () => {
     const result = evaluateReviewPosition(midgameGloballyInfeasibleSnapshot(), REALISTIC_BUDGET, PROVISIONAL_COVERAGE_THRESHOLD);
     expect(result.evidence.source).toBe('heuristic');
+    expect(result.heuristicFallbackReason).toBe('globally-infeasible');
     expect(solveMidgameDeterminizationModule.solveMidgameDeterminization).toHaveBeenCalledTimes(1);
     expect(solveHeuristicOpeningModule.solveHeuristicOpening).toHaveBeenCalledTimes(1);
   });

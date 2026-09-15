@@ -101,6 +101,20 @@ export type ReviewCandidateEvaluationV1 = {
   readonly value: ReviewEvaluationValue;
   readonly immediatePoints: number;
   readonly principalVariation: readonly ReviewPrincipalVariationStep[];
+  /**
+   * Uncalibrated, solver-specific scoring signal -- present only when
+   * `value.expectedPointDifferential` isn't a real point-differential
+   * estimate (today: heuristic-path candidates only, where that field is
+   * always 0 by design -- see solveHeuristicOpening.ts). Absent on
+   * exact/search candidates, where `value` already carries a calibrated
+   * number and this would be redundant. Never itself a point differential --
+   * exists so a rating/UI layer can read *relative* spread across a
+   * candidate set (e.g. how much better one move looks than another), not
+   * an absolute magnitude of advantage. Do not average, threshold, or
+   * otherwise treat it as being on the same scale as
+   * `value.expectedPointDifferential`.
+   */
+  readonly rawScore?: number;
 };
 
 export type ReviewEvaluationEvidence =
@@ -141,6 +155,44 @@ export type ReviewEvaluationV1 = {
     readonly complete: boolean;
   };
   readonly diagnostics: readonly string[];
+  /**
+   * Structured sample-stability signal from the search (B3) path only --
+   * absent for exact and heuristic results. Promotes B-integration's
+   * original diagnostics-string folding of this same data into a real
+   * field so a rating/UI layer can read it without string-parsing; the
+   * formatted diagnostics entry is still also present, not replaced.
+   */
+  readonly convergence?: {
+    readonly sameTopAction: boolean;
+    readonly valueDelta: number;
+  };
+  /**
+   * Populated only when `evidence.source === 'heuristic'`, by
+   * evaluateReviewPosition's dispatcher -- not by solveHeuristicOpening
+   * itself, which has no way to know why it was invoked (traced: every
+   * call site that routes to it does so identically, with no context
+   * parameter). Distinguishes three situations `evidence.source` alone
+   * conflates:
+   *  - 'locked-yard-infeasible': the exact (B2) solver found zero feasible
+   *    opponent-hand allocations for a locked yard.
+   *  - 'globally-infeasible': the search (B3) solver's own feasibility
+   *    check found zero feasible allocations for a non-locked yard.
+   *  - 'coverage-below-threshold': the search (B3) solver produced a real
+   *    result, but its coverage didn't clear the caller's coverageThreshold.
+   *
+   * This is a deliberately *closed* set reflecting exactly the three
+   * heuristic-routing branches that exist in evaluateReviewPosition today
+   * -- confirmed by tracing every call site, not assumed. A fourth
+   * "the solver call itself failed" case is not currently reachable here
+   * (solveHeuristicOpening does not throw or return null for any input
+   * evaluateReviewPosition passes it). If a future dispatch path adds a
+   * new way to reach the heuristic fallback, it must add a new literal
+   * here rather than silently reusing one of these three.
+   */
+  readonly heuristicFallbackReason?:
+    | 'locked-yard-infeasible'
+    | 'globally-infeasible'
+    | 'coverage-below-threshold';
 };
 
 export type LegacyReviewEvaluationDisclosure = {

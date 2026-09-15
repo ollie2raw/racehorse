@@ -499,6 +499,9 @@ export function solveHeuristicOpening(
     value: { expectedPointDifferential: 0, winProbability: null },
     immediatePoints: s.immediatePoints,
     principalVariation: [],
+    // The real number, not derived from the diagnostics string below --
+    // diagnostics is built from this same value, not the other way around.
+    rawScore: s.score,
   }));
 
   const order = scored
