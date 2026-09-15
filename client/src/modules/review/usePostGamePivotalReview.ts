@@ -18,12 +18,20 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
+import { useReviewWorkerBatch } from './useReviewWorkerBatch.ts';
+import { correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
+import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
+import {
+  DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+  DEFAULT_REVIEW_DISPATCH_BUDGET,
+} from './reviewEngineConfig.ts';
 import {
   buildPivotalReviewSession,
   savePivotalReviewSession,
@@ -77,6 +85,13 @@ export function usePostGamePivotalReview({
   const [pivotalReviewSummary, setPivotalReviewSummary] = useState<PivotalReviewSession | null>(null);
   const [postGameAnalysis, setPostGameAnalysis] = useState<GameAnalysis | null>(null);
   const [postGameAnalysisPending, setPostGameAnalysisPending] = useState(false);
+  // B5 UI wiring: additional, independent state alongside GameAnalysis --
+  // does not replace, merge into, or modify GameAnalysis/AnalyzedMove in
+  // any way. Frozen into state at the same read point as the existing
+  // `reviewSnapshots` read below (recorder mutates during live play, so
+  // this can't be a live getSnapshots() call inside useReviewWorkerBatch
+  // itself -- same reasoning as the A5 comment on that read).
+  const [reviewWorkerSnapshots, setReviewWorkerSnapshots] = useState<readonly ReviewPositionSnapshotV2[]>([]);
 
   useEffect(() => {
     if (!match.gameOver) {
@@ -86,6 +101,7 @@ export function usePostGamePivotalReview({
       setPivotalReviewSummary(null);
       setPostGameAnalysis(null);
       setPostGameAnalysisPending(false);
+      setReviewWorkerSnapshots([]);
       return;
     }
 
@@ -105,6 +121,7 @@ export function usePostGamePivotalReview({
     if (!eligible || !showPostGameOverlays || !moveLog.some((entry) => entry.player === 'you')) {
       setPostGameAnalysis(null);
       setPostGameAnalysisPending(false);
+      setReviewWorkerSnapshots([]);
       return;
     }
 
@@ -114,6 +131,10 @@ export function usePostGamePivotalReview({
     // renders but its internal array mutates during live play, so this must
     // be a fresh read, not a hook dependency.
     const reviewSnapshots = reviewSnapshotRecorder?.getSnapshots();
+    // B5 UI wiring: freeze the same read into state for useReviewWorkerBatch
+    // below -- independent of, and not read by, the analyzeMoveLogDeferred
+    // call immediately after.
+    setReviewWorkerSnapshots(reviewSnapshots ?? []);
     void import('../../analyzer/moveAnalyzer.ts').then(({ analyzeMoveLogDeferred }) =>
       analyzeMoveLogDeferred(moveLog, true, {
         oracleMode: 'tier',
@@ -150,6 +171,25 @@ export function usePostGamePivotalReview({
     reviewSnapshotRecorder,
     reviewCaptureEnabled,
   ]);
+
+  // B5 UI wiring: streaming-capable worker batch, wired as additional state
+  // alongside GameAnalysis -- not consumed by GameReviewer's rendering, not
+  // merged into postGameAnalysis. See logReviewWorkerBatchDiagnostics.ts
+  // for the dev-only diagnostic surface this currently feeds; no
+  // rating/coaching-copy translation happens here (Phase C's decision).
+  const reviewWorkerBatch = useReviewWorkerBatch(
+    reviewWorkerSnapshots,
+    DEFAULT_REVIEW_DISPATCH_BUDGET,
+    DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+  );
+
+  useEffect(() => {
+    if (!reviewWorkerBatch.done) return;
+    if (reviewWorkerBatch.resultsByDecisionId.size === 0 && reviewWorkerBatch.errorsByDecisionId.size === 0) return;
+    const correlation = correlateSnapshotsToMoveLog(reviewWorkerSnapshots, moveLog);
+    logReviewWorkerBatchDiagnostics(reviewWorkerBatch, correlation);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- logs once per completed batch, keyed on `done`; reviewWorkerSnapshots/moveLog are read fresh but shouldn't retrigger this on their own reference churn
+  }, [reviewWorkerBatch.done]);
 
   const pivotalSelection = useMemo(() => {
     // Only the wizard consumes this; skip the work when it's flagged off — the
