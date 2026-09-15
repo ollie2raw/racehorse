@@ -250,6 +250,12 @@
   color: var(--dfd-ink);
 }
 
+.gr-move-row-rating-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .gr-move-row-rating {
   font-size: 10px;
   font-weight: 800;
@@ -263,6 +269,39 @@
 .gr-move-row-rating.is-inaccuracy { color: var(--tier-elite); }
 .gr-move-row-rating.is-mistake { color: #f2a63a; }
 .gr-move-row-rating.is-blunder { color: var(--df-loss); }
+/* Deliberately distinct from every bucket color above -- an Unclear result
+   is never a Good/Inaccuracy/Blunder judgment, so it must never share one
+   of their colors. */
+.gr-move-row-rating.is-unclear { color: var(--tier-master); }
+
+/* Small, coaching-tool markers (not an error state) distinguishing a
+   heuristic-confidence result from an exact/search one that happens to
+   land on the same bucket color -- same small-pill shape as
+   .coach-grade-badge (client/src/learning/coach.css), this feature's
+   closest existing precedent. */
+.gr-move-row-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  line-height: 1.6;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.gr-move-row-badge.is-heuristic {
+  color: var(--tier-standard);
+  border-color: rgba(var(--tier-standard-rgb), 0.35);
+  background: rgba(var(--tier-standard-rgb), 0.1);
+}
+
+.gr-move-row-badge.is-unclear {
+  color: var(--tier-master);
+  border-color: rgba(var(--tier-master-rgb), 0.35);
+  background: rgba(var(--tier-master-rgb), 0.1);
+}
 
 .gr-coaching {
   flex: 0 1 auto;
