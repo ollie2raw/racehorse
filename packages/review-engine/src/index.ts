@@ -6,3 +6,5 @@ export { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 export type { ReviewHiddenPoolEligibility } from './hiddenPoolEligibility';
 export { solveExactEndgame } from './solveExactEndgame';
 export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
+export { solveMidgameDeterminization } from './solveMidgameDeterminization';
+export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';

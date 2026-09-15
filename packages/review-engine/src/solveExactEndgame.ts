@@ -1,19 +1,17 @@
 import {
   applyGameCommand,
   DEFAULT_CONFIG,
-  getLegalMoves,
   computePlayScore,
   simulatePlacement,
   tileEquals,
   type Config,
-  type GameCommand,
   type GameState,
   type Tile,
 } from '@racehorse/game-core';
-import { GAME_COMMAND_VERSION } from '@racehorse/game-core';
 import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { enumerateCombinations } from './combinations';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+import { commandForAction, searchGameTree, type GameTreeWalkConfig } from './searchGameTree';
 
 export type ExactEndgameBudget = { readonly maxNodes: number };
 
@@ -52,76 +50,6 @@ function immediatePointsForAction(
 ): number {
   if (action.kind !== 'play') return 0;
   return computePlayScore(simulatePlacement(board, action.tile, action.position), config);
-}
-
-function commandForAction(state: GameState, actorId: string, action: ReviewAction): GameCommand {
-  const base = {
-    version: GAME_COMMAND_VERSION,
-    commandId: `exact-endgame:${state.sequence}`,
-    sequence: state.sequence,
-    actorId,
-  } as const;
-  if (action.kind === 'play') return { ...base, kind: 'play', tile: action.tile, position: action.position };
-  if (action.kind === 'draw') return { ...base, kind: 'draw' };
-  return { ...base, kind: 'pass' };
-}
-
-/**
- * Node-budgeted, exhaustive two-player minimax over a fully known GameState
- * (one enumerated hidden-allocation world). `actorId` is always the reviewed
- * player, regardless of whose turn it currently is, so the value returned is
- * always in reviewed-player-minus-opponent terms: the reviewed player's
- * moves pick the max, the opponent's moves pick the min.
- *
- * Budget is a hard cap: a node whose visit would push the shared counter
- * past `budget.max` is never counted and is treated as a cutoff (its value
- * falls back to the score differential already on the board at that point,
- * i.e. "assume no further points from here"), so `budget.count` can equal
- * but never exceed `budget.max`.
- */
-function search(
-  state: GameState,
-  actorId: string,
-  opponentId: string,
-  budget: { count: number; max: number },
-): { finished: boolean; diff: number } {
-  const diffAtState = state.players[actorId].score - state.players[opponentId].score;
-
-  if (budget.count >= budget.max) {
-    return { finished: false, diff: diffAtState };
-  }
-  budget.count += 1;
-
-  if (state.handOver || state.gameOver) {
-    return { finished: true, diff: diffAtState };
-  }
-
-  const currentId = state.playerIds[state.currentPlayerIndex];
-  const moves = getLegalMoves(state, currentId);
-  const isActorTurn = currentId === actorId;
-
-  let finished = true;
-  let chosen: number | null = null;
-
-  for (const move of moves) {
-    const action: ReviewAction =
-      move.type === 'play' ? { kind: 'play', tile: move.tile, position: move.position } : { kind: 'pass' };
-    const command = commandForAction(state, currentId, action);
-    const { state: nextState } = applyGameCommand(state, command);
-    const child = search(nextState, actorId, opponentId, budget);
-
-    if (!child.finished) finished = false;
-    if (chosen === null) {
-      chosen = child.diff;
-    } else if (isActorTurn) {
-      chosen = Math.max(chosen, child.diff);
-    } else {
-      chosen = Math.min(chosen, child.diff);
-    }
-    if (!child.finished) break;
-  }
-
-  return { finished, diff: chosen ?? diffAtState };
 }
 
 function buildRootState(
@@ -214,6 +142,15 @@ export function solveExactEndgame(
   const config: Config = { ...DEFAULT_CONFIG, maxPips, winningScore: snapshot.preAction.winningTarget };
   const nodeBudget = { count: 0, max: budget.maxNodes };
 
+  // Exhaustive to the hand's real end -- no depth cutoff, only the shared
+  // node budget and true terminal states end a branch.
+  const walkConfig: GameTreeWalkConfig = {
+    actorId,
+    opponentId,
+    isCutoff: (state) => state.handOver || state.gameOver,
+    leafValue: (state) => state.players[actorId].score - state.players[opponentId].score,
+  };
+
   const totals = snapshot.legalActions.map(() => 0);
   let solvedAllocations = 0;
 
@@ -228,7 +165,7 @@ export function solveExactEndgame(
       const rootState = buildRootState(snapshot, allocation, deadTiles, config);
       const command = commandForAction(rootState, actorId, action);
       const { state: postActionState } = applyGameCommand(rootState, command);
-      const { finished, diff } = search(postActionState, actorId, opponentId, nodeBudget);
+      const { finished, diff } = searchGameTree(postActionState, 0, walkConfig, nodeBudget);
       perActionDiffs.push(diff - rootDiff);
       if (!finished) allocationComplete = false;
     }
