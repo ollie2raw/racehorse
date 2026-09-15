@@ -142,6 +142,14 @@ const FIXTURE_SPECS: readonly ReviewFixtureSpec[] = [
       immediatePoints: 0,
     },
   },
+  // Infeasible under strict evidence exclusion, by design — kept as-is, not a
+  // bug. knownMissingPipEvidence excludes pips {4, 5}; the 6-tile hidden pool
+  // is {(0,0),(1,1),(3,3),(1,5),(5,5),(4,6)}; removing tiles that carry pip 4
+  // or 5 leaves only {(0,0),(1,1),(3,3)} (3 tiles) eligible for the
+  // opponent's 4-tile hand -- C(3,4) = 0. This is Phase B's exact_endgame
+  // infeasibility fixture (game-review-oracle-upgrade-2026-09-13.md, B2):
+  // Review Engine B2's solveExactEndgame must return null here, not a
+  // fabricated ranking over zero real allocations.
   {
     id: 'locked-yard-five-tile-endgame',
     category: 'exact_endgame',
@@ -153,6 +161,27 @@ const FIXTURE_SPECS: readonly ReviewFixtureSpec[] = [
       preDigest: 'review-state-v1:2e7cd3e8',
       postDigest: 'review-state-v1:82f6a9eb',
       action: { kind: 'play', tile: { low: 2, high: 6 }, position: 'branch-1-0' },
+      immediatePoints: 0,
+    },
+  },
+  // Feasible companion to the fixture above -- Review Engine B2 needs
+  // exact_endgame coverage of its main job (producing a real ranked
+  // candidate list), not only the infeasibility path. knownMissingPipEvidence
+  // excludes pips {2, 3, 5}; the 5-tile hidden pool is
+  // {(0,0),(1,1),(3,6),(4,6),(6,6)}; removing tiles carrying pip 2, 3, or 5
+  // removes only (3,6) (pip 3), leaving {(0,0),(1,1),(4,6),(6,6)} (4 tiles)
+  // eligible for the opponent's 3-tile hand -- C(4,3) = 4, feasible.
+  {
+    id: 'locked-yard-feasible-endgame',
+    category: 'exact_endgame',
+    description: 'Two actor tiles and a three-tile opponent hand remain, the drawable yard is locked, evidence excludes three pips, and four evidence-consistent opponent-hand allocations remain feasible.',
+    seed: 'review-corpus:26',
+    strategy: 'first_legal',
+    actionIndex: 28,
+    expected: {
+      preDigest: 'review-state-v1:42fdea2a',
+      postDigest: 'review-state-v1:93e22d47',
+      action: { kind: 'play', tile: { low: 3, high: 4 }, position: 'branch-0-0' },
       immediatePoints: 0,
     },
   },

@@ -1,12 +1,6 @@
-import {
-  createDeterministicRandom,
-  generateFullSet,
-  shuffleDeterministically,
-  tileEquals,
-  type Tile,
-} from '@racehorse/game-core';
-import { tilesOnBoard } from '@racehorse/game-core/invariants';
+import { createDeterministicRandom, shuffleDeterministically, type Tile } from '@racehorse/game-core';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
+import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 
 export type ReviewHiddenAllocation = {
   readonly opponentHand: readonly Tile[];
@@ -37,25 +31,9 @@ export function sampleHiddenAllocation(
   seed: string | number,
   maxPips = 6,
 ): ReviewHiddenAllocation | null {
-  const { actorHand, board, opponentTileCount, boneyard, knownMissingPipEvidence } = snapshot.preAction;
+  const { opponentTileCount, boneyard } = snapshot.preAction;
 
-  // generateFullSet iterates two plain nested for-loops over fixed numeric
-  // ranges (packages/game-core/src/types.ts) — not Set/object-keyed, so its
-  // order is fixed and reproducible for a given maxPips. tilesOnBoard walks
-  // mainLine then each hub's branches in array order (also game-core). The
-  // two `.filter` calls below preserve the relative order of `generateFullSet`'s
-  // output for every tile they keep (Array.prototype.filter is
-  // order-preserving by spec) — so `hiddenPool` is deterministic before any
-  // seeded shuffle is applied to it.
-  const knownTiles = [...actorHand, ...tilesOnBoard(board)];
-  const hiddenPool = generateFullSet(maxPips).filter(
-    (tile) => !knownTiles.some((known) => tileEquals(known, tile)),
-  );
-
-  const excludedPips = new Set(knownMissingPipEvidence.map((evidence) => evidence.pip));
-  const isEligibleForOpponent = (tile: Tile) => !excludedPips.has(tile.low) && !excludedPips.has(tile.high);
-  const eligibleForOpponent = hiddenPool.filter(isEligibleForOpponent);
-  const boneyardOnly = hiddenPool.filter((tile) => !isEligibleForOpponent(tile));
+  const { eligibleForOpponent, excludedTiles: boneyardOnly } = resolveHiddenPoolEligibility(snapshot, maxPips);
 
   // Single RNG instance, consumed sequentially across both shuffles below —
   // not reseeded partway through.

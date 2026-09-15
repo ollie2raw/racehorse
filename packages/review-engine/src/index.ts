@@ -2,3 +2,7 @@ export { evaluateReviewPosition } from './evaluateReviewPosition';
 export type { ReviewSearchBudget } from './evaluateReviewPosition';
 export { sampleHiddenAllocation } from './sampleHiddenAllocation';
 export type { ReviewHiddenAllocation } from './sampleHiddenAllocation';
+export { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+export type { ReviewHiddenPoolEligibility } from './hiddenPoolEligibility';
+export { solveExactEndgame } from './solveExactEndgame';
+export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
