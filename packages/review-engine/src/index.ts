@@ -8,3 +8,5 @@ export { solveExactEndgame } from './solveExactEndgame';
 export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
 export { solveMidgameDeterminization } from './solveMidgameDeterminization';
 export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';
+export { solveHeuristicOpening } from './solveHeuristicOpening';
+export type { HandPhase } from './solveHeuristicOpening';
