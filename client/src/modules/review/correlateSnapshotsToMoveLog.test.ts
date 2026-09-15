@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MoveEntry } from '../../game/moveLogger';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
-import { correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog';
+import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog';
 
 function makeMoveEntry(overrides: Partial<MoveEntry> & { moveNumber: number; player: 'you' | 'opponent' }): MoveEntry {
   return {
@@ -103,5 +103,28 @@ describe('correlateSnapshotsToMoveLog', () => {
 
   it('returns an empty map for empty inputs', () => {
     expect(correlateSnapshotsToMoveLog([], []).size).toBe(0);
+  });
+});
+
+describe('buildDecisionIdByMoveNumber', () => {
+  it('inverts the correlation to moveNumber -> decisionId, for the cheap per-move lookup direction a rendered move actually needs', () => {
+    const moveLog: MoveEntry[] = [
+      makeMoveEntry({ moveNumber: 1, player: 'you' }),
+      makeMoveEntry({ moveNumber: 2, player: 'opponent' }),
+    ];
+    const snapshots: ReviewPositionSnapshotV2[] = [makeSnapshot(1, 'you'), makeSnapshot(2, 'bot')];
+
+    const byMoveNumber = buildDecisionIdByMoveNumber(snapshots, moveLog);
+
+    expect(byMoveNumber.get(1)).toBe('pvf-session-1:you:1');
+    expect(byMoveNumber.get(2)).toBe('pvf-session-1:bot:2');
+    expect(byMoveNumber.size).toBe(2);
+  });
+
+  it('omits a moveNumber with no matching snapshot, same as the underlying correlation', () => {
+    const moveLog: MoveEntry[] = [makeMoveEntry({ moveNumber: 1, player: 'you' })];
+    const byMoveNumber = buildDecisionIdByMoveNumber([], moveLog);
+    expect(byMoveNumber.has(1)).toBe(false);
+    expect(byMoveNumber.size).toBe(0);
   });
 });
