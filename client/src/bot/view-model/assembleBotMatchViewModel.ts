@@ -319,6 +319,8 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       analyzerOpen: review.analyzerOpen,
       closeAnalyzer: review.closeAnalyzer,
       currentAnalysis: review.currentAnalysis,
+      reviewWorkerBatch: review.reviewWorkerBatch,
+      decisionIdByMoveNumber: review.decisionIdByMoveNumber,
       reviewerScopeHandNumber: review.reviewerScopeHandNumber,
       reviewerInitialMoveIndex: review.reviewerInitialMoveIndex,
       opponentLabel,

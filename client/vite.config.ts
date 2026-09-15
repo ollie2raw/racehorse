@@ -153,6 +153,12 @@ export default defineConfig({
           // Review UI is lazy-loaded — keep Board/DominoTile out of the analysis engine chunk.
           if (id.includes('/src/analyzer/GameReviewer')) return 'game-reviewer';
           if (id.includes('/src/analyzer/reviewSidebarCopy')) return 'game-reviewer';
+          // Heuristic-classification render wiring (Phase C) -- only ever imported
+          // from GameReviewer.tsx, so it belongs in the same lazy chunk, not the
+          // separately-chunked 'analyzer' bucket below.
+          if (id.includes('/src/analyzer/useMoveHeuristicClassification')) return 'game-reviewer';
+          if (id.includes('/src/analyzer/heuristicClassificationToDisplay')) return 'game-reviewer';
+          if (id.includes('/src/analyzer/classifyHeuristicResult')) return 'game-reviewer';
           if (id.includes('/src/analyzer/')) return 'analyzer';
         },
       },
