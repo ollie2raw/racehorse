@@ -66,6 +66,17 @@ export default defineConfig({
       '@racehorse/game-core/bot': path.resolve(repoRoot, '../packages/game-core/src/botHeuristics.ts'),
       '@racehorse/game-core/reviewContracts': path.resolve(repoRoot, '../packages/game-core/src/reviewContracts.ts'),
       '@racehorse/game-core/review': path.resolve(repoRoot, '../packages/game-core/src/reviewContracts.ts'),
+      // These two are only reachable transitively (via
+      // @racehorse/review-engine's own imports, e.g. hiddenPoolEligibility.ts)
+      // -- nothing in client/src imports them directly today. Vite's normal
+      // app build silently fell through to @racehorse/game-core's built
+      // dist/ (via its package.json subpath exports) for these when
+      // unaliased, but Vite's separate worker-bundling pass for
+      // reviewWorker.ts (new Worker(new URL(...))) resolves aliased deep
+      // imports differently and broke without an explicit entry -- surfaced
+      // by the B5 UI-wiring PR's production build, not a pre-existing issue.
+      '@racehorse/game-core/invariants': path.resolve(repoRoot, '../packages/game-core/src/invariants.ts'),
+      '@racehorse/game-core/types': path.resolve(repoRoot, '../packages/game-core/src/types.ts'),
       '@racehorse/game-core': path.resolve(repoRoot, '../packages/game-core/src/index.ts'),
       '@racehorse/match-protocol': path.resolve(repoRoot, '../packages/match-protocol/src/index.ts'),
       '@racehorse/review-engine': path.resolve(repoRoot, '../packages/review-engine/src/index.ts'),
