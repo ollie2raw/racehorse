@@ -196,8 +196,8 @@ describe('buildReviewCoachingFacts -- different-tile misses (precise tier: exact
   });
 });
 
-describe('buildReviewCoachingFacts -- unknown fallback', () => {
-  it('lands on unknown when played already equals best and it was not forced (a correct pick, not a miss)', () => {
+describe('buildReviewCoachingFacts -- correct pick (played equals best, not forced)', () => {
+  it('lands on correct when played already equals best and it was not forced', () => {
     const action = play(3, 4);
     const candidates = [
       candidate(action, { value: { expectedPointDifferential: 10, winProbability: null } }),
@@ -205,10 +205,12 @@ describe('buildReviewCoachingFacts -- unknown fallback', () => {
     ];
     const evalOut = evaluation({ candidates, playedAction: action, bestAction: action });
     const facts = buildReviewCoachingFacts(evalOut);
-    expect(facts.missKind).toBe('unknown');
+    expect(facts.missKind).toBe('correct');
     expect(facts.deltas.expectedPointDifferential).toBe(0);
   });
+});
 
+describe('buildReviewCoachingFacts -- unknown fallback', () => {
   it('lands on unknown for a data-inconsistent precise-tier evaluation (different tile, non-positive totalLoss)', () => {
     const played = play(0, 1);
     const best = play(5, 6);

@@ -14,6 +14,7 @@ export type ReviewCoachingMissKind =
   | 'reply_risk'
   | 'forced'
   | 'pass_or_draw'
+  | 'correct'
   | 'unknown';
 
 export type ReviewCoachingProse = {
@@ -114,17 +115,8 @@ function classifyMissKind(
 
   if (actionsEqual(played.action, best.action)) {
     // Played the actual best move, and it wasn't forced (multiple distinct
-    // choices existed) -- a correct pick, not a miss of any kind. The
-    // 7-value missKind union (per the doc's design sketch) has no explicit
-    // "correct pick" category; by its own fallback rule ("none of the
-    // above cleanly applies -> unknown"), 'unknown' is the textually
-    // correct bucket, but it's worth flagging plainly: this is a known gap
-    // in the current union, not this function failing to explain a real
-    // miss. Callers building prose (D1) MUST check
-    // `deltas.expectedPointDifferential === 0` (or actionsEqual on the
-    // played/best actions) before treating missKind as describing an
-    // actual mistake.
-    return 'unknown';
+    // choices existed) -- a correct pick, not a miss of any kind.
+    return 'correct';
   }
 
   const playedIsPlay = isPlay(played.action);
