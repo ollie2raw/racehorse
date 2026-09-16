@@ -303,6 +303,16 @@
   background: rgba(var(--tier-master-rgb), 0.1);
 }
 
+/* Search-tier results keep their existing 6-bucket label/color untouched --
+   this badge is purely informational (a confident, non-exact result), so it
+   uses a third, distinct tier color rather than either heuristic's blue or
+   unclear's purple. */
+.gr-move-row-badge.is-search {
+  color: var(--tier-rookie);
+  border-color: rgba(var(--tier-rookie-rgb), 0.35);
+  background: rgba(var(--tier-rookie-rgb), 0.1);
+}
+
 .gr-coaching {
   flex: 0 1 auto;
   max-height: 45%;

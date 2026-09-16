@@ -12,6 +12,7 @@ import { buildReviewSidebarCopy } from './reviewSidebarCopy';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
+import { selectMoveSearchTier } from './useMoveSearchTier';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -30,9 +31,10 @@ interface GameReviewerProps {
 
 const COACHING_RATINGS: MoveRating[] = ['Blunder', 'Mistake', 'Inaccuracy'];
 
-const BADGE_TEXT: Record<'heuristic' | 'unclear', string> = {
+const BADGE_TEXT: Record<'heuristic' | 'unclear' | 'search', string> = {
   heuristic: 'Est.',
   unclear: 'Unclear',
+  search: 'Search',
 };
 
 function ratingClass(rating: MoveRating): string {
@@ -247,8 +249,10 @@ export default function GameReviewer({
                   ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch)
                   : null;
                 const display = classification ? heuristicClassificationToDisplay(classification) : null;
+                const searchTier = reviewWorkerBatch ? selectMoveSearchTier(decisionId, reviewWorkerBatch) : null;
                 const label = display?.label ?? move.rating;
                 const rowRatingClass = display?.ratingClass ?? ratingClass(move.rating);
+                const badge = display?.badge ?? searchTier;
                 return (
                   <button
                     key={`${move.moveNumber}-${idx}`}
@@ -262,8 +266,8 @@ export default function GameReviewer({
                     <span className="gr-move-row-played">{formatPlayedLabel(move)}</span>
                     <span className="gr-move-row-rating-cell">
                       <span className={`gr-move-row-rating is-${rowRatingClass}`}>{label}</span>
-                      {display?.badge ? (
-                        <span className={`gr-move-row-badge is-${display.badge}`}>{BADGE_TEXT[display.badge]}</span>
+                      {badge ? (
+                        <span className={`gr-move-row-badge is-${badge}`}>{BADGE_TEXT[badge]}</span>
                       ) : null}
                     </span>
                   </button>
