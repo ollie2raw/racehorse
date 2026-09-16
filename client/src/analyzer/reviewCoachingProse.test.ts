@@ -144,12 +144,26 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
     expect(prose.detail).toMatch(/8/);
   });
 
-  it('unknown: stays honest about the uncertainty, never fabricates a confident explanation', () => {
-    const f = facts({ missKind: 'unknown' });
+  it('unknown (precise tier, data-inconsistent): stays honest about the uncertainty, never fabricates a confident explanation', () => {
+    const f = facts({ missKind: 'unknown', evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' } });
     const prose = buildReviewCoachingProse(f);
     const combined = `${prose.headline} ${prose.detail} ${prose.takeaway}`.toLowerCase();
-    expect(combined).toMatch(/doesn't cleanly point|hard to pin down|not every move/);
+    expect(combined).toMatch(/don't add up|review-data gap|not every move/);
     expect(combined).not.toMatch(/clearly|definitely|certainly/);
+  });
+
+  it('unknown (heuristic tier): a distinct, honest message, not the same sentence as the precise-tier case', () => {
+    const f = facts({ missKind: 'unknown', evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' } });
+    const prose = buildReviewCoachingProse(f);
+    const combined = `${prose.headline} ${prose.detail} ${prose.takeaway}`.toLowerCase();
+    expect(combined).toMatch(/too early|resolved detail|not every move/);
+    expect(combined).not.toMatch(/clearly|definitely|certainly/);
+
+    const preciseTierProse = buildReviewCoachingProse(
+      facts({ missKind: 'unknown', evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' } }),
+    );
+    expect(prose.headline).not.toBe(preciseTierProse.headline);
+    expect(prose.detail).not.toBe(preciseTierProse.detail);
   });
 });
 
@@ -213,7 +227,8 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         deltas: { immediatePoints: 0, expectedPointDifferential: 8 },
       }),
     ],
-    ['unknown', facts({ missKind: 'unknown' })],
+    ['unknown (precise tier)', facts({ missKind: 'unknown', evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' } })],
+    ['unknown (heuristic tier)', facts({ missKind: 'unknown', evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' } })],
   ];
 
   it.each(cases)('%s: no fabricated numbers', (_label, f) => {

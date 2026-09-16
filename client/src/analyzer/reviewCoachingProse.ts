@@ -112,7 +112,7 @@ function buildSameTileWrongEndProse(facts: ReviewCoachingFacts): ReviewCoachingP
     : '';
 
   return {
-    headline: `Right tile, wrong end -- ${tile} plays better at ${bestSpot}.`,
+    headline: `${tile}, better end -- play it at ${bestSpot}, not ${playedSpot}.`,
     detail: `${tile} was the correct tile; it just belongs at ${bestSpot} rather than ${playedSpot}${gapClause}.`,
     takeaway: 'Once you know the tile, check both ends before you place it -- the end matters as much as the tile.',
   };
@@ -148,7 +148,7 @@ function buildBetterTileProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
   const gap = formatNumber(facts.deltas.expectedPointDifferential);
   const best = playAction(facts.best.action);
   return {
-    headline: `A different tile rated higher${best ? ` -- ${tileText(best.tile)}` : ''}, but not by one clear reason.`,
+    headline: `A different tile rated higher${best ? ` -- ${tileText(best.tile)}` : ''} -- for no single clear reason.`,
     detail: `The numbers put this about ${gap} ${pointsWord(facts.deltas.expectedPointDifferential)} behind, without one dominant cause -- not purely the immediate score, and not purely what follows.`,
     takeaway: 'A closer call like this is worth a second look, but it is not a clear-cut mistake.',
   };
@@ -190,16 +190,29 @@ function buildPassOrDrawProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
   };
 }
 
-function buildUnknownProse(): ReviewCoachingProse {
-  // Every path that reaches 'unknown' in classifyMissKind does so because
-  // the real numbers available are either non-diagnostic (heuristic tier,
-  // tied immediatePoints) or actively inconsistent (a precise-tier
-  // different-tile miss with non-positive totalLoss) -- citing either would
-  // mislead, not inform. Staying vague here is the honest answer, not a
-  // missing template.
+function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+  // 'unknown' in classifyMissKind is reached via two genuinely different
+  // situations, distinguishable by evidence.source (already on the
+  // object) -- collapsing them into one identical sentence would hide a
+  // real distinction a player could otherwise learn to recognize:
+  //  - heuristic tier: immediatePoints are tied, and the tier has no real
+  //    calibrated value to fall back on -- the review genuinely hasn't
+  //    resolved enough detail to say anything here, not a claim about the
+  //    move itself.
+  //  - precise tier (exact/search): a different-tile miss with a
+  //    non-positive totalLoss, which should never happen from a real
+  //    solver (best should always show value >= played's) -- this is a
+  //    review-data inconsistency, not a real signal about the move.
+  if (facts.evidence.source === 'heuristic') {
+    return {
+      headline: 'Too early in the review to say for sure.',
+      detail: "This tier doesn't have enough resolved detail yet to explain why -- there isn't a reliable number to build a specific case on for this move.",
+      takeaway: 'Not every move has a clean lesson attached -- this is one of them.',
+    };
+  }
   return {
-    headline: `Hard to pin down what made the difference here.`,
-    detail: `The data here doesn't cleanly point to one explanation -- there isn't a reliable number to build a specific case on for this move.`,
+    headline: "The numbers here don't add up to a clean explanation.",
+    detail: 'This looks like a review-data gap, not something to change about your play -- there isn\'t a reliable number to build a specific case on for this move.',
     takeaway: 'Not every move has a clean lesson attached -- this is one of them.',
   };
 }
@@ -227,6 +240,6 @@ export function buildReviewCoachingProse(facts: ReviewCoachingFacts): ReviewCoac
     case 'pass_or_draw':
       return buildPassOrDrawProse(facts);
     case 'unknown':
-      return buildUnknownProse();
+      return buildUnknownProse(facts);
   }
 }
