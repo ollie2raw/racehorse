@@ -146,6 +146,93 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* D3 (game-review-oracle-upgrade-2026-09-13.md): PV-on-board panel --
+   a new, self-contained region below the main move-nav controls, not a
+   change to the primary board/ghost-tile skeleton above it. */
+.gr-pv-panel {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--dfd-line);
+}
+
+.gr-pv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gr-pv-title {
+  color: var(--dfd-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gr-pv-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.gr-pv-toggle-btn {
+  border: 1px solid var(--dfd-line-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--dfd-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.gr-pv-toggle-btn.is-active {
+  border-color: rgba(231, 182, 74, 0.45);
+  background: rgba(231, 182, 74, 0.1);
+  color: var(--dfd-ink);
+}
+
+.gr-pv-toggle-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.gr-pv-board {
+  height: 160px;
+  border-radius: var(--radius-record);
+  border: 1px solid var(--dfd-line);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.gr-pv-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.gr-pv-step-label {
+  color: var(--dfd-muted);
+  font-size: 12px;
+  text-align: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gr-pv-empty {
+  margin: 0;
+  color: var(--dfd-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .gr-sidebar {
   border-left: 1px solid var(--dfd-line);
   display: flex;
