@@ -15,6 +15,7 @@ import { selectMoveSearchTier } from './useMoveSearchTier';
 import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
 import { buildReviewCoachingFacts } from './reviewCoachingFacts';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
+import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -63,6 +64,7 @@ export default function GameReviewer({
   title = 'Game Review',
   scopeHandNumber = null,
   initialMoveIndex = 1,
+  opponentLabel = 'Fritz',
 }: GameReviewerProps) {
   const hands = useMemo(() => analysis?.hands ?? [], [analysis?.hands]);
   const [selectedHandNumber, setSelectedHandNumber] = useState<number | null>(null);
@@ -125,6 +127,47 @@ export default function GameReviewer({
         : reviewWorkerBatch.pendingDecisionIds.has(currentDecisionId)
           ? 'pending'
           : 'unavailable';
+
+  // D3 (game-review-oracle-upgrade-2026-09-13.md): PV-on-board. Deliberately
+  // its own memo, independent of `coaching` above (D2) -- it needs both
+  // `played` and `best` principal variations from the raw evaluation, not
+  // just the single `principalVariation` field D0's ReviewCoachingFacts
+  // exposes (that field is best's only). Re-reading the same
+  // decisionId/reviewWorkerBatch lookup a third time here (matching the
+  // pattern `ratingCoachingCopy` and `coaching` already each do
+  // independently) keeps this addition from touching D0/D2's existing
+  // memos at all.
+  const pvLines = useMemo(() => {
+    if (!currentDecisionId || !reviewWorkerBatch || !current) return null;
+    const resolvedEvaluation = reviewWorkerBatch.resultsByDecisionId.get(currentDecisionId);
+    if (!resolvedEvaluation) return null;
+    return {
+      preMoveBoard: current.boardRenderState,
+      played: resolvedEvaluation.played.principalVariation,
+      best: resolvedEvaluation.best.principalVariation,
+    };
+  }, [current, currentDecisionId, reviewWorkerBatch]);
+
+  const pvResetKey = current?.moveNumber ?? null;
+  const [trackedPvResetKey, setTrackedPvResetKey] = useState(pvResetKey);
+  const [pvMode, setPvMode] = useState<'played' | 'best'>('best');
+  const [pvStepIndex, setPvStepIndex] = useState(0);
+  if (pvResetKey !== trackedPvResetKey) {
+    setTrackedPvResetKey(pvResetKey);
+    setPvMode('best');
+    setPvStepIndex(0);
+  }
+
+  const pvSteps = useMemo(
+    () => (pvLines ? (pvMode === 'played' ? pvLines.played : pvLines.best) : []),
+    [pvLines, pvMode],
+  );
+  const pvBoards = useMemo(
+    () => stepPrincipalVariationBoards(pvLines?.preMoveBoard ?? null, pvSteps),
+    [pvLines, pvSteps],
+  );
+  const pvSafeStepIndex = Math.min(pvStepIndex, pvBoards.length - 1);
+  const pvHasSteps = pvSteps.length > 0;
 
   const ratingCoachingCopy = useMemo(() => {
     if (!current) return null;
@@ -235,6 +278,87 @@ export default function GameReviewer({
                 {'>'}
               </button>
             </div>
+
+            {current ? (
+              <div className="gr-pv-panel">
+                <div className="gr-pv-header">
+                  <span className="gr-pv-title">Principal variation</span>
+                  <div className="gr-pv-toggle" role="tablist" aria-label="Principal variation line">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={pvMode === 'best'}
+                      className={`gr-pv-toggle-btn${pvMode === 'best' ? ' is-active' : ''}`}
+                      disabled={!pvHasSteps}
+                      onClick={() => {
+                        setPvMode('best');
+                        setPvStepIndex(0);
+                      }}
+                    >
+                      Best
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={pvMode === 'played'}
+                      className={`gr-pv-toggle-btn${pvMode === 'played' ? ' is-active' : ''}`}
+                      disabled={!pvHasSteps}
+                      onClick={() => {
+                        setPvMode('played');
+                        setPvStepIndex(0);
+                      }}
+                    >
+                      Played
+                    </button>
+                  </div>
+                </div>
+                {pvHasSteps ? (
+                  <>
+                    <div className="gr-pv-board">
+                      <Board
+                        key={`gr-pv-board-${current.moveNumber}-${pvMode}-${pvSafeStepIndex}`}
+                        board={pvBoards[pvSafeStepIndex] ?? null}
+                        legalMoves={[]}
+                        selectedTile={null}
+                        onPositionClick={() => {}}
+                        fitMode="guided"
+                        containFullBoard
+                        tileSize={28}
+                      />
+                    </div>
+                    <div className="gr-pv-steps">
+                      <button
+                        type="button"
+                        className="dfd__btn gr-nav-btn"
+                        onClick={() => setPvStepIndex((prev) => Math.max(0, prev - 1))}
+                        disabled={pvSafeStepIndex <= 0}
+                        aria-label="Previous principal variation step"
+                      >
+                        {'<'}
+                      </button>
+                      <span className="gr-pv-step-label">
+                        {pvSafeStepIndex === 0
+                          ? 'Pre-move position'
+                          : describePrincipalVariationStep(pvSteps[pvSafeStepIndex - 1], opponentLabel)}
+                        {' · '}
+                        {`Step ${pvSafeStepIndex} / ${pvSteps.length}`}
+                      </span>
+                      <button
+                        type="button"
+                        className="dfd__btn gr-nav-btn"
+                        onClick={() => setPvStepIndex((prev) => Math.min(pvBoards.length - 1, prev + 1))}
+                        disabled={pvSafeStepIndex >= pvBoards.length - 1}
+                        aria-label="Next principal variation step"
+                      >
+                        {'>'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="gr-pv-empty">No continuation recorded for this move.</p>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <aside className="gr-sidebar">
