@@ -9,6 +9,9 @@ import {
 } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import { buildReviewSidebarCopy } from './reviewSidebarCopy';
+import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
+import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
+import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -16,6 +19,8 @@ interface GameReviewerProps {
   open: boolean;
   onClose: () => void;
   analysis: GameAnalysis | null;
+  reviewWorkerBatch?: ReviewBatchState;
+  decisionIdByMoveNumber?: ReadonlyMap<number, string>;
   title?: string;
   scopeHandNumber?: number | null;
   /** 1-based move index within the starting hand (default 1). */
@@ -24,6 +29,11 @@ interface GameReviewerProps {
 }
 
 const COACHING_RATINGS: MoveRating[] = ['Blunder', 'Mistake', 'Inaccuracy'];
+
+const BADGE_TEXT: Record<'heuristic' | 'unclear', string> = {
+  heuristic: 'Est.',
+  unclear: 'Unclear',
+};
 
 function ratingClass(rating: MoveRating): string {
   return rating.toLowerCase();
@@ -57,6 +67,8 @@ export default function GameReviewer({
   open,
   onClose,
   analysis,
+  reviewWorkerBatch,
+  decisionIdByMoveNumber,
   title = 'Game Review',
   scopeHandNumber = null,
   initialMoveIndex = 1,
@@ -229,20 +241,34 @@ export default function GameReviewer({
               {moves.length === 0 ? (
                 <p className="gr-empty">No moves available to review in this hand.</p>
               ) : null}
-              {moves.map((move, idx) => (
-                <button
-                  key={`${move.moveNumber}-${idx}`}
-                  type="button"
-                  role="option"
-                  aria-selected={idx === cursor}
-                  className={`gr-move-row is-${ratingClass(move.rating)}${idx === cursor ? ' is-active' : ''}`}
-                  onClick={() => setCursor(idx)}
-                >
-                  <span className="gr-move-row-num">#{move.moveNumber}</span>
-                  <span className="gr-move-row-played">{formatPlayedLabel(move)}</span>
-                  <span className={`gr-move-row-rating is-${ratingClass(move.rating)}`}>{move.rating}</span>
-                </button>
-              ))}
+              {moves.map((move, idx) => {
+                const decisionId = decisionIdByMoveNumber?.get(move.moveNumber);
+                const classification = reviewWorkerBatch
+                  ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch)
+                  : null;
+                const display = classification ? heuristicClassificationToDisplay(classification) : null;
+                const label = display?.label ?? move.rating;
+                const rowRatingClass = display?.ratingClass ?? ratingClass(move.rating);
+                return (
+                  <button
+                    key={`${move.moveNumber}-${idx}`}
+                    type="button"
+                    role="option"
+                    aria-selected={idx === cursor}
+                    className={`gr-move-row is-${rowRatingClass}${idx === cursor ? ' is-active' : ''}`}
+                    onClick={() => setCursor(idx)}
+                  >
+                    <span className="gr-move-row-num">#{move.moveNumber}</span>
+                    <span className="gr-move-row-played">{formatPlayedLabel(move)}</span>
+                    <span className="gr-move-row-rating-cell">
+                      <span className={`gr-move-row-rating is-${rowRatingClass}`}>{label}</span>
+                      {display?.badge ? (
+                        <span className={`gr-move-row-badge is-${display.badge}`}>{BADGE_TEXT[display.badge]}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className={`gr-coaching${sidebarCopy ? ' is-prominent' : ''}`}>

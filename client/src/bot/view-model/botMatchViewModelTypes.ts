@@ -2,6 +2,7 @@ import type { RefObject, Dispatch, SetStateAction } from 'react';
 import type { BoardHandle } from '../../components';
 import type { MoveEntry } from '../../game/moveLogger';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
+import type { ReviewBatchState } from '../../modules/review/useReviewWorkerBatch.ts';
 import type { PivotalReviewSession, PivotalTurnReflection } from '../../training/pivotalReview/pivotalReviewStorage';
 import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector';
 import type { DailyFritzStartResponse } from '../../dailyFritz/api';
@@ -296,6 +297,8 @@ export type InGameOverlayViewModel = {
   analyzerOpen: boolean;
   closeAnalyzer: () => void;
   currentAnalysis: GameAnalysis | null;
+  reviewWorkerBatch: ReviewBatchState;
+  decisionIdByMoveNumber: ReadonlyMap<number, string>;
   reviewerScopeHandNumber: number | null;
   reviewerInitialMoveIndex: number;
   opponentLabel: string;

@@ -19,6 +19,7 @@
      runtime alpha. Keep in step with the hex values above. */
   --tier-standard-rgb: 60, 131, 247;
   --tier-elite-rgb:    231, 182, 74;
+  --tier-master-rgb:   175, 92, 254;
 
   /* ── Extended accent palette ────────────────────── */
   --accent-blue:   #0ea5e9;
