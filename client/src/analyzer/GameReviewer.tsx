@@ -8,12 +8,13 @@ import {
   type MoveRating,
 } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
-import { buildReviewSidebarCopy } from './reviewSidebarCopy';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
 import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
+import { buildReviewCoachingFacts } from './reviewCoachingFacts';
+import { buildReviewCoachingProse } from './reviewCoachingProse';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -53,19 +54,6 @@ function formatPlayedLabel(move: AnalyzedMove): string {
   return tileText(move.playedTile);
 }
 
-function positiveNote(move: AnalyzedMove): string | null {
-  if (move.rating === 'Brilliant') {
-    return 'Brilliant find — you spotted the scoring line Fritz would have played.';
-  }
-  if (move.rating === 'Great') {
-    return 'Strong choice — this matched the engine\'s top line.';
-  }
-  if (move.rating === 'Good') {
-    return 'Solid play — you stayed close to the engine on this turn.';
-  }
-  return null;
-}
-
 export default function GameReviewer({
   open,
   onClose,
@@ -75,7 +63,6 @@ export default function GameReviewer({
   title = 'Game Review',
   scopeHandNumber = null,
   initialMoveIndex = 1,
-  opponentLabel = 'Fritz',
 }: GameReviewerProps) {
   const hands = useMemo(() => analysis?.hands ?? [], [analysis?.hands]);
   const [selectedHandNumber, setSelectedHandNumber] = useState<number | null>(null);
@@ -112,18 +99,32 @@ export default function GameReviewer({
   const moves = selectedHand?.analyzedMoves ?? analysis?.analyzedMoves ?? [];
   const current = moves[cursor] ?? null;
 
-  const currentConsequence = current
-    ? analysis?.consequenceByMoveNumber?.[current.moveNumber] ?? null
-    : null;
+  // D2 (game-review-oracle-upgrade-2026-09-13.md): the one structured
+  // coaching path, replacing sidebarCopy/praiseCopy below. Sourced from
+  // the same reviewWorkerBatch/decisionIdByMoveNumber props
+  // ratingCoachingCopy already reads just below -- the only place in this
+  // component a resolved ReviewEvaluationV1 is available.
+  const currentDecisionId = current ? decisionIdByMoveNumber?.get(current.moveNumber) : undefined;
 
-  const sidebarCopy = useMemo(() => {
-    if (!current || !COACHING_RATINGS.includes(current.rating)) return null;
-    return buildReviewSidebarCopy({
-      move: current,
-      consequence: currentConsequence,
-      opponentLabel,
-    });
-  }, [current, currentConsequence, opponentLabel]);
+  const coaching = useMemo(() => {
+    if (!currentDecisionId || !reviewWorkerBatch) return null;
+    const resolvedEvaluation = reviewWorkerBatch.resultsByDecisionId.get(currentDecisionId);
+    if (!resolvedEvaluation) return null;
+    const facts = buildReviewCoachingFacts(resolvedEvaluation);
+    return { facts, prose: buildReviewCoachingProse(facts) };
+  }, [currentDecisionId, reviewWorkerBatch]);
+
+  // Explicit, honest states for every case that isn't a resolved result --
+  // never a fabricated placeholder claiming an answer exists.
+  const coachingStatus: 'resolved' | 'pending' | 'error' | 'unavailable' = coaching
+    ? 'resolved'
+    : !currentDecisionId || !reviewWorkerBatch
+      ? 'unavailable'
+      : reviewWorkerBatch.errorsByDecisionId.has(currentDecisionId)
+        ? 'error'
+        : reviewWorkerBatch.pendingDecisionIds.has(currentDecisionId)
+          ? 'pending'
+          : 'unavailable';
 
   const ratingCoachingCopy = useMemo(() => {
     if (!current) return null;
@@ -144,7 +145,6 @@ export default function GameReviewer({
     return moveRatingCoachingCopy(current.rating, 'precise', scoreGap);
   }, [current, decisionIdByMoveNumber, reviewWorkerBatch]);
 
-  const praiseCopy = current ? positiveNote(current) : null;
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
 
   const showGhostTile = Boolean(
@@ -295,7 +295,7 @@ export default function GameReviewer({
               })}
             </div>
 
-            <div className={`gr-coaching${sidebarCopy ? ' is-prominent' : ''}`}>
+            <div className={`gr-coaching${coaching ? ' is-prominent' : ''}`}>
               <div className="gr-coaching-body">
               {ratingCoachingCopy ? (
                 <div className="gr-advice-section">
@@ -303,35 +303,26 @@ export default function GameReviewer({
                   <p className="gr-advice-copy">{ratingCoachingCopy}</p>
                 </div>
               ) : null}
-              {sidebarCopy ? (
+              {!current ? (
+                <p className="gr-coaching-muted">Select a move to review.</p>
+              ) : coaching ? (
                 <>
                   <div className="gr-advice-section">
-                    <span className="gr-advice-kicker">What you should have played</span>
-                    <p className="gr-advice-copy">{sidebarCopy.shouldHavePlayed}</p>
+                    <span className="gr-advice-kicker">What happened</span>
+                    <p className="gr-advice-copy gr-advice-headline">{coaching.prose.headline}</p>
+                    <p className="gr-advice-copy">{coaching.prose.detail}</p>
                   </div>
-                  {sidebarCopy.whyBetter ? (
-                    <div className="gr-advice-section">
-                      <span className="gr-advice-kicker">Why it was better</span>
-                      <p className="gr-advice-copy">{sidebarCopy.whyBetter}</p>
-                    </div>
-                  ) : null}
-                  {sidebarCopy.whatHappenedInstead ? (
-                    <div className="gr-advice-section">
-                      <span className="gr-advice-kicker">What {opponentLabel} did instead</span>
-                      <p className="gr-advice-copy gr-advice-consequence">{sidebarCopy.whatHappenedInstead}</p>
-                    </div>
-                  ) : null}
                   <div className="gr-advice-section">
                     <span className="gr-advice-kicker">What to remember</span>
-                    <p className="gr-advice-copy gr-advice-takeaway">{sidebarCopy.takeaway}</p>
+                    <p className="gr-advice-copy gr-advice-takeaway">{coaching.prose.takeaway}</p>
                   </div>
                 </>
-              ) : praiseCopy ? (
-                <p className="gr-coaching-praise">{praiseCopy}</p>
-              ) : current ? (
-                <p className="gr-coaching-muted">Select a blunder or mistake to see coaching.</p>
+              ) : coachingStatus === 'pending' ? (
+                <p className="gr-coaching-muted">Analyzing this move…</p>
+              ) : coachingStatus === 'error' ? (
+                <p className="gr-coaching-muted">{"This move couldn't be analyzed."}</p>
               ) : (
-                <p className="gr-coaching-muted">Select a move to review.</p>
+                <p className="gr-coaching-muted">Review data not available for this move.</p>
               )}
               </div>
             </div>

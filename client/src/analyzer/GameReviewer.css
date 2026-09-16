@@ -360,6 +360,15 @@
   color: #f0c4a8;
 }
 
+/* D2 coaching panel (game-review-oracle-upgrade-2026-09-13.md): the prose
+   headline gets slightly more visual weight than the detail line below it
+   -- neutral-toned (not the win-green .gr-coaching-praise used to have),
+   since a headline can equally be "correct", "forced", or a real miss. */
+.gr-advice-headline {
+  color: var(--dfd-ink);
+  font-weight: 700;
+}
+
 .gr-advice-takeaway {
   color: var(--dfd-accent);
   font-weight: 600;
