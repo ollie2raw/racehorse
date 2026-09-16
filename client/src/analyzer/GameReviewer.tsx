@@ -13,6 +13,7 @@ import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
+import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -123,6 +124,25 @@ export default function GameReviewer({
       opponentLabel,
     });
   }, [current, currentConsequence, opponentLabel]);
+
+  const ratingCoachingCopy = useMemo(() => {
+    if (!current) return null;
+    const decisionId = decisionIdByMoveNumber?.get(current.moveNumber);
+    const classification = reviewWorkerBatch
+      ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch)
+      : null;
+    // forced (nothing to explain) and unclear (explaining it confidently
+    // defeats the point of flagging it unclear) deliberately get no copy.
+    if (classification?.kind === 'forced' || classification?.kind === 'unclear') return null;
+    if (classification?.kind === 'bucket') {
+      return moveRatingCoachingCopy(classification.bucket, 'heuristic');
+    }
+    const resolvedEvaluation = decisionId ? reviewWorkerBatch?.resultsByDecisionId.get(decisionId) : undefined;
+    const isPreciseSource =
+      resolvedEvaluation?.evidence.source === 'exact' || resolvedEvaluation?.evidence.source === 'search';
+    const scoreGap = isPreciseSource ? Math.abs(resolvedEvaluation!.loss.expectedPointDifferential) : undefined;
+    return moveRatingCoachingCopy(current.rating, 'precise', scoreGap);
+  }, [current, decisionIdByMoveNumber, reviewWorkerBatch]);
 
   const praiseCopy = current ? positiveNote(current) : null;
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
@@ -277,6 +297,12 @@ export default function GameReviewer({
 
             <div className={`gr-coaching${sidebarCopy ? ' is-prominent' : ''}`}>
               <div className="gr-coaching-body">
+              {ratingCoachingCopy ? (
+                <div className="gr-advice-section">
+                  <span className="gr-advice-kicker">Why this rating</span>
+                  <p className="gr-advice-copy">{ratingCoachingCopy}</p>
+                </div>
+              ) : null}
               {sidebarCopy ? (
                 <>
                   <div className="gr-advice-section">
