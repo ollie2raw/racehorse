@@ -14,12 +14,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "record:self-play": "tsx src/devtools/recordSelfPlayCorpus.ts"
   },
   "dependencies": {
     "@racehorse/game-core": "*"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.23.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.9"
   }

@@ -1,0 +1,19 @@
+{
+  "batchTag": "strong-policy-top-tier",
+  "harnessVersion": "self-play-harness-v1",
+  "policyId": "official-fritz",
+  "tier": "master",
+  "seed": "demo-strong-policy-1",
+  "gameCount": 5,
+  "budget": {
+    "maxNodes": 200000,
+    "maxHiddenStateSamples": 100,
+    "maxPlyDepth": 2,
+    "seed": "self-play-corpus"
+  },
+  "coverageThreshold": 0.02,
+  "recordedDecisions": 681,
+  "nonHeuristicDecisions": 460,
+  "elapsedMs": 8153,
+  "generatedAt": "2026-09-17T02:57:46.483Z"
+}

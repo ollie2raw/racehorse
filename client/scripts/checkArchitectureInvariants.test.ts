@@ -3,6 +3,7 @@ import {
   findDriftedRatingConstants,
   findLenientDefaultStrictnessOptions,
   findNonIdempotentRankedGamesWrites,
+  findStrayNodeImportInReviewEngine,
   findUnguardedFloatingImports,
   findUnguardedPublishChallengeCallers,
   isSuspiciousDailyFritzScoreAccess,
@@ -306,5 +307,51 @@ describe('INV-19 reuse-first published-challenge writes', () => {
   it('does not flag a test file even if it calls publish without the reuse check', () => {
     const testFile = `await publishDailyFritzChallenge(fixture);`;
     expect(findUnguardedPublishChallengeCallers('server/src/scheduled/dailyWarmup.test.ts', testFile)).toBeNull();
+  });
+});
+
+/**
+ * INV-20 — review-engine Node-import boundary (C2a-2 follow-up). Adding
+ * `"types": ["node"]` to packages/review-engine/tsconfig.json (so its one
+ * devtools script could import node:fs/node:path/node:url) widened Node
+ * builtin availability to the whole package, not just devtools/ -- even
+ * though review-engine's public API is consumed by the browser client. This
+ * pins the boundary the type-checker can no longer express on its own.
+ */
+describe('INV-20 review-engine Node-import boundary', () => {
+  it('flags a non-devtools file that imports a node: builtin', () => {
+    const violation = `import { readFileSync } from 'node:fs';\nexport function x() { return readFileSync('x'); }`;
+    expect(findStrayNodeImportInReviewEngine('reviewAccuracy.ts', violation)).toMatch(
+      /imports a node: builtin outside src\/devtools\//,
+    );
+  });
+
+  it('flags a violation nested under __tests__, not just top-level files', () => {
+    const violation = `import path from 'node:path';\nexport const x = path.join('a', 'b');`;
+    expect(findStrayNodeImportInReviewEngine('__tests__/someHelper.test.ts', violation)).toMatch(
+      /imports a node: builtin/,
+    );
+  });
+
+  it('does not flag a devtools file that imports node: builtins', () => {
+    const allowed = `import { writeFileSync } from 'node:fs';\nwriteFileSync('x', 'y');`;
+    expect(findStrayNodeImportInReviewEngine('devtools/recordSelfPlayCorpus.ts', allowed)).toBeNull();
+  });
+
+  it('does not flag a file with no node: import at all', () => {
+    const clean = `import { evaluateReviewPosition } from './evaluateReviewPosition';\nexport const x = evaluateReviewPosition;`;
+    expect(findStrayNodeImportInReviewEngine('reviewAccuracy.ts', clean)).toBeNull();
+  });
+
+  it('does not false-positive on an unrelated string that merely contains "node:"', () => {
+    const clean = `export const label = 'node: not an import';`;
+    expect(findStrayNodeImportInReviewEngine('reviewAccuracy.ts', clean)).toBeNull();
+  });
+
+  it('flags a require()-style node: import too, not just ESM from', () => {
+    const violation = `const fs = require('node:fs');`;
+    expect(findStrayNodeImportInReviewEngine('reviewAccuracy.ts', violation)).toMatch(
+      /imports a node: builtin/,
+    );
   });
 });

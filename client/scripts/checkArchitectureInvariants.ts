@@ -1366,6 +1366,62 @@ function checkReuseFirstPublishedChallengeWrites(): void {
 }
 
 // ---------------------------------------------------------------------------
+// INV-20 — review-engine Node-import boundary (C2a-2 follow-up).
+//
+// packages/review-engine/tsconfig.json gained `"types": ["node"]` so its one
+// devtools script (recordSelfPlayCorpus.ts) could import node:fs/node:path/
+// node:url. That widening applies to the whole package, not just devtools --
+// any file under packages/review-engine/src could now import a node: builtin
+// and typecheck clean, even though review-engine's own public API (index.ts)
+// is consumed by the browser client, which has no node: builtins available
+// at runtime. This pins the boundary the type-checker itself can no longer
+// enforce: no file outside src/devtools/ may import from a node: specifier.
+// ---------------------------------------------------------------------------
+
+const REVIEW_ENGINE_SRC = path.join(REPO_ROOT, 'packages/review-engine/src');
+const NODE_IMPORT_PATTERN = /(?:from\s+|require\(\s*)['"]node:[a-z0-9/_-]+['"]/;
+
+/**
+ * Given a file's path (relative to packages/review-engine/src) and source,
+ * returns a violation string if the file imports a node: builtin and is not
+ * under devtools/ -- review-engine is consumed by the browser client outside
+ * its own devtools scripts and must stay Node-free there.
+ */
+export function findStrayNodeImportInReviewEngine(
+  relativePath: string,
+  source: string,
+): string | null {
+  const normalized = relativePath.replace(/\\/g, '/');
+  if (normalized.startsWith('devtools/')) return null;
+  if (!NODE_IMPORT_PATTERN.test(source)) return null;
+  return (
+    `packages/review-engine/src/${normalized} imports a node: builtin outside src/devtools/ -- ` +
+    `review-engine is consumed by the browser client and must stay Node-free except its own devtools scripts.`
+  );
+}
+
+function checkReviewEngineNodeImportBoundary(): void {
+  const errors: string[] = [];
+  const files = walkTsFiles(REVIEW_ENGINE_SRC);
+
+  for (const absolutePath of files) {
+    const relative = path.relative(REVIEW_ENGINE_SRC, absolutePath).split(path.sep).join('/');
+    const source = fs.readFileSync(absolutePath, 'utf8');
+    const violation = findStrayNodeImportInReviewEngine(relative, source);
+    if (violation) errors.push(violation);
+  }
+
+  addResult({
+    id: 'INV-20',
+    name: 'review-engine Node-Import Boundary',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { reviewEngineFilesScanned: files.length },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 function printReport(manifest: ArchitectureManifest): void {
@@ -1407,6 +1463,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Idempotent ranked_games Writes', 'server-wide POST /rest/v1/ranked_games scan', 'check:architecture'],
     ['Strict-by-Default Verifier Options', 'strict* default-value assertion on pinned verifiers', 'check:architecture'],
     ['Reuse-First Published-Challenge Writes', 'publishDailyFritzChallenge callers must reference the reuse check', 'check:architecture'],
+    ['review-engine Node-Import Boundary', 'node: import scan outside packages/review-engine/src/devtools', 'check:architecture'],
   ];
   for (const [name, mech, script] of enforcement) {
     console.log(`| ${name} | ${mech} | ${script} |`);
@@ -1490,6 +1547,7 @@ function main(): void {
   checkIdempotentRankedGamesWrites();
   checkStrictDefaultVerifiers();
   checkReuseFirstPublishedChallengeWrites();
+  checkReviewEngineNodeImportBoundary();
 
   printReport(manifest);
 }
