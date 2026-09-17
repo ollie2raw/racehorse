@@ -4,6 +4,10 @@ import {
   deserializeSelfPlayRecordsFromJsonl,
   parseCliArgs,
   runSelfPlayCorpus,
+  SELF_PLAY_COVERAGE_THRESHOLD,
+  SELF_PLAY_HARNESS_VERSION,
+  SELF_PLAY_POLICY_ID,
+  SELF_PLAY_REALISTIC_BUDGET,
   serializeSelfPlayRecordsToJsonl,
   type RecordedSelfPlayEvaluation,
 } from '../devtools/recordSelfPlayCorpus';
@@ -37,6 +41,15 @@ describe('parseCliArgs', () => {
     expect(options.outDir.length).toBeGreaterThan(0);
   });
 
+  it('derives the default outDir from this module\'s own real location (import.meta.url), not a shimmed __dirname', () => {
+    const options = parseCliArgs([]);
+    // Proves the fileURLToPath(import.meta.url)-based SCRIPT_DIR actually
+    // resolved to this file's real directory, not merely "some string" --
+    // an incidental __dirname shim from the test/tsx runtime would not
+    // necessarily land on this exact, predictable path.
+    expect(options.outDir.replace(/\\/g, '/')).toMatch(/packages\/review-engine\/fixtures\/recorded-self-play$/);
+  });
+
   it('rejects a non-positive-integer --games value', () => {
     expect(() => parseCliArgs(['--games', '0'])).toThrow(/positive integer/);
     expect(() => parseCliArgs(['--games', 'not-a-number'])).toThrow(/positive integer/);
@@ -49,8 +62,34 @@ describe('parseCliArgs', () => {
 
 describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl -- mechanical round-trip', () => {
   const fakeRecords = [
-    { batchTag: 'ordinary-pvf-tier', tier: 'standard', seed: 's', gameIndex: 0, handNumber: 1, moveNumber: 1, actorId: 'player', evaluation: { a: 1 } },
-    { batchTag: 'ordinary-pvf-tier', tier: 'standard', seed: 's', gameIndex: 0, handNumber: 1, moveNumber: 2, actorId: 'opponent', evaluation: { a: 2 } },
+    {
+      batchTag: 'ordinary-pvf-tier',
+      harnessVersion: SELF_PLAY_HARNESS_VERSION,
+      policyId: SELF_PLAY_POLICY_ID,
+      tier: 'standard',
+      seed: 's',
+      gameIndex: 0,
+      handNumber: 1,
+      moveNumber: 1,
+      actorId: 'player',
+      budget: SELF_PLAY_REALISTIC_BUDGET,
+      coverageThreshold: SELF_PLAY_COVERAGE_THRESHOLD,
+      evaluation: { a: 1 },
+    },
+    {
+      batchTag: 'ordinary-pvf-tier',
+      harnessVersion: SELF_PLAY_HARNESS_VERSION,
+      policyId: SELF_PLAY_POLICY_ID,
+      tier: 'standard',
+      seed: 's',
+      gameIndex: 0,
+      handNumber: 1,
+      moveNumber: 2,
+      actorId: 'opponent',
+      budget: SELF_PLAY_REALISTIC_BUDGET,
+      coverageThreshold: SELF_PLAY_COVERAGE_THRESHOLD,
+      evaluation: { a: 2 },
+    },
   ] as unknown as RecordedSelfPlayEvaluation[];
 
   it('serializes one JSON record per line with a trailing newline', () => {
@@ -83,7 +122,7 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
   // harness itself uses, so a mock would prove nothing about it.
   const options = { gameCount: 1, tier: 'standard' as const, seed: 'harness-unit-test-seed' };
 
-  it('produces at least one recorded decision, all correctly tagged with the batch/tier/seed', () => {
+  it('produces at least one recorded decision, all correctly tagged with the batch/tier/seed/harness/policy/budget', () => {
     const records = runSelfPlayCorpus(options);
     expect(records.length).toBeGreaterThan(0);
     for (const record of records) {
@@ -91,6 +130,10 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
       expect(record.tier).toBe('standard');
       expect(record.seed).toBe('harness-unit-test-seed');
       expect(record.gameIndex).toBe(0);
+      expect(record.harnessVersion).toBe(SELF_PLAY_HARNESS_VERSION);
+      expect(record.policyId).toBe(SELF_PLAY_POLICY_ID);
+      expect(record.budget).toEqual(SELF_PLAY_REALISTIC_BUDGET);
+      expect(record.coverageThreshold).toBe(SELF_PLAY_COVERAGE_THRESHOLD);
     }
   });
 

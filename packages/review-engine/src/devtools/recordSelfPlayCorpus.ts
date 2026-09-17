@@ -36,7 +36,7 @@
  *   npm run record:self-play -- --games 5 --tier master --seed demo-master-1
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   applyGameCommand,
@@ -60,6 +60,11 @@ import {
 } from '@racehorse/game-core/review';
 import { evaluateReviewPosition, type ReviewDispatchBudget } from '../evaluateReviewPosition';
 
+// __dirname is not available in a pure-ESM module; this file is invoked
+// directly (tsx) and imported by tests, both of which give import.meta.url
+// its real, expected value, so this needs no __dirname shim.
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+
 const FRITZ_TIERS: readonly FritzTier[] = ['rookie', 'standard', 'elite', 'master'];
 
 /**
@@ -75,6 +80,25 @@ export const SELF_PLAY_REALISTIC_BUDGET: ReviewDispatchBudget = {
 };
 export const SELF_PLAY_COVERAGE_THRESHOLD = 0.02;
 
+/**
+ * Bump manually whenever this harness's capture behavior changes (what gets
+ * recorded, how evidence is filtered, how hands are dealt/redealt) -- not
+ * when only cosmetic/refactor changes land. Recorded on every row so a
+ * consumer reading a JSONL file in isolation (split, merged, or streamed
+ * away from its manifest) still knows which capture semantics produced it.
+ */
+export const SELF_PLAY_HARNESS_VERSION = 'self-play-harness-v1';
+
+/**
+ * Identifies the decision-making policy used to generate a batch, so a
+ * future second capture path (a different policy entirely, not just a
+ * different FritzTier) is distinguishable at the row level rather than
+ * inferred from `tier` -- `tier` alone can't disambiguate "chooseOfficialFritzDecision
+ * at this tier" from some other policy that happens to reuse the same tier
+ * name.
+ */
+export const SELF_PLAY_POLICY_ID = 'official-fritz';
+
 export type SelfPlayBatchTag = 'strong-policy-top-tier' | 'ordinary-pvf-tier' | `other-tier-${FritzTier}`;
 
 /**
@@ -88,15 +112,46 @@ export function batchTagForTier(tier: FritzTier): SelfPlayBatchTag {
   return `other-tier-${tier}`;
 }
 
+/**
+ * Per-record provenance. Deliberately excludes anything that would vary
+ * between two runs of the same seed (a wall-clock timestamp, a git SHA) --
+ * that would break the byte-identical determinism this harness's own test
+ * suite asserts. Run-level, non-deterministic provenance (generatedAt) lives
+ * only in the sidecar manifest (see SelfPlayCaptureManifest below), not here.
+ */
 export type RecordedSelfPlayEvaluation = {
   readonly batchTag: SelfPlayBatchTag;
+  readonly harnessVersion: string;
+  readonly policyId: string;
   readonly tier: FritzTier;
   readonly seed: string;
   readonly gameIndex: number;
   readonly handNumber: number;
   readonly moveNumber: number;
   readonly actorId: string;
+  readonly budget: ReviewDispatchBudget;
+  readonly coverageThreshold: number;
   readonly evaluation: ReviewEvaluationV1;
+};
+
+/**
+ * Run-level provenance written once per JSONL file, alongside it (same base
+ * filename, .manifest.json). generatedAt and any future non-deterministic
+ * field belong here, never on individual records.
+ */
+export type SelfPlayCaptureManifest = {
+  readonly batchTag: SelfPlayBatchTag;
+  readonly harnessVersion: string;
+  readonly policyId: string;
+  readonly tier: FritzTier;
+  readonly seed: string;
+  readonly gameCount: number;
+  readonly budget: ReviewDispatchBudget;
+  readonly coverageThreshold: number;
+  readonly recordedDecisions: number;
+  readonly nonHeuristicDecisions: number;
+  readonly elapsedMs: number;
+  readonly generatedAt: string;
 };
 
 export type SelfPlayCorpusOptions = {
@@ -202,12 +257,16 @@ export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): RecordedSelfP
       const evaluation = evaluateReviewPosition(snapshot, SELF_PLAY_REALISTIC_BUDGET, SELF_PLAY_COVERAGE_THRESHOLD);
       records.push({
         batchTag,
+        harnessVersion: SELF_PLAY_HARNESS_VERSION,
+        policyId: SELF_PLAY_POLICY_ID,
         tier: options.tier,
         seed: options.seed,
         gameIndex,
         handNumber: state.handNumber,
         moveNumber,
         actorId,
+        budget: SELF_PLAY_REALISTIC_BUDGET,
+        coverageThreshold: SELF_PLAY_COVERAGE_THRESHOLD,
         evaluation,
       });
 
@@ -261,14 +320,14 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   }
 
   const seed = raw.get('seed') ?? 'self-play-default-seed';
-  const outDir = raw.get('out') ?? join(__dirname, '..', '..', 'fixtures', 'recorded-self-play');
+  const outDir = raw.get('out') ?? join(SCRIPT_DIR, '..', '..', 'fixtures', 'recorded-self-play');
 
   return { gameCount, tier, seed, outDir };
 }
 
-function outputFileName(options: CliOptions): string {
+function baseFileName(options: CliOptions): string {
   const batchTag = batchTagForTier(options.tier);
-  return `${batchTag}--tier-${options.tier}--seed-${options.seed}--games-${options.gameCount}.jsonl`;
+  return `${batchTag}--tier-${options.tier}--seed-${options.seed}--games-${options.gameCount}`;
 }
 
 function main(): void {
@@ -276,22 +335,34 @@ function main(): void {
   const startedAt = Date.now();
   const records = runSelfPlayCorpus(options);
   mkdirSync(options.outDir, { recursive: true });
-  const outPath = join(options.outDir, outputFileName(options));
+
+  const base = baseFileName(options);
+  const outPath = join(options.outDir, `${base}.jsonl`);
+  const manifestPath = join(options.outDir, `${base}.manifest.json`);
   writeFileSync(outPath, serializeSelfPlayRecordsToJsonl(records), 'utf8');
 
   const scorableCount = records.filter(
     (record) => record.evaluation.evidence.source !== 'heuristic',
   ).length;
-  console.log(JSON.stringify({
+  const elapsedMs = Date.now() - startedAt;
+
+  const manifest: SelfPlayCaptureManifest = {
     batchTag: batchTagForTier(options.tier),
+    harnessVersion: SELF_PLAY_HARNESS_VERSION,
+    policyId: SELF_PLAY_POLICY_ID,
     tier: options.tier,
     seed: options.seed,
     gameCount: options.gameCount,
+    budget: SELF_PLAY_REALISTIC_BUDGET,
+    coverageThreshold: SELF_PLAY_COVERAGE_THRESHOLD,
     recordedDecisions: records.length,
     nonHeuristicDecisions: scorableCount,
-    outPath,
-    elapsedMs: Date.now() - startedAt,
-  }, null, 2));
+    elapsedMs,
+    generatedAt: new Date().toISOString(),
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+  console.log(JSON.stringify({ ...manifest, outPath, manifestPath }, null, 2));
 }
 
 const invokedDirectly = (() => {
