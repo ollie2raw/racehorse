@@ -1,28 +1,31 @@
 import { dedupeCandidatesByTile } from '@racehorse/game-core/review';
 import type { ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
+import { ACCURACY_MODEL_CALIBRATION_VERSION, CALIBRATED_K } from './accuracyModelCalibration';
 
 /**
- * C0 spec (docs/scoping/phase-c-accuracy-model-spec.md), section 3. The map
- * from mean loss to a 0-100 accuracy score. `k` is the model's single free
- * parameter -- calibrated by C2 against real loss histograms, not guessed
- * here. This value is a provisional placeholder ONLY, chosen so the
- * exponential decay has a sane, non-degenerate shape (k too close to 0
- * flattens the curve toward a constant 100; k too large collapses it toward
- * 0 for almost any nonzero loss) while property tests are being written
- * against it. It carries no calibration meaning and MUST NOT be treated as
- * a real number by any test that asserts a specific accuracy value -- only
- * by tests that check relative/structural properties (monotonicity,
- * ceiling, floor separation, invariances). C2 will overwrite this.
+ * C0 spec (docs/scoping/phase-c-accuracy-model-spec.md), section 3. HISTORICAL
+ * -- kept for the tests that exercise the mapping's structural properties
+ * (monotonicity, ceiling, floor separation, invariances) using a fixed,
+ * non-degenerate constant, and as a record of what shipped before C2/C4's
+ * calibration and cutover. `accuracyFromEvaluations` no longer defaults to
+ * this: its live default is now `CALIBRATED_K` (C4,
+ * accuracyModelCalibration.ts), fit against real data and signed off. Do
+ * not read this as the production value -- it never was calibrated, and
+ * MUST NOT be treated as a real number by any test that asserts a specific
+ * accuracy value.
  */
 export const UNCALIBRATED_DEFAULT_K = 0.1;
 
 /**
- * Bumped whenever `UNCALIBRATED_DEFAULT_K` (or, later, its calibrated
- * replacement) or the functional form in `accuracyFromEvaluations` changes,
- * per C0 spec section 3. The `-uncalibrated` suffix marks this as the
- * pre-C2 version; C2 mints a new version string alongside its real `k`.
+ * C4 (phase-c-accuracy-model-spec.md section 3's "never silently"
+ * versioning rule): this is now literally `ACCURACY_MODEL_CALIBRATION_VERSION`
+ * (accuracyModelCalibration.ts) -- one source of truth, so the two can
+ * never drift apart. Bumped whenever `CALIBRATED_K` or
+ * `LOSS_BAND_BOUNDARIES` changes (re-fit against new data, or a change to
+ * the fitting method itself) -- always change accuracyModelCalibration.ts,
+ * never this constant directly.
  */
-export const ACCURACY_MODEL_VERSION = 'accuracy-model-v1-uncalibrated';
+export const ACCURACY_MODEL_VERSION: string = ACCURACY_MODEL_CALIBRATION_VERSION;
 
 /**
  * C0 spec section 2: a decision counts toward headline accuracy only if it
@@ -58,10 +61,15 @@ export type AccuracyResult =
  * than a bare number so the empty-denominator case (every decision in
  * scope was forced or heuristic-only) is representable instead of
  * fabricated as 0 or 100.
+ *
+ * `k` defaults to `CALIBRATED_K` (C4) -- the real, signed-off, fitted
+ * value, not a placeholder. Callers needing the pre-calibration constant
+ * for a structural/property test may still pass `UNCALIBRATED_DEFAULT_K`
+ * explicitly.
  */
 export function accuracyFromEvaluations(
   evaluations: readonly ReviewEvaluationV1[],
-  k: number = UNCALIBRATED_DEFAULT_K,
+  k: number = CALIBRATED_K,
 ): AccuracyResult {
   const scorableLosses = evaluations
     .filter((evaluation) => isScorable(evaluation, evaluation.candidates))

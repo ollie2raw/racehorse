@@ -12,14 +12,6 @@
  *
  *   npx tsx packages/review-engine/src/devtools/calibrateAccuracyModel.ts
  *
- * This file is NOT imported by reviewAccuracy.ts, moveAnalyzer.ts, or
- * anything shipping -- it is a standalone, inspectable artifact pending
- * product/data sign-off on the observed distribution (spec section 5, step
- * 5), imported only by calibrateAccuracyModel.ts's own acceptance tests. Do
- * not wire this into `UNCALIBRATED_DEFAULT_K` / `ACCURACY_MODEL_VERSION`
- * (reviewAccuracy.ts) without that separate, explicit sign-off and a
- * dedicated cutover change.
- *
  * A re-run of the harness against the SAME committed corpus files
  * reproduces these exact numbers -- `daily-fritz-master` (chooseOfficialFritzDecision)
  * and the `pvf-bot-match` tier-'standard' batch are both fully
@@ -31,30 +23,33 @@
  * `ACCURACY_MODEL_CALIBRATION_VERSION` and republish this whole file, never
  * edit the constants in place silently.
  *
- * *** PROVISIONAL -- NOT PRODUCT-REVIEWED -- NOT CLEARED FOR ANY PRODUCTION
- * CONSUMER. *** This specific run has not cleared the spec section 5 step 5
- * human checkpoint yet. The v2 run's blocker (worst_legal n=2) was resolved
- * in v3 (n=44). This v4 run widens the pvf-bot-match informational tiers
- * (hard/master) and the standard-tier validation anchor from 5 games each
- * to 30 (5 original + 25 new, independent seed) -- addressing a specific
- * finding from the v3 report: hard-tier's small (n=182) informational
- * sample showed a LOWER mean moveLoss than both standard and master, an
- * inverted difficulty ordering that could have been sampling noise or a
- * real tier-weighting issue. At this wider sample (hard n=1063, master
- * n=1119) the direction persists (hard mean 0.521 < master mean 0.619,
- * i.e. hard still edges out master) but the gap is no longer
- * distinguishable from noise (two-sample z ~= 1.42 on the combined data,
- * ~= 0.54 on the new 25-game-only data alone) -- see the harness report /
- * PR for full numbers. This is an observation about client/src/modules/
- * fritz/botHeuristics.ts's real chooseBotMove tier weighting, NOT
- * something this calibration artifact or its harness investigates or
- * fixes; botHeuristics.ts is untouched by this file. Product/data review
- * of the full observed distribution (spec section 5 step 5) is still a
- * separate, pending step. Until that sign-off happens, do not import
- * CALIBRATED_K, LOSS_BAND_BOUNDARIES, or ACCURACY_MODEL_CALIBRATION_VERSION
- * from anywhere outside calibrateAccuracyModel.ts and its own tests --
- * including from reviewAccuracy.ts, moveAnalyzer.ts, any UI, or any other
- * production consumer, per-move or aggregate.
+ * *** SIGNED OFF -- 2026-09-17, this v4 run. *** Product/data review of the
+ * observed distribution (spec section 5 step 5) is complete for this run:
+ * histograms, the fitted k/boundaries, and the pvf-bot-match hard/master
+ * tier-ordering finding (persists in direction at n=1063/1119, but shrinks
+ * to statistical noise -- z ~= 0.54 on independent 25-game data; not a
+ * blocker, handed back as a separate possible `botHeuristics.ts`
+ * investigation, not fixed here) were all reviewed and accepted.
+ *
+ * This sign-off clears CALIBRATED_K, LOSS_BAND_BOUNDARIES, and
+ * ACCURACY_MODEL_CALIBRATION_VERSION for exactly two consumers, wired in
+ * the same change that added this note (C4, phase-c-accuracy-model-spec.md
+ * section 6):
+ *  1. `reviewAccuracy.ts` -- `accuracyFromEvaluations`'s live default `k`
+ *     and `ACCURACY_MODEL_VERSION`.
+ *  2. `client/src/analyzer/gameAccuracyModel.ts` -- the §4a loss-band label
+ *     function and `GameAccuracyModelResult` computation, via
+ *     `LOSS_BAND_BOUNDARIES` re-exported from review-engine's `index.ts`.
+ *
+ * It is NOT a blanket clearance. A new consumer -- a different package, a
+ * UI surface reading these numbers directly, anything computing its own
+ * copy of the model -- needs its own explicit review, not an assumption
+ * that this note already covers it. Note also (unchanged from C4's own
+ * scope limit): being wired here does not mean players see it yet --
+ * spec section 6's own cutover condition (a `GameAnalysis` only ever gets
+ * a *populated* `accuracyModel` once a caller with real per-decision
+ * `ReviewEvaluationV1` data computes one, which no shipping code does yet)
+ * and any UI change are separate, later work.
  */
 
 /** Spec section 3's single free parameter. Fitted 2026-09-17 (v4) -- unchanged from v3 since the strong-policy and worst_legal anchors this fits against are untouched by this run's corpus widening. See the harness report for method and full histogram detail. */
