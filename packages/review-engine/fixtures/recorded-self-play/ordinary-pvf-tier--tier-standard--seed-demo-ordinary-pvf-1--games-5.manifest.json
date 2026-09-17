@@ -1,5 +1,6 @@
 {
   "batchTag": "ordinary-pvf-tier",
+  "corpusKind": "synthetic-baseline",
   "harnessVersion": "self-play-harness-v1",
   "policyId": "official-fritz",
   "tier": "standard",
@@ -14,6 +15,7 @@
   "coverageThreshold": 0.02,
   "recordedDecisions": 531,
   "nonHeuristicDecisions": 358,
-  "elapsedMs": 6903,
-  "generatedAt": "2026-09-17T02:57:53.957Z"
+  "elapsedMs": 6950,
+  "generatedAt": "2026-09-17T03:50:04.925Z",
+  "reproducible": true
 }
