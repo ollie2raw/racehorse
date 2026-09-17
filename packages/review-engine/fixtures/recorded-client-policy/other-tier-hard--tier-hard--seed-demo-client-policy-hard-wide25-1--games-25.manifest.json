@@ -1,0 +1,21 @@
+{
+  "batchTag": "other-tier-hard",
+  "corpusKind": "pvf-bot-match",
+  "harnessVersion": "client-policy-harness-v1",
+  "policyId": "client-bot-v1-hard-strategic-plus-mc8-blend035",
+  "tier": "hard",
+  "seed": "demo-client-policy-hard-wide25-1",
+  "gameCount": 25,
+  "budget": {
+    "maxNodes": 200000,
+    "maxHiddenStateSamples": 100,
+    "maxPlyDepth": 2,
+    "seed": "racehorse-review-default-seed"
+  },
+  "coverageThreshold": 0.02,
+  "recordedDecisions": 3148,
+  "nonHeuristicDecisions": 2161,
+  "elapsedMs": 39146,
+  "generatedAt": "2026-09-17T06:16:23.724Z",
+  "reproducible": false
+}

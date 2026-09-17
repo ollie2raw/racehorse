@@ -33,21 +33,31 @@
  *
  * *** PROVISIONAL -- NOT PRODUCT-REVIEWED -- NOT CLEARED FOR ANY PRODUCTION
  * CONSUMER. *** This specific run has not cleared the spec section 5 step 5
- * human checkpoint yet. The v2 run's specific blocker -- the worst_legal
- * (poor-play) anchor having only n=2 scorable decisions -- is resolved as
- * of this v3 run (n=44, spread across opening/midgame/endgame phases and
- * ~40 distinct seeds; see reviewFixtureCorpus.ts's own comment on its
- * `deliberately_poor` category). That resolves the specific data-volume
- * objection, not the sign-off itself: product/data review of the observed
- * distribution (spec section 5 step 5) is a separate, still-pending step.
- * Until that sign-off happens, do not import CALIBRATED_K,
- * LOSS_BAND_BOUNDARIES, or ACCURACY_MODEL_CALIBRATION_VERSION from anywhere
- * outside calibrateAccuracyModel.ts and its own tests -- including from
- * reviewAccuracy.ts, moveAnalyzer.ts, any UI, or any other production
- * consumer, per-move or aggregate.
+ * human checkpoint yet. The v2 run's blocker (worst_legal n=2) was resolved
+ * in v3 (n=44). This v4 run widens the pvf-bot-match informational tiers
+ * (hard/master) and the standard-tier validation anchor from 5 games each
+ * to 30 (5 original + 25 new, independent seed) -- addressing a specific
+ * finding from the v3 report: hard-tier's small (n=182) informational
+ * sample showed a LOWER mean moveLoss than both standard and master, an
+ * inverted difficulty ordering that could have been sampling noise or a
+ * real tier-weighting issue. At this wider sample (hard n=1063, master
+ * n=1119) the direction persists (hard mean 0.521 < master mean 0.619,
+ * i.e. hard still edges out master) but the gap is no longer
+ * distinguishable from noise (two-sample z ~= 1.42 on the combined data,
+ * ~= 0.54 on the new 25-game-only data alone) -- see the harness report /
+ * PR for full numbers. This is an observation about client/src/modules/
+ * fritz/botHeuristics.ts's real chooseBotMove tier weighting, NOT
+ * something this calibration artifact or its harness investigates or
+ * fixes; botHeuristics.ts is untouched by this file. Product/data review
+ * of the full observed distribution (spec section 5 step 5) is still a
+ * separate, pending step. Until that sign-off happens, do not import
+ * CALIBRATED_K, LOSS_BAND_BOUNDARIES, or ACCURACY_MODEL_CALIBRATION_VERSION
+ * from anywhere outside calibrateAccuracyModel.ts and its own tests --
+ * including from reviewAccuracy.ts, moveAnalyzer.ts, any UI, or any other
+ * production consumer, per-move or aggregate.
  */
 
-/** Spec section 3's single free parameter. Fitted 2026-09-17 (v3, worst_legal corpus expanded to n=44) -- see the harness report for method and full histogram detail. */
+/** Spec section 3's single free parameter. Fitted 2026-09-17 (v4) -- unchanged from v3 since the strong-policy and worst_legal anchors this fits against are untouched by this run's corpus widening. See the harness report for method and full histogram detail. */
 export const CALIBRATED_K = 0.19770906562806756;
 
 /** Spec section 4a's three loss-band boundary constants. Same fitting run as CALIBRATED_K -- always version and republish together. */
@@ -59,7 +69,10 @@ export type CalibratedLossBandBoundaries = {
 
 export const LOSS_BAND_BOUNDARIES: CalibratedLossBandBoundaries = {
   bestTolerance: 0.12999999999999995,
-  inaccuracyToMistake: 0.895,
+  // Only this boundary moved from v3 (0.895 -> 0.79): it's fit from
+  // pvf-bot-match standard-tier's own losses (p75), and standard-tier's
+  // sample widened from 5 to 30 games this run.
+  inaccuracyToMistake: 0.79,
   mistakeToBlunder: 5.98,
 };
 
@@ -71,4 +84,4 @@ export const LOSS_BAND_BOUNDARIES: CalibratedLossBandBoundaries = {
  * calibration artifact's own version, not a value reviewAccuracy.ts reads
  * or stamps onto anything today.
  */
-export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v3-calibrated-2026-09-17';
+export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v4-calibrated-2026-09-17';
