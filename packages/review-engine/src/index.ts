@@ -10,3 +10,5 @@ export { solveMidgameDeterminization } from './solveMidgameDeterminization';
 export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';
 export { solveHeuristicOpening } from './solveHeuristicOpening';
 export type { HandPhase } from './solveHeuristicOpening';
+export { accuracyFromEvaluations, isScorable, ACCURACY_MODEL_VERSION, UNCALIBRATED_DEFAULT_K } from './reviewAccuracy';
+export type { AccuracyResult } from './reviewAccuracy';
