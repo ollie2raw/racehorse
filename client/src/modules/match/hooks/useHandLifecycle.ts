@@ -524,10 +524,24 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
           });
           if (!isRetryable) {
             const status = err instanceof DailyFritzNextHandHttpError ? err.status : null;
+            const serverCurrentHandIndex = err instanceof DailyFritzNextHandHttpError
+              ? err.currentHandIndex
+              : null;
+            if (serverCurrentHandIndex !== null && serverCurrentHandIndex - dailyFritzHandIndex > 1) {
+              logDailyFritzHandBreadcrumb('stale-cursor-detected', {
+                source,
+                failureAttempt,
+                clientCompletedHandIndex: dailyFritzHandIndex,
+                serverCurrentHandIndex,
+                staleByHands: serverCurrentHandIndex - dailyFritzHandIndex,
+              });
+            }
             const recovery = resolveDailyFritzCompletedHandNextHandFailure({
               verifierCode,
               status,
               failureAttempt,
+              serverCurrentHandIndex,
+              clientCompletedHandIndex: dailyFritzHandIndex,
             });
             if (status === 400) {
               discardDailyFritzSnapshot(buildDailyFritzStorageKey(
@@ -548,6 +562,50 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               prefetchCoordinator.clear();
               completedHandEvidenceRef.current = null;
               advanceRetry.schedule(recovery.delayMs, recovery.reason, () => advanceHandRef.current());
+              return;
+            } else if (recovery.kind === 'stale_cursor_unrecoverable') {
+              // Root-cause fix for the 2026-09 retry storm: this client's
+              // completedHandIndex is more than one hand behind the
+              // server's own cursor, persistently (not a transient race
+              // that narrows to 1 and self-heals via the server's replay
+              // window) -- its local transcript is for a hand the server
+              // has moved past, so every further resubmission with the
+              // SAME data is doomed by construction. Stop resubmitting and
+              // resync instead of retrying forever.
+              logDailyFritzHandBreadcrumb('resync-triggered', {
+                source,
+                failureAttempt,
+                reason: recovery.reason,
+                staleByHands: recovery.staleByHands,
+                serverCurrentHandIndex: recovery.serverCurrentHandIndex,
+                clientCompletedHandIndex: dailyFritzHandIndex,
+              });
+              prefetchCoordinator.clear();
+              completedHandEvidenceRef.current = null;
+              discardDailyFritzSnapshot(buildDailyFritzStorageKey(
+                dailyFritzPackage.attempt_id,
+                prefetchParams.gameNumber,
+              ));
+              reloadRequiredRef.current = true;
+              setHandAdvanceError(
+                'This Daily Fritz run fell out of sync with the server (played in another tab, or a connection drop). Reload to continue with your saved progress.',
+              );
+              logDailyFritzHandBreadcrumb('manual-advance-shown', {
+                reason: 'stale-cursor-unrecoverable',
+                source,
+                failureAttempt,
+                staleByHands: recovery.staleByHands,
+              });
+              setShowManualHandAdvance(true);
+              emitModalFailureTelemetry('discard_checkpoint_and_reload_authority');
+              traceHandLifecycle('error', {
+                source,
+                error: recovery.reason,
+                failureAttempt,
+                status,
+                verifierCode,
+                willRetry: false,
+              }, 'C');
               return;
             }
             if (recovery.kind === 'retry') {

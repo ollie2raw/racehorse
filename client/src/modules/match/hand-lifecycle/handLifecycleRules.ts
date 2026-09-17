@@ -121,7 +121,14 @@ export type DailyFritzHandBreadcrumbEvent =
   | 'manual-advance-shown'
   | 'next-hand-silent-retry'
   | 'unverified-fallback-requested'
-  | 'unverified-fallback-accepted';
+  | 'unverified-fallback-accepted'
+  // 2026-09 retry-storm fix: fired on every stale-by->1 next-hand 409, and
+  // when the bail ceiling is reached -- production visibility into how
+  // often this actually happens and by how many hands, to root-cause WHY
+  // the cursor goes stale (multi-tab, backgrounded tab, dropped response,
+  // ...) without needing a live repro session.
+  | 'stale-cursor-detected'
+  | 'resync-triggered';
 
 /** Production-visible trust breadcrumbs for Daily Fritz hand lifecycle debugging. */
 export function logDailyFritzHandBreadcrumb(

@@ -574,6 +574,9 @@ export async function nextDailyFritzHand(input: {
         result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
           ? result.errorData.authoritative_state as Record<string, unknown>
           : null,
+        Number.isInteger(result.errorData?.current_hand_index)
+          ? Number(result.errorData?.current_hand_index)
+          : null,
       );
     }
     throw new DailyFritzEndOfRunError(message);
@@ -609,6 +612,9 @@ export async function nextDailyFritzHand(input: {
         : null,
       result.errorData?.authoritative_state && typeof result.errorData.authoritative_state === 'object'
         ? result.errorData.authoritative_state as Record<string, unknown>
+        : null,
+      Number.isInteger(result.errorData?.current_hand_index)
+        ? Number(result.errorData?.current_hand_index)
         : null,
     );
   }
