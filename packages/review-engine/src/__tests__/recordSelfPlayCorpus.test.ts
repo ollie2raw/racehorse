@@ -117,11 +117,17 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     }
   });
 
+  // Each of these two tests runs a real self-play game twice (this package's
+  // real evaluateReviewPosition dispatcher, no mocks), so they legitimately
+  // take longer than vitest's 5000ms default -- observed ~3s/run locally but
+  // enough slower on CI's runner to exceed the default in a plain 2x run.
+  // 20s is a comfortable multiple of the slowest observed run, not a tuned
+  // minimum.
   it('is fully deterministic -- the same seed produces byte-identical evaluations on a second run', () => {
     const first = runSelfPlayCorpus(options);
     const second = runSelfPlayCorpus(options);
     expect(second).toEqual(first);
-  });
+  }, 20_000);
 
   it('a different seed produces a different game (different move count or different first move)', () => {
     const withDifferentSeed = runSelfPlayCorpus({ ...options, seed: 'a-completely-different-seed' });
@@ -129,5 +135,5 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     const sameLength = withDifferentSeed.length === original.length;
     const sameFirstMove = JSON.stringify(withDifferentSeed[0]?.evaluation.played) === JSON.stringify(original[0]?.evaluation.played);
     expect(sameLength && sameFirstMove).toBe(false);
-  });
+  }, 20_000);
 });
