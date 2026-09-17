@@ -121,21 +121,41 @@ export type DailyFritzHandBreadcrumbEvent =
   | 'manual-advance-shown'
   | 'next-hand-silent-retry'
   | 'unverified-fallback-requested'
-  | 'unverified-fallback-accepted'
-  // 2026-09 retry-storm fix: fired on every stale-by->1 next-hand 409, and
-  // when the bail ceiling is reached -- production visibility into how
-  // often this actually happens and by how many hands, to root-cause WHY
-  // the cursor goes stale (multi-tab, backgrounded tab, dropped response,
-  // ...) without needing a live repro session.
-  | 'stale-cursor-detected'
-  | 'resync-triggered';
+  | 'unverified-fallback-accepted';
 
-/** Production-visible trust breadcrumbs for Daily Fritz hand lifecycle debugging. */
+/**
+ * DEV-only Daily Fritz hand lifecycle debugging (logger.info gates on
+ * import.meta.env.DEV, confirmed 2026-09 while trying to pull 7 days of
+ * stale-cursor-detected/resync-triggered events from production and
+ * finding zero -- they'd never reached anywhere queryable). Fine for the
+ * local-debugging events above; for anything that needs real production
+ * visibility, use logDailyFritzStaleCursorBreadcrumb (Sentry breadcrumb)
+ * below instead, not this function.
+ */
 export function logDailyFritzHandBreadcrumb(
   event: DailyFritzHandBreadcrumbEvent,
   detail: Record<string, unknown>,
 ): void {
   logger.info('daily-flow', event, detail);
+}
+
+/**
+ * 2026-09 retry-storm instrumentation follow-up: unlike
+ * logDailyFritzHandBreadcrumb above, this reaches production --
+ * logger.operational always adds a real Sentry breadcrumb (visible on any
+ * error report from the same session), not just a DEV console line.
+ * Deliberately its own narrower event type (not all of
+ * DailyFritzHandBreadcrumbEvent) so routing a new, possibly high-frequency
+ * breadcrumb to Sentry later is a conscious choice, not an accidental side
+ * effect of reusing this function for something else.
+ */
+export type DailyFritzStaleCursorBreadcrumbEvent = 'stale-cursor-detected' | 'resync-triggered';
+
+export function logDailyFritzStaleCursorBreadcrumb(
+  event: DailyFritzStaleCursorBreadcrumbEvent,
+  detail: Record<string, unknown>,
+): void {
+  logger.operational('daily-flow', event, detail);
 }
 
 export function logHandLifecycle(payload: HandLifecycleLogPayload): void {
