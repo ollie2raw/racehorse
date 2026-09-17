@@ -189,6 +189,22 @@ describe('C0 section 5 step 4 acceptance test: optimal-game ceiling', () => {
   });
 });
 
+describe('accuracyFromEvaluations default parameter -- the path gameAccuracyModel.ts actually relies on', () => {
+  it('calling accuracyFromEvaluations with no k argument produces the exact same result as passing CALIBRATED_K explicitly', () => {
+    // gameAccuracyModel.ts calls accuracyFromEvaluations(evaluations) with no
+    // second argument -- every other test in this file passes CALIBRATED_K
+    // explicitly, which re-verifies the constant but never exercises the
+    // default parameter itself. This is the one test that does.
+    const scorable = ordinaryPvfEvaluations.filter((e) => isScorable(e, e.candidates));
+    expect(scorable.length).toBeGreaterThan(0);
+
+    const defaultResult = accuracyFromEvaluations(scorable);
+    const explicitResult = accuracyFromEvaluations(scorable, CALIBRATED_K);
+
+    expect(defaultResult).toEqual(explicitResult);
+  });
+});
+
 describe('C0 section 5 step 4 acceptance test: poor-play floor', () => {
   it('a deliberately-poor evaluation set scores meaningfully separated from the ceiling, with no floor inflation', () => {
     const result = accuracyFromEvaluations(worstLegalEvaluations, CALIBRATED_K);
