@@ -6,6 +6,7 @@ import {
   isDailyFritzAdvanceLocked,
   isDailyFritzSetTerminal,
   logDailyFritzHandBreadcrumb,
+  logDailyFritzStaleCursorBreadcrumb,
   warnHandLifecycleStuck,
 } from '../hand-lifecycle/handLifecycleRules.ts';
 import {
@@ -528,12 +529,43 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               ? err.currentHandIndex
               : null;
             if (serverCurrentHandIndex !== null && serverCurrentHandIndex - dailyFritzHandIndex > 1) {
-              logDailyFritzHandBreadcrumb('stale-cursor-detected', {
+              const staleByHandsDetected = serverCurrentHandIndex - dailyFritzHandIndex;
+              logDailyFritzStaleCursorBreadcrumb('stale-cursor-detected', {
                 source,
                 failureAttempt,
                 clientCompletedHandIndex: dailyFritzHandIndex,
                 serverCurrentHandIndex,
-                staleByHands: serverCurrentHandIndex - dailyFritzHandIndex,
+                staleByHands: staleByHandsDetected,
+              });
+              // 2026-09 instrumentation follow-up: the Sentry breadcrumb
+              // above is only ever visible alongside a LATER error report
+              // from the same session -- record this as its own
+              // best-effort telemetry event too, so it's independently
+              // queryable (how often this fires, and by how many hands)
+              // even on a session that never produces another Sentry
+              // event at all. failureCode deliberately distinct from
+              // 'next_hand_request_failed' (the bail path's own code) so
+              // the two are never conflated in a query.
+              void recordDailyFritzTelemetry({
+                eventId: dailyFritzTelemetryEventId(
+                  dailyFritzPackage.attempt_id,
+                  'recovery_started',
+                  `stale-cursor-detected:${dailyFritzHandIndex}:${failureAttempt}`,
+                ),
+                eventType: 'recovery_started',
+                attemptId: dailyFritzPackage.attempt_id,
+                runDate: dailyFritzPackage.run_date,
+                challengeId: dailyFritzPackage.challenge_id ?? null,
+                sessionId: getDailyFritzTelemetrySession(dailyFritzPackage.run_date),
+                failureCode: 'stale_cursor_detected',
+                payload: {
+                  transitionPhase: 'next-hand-request',
+                  diagnosticKind: 'stale_cursor_detected',
+                  clientCompletedHandIndex: dailyFritzHandIndex,
+                  serverCurrentHandIndex,
+                  staleByHands: staleByHandsDetected,
+                  failureAttempt,
+                },
               });
             }
             const recovery = resolveDailyFritzCompletedHandNextHandFailure({
@@ -572,7 +604,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
               // has moved past, so every further resubmission with the
               // SAME data is doomed by construction. Stop resubmitting and
               // resync instead of retrying forever.
-              logDailyFritzHandBreadcrumb('resync-triggered', {
+              logDailyFritzStaleCursorBreadcrumb('resync-triggered', {
                 source,
                 failureAttempt,
                 reason: recovery.reason,
