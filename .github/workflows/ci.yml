@@ -127,8 +127,70 @@ jobs:
       - name: Client tests
         run: npm run test:all --prefix client
 
+  changes:
+    name: Detect Non-Shipping-Only Diff
+    runs-on: ubuntu-latest
+    outputs:
+      e2e_required: ${{ steps.check.outputs.e2e_required }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Playwright E2E exercises the shipped app; a diff confined to
+      # calibration tooling (devtools capture scripts, the review-engine
+      # package's internals, and the recorded fixture corpora they produce)
+      # never reaches a real player and doesn't need it. Conservative on
+      # purpose: packages/review-engine/src/index.ts is excluded from the
+      # allowlist even though it's inside packages/review-engine, because
+      # it's the package's public export surface -- a change there can
+      # affect what client actually imports, so it still gets E2E. Only
+      # applies to pull_request diffs (base..head); a push to main always
+      # runs E2E regardless of which files changed.
+      - name: Determine whether this diff needs Playwright E2E
+        id: check
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull_request event -- always running E2E."
+            echo "e2e_required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files ($BASE_SHA..$HEAD_SHA):"
+          echo "$changed_files"
+
+          e2e_required=false
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              packages/review-engine/src/index.ts)
+                # Public export surface -- always requires E2E.
+                e2e_required=true
+                ;;
+              client/src/devtools/*|packages/review-engine/*|*/fixtures/recorded-*/*)
+                # Allowlisted non-shipping path -- no-op.
+                ;;
+              *)
+                e2e_required=true
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "e2e_required=$e2e_required" >> "$GITHUB_OUTPUT"
+          if [ "$e2e_required" = "true" ]; then
+            echo "At least one changed path falls outside the non-shipping allowlist -- E2E required."
+          else
+            echo "Every changed path falls inside the non-shipping allowlist -- E2E skipped."
+          fi
+
   e2e:
     name: Playwright E2E
+    needs: [changes]
+    if: needs.changes.outputs.e2e_required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
