@@ -20,9 +20,10 @@ export type ReviewFixtureCategory =
   | 'nested_branches'
   | 'near_win_defense'
   | 'hidden_information_ambiguity'
-  | 'exact_endgame';
+  | 'exact_endgame'
+  | 'deliberately_poor';
 
-type FixtureStrategy = 'first_legal' | 'branch_builder';
+type FixtureStrategy = 'first_legal' | 'branch_builder' | 'worst_legal';
 
 type ReviewFixtureSpec = {
   readonly id: string;
@@ -199,6 +200,45 @@ const FIXTURE_SPECS: readonly ReviewFixtureSpec[] = [
       immediatePoints: 0,
     },
   },
+  // C2a-1 (docs/scoping/phase-c-accuracy-model-spec.md, section 5 gap check):
+  // deliberately_poor was one of three fixture-corpus categories the spec
+  // found had zero representation. These two fixtures use a new
+  // FixtureStrategy, 'worst_legal' (see chooseFixtureCommand below), which
+  // mirrors branch_builder's own strategic-value weighting (branch play,
+  // doubles, new branch hubs, immediate score) but inverted -- it always
+  // picks the LEAST valuable legal play instead of the most valuable one.
+  // Both checkpoints below were confirmed, by actually running the real
+  // evaluateReviewPosition dispatcher against them (not eyeballed), to
+  // produce a non-heuristic, materially nonzero moveLoss -- see
+  // reviewFixtureCorpus.deliberatelyPoor.test.ts.
+  {
+    id: 'deliberately-poor-avoided-branch-and-score',
+    category: 'deliberately_poor',
+    description: 'Three legal replies were available, including a branch/scoring continuation; the actual play deliberately picks the least strategically valuable of the three instead.',
+    seed: 'review-corpus:11',
+    strategy: 'worst_legal',
+    actionIndex: 19,
+    expected: {
+      preDigest: 'review-state-v1:fb1f9006',
+      postDigest: 'review-state-v1:9fc90d40',
+      action: { kind: 'play', tile: { low: 2, high: 3 }, position: 'left' },
+      immediatePoints: 0,
+    },
+  },
+  {
+    id: 'deliberately-poor-flat-continuation-over-branch',
+    category: 'deliberately_poor',
+    description: 'Three legal replies were available, including a branch continuation; the actual play deliberately extends the plain main line instead.',
+    seed: 'review-corpus:4',
+    strategy: 'worst_legal',
+    actionIndex: 18,
+    expected: {
+      preDigest: 'review-state-v1:bc1d977b',
+      postDigest: 'review-state-v1:8bf4f8d9',
+      action: { kind: 'play', tile: { low: 0, high: 5 }, position: 'left' },
+      immediatePoints: 0,
+    },
+  },
 ] as const;
 
 function createFixtureInitialState(seed: string): GameState {
@@ -242,11 +282,21 @@ function chooseFixtureCommand(state: GameState, strategy: FixtureStrategy): Game
           tile: move.tile,
           position: move.position,
         }).state;
+        const strategicWeight = (move.position.startsWith('branch-') ? 1_000 : 0)
+          + (move.tile.low === move.tile.high ? 500 : 0)
+          + (preview.board?.hubDoubles.filter((hub) => hub.laneType === 'branch').length ?? 0) * 300
+          + (preview.board ? computePlayScore(preview.board, state.config) * 50 : 0);
         const strategyScore = strategy === 'branch_builder'
-          ? (move.position.startsWith('branch-') ? 1_000 : 0)
-            + (move.tile.low === move.tile.high ? 500 : 0)
-            + (preview.board?.hubDoubles.filter((hub) => hub.laneType === 'branch').length ?? 0) * 300
-            + (preview.board ? computePlayScore(preview.board, state.config) * 50 : 0)
+          ? strategicWeight
+          // Mirrors branch_builder's own weighting (branch play, doubles, new
+          // branch hubs, immediate score) but inverted -- ranked[0] (the
+          // highest strategyScore, per the shared sort below) becomes the
+          // move with the LEAST strategic/scoring value among the legal
+          // options, i.e. deliberately poor play rather than deliberately
+          // strong play. Used only for the deliberately_poor fixture
+          // category (C2a-1).
+          : strategy === 'worst_legal'
+          ? -strategicWeight
           : 0;
         return { move, strategyScore };
       })

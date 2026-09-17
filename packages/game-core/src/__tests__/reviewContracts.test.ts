@@ -21,15 +21,18 @@ const REQUIRED_CATEGORIES: readonly ReviewFixtureCategory[] = [
   'near_win_defense',
   'hidden_information_ambiguity',
   'exact_endgame',
+  'deliberately_poor',
 ];
 
 describe('ReviewPositionSnapshotV2 fixture corpus', () => {
   it('contains one distinct deterministic game-log checkpoint for every Batch 0 scenario class', () => {
-    // exact_endgame deliberately carries two fixtures (a feasible and an
-    // infeasible checkpoint, game-review-oracle-upgrade-2026-09-13.md B2) --
-    // every other category still has exactly one, so the corpus is
-    // REQUIRED_CATEGORIES.length plus that one deliberate extra.
-    expect(REVIEW_FIXTURE_CORPUS).toHaveLength(REQUIRED_CATEGORIES.length + 1);
+    // exact_endgame and deliberately_poor each deliberately carry two
+    // fixtures (exact_endgame: a feasible and an infeasible checkpoint,
+    // game-review-oracle-upgrade-2026-09-13.md B2; deliberately_poor: two
+    // independent poor-play checkpoints, phase-c-accuracy-model-spec.md C2a-1)
+    // -- every other category still has exactly one, so the corpus is
+    // REQUIRED_CATEGORIES.length plus those two deliberate extras.
+    expect(REVIEW_FIXTURE_CORPUS).toHaveLength(REQUIRED_CATEGORIES.length + 2);
     expect(new Set(REVIEW_FIXTURE_CORPUS.map((fixture) => fixture.id)).size).toBe(REVIEW_FIXTURE_CORPUS.length);
     expect(new Set(REVIEW_FIXTURE_CORPUS.map((fixture) => fixture.category))).toEqual(new Set(REQUIRED_CATEGORIES));
     for (const fixture of REVIEW_FIXTURE_CORPUS) {
