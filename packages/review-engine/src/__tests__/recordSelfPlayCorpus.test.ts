@@ -124,6 +124,13 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
   // harness itself uses, so a mock would prove nothing about it.
   const options = { gameCount: 1, tier: 'standard' as const, seed: 'harness-unit-test-seed' };
 
+  // All four single-run tests below carry the same explicit 20s timeout as
+  // the two double-run tests further down (originally only those two had
+  // one): confirmed on CI (PR #254, 2026-09-17) that a single
+  // runSelfPlayCorpus(options) call alone can exceed vitest's 5000ms
+  // default on the shared runner once the rest of this package's suite has
+  // grown (the deliberately_poor fixture corpus's own real-dispatcher test
+  // file), not because this call became slower itself.
   it('produces at least one recorded decision, all correctly tagged with the batch/corpusKind/tier/seed/harness/policy/budget', () => {
     const records = runSelfPlayCorpus(options);
     expect(records.length).toBeGreaterThan(0);
@@ -138,14 +145,14 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
       expect(record.budget).toEqual(SELF_PLAY_REALISTIC_BUDGET);
       expect(record.coverageThreshold).toBe(SELF_PLAY_COVERAGE_THRESHOLD);
     }
-  });
+  }, 20_000);
 
   it('captures decisions from BOTH players, not just one seat', () => {
     const records = runSelfPlayCorpus(options);
     const actors = new Set(records.map((record) => record.actorId));
     expect(actors.has('player')).toBe(true);
     expect(actors.has('opponent')).toBe(true);
-  });
+  }, 20_000);
 
   it('assigns a strictly increasing moveNumber, starting at 1, across the whole game', () => {
     const records = runSelfPlayCorpus(options);
@@ -154,14 +161,14 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     for (let index = 1; index < moveNumbers.length; index += 1) {
       expect(moveNumbers[index]).toBe(moveNumbers[index - 1] + 1);
     }
-  });
+  }, 20_000);
 
   it('assigns a non-decreasing handNumber across the recorded sequence', () => {
     const records = runSelfPlayCorpus(options);
     for (let index = 1; index < records.length; index += 1) {
       expect(records[index].handNumber).toBeGreaterThanOrEqual(records[index - 1].handNumber);
     }
-  });
+  }, 20_000);
 
   // Each of these two tests runs a real self-play game twice (this package's
   // real evaluateReviewPosition dispatcher, no mocks), so they legitimately
