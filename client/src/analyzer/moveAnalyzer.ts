@@ -15,8 +15,13 @@ import type {
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
 import { derivePostMoveReviewBoard } from '../modules/replay/reviewBoardState.ts';
+import type { GameAccuracyModelResult } from './gameAccuracyModel';
+import { gradeFromAccuracy } from './accuracyGrade';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
+export type { GameAccuracyModelResult } from './gameAccuracyModel';
+export { computeGameAccuracyModel, lossBandLabel, lossBandLabelForEvaluation } from './gameAccuracyModel';
+export type { LossBandLabel } from './gameAccuracyModel';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
 
@@ -57,6 +62,19 @@ export type GameAnalysis = {
   consequenceByMoveNumber: Record<number, ConsequenceChain>;
   /** Disclosure for the legacy V1 heuristic evaluator. Optional for persisted pre-Batch-0 records. */
   evidence?: LegacyReviewEvaluationDisclosure;
+  /**
+   * C4 (phase-c-accuracy-model-spec.md section 6): the calibrated accuracy
+   * model's result, additive alongside the legacy `accuracy`/`grade` fields
+   * above -- neither is replaced or touched by this field's presence.
+   * `undefined` means this GameAnalysis predates C4, OR no caller has
+   * computed one yet (`computeGameAccuracyModel`, gameAccuracyModel.ts, is
+   * not invoked anywhere in this file -- population requires real
+   * per-decision ReviewEvaluationV1 data this synchronous analyzer has no
+   * access to; a future caller with that data, e.g. GameReviewer.tsx's
+   * reviewWorkerBatch, computes and attaches one). Render exactly as today
+   * when absent -- no behavior change.
+   */
+  accuracyModel?: GameAccuracyModelResult;
 };
 
 export const LEGACY_ANALYSIS_DISCLOSURE: LegacyReviewEvaluationDisclosure = {
@@ -545,13 +563,6 @@ function classifyMove(entry: MoveEntry, gradeTier: FritzTier, hasV2Snapshots: bo
   };
 }
 
-function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
-  if (accuracy >= 92) return 'S';
-  if (accuracy >= 82) return 'A';
-  if (accuracy >= 72) return 'B';
-  if (accuracy >= 60) return 'C';
-  return 'D';
-}
 
 export function enrichMovesWithFritz(
   entries: MoveEntry[],
