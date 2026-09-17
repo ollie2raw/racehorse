@@ -20,7 +20,6 @@ import { gradeFromAccuracy } from './accuracyGrade';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
 export type { GameAccuracyModelResult } from './gameAccuracyModel';
-export { computeGameAccuracyModel, lossBandLabel, lossBandLabelForEvaluation } from './gameAccuracyModel';
 export type { LossBandLabel } from './gameAccuracyModel';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';

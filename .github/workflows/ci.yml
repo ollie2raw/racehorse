@@ -124,6 +124,9 @@ jobs:
       - name: Build game-core
         run: npm run build -w @racehorse/game-core
 
+      - name: Build review-engine
+        run: npm run build -w @racehorse/review-engine
+
       - name: Client tests
         run: npm run test:all --prefix client
 
