@@ -266,6 +266,7 @@ export type ModalOverlayViewModel = {
   ghostResult: GhostCompletionResult | null;
   botPostGameReviewEligible: boolean;
   postGameAnalysisPending: boolean;
+  accuracyModelPending: boolean;
   isPlayVsFritzGameOver: boolean;
   isGuidedMatchVictoryResult: boolean;
   isGhostMode: boolean;

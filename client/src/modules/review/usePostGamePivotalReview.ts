@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
+import type { GameAccuracyModelResult } from '../../analyzer/gameAccuracyModel.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
@@ -211,6 +212,86 @@ export function usePostGamePivotalReview({
     return selectPivotalTurnsFromAnalysis(postGameAnalysis, moveLog, { winningScore });
   }, [postGameAnalysis, moveLog, winningScore]);
 
+  // C4 UI follow-up (phase-c-accuracy-model-spec.md section 6): the coverage
+  // floor's real input, computed from reviewWorkerBatch's real per-decision
+  // ReviewEvaluationV1 data -- the exact data source moveAnalyzer.ts's own
+  // `accuracyModel?` doc comment names as the missing piece.
+  //
+  // `accuracyModelPending` is real state, not derived inline from
+  // `!reviewWorkerBatch.done` -- it stays true until `accuracyModel` has
+  // actually been set for the current batch, not merely until `done`
+  // flips. `computeGameAccuracyModel` is loaded via a dynamic import below
+  // (see that comment for why), which resolves on a LATER microtask than
+  // the render where `done` becomes true -- deriving pending from `done`
+  // alone reintroduces exactly the legacy-then-swap flash this whole
+  // wiring was built to avoid: `done` true + `accuracyModel` still
+  // undefined, for one real (if brief) window, is precisely that flash.
+  // Still short-circuits to `false` immediately for zero snapshots (no
+  // worker spawned, nothing will ever resolve) -- unchanged from before.
+  const [accuracyModelPending, setAccuracyModelPending] = useState(false);
+  const [accuracyModel, setAccuracyModel] = useState<GameAccuracyModelResult | undefined>(undefined);
+
+  useEffect(() => {
+    if (reviewWorkerSnapshots.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- tracks reviewWorkerBatch's own async lifecycle (see accuracyModelPending's doc comment above), not a prop-derived value computable during render
+      setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModelPending(false);
+      return;
+    }
+    if (!reviewWorkerBatch.done) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModelPending(true);
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+    setAccuracyModelPending(true);
+    let cancelled = false;
+    const evaluations = Array.from(reviewWorkerBatch.resultsByDecisionId.values());
+    // Dynamic import, same reason as analyzeMoveLogDeferred above:
+    // gameAccuracyModel.ts pulls @racehorse/review-engine's dependency
+    // graph in, and this hook is reachable from BotMatchScreen's eager
+    // bundle -- a static import here trips check:bot-match-lazy exactly
+    // the way moveAnalyzer.ts's own value re-export did (C4's first CI
+    // fix). Never import this module statically from anywhere in the
+    // standard bot-match path.
+    void import('../../analyzer/gameAccuracyModel.ts').then(({ computeGameAccuracyModel }) => {
+      if (cancelled) return;
+      setAccuracyModel(computeGameAccuracyModel(evaluations));
+      setAccuracyModelPending(false);
+    }).catch((error) => {
+      if (cancelled) return;
+      // Leaves accuracyModel at its default (undefined) -- the prompt falls
+      // back to the legacy accuracy/grade, same as any other GameAnalysis
+      // without a computed accuracyModel. Still clears pending -- a
+      // permanently-pending loading state on import failure would be worse
+      // than the legacy fallback.
+      setAccuracyModelPending(false);
+      logger.warn(
+        'usePostGamePivotalReview',
+        'accuracyModel chunk failed to load; falling back to legacy accuracy/grade',
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewWorkerSnapshots.length, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId]);
+
+  // Merged only into the value exposed as `postGameAnalysis` below -- the
+  // internal `postGameAnalysis` state above (read by pivotalSelection,
+  // openHandScopedReview, openReviewGameFromPrompt) is left untouched
+  // on purpose. accuracyModel doesn't affect pivotal-turn selection or
+  // GameReviewer's (D2) per-move rendering, so there's no reason to widen
+  // this change's blast radius to those call sites.
+  const exposedPostGameAnalysis = useMemo(() => {
+    if (!postGameAnalysis || accuracyModel === undefined) return postGameAnalysis;
+    return { ...postGameAnalysis, accuracyModel };
+  }, [postGameAnalysis, accuracyModel]);
+
   const skipPostGameReview = useCallback(() => {
     setPostGameReviewDismissed(true);
   }, []);
@@ -281,8 +362,9 @@ export function usePostGamePivotalReview({
     setPivotalReviewOpen,
     pivotalReviewSummary,
     setPivotalReviewSummary,
-    postGameAnalysis,
+    postGameAnalysis: exposedPostGameAnalysis,
     postGameAnalysisPending,
+    accuracyModelPending,
     reviewWorkerBatch,
     decisionIdByMoveNumber,
     pivotalSelection,

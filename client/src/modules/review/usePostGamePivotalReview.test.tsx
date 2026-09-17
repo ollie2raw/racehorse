@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { createBotMatch, type BotMatchState } from '../match/runtime/botEngine.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/reviewContracts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
+import type { ReviewBatchState } from './useReviewWorkerBatch.ts';
 import { logger } from '../../utils/logger.ts';
 import { usePostGamePivotalReview, type UsePostGamePivotalReviewParams } from './usePostGamePivotalReview.ts';
 
@@ -19,6 +21,44 @@ const saveReviewSnapshots = vi.fn();
 vi.mock('./reviewSnapshotStorage.ts', () => ({
   saveReviewSnapshots: (...args: unknown[]) => saveReviewSnapshots(...args),
 }));
+
+// Real Worker construction isn't available in jsdom -- mocked the same way
+// analyzeMoveLogDeferred already is, so the accuracyModel wiring tests below
+// can control resultsByDecisionId/done deterministically instead of racing
+// a real worker.
+const useReviewWorkerBatchMock = vi.fn<(...args: unknown[]) => ReviewBatchState & { cancel: () => void }>();
+vi.mock('./useReviewWorkerBatch.ts', () => ({
+  useReviewWorkerBatch: (...args: unknown[]) => useReviewWorkerBatchMock(...args),
+}));
+
+const NOT_DONE_BATCH: ReviewBatchState & { cancel: () => void } = {
+  resultsByDecisionId: new Map(),
+  errorsByDecisionId: new Map(),
+  pendingDecisionIds: new Set(),
+  done: false,
+  cancel: vi.fn(),
+};
+
+const EXACT: ReviewEvaluationV1['evidence'] = { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' };
+const HEURISTIC: ReviewEvaluationV1['evidence'] = { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' };
+
+function scorableEvaluation(id: string, moveLoss: number, evidence = EXACT): ReviewEvaluationV1 {
+  const best = { action: { kind: 'play', tile: { low: 5, high: 6 }, position: 'left' }, value: { expectedPointDifferential: moveLoss, winProbability: null }, immediatePoints: 0, principalVariation: [] } as const;
+  const played = { action: { kind: 'play', tile: { low: 0, high: 1 }, position: 'left' }, value: { expectedPointDifferential: 0, winProbability: null }, immediatePoints: 0, principalVariation: [] } as const;
+  return {
+    evaluationVersion: 1,
+    snapshotId: id,
+    rulesVersion: 1,
+    reviewEngineVersion: 'review-engine-v1',
+    evidence,
+    played,
+    best,
+    candidates: [played, best],
+    loss: { expectedPointDifferential: moveLoss, winProbability: null },
+    search: { nodes: 2, depth: 1, hiddenStateSamples: 0, coverage: 1, complete: true },
+    diagnostics: [],
+  };
+}
 
 const gameOverMatch = (): BotMatchState => ({ ...createBotMatch(), gameOver: true });
 const moveLog: MoveEntry[] = [{ player: 'you' } as MoveEntry];
@@ -45,6 +85,8 @@ let warnSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   analyzeMoveLogDeferred.mockReset();
   saveReviewSnapshots.mockReset();
+  useReviewWorkerBatchMock.mockReset();
+  useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
   warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -142,5 +184,132 @@ describe('usePostGamePivotalReview — A6 persistence gate (found during Phase-A
     await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
     expect(result.current.postGameAnalysis).toBeNull();
     expect(analyzeMoveLogDeferred).not.toHaveBeenCalled();
+  });
+});
+
+describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', () => {
+  const baseAnalysis = { fake: true, accuracy: 42, grade: 'B' } as never;
+
+  it('no captured snapshots -- accuracyModelPending is false and accuracyModel stays undefined (legacy display, no infinite loading)', async () => {
+    // useReviewWorkerBatch's own `done` never flips true when it was given
+    // zero snapshots (no worker is even spawned) -- accuracyModelPending
+    // must be derived from snapshot presence, not `done` alone, or this
+    // case would spin forever.
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+
+    const { result } = render();
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(false);
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+  });
+
+  it('snapshots present but the worker batch has not finished -- accuracyModelPending is true, accuracyModel stays undefined until done', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(true);
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+  });
+
+  it('reviewWorkerBatch.done flips true but the dynamic import has not resolved yet -- accuracyModelPending must still be true (regression: it must NOT derive from `done` alone, or the legacy number flashes before the swap)', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+
+    const { result, rerender } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(true);
+
+    // Flip the batch to done. The hook's effect will synchronously call
+    // setAccuracyModelPending(true) (a no-op, already true) and kick off
+    // `import('../../analyzer/gameAccuracyModel.ts').then(...)` -- a real
+    // dynamic import, which resolves on a LATER microtask than this
+    // synchronous render. `rerender()` itself is synchronous (not
+    // awaited), so nothing has had a chance to reach that microtask yet
+    // when the assertions below run.
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    resultsByDecisionId.set('scorable-0', scorableEvaluation('scorable-0', 1, EXACT));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+    rerender();
+
+    // The exact bug this test guards against: done is now true, but the
+    // dynamic import's .then() has not fired -- accuracyModel must still
+    // be undefined AND accuracyModelPending must still be true right here,
+    // not just "eventually consistent" after a waitFor.
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+    expect(result.current.accuracyModelPending).toBe(true);
+
+    // It does resolve shortly after -- confirms this isn't stuck forever.
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(false));
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined();
+  });
+
+  it('worker batch done with coverage clearing the floor -- accuracyModel merges in with a real populated accuracy/grade', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    for (let i = 0; i < 60; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
+    for (let i = 0; i < 40; i += 1) resultsByDecisionId.set(`heuristic-${i}`, scorableEvaluation(`heuristic-${i}`, 1, HEURISTIC));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(false);
+    // accuracyModel populates via a dynamic import (check:bot-match-lazy
+    // requires gameAccuracyModel.ts never be statically imported from this
+    // eager-bundle-reachable file) -- a real microtask, not synchronous.
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
+    expect(accuracyModel?.accuracy).not.toBeNull();
+    expect(accuracyModel?.coverageFraction).toBeCloseTo(0.6, 10);
+    // The legacy fields must survive the merge untouched.
+    expect(result.current.postGameAnalysis?.accuracy).toBe(42);
+    expect(result.current.postGameAnalysis?.grade).toBe('B');
+  });
+
+  it('worker batch done with coverage below the floor -- accuracyModel merges in with accuracy/grade null, not the legacy numbers', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    resultsByDecisionId.set('scorable-0', scorableEvaluation('scorable-0', 1, EXACT));
+    for (let i = 0; i < 20; i += 1) resultsByDecisionId.set(`heuristic-${i}`, scorableEvaluation(`heuristic-${i}`, 1, HEURISTIC));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
+    expect(accuracyModel?.accuracy).toBeNull();
+    expect(accuracyModel?.grade).toBeNull();
   });
 });

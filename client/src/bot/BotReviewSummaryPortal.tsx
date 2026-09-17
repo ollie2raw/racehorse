@@ -11,6 +11,7 @@ export interface BotReviewSummaryPortalProps {
   pivotalReviewSummary: PivotalReviewSession | null;
   pivotalSelection: PivotalTurnSelection | null;
   postGameAnalysis: GameAnalysis | null;
+  accuracyModelPending: boolean;
   opponentLabel: string;
   showPostGameReviewPrompt: boolean;
   winnerId: 'you' | 'bot' | null;
@@ -28,6 +29,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
   pivotalReviewSummary,
   pivotalSelection,
   postGameAnalysis,
+  accuracyModelPending,
   opponentLabel,
   showPostGameReviewPrompt,
   winnerId,
@@ -64,6 +66,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
           opponentScore={opponentScore}
           opponentLabel={opponentLabel}
           analysis={postGameAnalysis}
+          accuracyModelPending={accuracyModelPending}
           onReviewGame={onOpenReviewGameFromPrompt}
           onSkip={onSkipPostGameReview}
         />
