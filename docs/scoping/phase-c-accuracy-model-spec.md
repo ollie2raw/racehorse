@@ -188,30 +188,31 @@ The parent doc names five categories C2 needs. Checked directly against `package
 
 ## 6. C4's cutover condition, made concrete
 
-The parent doc's `C4` acceptance: *"Switch `GameAnalysis` accuracy/grade to the new model only when all moves in aggregate have non-heuristic evidence, else show 'partial / Fritz's read'."*
+**Revised 2026-09-17 (C4 follow-up, post-shipping investigation):** the parent doc's original all-or-nothing trigger below shipped in C4, then was investigated against the full 100-game recorded corpus (`packages/review-engine/fixtures/recorded-self-play` + `recorded-client-policy`, spanning `daily-fritz-master` and `pvf-bot-match` standard/hard/master tiers). Finding: **zero of the 100 real games ever reached `status: 'complete'`** under the original trigger. This is structural, not a bug — `evaluateReviewPosition`'s coverage-vs-threshold dispatch (§5) concentrates heuristic-tier fallback at the start of every hand (largest hidden-information space), and a real game replays that worst case once per hand; the original trigger required *zero* heuristic decisions across an *entire* multi-hand game, an AND over 60-90+ decisions that real games never clear. `accuracy`/`grade` are therefore decoupled from `status` below — `status` stays as originally defined (diagnostic only, describing whether *every* non-forced decision was solver-scorable), while `accuracy`/`grade` now populate whenever coverage clears a floor derived from real data, independent of `status`.
 
-**Trigger condition, precisely:** among all decisions in the analyzed scope that are **not forced** (§2a — forced decisions are silently excluded either way and don't affect this check), if **any** decision has `evidence.source === 'heuristic'`, the result is `partial`. Only when **zero** non-forced decisions are heuristic-tier does the result become `complete`.
+The parent doc's original `C4` acceptance: *"Switch `GameAnalysis` accuracy/grade to the new model only when all moves in aggregate have non-heuristic evidence, else show 'partial / Fritz's read'."* This is now superseded by the coverage-floor condition below; kept here for history.
 
-**Proposed data shape** — a new field on `GameAnalysis` (`client/src/analyzer/moveAnalyzer.ts`), additive, not replacing the existing `accuracy`/`grade` fields (which stay as the legacy values until this ships, per this spec's explicit scope limit):
+**`status`, precisely (unchanged from the original trigger, now diagnostic-only):** among all decisions in the analyzed scope that are **not forced** (§2a — forced decisions are silently excluded either way and don't affect this check), if **any** decision has `evidence.source === 'heuristic'`, `status` is `'partial'`. Only when **zero** non-forced decisions are heuristic-tier is `status` `'complete'`. `status` no longer gates whether `accuracy`/`grade` populate — see below.
+
+**`coverageFraction`, precisely:** `scorableNonForcedCount / totalNonForcedMoveCount`, where `scorableNonForcedCount` is the count of non-forced decisions that are *not* heuristic-tier (i.e. `totalNonForcedMoveCount - heuristicMoveCount`). `0` when `totalNonForcedMoveCount === 0` (nothing to score). This is the "how much of the game did we actually get to precisely solve" signal, in the direction that reads naturally with a floor comparison (higher is better) — deliberately not a reuse of `heuristicMoveCount`, which runs the opposite direction and was already scoped for a different purpose ("why is this partial").
+
+**`MINIMUM_COVERAGE_FLOOR`, precisely and its derivation:** `accuracy`/`grade` populate whenever `coverageFraction >= MINIMUM_COVERAGE_FLOOR`, regardless of `status`. The floor is `0.46808510638297873` — the 5th percentile of per-game `coverageFraction` across the 100-game recorded corpus (real games from `daily-fritz-master` and `pvf-bot-match` standard/hard/master tiers; corpus snapshot 2026-09-17, same one `accuracyModelCalibration.ts`'s constants are fit against). Distribution observed: min `0.365079`, p5 `0.468085`, p10 `0.485714`, p25 `0.527273`, median `0.561404`, p75 `0.6`, max `0.696970`, mean `0.558783`. The 5th percentile was chosen over the true minimum (which would trivially pass every game seen so far and prove nothing) and over a parametric choice like mean-minus-two-stddev (which assumes normality this 100-game sample doesn't need to justify) — it is a direct, nonparametric statement about the real data: **95% of real games already clear it**, and it still excludes the worst ~5% (games where scorable decisions never reached even roughly half of the reviewable moves) from getting a numeric accuracy stamped on too little real signal. Re-derive from a re-recorded or meaningfully expanded corpus the same way `accuracyModelCalibration.ts`'s constants are re-derived — never by hand-picking a rounder number.
+
+**Revised data shape** — `GameAccuracyModelResult` is now a single flat type, not a discriminated union split on `status`, because `status` no longer determines which fields are present:
 
 ```ts
-export type GameAccuracyModelResult =
-  | {
-      readonly status: 'complete';
-      readonly accuracyModelVersion: string;
-      readonly accuracy: number; // 0-100, from accuracyFromEvaluations
-      readonly grade: 'S' | 'A' | 'B' | 'C' | 'D'; // derived from the new accuracy, not the legacy one
-    }
-  | {
-      readonly status: 'partial';
-      readonly accuracyModelVersion: string;
-      readonly accuracy: null;
-      readonly grade: null;
-      /** How many non-forced decisions were heuristic-tier -- the reason this is partial. */
-      readonly heuristicMoveCount: number;
-      /** Total non-forced (scorable-or-heuristic) decisions in scope, for "X of Y moves" copy. */
-      readonly totalNonForcedMoveCount: number;
-    };
+export type GameAccuracyModelResult = {
+  readonly status: 'complete' | 'partial'; // diagnostic only -- see above. Does NOT gate accuracy/grade.
+  readonly accuracyModelVersion: string;
+  readonly accuracy: number | null; // populated whenever coverageFraction >= MINIMUM_COVERAGE_FLOOR
+  readonly grade: 'S' | 'A' | 'B' | 'C' | 'D' | null; // derived from the new accuracy, not the legacy one
+  /** How many non-forced decisions were heuristic-tier. */
+  readonly heuristicMoveCount: number;
+  /** Total non-forced (scorable-or-heuristic) decisions in scope, for "X of Y moves" copy. */
+  readonly totalNonForcedMoveCount: number;
+  /** scorableNonForcedCount / totalNonForcedMoveCount; 0 when totalNonForcedMoveCount is 0. The gate for accuracy/grade above. */
+  readonly coverageFraction: number;
+};
 
 export type GameAnalysis = {
   // ...existing fields, unchanged...
@@ -223,10 +224,10 @@ export type GameAnalysis = {
 **What a consumer (D2's panel, or any future renderer) does with this, concretely:**
 
 - `accuracyModel === undefined` → this `GameAnalysis` predates C4 shipping (or C4 hasn't shipped yet at all) — render exactly as today, no behavior change.
-- `accuracyModel.status === 'complete'` → render the new `accuracy`/`grade` as the headline number.
-- `accuracyModel.status === 'partial'` → render "Partial / Fritz's read" (the parent doc's own words) plus a concrete, real count — e.g. "N of M moves reviewed" using `totalNonForcedMoveCount - heuristicMoveCount` of `totalNonForcedMoveCount` — never a fabricated percentage standing in for the real one.
+- `accuracyModel.accuracy !== null` → render the new `accuracy`/`grade` as the headline number, regardless of `status`. `status === 'partial'` alongside a populated `accuracy` is expected and normal (the common case on real data) — it means some decisions were heuristic-tier but coverage was still high enough to trust the aggregate; it is not a reason to suppress the number.
+- `accuracyModel.accuracy === null` → render "Partial / Fritz's read" (the parent doc's own words) plus a concrete, real count — e.g. "N of M moves reviewed" using `totalNonForcedMoveCount - heuristicMoveCount` of `totalNonForcedMoveCount` — never a fabricated percentage standing in for the real one. `status` may still be checked here for finer copy (e.g. distinguishing "some coverage, just not enough" from the 0-of-0 "nothing to review" case) but is not required to decide whether to show a number at all.
 
-This section fixes the **contract shape**; it does not implement `accuracyModel`'s population (that's `C4`'s own code, not C0's).
+This section fixes the **contract shape**; it does not implement `accuracyModel`'s population (that's `C4`'s own code, not C0's). No UI work has consumed this shape yet — this revision is still contract + computation only.
 
 ---
 
