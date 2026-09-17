@@ -217,23 +217,38 @@ export function usePostGamePivotalReview({
   // ReviewEvaluationV1 data -- the exact data source moveAnalyzer.ts's own
   // `accuracyModel?` doc comment names as the missing piece.
   //
-  // `accuracyModelPending` is deliberately NOT `!reviewWorkerBatch.done`
-  // alone: useReviewWorkerBatch's `done` never flips true when it was given
-  // zero snapshots (no worker is even spawned in that case), so gating
-  // purely on `done` would spin the loading state forever whenever review
-  // capture produced nothing for this game (capture disabled, no recorder,
-  // etc.) -- exactly the "GameAnalysis predates C4 / no caller computed
-  // one" case that should show the legacy fields immediately instead.
-  const accuracyModelPending = reviewWorkerSnapshots.length > 0 && !reviewWorkerBatch.done;
-
+  // `accuracyModelPending` is real state, not derived inline from
+  // `!reviewWorkerBatch.done` -- it stays true until `accuracyModel` has
+  // actually been set for the current batch, not merely until `done`
+  // flips. `computeGameAccuracyModel` is loaded via a dynamic import below
+  // (see that comment for why), which resolves on a LATER microtask than
+  // the render where `done` becomes true -- deriving pending from `done`
+  // alone reintroduces exactly the legacy-then-swap flash this whole
+  // wiring was built to avoid: `done` true + `accuracyModel` still
+  // undefined, for one real (if brief) window, is precisely that flash.
+  // Still short-circuits to `false` immediately for zero snapshots (no
+  // worker spawned, nothing will ever resolve) -- unchanged from before.
+  const [accuracyModelPending, setAccuracyModelPending] = useState(false);
   const [accuracyModel, setAccuracyModel] = useState<GameAccuracyModelResult | undefined>(undefined);
 
   useEffect(() => {
-    if (reviewWorkerSnapshots.length === 0 || !reviewWorkerBatch.done) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the analyzeMoveLogDeferred reset pattern above; tracks reviewWorkerBatch's own async lifecycle, not a prop-derived value computable during render
+    if (reviewWorkerSnapshots.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- tracks reviewWorkerBatch's own async lifecycle (see accuracyModelPending's doc comment above), not a prop-derived value computable during render
       setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModelPending(false);
       return;
     }
+    if (!reviewWorkerBatch.done) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setAccuracyModelPending(true);
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+    setAccuracyModelPending(true);
     let cancelled = false;
     const evaluations = Array.from(reviewWorkerBatch.resultsByDecisionId.values());
     // Dynamic import, same reason as analyzeMoveLogDeferred above:
@@ -246,13 +261,15 @@ export function usePostGamePivotalReview({
     void import('../../analyzer/gameAccuracyModel.ts').then(({ computeGameAccuracyModel }) => {
       if (cancelled) return;
       setAccuracyModel(computeGameAccuracyModel(evaluations));
+      setAccuracyModelPending(false);
     }).catch((error) => {
       if (cancelled) return;
       // Leaves accuracyModel at its default (undefined) -- the prompt falls
       // back to the legacy accuracy/grade, same as any other GameAnalysis
-      // without a computed accuracyModel. No pending flag to clear here
-      // (accuracyModelPending already tracks reviewWorkerBatch.done, not
-      // this import's own success).
+      // without a computed accuracyModel. Still clears pending -- a
+      // permanently-pending loading state on import failure would be worse
+      // than the legacy fallback.
+      setAccuracyModelPending(false);
       logger.warn(
         'usePostGamePivotalReview',
         'accuracyModel chunk failed to load; falling back to legacy accuracy/grade',

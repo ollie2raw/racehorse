@@ -217,6 +217,47 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
   });
 
+  it('reviewWorkerBatch.done flips true but the dynamic import has not resolved yet -- accuracyModelPending must still be true (regression: it must NOT derive from `done` alone, or the legacy number flashes before the swap)', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+
+    const { result, rerender } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(true);
+
+    // Flip the batch to done. The hook's effect will synchronously call
+    // setAccuracyModelPending(true) (a no-op, already true) and kick off
+    // `import('../../analyzer/gameAccuracyModel.ts').then(...)` -- a real
+    // dynamic import, which resolves on a LATER microtask than this
+    // synchronous render. `rerender()` itself is synchronous (not
+    // awaited), so nothing has had a chance to reach that microtask yet
+    // when the assertions below run.
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    resultsByDecisionId.set('scorable-0', scorableEvaluation('scorable-0', 1, EXACT));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+    rerender();
+
+    // The exact bug this test guards against: done is now true, but the
+    // dynamic import's .then() has not fired -- accuracyModel must still
+    // be undefined AND accuracyModelPending must still be true right here,
+    // not just "eventually consistent" after a waitFor.
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+    expect(result.current.accuracyModelPending).toBe(true);
+
+    // It does resolve shortly after -- confirms this isn't stuck forever.
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(false));
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined();
+  });
+
   it('worker batch done with coverage clearing the floor -- accuracyModel merges in with a real populated accuracy/grade', async () => {
     const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
     const recorder = makeRecorderWithSnapshots(snapshots);
