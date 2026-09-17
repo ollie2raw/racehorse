@@ -1,0 +1,21 @@
+{
+  "batchTag": "strong-policy-top-tier",
+  "corpusKind": "pvf-bot-match",
+  "harnessVersion": "client-policy-harness-v1",
+  "policyId": "client-bot-v1-master-strategic-plus-mc20-blend045-endgame-minimax-le12tiles",
+  "tier": "master",
+  "seed": "demo-client-policy-master-wide25-1",
+  "gameCount": 25,
+  "budget": {
+    "maxNodes": 200000,
+    "maxHiddenStateSamples": 100,
+    "maxPlyDepth": 2,
+    "seed": "racehorse-review-default-seed"
+  },
+  "coverageThreshold": 0.02,
+  "recordedDecisions": 3136,
+  "nonHeuristicDecisions": 2143,
+  "elapsedMs": 186379,
+  "generatedAt": "2026-09-17T06:20:33.101Z",
+  "reproducible": false
+}
