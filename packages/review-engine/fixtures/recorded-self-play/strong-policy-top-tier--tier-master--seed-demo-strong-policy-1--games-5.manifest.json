@@ -1,6 +1,6 @@
 {
   "batchTag": "strong-policy-top-tier",
-  "corpusKind": "synthetic-baseline",
+  "corpusKind": "daily-fritz-master",
   "harnessVersion": "self-play-harness-v1",
   "policyId": "official-fritz",
   "tier": "master",
@@ -15,7 +15,7 @@
   "coverageThreshold": 0.02,
   "recordedDecisions": 681,
   "nonHeuristicDecisions": 460,
-  "elapsedMs": 8157,
-  "generatedAt": "2026-09-17T03:49:57.395Z",
+  "elapsedMs": 8214,
+  "generatedAt": "2026-09-17T05:04:22.624Z",
   "reproducible": true
 }

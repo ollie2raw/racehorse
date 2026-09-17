@@ -118,14 +118,16 @@ export function batchTagForTier(tier: FritzTier): ReviewCaptureBatchTag {
 }
 
 /**
- * This harness only ever produces the synthetic-baseline corpus kind --
- * chooseOfficialFritzDecision is a deterministic, no-opponent-modeling
- * policy, structurally different from the real chooseBotMove policy players
- * actually face (see reviewCaptureSchema.ts's ReviewCaptureCorpusKind doc,
- * and the PR #250 fidelity finding it records). C2a-3's client-policy
- * capture produces 'client-policy' instead.
+ * This harness produces the daily-fritz-master corpus kind --
+ * chooseOfficialFritzDecision is the same real, already-shipped bot policy
+ * Daily Fritz uses in production, deterministic and with no opponent
+ * modeling, structurally different from the PVF bot's chooseBotMove policy
+ * (see reviewCaptureSchema.ts's ReviewCaptureCorpusKind doc, and the PR #250
+ * fidelity finding it records) but real production data representing a real
+ * mode, not synthetic filler. C2a-3's client-policy capture produces
+ * 'pvf-bot-match' instead.
  */
-const SELF_PLAY_CORPUS_KIND = 'synthetic-baseline' as const;
+const SELF_PLAY_CORPUS_KIND = 'daily-fritz-master' as const;
 
 /**
  * chooseOfficialFritzDecision (fritzPolicy.ts) has no wall-clock deadlines

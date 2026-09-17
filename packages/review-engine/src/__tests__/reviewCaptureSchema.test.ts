@@ -7,7 +7,7 @@ import {
 
 const fakeRecord = {
   batchTag: 'strong-policy-top-tier',
-  corpusKind: 'synthetic-baseline',
+  corpusKind: 'daily-fritz-master',
   harnessVersion: 'test-harness-v1',
   policyId: 'test-policy',
   tier: 'master',

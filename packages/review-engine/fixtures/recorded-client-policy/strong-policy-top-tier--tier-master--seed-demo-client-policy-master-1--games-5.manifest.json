@@ -1,6 +1,6 @@
 {
   "batchTag": "strong-policy-top-tier",
-  "corpusKind": "client-policy",
+  "corpusKind": "pvf-bot-match",
   "harnessVersion": "client-policy-harness-v1",
   "policyId": "client-bot-v1-master-strategic-plus-mc20-blend045-endgame-minimax-le12tiles",
   "tier": "master",

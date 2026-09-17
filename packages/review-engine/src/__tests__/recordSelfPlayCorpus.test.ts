@@ -64,7 +64,7 @@ describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl 
   const fakeRecords = [
     {
       batchTag: 'ordinary-pvf-tier',
-      corpusKind: 'synthetic-baseline',
+      corpusKind: 'daily-fritz-master',
       harnessVersion: SELF_PLAY_HARNESS_VERSION,
       policyId: SELF_PLAY_POLICY_ID,
       tier: 'standard',
@@ -79,7 +79,7 @@ describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl 
     },
     {
       batchTag: 'ordinary-pvf-tier',
-      corpusKind: 'synthetic-baseline',
+      corpusKind: 'daily-fritz-master',
       harnessVersion: SELF_PLAY_HARNESS_VERSION,
       policyId: SELF_PLAY_POLICY_ID,
       tier: 'standard',
@@ -129,7 +129,7 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     expect(records.length).toBeGreaterThan(0);
     for (const record of records) {
       expect(record.batchTag).toBe('ordinary-pvf-tier');
-      expect(record.corpusKind).toBe('synthetic-baseline');
+      expect(record.corpusKind).toBe('daily-fritz-master');
       expect(record.tier).toBe('standard');
       expect(record.seed).toBe('harness-unit-test-seed');
       expect(record.gameIndex).toBe(0);
