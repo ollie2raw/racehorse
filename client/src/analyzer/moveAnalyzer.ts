@@ -563,7 +563,6 @@ function classifyMove(entry: MoveEntry, gradeTier: FritzTier, hasV2Snapshots: bo
   };
 }
 
-
 export function enrichMovesWithFritz(
   entries: MoveEntry[],
   referenceTier: FritzTier = 'master',
