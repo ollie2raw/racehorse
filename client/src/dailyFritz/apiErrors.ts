@@ -105,6 +105,14 @@ export class DailyFritzNextHandHttpError extends Error {
   readonly verifierCode: string | null;
   readonly authorityRevision: number | null;
   readonly authoritativeState: Record<string, unknown> | null;
+  /**
+   * 2026-09 retry-storm fix: the server's `current_hand_index`, present on
+   * the plain "hand is no longer current" 409
+   * (dailyFritzNextHandRoute.ts) so a client that's fallen more than one
+   * hand behind can detect it from the SAME failed response, no second
+   * round-trip. `null` for every other error shape.
+   */
+  readonly currentHandIndex: number | null;
 
   constructor(
     message: string,
@@ -112,6 +120,7 @@ export class DailyFritzNextHandHttpError extends Error {
     verifierCode: string | null = null,
     authorityRevision: number | null = null,
     authoritativeState: Record<string, unknown> | null = null,
+    currentHandIndex: number | null = null,
   ) {
     super(message);
     this.name = 'DailyFritzNextHandHttpError';
@@ -119,6 +128,7 @@ export class DailyFritzNextHandHttpError extends Error {
     this.verifierCode = verifierCode;
     this.authorityRevision = authorityRevision;
     this.authoritativeState = authoritativeState;
+    this.currentHandIndex = currentHandIndex;
   }
 }
 

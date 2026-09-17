@@ -209,7 +209,17 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         return;
       }
       if (completedHandIndex !== attempt.currentHandIndex) {
-        res.status(409).json({ error: 'Daily Fritz hand is no longer current.' });
+        // 2026-09 retry-storm fix: carry the server's own cursor on the
+        // conflict, the same shape the verified_hand_conflict 409 below
+        // already sends (authority_revision), plus current_hand_index --
+        // the client's resync path reads it off this SAME response, no
+        // second round-trip, to tell a genuinely stale client (2+ hands
+        // behind) from the idempotent 1-behind replay window above.
+        res.status(409).json({
+          error: 'Daily Fritz hand is no longer current.',
+          current_hand_index: attempt.currentHandIndex,
+          authority_revision: attempt.revision,
+        });
         return;
       }
       attempt.result = writeActiveGameProgress({
@@ -306,7 +316,12 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
       return;
     }
     if (completedHandIndex !== attempt.currentHandIndex) {
-      res.status(409).json({ error: 'Daily Fritz hand is no longer current.' });
+      // Same cursor payload as the legacy branch above -- see its comment.
+      res.status(409).json({
+        error: 'Daily Fritz hand is no longer current.',
+        current_hand_index: attempt.currentHandIndex,
+        authority_revision: attempt.revision,
+      });
       return;
     }
     // Do NOT cap by hand count — Daily Fritz plays to the winning score (e.g.
