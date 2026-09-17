@@ -4,7 +4,7 @@ import {
   type ReviewKnownMissingPipEvidence,
   type ReviewPositionIdentifiers,
   type ReviewPositionSnapshotV2,
-} from '@racehorse/game-core/reviewContracts';
+} from '@racehorse/game-core/review';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import { toCoreGameState } from '../match/runtime/gameCoreAdapter.ts';
 import { toReviewKnownMissingPipEvidence } from './missingPipEvidenceAdapter.ts';

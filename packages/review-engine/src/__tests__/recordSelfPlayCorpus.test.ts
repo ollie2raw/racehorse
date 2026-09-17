@@ -9,8 +9,8 @@ import {
   SELF_PLAY_POLICY_ID,
   SELF_PLAY_REALISTIC_BUDGET,
   serializeSelfPlayRecordsToJsonl,
-  type RecordedSelfPlayEvaluation,
 } from '../devtools/recordSelfPlayCorpus';
+import type { ReviewCaptureRecord } from '../reviewCaptureSchema';
 
 describe('batchTagForTier -- maps FritzTier onto C0 section 5\'s two named categories', () => {
   it('maps master to strong-policy-top-tier', () => {
@@ -64,6 +64,7 @@ describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl 
   const fakeRecords = [
     {
       batchTag: 'ordinary-pvf-tier',
+      corpusKind: 'synthetic-baseline',
       harnessVersion: SELF_PLAY_HARNESS_VERSION,
       policyId: SELF_PLAY_POLICY_ID,
       tier: 'standard',
@@ -78,6 +79,7 @@ describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl 
     },
     {
       batchTag: 'ordinary-pvf-tier',
+      corpusKind: 'synthetic-baseline',
       harnessVersion: SELF_PLAY_HARNESS_VERSION,
       policyId: SELF_PLAY_POLICY_ID,
       tier: 'standard',
@@ -90,7 +92,7 @@ describe('serializeSelfPlayRecordsToJsonl / deserializeSelfPlayRecordsFromJsonl 
       coverageThreshold: SELF_PLAY_COVERAGE_THRESHOLD,
       evaluation: { a: 2 },
     },
-  ] as unknown as RecordedSelfPlayEvaluation[];
+  ] as unknown as ReviewCaptureRecord[];
 
   it('serializes one JSON record per line with a trailing newline', () => {
     const jsonl = serializeSelfPlayRecordsToJsonl(fakeRecords);
@@ -122,11 +124,12 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
   // harness itself uses, so a mock would prove nothing about it.
   const options = { gameCount: 1, tier: 'standard' as const, seed: 'harness-unit-test-seed' };
 
-  it('produces at least one recorded decision, all correctly tagged with the batch/tier/seed/harness/policy/budget', () => {
+  it('produces at least one recorded decision, all correctly tagged with the batch/corpusKind/tier/seed/harness/policy/budget', () => {
     const records = runSelfPlayCorpus(options);
     expect(records.length).toBeGreaterThan(0);
     for (const record of records) {
       expect(record.batchTag).toBe('ordinary-pvf-tier');
+      expect(record.corpusKind).toBe('synthetic-baseline');
       expect(record.tier).toBe('standard');
       expect(record.seed).toBe('harness-unit-test-seed');
       expect(record.gameIndex).toBe(0);

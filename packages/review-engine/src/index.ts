@@ -12,3 +12,13 @@ export { solveHeuristicOpening } from './solveHeuristicOpening';
 export type { HandPhase } from './solveHeuristicOpening';
 export { accuracyFromEvaluations, isScorable, ACCURACY_MODEL_VERSION, UNCALIBRATED_DEFAULT_K } from './reviewAccuracy';
 export type { AccuracyResult } from './reviewAccuracy';
+export {
+  serializeReviewCaptureRecordsToJsonl,
+  deserializeReviewCaptureRecordsFromJsonl,
+} from './reviewCaptureSchema';
+export type {
+  ReviewCaptureBatchTag,
+  ReviewCaptureCorpusKind,
+  ReviewCaptureRecord,
+  ReviewCaptureManifest,
+} from './reviewCaptureSchema';

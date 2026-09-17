@@ -59,6 +59,13 @@ import {
   type ReviewKnownMissingPipEvidence,
 } from '@racehorse/game-core/review';
 import { evaluateReviewPosition, type ReviewDispatchBudget } from '../evaluateReviewPosition';
+import {
+  deserializeReviewCaptureRecordsFromJsonl,
+  serializeReviewCaptureRecordsToJsonl,
+  type ReviewCaptureBatchTag,
+  type ReviewCaptureManifest,
+  type ReviewCaptureRecord,
+} from '../reviewCaptureSchema';
 
 // __dirname is not available in a pure-ESM module; this file is invoked
 // directly (tsx) and imported by tests, both of which give import.meta.url
@@ -99,60 +106,35 @@ export const SELF_PLAY_HARNESS_VERSION = 'self-play-harness-v1';
  */
 export const SELF_PLAY_POLICY_ID = 'official-fritz';
 
-export type SelfPlayBatchTag = 'strong-policy-top-tier' | 'ordinary-pvf-tier' | `other-tier-${FritzTier}`;
-
 /**
  * Maps a FritzTier onto C0's own two named categories, so a downstream
  * consumer (C2b) can tell which category a batch belongs to purely from its
  * tag -- no need to know which CLI arguments produced a given file.
  */
-export function batchTagForTier(tier: FritzTier): SelfPlayBatchTag {
+export function batchTagForTier(tier: FritzTier): ReviewCaptureBatchTag {
   if (tier === 'master') return 'strong-policy-top-tier';
   if (tier === 'standard') return 'ordinary-pvf-tier';
   return `other-tier-${tier}`;
 }
 
 /**
- * Per-record provenance. Deliberately excludes anything that would vary
- * between two runs of the same seed (a wall-clock timestamp, a git SHA) --
- * that would break the byte-identical determinism this harness's own test
- * suite asserts. Run-level, non-deterministic provenance (generatedAt) lives
- * only in the sidecar manifest (see SelfPlayCaptureManifest below), not here.
+ * This harness only ever produces the synthetic-baseline corpus kind --
+ * chooseOfficialFritzDecision is a deterministic, no-opponent-modeling
+ * policy, structurally different from the real chooseBotMove policy players
+ * actually face (see reviewCaptureSchema.ts's ReviewCaptureCorpusKind doc,
+ * and the PR #250 fidelity finding it records). C2a-3's client-policy
+ * capture produces 'client-policy' instead.
  */
-export type RecordedSelfPlayEvaluation = {
-  readonly batchTag: SelfPlayBatchTag;
-  readonly harnessVersion: string;
-  readonly policyId: string;
-  readonly tier: FritzTier;
-  readonly seed: string;
-  readonly gameIndex: number;
-  readonly handNumber: number;
-  readonly moveNumber: number;
-  readonly actorId: string;
-  readonly budget: ReviewDispatchBudget;
-  readonly coverageThreshold: number;
-  readonly evaluation: ReviewEvaluationV1;
-};
+const SELF_PLAY_CORPUS_KIND = 'synthetic-baseline' as const;
 
 /**
- * Run-level provenance written once per JSONL file, alongside it (same base
- * filename, .manifest.json). generatedAt and any future non-deterministic
- * field belong here, never on individual records.
+ * chooseOfficialFritzDecision (fritzPolicy.ts) has no wall-clock deadlines
+ * anywhere in it -- its only randomness is createDeterministicRandom-seeded
+ * tie-breaking. Unlike client/src/devtools/recordClientPolicyCorpus.ts's
+ * chooseBotMove ('hard'/'master' are timing-sensitive, C2a-3 finding), this
+ * harness is reproducible at every FritzTier.
  */
-export type SelfPlayCaptureManifest = {
-  readonly batchTag: SelfPlayBatchTag;
-  readonly harnessVersion: string;
-  readonly policyId: string;
-  readonly tier: FritzTier;
-  readonly seed: string;
-  readonly gameCount: number;
-  readonly budget: ReviewDispatchBudget;
-  readonly coverageThreshold: number;
-  readonly recordedDecisions: number;
-  readonly nonHeuristicDecisions: number;
-  readonly elapsedMs: number;
-  readonly generatedAt: string;
-};
+const SELF_PLAY_REPRODUCIBLE = true;
 
 export type SelfPlayCorpusOptions = {
   readonly gameCount: number;
@@ -199,8 +181,8 @@ function recordMissingPipEvidence(
  * actual evaluateReviewPosition dispatcher -- no mocks, no stub solver) at
  * every real decision point, for both players.
  */
-export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): RecordedSelfPlayEvaluation[] {
-  const records: RecordedSelfPlayEvaluation[] = [];
+export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): ReviewCaptureRecord[] {
+  const records: ReviewCaptureRecord[] = [];
   const batchTag = batchTagForTier(options.tier);
   const maxActionsPerGame = options.maxActionsPerGame ?? 4_000;
 
@@ -257,6 +239,7 @@ export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): RecordedSelfP
       const evaluation = evaluateReviewPosition(snapshot, SELF_PLAY_REALISTIC_BUDGET, SELF_PLAY_COVERAGE_THRESHOLD);
       records.push({
         batchTag,
+        corpusKind: SELF_PLAY_CORPUS_KIND,
         harnessVersion: SELF_PLAY_HARNESS_VERSION,
         policyId: SELF_PLAY_POLICY_ID,
         tier: options.tier,
@@ -284,18 +267,12 @@ export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): RecordedSelfP
   return records;
 }
 
-/** One ReviewEvaluationV1 record per line -- trailing newline only when non-empty. */
-export function serializeSelfPlayRecordsToJsonl(records: readonly RecordedSelfPlayEvaluation[]): string {
-  if (records.length === 0) return '';
-  return `${records.map((record) => JSON.stringify(record)).join('\n')}\n`;
-}
-
-export function deserializeSelfPlayRecordsFromJsonl(jsonl: string): RecordedSelfPlayEvaluation[] {
-  return jsonl
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as RecordedSelfPlayEvaluation);
-}
+// Re-exported so existing callers of this script's own serialize/deserialize
+// names keep working without duplicating the shared implementation.
+export {
+  serializeReviewCaptureRecordsToJsonl as serializeSelfPlayRecordsToJsonl,
+  deserializeReviewCaptureRecordsFromJsonl as deserializeSelfPlayRecordsFromJsonl,
+};
 
 type CliOptions = SelfPlayCorpusOptions & { readonly outDir: string };
 
@@ -339,15 +316,16 @@ function main(): void {
   const base = baseFileName(options);
   const outPath = join(options.outDir, `${base}.jsonl`);
   const manifestPath = join(options.outDir, `${base}.manifest.json`);
-  writeFileSync(outPath, serializeSelfPlayRecordsToJsonl(records), 'utf8');
+  writeFileSync(outPath, serializeReviewCaptureRecordsToJsonl(records), 'utf8');
 
   const scorableCount = records.filter(
     (record) => record.evaluation.evidence.source !== 'heuristic',
   ).length;
   const elapsedMs = Date.now() - startedAt;
 
-  const manifest: SelfPlayCaptureManifest = {
+  const manifest: ReviewCaptureManifest = {
     batchTag: batchTagForTier(options.tier),
+    corpusKind: SELF_PLAY_CORPUS_KIND,
     harnessVersion: SELF_PLAY_HARNESS_VERSION,
     policyId: SELF_PLAY_POLICY_ID,
     tier: options.tier,
@@ -359,6 +337,7 @@ function main(): void {
     nonHeuristicDecisions: scorableCount,
     elapsedMs,
     generatedAt: new Date().toISOString(),
+    reproducible: SELF_PLAY_REPRODUCIBLE,
   };
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 

@@ -1,0 +1,21 @@
+{
+  "batchTag": "ordinary-pvf-tier",
+  "corpusKind": "client-policy",
+  "harnessVersion": "client-policy-harness-v1",
+  "policyId": "client-bot-v1-standard-weighted-heuristic-deterministic",
+  "tier": "standard",
+  "seed": "demo-client-policy-standard-1",
+  "gameCount": 5,
+  "budget": {
+    "maxNodes": 200000,
+    "maxHiddenStateSamples": 100,
+    "maxPlyDepth": 2,
+    "seed": "racehorse-review-default-seed"
+  },
+  "coverageThreshold": 0.02,
+  "recordedDecisions": 651,
+  "nonHeuristicDecisions": 433,
+  "elapsedMs": 7925,
+  "generatedAt": "2026-09-17T03:51:04.098Z",
+  "reproducible": true
+}
