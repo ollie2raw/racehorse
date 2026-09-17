@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0a0b0d;}
+  a{color:#e8b23c;text-decoration:none;}
+  a:hover{color:#f4c94f;}
+  ::-webkit-scrollbar{width:0px;}
+</style>
+</helmet>
+
+<div style="background:#0a0b0d;min-height:100vh;font-family:Inter,sans-serif;color:#f5f6f7;">
+
+  <!-- top nav -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 40px;background:#0d0f12;border-bottom:1px solid rgba(255,255,255,0.06);gap:24px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:42px;height:42px;border-radius:10px;background:#1a1d22;border:1px solid rgba(232,178,60,0.5);display:flex;align-items:center;justify-content:center;font-family:Oswald,sans-serif;font-weight:700;color:#e8b23c;font-size:20px;">R</div>
+      <div style="font-family:Oswald,sans-serif;font-weight:600;font-size:20px;letter-spacing:1px;color:#f5f6f7;">RACEHORSE</div>
+    </div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;">
+      <span style="color:#7c8492;font-weight:600;font-size:15px;">Multiplayer</span>
+      <span style="color:#e8b23c;font-weight:700;font-size:15px;border-bottom:2px solid #e8b23c;padding-bottom:4px;">Single Player</span>
+      <span style="color:#7c8492;font-weight:600;font-size:15px;">Tournament</span>
+      <span style="color:#7c8492;font-weight:600;font-size:15px;">Social</span>
+      <span style="color:#7c8492;font-weight:600;font-size:15px;">Learn</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:22px;">
+      <div style="display:flex;align-items:center;gap:6px;color:#e8b23c;font-weight:700;font-size:14px;">★ 2,230</div>
+      <div style="display:flex;align-items:center;gap:6px;color:#c7cbd1;font-weight:600;font-size:14px;">5 Friends</div>
+      <div style="display:flex;align-items:center;gap:8px;background:#151820;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:6px 14px 6px 6px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#8a5a2a;"></div>
+        <span style="font-size:14px;font-weight:600;">oliver</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- header row -->
+  <div style="max-width:1180px;margin:0 auto;padding:32px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;min-width:0;">
+      <div style="display:flex;align-items:center;gap:8px;background:#12151a;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 16px;font-weight:600;font-size:14px;color:#e6e8eb;flex-shrink:0;">
+        <span>←</span><span>Single Player</span>
+      </div>
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:nowrap;">
+          <span style="color:#e8b23c;font-weight:700;font-size:14px;flex-shrink:0;">01</span>
+          <h1 style="font-family:Oswald,sans-serif;font-weight:700;font-size:32px;margin:0;letter-spacing:0.5px;white-space:nowrap;">Fritz Trail</h1>
+        </div>
+        <div style="color:#7c8492;font-size:14px;margin-top:2px;white-space:nowrap;">Chapter 1 · Proving Ground</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;background:#12151a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px 20px;flex-shrink:0;">
+      <div style="width:36px;height:36px;border-radius:50%;background:rgba(232,178,60,0.12);border:1px solid rgba(232,178,60,0.4);display:flex;align-items:center;justify-content:center;color:#e8b23c;font-size:15px;flex-shrink:0;">✓</div>
+      <div style="white-space:nowrap;">
+        <div style="font-weight:700;font-size:18px;color:#f5f6f7;">{{ doneCount }} / {{ total }}</div>
+        <div style="font-size:11px;color:#7c8492;font-weight:600;letter-spacing:0.6px;">NODES CLEARED</div>
+      </div>
+      <div style="width:1px;height:28px;background:rgba(255,255,255,0.1);margin:0 6px;flex-shrink:0;"></div>
+      <div style="width:36px;height:36px;border-radius:50%;background:rgba(232,178,60,0.12);border:1px solid rgba(232,178,60,0.4);display:flex;align-items:center;justify-content:center;color:#e8b23c;font-size:15px;flex-shrink:0;">▸</div>
+      <div style="white-space:nowrap;">
+        <div style="font-weight:700;font-size:16px;color:#f5f6f7;">{{ currentName }}</div>
+        <div style="font-size:11px;color:#7c8492;font-weight:600;letter-spacing:0.6px;">CURRENT NODE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- chapter tabs -->
+  <div style="max-width:1180px;margin:36px auto 0;padding:24px 24px 0;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:36px;overflow-x:auto;">
+    <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="6">
+      <div style="display:flex;flex-direction:column;gap:8px;white-space:nowrap;padding-bottom:14px;">
+        <span style="font-size:13px;font-weight:700;letter-spacing:0.5px;color: {{ tab.active }} ? '#e8b23c' : '#5c626c';">{{ tab.label }}</span>
+        <div style="width:100%;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;background:#e8b23c;border-radius:2px;width: {{ tab.pct }}%;"></div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- trail map -->
+  <div style="max-width:900px;margin:0 auto;padding:20px 24px 120px;position:relative;">
+    <div style="position:relative;width:100%;height:{{ containerHeight }}px;background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 26px);border-radius:16px;">
+
+      <svg width="100%" height="{{ containerHeight }}" viewBox="0 0 100 {{ containerHeight }}" preserveAspectRatio="none" style="position:absolute;top:0;left:0;">
+        <path d="{{ pathD }}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="10" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+        <path d="{{ pathD }}" fill="none" stroke="#e8b23c" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.6 2.2" vector-effect="non-scaling-stroke"></path>
+      </svg>
+
+      <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="12">
+        <div ref="{{ setRef($index) }}" style="position:absolute;left: {{ n.x }}%;top: {{ n.y }}px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:10px;width:180px;">
+
+          <sc-if value="{{ n.isDone }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column-reverse;align-items:center;gap:8px;">
+              <div style="width:46px;height:46px;border-radius:50%;background:#14181d;border:2px solid rgba(232,178,60,0.55);display:flex;align-items:center;justify-content:center;">
+                <svg width="18" height="14" viewBox="0 0 18 14"><polyline points="1,7 6,12 17,1" fill="none" stroke="#4ADE80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:13px;font-weight:600;color:#c7cbd1;">{{ n.name }}</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ n.isCurrent }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+              <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#7c8492;">FRITZ TRAIL · {{ n.i }}</div>
+              <div style="width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #ffdd8a, #e8b23c 55%, #b9860f 100%);box-shadow:0 0 0 6px rgba(232,178,60,0.14), 0 0 40px rgba(232,178,60,0.55);"></div>
+              <div style="font-size:15px;font-weight:700;color:#f4c94f;">{{ n.name }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ n.isLocked }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+              <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.03);border:1.5px dashed rgba(255,255,255,0.18);"></div>
+              <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#454b54;">LOCKED</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ n.isBoss }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+              <div style="width:92px;height:92px;clip-path:polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);background:linear-gradient(160deg, rgba(155,124,255,0.12), rgba(232,178,60,0.1));border:1.5px dashed rgba(232,178,60,0.3);"></div>
+              <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#6a5f80;">CHAPTER FINALE · LOCKED</div>
+            </div>
+          </sc-if>
+
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- next chapter teaser -->
+    <div style="margin-top:56px;background:#101216;border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:24px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;opacity:0.6;">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#5c626c;margin-bottom:6px;">02 HIGH LINE · LOCKED</div>
+        <div style="font-family:Oswald,sans-serif;font-weight:600;font-size:20px;color:#8b909a;">Chapter 2</div>
+      </div>
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.04);border:1.5px dashed rgba(255,255,255,0.15);"></div>
+    </div>
+  </div>
+
+  <!-- scroll rail -->
+  <div style="position:fixed;right:22px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:9px;">
+    <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="12">
+      <div style="width: {{ n.railSize }}; height: {{ n.railSize }}; border-radius:50%; background: {{ n.railColor }}; transition:all 0.2s;"></div>
+    </sc-for>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { activeIdx: 9 };
+  nodeRefs = [];
+
+  componentDidMount() {
+    this.onScroll = () => this.updateActive();
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('scroll', this.onScroll);
+  }
+
+  updateActive() {
+    const vh = window.innerHeight / 2;
+    let closestIdx = this.state.activeIdx, closestDist = Infinity;
+    this.nodeRefs.forEach((el, i) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const c = r.top + r.height / 2;
+      const d = Math.abs(c - vh);
+      if (d < closestDist) { closestDist = d; closestIdx = i; }
+    });
+    if (closestIdx !== this.state.activeIdx) this.setState({ activeIdx: closestIdx });
+  }
+
+  renderVals() {
+    const nodes = [
+      { name: 'Trailhead Briefing', type: 'done' },
+      { name: 'First Score', type: 'done' },
+      { name: 'Open Ends Trial', type: 'done' },
+      { name: 'Draw Escape', type: 'done' },
+      { name: 'Blocked Hand Drill', type: 'done' },
+      { name: 'Speed Round', type: 'done' },
+      { name: 'Bluff & Block', type: 'done' },
+      { name: 'Endgame Count', type: 'done' },
+      { name: 'Pressure Hand', type: 'done' },
+      { name: 'Elite Warmup', type: 'current' },
+      { name: 'No-Hint Trial', type: 'locked' },
+      { name: "Trailmaster's Reckoning", type: 'boss' },
+    ];
+    const SPACING = 168, TOP = 90;
+    const xs = [18, 82];
+    const pts = nodes.map((n, i) => {
+      const x = i === nodes.length - 1 ? 50 : xs[i % 2];
+      const y = TOP + i * SPACING;
+      return { ...n, x, y, i: i + 1, isDone: n.type === 'done', isCurrent: n.type === 'current', isLocked: n.type === 'locked', isBoss: n.type === 'boss' };
+    });
+    const containerHeight = TOP + (nodes.length - 1) * SPACING + 90;
+
+    let pathD = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i];
+      const midY = (p0.y + p1.y) / 2;
+      pathD += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
+    }
+
+    const doneCount = nodes.filter(n => n.type === 'done').length;
+    const setRef = (i) => (el) => { this.nodeRefs[i] = el; };
+    const activeIdx = this.state.activeIdx;
+    pts.forEach((n, i) => {
+      const isActive = i === activeIdx;
+      n.railSize = isActive ? '10px' : '6px';
+      n.railColor = n.isDone ? '#e8b23c' : (n.isCurrent ? '#f4c94f' : 'rgba(255,255,255,0.15)');
+    });
+
+    const tabs = [
+      { label: '01 FRITZ TRAIL', pct: 75, active: true },
+      { label: '02 HIGH LINE', pct: 0, active: false },
+      { label: '03 LONG MARCH', pct: 0, active: false },
+      { label: '04 PRESSURE CIRCUIT', pct: 0, active: false },
+      { label: '05 IRON MILE', pct: 0, active: false },
+      { label: '06 MASTER TABLE', pct: 0, active: false },
+    ];
+
+    return {
+      nodes: pts,
+      pathD,
+      containerHeight,
+      doneCount,
+      total: nodes.length,
+      currentName: nodes[9].name,
+      setRef,
+      activeIdx,
+      tabs,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
