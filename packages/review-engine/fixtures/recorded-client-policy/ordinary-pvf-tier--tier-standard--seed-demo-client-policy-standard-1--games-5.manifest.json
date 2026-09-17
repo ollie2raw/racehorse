@@ -1,6 +1,6 @@
 {
   "batchTag": "ordinary-pvf-tier",
-  "corpusKind": "client-policy",
+  "corpusKind": "pvf-bot-match",
   "harnessVersion": "client-policy-harness-v1",
   "policyId": "client-bot-v1-standard-weighted-heuristic-deterministic",
   "tier": "standard",
@@ -15,7 +15,7 @@
   "coverageThreshold": 0.02,
   "recordedDecisions": 651,
   "nonHeuristicDecisions": 433,
-  "elapsedMs": 7925,
-  "generatedAt": "2026-09-17T03:51:04.098Z",
+  "elapsedMs": 7988,
+  "generatedAt": "2026-09-17T05:04:34.600Z",
   "reproducible": true
 }

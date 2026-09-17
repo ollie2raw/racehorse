@@ -112,7 +112,14 @@ const CLIENT_POLICY_ID_BY_TIER: Record<BotDifficulty, string> = {
  */
 export const CLIENT_POLICY_HARNESS_VERSION = 'client-policy-harness-v1';
 
-const CLIENT_POLICY_CORPUS_KIND = 'client-policy' as const;
+/**
+ * This harness produces the pvf-bot-match corpus kind -- chooseBotMove is
+ * the real policy a player actually faces in a live Play vs Fritz match, so
+ * this is real production data representing a real mode, on equal footing
+ * with recordSelfPlayCorpus.ts's daily-fritz-master corpus (see
+ * reviewCaptureSchema.ts's ReviewCaptureCorpusKind doc).
+ */
+const CLIENT_POLICY_CORPUS_KIND = 'pvf-bot-match' as const;
 
 /**
  * C2a-3 finding (2026-09-17): 'hard' and 'master' both pass through

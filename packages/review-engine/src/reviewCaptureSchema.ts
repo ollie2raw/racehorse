@@ -20,26 +20,27 @@ export type ReviewCaptureBatchTag =
   | `other-tier-${string}`;
 
 /**
- * corpusKind is the coarse "is this trustworthy for calibration" signal;
- * policyId is the finer "which exact policy produced it" signal. Keep both
- * -- do not collapse them into one field.
+ * corpusKind names WHICH real production mode a batch's decisions were
+ * captured from. Naming matches C0's own category names
+ * (docs/scoping/phase-c-accuracy-model-spec.md, section 5) rather than
+ * language invented mid-project -- both values below name a real, real-data
+ * source, on equal footing with each other; neither is a fallback or a
+ * "sanity check" for the other. policyId is the finer "which exact policy
+ * produced it" signal -- keep both, do not collapse them into one field.
  *
- * 'synthetic-baseline': a fully deterministic policy with no opponent
- * modeling (chooseOfficialFritzDecision, C2a-2). Real per the definition of
- * "real" the whole review pipeline uses (a real evaluateReviewPosition call
- * against a real position), but not representative of what a player
- * actually faces -- confirmed structurally different from chooseBotMove
- * (one-ply deterministic formula vs. multi-ply Monte Carlo search with
- * tier-specific weights and built-in randomized suboptimality; see the
- * PR #250 fidelity finding). Useful for validating the calibration MATH
- * against controllable, hand-verifiable ground truth -- not for validating
- * a calibration RESULT against real play. C2b must not treat this as its
- * production input.
+ * 'daily-fritz-master': chooseOfficialFritzDecision (C2a-2), the same real,
+ * already-shipped bot policy used in production by Daily Fritz. A fully
+ * deterministic policy with no opponent modeling -- structurally different
+ * from the PVF bot's chooseBotMove (one-ply deterministic formula vs.
+ * multi-ply Monte Carlo search with tier-specific weights and built-in
+ * randomized suboptimality; see the PR #250 fidelity finding) -- but real
+ * production data representing a real mode, not synthetic filler.
  *
- * 'client-policy': the real chooseBotMove policy a player actually faces in
- * a live match (C2a-3). This is the corpus C2b calibrates against.
+ * 'pvf-bot-match': the real chooseBotMove policy a player actually faces in
+ * a live Play vs Fritz match (C2a-3). Also real production data, from a
+ * different real mode.
  */
-export type ReviewCaptureCorpusKind = 'synthetic-baseline' | 'client-policy';
+export type ReviewCaptureCorpusKind = 'daily-fritz-master' | 'pvf-bot-match';
 
 /**
  * Per-record provenance. Deliberately excludes anything that would vary

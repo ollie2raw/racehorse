@@ -83,7 +83,7 @@ describe('serializeClientPolicyRecordsToJsonl / deserializeClientPolicyRecordsFr
   const fakeRecords = [
     {
       batchTag: 'ordinary-pvf-tier',
-      corpusKind: 'client-policy',
+      corpusKind: 'pvf-bot-match',
       harnessVersion: CLIENT_POLICY_HARNESS_VERSION,
       policyId: 'client-bot-v1-standard-weighted-heuristic-deterministic',
       tier: 'standard',
@@ -98,7 +98,7 @@ describe('serializeClientPolicyRecordsToJsonl / deserializeClientPolicyRecordsFr
     },
     {
       batchTag: 'ordinary-pvf-tier',
-      corpusKind: 'client-policy',
+      corpusKind: 'pvf-bot-match',
       harnessVersion: CLIENT_POLICY_HARNESS_VERSION,
       policyId: 'client-bot-v1-standard-weighted-heuristic-deterministic',
       tier: 'standard',
@@ -136,7 +136,7 @@ describe('runClientPolicyCorpus -- real, deterministic, small client-policy run 
     expect(records.length).toBeGreaterThan(0);
     for (const record of records) {
       expect(record.batchTag).toBe('ordinary-pvf-tier');
-      expect(record.corpusKind).toBe('client-policy');
+      expect(record.corpusKind).toBe('pvf-bot-match');
       expect(record.tier).toBe('standard');
       expect(record.seed).toBe('harness-unit-test-seed');
       expect(record.gameIndex).toBe(0);
