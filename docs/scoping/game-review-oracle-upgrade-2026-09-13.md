@@ -371,6 +371,39 @@ When is it safe to flip the public visibility flag and revive pivotal?
 | **E4** | S | Flip `POST_GAME_REVIEW_VISIBLE` behind server cohort flag first, then client constant | Rollback without rewriting stored analyses |
 | **E5** | M | Multiplayer parity last: V2 capture at MP action boundary, same oracle, no pip-heuristic `engineBestMove` as truth | MP reviews match PVF honesty bar |
 
+**E0's storage-shape decision (E0b, settled 2026-09-17):** the "snapshot list **or**
+hash" wording above was a deliberately open question, resolved before schema
+work started. E0 persists **`ReviewEvaluationV1[]` + `getReviewAuthorityStateDigest`
+output — not full `ReviewPositionSnapshotV2[]`.**
+
+- **Measured sizes** (not estimated — `JSON.stringify` over the real fixture/recorded
+  corpora): `ReviewPositionSnapshotV2` averages **4,154 bytes** (53 real fixtures,
+  `packages/game-core`), `ReviewEvaluationV1` averages **1,592 bytes** (531 real
+  recorded decisions, `packages/review-engine/fixtures/recorded-self-play`). A real
+  game averages **~106 decisions**. Evaluations-only ≈ **170KB/game**; snapshots +
+  evaluations ≈ **610KB/game** — **~3.6×** heavier for no redisplay benefit (below).
+- **Reopen-dependency finding (traced, not assumed):** `GameReviewer.tsx` never
+  reads `ReviewPositionSnapshotV2` anywhere in its render path — board/PV/ghost
+  rendering and per-move labels come entirely from `ReviewEvaluationV1.played` /
+  `.best` / `.candidates` / `.principalVariation` and the separately-built
+  `AnalyzedMove`. The snapshot is consumed only as review-engine *input* and as
+  an integrity digest; it has zero display role, so "reopen returns same result"
+  is fully satisfiable from evaluations alone.
+- **Why digest-only-recompute was rejected:** a scheme that persists only the
+  digest and re-runs the review engine on reopen would need to reconstruct the
+  original snapshot to recompute, and a recompute under a `reviewEngineVersion`/
+  `accuracyModelVersion` that has since moved on would silently relabel a
+  historical game under a newer model — exactly the silent-reinterpretation risk
+  "versioned" exists in this design to prevent. Evaluations-only avoids this
+  because each persisted `ReviewEvaluationV1` already carries its own version
+  stamp and is never recomputed.
+- **Trade-off, stated explicitly:** no raw position record survives this scheme.
+  If a future audit, dispute, or debugging need ever requires re-deriving a
+  review from scratch (e.g. to check the review engine's own correctness against
+  the original position, not just re-display its stored conclusion), that
+  capability does not exist under this design — only the evaluation's own
+  conclusions persist, not the position they were computed from.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---
