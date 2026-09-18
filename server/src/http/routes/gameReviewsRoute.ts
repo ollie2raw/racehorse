@@ -3,29 +3,39 @@ import { childLogger } from '../../logger';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { parseGameReviewRequestBody } from '../../reviewPersistence/gameReviewPayload';
 import { insertGameReviewIdempotent } from '../../reviewPersistence/insertGameReviewIdempotent';
+import { queryLatestGameReview, toGameReviewReadResult } from '../../reviewPersistence/queryLatestGameReview';
 
 const log = childLogger('game-reviews');
 
 /**
- * E0c (docs/scoping/game-review-oracle-upgrade-2026-09-13.md, Phase E): the
- * idempotent write side of server-side versioned review persistence. Auth
- * follows dailyFritzRecordGameRoute.ts's getAuthenticatedUserId gate; the
- * insert itself follows insertRankedGameIdempotent.ts's on_conflict pattern
- * (ENGINEERING_GUARDRAILS.md §3) via insertGameReviewIdempotent.
+ * E0c/E0d (docs/scoping/game-review-oracle-upgrade-2026-09-13.md, Phase E):
+ * server-side versioned review persistence -- write (E0c) and read/reopen
+ * (E0d) sides. Auth follows dailyFritzRecordGameRoute.ts's
+ * getAuthenticatedUserId gate on both routes; the insert follows
+ * insertRankedGameIdempotent.ts's on_conflict pattern (ENGINEERING_GUARDRAILS.md
+ * §3) via insertGameReviewIdempotent, and the read follows
+ * getDailyFritzAttemptById's explicit-ownership-filter pattern
+ * (dailyFritzStore.ts:581-591) via queryLatestGameReview -- see that
+ * function's own doc comment for why the filter, not RLS, is what actually
+ * enforces ownership here.
  *
- * This route only persists a caller-supplied, already-computed review
- * (evaluations + accuracyModelResult, per E0b) -- it does not run the review
- * engine itself. Wiring a real PVF post-game write call site is E1's job,
- * not this one's.
+ * This module only persists/returns a caller-supplied, already-computed
+ * review (evaluations + accuracyModelResult, per E0b) -- it does not run the
+ * review engine itself. Wiring a real PVF post-game write/reopen call site
+ * is E1's job, not this one's.
  *
- * TRUST BOUNDARY: this route does not verify the request body against any
- * server-side recomputation -- evaluations/accuracyModelResult are exactly
- * what the client asserts them to be, the same trust level as any other
- * client-submitted jsonb blob. Persisted game_reviews rows must never be
- * treated as authoritative for anything competitive or comparative
- * (leaderboards, rankings, achievements, public-facing stats) unless/until a
- * server-side verification step is added. This is a personal review record,
- * not a verified result like ranked_games.
+ * TRUST BOUNDARY: neither route verifies the request body (write) or
+ * persisted row (read) against any server-side recomputation --
+ * evaluations/accuracyModelResult are exactly what the client asserted at
+ * write time, the same trust level as any other client-submitted jsonb
+ * blob. Persisted game_reviews rows must never be treated as authoritative
+ * for anything competitive or comparative (leaderboards, rankings,
+ * achievements, public-facing stats) unless/until a server-side
+ * verification step is added. This is a personal review record, not a
+ * verified result like ranked_games. The read response carries this
+ * forward structurally, not just as a comment: every response stamps
+ * `source: 'client-asserted'` (queryLatestGameReview.ts), so a future UI
+ * consumer has a signal it can't accidentally drop.
  */
 export function registerGameReviewsRoute(app: Application): void {
   app.post('/api/game-reviews', async (req, res) => {
@@ -50,6 +60,39 @@ export function registerGameReviewsRoute(app: Application): void {
     } catch (error) {
       log.error({ err: error, userId: authenticatedUserId }, 'insert failed');
       res.status(500).json({ error: 'Failed to persist game review.' });
+    }
+  });
+
+  /**
+   * E0d: returns the latest (by created_at) game_reviews row for a given
+   * gameDigest, scoped to the authenticated user. Query param surface is
+   * deliberately just `gameDigest` today -- an optional exact-version-match
+   * (reviewEngineVersion/accuracyModelVersion query params, falling back to
+   * "latest" when omitted) is additive to add later, not built here.
+   */
+  app.get('/api/game-reviews', async (req, res) => {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const gameDigest = typeof req.query.gameDigest === 'string' ? req.query.gameDigest.trim() : '';
+    if (!gameDigest) {
+      res.status(400).json({ error: 'gameDigest is required.' });
+      return;
+    }
+
+    try {
+      const row = await queryLatestGameReview(authenticatedUserId, gameDigest);
+      if (!row) {
+        res.status(404).json({ error: 'This game has not been analyzed yet.' });
+        return;
+      }
+      res.status(200).json(toGameReviewReadResult(row));
+    } catch (error) {
+      log.error({ err: error, userId: authenticatedUserId }, 'read failed');
+      res.status(500).json({ error: 'Failed to read game review.' });
     }
   });
 }
