@@ -357,6 +357,20 @@ fine.
     reimplementation of an exported `@racehorse/game-core` function. Safe to
     defer: the highest-signal slice (the rating constant table) is already
     enforced by INV-16, and the general mechanism has not been designed.
+15. **Migrate the post-game dossier's H1-H8 per-hand accuracy to the
+    calibrated model.** The headline `accuracy`/`grade` (C4, coverage-floor
+    revision) already use `accuracyFromEvaluations`/`MINIMUM_COVERAGE_FLOOR`;
+    the per-hand rows below them (`hand.handAccuracy`, `moveAnalyzer.ts`'s
+    `analyzeHandMoves`) still average `classifyMove`'s legacy heuristic score
+    -- unrelated to the new model, now visibly labeled as such (the
+    "Per-hand scores use Fritz's classic scoring model" caption). Safe to
+    defer: migrating the math itself needs its own hand-scoped corpus pull
+    and its own `MINIMUM_COVERAGE_FLOOR`-equivalent constant -- the existing
+    game-level floor was calibrated against full-game samples (46+
+    decisions in the smallest real game); a single hand has ~8-15, so
+    reusing the same floor would likely read most hands as "Partial" by
+    construction, not a real finding. Real, separate calibration work, not
+    a small fix.
 
 ---
 

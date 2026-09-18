@@ -144,6 +144,8 @@ export function PostGameReviewPrompt({
 
             {coverageText ? <p className="pgr-coverage-note">{coverageText}</p> : null}
 
+            <p className="pgr-legacy-hand-note">Per-hand scores use Fritz's classic scoring model.</p>
+
             <div className="dfd__games pgr-dossier-hands" aria-label="Move accuracy by hand">
               {hands.map((hand) => {
                 const isWorst = hand.handNumber === worstHandNumber;

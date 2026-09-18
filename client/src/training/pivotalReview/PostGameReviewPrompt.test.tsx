@@ -135,4 +135,14 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText('Partial')).not.toBeInTheDocument();
     expect(screen.getByText('30 of 30 moves analyzed')).toBeInTheDocument();
   });
+
+  it('the H1-H8 per-hand breakdown always carries a caption disclosing it uses the legacy scorer, regardless of headline state', () => {
+    // The per-hand rows (hand.handAccuracy) still come from classifyMove --
+    // the pre-C4 legacy scorer -- not the calibrated accuracyModel above
+    // them. This caption must render every time the hand list does, so it
+    // can't be gated on accuracyModel/accuracyModelPending like the other
+    // three states are.
+    render(<PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending={false} />);
+    expect(screen.getByText("Per-hand scores use Fritz's classic scoring model.")).toBeInTheDocument();
+  });
 });
