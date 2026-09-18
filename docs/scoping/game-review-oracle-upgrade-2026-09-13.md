@@ -323,6 +323,21 @@ Prose generator: deterministic templates that **refuse** to emit a sentence unle
 | **D2** | S | GameReviewer: remove `positiveNote` + `buildReviewSidebarCopy` usage; render structured compare panel | One coaching path |
 | **D3** | S | PV-on-board: step principal variation from pre-move position (toggle played vs best) | Player can see continuation without leaving the move |
 | **D4** | S | Delete or quarantine dead copy modules once call sites are gone | No third path left |
+| **D5** | S | Wire calibrated per-move labels into GameReviewer for exact/search-evidence moves | Label bucket matches the game's own accuracyModel, not a separate scorer |
+
+**D5, added 2026-09-17 (retrofit):** not in the original table above because
+`LOSS_BAND_BOUNDARIES`/`lossBandLabelForEvaluation` did not exist when this
+document was written (2026-09-13) — they shipped later, in Phase C0's
+calibration work. `useMoveHeuristicClassification.ts`'s
+`selectMoveHeuristicClassification` (D2/D3, PR #243/#244) already overrides
+the per-move label when a decision's real evidence is heuristic-tier, but
+explicitly falls through to the legacy `move.rating` (`classifyMove`) for
+exact/search-evidence moves — real, calibrated per-decision data, computed
+in `reviewWorkerBatch` for every move that has it, simply unused for this
+purpose. D5 closes that gap: for exact/search evidence, classify with
+`lossBandLabelForEvaluation` (`phase-c-accuracy-model-spec.md` §4a) instead
+of falling back to the legacy rating. No new capture or calibration work —
+this is a rendering swap of already-shipped, already-calibrated data.
 
 **Out of D:** pivotal wizard product (E), public flag.
 
