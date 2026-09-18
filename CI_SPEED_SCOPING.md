@@ -301,6 +301,21 @@ one store per connection:
      Play vs Fritz, a different feature from the Daily Fritz daily-challenge
      surface this point is actually about. It is still placed in the serial
      group below, but for an unrelated reason — see the note there.
+     **Follow-up correction (2026-09-18, exhaustive 23-spec audit):** the
+     original "everything else parallelizes freely" classification (see
+     "Proposed split" below) was itself checked against every spec, not
+     re-derived from this doc's own prior claims — and it doesn't hold up.
+     `mobile-390.spec.ts` was misclassified as safe: its `'daily fritz setup'`/
+     `'daily fritz in-game'` tests (`client/e2e/mobile-390.spec.ts:125-131,153-165`)
+     `page.goto('/daily-fritz')` and click `.df-pvf-start-btn` — a real attempt
+     start against this same date-keyed store, the same severity as the two
+     specs named above. `routing.spec.ts` (`routing.spec.ts:18-19,23-29`) and
+     `spectator-mode.spec.ts` (`spectator-mode.spec.ts:44-48`) also touch
+     `/daily-fritz` — lower severity (read/ensure-only via
+     `ensureDailyFritzRunForDate` for `routing.spec.ts`; gated behind an env
+     var for `spectator-mode.spec.ts`, not confirmed wired into any CI
+     workflow today) — flagged as needing an explicit decision, not silently
+     reclassified into either group by this correction.
 2. **Rate limiting is per-IP, process-global, and tuned for one real user.**
      `server/src/rateLimit.ts`'s `InMemoryRateLimiter` buckets by key (IP, or
      IP+route); `server/src/index.ts:396-435` wires tight windows for
@@ -310,6 +325,16 @@ one store per connection:
      routes out across N concurrent workers multiplies the request rate
      against the *same* bucket in a way the serial run never does — real risk
      of spurious 429s that have nothing to do with the code under test.
+     **Sharper numbers (2026-09-18 audit):** the two Daily Fritz routes most of
+     the specs above actually hit, `/api/daily-fritz/today` and
+     `/api/daily-fritz/start`, are both limited to **20 req/60s per IP**
+     (`server/src/index.ts:430-435`, `dailyFritzInitLimit`) — not just the
+     generic "10-20 per 5-10min" bucket this point originally cited. At least
+     5 of the 23 specs (`daily-fritz-v2`, `daily-fritz-server-restore`,
+     `mobile-390` ×2 tests, `routing` ×2 tests, `spectator-mode`) hit one of
+     these two routes; running them concurrently plausibly approaches that
+     budget on top of the store-race risk in point 1 — a second, independent
+     reason those specs shouldn't fan out freely, not just the store race.
 3. **Multiplayer specs are comparatively safe.** Room/session identifiers are
      generated with `crypto.randomUUID()` or `Date.now()+Math.random()`
      (`client/src/multiplayer/roomTransport.ts:83-86`,
@@ -321,26 +346,55 @@ one store per connection:
      their flows hit a rate-limited socket event (`room:create`, `room:join`,
      etc. are all in the per-event limiter table at `server/src/index.ts:599-609`)
      under high concurrency.
+4. **A shared, fixed QA auth fixture — a risk category this doc didn't name
+     before 2026-09-18.** `.auth/daily-fritz-qa.json` is reused, unchanged,
+     across `ghost-play-to-completion.spec.ts:168`,
+     `puzzle-rush-play-to-completion.spec.ts:127`, `spectator-mode.spec.ts`,
+     and `mobile-reachability.spec.ts`'s authed mode (`REACHABILITY_AUTHED`) —
+     the same account, not one per worker, a category-3 (fixed-identifier)
+     risk independent of Daily Fritz's store entirely. **Dormant today, not a
+     live blocker:** all four specs gate on `hasValidAuthState(...)` /
+     `test.skip`, and CI never generates the fixture (`grep` of
+     `.github/workflows/*.yml` for `qa:capture-auth`/`daily-fritz-qa` returns
+     nothing) — so none of this fires in default `npm run e2e` today. It's a
+     landmine for later: if anyone wires this fixture into CI for broader
+     authed coverage, or runs these specs locally in parallel against a
+     shared backend, all four would race on the same account's state. Anyone
+     doing that wiring should give the fixture per-worker identity first, not
+     discover this the way `fritz-play-to-completion` was discovered.
 
 ### Proposed split
 
 - **Keep serial (own project/shard, `workers: 1`):** every spec that touches
-  Daily Fritz — `daily-fritz-v2.spec.ts`, `daily-fritz-server-restore.spec.ts`
-  — plus `fritz-play-to-completion.spec.ts`, grouped here for a **different**
-  reason than the other two (see the 2026-09-18 correction above): it does
-  not share Daily Fritz's date-keyed store, but it is the single slowest file
-  in the whole suite today (6.9m for 3 tests — full played-out matches), and
-  no state-coupling analysis has been done to confirm it's actually safe to
-  move into the parallel group below. Whoever scopes #4 for real should treat
-  "does `fritz-play-to-completion` belong in the parallel group instead" as
-  an open question, not assume this doc's grouping already answered it.
+  Daily Fritz — `daily-fritz-v2.spec.ts`, `daily-fritz-server-restore.spec.ts`,
+  and (moved here 2026-09-18, exhaustive audit — see point 1 above)
+  **`mobile-390.spec.ts`**, whose `'daily fritz setup'`/`'daily fritz
+  in-game'` tests start a real Daily Fritz attempt against the same
+  date-keyed store — plus `fritz-play-to-completion.spec.ts`, grouped here
+  for a **different** reason than the others (see the 2026-09-18 correction
+  above): it does not share Daily Fritz's date-keyed store, but it is the
+  single slowest file in the whole suite today (6.9m for 3 tests — full
+  played-out matches), and no state-coupling analysis has been done to
+  confirm it's actually safe to move into the parallel group below. Whoever
+  scopes #4 for real should treat "does `fritz-play-to-completion` belong in
+  the parallel group instead" as an open question, not assume this doc's
+  grouping already answered it.
 - **Parallelize freely (`workers: 4`, `fullyParallel: true`):** everything
-  else with no shared-date-keyed state — `match.spec.ts`, `routing.spec.ts`,
-  `mobile-390*.spec.ts`, `smoke.spec.ts`, `board-camera.spec.ts`,
-  `bot-match-lazy-chunks.spec.ts`, `puzzle-rush-play-to-completion.spec.ts`,
-  `ghost-play-to-completion.spec.ts`, `no-brainer-lab-play-to-completion.spec.ts`,
-  journey specs, `solo-hub-no-circuit.spec.ts`, `mid-match-scrubber.spec.ts`,
-  `spectator-mode.spec.ts`, `welcome-modal.spec.ts` — 77 tests.
+  else with no shared-date-keyed state — `match.spec.ts`, `smoke.spec.ts`,
+  `board-camera.spec.ts`, `bot-match-lazy-chunks.spec.ts`,
+  `puzzle-rush-play-to-completion.spec.ts`, `ghost-play-to-completion.spec.ts`,
+  `no-brainer-lab-play-to-completion.spec.ts`, journey specs,
+  `solo-hub-no-circuit.spec.ts`, `mid-match-scrubber.spec.ts`,
+  `welcome-modal.spec.ts` — plus `routing.spec.ts`† and
+  `spectator-mode.spec.ts`† — **† flagged 2026-09-18, not confidently safe:**
+  both touch `/daily-fritz` (read/ensure-only for `routing.spec.ts`; a real
+  attempt start for `spectator-mode.spec.ts`, currently gated off in default
+  CI). Left in this list rather than moved, because moving them without a
+  decision would just be a second silent reclassification of the same kind
+  that put `mobile-390.spec.ts` here in the first place — whoever implements
+  #4 needs to actually decide these two, not inherit this doc's guess either
+  way. 77 tests total in this bucket as originally counted; that count has
+  not been re-verified against the two `†` specs' eventual placement.
 - **Multiplayer specs (`multiplayer-chaos.spec.ts`,
   `multiplayer-in-match-reconnect.spec.ts`, 15 tests):** parallelize but at a
   lower worker count (e.g. `workers: 2`) rather than full concurrency, to
@@ -455,6 +509,19 @@ to build first.
   of state coupling). No code changed — #4 still has not started, so nothing
   live was affected by the stale claim; this only corrects the plan before
   someone picks it up.
+- 2026-09-18 — **Follow-up: exhaustive 23-spec state-coupling audit**, run
+  because the correction above raised the obvious question of whether other
+  specs in the "parallelize freely" bucket were also misclassified. They
+  were. `mobile-390.spec.ts` moved into the Daily Fritz serial group
+  (confirmed high severity — real attempt-start flow, same store).
+  `routing.spec.ts` and `spectator-mode.spec.ts` flagged with a `†` in the
+  "Proposed split" rather than moved — lower severity, left as an open
+  decision for whoever implements #4, not silently reclassified either way.
+  Also added: §4 point 4, a previously-undocumented shared-fixed-QA-account
+  risk (`.auth/daily-fritz-qa.json`, dormant in CI today) independent of the
+  Daily Fritz store issue; and sharper `/api/daily-fritz/today`+`/start`
+  rate-limit numbers (20 req/60s, not just the generic range point 2
+  originally cited) in point 2. No code changed — #4 still has not started.
 
 ## 7. Backlog — dead Sentry sourcemap upload condition
 
