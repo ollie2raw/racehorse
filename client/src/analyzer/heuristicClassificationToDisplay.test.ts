@@ -56,4 +56,13 @@ describe('heuristicClassificationToDisplay', () => {
       badge: 'heuristic',
     });
   });
+
+  it('D5: calibrated/Mistake -> Mistake/mistake, no badge -- so GameReviewer\'s display?.badge ?? searchTier fallback still shows the search-tier badge', () => {
+    const classification: HeuristicClassification = { kind: 'calibrated', label: 'Mistake' };
+    expect(heuristicClassificationToDisplay(classification)).toEqual({
+      label: 'Mistake',
+      ratingClass: 'mistake',
+      badge: null,
+    });
+  });
 });
