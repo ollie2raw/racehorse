@@ -1150,6 +1150,41 @@ function stripTsComments(source: string): string {
 }
 
 /**
+ * Shared core: returns the offending call snippets for a given `table` — a
+ * `supabaseFetch`/`fetch` call whose argument targets `/rest/v1/<table>` and
+ * whose options carry `method: 'POST'`, in a file other than that table's
+ * idempotent wrapper. `findNonIdempotentRankedGamesWrites` (INV-17) and
+ * `findNonIdempotentGameReviewsWrites` (INV-21, E0c) are both thin,
+ * table-specific callers of this — one mechanism, reused, not two
+ * independently-drifting regexes (ENGINEERING_GUARDRAILS.md §3's own "no
+ * second implementation" discipline, applied to the guard itself).
+ */
+function findNonIdempotentTableWrites(
+  table: string,
+  wrapperRelativePath: string,
+  relativePath: string,
+  source: string,
+): string[] {
+  if (relativePath.replace(/\\/g, '/').endsWith(wrapperRelativePath)) {
+    return [];
+  }
+  const stripped = stripTsComments(source);
+  const offenders: string[] = [];
+  // A single (supabaseFetch|fetch) call statement — bounded to the call by
+  // requiring the table's path and the POST method between the callee and
+  // the next `;`. `[^;]` spans newlines, so multi-line calls are covered.
+  const callPattern = new RegExp(
+    `\\b(?:supabaseFetch|fetch)\\s*(?:<[^>]*>)?\\s*\\([^;]*?/rest/v1/${table}[^;]*?method:\\s*['"]POST['"][^;]*?;`,
+    'g',
+  );
+  let match: RegExpExecArray | null;
+  while ((match = callPattern.exec(stripped)) !== null) {
+    offenders.push(match[0].replace(/\s+/g, ' ').trim().slice(0, 160));
+  }
+  return offenders;
+}
+
+/**
  * Returns the offending call snippets: a `supabaseFetch`/`fetch` call whose
  * argument targets `/rest/v1/ranked_games` and whose options carry
  * `method: 'POST'`, in a file other than the idempotent wrapper.
@@ -1158,21 +1193,59 @@ export function findNonIdempotentRankedGamesWrites(
   relativePath: string,
   source: string,
 ): string[] {
-  if (relativePath.replace(/\\/g, '/').endsWith(IDEMPOTENT_RANKED_GAMES_WRAPPER)) {
-    return [];
+  return findNonIdempotentTableWrites('ranked_games', IDEMPOTENT_RANKED_GAMES_WRAPPER, relativePath, source);
+}
+
+// ---------------------------------------------------------------------------
+// 21. Idempotent game_reviews writes only (E0c, docs/scoping/
+// game-review-oracle-upgrade-2026-09-13.md Phase E) — same guarantee as
+// INV-17's ranked_games rule, extended to the new review-persistence table:
+// any insert into game_reviews must go through insertGameReviewIdempotent(),
+// never a bare supabaseFetch POST, so the table ships with the same
+// no-second-implementation safety net ranked_games already has, rather than
+// a new write path with no equivalent guard.
+// ---------------------------------------------------------------------------
+
+const IDEMPOTENT_GAME_REVIEWS_WRAPPER = 'reviewPersistence/insertGameReviewIdempotent.ts';
+
+export function findNonIdempotentGameReviewsWrites(
+  relativePath: string,
+  source: string,
+): string[] {
+  return findNonIdempotentTableWrites(
+    'game_reviews',
+    IDEMPOTENT_GAME_REVIEWS_WRAPPER,
+    relativePath,
+    source,
+  );
+}
+
+function checkIdempotentGameReviewsWrites(): void {
+  const errors: string[] = [];
+  const serverFiles = walkTsFiles(SERVER_SRC).filter((f) => !/\.test\.ts$/.test(f));
+
+  let flaggedFiles = 0;
+  for (const absolutePath of serverFiles) {
+    const relative = `server/src/${path.relative(SERVER_SRC, absolutePath).split(path.sep).join('/')}`;
+    const offenders = findNonIdempotentGameReviewsWrites(relative, fs.readFileSync(absolutePath, 'utf8'));
+    if (offenders.length === 0) continue;
+    flaggedFiles += 1;
+    for (const offender of offenders) {
+      errors.push(
+        `${relative} POSTs directly to /rest/v1/game_reviews — must go through ` +
+        `insertGameReviewIdempotent() (mirrors ENGINEERING_GUARDRAILS.md §3's ranked_games rule): ${offender}`,
+      );
+    }
   }
-  const stripped = stripTsComments(source);
-  const offenders: string[] = [];
-  // A single (supabaseFetch|fetch) call statement — bounded to the call by
-  // requiring the ranked_games path and the POST method between the callee and
-  // the next `;`. `[^;]` spans newlines, so multi-line calls are covered.
-  const callPattern =
-    /\b(?:supabaseFetch|fetch)\s*(?:<[^>]*>)?\s*\([^;]*?\/rest\/v1\/ranked_games[^;]*?method:\s*['"]POST['"][^;]*?;/g;
-  let match: RegExpExecArray | null;
-  while ((match = callPattern.exec(stripped)) !== null) {
-    offenders.push(match[0].replace(/\s+/g, ' ').trim().slice(0, 160));
-  }
-  return offenders;
+
+  addResult({
+    id: 'INV-21',
+    name: 'Idempotent game_reviews Writes',
+    status: errors.length === 0 ? 'pass' : 'fail',
+    errors,
+    warnings: [],
+    metrics: { serverFilesScanned: serverFiles.length, flaggedFiles },
+  });
 }
 
 function checkIdempotentRankedGamesWrites(): void {
@@ -1461,6 +1534,7 @@ function printReport(manifest: ArchitectureManifest): void {
     ['Godfile LOC Caps', 'line count vs cap', 'check:architecture'],
     ['Shared Rating-Constant Parity', 'client vs server glicko2 export const diff', 'check:architecture'],
     ['Idempotent ranked_games Writes', 'server-wide POST /rest/v1/ranked_games scan', 'check:architecture'],
+    ['Idempotent game_reviews Writes', 'server-wide POST /rest/v1/game_reviews scan', 'check:architecture'],
     ['Strict-by-Default Verifier Options', 'strict* default-value assertion on pinned verifiers', 'check:architecture'],
     ['Reuse-First Published-Challenge Writes', 'publishDailyFritzChallenge callers must reference the reuse check', 'check:architecture'],
     ['review-engine Node-Import Boundary', 'node: import scan outside packages/review-engine/src/devtools', 'check:architecture'],
@@ -1545,6 +1619,7 @@ function main(): void {
   checkFloatingImports();
   checkRatingConstantParity();
   checkIdempotentRankedGamesWrites();
+  checkIdempotentGameReviewsWrites();
   checkStrictDefaultVerifiers();
   checkReuseFirstPublishedChallengeWrites();
   checkReviewEngineNodeImportBoundary();

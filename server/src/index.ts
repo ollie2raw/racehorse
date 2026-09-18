@@ -264,6 +264,7 @@ import { registerGhostRoutes } from './http/routes/ghost';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
+import { registerGameReviewsRoute } from './http/routes/gameReviewsRoute';
 import {
   getDailyFritzEventsPersistenceAvailability,
   probeDailyFritzEventsPersistence,
@@ -578,6 +579,7 @@ registerBotMatchesRoutes(app, {
 
 registerPuzzleRushRoutes(app);
 registerDailyFritzRoutes(app);
+registerGameReviewsRoute(app);
 
 registerRoomEventsRoutes(app, {
   getAuthenticatedUserId,
