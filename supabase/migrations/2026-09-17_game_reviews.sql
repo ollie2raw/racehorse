@@ -21,6 +21,16 @@
 -- RLS follows daily_fritz_attempts's convention exactly (supabase/daily_fritz.sql):
 -- a user reads only their own rows; all writes go through the server's
 -- service-role key (insertGameReviewIdempotent), never a direct client POST.
+--
+-- TRUST BOUNDARY: evaluations and accuracy_model_result are client-asserted --
+-- the write route (gameReviewsRoute.ts) persists whatever the request body
+-- contains, unverified against any server-side recomputation of the review
+-- (there is no such recomputation today). This table must never be treated as
+-- authoritative for anything competitive or comparative -- leaderboards,
+-- rankings, achievements, public-facing stats -- without a server-side
+-- verification step added first. It is a personal record of "what the client
+-- claims its own review concluded," the same trust level as any other
+-- client-submitted jsonb blob, not a verified result like ranked_games.
 
 create table if not exists public.game_reviews (
   id uuid primary key default gen_random_uuid(),

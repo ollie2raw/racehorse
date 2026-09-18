@@ -404,6 +404,20 @@ output — not full `ReviewPositionSnapshotV2[]`.**
   capability does not exist under this design — only the evaluation's own
   conclusions persist, not the position they were computed from.
 
+**E0's trust boundary, stated explicitly (added 2026-09-17, E0a/E0c):**
+`game_reviews` rows are **client-asserted, not server-verified**. The write
+route (`gameReviewsRoute.ts`) persists whatever `evaluations`/
+`accuracyModelResult` the request body contains — there is no server-side
+recomputation of the review to check it against, today or in this design as
+scoped. This table must **never** be treated as authoritative for anything
+competitive or comparative — leaderboards, rankings, achievements,
+public-facing stats — without a server-side verification step added first.
+It is a personal review record (the same trust level as any other
+client-submitted jsonb blob), not a verified result like `ranked_games`,
+which is idempotent but not the same thing as verified. Any future feature
+that wants to compare or rank on this data needs its own verification design
+before it can safely read from this table for that purpose.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---

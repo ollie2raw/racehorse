@@ -17,6 +17,15 @@ const log = childLogger('game-reviews');
  * (evaluations + accuracyModelResult, per E0b) -- it does not run the review
  * engine itself. Wiring a real PVF post-game write call site is E1's job,
  * not this one's.
+ *
+ * TRUST BOUNDARY: this route does not verify the request body against any
+ * server-side recomputation -- evaluations/accuracyModelResult are exactly
+ * what the client asserts them to be, the same trust level as any other
+ * client-submitted jsonb blob. Persisted game_reviews rows must never be
+ * treated as authoritative for anything competitive or comparative
+ * (leaderboards, rankings, achievements, public-facing stats) unless/until a
+ * server-side verification step is added. This is a personal review record,
+ * not a verified result like ranked_games.
  */
 export function registerGameReviewsRoute(app: Application): void {
   app.post('/api/game-reviews', async (req, res) => {
