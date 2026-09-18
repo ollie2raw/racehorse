@@ -289,12 +289,18 @@ one store per connection:
      `const runs = new Map<string, DailyFritzRunRecord>()` /
      `const attempts = new Map<string, DailyFritzAttemptRecord>()`, module-level
      singletons, seeded by `runDate` (`seedRun`, line 21) which every spec
-     implicitly resolves to "today" server-side. Every one of
-     `daily-fritz-v2.spec.ts`, `daily-fritz-server-restore.spec.ts`, and
-     `fritz-play-to-completion.spec.ts` (12 tests total) reads/writes the
-     *same* record if they overlap. Two workers running one Daily Fritz spec
-     each concurrently would race on the same day's run/attempt state —
-     genuinely unsafe to parallelize as-is, not just untested.
+     implicitly resolves to "today" server-side. `daily-fritz-v2.spec.ts` and
+     `daily-fritz-server-restore.spec.ts` both read/write the *same* record if
+     they overlap. Two workers running one Daily Fritz spec each concurrently
+     would race on the same day's run/attempt state — genuinely unsafe to
+     parallelize as-is, not just untested. **Correction (2026-09-18, found by
+     a separate read-only audit):** `fritz-play-to-completion.spec.ts` does
+     **not** belong in this group — it plays a Play vs Fritz (bot match) game,
+     never imports or touches `dailyFritzMemoryStore.ts`, and has no
+     `daily`-anything in it (confirmed by grep against the live file). It is
+     Play vs Fritz, a different feature from the Daily Fritz daily-challenge
+     surface this point is actually about. It is still placed in the serial
+     group below, but for an unrelated reason — see the note there.
 2. **Rate limiting is per-IP, process-global, and tuned for one real user.**
      `server/src/rateLimit.ts`'s `InMemoryRateLimiter` buckets by key (IP, or
      IP+route); `server/src/index.ts:396-435` wires tight windows for
@@ -319,10 +325,15 @@ one store per connection:
 ### Proposed split
 
 - **Keep serial (own project/shard, `workers: 1`):** every spec that touches
-  Daily Fritz — `daily-fritz-v2.spec.ts`, `daily-fritz-server-restore.spec.ts`,
-  `fritz-play-to-completion.spec.ts`. 12 tests, and `fritz-play-to-completion`
-  is also the single slowest file in the whole suite today (6.9m for 3 tests
-  — full played-out matches, not something sharding fixes on its own).
+  Daily Fritz — `daily-fritz-v2.spec.ts`, `daily-fritz-server-restore.spec.ts`
+  — plus `fritz-play-to-completion.spec.ts`, grouped here for a **different**
+  reason than the other two (see the 2026-09-18 correction above): it does
+  not share Daily Fritz's date-keyed store, but it is the single slowest file
+  in the whole suite today (6.9m for 3 tests — full played-out matches), and
+  no state-coupling analysis has been done to confirm it's actually safe to
+  move into the parallel group below. Whoever scopes #4 for real should treat
+  "does `fritz-play-to-completion` belong in the parallel group instead" as
+  an open question, not assume this doc's grouping already answered it.
 - **Parallelize freely (`workers: 4`, `fullyParallel: true`):** everything
   else with no shared-date-keyed state — `match.spec.ts`, `routing.spec.ts`,
   `mobile-390*.spec.ts`, `smoke.spec.ts`, `board-camera.spec.ts`,
@@ -434,6 +445,16 @@ to build first.
   everything-else-parallel project split first, prove *that* stable over
   several runs, before touching worker counts (per §4). **#4 has not
   started.**
+- 2026-09-18 — **Correction found by a separate, read-only audit (not this
+  doc's own pass):** §4 point 1 and the "Proposed split" wrongly grouped
+  `fritz-play-to-completion.spec.ts` in with the two real Daily Fritz specs
+  as sharing `dailyFritzMemoryStore.ts`'s date-keyed state. It doesn't — it's
+  a Play vs Fritz (bot match) spec with no Daily Fritz involvement at all.
+  Fixed inline in §4 with the correct reasoning (it's still in the serial
+  group, but only because it's the suite's single slowest file, not because
+  of state coupling). No code changed — #4 still has not started, so nothing
+  live was affected by the stale claim; this only corrects the plan before
+  someone picks it up.
 
 ## 7. Backlog — dead Sentry sourcemap upload condition
 

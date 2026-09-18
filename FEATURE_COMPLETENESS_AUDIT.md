@@ -585,6 +585,14 @@ Each of these is real. None is closeable as written, so none goes on the bar.
    user-visible effect, and cleaning it up means reworking when those fetches
    fire — more than it is worth on its own.
 
+8. **Post-game review browser coverage** — While `POST_GAME_REVIEW_VISIBLE`
+   remains false, there is zero Playwright coverage of the post-game review
+   surface (accuracy display, coverage-floor states, GameReviewer open path).
+   Unit/component coverage is extensive. Defer building e2e until the feature
+   is unflagged for players; when unflagged, add one thin play-to-prompt +
+   accuracy-state + GameReviewer-mount spec. Tracked as deferred (unscoped),
+   not as a closeable completeness bar item.
+
 ---
 
 ## 6. Route and mode inventory
