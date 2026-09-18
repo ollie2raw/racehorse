@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   findDriftedRatingConstants,
   findLenientDefaultStrictnessOptions,
+  findNonIdempotentGameReviewsWrites,
   findNonIdempotentRankedGamesWrites,
   findStrayNodeImportInReviewEngine,
   findUnguardedFloatingImports,
@@ -212,6 +213,59 @@ describe('INV-17 idempotent ranked_games writes', () => {
       await supabaseFetch('/auth/v1/admin/users/' + userId, { method: 'DELETE' });
     `;
     expect(findNonIdempotentRankedGamesWrites('server/src/account/routes.ts', prose)).toEqual([]);
+  });
+});
+
+/**
+ * INV-21 — Idempotent game_reviews writes only (E0c, same guarantee as
+ * INV-17's ranked_games rule, extended to the new review-persistence table).
+ */
+describe('INV-21 idempotent game_reviews writes', () => {
+  it('flags a direct supabaseFetch POST to game_reviews outside the wrapper', () => {
+    const violation = `
+      export async function recordReviewDirect(input) {
+        const rows = await supabaseFetch<Row[]>('/rest/v1/game_reviews', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify(payload),
+        });
+        return rows?.[0] ?? null;
+      }
+    `;
+    expect(
+      findNonIdempotentGameReviewsWrites('server/src/http/routes/someOtherRoute.ts', violation),
+    ).toHaveLength(1);
+  });
+
+  it('does not flag the idempotent wrapper itself', () => {
+    const wrapper = `
+      const rows = await supabaseFetch<Row[]>('/rest/v1/game_reviews', { method: 'POST', body });
+    `;
+    expect(
+      findNonIdempotentGameReviewsWrites(
+        'server/src/reviewPersistence/insertGameReviewIdempotent.ts',
+        wrapper,
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not flag a GET read of game_reviews', () => {
+    const read = `
+      const rows = await supabaseFetch('/rest/v1/game_reviews?user_id=eq.' + id, {
+        method: 'GET',
+      });
+    `;
+    expect(findNonIdempotentGameReviewsWrites('server/src/http/routes/gameReviewsRoute.ts', read)).toEqual(
+      [],
+    );
+  });
+
+  it('does not flag a game_reviews mention that only appears in a comment', () => {
+    const prose = `
+      // See supabase/migrations/2026-09-17_game_reviews.sql for the RLS policy.
+      await supabaseFetch('/auth/v1/admin/users/' + userId, { method: 'DELETE' });
+    `;
+    expect(findNonIdempotentGameReviewsWrites('server/src/account/routes.ts', prose)).toEqual([]);
   });
 });
 
