@@ -3,10 +3,23 @@ import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewEvaluationV1 } fr
 
 export { dedupeCandidatesByTile };
 
+/**
+ * The 'calibrated' variant is D5's (game-review-oracle-upgrade-2026-09-13.md
+ * Phase D), not produced by classifyHeuristicResult below -- it's the
+ * exact/search-evidence sibling result selectMoveHeuristicClassification
+ * (useMoveHeuristicClassification.ts) returns via lossBandLabelForEvaluation
+ * (phase-c-accuracy-model-spec.md section 4a). Kept in this shared union
+ * rather than a separate type because both are "a real per-move
+ * classification GameReviewer can render instead of the legacy rating" --
+ * the same caller-facing concept, just backed by two different real-evidence
+ * tiers with different label vocabularies (3-bucket heuristic vs the
+ * calibrated 4-band scale).
+ */
 export type HeuristicClassification =
   | { readonly kind: 'forced' }
   | { readonly kind: 'unclear'; readonly reason: 'globally-infeasible' | 'flat-spread' }
-  | { readonly kind: 'bucket'; readonly bucket: 'Good' | 'Inaccuracy' | 'Blunder' };
+  | { readonly kind: 'bucket'; readonly bucket: 'Good' | 'Inaccuracy' | 'Blunder' }
+  | { readonly kind: 'calibrated'; readonly label: 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder' };
 
 // Provisional, from a real but tiny (n=3) dataset -- see issue #231 for the
 // full evidentiary basis and what would need to happen before these are

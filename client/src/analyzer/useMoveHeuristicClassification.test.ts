@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
+import { LOSS_BAND_BOUNDARIES } from '@racehorse/review-engine';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 
@@ -29,10 +30,25 @@ function heuristicEvaluation(candidates: readonly ReviewCandidateEvaluationV1[])
   };
 }
 
-function exactEvaluation(candidates: readonly ReviewCandidateEvaluationV1[]): ReviewEvaluationV1 {
+function exactEvaluation(
+  candidates: readonly ReviewCandidateEvaluationV1[],
+  moveLoss = 0,
+): ReviewEvaluationV1 {
   return {
     ...heuristicEvaluation(candidates),
     evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
+    loss: { expectedPointDifferential: moveLoss, winProbability: null },
+  };
+}
+
+function searchEvaluation(
+  candidates: readonly ReviewCandidateEvaluationV1[],
+  moveLoss = 0,
+): ReviewEvaluationV1 {
+  return {
+    ...heuristicEvaluation(candidates),
+    evidence: { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' },
+    loss: { expectedPointDifferential: moveLoss, winProbability: null },
   };
 }
 
@@ -58,7 +74,25 @@ describe('selectMoveHeuristicClassification', () => {
     expect(selectMoveHeuristicClassification('d1', batch)).toBeNull();
   });
 
-  it('returns null when the resolved result is exact/search-sourced, not heuristic -- render legacy unchanged', () => {
+  it('D5: an exact-evidence result with real differentiated candidates (non-forced) classifies via the calibrated lossBandLabelForEvaluation, not the legacy heuristic bucket scale', () => {
+    // moveLoss between LOSS_BAND_BOUNDARIES.inaccuracyToMistake and
+    // .mistakeToBlunder -- the real calibrated boundaries, not a stand-in.
+    const moveLoss = (LOSS_BAND_BOUNDARIES.inaccuracyToMistake + LOSS_BAND_BOUNDARIES.mistakeToBlunder) / 2;
+    const batch = batchState({
+      resultsByDecisionId: new Map([['d1', exactEvaluation([candidate(1, 2, 10), candidate(3, 4, 20)], moveLoss)]]),
+    });
+    expect(selectMoveHeuristicClassification('d1', batch)).toEqual({ kind: 'calibrated', label: 'Mistake' });
+  });
+
+  it('D5: a search-evidence result with real differentiated candidates classifies the same way as exact evidence', () => {
+    const moveLoss = LOSS_BAND_BOUNDARIES.bestTolerance / 2;
+    const batch = batchState({
+      resultsByDecisionId: new Map([['d1', searchEvaluation([candidate(1, 2, 10), candidate(3, 4, 20)], moveLoss)]]),
+    });
+    expect(selectMoveHeuristicClassification('d1', batch)).toEqual({ kind: 'calibrated', label: 'Best' });
+  });
+
+  it('D5: a forced exact-evidence result (single real candidate) still returns null -- falls through to the legacy forced handling, same as before', () => {
     const batch = batchState({
       resultsByDecisionId: new Map([['d1', exactEvaluation([candidate(1, 2, 10)])]]),
     });

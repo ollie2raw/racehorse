@@ -41,5 +41,16 @@ export function heuristicClassificationToDisplay(classification: HeuristicClassi
       // label, same class, no badge, since this isn't a judgment call to
       // flag as uncertain.
       return { label: 'Good', ratingClass: 'good', badge: null };
+    case 'calibrated':
+      // D5 (game-review-oracle-upgrade-2026-09-13.md Phase D): the
+      // calibrated exact/search-evidence label. No badge -- deliberately
+      // null, not 'heuristic', so GameReviewer.tsx's `display?.badge ??
+      // searchTier` fallback still shows the existing search-tier badge for
+      // these moves instead of this display shape suppressing it.
+      return {
+        label: classification.label,
+        ratingClass: classification.label.toLowerCase(),
+        badge: null,
+      };
   }
 }

@@ -129,7 +129,8 @@ describe('GameReviewer heuristic-classification render wiring', () => {
     expect(withBatchHtml).toEqual(legacyHtml);
   });
 
-  it('renders identically to legacy behavior for a resolved exact/search-source result', () => {
+  it('D5: renders the calibrated label (not the legacy rating) for a resolved exact-source result, no badge', () => {
+    // moveLoss 0 -> 'Best' under the real LOSS_BAND_BOUNDARIES.
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
     const candidates = [candidate(0, 4, 30.53), candidate(3, 6, -15.77)];
     const exactResult: ReviewEvaluationV1 = {
@@ -138,6 +139,67 @@ describe('GameReviewer heuristic-classification render wiring', () => {
     };
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', exactResult]]),
+    });
+    const decisionIdByMoveNumber = new Map([[1, 'd1']]);
+
+    render(
+      <GameReviewer
+        open
+        onClose={vi.fn()}
+        analysis={analysis}
+        reviewWorkerBatch={reviewWorkerBatch}
+        decisionIdByMoveNumber={decisionIdByMoveNumber}
+      />,
+    );
+
+    const ratingEl = screen.getByText('Best', { selector: '.gr-move-row-rating' });
+    expect(ratingEl).toHaveClass('is-best');
+    expect(screen.queryByText('Blunder')).not.toBeInTheDocument();
+    // exact evidence never carries the search-tier badge -- no badge at all
+    // here, since the calibrated display's own badge is also null.
+    expect(document.body.querySelector('.gr-move-row-badge')).toBeNull();
+  });
+
+  it('D5: renders the calibrated label for a resolved search-source result, with the existing search-tier badge preserved', () => {
+    const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
+    const candidates = [candidate(0, 4, 30.53), candidate(3, 6, -15.77)];
+    const searchResult: ReviewEvaluationV1 = {
+      ...heuristicEvaluation(candidates),
+      evidence: { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' },
+    };
+    const reviewWorkerBatch = batchState({
+      resultsByDecisionId: new Map([['d1', searchResult]]),
+    });
+    const decisionIdByMoveNumber = new Map([[1, 'd1']]);
+
+    render(
+      <GameReviewer
+        open
+        onClose={vi.fn()}
+        analysis={analysis}
+        reviewWorkerBatch={reviewWorkerBatch}
+        decisionIdByMoveNumber={decisionIdByMoveNumber}
+      />,
+    );
+
+    const ratingEl = screen.getByText('Best', { selector: '.gr-move-row-rating' });
+    expect(ratingEl).toHaveClass('is-best');
+    // display?.badge is null (calibrated case), so GameReviewer's
+    // `display?.badge ?? searchTier` fallback still shows the search badge --
+    // confirms the calibrated display case doesn't suppress it.
+    const badgeEl = document.body.querySelector('.gr-move-row-badge');
+    expect(badgeEl).not.toBeNull();
+    expect(badgeEl).toHaveClass('is-search');
+  });
+
+  it('D5: a forced exact-source result (single real candidate) still renders identically to legacy behavior', () => {
+    const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
+    const forcedExactResult: ReviewEvaluationV1 = {
+      ...heuristicEvaluation([candidate(0, 4, 30.53)]),
+      evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
+    };
+    const reviewWorkerBatch = batchState({
+      resultsByDecisionId: new Map([['d1', forcedExactResult]]),
     });
     const decisionIdByMoveNumber = new Map([[1, 'd1']]);
 
