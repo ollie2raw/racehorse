@@ -221,10 +221,19 @@
 
 .rh-sf-main-column .rh-af-panel,
 .rh-sf-main-column .social-feed-panel,
-.social-main-column .social-feed-panel {
+.social-main-column .social-feed-panel,
+.rh-sf-main-column > .rh-sb-table,
+.social-main-column > .rh-sb-table {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Board feed: scroll inside the table (not clip it). */
+.rh-sf-main-column > .rh-sb-table,
+.social-main-column > .rh-sb-table {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Post Update removed — hide any stale/cached markup */

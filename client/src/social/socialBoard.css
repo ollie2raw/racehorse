@@ -228,11 +228,20 @@
 
 .rh-sb-table {
   display: flex;
+  flex: 1 1 0;
+  min-height: 0;
   flex-direction: column;
   border: 1px solid var(--rh-sb-line);
   border-radius: var(--radius-record);
   background: var(--rh-sb-surface);
-  overflow: hidden;
+  /* Fill the viewport-locked main column and scroll rows inside the table.
+     Without this, parent overflow:hidden clips earlier activity and the
+     "Load earlier activity" footer. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
 }
 
 /* Five columns, like the leaderboard. The score column stops "what
@@ -247,9 +256,12 @@
 }
 
 .rh-sb-thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   min-height: 34px;
   border-bottom: 1px solid var(--rh-sb-line);
-  background: rgba(255, 255, 255, 0.014);
+  background: rgba(10, 16, 28, 0.96);
   font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
@@ -488,7 +500,10 @@
 /* The five-column grid needs a horizontal scroll on a phone — same
    constraint the leaderboard board has. */
 @media (--phone) {
-  .rh-sb-table { overflow-x: auto; }
+  .rh-sb-table {
+    overflow-x: auto;
+    overflow-y: auto;
+  }
   .rh-sb-thead,
   .rh-sb-row { min-width: 560px; }
 }
