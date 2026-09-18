@@ -371,6 +371,7 @@ fine.
     reusing the same floor would likely read most hands as "Partial" by
     construction, not a real finding. Real, separate calibration work, not
     a small fix.
+16. **Verify the mixed-evidence-tier move list in GameReviewer reads coherently to a real player** — forced/heuristic/exact-search label vocabularies (D5, `game-review-oracle-upgrade-2026-09-13.md`) now render side by side in the same move list. Safe to defer: `POST_GAME_REVIEW_VISIBLE` is still `false`, so no player sees this today; do it as part of E4's pre-public-flag QA, not before.
 
 ---
 
