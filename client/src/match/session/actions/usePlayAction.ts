@@ -157,7 +157,15 @@ export function usePlayAction(
       setPendingActionRefDiag(true);
       setSelectedTile(null);
       setDrawStepMyHand(null);
-      const telemetry = buildGameplayMoveTelemetry({ stateNow, legalMovesNow, you });
+      const telemetry = buildGameplayMoveTelemetry({
+        stateNow,
+        legalMovesNow,
+        you,
+        reviewAction: { kind: 'play', tile: tileToPlay, position },
+        reviewSessionId: `mp-review:${joinedRoom}`,
+        reviewGameId: joinedRoom,
+        reviewActionNumber: (stateNow?.sequence ?? 0) + 1,
+      });
       const playedTile = toTileTuple(tileToPlay);
       const handNumber = stateNow?.handNumber ?? 0;
       const signature = buildLogicalActionSignature({

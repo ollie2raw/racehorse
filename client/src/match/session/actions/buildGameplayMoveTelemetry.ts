@@ -1,11 +1,12 @@
 import type { GameState, Move, Tile } from '../../../types';
 import {
   cloneBoardState,
-  pickEngineBestMove,
   snapshotBoardState,
   toTileTuple,
 } from '../../../game/moveLogger';
 import { getBoardEnds } from '../../boardSessionUtils';
+import { captureMultiplayerReviewSnapshot } from '../../../multiplayer/multiplayerReviewSnapshot';
+import type { ReviewAction } from '@racehorse/game-core/review';
 
 /**
  * Shared "before the action" snapshot used by draw/pass/play when building
@@ -17,6 +18,10 @@ export function buildGameplayMoveTelemetry(params: {
   stateNow: GameState | null;
   legalMovesNow: Move[];
   you: string;
+  reviewAction?: ReviewAction;
+  reviewSessionId?: string;
+  reviewGameId?: string;
+  reviewActionNumber?: number;
 }) {
   const { stateNow, legalMovesNow, you } = params;
   const boardEnds = getBoardEnds(stateNow?.board ?? null);
@@ -24,13 +29,22 @@ export function buildGameplayMoveTelemetry(params: {
   const validMoves = legalMovesNow
     .filter((m) => m.type === 'play' && m.tile)
     .map((m) => toTileTuple(m.tile as Tile));
-  const engineBestMove = pickEngineBestMove(
-    legalMovesNow
-      .filter((m) => m.type === 'play' && m.tile)
-      .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-    boardEnds,
-    handBefore,
-  );
+  let reviewSnapshot;
+  if (stateNow && params.reviewAction && params.reviewSessionId && params.reviewGameId && params.reviewActionNumber) {
+    try {
+      reviewSnapshot = captureMultiplayerReviewSnapshot({
+        state: stateNow,
+        actorId: you,
+        action: params.reviewAction,
+        sessionId: params.reviewSessionId,
+        gameId: params.reviewGameId,
+        actionNumber: params.reviewActionNumber,
+      });
+    } catch {
+      // Review capture is observability/UI enrichment; never block a live move.
+      reviewSnapshot = undefined;
+    }
+  }
   return {
     boardEnds,
     handBefore,
@@ -38,6 +52,8 @@ export function buildGameplayMoveTelemetry(params: {
     boardState: snapshotBoardState(stateNow?.board ?? null),
     boardRenderState: cloneBoardState(stateNow?.board ?? null),
     handSnapshot: handBefore,
-    engineBestMove,
+    // E5: MP review no longer treats the pip/setup heuristic as oracle truth.
+    engineBestMove: null,
+    reviewSnapshot,
   };
 }

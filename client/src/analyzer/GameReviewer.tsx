@@ -188,15 +188,25 @@ export default function GameReviewer({
     return moveRatingCoachingCopy(current.rating, 'precise', scoreGap);
   }, [current, decisionIdByMoveNumber, reviewWorkerBatch]);
 
+  const currentOracleEvaluation = current && decisionIdByMoveNumber && reviewWorkerBatch
+    ? reviewWorkerBatch.resultsByDecisionId.get(decisionIdByMoveNumber.get(current.moveNumber) ?? '')
+    : undefined;
+  const oracleBestAction = currentOracleEvaluation?.best.action;
+  const oracleBestTile = oracleBestAction?.kind === 'play'
+    ? [oracleBestAction.tile.low, oracleBestAction.tile.high] as [number, number]
+    : undefined;
+
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
 
   const showGhostTile = Boolean(
     current &&
       current.action === 'place' &&
-      current.engineBestMove?.tile &&
-      COACHING_RATINGS.includes(current.rating) &&
-      (!sameTileTuple(current.playedTile, current.engineBestMove.tile) ||
-        current.bestPosition !== current.engineBestMove.position),
+      (oracleBestTile ?? current.engineBestMove?.tile) &&
+      (currentOracleEvaluation || COACHING_RATINGS.includes(current.rating)) &&
+      (oracleBestTile
+        ? !sameTileTuple(current.playedTile, oracleBestTile)
+        : !sameTileTuple(current.playedTile, current.engineBestMove?.tile) ||
+          current.bestPosition !== current.engineBestMove?.position),
   );
 
   if (!open) return null;
@@ -240,10 +250,13 @@ export default function GameReviewer({
                   showZoomTray
                 />
               </div>
-              {showGhostTile && current?.engineBestMove?.tile ? (
+              {showGhostTile && (oracleBestTile ?? current?.engineBestMove?.tile) ? (
                 <div className="gr-ghost-tile">
                   <DominoTile
-                    tile={{ low: current.engineBestMove.tile[0], high: current.engineBestMove.tile[1] }}
+                    tile={{
+                      low: (oracleBestTile ?? current.engineBestMove!.tile)[0],
+                      high: (oracleBestTile ?? current.engineBestMove!.tile)[1],
+                    }}
                     size={48}
                     disabled
                   />

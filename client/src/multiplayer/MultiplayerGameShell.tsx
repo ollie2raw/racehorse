@@ -6,8 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { isMultiplayerPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
-import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
+import { isMultiplayerPostGameReviewLocallyEligible } from '../training/pivotalReview/postGameReviewPolicy';
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
@@ -54,6 +53,8 @@ import type {
   MultiplayerGameShellProps,
 } from './multiplayerGameShellTypes';
 import { reportOptionalChunkFailure } from '../utils/optionalChunk';
+import { useReviewWorkerBatch } from '../modules/review/useReviewWorkerBatch';
+import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, DEFAULT_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
 
 function MultiplayerGameShellComponent({
   socket,
@@ -103,6 +104,22 @@ function MultiplayerGameShellComponent({
   const previousStateForAnalysisRef = useRef<import('../types').GameState | null>(null);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
+  const multiplayerReviewSnapshots = useMemo(
+    () => multiplayerMoveLog.flatMap((entry) => (entry.reviewSnapshot ? [entry.reviewSnapshot] : [])),
+    [multiplayerMoveLog],
+  );
+  const multiplayerReviewWorkerBatch = useReviewWorkerBatch(
+    multiplayerReviewSnapshots,
+    DEFAULT_REVIEW_DISPATCH_BUDGET,
+    DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+  );
+  const multiplayerDecisionIdByMoveNumber = useMemo(() => {
+    const result = new Map<number, string>();
+    for (const entry of multiplayerMoveLog) {
+      if (entry.reviewSnapshot) result.set(entry.moveNumber, entry.reviewSnapshot.identifiers.decisionId);
+    }
+    return result;
+  }, [multiplayerMoveLog]);
   const [handTileSize, setHandTileSize] = useState(44);
   const prevOppCountRef = useRef<number | null>(null);
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
@@ -757,11 +774,9 @@ function MultiplayerGameShellComponent({
     you,
   ]);
 
-  const serverCohortEnabled = usePostGameReviewAccess(authUser?.id);
-  const canOpenPostGameReview = isMultiplayerPostGameReviewEligible({
+  const canOpenPostGameReview = isMultiplayerPostGameReviewLocallyEligible({
     gameOver: true,
     isTournament: isTournamentMatch,
-    serverCohortEnabled,
   });
 
   const openMultiplayerAnalyzer = useCallback(() => {
@@ -1080,6 +1095,8 @@ function MultiplayerGameShellComponent({
         open={analyzerOpen}
         onClose={() => setAnalyzerOpen(false)}
         analysis={currentAnalysis}
+        reviewWorkerBatch={multiplayerReviewWorkerBatch}
+        decisionIdByMoveNumber={multiplayerDecisionIdByMoveNumber}
         title="Game Review"
       />
     </React.Suspense>

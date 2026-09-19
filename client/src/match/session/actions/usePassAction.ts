@@ -70,7 +70,15 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
     mpPerfBeginAction('pass', baselineSequence);
     setPendingUiAction('pass');
     setPendingActionRefDiag(true);
-    const telemetry = buildGameplayMoveTelemetry({ stateNow, legalMovesNow, you });
+    const telemetry = buildGameplayMoveTelemetry({
+      stateNow,
+      legalMovesNow,
+      you,
+      reviewAction: { kind: 'pass' },
+      reviewSessionId: `mp-review:${joinedRoom}`,
+      reviewGameId: joinedRoom,
+      reviewActionNumber: (stateNow?.sequence ?? 0) + 1,
+    });
     const handNumber = stateNow?.handNumber ?? 0;
     const signature = buildLogicalActionSignature({
       kind: 'pass',

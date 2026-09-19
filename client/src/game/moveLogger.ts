@@ -42,6 +42,8 @@ export type MoveEntry = {
   engineBestMove: EngineBestMove | null;
   /** Canonical official state immediately before this action, when available. */
   authorityPreStateDigest?: string;
+  /** E5: accepted multiplayer V2 oracle snapshot for this human decision. */
+  reviewSnapshot?: import('@racehorse/game-core/review').ReviewPositionSnapshotV2;
 };
 
 export function toTileTuple(tile: Tile): TileTuple {
