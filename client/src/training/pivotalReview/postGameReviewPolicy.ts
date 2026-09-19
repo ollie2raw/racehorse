@@ -78,3 +78,10 @@ export function isMultiplayerPostGameReviewEligible(input: {
 }): boolean {
   return isPostGameReviewEnabled(input.serverCohortEnabled) && input.gameOver && !input.isTournament;
 }
+
+export function isMultiplayerPostGameReviewLocallyEligible(input: {
+  gameOver: boolean;
+  isTournament: boolean;
+}): boolean {
+  return POST_GAME_REVIEW_VISIBLE && input.gameOver && !input.isTournament;
+}

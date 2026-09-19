@@ -88,7 +88,15 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
     const handBeforeDraw = stateNow?.players[you]?.hand ?? [];
     setDrawStepMyHand?.([...handBeforeDraw, { low: -1, high: -1 } as Tile]);
     setDrawPulseIndex?.(handBeforeDraw.length);
-    const telemetry = buildGameplayMoveTelemetry({ stateNow, legalMovesNow, you });
+    const telemetry = buildGameplayMoveTelemetry({
+      stateNow,
+      legalMovesNow,
+      you,
+      reviewAction: { kind: 'draw' },
+      reviewSessionId: `mp-review:${joinedRoom}`,
+      reviewGameId: joinedRoom,
+      reviewActionNumber: (stateNow?.sequence ?? 0) + 1,
+    });
     const handNumber = stateNow?.handNumber ?? 0;
     const signature = buildLogicalActionSignature({
       kind: 'draw',
