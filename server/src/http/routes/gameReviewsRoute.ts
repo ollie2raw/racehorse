@@ -9,6 +9,7 @@ import {
   toGameReviewReadResult,
 } from '../../reviewPersistence/queryLatestGameReview';
 import { reconcileAccuracyModelResult } from '../../reviewPersistence/reconcileAccuracyModel';
+import { isGameReviewCohortUser } from '../../reviewPersistence/gameReviewCohort';
 
 const log = childLogger('game-reviews');
 
@@ -45,6 +46,10 @@ export function registerGameReviewsRoute(app: Application): void {
     const authenticatedUserId = await getAuthenticatedUserId(req);
     if (!authenticatedUserId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (!isGameReviewCohortUser(authenticatedUserId)) {
+      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
       return;
     }
 
@@ -108,6 +113,10 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+    if (!isGameReviewCohortUser(authenticatedUserId)) {
+      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
+      return;
+    }
 
     const gameDigest = typeof req.query.gameDigest === 'string' ? req.query.gameDigest.trim() : '';
     if (!gameDigest) {
@@ -126,5 +135,14 @@ export function registerGameReviewsRoute(app: Application): void {
       log.error({ err: error, userId: authenticatedUserId }, 'read failed');
       res.status(500).json({ error: 'Failed to read game review.' });
     }
+  });
+
+  app.get('/api/game-reviews/access', async (req, res) => {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    res.status(200).json({ enabled: isGameReviewCohortUser(authenticatedUserId) });
   });
 }

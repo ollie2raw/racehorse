@@ -42,8 +42,8 @@ import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLeg
 import type { GameState, Move, Tile } from '../types';
 import type { RoomPlayer } from '../multiplayer/protocol';
 import { useAuth } from '../auth/useAuth';
-import { isAdminUser } from '../auth/isAdminUser';
 import { isMultiplayerPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
+import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
 import type { LiveMatchScreenProps } from './liveMatchScreenTypes';
 
 export type { LiveMatchScreenProps } from './liveMatchScreenTypes';
@@ -443,10 +443,11 @@ export function LiveMatchScreen({
     handRevealAutoProgress,
   } = postGame;
   const { user: authUser } = useAuth();
+  const serverCohortEnabled = usePostGameReviewAccess(authUser?.id);
   const canAnalyzeGame = isMultiplayerPostGameReviewEligible({
     gameOver: true,
     isTournament: Boolean(tournamentMatch),
-    isAdmin: isAdminUser(authUser?.email),
+    serverCohortEnabled,
   });
   const {
     showLeaveConfirm,

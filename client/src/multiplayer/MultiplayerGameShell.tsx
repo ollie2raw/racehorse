@@ -6,8 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { isAdminUser } from '../auth/isAdminUser';
 import { isMultiplayerPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
+import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
@@ -757,10 +757,11 @@ function MultiplayerGameShellComponent({
     you,
   ]);
 
+  const serverCohortEnabled = usePostGameReviewAccess(authUser?.id);
   const canOpenPostGameReview = isMultiplayerPostGameReviewEligible({
     gameOver: true,
     isTournament: isTournamentMatch,
-    isAdmin: isAdminUser(authUser?.email),
+    serverCohortEnabled,
   });
 
   const openMultiplayerAnalyzer = useCallback(() => {
