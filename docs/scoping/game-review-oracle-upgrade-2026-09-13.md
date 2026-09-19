@@ -134,6 +134,8 @@ MP already has a thinner capture path (`buildGameplayMoveTelemetry` + `pickEngin
 | **A2** | S | `captureReviewSnapshotAtDecision(preState, command, ids, evidence)` thin wrapper around `toCoreGameState` + `createReviewPositionSnapshotV2` | Unit tests against game-core fixture categories |
 | **A3** | S | Wire capture into **player place/draw/pass** PVF path only; append to an in-memory `reviewSnapshots: ReviewPositionSnapshotV2[]` on the match/review runtime (do not persist server-side yet) | Completing a short PVF hand yields one snapshot per player decision; digests match `toCoreGameState` |
 | **A4** | S | Wire capture into **bot place/draw/pass** path (bot actor snapshots too — needed for fair midgame search later, even if UI only grades “you”) | Snapshot count = all actors’ decisions in hand |
+
+**Accepted asymmetry:** bot-actor PVF snapshots retain the bot's true actor hand for the planned A4 analysis use; MP masks the opponent hand because it is not client-visible, and this difference is deliberate rather than missed.
 | **A5** | S | Analyzer dual-read shim: if V2 snapshots present, refuse to invent placeholders in `buildEvalState`; if absent, keep legacy path + `LEGACY_ANALYSIS_DISCLOSURE` | No silent promotion of V1 → “exact” |
 | **A6** | S | Session-local persistence of snapshot array (RAM + optional localStorage for admin reopen) — **not** server yet | Refresh within session can reopen; no schema migration of old histories |
 
