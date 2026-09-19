@@ -48,6 +48,8 @@ export function PivotalReviewSummary({
     });
   }, [candidates, session.reflections]);
 
+  // Note-only reflections contribute no taxonomy counts. Older stored reasons
+  // remain readable through the storage helper, without rewriting those records.
   const recurringPattern = useMemo(
     () => computeTopRecurringMissReason(session),
     [session],

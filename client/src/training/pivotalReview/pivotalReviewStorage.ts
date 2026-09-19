@@ -5,7 +5,8 @@ import type { PivotalTurnSelection } from './pivotalTurnSelector';
 export type PivotalTurnReflection = {
   moveNumber: number;
   rank: number;
-  missReasons: PivotalReviewMissReasonId[];
+  /** Legacy reflections may contain taxonomy reasons; new reflections are note-only. */
+  missReasons?: PivotalReviewMissReasonId[];
   note: string;
 };
 
@@ -91,7 +92,7 @@ export function computeTopRecurringMissReason(
   const counts = new Map<PivotalReviewMissReasonId, number>();
   for (const session of sessions) {
     for (const reflection of session.reflections) {
-      for (const reasonId of reflection.missReasons) {
+      for (const reasonId of reflection.missReasons ?? []) {
         counts.set(reasonId, (counts.get(reasonId) ?? 0) + 1);
       }
     }
@@ -118,7 +119,7 @@ export function formatPivotalLessonLine(
   else if (rating === 'Inaccuracy') hook = 'inaccuracy on a key line';
 
   const base = `Turn ${reflection.moveNumber} — ${hook}`;
-  if (reflection.missReasons.length === 0) return base;
+  if (!reflection.missReasons?.length) return base;
 
   const reasonCopy = reflection.missReasons.map((id) => getMissReasonLabel(id)).join(', ');
   return `${base} (${reasonCopy})`;
