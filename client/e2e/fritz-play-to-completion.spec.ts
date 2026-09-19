@@ -122,7 +122,7 @@ async function playToResult(page: Page) {
   throw new Error('Fritz match did not reach a result within the time budget');
 }
 
-test('Play vs Fritz runs a full match to a result screen', async ({ page }) => {
+test('Play vs Fritz runs to the review prompt and opens Game Reviewer', async ({ page }) => {
   test.setTimeout(600_000);
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -137,6 +137,17 @@ test('Play vs Fritz runs a full match to a result screen', async ({ page }) => {
   await expect(result.getByText('Final Score')).toBeVisible();
   await expect(result.locator('[aria-label="Final standings"]')).toBeVisible();
   await expect(result.getByRole('button', { name: /Rematch/i })).toBeVisible();
+
+  // FEATURE_COMPLETENESS_AUDIT §5.8: the live post-game path should expose
+  // the oracle-backed accuracy state before the player opens the reviewer.
+  const reviewPrompt = page.getByRole('dialog', { name: 'Post-game review' });
+  await expect(reviewPrompt).toBeVisible({ timeout: 120_000 });
+  await expect(reviewPrompt.getByText('Accuracy', { exact: true })).toBeVisible();
+  await expect(reviewPrompt.getByText('Grade', { exact: true })).toBeVisible();
+  await expect(reviewPrompt.locator('.dfd__stat').filter({ hasText: 'Accuracy' })).toHaveText(/Accuracy|%|Partial/);
+  await reviewPrompt.getByRole('button', { name: 'Review Game' }).click();
+  await expect(page.getByRole('dialog', { name: 'Game reviewer' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Game Review' })).toBeVisible();
 
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
