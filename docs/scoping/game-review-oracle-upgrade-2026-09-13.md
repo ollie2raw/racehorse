@@ -453,6 +453,21 @@ error. Neither case blocks or changes the successful write response. The
 existing admin-only review gate is the E2 shadow cohort; no new cohort,
 allowlist, or feature-flag infrastructure was added.
 
+**E3, shipped 2026-09-19 (PR #268, merged):** the pivotal-turn selector now
+re-scores current completed-match moments from oracle evaluations using strict
+top-N ordering by `loss.expectedPointDifferential` descending. It reuses the
+shared `isScorable` filter, includes human decisions only, breaks equal-loss
+ties by earlier move number, and returns the selected moments in chronological
+display order. The miss-reason taxonomy (chips, cap, and reason-specific
+coaching) was removed from the primary pivotal-review flow; the optional
+free-text note remains available, and old stored reflections remain readable.
+The pivotal card now sources its played move, best move, rating, expected loss,
+and immediate-points difference from the oracle evaluation rather than legacy
+`AnalyzedMove` fields, resolving the ranking/explanation mismatch. E3 covers
+only the current live post-game session: `PIVOTAL_REVIEW_WIZARD_ENABLED`
+remains `false`, and historical/reopened-game pivotal review is explicitly out
+of scope. That reopen gap remains open for a future phase if needed.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---
