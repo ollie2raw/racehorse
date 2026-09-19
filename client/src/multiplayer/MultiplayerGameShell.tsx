@@ -55,6 +55,8 @@ import type {
 import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 import { useReviewWorkerBatch } from '../modules/review/useReviewWorkerBatch';
 import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, DEFAULT_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
+import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
+import { persistMultiplayerReview } from '../modules/review/multiplayerReviewPersistence';
 
 function MultiplayerGameShellComponent({
   socket,
@@ -148,6 +150,8 @@ function MultiplayerGameShellComponent({
   const [multiplayerRatingPending, setMultiplayerRatingPending] = useState(false);
   const multiplayerRatingRefreshKeyRef = useRef('');
   const previousMultiplayerGameOverRef = useRef(false);
+  const multiplayerReviewPersistedKeyRef = useRef('');
+  const multiplayerReviewCohortEnabled = usePostGameReviewAccess(authUser?.id);
 
   const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => {
     const moveNumber =
@@ -772,6 +776,56 @@ function MultiplayerGameShellComponent({
     state,
     supabaseEnabled,
     you,
+  ]);
+
+  useEffect(() => {
+    if (
+      !multiplayerReviewCohortEnabled ||
+      !state?.gameOver ||
+      !joinedRoom ||
+      !authUser ||
+      isSpectatingMatch ||
+      isTournamentMatch ||
+      !multiplayerReviewWorkerBatch.done ||
+      multiplayerReviewSnapshots.length === 0
+    ) return;
+
+    const evaluations = Array.from(multiplayerReviewWorkerBatch.resultsByDecisionId.values());
+    if (evaluations.length === 0) return;
+    const finalSnapshotDigest = multiplayerReviewSnapshots[multiplayerReviewSnapshots.length - 1]?.integrity.authorityPostStateDigest;
+    const persistenceKey = `${joinedRoom}:${finalSnapshotDigest ?? ''}`;
+    if (multiplayerReviewPersistedKeyRef.current === persistenceKey) return;
+    multiplayerReviewPersistedKeyRef.current = persistenceKey;
+
+    // Local MP review visibility is intentionally independent of this server
+    // cohort check. This effect gates persistence only, matching PVF guests'
+    // local-fallback behavior. Both imports stay lazy in the eager match shell.
+    void Promise.all([
+      import('../modules/review/postGameReviewWrite.ts'),
+      import('@racehorse/review-engine'),
+    ]).then(([{ postGameReviewWrite }, { computeGameAccuracyModel }]) => {
+      persistMultiplayerReview({
+        enabled: true,
+        snapshots: multiplayerReviewSnapshots,
+        evaluations,
+        accuracyModelResult: computeGameAccuracyModel(evaluations),
+        sourceMatchId: joinedRoom,
+        write: postGameReviewWrite,
+      });
+    }).catch(() => {
+      // Review persistence is non-blocking and must never affect the result or
+      // the already-available local multiplayer review UI.
+    });
+  }, [
+    authUser,
+    isSpectatingMatch,
+    isTournamentMatch,
+    joinedRoom,
+    multiplayerReviewCohortEnabled,
+    multiplayerReviewSnapshots,
+    multiplayerReviewWorkerBatch.done,
+    multiplayerReviewWorkerBatch.resultsByDecisionId,
+    state?.gameOver,
   ]);
 
   const canOpenPostGameReview = isMultiplayerPostGameReviewLocallyEligible({

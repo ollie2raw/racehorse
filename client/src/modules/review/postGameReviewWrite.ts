@@ -8,7 +8,7 @@ export type PostGameReviewWriteBody = {
   accuracyModelVersion: string;
   evaluations: readonly ReviewEvaluationV1[];
   accuracyModelResult: GameAccuracyModelResult;
-  mode: 'pvf' | 'mp';
+  mode: 'pvf' | 'mp' | 'multiplayer';
   sourceMatchId?: string | null;
 };
 
