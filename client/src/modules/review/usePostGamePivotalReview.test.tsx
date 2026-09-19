@@ -181,15 +181,20 @@ describe('usePostGamePivotalReview — A6 persistence gate (found during Phase-A
     expect(saveReviewSnapshots).not.toHaveBeenCalled();
   });
 
-  it('does not touch the existing botPostGameReviewEligible-gated analysis behavior', async () => {
+  it('keeps local analysis available when persistence is outside the server cohort', async () => {
     const analysis = { fake: true } as never;
     analyzeMoveLogDeferred.mockResolvedValueOnce(analysis);
 
-    const { result } = render({ botPostGameReviewEligible: false, reviewCaptureEnabled: true });
+    const { result } = render({
+      botPostGameReviewEligible: true,
+      reviewPersistenceEnabled: false,
+      reviewCaptureEnabled: true,
+    });
 
     await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
-    expect(result.current.postGameAnalysis).toBeNull();
-    expect(analyzeMoveLogDeferred).not.toHaveBeenCalled();
+    expect(result.current.postGameAnalysis).toBe(analysis);
+    expect(analyzeMoveLogDeferred).toHaveBeenCalledTimes(1);
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isBotPostGameReviewEligible,
+  isBotPostGameReviewLocallyEligible,
   isMultiplayerPostGameReviewEligible,
   isPlayVsFritzResultOverlayMode,
   isPostGameReviewEnabled,
@@ -29,6 +30,7 @@ describe('post-game review beta gate', () => {
     expect(isPlayVsFritzResultOverlayMode(fritzMatch)).toBe(true);
     expect(isBotPostGameReviewEligible({ ...fritzMatch, serverCohortEnabled: false })).toBe(false);
     expect(isBotPostGameReviewEligible({ ...fritzMatch, serverCohortEnabled: true })).toBe(true);
+    expect(isBotPostGameReviewLocallyEligible({ ...fritzMatch, serverCohortEnabled: false })).toBe(true);
   });
 
   it('shows multiplayer Analyze Game only for cohort players', () => {

@@ -45,7 +45,15 @@ export function isPlayVsFritzResultOverlayMode(ctx: BotPostGameReviewContext): b
 /** Post-game review prompt on standard Play vs Fritz (excludes Journey trial). */
 export function isBotPostGameReviewEligible(ctx: BotPostGameReviewContext): boolean {
   return (
-    isPostGameReviewEnabled(ctx.serverCohortEnabled) &&
+    isBotPostGameReviewLocallyEligible(ctx) &&
+    ctx.serverCohortEnabled === true
+  );
+}
+
+/** Local post-game review experience; persistence is gated separately. */
+export function isBotPostGameReviewLocallyEligible(ctx: BotPostGameReviewContext): boolean {
+  return (
+    POST_GAME_REVIEW_VISIBLE &&
     isPlayVsFritzResultOverlayMode(ctx) &&
     !ctx.isJourneyTrial
   );

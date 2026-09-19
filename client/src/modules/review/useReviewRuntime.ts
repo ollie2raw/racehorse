@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  isBotPostGameReviewEligible,
+  isBotPostGameReviewLocallyEligible,
   isReviewCaptureEnabled,
 } from '../../training/pivotalReview/postGameReviewPolicy.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
@@ -56,10 +56,7 @@ export function useReviewRuntime({
     isJourneyTrial,
   };
 
-  const botPostGameReviewEligible = isBotPostGameReviewEligible({
-    ...reviewModeContext,
-    serverCohortEnabled,
-  });
+  const botPostGameReviewEligible = isBotPostGameReviewLocallyEligible(reviewModeContext);
 
   const reviewCaptureEnabled = isReviewCaptureEnabled(reviewModeContext);
 
@@ -83,6 +80,7 @@ export function useReviewRuntime({
     match,
     moveLog: [...moveLog],
     botPostGameReviewEligible,
+    reviewPersistenceEnabled: serverCohortEnabled,
     fritzTier,
     winningScore,
     showPostGameOverlays,
