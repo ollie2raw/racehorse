@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "prebuild": "npm run build --workspace=@racehorse/game-core",
+    "prebuild": "npm run build --workspace=@racehorse/game-core && npm run build --workspace=@racehorse/review-engine",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run --shard=1/4 && vitest run --shard=2/4 && vitest run --shard=3/4 && vitest run --shard=4/4",
@@ -33,6 +33,7 @@
   "license": "ISC",
   "dependencies": {
     "@racehorse/game-core": "*",
+    "@racehorse/review-engine": "*",
     "@sentry/node": "^10.62.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",

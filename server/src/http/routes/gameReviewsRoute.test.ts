@@ -9,12 +9,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from 'express';
 
-const { getAuthenticatedUserIdMock } = vi.hoisted(() => ({
+const { getAuthenticatedUserIdMock, warnLogMock } = vi.hoisted(() => ({
   getAuthenticatedUserIdMock: vi.fn<() => Promise<string | null>>(),
+  warnLogMock: vi.fn(),
 }));
 
 vi.mock('../../platform/auth/supabaseAuth', () => ({
   getAuthenticatedUserId: getAuthenticatedUserIdMock,
+}));
+
+vi.mock('../../logger', () => ({
+  childLogger: () => ({
+    warn: warnLogMock,
+    error: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  }),
 }));
 
 /** A minimal PostgREST-shaped fake for the game_reviews table only. */
@@ -85,7 +95,11 @@ function makeHarness() {
     },
   };
   registerGameReviewsRoute(app as unknown as Application);
-  return async (method: 'GET' | 'POST', path: string, options: { body?: unknown; query?: Record<string, string> } = {}) => {
+  return async (
+    method: 'GET' | 'POST',
+    path: string,
+    options: { body?: unknown; query?: Record<string, string> } = {},
+  ) => {
     const handler = routes.get(`${method} ${path}`);
     if (!handler) throw new Error(`no route ${method} ${path}`);
     let status = 200;
@@ -114,6 +128,120 @@ const baseReviewBody = {
   mode: 'pvf',
 };
 
+const reconciledReviewBody = {
+  ...baseReviewBody,
+  gameDigest: 'digest-reconciliation',
+  evaluations: [
+    {
+      evaluationVersion: 1,
+      snapshotId: 'x',
+      rulesVersion: 1,
+      reviewEngineVersion: 'review-engine-v1',
+      evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
+      played: {
+        action: { kind: 'play', tile: { low: 0, high: 1 }, position: 'left' },
+        value: { expectedPointDifferential: 0, winProbability: null },
+        immediatePoints: 0,
+        principalVariation: [],
+      },
+      best: {
+        action: { kind: 'play', tile: { low: 5, high: 6 }, position: 'left' },
+        value: { expectedPointDifferential: 0, winProbability: null },
+        immediatePoints: 0,
+        principalVariation: [],
+      },
+      candidates: [
+        {
+          action: { kind: 'play', tile: { low: 0, high: 1 }, position: 'left' },
+          value: { expectedPointDifferential: 0, winProbability: null },
+          immediatePoints: 0,
+          principalVariation: [],
+        },
+        {
+          action: { kind: 'play', tile: { low: 5, high: 6 }, position: 'left' },
+          value: { expectedPointDifferential: 0, winProbability: null },
+          immediatePoints: 0,
+          principalVariation: [],
+        },
+      ],
+      loss: { expectedPointDifferential: 0, winProbability: null },
+      search: { nodes: 2, depth: 1, hiddenStateSamples: 0, coverage: 1, complete: true },
+      diagnostics: [],
+    },
+  ],
+};
+
+describe('E2 accuracy-model reconciliation on write', () => {
+  const request = makeHarness();
+
+  beforeEach(() => {
+    fakeTable.rows.length = 0;
+    getAuthenticatedUserIdMock.mockReset();
+    warnLogMock.mockReset();
+  });
+
+  it('does not warn when the client assertion matches the server derivation', async () => {
+    const { computeGameAccuracyModel } = await import('@racehorse/review-engine');
+    const body = {
+      ...reconciledReviewBody,
+      accuracyModelResult: computeGameAccuracyModel(reconciledReviewBody.evaluations as never),
+    };
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-match');
+
+    const res = await request('POST', '/api/game-reviews', { body });
+
+    expect(res.status).toBe(201);
+    expect(fakeTable.rows).toHaveLength(1);
+    expect(warnLogMock).not.toHaveBeenCalled();
+  });
+
+  it('warns on mismatch without blocking the successful persisted write', async () => {
+    const clientAssertedAccuracyModelResult = { accuracy: 12, grade: 'D' };
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-mismatch');
+
+    const res = await request('POST', '/api/game-reviews', {
+      body: { ...reconciledReviewBody, accuracyModelResult: clientAssertedAccuracyModelResult },
+    });
+
+    expect(res.status).toBe(201);
+    expect(fakeTable.rows).toHaveLength(1);
+    expect(warnLogMock).toHaveBeenCalledTimes(1);
+    expect(warnLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameDigest: reconciledReviewBody.gameDigest,
+        userId: 'user-mismatch',
+        clientAssertedAccuracyModelResult,
+        serverDerivedAccuracyModelResult: expect.objectContaining({ accuracy: expect.any(Number) }),
+      }),
+      'client/server accuracy model mismatch',
+    );
+  });
+
+  it('logs reconciliation failures distinctly without blocking the successful persisted write', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-reconciliation-failure');
+
+    const res = await request('POST', '/api/game-reviews', {
+      body: {
+        ...baseReviewBody,
+        gameDigest: 'digest-reconciliation-failure',
+        evaluations: [{ malformed: true }],
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(fakeTable.rows).toHaveLength(1);
+    expect(warnLogMock).toHaveBeenCalledTimes(1);
+    expect(warnLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameDigest: 'digest-reconciliation-failure',
+        userId: 'user-reconciliation-failure',
+        err: expect.anything(),
+      }),
+      'accuracy model reconciliation failed',
+    );
+  });
+});
+
 describe('GET /api/game-reviews', () => {
   const request = makeHarness();
 
@@ -123,7 +251,7 @@ describe('GET /api/game-reviews', () => {
   });
   afterEach(() => vi.clearAllMocks());
 
-  it('E0d: a user cannot read another user\'s row for the same game_digest, even though the fake table (like service_role) holds both', async () => {
+  it("E0d: a user cannot read another user's row for the same game_digest, even though the fake table (like service_role) holds both", async () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
     await request('POST', '/api/game-reviews', { body: baseReviewBody });
 
@@ -137,15 +265,21 @@ describe('GET /api/game-reviews', () => {
     expect(fakeTable.rows).toHaveLength(2);
 
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
-    const res = await request('GET', '/api/game-reviews', { query: { gameDigest: baseReviewBody.gameDigest } });
+    const res = await request('GET', '/api/game-reviews', {
+      query: { gameDigest: baseReviewBody.gameDigest },
+    });
 
     expect(res.status).toBe(200);
-    expect((res.body as { accuracyModelResult: { grade: string } }).accuracyModelResult.grade).toBe('A');
+    expect((res.body as { accuracyModelResult: { grade: string } }).accuracyModelResult.grade).toBe(
+      'A',
+    );
   });
 
   it('E0d: returns 404 with a clear "not yet analyzed" message when no row exists', async () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
-    const res = await request('GET', '/api/game-reviews', { query: { gameDigest: 'never-analyzed' } });
+    const res = await request('GET', '/api/game-reviews', {
+      query: { gameDigest: 'never-analyzed' },
+    });
 
     expect(res.status).toBe(404);
     expect((res.body as { error: string }).error).toMatch(/not.*analyzed/i);
@@ -157,7 +291,9 @@ describe('GET /api/game-reviews', () => {
     expect(writeRes.status).toBe(201);
 
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
-    const readRes = await request('GET', '/api/game-reviews', { query: { gameDigest: baseReviewBody.gameDigest } });
+    const readRes = await request('GET', '/api/game-reviews', {
+      query: { gameDigest: baseReviewBody.gameDigest },
+    });
 
     expect(readRes.status).toBe(200);
     expect(readRes.body).toEqual({

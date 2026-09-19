@@ -18,7 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@racehorse/game-core/bot": ["../packages/game-core/dist/botHeuristics"],
-      "@racehorse/game-core/build-stamp": ["../packages/game-core/dist/buildStamp"]
+      "@racehorse/game-core/build-stamp": ["../packages/game-core/dist/buildStamp"],
+      "@racehorse/game-core/review": ["../packages/game-core/dist/reviewContracts"]
     }
   },
   "include": ["src"],

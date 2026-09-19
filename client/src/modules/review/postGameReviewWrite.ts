@@ -1,5 +1,5 @@
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
-import type { GameAccuracyModelResult } from '../../analyzer/gameAccuracyModel.ts';
+import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { apiPost } from '../../api/client.ts';
 
 export type PostGameReviewWriteBody = {

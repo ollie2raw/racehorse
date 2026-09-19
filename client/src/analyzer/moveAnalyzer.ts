@@ -15,11 +15,11 @@ import type {
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
 import { derivePostMoveReviewBoard } from '../modules/replay/reviewBoardState.ts';
-import type { GameAccuracyModelResult } from './gameAccuracyModel';
+import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { gradeFromAccuracy } from './accuracyGrade';
 
 export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
-export type { GameAccuracyModelResult } from './gameAccuracyModel';
+export type { GameAccuracyModelResult } from '@racehorse/review-engine';
 export type { LossBandLabel } from './gameAccuracyModel';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
