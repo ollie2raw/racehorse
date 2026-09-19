@@ -522,6 +522,29 @@ to build first.
   Daily Fritz store issue; and sharper `/api/daily-fritz/today`+`/start`
   rate-limit numbers (20 req/60s, not just the generic range point 2
   originally cited) in point 2. No code changed — #4 still has not started.
+- 2026-09-19 — **#4 implemented**, using the split exactly as corrected
+  above: `chromium-df-serial` (`daily-fritz-v2.spec.ts`,
+  `daily-fritz-server-restore.spec.ts`, `fritz-play-to-completion.spec.ts`,
+  `workers: 1`), `chromium-mobile-df-serial` (`mobile-390.spec.ts` alone,
+  split out of the general mobile project, `workers: 1`),
+  `chromium-multiplayer` (`multiplayer-chaos.spec.ts`,
+  `multiplayer-in-match-reconnect.spec.ts`, `workers: 2`), and `chromium`
+  (everything else, including `routing.spec.ts`/`spectator-mode.spec.ts` per
+  the open-decision call above — left there, not moved). Total CI worker
+  budget raised to 4 (`CI ? 4 : 1` — local dev runs are unaffected, still
+  serial). Verified with a real local run (not just `--list`): 82 Chromium
+  tests passed, 7 skipped (expected — QA-auth-fixture-gated), 0 failures,
+  4.8m wall clock reusing an existing dev server with `--workers=4`; all
+  three new projects (`chromium-df-serial`, `chromium-mobile-df-serial`,
+  `chromium-multiplayer`) confirmed to actually receive their assigned
+  specs with no cross-project duplication (checked via `--list` before and
+  after: 108 tests / 22 files locally, 89 tests / 22 files under `CI=1`,
+  identical to pre-split baseline both times). Per this doc's own
+  recommendation (§4, "prove it green on 3-4 real runs before raising worker
+  counts further" — same caution the #3 job-split rollout used): land this
+  split now, watch the next several real CI runs for flakiness before
+  considering raising `chromium`'s effective concurrency beyond the current
+  4-worker budget.
 
 ## 7. Backlog — dead Sentry sourcemap upload condition
 

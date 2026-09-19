@@ -30,16 +30,53 @@ const WELCOME_DISMISSED = {
   ],
 };
 
+const CI = !!process.env.CI;
+
+// CI_SPEED_SCOPING.md §4 (Playwright worker parallelization, 2026-09-18):
+// grouped by real, audited shared-state coupling on the CI runner -- not a
+// blind numeric split. Every file below was individually checked (an
+// exhaustive 23-spec pass, not just the two files originally suspected) for
+// touching server-side state that isn't safely per-test: Daily Fritz's
+// date-keyed in-memory store (dailyFritzMemoryStore.ts), or a shared-IP
+// rate limit. Two real misclassifications were caught and corrected before
+// this config existed: `fritz-play-to-completion.spec.ts` was wrongly
+// grouped as touching the Daily Fritz store (it's Play vs Fritz -- kept
+// serial anyway, for its own reason, below); `mobile-390.spec.ts` was
+// missed entirely (its 'daily fritz setup'/'daily fritz in-game' tests
+// really do start a Daily Fritz attempt). See CI_SPEED_SCOPING.md §4 for
+// the full per-file reasoning, including `routing.spec.ts` and
+// `spectator-mode.spec.ts`, deliberately left in the parallel group as an
+// open, not-yet-decided question rather than silently guessed either way.
+//
+// Only the CI runner's worker budget changes here -- local dev runs stay at
+// the previous workers:1 behavior (matches the existing `retries` CI-gating
+// pattern below), since the state-coupling risk this split manages is
+// specific to CI's shared runner IP and shared server process, not a local
+// machine.
+const DF_SERIAL_DESKTOP_SPECS = [
+  'daily-fritz-v2.spec.ts',
+  'daily-fritz-server-restore.spec.ts',
+  // Not Daily-Fritz-store-coupled (confirmed) -- grouped serial only
+  // because it's the suite's single slowest file (real played-out
+  // matches); whether it could safely move to the parallel group instead
+  // is an open question for a later pass, not settled by this split.
+  'fritz-play-to-completion.spec.ts',
+];
+const MULTIPLAYER_SPECS = ['multiplayer-chaos.spec.ts', 'multiplayer-in-match-reconnect.spec.ts'];
+
 export default defineConfig({
   testDir: './e2e',
   // Aborts the run if the client dev server is serving stale config (issue
   // #119) — see e2e/globalSetup.ts.
   globalSetup: './e2e/globalSetup.ts',
-  fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: 1,
-  reporter: process.env.CI ? 'github' : 'list',
+  fullyParallel: CI,
+  forbidOnly: CI,
+  retries: CI ? 1 : 0,
+  // Total worker budget for CI; each project below caps itself under this
+  // via its own `workers` (Playwright limits a project's workers to
+  // min(project.workers, this total) — CI_SPEED_SCOPING.md §4).
+  workers: CI ? 4 : 1,
+  reporter: CI ? 'github' : 'list',
   use: {
     baseURL,
     trace: 'on-first-retry',
@@ -47,16 +84,32 @@ export default defineConfig({
     storageState: WELCOME_DISMISSED,
   },
   projects: [
+    // Daily-Fritz-store-coupled mobile test -- see DF_SERIAL_DESKTOP_SPECS'
+    // comment above. Split out of the general chromium-mobile project
+    // (below) specifically so it can stay workers:1 while
+    // mobile-390-hub-containment.spec.ts (not DF-coupled) parallelizes.
     {
-      name: 'chromium-mobile',
-      testMatch: /mobile-390.*\.spec\.ts/,
+      name: 'chromium-mobile-df-serial',
+      testMatch: ['mobile-390.spec.ts'],
+      workers: 1,
       use: {
         ...devices['Pixel 5'],
         viewport: PHONE,
       },
     },
-    // WebKit is verified locally; CI only installs Chromium.
-    ...(!process.env.CI
+    {
+      name: 'chromium-mobile',
+      testMatch: /mobile-390.*\.spec\.ts/,
+      testIgnore: ['mobile-390.spec.ts'],
+      use: {
+        ...devices['Pixel 5'],
+        viewport: PHONE,
+      },
+    },
+    // WebKit is verified locally; CI only installs Chromium. Local runs stay
+    // serial regardless (workers:1 above), so no DF-serial/parallel split is
+    // needed here -- this project is unaffected by the CI worker change.
+    ...(!CI
       ? [
           {
             name: 'webkit-mobile',
@@ -69,8 +122,33 @@ export default defineConfig({
         ]
       : []),
     {
+      name: 'chromium-df-serial',
+      testMatch: DF_SERIAL_DESKTOP_SPECS,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium-multiplayer',
+      testMatch: MULTIPLAYER_SPECS,
+      // Parallelize the two files against each other, but at a lower cap
+      // than the general pool -- these are the specs most likely to
+      // legitimately burst requests (chaos/reconnect scenarios), so this
+      // keeps shared-IP rate-limit headroom (CI_SPEED_SCOPING.md §4 point 2).
+      // multiplayer-in-match-reconnect.spec.ts already self-serializes its
+      // own tests (`test.describe.configure({ mode: 'serial' })`); this
+      // only governs whether the two FILES can run concurrently with each
+      // other.
+      workers: 2,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'chromium',
-      testIgnore: [/mobile-390.*\.spec\.ts/, /mobile-reachability\.spec\.ts/],
+      testIgnore: [
+        /mobile-390.*\.spec\.ts/,
+        /mobile-reachability\.spec\.ts/,
+        ...DF_SERIAL_DESKTOP_SPECS,
+        ...MULTIPLAYER_SPECS,
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     // Repo-wide mobile reachability harness (tap targets + h-overflow across
