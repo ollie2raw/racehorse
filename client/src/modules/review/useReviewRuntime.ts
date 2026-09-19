@@ -69,6 +69,16 @@ export function useReviewRuntime({
     return new ReviewSnapshotRecorder({ sessionId, gameId: sessionId });
   });
 
+  // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): a stable
+  // per-match identifier, generated once at the earliest available
+  // match-start point -- the same lazy useState initializer pattern
+  // sessionId above already uses -- mirroring MP's room-code generation
+  // (createRoomCommandRequestId, roomTransport.ts). Deliberately a separate
+  // value from sessionId/gameId above: those key the in-memory
+  // review-capture session itself (decisionId construction), this
+  // identifies the real match a persisted game_reviews row belongs to.
+  const [sourceMatchId] = useState(() => createLocalMatchId());
+
   const review = usePostGamePivotalReview({
     match,
     moveLog: [...moveLog],
@@ -78,6 +88,7 @@ export function useReviewRuntime({
     showPostGameOverlays,
     reviewSnapshotRecorder,
     reviewCaptureEnabled,
+    sourceMatchId,
   });
 
   const showPostGameReviewPrompt =

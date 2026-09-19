@@ -21,11 +21,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
 import type { GameAccuracyModelResult } from '../../analyzer/gameAccuracyModel.ts';
+import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
+import { postGameReviewWrite } from './postGameReviewWrite.ts';
 import { useReviewWorkerBatch } from './useReviewWorkerBatch.ts';
 import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
 import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
@@ -65,6 +67,16 @@ export type UsePostGamePivotalReviewParams = {
    * every non-admin player. See the review-a6-persistence-gate-fix PR.
    */
   reviewCaptureEnabled: boolean;
+  /**
+   * E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): a stable
+   * identifier for this PVF match, generated once at match start
+   * (useReviewRuntime.ts, mirroring MP's room-code generation pattern) and
+   * threaded down to tag the persisted game_reviews row (E0c's
+   * `sourceMatchId`). Not the same value as ReviewSnapshotRecorder's own
+   * sessionId/gameId -- those key the in-memory review-capture session,
+   * this identifies the real match a persisted row belongs to.
+   */
+  sourceMatchId: string;
 };
 
 export function usePostGamePivotalReview({
@@ -76,6 +88,7 @@ export function usePostGamePivotalReview({
   showPostGameOverlays,
   reviewSnapshotRecorder,
   reviewCaptureEnabled,
+  sourceMatchId,
 }: UsePostGamePivotalReviewParams) {
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
@@ -260,8 +273,41 @@ export function usePostGamePivotalReview({
     // standard bot-match path.
     void import('../../analyzer/gameAccuracyModel.ts').then(({ computeGameAccuracyModel }) => {
       if (cancelled) return;
-      setAccuracyModel(computeGameAccuracyModel(evaluations));
+      const model = computeGameAccuracyModel(evaluations);
+      setAccuracyModel(model);
       setAccuracyModelPending(false);
+
+      // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): fire-and-
+      // forget persistence write -- never awaited, and this try/catch is
+      // defense-in-depth on top of postGameReviewWrite's own internal
+      // isolation (see that file's doc comment). Persistence failure must
+      // never affect local state or the post-game UI; nothing above this
+      // point depends on what happens here. Skipped when there are zero
+      // resolved evaluations -- nothing real to persist.
+      //
+      // Gated by botPostGameReviewEligible (via the eligibility check
+      // earlier in this effect) / POST_GAME_REVIEW_VISIBLE, same as every
+      // other branch in this hook -- today that means this call site only
+      // ever runs for a signed-in admin. The guest/non-admin fallback path
+      // E1's own acceptance bar names ("guests keep local fallback") is
+      // therefore untested against real behavior until POST_GAME_REVIEW_VISIBLE
+      // unflags in E4 -- this comment exists so that's visible in-repo, not
+      // just in the PR that added it.
+      if (evaluations.length > 0) {
+        try {
+          postGameReviewWrite({
+            gameDigest: computeGameDigest(reviewWorkerSnapshots),
+            reviewEngineVersion: evaluations[0].reviewEngineVersion,
+            accuracyModelVersion: model.accuracyModelVersion,
+            evaluations,
+            accuracyModelResult: model,
+            mode: 'pvf',
+            sourceMatchId,
+          });
+        } catch {
+          // Persistence must never affect local state or the post-game UI.
+        }
+      }
     }).catch((error) => {
       if (cancelled) return;
       // Leaves accuracyModel at its default (undefined) -- the prompt falls
@@ -279,7 +325,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots.length, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, sourceMatchId]);
 
   // Merged only into the value exposed as `postGameAnalysis` below -- the
   // internal `postGameAnalysis` state above (read by pivotalSelection,

@@ -21,6 +21,10 @@ const saveReviewSnapshots = vi.fn();
 vi.mock('./reviewSnapshotStorage.ts', () => ({
   saveReviewSnapshots: (...args: unknown[]) => saveReviewSnapshots(...args),
 }));
+const postGameReviewWriteMock = vi.fn();
+vi.mock('./postGameReviewWrite.ts', () => ({
+  postGameReviewWrite: (...args: unknown[]) => postGameReviewWriteMock(...args),
+}));
 
 // Real Worker construction isn't available in jsdom -- mocked the same way
 // analyzeMoveLogDeferred already is, so the accuracyModel wiring tests below
@@ -71,6 +75,7 @@ const defaultParams: UsePostGamePivotalReviewParams = {
   winningScore: 60,
   showPostGameOverlays: true,
   reviewCaptureEnabled: true,
+  sourceMatchId: 'match-uuid-1',
 };
 
 const render = (overrides: Partial<UsePostGamePivotalReviewParams> = {}) =>
@@ -87,6 +92,7 @@ beforeEach(() => {
   saveReviewSnapshots.mockReset();
   useReviewWorkerBatchMock.mockReset();
   useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+  postGameReviewWriteMock.mockReset();
   warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -311,5 +317,100 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
     expect(accuracyModel?.accuracy).toBeNull();
     expect(accuracyModel?.grade).toBeNull();
+  });
+});
+
+describe('usePostGamePivotalReview — E1 write call site', () => {
+  const baseAnalysis = { fake: true, accuracy: 42, grade: 'B' } as never;
+
+  function snapshotWithDigest(digest: string): ReviewPositionSnapshotV2 {
+    return {
+      identifiers: { decisionId: digest },
+      integrity: { authorityPreStateDigest: `pre-${digest}`, authorityPostStateDigest: digest },
+    } as unknown as ReviewPositionSnapshotV2;
+  }
+
+  function buildScorableBatch(): { resultsByDecisionId: Map<string, ReviewEvaluationV1> } {
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    for (let i = 0; i < 60; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
+    return { resultsByDecisionId };
+  }
+
+  it('E1(b): fires postGameReviewWrite with the correct body once accuracyModel resolves', async () => {
+    const snapshots = [snapshotWithDigest('d1'), snapshotWithDigest('d2'), snapshotWithDigest('d3')];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const { resultsByDecisionId } = buildScorableBatch();
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder, sourceMatchId: 'match-uuid-1' });
+
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    await waitFor(() => expect(postGameReviewWriteMock).toHaveBeenCalledTimes(1));
+
+    const body = postGameReviewWriteMock.mock.calls[0][0];
+    const evaluations = Array.from(resultsByDecisionId.values());
+    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
+
+    expect(body.mode).toBe('pvf');
+    expect(body.sourceMatchId).toBe('match-uuid-1');
+    expect(body.reviewEngineVersion).toBe(evaluations[0].reviewEngineVersion);
+    expect(body.accuracyModelVersion).toBe(accuracyModel?.accuracyModelVersion);
+    expect(body.accuracyModelResult).toBe(accuracyModel);
+    expect(body.evaluations).toEqual(evaluations);
+    // The digest hashes the full ordered snapshot array, not just the last
+    // entry -- a real assertion against computeGameDigest's own contract,
+    // not just "some string was passed".
+    expect(body.gameDigest).toMatch(/^game-digest-v\d+:[0-9a-f]{8}$/);
+  });
+
+  it('E1(c): a throwing postGameReviewWrite does not crash the hook or block accuracyModel from resolving', async () => {
+    const snapshots = [snapshotWithDigest('d1')];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const { resultsByDecisionId } = buildScorableBatch();
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+    postGameReviewWriteMock.mockImplementation(() => {
+      throw new Error('simulated persistence failure');
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    // The throw must not prevent accuracyModel/accuracyModelPending from
+    // reaching their normal resolved state -- persistence failure must
+    // never affect local state.
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(false));
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    expect(postGameReviewWriteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('E1: does not fire the write when there are zero resolved evaluations (nothing real to persist)', async () => {
+    const snapshots = [snapshotWithDigest('d1')];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId: new Map(),
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(false));
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
   });
 });
