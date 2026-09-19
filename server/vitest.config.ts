@@ -9,7 +9,15 @@ export default defineConfig({
     alias: {
       '@racehorse/game-core/bot': path.resolve(root, 'packages/game-core/src/botHeuristics.ts'),
       '@racehorse/game-core/build-stamp': path.resolve(root, 'packages/game-core/src/buildStamp.ts'),
+      // E2: @racehorse/review-engine's own source imports this subpath
+      // internally (reviewAccuracy.ts, gameAccuracyModel.ts) -- aliased so
+      // it resolves to source under vitest the same way the bare
+      // @racehorse/game-core alias below does, not just via a pre-built
+      // dist (which CI always has ready, but local dev may not).
+      '@racehorse/game-core/review': path.resolve(root, 'packages/game-core/src/reviewContracts.ts'),
+      '@racehorse/game-core/invariants': path.resolve(root, 'packages/game-core/src/invariants.ts'),
       '@racehorse/game-core': path.resolve(root, 'packages/game-core/src/index.ts'),
+      '@racehorse/review-engine': path.resolve(root, 'packages/review-engine/src/index.ts'),
     },
   },
   test: {

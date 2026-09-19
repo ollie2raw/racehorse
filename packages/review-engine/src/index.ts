@@ -21,6 +21,12 @@ export type { AccuracyResult } from './reviewAccuracy';
 // needs to reach into accuracyModelCalibration.ts directly for those.
 export { LOSS_BAND_BOUNDARIES } from './accuracyModelCalibration';
 export type { CalibratedLossBandBoundaries } from './accuracyModelCalibration';
+// E2 (game-review-oracle-upgrade-2026-09-13.md Phase E): relocated from
+// client/src/analyzer/ so the server can compute the identical
+// accuracy/grade result the client asserts, for reconciliation.
+export { gradeFromAccuracy } from './accuracyGrade';
+export { computeGameAccuracyModel, MINIMUM_COVERAGE_FLOOR } from './gameAccuracyModel';
+export type { GameAccuracyModelResult } from './gameAccuracyModel';
 export {
   serializeReviewCaptureRecordsToJsonl,
   deserializeReviewCaptureRecordsFromJsonl,

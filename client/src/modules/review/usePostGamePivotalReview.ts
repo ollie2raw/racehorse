@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
-import type { GameAccuracyModelResult } from '../../analyzer/gameAccuracyModel.ts';
+import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
@@ -264,13 +264,15 @@ export function usePostGamePivotalReview({
     let cancelled = false;
     const evaluations = Array.from(reviewWorkerBatch.resultsByDecisionId.values());
     // Dynamic import, same reason as analyzeMoveLogDeferred above:
-    // gameAccuracyModel.ts pulls @racehorse/review-engine's dependency
-    // graph in, and this hook is reachable from BotMatchScreen's eager
-    // bundle -- a static import here trips check:bot-match-lazy exactly
-    // the way moveAnalyzer.ts's own value re-export did (C4's first CI
-    // fix). Never import this module statically from anywhere in the
-    // standard bot-match path.
-    void import('../../analyzer/gameAccuracyModel.ts').then(({ computeGameAccuracyModel }) => {
+    // @racehorse/review-engine's dependency graph is heavy, and this hook
+    // is reachable from BotMatchScreen's eager bundle -- a static import
+    // here trips check:bot-match-lazy exactly the way moveAnalyzer.ts's own
+    // value re-export did (C4's first CI fix). computeGameAccuracyModel
+    // relocated here from client/src/analyzer/gameAccuracyModel.ts in E2
+    // (Phase E) so server-side reconciliation can compute the identical
+    // result -- import it directly from the package, never statically from
+    // anywhere in the standard bot-match path.
+    void import('@racehorse/review-engine').then(({ computeGameAccuracyModel }) => {
       if (cancelled) return;
       const model = computeGameAccuracyModel(evaluations);
       setAccuracyModel(model);
@@ -282,8 +284,8 @@ export function usePostGamePivotalReview({
       // point depends on what happens here. Skipped when there are zero
       // resolved evaluations -- nothing real to persist.
       //
-      // Dynamic import, same reason as gameAccuracyModel.ts above:
-      // postGameReviewWrite.ts pulls in api/client.ts -> lib/supabase.ts,
+      // Dynamic import, same lazy-boundary reason as @racehorse/review-engine
+      // above: postGameReviewWrite.ts pulls in api/client.ts -> lib/supabase.ts,
       // which reads import.meta.env at module scope -- fine under
       // Vite/Vitest, but a static import here would also load eagerly under
       // the plain-Node `tsx` runner usePostGamePivotalReview.behaviorTests.ts

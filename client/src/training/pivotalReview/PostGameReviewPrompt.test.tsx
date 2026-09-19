@@ -2,7 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
-import type { GameAccuracyModelResult } from '../../analyzer/gameAccuracyModel.ts';
+import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { PostGameReviewPrompt } from './PostGameReviewPrompt.tsx';
 
 function baseAnalysis(overrides: Partial<GameAnalysis> = {}): GameAnalysis {

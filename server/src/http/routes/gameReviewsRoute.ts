@@ -1,9 +1,14 @@
 import type { Application } from 'express';
+import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { childLogger } from '../../logger';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { parseGameReviewRequestBody } from '../../reviewPersistence/gameReviewPayload';
 import { insertGameReviewIdempotent } from '../../reviewPersistence/insertGameReviewIdempotent';
-import { queryLatestGameReview, toGameReviewReadResult } from '../../reviewPersistence/queryLatestGameReview';
+import {
+  queryLatestGameReview,
+  toGameReviewReadResult,
+} from '../../reviewPersistence/queryLatestGameReview';
+import { reconcileAccuracyModelResult } from '../../reviewPersistence/reconcileAccuracyModel';
 
 const log = childLogger('game-reviews');
 
@@ -19,16 +24,14 @@ const log = childLogger('game-reviews');
  * function's own doc comment for why the filter, not RLS, is what actually
  * enforces ownership here.
  *
- * This module only persists/returns a caller-supplied, already-computed
- * review (evaluations + accuracyModelResult, per E0b) -- it does not run the
- * review engine itself. Wiring a real PVF post-game write/reopen call site
- * is E1's job, not this one's.
+ * This module persists/returns a caller-supplied, already-computed review
+ * (evaluations + accuracyModelResult, per E0b). E2 adds an observability-only
+ * server-side accuracy-model reconciliation after a successful write; it
+ * does not make the persisted review authoritative or block the write.
  *
- * TRUST BOUNDARY: neither route verifies the request body (write) or
- * persisted row (read) against any server-side recomputation --
- * evaluations/accuracyModelResult are exactly what the client asserted at
- * write time, the same trust level as any other client-submitted jsonb
- * blob. Persisted game_reviews rows must never be treated as authoritative
+ * TRUST BOUNDARY: the write still persists the client assertion and the
+ * reconciliation is observability-only; neither route treats a row as
+ * verified. Persisted game_reviews rows must never be treated as authoritative
  * for anything competitive or comparative (leaderboards, rankings,
  * achievements, public-facing stats) unless/until a server-side
  * verification step is added. This is a personal review record, not a
@@ -57,6 +60,27 @@ export function registerGameReviewsRoute(app: Application): void {
         isNew: result.isNew,
         review: result.review,
       });
+
+      try {
+        const reconciliation = reconcileAccuracyModelResult(
+          parsed.evaluations as readonly ReviewEvaluationV1[],
+          parsed.accuracyModelResult,
+        );
+        if (reconciliation.mismatches.length > 0 && reconciliation.serverDerived) {
+          log.warn(
+            {
+              gameDigest: parsed.gameDigest,
+              userId: authenticatedUserId,
+              clientAssertedAccuracyModelResult: parsed.accuracyModelResult,
+              serverDerivedAccuracyModelResult: reconciliation.serverDerived,
+              mismatches: reconciliation.mismatches,
+            },
+            'client/server accuracy model mismatch',
+          );
+        }
+      } catch {
+        // Reconciliation is strictly observability-only; never alter a success response.
+      }
     } catch (error) {
       log.error({ err: error, userId: authenticatedUserId }, 'insert failed');
       res.status(500).json({ error: 'Failed to persist game review.' });

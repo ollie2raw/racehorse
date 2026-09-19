@@ -1,17 +1,17 @@
 /**
- * Shared 0-100 accuracy -> letter grade mapping. Extracted from
- * moveAnalyzer.ts (its original, still-only caller) into its own module so
- * gameAccuracyModel.ts (C4) can reuse it without moveAnalyzer.ts <->
- * gameAccuracyModel.ts becoming a circular import -- moveAnalyzer.ts's
- * `GameAnalysis` type needs `GameAccuracyModelResult` from
- * gameAccuracyModel.ts, and gameAccuracyModel.ts's `computeGameAccuracyModel`
- * needs this grade mapping; this file has no dependency on either.
- *
- * No calibration work has been done for grade cutoffs specifically (only
- * `k` and the loss-band boundaries were calibrated,
- * phase-c-accuracy-model-spec.md sections 3-4a) -- reusing this one
- * already-shipped mapping for the new calibrated accuracy model's grade
- * (C4) is a documented, non-invented choice, not a coincidence.
+ * Shared 0-100 accuracy -> letter grade mapping, kept client-side for
+ * moveAnalyzer.ts's legacy scorer specifically. Deliberately NOT re-pointed
+ * at @racehorse/review-engine's own copy (E2, gameAccuracyModel.ts in that
+ * package) even though the two must stay identical: moveAnalyzer.ts is
+ * reachable from BotMatchScreen's eager bundle via GameReviewer.tsx's value
+ * import of LEGACY_ANALYSIS_DISCLOSURE, so a static import of
+ * @racehorse/review-engine from moveAnalyzer.ts pulls that package's entire
+ * dependency graph into the eager path and trips check:bot-match-lazy --
+ * confirmed empirically while building E2 (the relocation this file's
+ * twin, review-engine's own accuracyGrade.ts, was built for). This is a
+ * narrow, documented, architecturally-forced exception to E2's "no
+ * duplicated logic" goal, not an oversight -- if the cutoffs below ever
+ * change, review-engine's accuracyGrade.ts must change identically.
  */
 export function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   if (accuracy >= 92) return 'S';
