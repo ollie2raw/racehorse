@@ -418,6 +418,29 @@ which is idempotent but not the same thing as verified. Any future feature
 that wants to compare or rank on this data needs its own verification design
 before it can safely read from this table for that purpose.
 
+**E1, shipped 2026-09-19 (PR #265, merged):** the real PVF post-game write
+call site is live — `usePostGamePivotalReview.ts`'s existing accuracyModel
+effect now POSTs to `/api/game-reviews` (E0c) once evaluations and the
+computed `GameAccuracyModelResult` are both available, fire-and-forget
+(mirrors `ingestDailyFritzNextHandDebug`'s isolation pattern — persistence
+failure can never block or affect the post-game UI). `gameDigest` hashes
+the full ordered array of per-decision `authorityPostStateDigest` values
+(not just the final one, avoiding a real collision risk between two games
+sharing a terminal state); `sourceMatchId` is a `crypto.randomUUID()`
+generated once at match start.
+
+This satisfies **only the admin+authenticated half** of E1's stated
+acceptance bar ("Admin + authenticated PVF"). The other half — **"guests
+keep local fallback"** — remains untested and effectively unbuilt: the
+write call site sits behind the same `isBotPostGameReviewEligible`/
+`POST_GAME_REVIEW_VISIBLE` gate every other branch in that hook already
+used, and that flag is `false` today, so this call site has only ever run
+for a signed-in admin. There is no guest-specific fallback code path to
+test yet — "guests keep local fallback" describes E4-era behavior once the
+flag unflags for non-admin players, not a verified property of what
+shipped in E1. A code comment at the call site records this explicitly so
+it's visible to a future reader without needing this doc.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---
