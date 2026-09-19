@@ -303,14 +303,24 @@ export function canonicalizeReviewAuthorityState(state: GameState): string {
   });
 }
 
-export function getReviewAuthorityStateDigest(state: GameState): string {
-  const serialized = canonicalizeReviewAuthorityState(state);
+/**
+ * FNV-1a 32-bit, exported so other digests over a canonical string can reuse
+ * the exact same primitive getReviewAuthorityStateDigest uses below, rather
+ * than a second hand-copied hash implementation drifting from this one.
+ * Pure/deterministic; returns an 8-char lowercase hex string.
+ */
+export function fnv1a32Hex(input: string): string {
   let hash = 2166136261;
-  for (let index = 0; index < serialized.length; index += 1) {
-    hash ^= serialized.charCodeAt(index);
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
-  return `review-state-v${REVIEW_STATE_DIGEST_VERSION}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function getReviewAuthorityStateDigest(state: GameState): string {
+  const serialized = canonicalizeReviewAuthorityState(state);
+  return `review-state-v${REVIEW_STATE_DIGEST_VERSION}:${fnv1a32Hex(serialized)}`;
 }
 
 function actionFromCommand(command: GameCommand): ReviewAction {
