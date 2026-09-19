@@ -48,6 +48,8 @@ export type UsePostGamePivotalReviewParams = {
   match: BotMatchState;
   moveLog: MoveEntry[];
   botPostGameReviewEligible: boolean;
+  /** Server cohort gate for persistence; local analysis/UI is independent. */
+  reviewPersistenceEnabled?: boolean;
   fritzTier: FritzTier;
   winningScore: number;
   showPostGameOverlays: boolean;
@@ -82,6 +84,7 @@ export function usePostGamePivotalReview({
   match,
   moveLog,
   botPostGameReviewEligible,
+  reviewPersistenceEnabled = true,
   fritzTier,
   winningScore,
   showPostGameOverlays,
@@ -310,15 +313,10 @@ export function usePostGamePivotalReview({
       // postGameReviewWrite failure with the same "never affect local
       // state" handling -- no need to distinguish them.
       //
-      // Gated by botPostGameReviewEligible (via the eligibility check
-      // earlier in this effect) / POST_GAME_REVIEW_VISIBLE, same as every
-      // other branch in this hook -- today that means this call site only
-      // ever runs for a signed-in admin. The guest/non-admin fallback path
-      // E1's own acceptance bar names ("guests keep local fallback") is
-      // therefore untested against real behavior until POST_GAME_REVIEW_VISIBLE
-      // unflags in E4 -- this comment exists so that's visible in-repo, not
-      // just in the PR that added it.
-      if (evaluations.length > 0) {
+      // Local analysis/UI is available to guests and non-cohort users, but
+      // server persistence remains cohort-gated. This preserves the original
+      // in-memory fallback without issuing writes that the server would reject.
+      if (reviewPersistenceEnabled && evaluations.length > 0) {
         void import('./postGameReviewWrite.ts')
           .then(({ postGameReviewWrite }) => {
             postGameReviewWrite({
@@ -352,7 +350,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, sourceMatchId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, sourceMatchId]);
 
   // Merged only into the value exposed as `postGameAnalysis` below -- the
   // internal `postGameAnalysis` state above (read by pivotalSelection,
