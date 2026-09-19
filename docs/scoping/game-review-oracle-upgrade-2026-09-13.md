@@ -441,6 +441,18 @@ flag unflags for non-admin players, not a verified property of what
 shipped in E1. A code comment at the call site records this explicitly so
 it's visible to a future reader without needing this doc.
 
+**E2, shipped 2026-09-19 (PR #267, merged):** accuracy-model reconciliation
+is live as an observability-only shadow check. `accuracyFromEvaluations` and
+`computeGameAccuracyModel` were relocated to the shared
+`@racehorse/review-engine` package, and the E0c write route re-derives the
+model server-side from the submitted evaluations after the write succeeds.
+The route compares that result with the client assertion and emits structured
+`childLogger` warnings for client/server mismatches; computation failures emit
+a distinct reconciliation-failure warning with the game digest, user, and
+error. Neither case blocks or changes the successful write response. The
+existing admin-only review gate is the E2 shadow cohort; no new cohort,
+allowlist, or feature-flag infrastructure was added.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---
