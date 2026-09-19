@@ -8,8 +8,8 @@ import { POST_GAME_REVIEW_VISIBLE } from '../../appRouteTypes';
  * (not `bot`), with its own set-progression / final overlays. Re-enable when
  * set-final flow can host the review prompt without fighting hand interstitials.
  *
- * Beta: the analyzer is unfinished, so players never see it. Visibility is
- * gated by the server cohort response and the client release constant.
+ * Visibility is gated by the server cohort response and the client release
+ * constant; the latter is the deployment rollback switch.
  */
 export const POST_GAME_REVIEW_DEFERRED_DAILY_FRITZ = true;
 
