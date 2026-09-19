@@ -27,7 +27,6 @@ import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
-import { postGameReviewWrite } from './postGameReviewWrite.ts';
 import { useReviewWorkerBatch } from './useReviewWorkerBatch.ts';
 import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
 import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
@@ -278,12 +277,21 @@ export function usePostGamePivotalReview({
       setAccuracyModelPending(false);
 
       // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): fire-and-
-      // forget persistence write -- never awaited, and this try/catch is
-      // defense-in-depth on top of postGameReviewWrite's own internal
-      // isolation (see that file's doc comment). Persistence failure must
+      // forget persistence write -- never awaited. Persistence failure must
       // never affect local state or the post-game UI; nothing above this
       // point depends on what happens here. Skipped when there are zero
       // resolved evaluations -- nothing real to persist.
+      //
+      // Dynamic import, same reason as gameAccuracyModel.ts above:
+      // postGameReviewWrite.ts pulls in api/client.ts -> lib/supabase.ts,
+      // which reads import.meta.env at module scope -- fine under
+      // Vite/Vitest, but a static import here would also load eagerly under
+      // the plain-Node `tsx` runner usePostGamePivotalReview.behaviorTests.ts
+      // uses (npm run test:bot-hooks), where import.meta.env is undefined
+      // and the module throws just from being imported, before any test
+      // even runs. The .catch() below covers both an import failure and a
+      // postGameReviewWrite failure with the same "never affect local
+      // state" handling -- no need to distinguish them.
       //
       // Gated by botPostGameReviewEligible (via the eligibility check
       // earlier in this effect) / POST_GAME_REVIEW_VISIBLE, same as every
@@ -294,19 +302,21 @@ export function usePostGamePivotalReview({
       // unflags in E4 -- this comment exists so that's visible in-repo, not
       // just in the PR that added it.
       if (evaluations.length > 0) {
-        try {
-          postGameReviewWrite({
-            gameDigest: computeGameDigest(reviewWorkerSnapshots),
-            reviewEngineVersion: evaluations[0].reviewEngineVersion,
-            accuracyModelVersion: model.accuracyModelVersion,
-            evaluations,
-            accuracyModelResult: model,
-            mode: 'pvf',
-            sourceMatchId,
+        void import('./postGameReviewWrite.ts')
+          .then(({ postGameReviewWrite }) => {
+            postGameReviewWrite({
+              gameDigest: computeGameDigest(reviewWorkerSnapshots),
+              reviewEngineVersion: evaluations[0].reviewEngineVersion,
+              accuracyModelVersion: model.accuracyModelVersion,
+              evaluations,
+              accuracyModelResult: model,
+              mode: 'pvf',
+              sourceMatchId,
+            });
+          })
+          .catch(() => {
+            // Persistence must never affect local state or the post-game UI.
           });
-        } catch {
-          // Persistence must never affect local state or the post-game UI.
-        }
       }
     }).catch((error) => {
       if (cancelled) return;
