@@ -20,7 +20,7 @@ export const JOURNEY_MODE_VISIBLE = true;
 
 /**
  * Public post-game review + full game analyzer.
- * Keep false for beta; admins still get it via `isPostGameReviewEnabled(isAdmin)`.
+ * Keep false for beta; the server cohort gate is necessary but not sufficient.
  */
 export const POST_GAME_REVIEW_VISIBLE = false;
 

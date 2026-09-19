@@ -175,6 +175,8 @@ describe('E2 accuracy-model reconciliation on write', () => {
   const request = makeHarness();
 
   beforeEach(() => {
+    process.env.POST_GAME_REVIEW_COHORT_USER_IDS =
+      'user-match,user-mismatch,user-reconciliation-failure,user-a,user-b';
     fakeTable.rows.length = 0;
     getAuthenticatedUserIdMock.mockReset();
     warnLogMock.mockReset();
@@ -246,6 +248,7 @@ describe('GET /api/game-reviews', () => {
   const request = makeHarness();
 
   beforeEach(() => {
+    process.env.POST_GAME_REVIEW_COHORT_USER_IDS = 'user-a,user-b';
     fakeTable.rows.length = 0;
     getAuthenticatedUserIdMock.mockReset();
   });
@@ -319,5 +322,31 @@ describe('GET /api/game-reviews', () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
     const res = await request('GET', '/api/game-reviews', { query: {} });
     expect(res.status).toBe(400);
+  });
+
+  it('denies reads and writes for authenticated users outside the cohort', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
+    const writeRes = await request('POST', '/api/game-reviews', { body: baseReviewBody });
+    expect(writeRes.status).toBe(403);
+
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
+    const readRes = await request('GET', '/api/game-reviews', {
+      query: { gameDigest: baseReviewBody.gameDigest },
+    });
+    expect(readRes.status).toBe(403);
+  });
+
+  it('reports cohort access separately and fails closed for missing auth', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const enabled = await request('GET', '/api/game-reviews/access');
+    expect(enabled).toEqual({ status: 200, body: { enabled: true } });
+
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
+    const disabled = await request('GET', '/api/game-reviews/access');
+    expect(disabled).toEqual({ status: 200, body: { enabled: false } });
+
+    getAuthenticatedUserIdMock.mockResolvedValueOnce(null);
+    const unauthenticated = await request('GET', '/api/game-reviews/access');
+    expect(unauthenticated.status).toBe(401);
   });
 });

@@ -468,6 +468,21 @@ only the current live post-game session: `PIVOTAL_REVIEW_WIZARD_ENABLED`
 remains `false`, and historical/reopened-game pivotal review is explicitly out
 of scope. That reopen gap remains open for a future phase if needed.
 
+**E4, server-cohort gate staged 2026-09-19 (implementation PR):** the
+existing admin-email bypass is replaced by a server-owned
+`POST_GAME_REVIEW_COHORT_USER_IDS` allowlist of exact Supabase user IDs. The
+new authenticated `/api/game-reviews/access` endpoint reports cohort access,
+and both existing review read/write routes enforce the same allowlist. The
+client reads that response through a fail-closed hook and now requires
+`server-cohort-response && POST_GAME_REVIEW_VISIBLE`; the client constant
+deliberately remains `false` in this PR, so production visibility is not
+flipped. The rollout population is deliberately limited to the existing
+admin's Supabase user ID, with no additional pilot accounts yet: expansion is
+explicitly deferred while the guest-fallback and reopen-history gaps remain
+open, not forgotten. Deployment, production allowlist population, access
+verification, and the eventual constant flip are a separate follow-up after
+review; stored analyses need no rewrite to roll back.
+
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
 ---
