@@ -40,7 +40,7 @@ import {
   type PivotalReviewSession,
   type PivotalTurnReflection,
 } from '../../training/pivotalReview/pivotalReviewStorage.ts';
-import { selectPivotalTurnsFromAnalysis } from '../../training/pivotalReview/pivotalTurnSelector.ts';
+import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { logger } from '../../utils/logger.ts';
 
@@ -217,12 +217,27 @@ export function usePostGamePivotalReview({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- logs once per completed batch, keyed on `done`; reviewWorkerSnapshots/moveLog are read fresh but shouldn't retrigger this on their own reference churn
   }, [reviewWorkerBatch.done]);
 
-  const pivotalSelection = useMemo(() => {
-    // Only the wizard consumes this; skip the work when it's flagged off — the
-    // result can't render (CQ9.2 F17).
-    if (!PIVOTAL_REVIEW_WIZARD_ENABLED || !postGameAnalysis) return null;
-    return selectPivotalTurnsFromAnalysis(postGameAnalysis, moveLog, { winningScore });
-  }, [postGameAnalysis, moveLog, winningScore]);
+  const [pivotalSelection, setPivotalSelection] = useState<PivotalTurnSelection | null>(null);
+  useEffect(() => {
+    // Require a completed batch for a stable top-N and clear the prior selection.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- owns async selection lifecycle
+    setPivotalSelection(null);
+    if (!PIVOTAL_REVIEW_WIZARD_ENABLED || !postGameAnalysis || !reviewWorkerBatch.done) return;
+    let cancelled = false;
+    // The selector reuses review-engine's isScorable. Keep that dependency off
+    // BotMatchScreen's eager graph, as with the accuracy model below.
+    void import('../../training/pivotalReview/pivotalTurnSelector.ts').then(({ selectPivotalTurnsFromAnalysis }) => {
+      if (cancelled) return;
+      setPivotalSelection(selectPivotalTurnsFromAnalysis(postGameAnalysis, moveLog, {
+        winningScore,
+        evaluationsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+        decisionIdByMoveNumber,
+      }));
+    }).catch((error) => {
+      if (!cancelled) logger.warn('usePostGamePivotalReview', 'pivotal selection failed', { error: String(error) });
+    });
+    return () => { cancelled = true; };
+  }, [postGameAnalysis, moveLog, winningScore, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, decisionIdByMoveNumber]);
 
   // C4 UI follow-up (phase-c-accuracy-model-spec.md section 6): the coverage
   // floor's real input, computed from reviewWorkerBatch's real per-decision
