@@ -216,6 +216,30 @@ describe('E2 accuracy-model reconciliation on write', () => {
       'client/server accuracy model mismatch',
     );
   });
+
+  it('logs reconciliation failures distinctly without blocking the successful persisted write', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-reconciliation-failure');
+
+    const res = await request('POST', '/api/game-reviews', {
+      body: {
+        ...baseReviewBody,
+        gameDigest: 'digest-reconciliation-failure',
+        evaluations: [{ malformed: true }],
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(fakeTable.rows).toHaveLength(1);
+    expect(warnLogMock).toHaveBeenCalledTimes(1);
+    expect(warnLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameDigest: 'digest-reconciliation-failure',
+        userId: 'user-reconciliation-failure',
+        err: expect.anything(),
+      }),
+      'accuracy model reconciliation failed',
+    );
+  });
 });
 
 describe('GET /api/game-reviews', () => {

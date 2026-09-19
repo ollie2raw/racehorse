@@ -54,36 +54,44 @@ export function registerGameReviewsRoute(app: Application): void {
       return;
     }
 
+    let result;
     try {
-      const result = await insertGameReviewIdempotent(parsed);
-      res.status(result.isNew ? 201 : 200).json({
-        isNew: result.isNew,
-        review: result.review,
-      });
-
-      try {
-        const reconciliation = reconcileAccuracyModelResult(
-          parsed.evaluations as readonly ReviewEvaluationV1[],
-          parsed.accuracyModelResult,
-        );
-        if (reconciliation.mismatches.length > 0 && reconciliation.serverDerived) {
-          log.warn(
-            {
-              gameDigest: parsed.gameDigest,
-              userId: authenticatedUserId,
-              clientAssertedAccuracyModelResult: parsed.accuracyModelResult,
-              serverDerivedAccuracyModelResult: reconciliation.serverDerived,
-              mismatches: reconciliation.mismatches,
-            },
-            'client/server accuracy model mismatch',
-          );
-        }
-      } catch {
-        // Reconciliation is strictly observability-only; never alter a success response.
-      }
+      result = await insertGameReviewIdempotent(parsed);
     } catch (error) {
       log.error({ err: error, userId: authenticatedUserId }, 'insert failed');
       res.status(500).json({ error: 'Failed to persist game review.' });
+      return;
+    }
+
+    res.status(result.isNew ? 201 : 200).json({
+      isNew: result.isNew,
+      review: result.review,
+    });
+
+    const reconciliation = reconcileAccuracyModelResult(
+      parsed.evaluations as readonly ReviewEvaluationV1[],
+      parsed.accuracyModelResult,
+    );
+    if (reconciliation.reconciliationError) {
+      log.warn(
+        {
+          gameDigest: parsed.gameDigest,
+          userId: authenticatedUserId,
+          err: reconciliation.reconciliationError,
+        },
+        'accuracy model reconciliation failed',
+      );
+    } else if (reconciliation.mismatches.length > 0 && reconciliation.serverDerived) {
+      log.warn(
+        {
+          gameDigest: parsed.gameDigest,
+          userId: authenticatedUserId,
+          clientAssertedAccuracyModelResult: parsed.accuracyModelResult,
+          serverDerivedAccuracyModelResult: reconciliation.serverDerived,
+          mismatches: reconciliation.mismatches,
+        },
+        'client/server accuracy model mismatch',
+      );
     }
   });
 
