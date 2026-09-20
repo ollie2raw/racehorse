@@ -5,9 +5,11 @@ import {
   runHeadToHead,
   runHeadToHeadGame,
   replayHeadToHeadGame,
+  masterPerspective,
   summarizeHeadToHead,
   type GameResult,
 } from './oracleVsFritzHeadToHead.ts';
+import { createFixedBotMatch } from '../modules/match/runtime/botEngine.ts';
 
 // Real chooseBotMove + real evaluateReviewPosition on every decision, no
 // mocks -- same reasoning as recordClientPolicyCorpus.test.ts's file-level
@@ -65,6 +67,7 @@ describe('runHeadToHeadGame -- mechanical correctness of a single game (real eng
     expect(new Set(Object.values(result.seatAssignment))).toEqual(new Set(['fritz-master', 'oracle-top-move']));
     expect(result.decisionCount).toBeGreaterThan(0);
     expect(result.decisions.length).toBe(result.decisionCount);
+    expect(result.replayTrace.some(row => row.publicEvidenceCount > 0)).toBe(true);
   });
 
   it('is deterministic at a non-timing-sensitive fritzTier: the same seed and seat produce byte-identical results', () => {
@@ -187,6 +190,15 @@ describe('summarizeHeadToHead -- pure aggregation over synthetic results (no eng
 });
 
 describe('HEAD_TO_HEAD_HARNESS_VERSION', () => {
+  it('rotates public missing-pip evidence with the opponent, not with the seat label', () => {
+    const state = createFixedBotMatch({ player_tiles: [{ low: 0, high: 1 }], fritz_tiles: [{ low: 2, high: 3 }], boneyard: [], locked: [] });
+    state.reviewMissingPipObservations = [
+      { actorId: 'you', reason: 'passed_on_open_end', observedHandNumber: 1, observedSequence: 2, openEnds: [4] },
+      { actorId: 'bot', reason: 'drew_past_open_end', observedHandNumber: 1, observedSequence: 3, openEnds: [5] },
+    ];
+    expect(masterPerspective(state, 'bot').opponentKnownMissing).toEqual([4]);
+    expect(masterPerspective(state, 'you').opponentKnownMissing).toEqual([5]);
+  });
   it('is a non-empty version string', () => {
     expect(HEAD_TO_HEAD_HARNESS_VERSION.length).toBeGreaterThan(0);
   });

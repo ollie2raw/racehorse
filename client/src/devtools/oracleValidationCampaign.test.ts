@@ -6,7 +6,7 @@ function game(index: number, score: number, winnerPolicy: GameResult['winnerPoli
   return { gameIndex: index, seed: 'fixed', fritzSeat: 'bot', seatAssignment: { bot: 'fritz-master', you: 'oracle-top-move' },
     winnerPolicy, finalScore: { 'fritz-master': score, 'oracle-top-move': 100 }, handCount: 1,
     decisionCount: 1, decisions: [], finalStateDigest: 'terminal',
-    replayTrace: [{ decisionIndex: 1, stateDigest: `position-${index}`, actor: 'bot', action: { kind: 'pass' }, masterConsulted: true }] };
+    replayTrace: [{ decisionIndex: 1, stateDigest: `position-${index}`, actor: 'bot', action: { kind: 'pass' }, masterConsulted: true, publicEvidenceCount: 0 }] };
 }
 
 describe('F1 experiment decision rules', () => {

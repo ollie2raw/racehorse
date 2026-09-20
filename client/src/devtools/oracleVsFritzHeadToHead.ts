@@ -74,6 +74,8 @@ import {
 } from '../modules/match/runtime/botEngine.ts';
 import { toCoreGameState } from '../modules/match/runtime/gameCoreAdapter.ts';
 import { captureReviewSnapshotAtDecision } from '../modules/review/captureReviewSnapshotAtDecision.ts';
+import { observeActorDrawPastOpenEnds, observeActorPassOnOpenEnds } from '../modules/review/missingPipEvidenceAccumulate.ts';
+import { toReviewKnownMissingPipEvidence } from '../modules/review/missingPipEvidenceAdapter.ts';
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   DEFAULT_REVIEW_DISPATCH_BUDGET,
@@ -81,7 +83,7 @@ import {
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
-export const HEAD_TO_HEAD_HARNESS_VERSION = 'oracle-vs-fritz-h2h-v2';
+export const HEAD_TO_HEAD_HARNESS_VERSION = 'oracle-vs-fritz-h2h-v3';
 
 export type EnginePolicy = 'fritz-master' | 'oracle-top-move';
 export type OracleVariant = 'default' | 'oracle-fallback-to-fritz-master-heuristic';
@@ -141,6 +143,7 @@ export type DecisionTrace = {
   readonly actor: BotPlayerId;
   readonly action: ReviewAction;
   readonly masterConsulted: boolean;
+  readonly publicEvidenceCount: number;
   readonly evidenceSource?: 'exact' | 'search' | 'heuristic';
 };
 
@@ -167,12 +170,22 @@ function dealForHand(seed: string, handNumber: number): BotHandDeal {
  * chooseMoveForActor, and its doc comment for the established pattern this
  * reuses rather than duplicates a novel approach for).
  */
+export function masterPerspective(state: BotMatchState, actor: BotPlayerId): BotMatchState {
+  const opponent = actor === 'bot' ? 'you' : 'bot';
+  const evidence = toReviewKnownMissingPipEvidence(state.reviewMissingPipObservations ?? []).filter(row => row.opponentId === opponent);
+  return { ...state,
+    players: actor === 'bot' ? state.players : { bot: state.players.you, you: state.players.bot },
+    currentPlayer: 'bot',
+    opponentKnownMissing: [...new Set(evidence.map(row => row.pip))],
+    opponentPassedOnEnds: [...new Set(evidence.filter(row => row.reason === 'passed_on_open_end').map(row => row.pip))],
+    opponentMissingEvidence: evidence.map(row => ({ pip: row.pip, handNumber: row.observedHandNumber, turnIndex: row.observedSequence })),
+  };
+}
+
 function chooseFritzMasterAction(state: BotMatchState, actor: BotPlayerId, tier: BotDifficulty): ReviewAction {
   const playMoves = getLegalMoves(state, actor).filter((move) => move.type === 'play');
   if (playMoves.length > 0) {
-    const perspective: BotMatchState = actor === 'bot'
-      ? state
-      : { ...state, players: { bot: state.players.you, you: state.players.bot }, currentPlayer: 'bot' };
+    const perspective = masterPerspective(state, actor);
     const choice = chooseBotMove(toBotVisibleState(perspective), tier);
     if (!choice?.move || choice.move.type !== 'play' || !choice.move.tile || !choice.move.position) {
       throw new Error(`chooseBotMove returned no play despite ${playMoves.length} legal play(s).`);
@@ -221,9 +234,7 @@ function chooseOracleAction(
   if (evaluation.evidence.source === 'heuristic' && options.variant === 'oracle-fallback-to-fritz-master-heuristic') {
     const playMoves = getLegalMoves(state, actor).filter((move) => move.type === 'play');
     if (playMoves.length > 0) {
-      const perspective: BotMatchState = actor === 'bot'
-        ? state
-        : { ...state, players: { bot: state.players.you, you: state.players.bot }, currentPlayer: 'bot' };
+      const perspective = masterPerspective(state, actor);
       const choice = chooseBotMove(toBotVisibleState(perspective), options.fritzTier);
       if (choice?.move?.type === 'play' && choice.move.tile && choice.move.position) {
         return {
@@ -244,8 +255,8 @@ function applyReviewAction(state: BotMatchState, actor: BotPlayerId, action: Rev
   if (action.kind === 'play') {
     return applyPlayMove(state, actor, { type: 'play', tile: action.tile, position: action.position }).state;
   }
-  if (action.kind === 'draw') return drawOne(state, actor).state;
-  return passTurn(state, actor).state;
+  if (action.kind === 'draw') return drawOne(observeActorDrawPastOpenEnds(state, actor), actor).state;
+  return passTurn(observeActorPassOnOpenEnds(state, actor), actor).state;
 }
 
 /**
@@ -318,7 +329,8 @@ export function runHeadToHeadGame(
       action = chosen.action;
       masterConsulted = chosen.masterConsulted ?? false;
     }
-    replayTrace.push({ decisionIndex, stateDigest, actor, action, masterConsulted, evidenceSource });
+    replayTrace.push({ decisionIndex, stateDigest, actor, action, masterConsulted, evidenceSource,
+      publicEvidenceCount: state.reviewMissingPipObservations?.length ?? 0 });
     const nextState = applyReviewAction(state, actor, action);
 
     decisions.push({
