@@ -431,17 +431,12 @@ the full ordered array of per-decision `authorityPostStateDigest` values
 sharing a terminal state); `sourceMatchId` is a `crypto.randomUUID()`
 generated once at match start.
 
-This satisfies **only the admin+authenticated half** of E1's stated
-acceptance bar ("Admin + authenticated PVF"). The other half — **"guests
-keep local fallback"** — remains untested and effectively unbuilt: the
-write call site sits behind the same `isBotPostGameReviewEligible`/
-`POST_GAME_REVIEW_VISIBLE` gate every other branch in that hook already
-used, and that flag is `false` today, so this call site has only ever run
-for a signed-in admin. There is no guest-specific fallback code path to
-test yet — "guests keep local fallback" describes E4-era behavior once the
-flag unflags for non-admin players, not a verified property of what
-shipped in E1. A code comment at the call site records this explicitly so
-it's visible to a future reader without needing this doc.
+This satisfied **only the admin+authenticated half** of E1's stated
+acceptance bar ("Admin + authenticated PVF") at E1's merge point. The other
+half — **"guests keep local fallback"** — was subsequently closed in PR #271
+(merged): local review visibility is independent of cohort-gated persistence,
+so non-cohort users retain the in-memory review experience without a server
+write.
 
 **E2, shipped 2026-09-19 (PR #267, merged):** accuracy-model reconciliation
 is live as an observability-only shadow check. `accuracyFromEvaluations` and
@@ -477,17 +472,36 @@ existing admin-email bypass is replaced by a server-owned
 new authenticated `/api/game-reviews/access` endpoint reports cohort access,
 and both existing review read/write routes enforce the same allowlist. The
 client reads that response through a fail-closed hook and now requires
-`server-cohort-response && POST_GAME_REVIEW_VISIBLE`; the client constant
-deliberately remains `false`, so production visibility is not flipped. The
-rollout population is deliberately limited to the existing
-admin's Supabase user ID, with no additional pilot accounts yet: expansion is
-explicitly deferred while the guest-fallback and reopen-history gaps remain
-open, not forgotten. Deployment, production allowlist population, access
-verification, and the eventual constant flip are a separate, not-yet-scheduled
-follow-up after review; stored analyses need no rewrite to roll back. That
-follow-up is a deployment/config action only — populate the environment
-variable, verify access, and set `POST_GAME_REVIEW_VISIBLE` to `true`; no new
-code change is required.
+`server-cohort-response && POST_GAME_REVIEW_VISIBLE`; the client constant was
+flipped in PR #270 (merged). The rollout population remains deliberately
+limited to the existing admin's Supabase user ID, with no additional pilot
+accounts yet: expansion was explicitly deferred while the guest-fallback and
+reopen-history gaps were open, not forgotten. Stored analyses need no rewrite
+to roll back. The remaining production verification is a deployment/config
+check only — confirm the allowlist, access response, and admin review flow in
+production; no new code change is required.
+
+**E5, shipped 2026-09-19 (PR #273, merged, `e00355ba`):** multiplayer now
+captures V2 review snapshots at the action boundary and evaluates them with
+the same oracle/PVF honesty bar rather than the pip-heuristic
+`engineBestMove`. The initial parity implementation left MP server
+persistence as the remaining follow-up gap.
+
+**E5 follow-up gap closure, shipped 2026-09-19 (PR #274, merged, merge commit
+`3a3ddea1`):** MP reviews now persist for cohort members through the same
+`/api/game-reviews` path as PVF, gated identically by the server cohort. Local
+MP review visibility remains independent of cohort membership, preserving the
+Step 2 guest-fallback pattern. The accepted PVF/MP hand-exposure asymmetry is
+documented near the A4 entry above: PVF bot-actor snapshots retain the true
+actor hand for planned A4 analysis, while MP masks the opponent hand because
+it is not client-visible.
+
+**Phase E final status:** E0a–E0d, E1, E2, E3, E4, E5, and the E5
+MP-persistence follow-up are shipped and merged (including the guest-fallback
+and review-E2E coverage closures in PRs #271 and #272). The single remaining
+open item is manual production verification with a real admin login: complete
+a match, confirm review appears, persists, and reopens. No further engineering
+action is needed unless that manual check finds a real bug.
 
 **Do not** enable public review on legacy V1 heuristic accuracy. If a game lacks V2 snapshots, show an honest “Review unavailable / upgrade client” or legacy-labeled fallback — never a fake precision %.
 
