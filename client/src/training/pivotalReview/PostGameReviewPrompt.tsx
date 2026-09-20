@@ -1,6 +1,5 @@
 import { GameOverlayPortal } from '../../components/GameOverlayPortal';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
-import { formatHandOutcome, handAccuracyLabel } from './handReviewFormat';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
 
@@ -92,8 +91,6 @@ export function PostGameReviewPrompt({
   const margin = Math.abs(youScore - opponentScore);
   const marginTone = won === true ? 'is-win' : won === false ? 'is-loss' : '';
   const accentClass = accent === 'blue' ? ' dfd--blue' : '';
-  const worstHandNumber = analysis.worstHandNumber;
-  const hands = analysis.hands;
   const { accuracyText, gradeText, coverageText } = resolveAccuracyStatValues({ analysis, accuracyModelPending });
 
   return (
@@ -143,28 +140,6 @@ export function PostGameReviewPrompt({
             </dl>
 
             {coverageText ? <p className="pgr-coverage-note">{coverageText}</p> : null}
-
-            <p className="pgr-legacy-hand-note">Per-hand scores use Fritz's classic scoring model.</p>
-
-            <div className="dfd__games pgr-dossier-hands" aria-label="Move accuracy by hand">
-              {hands.map((hand) => {
-                const isWorst = hand.handNumber === worstHandNumber;
-                const accuracyPct = Math.max(0, Math.min(100, hand.handAccuracy));
-                return (
-                  <div key={hand.handNumber} className={`pgr-dossier-hand${isWorst ? ' is-worst' : ''}`}>
-                    <div className="dfd__game">
-                      <span className="dfd__game-no">H{hand.handNumber}</span>
-                      <span className="dfd__track pgr-dossier-track" aria-hidden="true">
-                        <span className="pgr-dossier-track__fill" style={{ width: `${accuracyPct}%` }} />
-                      </span>
-                      <span className="dfd__game-score dfd__game-score--win">{handAccuracyLabel(hand)}</span>
-                      {isWorst ? <span className="dfd__game-tag">Worst</span> : null}
-                    </div>
-                    <p className="pgr-dossier-hand__outcome">{formatHandOutcome(hand.verdict, opponentLabel)}</p>
-                  </div>
-                );
-              })}
-            </div>
 
             <div className="dfd__actions">
               <button type="button" className="dfd__btn dfd__btn--primary" onClick={onReviewGame}>
