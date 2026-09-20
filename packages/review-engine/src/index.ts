@@ -31,6 +31,12 @@ export {
   serializeReviewCaptureRecordsToJsonl,
   deserializeReviewCaptureRecordsFromJsonl,
 } from './reviewCaptureSchema';
+// Positional features (feat/review-positional-features): tier-agnostic,
+// named numeric features over a single candidate action, ported from
+// client/src/modules/fritz/botHeuristics.ts via solveHeuristicOpening.ts's
+// already-exported pure functions -- see computePositionalFeatures.ts.
+export { computePositionalFeatures, POSITIONAL_FEATURE_NAMES } from './computePositionalFeatures';
+export type { PositionalFeatures, PositionalFeatureName } from './computePositionalFeatures';
 export type {
   ReviewCaptureBatchTag,
   ReviewCaptureCorpusKind,
