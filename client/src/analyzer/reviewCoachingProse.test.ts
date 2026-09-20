@@ -16,6 +16,8 @@ function facts(overrides: Partial<ReviewCoachingFacts>): ReviewCoachingFacts {
     deltas: { immediatePoints: 0, expectedPointDifferential: 0 },
     evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
     principalVariation: [],
+    referenceSource: 'oracle',
+    agreement: { oracleVsFritz: 'not-computed', playedMatch: 'oracle', contested: false },
     ...overrides,
   };
 }

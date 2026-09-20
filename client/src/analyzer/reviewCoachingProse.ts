@@ -1,5 +1,9 @@
 import type { ReviewAction } from '@racehorse/game-core/review';
-import type { ReviewCoachingFacts, ReviewCoachingProse } from './reviewCoachingFacts';
+import type { PositionalFeatureName } from '@racehorse/review-engine';
+import type { ReviewCoachingFacts, ReviewCoachingProse, ReviewFeatureDelta } from './reviewCoachingFacts';
+
+/** Product-owner ship gate: default off; sample generation opts in explicitly. */
+export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false;
 
 /**
  * Phase D1 (game-review-oracle-upgrade-2026-09-13.md): deterministic prose
@@ -44,6 +48,117 @@ function formatNumber(value: number): string {
 
 function pointsWord(value: number): string {
   return Math.round(Math.abs(value) * 10) / 10 === 1 ? 'point' : 'points';
+}
+
+/**
+ * feat/review-positional-features: human-readable label + polarity for
+ * each `PositionalFeatureName` (`computePositionalFeatures.ts`), so a
+ * ranked `ReviewFeatureDelta` can be phrased in the right direction --
+ * "higherIsBetter: false" means a LOWER value is the stronger outcome for
+ * the actor (e.g. leaving fewer orphaned tiles), so the phrasing below
+ * inverts sign for those before saying which move "wins" that feature.
+ * `scoreMarginUrgency` and `tileCountBoneyardPressure` are pre-action,
+ * position-level facts (identical for every candidate action on a given
+ * snapshot -- see computePositionalFeatures.ts) -- they never appear here
+ * in practice, since their delta is always 0 and `buildFeatureDeltas`
+ * already filters near-zero deltas out, but they're listed for
+ * completeness/documentation of every `PositionalFeatureName`.
+ */
+const FEATURE_META: Record<PositionalFeatureName, { label: string; higherIsBetter: boolean }> = {
+  opponentOutsLeft: { label: 'unseen tiles matching the open ends', higherIsBetter: false },
+  endControlScore: { label: 'end control', higherIsBetter: true },
+  endDangerPenalty: { label: 'exposure to an immediate reply', higherIsBetter: false },
+  knownMissingPipExploitationScore: { label: 'exploiting a known gap in the opponent’s hand', higherIsBetter: true },
+  handShapeOrphanCount: { label: 'orphaned tiles left in hand', higherIsBetter: false },
+  handShapePlayableNext: { label: 'tiles you can follow up with', higherIsBetter: true },
+  handShapeMobilityScore: { label: 'hand mobility', higherIsBetter: true },
+  scoreMarginUrgency: { label: 'score-margin urgency', higherIsBetter: true },
+  tileCountBoneyardPressure: { label: 'boneyard pressure', higherIsBetter: false },
+  doubleHubOpeningRisk: { label: 'double/hub exposure risk', higherIsBetter: false },
+  immediatePoints: { label: 'immediate points scored', higherIsBetter: true },
+};
+
+/** True when `referenceValue` is the stronger outcome for this feature, given its polarity. */
+function referenceWinsFeature(delta: ReviewFeatureDelta): boolean {
+  const meta = FEATURE_META[delta.feature];
+  return meta.higherIsBetter ? delta.delta > 0 : delta.delta < 0;
+}
+
+function describeFeatureDelta(delta: ReviewFeatureDelta, referenceLabel: string, playedLabel: string): string {
+  const meta = FEATURE_META[delta.feature];
+  const magnitude = formatNumber(delta.delta);
+  const winner = referenceWinsFeature(delta) ? referenceLabel : playedLabel;
+  return `${winner} rates better on ${meta.label} (by ${magnitude})`;
+}
+
+function actionLabel(action: ReviewAction): string {
+  const play = playAction(action);
+  if (play) return `${tileText(play.tile)} at ${positionText(play.position)}`;
+  const word = nonPlayWord(action);
+  return word === 'draw' ? 'drawing' : 'passing';
+}
+
+/**
+ * feat/review-positional-features, build brief item 2: "rewrite the prose
+ * generator to produce prose from the RANKED FEATURE DELTA -- largest
+ * supported difference first, largest-magnitude features driving the
+ * headline sentence." Used whenever `facts.featureDeltas` is present and
+ * non-empty (i.e. `buildReviewCoachingFacts` was given a real snapshot) --
+ * every number quoted here is a `ReviewFeatureDelta.delta`/`playedValue`/
+ * `referenceValue` or a `facts.deltas`/`played`/`best` field, per the D1
+ * repo rule (enforced by reviewCoachingProse.truthTest.test.ts).
+ */
+function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+  const deltas = facts.featureDeltas ?? [];
+  const referenceLabel = facts.referenceSource === 'fritz' ? "Fritz's read" : 'the engine’s line';
+  const referenceAction = actionLabel(facts.best.action);
+  const playedAction = actionLabel(facts.played.action);
+  const top = deltas[0];
+  const second = deltas[1];
+  if (!top) return {
+    headline: 'No meaningful positional difference in the measured features.',
+    detail: `${playedAction} and ${referenceAction} have no feature difference above the reporting threshold.`,
+    takeaway: 'The measured features do not explain a preference between these moves.',
+  };
+
+  const immediateClause =
+    facts.deltas.immediatePoints !== 0
+      ? ` ${referenceAction} scores ${formatNumber(facts.deltas.immediatePoints)} ${facts.deltas.immediatePoints > 0 ? 'more' : 'fewer'} ${pointsWord(facts.deltas.immediatePoints)} immediately.`
+      : '';
+
+  const headline = `${referenceAction} (${referenceLabel}) over ${playedAction} -- biggest gap: ${FEATURE_META[top.feature].label} (${formatNumber(top.delta)}).`;
+  const detailParts = [describeFeatureDelta(top, referenceAction, playedAction)];
+  if (second) detailParts.push(describeFeatureDelta(second, referenceAction, playedAction));
+  const detail = `${detailParts.join('; ')}.${immediateClause}`;
+  const takeaway = second
+    ? `Two features separate these moves: ${FEATURE_META[top.feature].label} and ${FEATURE_META[second.feature].label}.`
+    : `The largest measured difference here is ${FEATURE_META[top.feature].label}.`;
+
+  return { headline, detail, takeaway };
+}
+
+/**
+ * Same feature-delta basis as `buildFeatureDeltaProse`, but for a contested
+ * decision (`facts.agreement.contested`, i.e. oracle and Fritz picked
+ * different moves at search/heuristic tier) -- per the build brief,
+ * disagreement must be surfaced honestly rather than presented as a
+ * confident verdict, since `capSeverityForContestedDecision` is already
+ * capping how harshly this decision can be labeled elsewhere in the
+ * pipeline.
+ */
+function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+  const base = buildFeatureDeltaProse(facts);
+  const referenceAction = actionLabel(facts.best.action);
+  const otherEngineAction = facts.referenceSource === 'fritz'
+    ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
+    : (facts.fritzMove ? actionLabel(facts.fritzMove.action) : "Fritz's read");
+  const otherEngineName = facts.referenceSource === 'fritz' ? "the Review Engine's heuristic" : 'Fritz';
+  const disagreementNote = ` ${otherEngineName} would have played ${otherEngineAction} instead of ${referenceAction} here, so this read is contested.`;
+  return {
+    headline: `Contested: ${base.headline}`,
+    detail: `${base.detail}${disagreementNote}`,
+    takeaway: `${base.takeaway} The engines disagree on the reference move.`,
+  };
 }
 
 function buildCorrectProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
@@ -223,7 +338,10 @@ function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
  * already on the object (missKind, deltas, evidence, principalVariation,
  * played/best actions).
  */
-export function buildReviewCoachingProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+export function buildReviewCoachingProse(facts: ReviewCoachingFacts, enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED): ReviewCoachingProse {
+  if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
+    return facts.agreement.contested ? buildContestedFeatureDeltaProse(facts) : buildFeatureDeltaProse(facts);
+  }
   switch (facts.missKind) {
     case 'correct':
       return buildCorrectProse(facts);
