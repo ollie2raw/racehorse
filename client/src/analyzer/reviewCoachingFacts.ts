@@ -269,7 +269,7 @@ function classifyMissKind(
   return classifyDifferentTileMiss(played.immediatePoints, best.immediatePoints, expectedPointDifferentialLoss, evidence);
 }
 
-function resolveAgreement(
+export function resolveAgreement(
   playedAction: ReviewAction,
   oracleBestAction: ReviewAction,
   fritzMove: FritzSecondOpinion | null,
@@ -310,8 +310,9 @@ function resolveAgreement(
  * caller and test green without modification.
  *
  * Reference-move policy (build brief, exact wording):
- *  - exact tier: oracle's `best` is authoritative, full stop -- no Fritz
- *    computation is made.
+ *  - exact tier: oracle's `best` is authoritative. Fritz is still computed
+ *    when a snapshot is available to record agreement, but disagreement
+ *    never makes a complete exact result contested.
  *  - search tier: oracle's `best` stays the primary teaching reference;
  *    Fritz's real move is ALWAYS additionally computed and exposed via
  *    `fritzMove` (a second opinion, never substituted for `best`).
