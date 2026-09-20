@@ -18,7 +18,7 @@ export function evaluation(moveNumber: number, loss: number): ReviewEvaluationV1
 
 export function matchFixture(losses: number[]) {
   const moveLog = losses.map((_, index) => ({
-    moveNumber: index + 1, player: 'you', action: 'play', pointsScored: 0,
+    moveNumber: index + 1, player: 'you', action: 'place', tile: [1, 1], position: 'left', pointsScored: 0,
     boardState: [], validMoves: [],
   } as unknown as MoveEntry));
   const analyzedMoves = losses.map((_, index) => ({

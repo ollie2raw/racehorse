@@ -29,7 +29,12 @@ function setup() {
   };
   batch.mockImplementation(() => state);
   const snapshots = fixture.moveLog.map((entry) => ({
-    identifiers: { actionNumber: entry.moveNumber, decisionId: `decision-${entry.moveNumber}` },
+    identifiers: { actionNumber: entry.moveNumber, decisionId: `decision-${entry.moveNumber}`, actorId: 'you' },
+    // Matches matchFixture's moveLog entries (action: 'place', tile [1,1],
+    // position 'left') -- correlateSnapshotsToMoveLog.ts's content
+    // cross-check (2026-09-19 correctness audit) requires this to agree
+    // with the moveLog entry, not just the actionNumber/moveNumber counter.
+    actualAction: { kind: 'play', tile: { low: 1, high: 1 }, position: 'left' },
     outcome: { authorityPostStateDigest: `digest-${entry.moveNumber}` },
   } as unknown as ReviewPositionSnapshotV2));
   const params = {
