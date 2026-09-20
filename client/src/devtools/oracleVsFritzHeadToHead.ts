@@ -201,7 +201,8 @@ function placeholderCommand(state: BotMatchState, actor: BotPlayerId): GameComma
   const base = { version: 1 as const, commandId: 'h2h-placeholder', sequence: state.turnIndex ?? 0, actorId: actor };
   if (playMoves.length > 0) {
     const move = playMoves[0];
-    if (move.type === 'play') return { ...base, kind: 'play', tile: move.tile, position: move.position };
+    if (move.type === 'play' && move.tile && move.position) return { ...base, kind: 'play', tile: move.tile, position: move.position };
+    throw new Error('Legal play is missing its tile or position.');
   }
   const core = toCoreGameState(state);
   return canDraw(core, actor) ? { ...base, kind: 'draw' } : { ...base, kind: 'pass' };
@@ -640,7 +641,6 @@ async function main(): Promise<void> {
         harnessVersion: HEAD_TO_HEAD_HARNESS_VERSION,
         variant: options.variant,
         seed: options.seed,
-        gameCount: options.gameCount,
         workers: options.workers,
         loadSamples,
         loadExceeded: loadExceeded(),

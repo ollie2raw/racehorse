@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": { "types": ["node", "vite/client", "vitest/globals"], "tsBuildInfoFile": "./node_modules/.tmp/f1-validation.tsbuildinfo" },
+  "include": ["src/devtools/oracleVsFritzHeadToHead.ts", "src/devtools/oracleVsFritzHeadToHead.test.ts", "src/devtools/oracleValidationCampaign.ts", "src/devtools/oracleValidationCampaign.test.ts"],
+  "exclude": []
+}
