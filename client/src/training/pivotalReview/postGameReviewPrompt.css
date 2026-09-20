@@ -4,44 +4,12 @@
   z-index: 10060;
 }
 
-.pgr-dossier-hands {
-  gap: 0;
-}
-
-.pgr-dossier-hand + .pgr-dossier-hand {
-  margin-top: 2px;
-}
-
-.pgr-dossier-hand .dfd__game {
-  padding-bottom: 6px;
-}
-
 .pgr-coverage-note {
   margin: -8px 0 16px;
   font-size: 12px;
   line-height: 1.4;
   text-align: center;
   color: var(--dfd-dim, rgba(255, 255, 255, 0.36));
-}
-
-.pgr-legacy-hand-note {
-  margin: -4px 0 10px;
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
-  color: var(--dfd-dim, rgba(255, 255, 255, 0.36));
-}
-
-.pgr-dossier-hand__outcome {
-  margin: 0 0 8px;
-  padding-left: 28px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--dfd-dim, rgba(255, 255, 255, 0.36));
-}
-
-.pgr-dossier-hand.is-worst .dfd__game {
-  border-color: rgba(231, 182, 74, 0.35);
 }
 
 .pgr-dossier-track {
