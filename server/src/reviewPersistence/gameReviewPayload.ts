@@ -1,4 +1,4 @@
-export type GameReviewMode = 'pvf' | 'mp';
+export type GameReviewMode = 'pvf' | 'mp' | 'multiplayer';
 
 export interface GameReviewInsertInput {
   userId: string;
@@ -84,8 +84,8 @@ export function parseGameReviewRequestBody(
   }
 
   const mode = record.mode;
-  if (mode !== 'pvf' && mode !== 'mp') {
-    return { error: "mode must be 'pvf' or 'mp'." };
+  if (mode !== 'pvf' && mode !== 'mp' && mode !== 'multiplayer') {
+    return { error: "mode must be 'pvf', 'mp', or 'multiplayer'." };
   }
 
   const sourceMatchId = typeof record.sourceMatchId === 'string' ? record.sourceMatchId : null;

@@ -103,9 +103,16 @@ describe('parseGameReviewRequestBody', () => {
     ).toEqual({ error: 'accuracyModelResult is required.' });
   });
 
-  it("rejects a mode that isn't 'pvf' or 'mp'", () => {
+  it("rejects a mode outside the supported review modes", () => {
     expect(parseGameReviewRequestBody({ ...rawBody, mode: 'ghost' }, baseInput.userId)).toEqual({
-      error: "mode must be 'pvf' or 'mp'.",
+      error: "mode must be 'pvf', 'mp', or 'multiplayer'.",
+    });
+  });
+
+  it('accepts the explicit multiplayer persistence mode', () => {
+    expect(parseGameReviewRequestBody({ ...rawBody, mode: 'multiplayer' }, baseInput.userId)).toMatchObject({
+      mode: 'multiplayer',
+      userId: baseInput.userId,
     });
   });
 });
