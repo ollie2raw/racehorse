@@ -160,7 +160,7 @@ function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoac
   const otherEngineAction = facts.referenceSource === 'fritz'
     ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
     : (facts.fritzMove ? actionLabel(facts.fritzMove.action) : "Fritz's read");
-  const otherEngineName = facts.referenceSource === 'fritz' ? "the Review Engine's heuristic" : 'Fritz';
+  const otherEngineName = facts.referenceSource === 'fritz' ? "The Review Engine's heuristic" : 'Fritz';
   const disagreementNote = ` ${otherEngineName} would have played ${otherEngineAction} instead of ${referenceAction} here, so this read is contested.`;
   return {
     headline: `Contested: ${base.headline}`,

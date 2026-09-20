@@ -9,7 +9,7 @@ import type { ReviewAction, ReviewPositionSnapshotV2 } from '@racehorse/game-cor
 import { computePositionalFeatures } from '../computePositionalFeatures';
 import { computeEndControlScore, computeEndDangerPenalty, computePressureScore, computeTrapPenalty, type HandPhase } from '../solveHeuristicOpening';
 import { resolveHiddenPoolEligibility } from '../hiddenPoolEligibility';
-import { replayRecordedSelfPlay } from '../devtools/replayRecordedSelfPlay';
+import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const records = replayRecordedSelfPlay(resolve(root, 'packages/review-engine/fixtures/recorded-self-play'));
