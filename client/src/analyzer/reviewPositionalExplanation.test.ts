@@ -36,6 +36,24 @@ describe('default-off positional prose truth', () => {
     expect(buildReviewCoachingProse({ ...facts(), featureDeltas: [] }, true).headline).toContain('No meaningful positional difference');
   });
 
+  it('only cites feature values that favor the recommended move', () => {
+    const f = {
+      ...facts(),
+      featureDeltas: [
+        { feature: 'endControlScore' as const, playedValue: 2, referenceValue: 8, delta: 6 },
+        { feature: 'endDangerPenalty' as const, playedValue: 9, referenceValue: 3, delta: -6 },
+        // This is a large gap, but it favors the played move and must not
+        // be used to explain the recommendation.
+        { feature: 'handShapeMobilityScore' as const, playedValue: 9, referenceValue: 1, delta: -8 },
+      ],
+    };
+    const prose = buildReviewCoachingProse(f, true);
+    expect(prose.detail).toContain('2-4 at the right end rates better on end control');
+    expect(prose.detail).toContain('2-4 at the right end rates better on exposure to an immediate reply');
+    expect(prose.detail).not.toContain('2-4 at the left end rates better');
+    expect(prose.detail).not.toContain('hand mobility');
+  });
+
   it.each(['search', 'heuristic'] as const)('caps unresolved %s disagreements at Inaccuracy', tier => {
     const agreement = { oracleVsFritz: 'disagree' as const, playedMatch: 'fritz' as const, contested: true };
     expect(capSeverityForContestedDecision('Blunder', agreement, tier)).toBe('Blunder');

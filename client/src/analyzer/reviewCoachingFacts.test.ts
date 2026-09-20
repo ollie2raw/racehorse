@@ -70,12 +70,12 @@ describe('buildReviewCoachingFacts -- structural missKinds (tier-agnostic)', () 
     expect(facts.best.action).toEqual(action);
   });
 
-  it('forced: position-variants of the same tile collapse to a single real choice', () => {
+  it('same_tile_wrong_end: multiple legal placements of one tile are a real choice', () => {
     const played = play(2, 6, 'branch-1-0');
     const candidates = [candidate(play(2, 6, 'right'), { value: { expectedPointDifferential: 5, winProbability: null } }), candidate(played)];
     const evalOut = evaluation({ candidates, playedAction: played, bestAction: play(2, 6, 'right') });
     const facts = buildReviewCoachingFacts(evalOut);
-    expect(facts.missKind).toBe('forced');
+    expect(facts.missKind).toBe('same_tile_wrong_end');
   });
 
   it('pass_or_draw: played a non-play action when a play was available (and best)', () => {
@@ -377,7 +377,7 @@ describe('buildReviewCoachingFacts -- real corpus fixtures (same fixtures as cla
     expect(facts.missKind).toBe('forced');
   });
 
-  it('locked-yard-five-tile-endgame: 3 position-variants of the same tile -> forced (dedup collapses to 1)', () => {
+  it('locked-yard-five-tile-endgame: 3 position-variants of the same tile remain distinct placements', () => {
     const played = play(2, 6, 'branch-1-0');
     const candidates = [
       candidate(play(2, 6, 'right'), { value: { expectedPointDifferential: 0, winProbability: null }, rawScore: 253.75 }),
@@ -391,7 +391,7 @@ describe('buildReviewCoachingFacts -- real corpus fixtures (same fixtures as cla
       evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
     });
     const facts = buildReviewCoachingFacts(evalOut);
-    expect(facts.missKind).toBe('forced');
+    expect(facts.missKind).toBe('same_tile_wrong_end');
   });
 
   it('hidden-allocation-ambiguous-midgame: 3 distinct tiles, real heuristic spread 82.24, played mid-pack -> a different-tile miss classified from real immediatePoints, not fabricated', () => {

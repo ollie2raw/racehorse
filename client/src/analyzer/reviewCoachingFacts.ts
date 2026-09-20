@@ -7,7 +7,6 @@ import type {
   ReviewPrincipalVariationStep,
 } from '@racehorse/game-core/review';
 import { computePositionalFeatures, POSITIONAL_FEATURE_NAMES, type PositionalFeatureName } from '@racehorse/review-engine';
-import { dedupeCandidatesByTile } from './classifyHeuristicResult';
 import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
 
@@ -345,7 +344,7 @@ export function buildReviewCoachingFacts(
   // shape. In particular it must not pay for Fritz Master or add agreement,
   // reference, or feature fields until the feature is explicitly enabled.
   if (!enablePositionalExplanations) {
-    const distinctChoiceCount = dedupeCandidatesByTile(candidates).length;
+    const distinctChoiceCount = candidates.length;
     const resolvedBest = { action: oracleBest.action, immediatePoints: oracleBest.immediatePoints };
     return {
       played: { action: played.action, immediatePoints: played.immediatePoints },
@@ -378,7 +377,7 @@ export function buildReviewCoachingFacts(
   const comparison = resolveAgreement(played.action, oracleBest.action, fritzMove);
   const agreement = { ...comparison, contested: evidence.source !== 'exact' && comparison.contested };
 
-  const distinctChoiceCount = dedupeCandidatesByTile(candidates).length;
+  const distinctChoiceCount = candidates.length;
   const missKind = classifyMissKind(
     { action: played.action, immediatePoints: played.immediatePoints },
     resolvedBest,

@@ -113,7 +113,11 @@ function actionLabel(action: ReviewAction): string {
  * repo rule (enforced by reviewCoachingProse.truthTest.test.ts).
  */
 function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const deltas = facts.featureDeltas ?? [];
+  // The recommendation comes from the review reference. A feature sentence
+  // may only be used to explain that recommendation when the reference
+  // actually wins the feature after applying its polarity. Ranking all
+  // absolute gaps previously let a played-favoring value lead the sentence.
+  const deltas = (facts.featureDeltas ?? []).filter(referenceWinsFeature);
   const referenceLabel = facts.referenceSource === 'fritz' ? "Fritz's read" : 'the engine’s line';
   const referenceAction = actionLabel(facts.best.action);
   const playedAction = actionLabel(facts.played.action);
