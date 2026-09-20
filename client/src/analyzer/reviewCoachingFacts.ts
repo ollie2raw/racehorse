@@ -11,6 +11,9 @@ import { dedupeCandidatesByTile } from './classifyHeuristicResult';
 import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
 
+/** Product-owner ship gate: default off; sample generation opts in explicitly. */
+export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false;
+
 export type ReviewCoachingMissKind =
   | 'better_tile'
   | 'same_tile_wrong_end'
@@ -92,8 +95,9 @@ export function capSeverityForContestedDecision(
   label: LossBandLabel,
   agreement: ReviewAgreement,
   evidenceSource: ReviewEvaluationEvidence['source'],
+  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
 ): LossBandLabel {
-  if (evidenceSource === 'exact' || !agreement.contested) return label;
+  if (!enablePositionalExplanations || evidenceSource === 'exact' || !agreement.contested) return label;
   const cap = evidenceSource === 'search' ? CONTESTED_SEVERITY_CAP_SEARCH : CONTESTED_SEVERITY_CAP_HEURISTIC;
   return LOSS_BAND_ORDER.indexOf(label) > LOSS_BAND_ORDER.indexOf(cap) ? cap : label;
 }
@@ -138,7 +142,8 @@ function buildFeatureDeltas(
 export type ReviewCoachingFacts = {
   readonly played: { readonly action: ReviewAction; readonly immediatePoints: number };
   readonly best: { readonly action: ReviewAction; readonly immediatePoints: number };
-  readonly referenceSource: ReviewCoachingReferenceSource;
+  /** Present only when positional explanations are explicitly enabled. */
+  readonly referenceSource?: ReviewCoachingReferenceSource;
   readonly missKind: ReviewCoachingMissKind;
   readonly deltas: {
     readonly immediatePoints: number;
@@ -147,7 +152,8 @@ export type ReviewCoachingFacts = {
   };
   readonly evidence: ReviewEvaluationEvidence;
   readonly principalVariation: readonly ReviewPrincipalVariationStep[];
-  readonly agreement: ReviewAgreement;
+  /** Present only when positional explanations are explicitly enabled. */
+  readonly agreement?: ReviewAgreement;
   /** Fritz's real chooseBotMove('master') result, present only when a snapshot was supplied at search/heuristic tier. */
   readonly fritzMove?: FritzSecondOpinion;
   /**
@@ -325,6 +331,7 @@ export function resolveAgreement(
 export function buildReviewCoachingFacts(
   evaluation: ReviewEvaluationV1,
   snapshot?: ReviewPositionSnapshotV2,
+  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
 ): ReviewCoachingFacts {
   const { played, best: oracleBest, evidence, candidates, loss } = evaluation;
   if (candidates.length === 0) {
@@ -334,8 +341,33 @@ export function buildReviewCoachingFacts(
     );
   }
 
-  const fritzMove: FritzSecondOpinion | null =
-    snapshot ? computeFritzReferenceMove(snapshot) : null;
+  // The default path is deliberately byte-for-byte the pre-F2 D0 facts
+  // shape. In particular it must not pay for Fritz Master or add agreement,
+  // reference, or feature fields until the feature is explicitly enabled.
+  if (!enablePositionalExplanations) {
+    const distinctChoiceCount = dedupeCandidatesByTile(candidates).length;
+    const resolvedBest = { action: oracleBest.action, immediatePoints: oracleBest.immediatePoints };
+    return {
+      played: { action: played.action, immediatePoints: played.immediatePoints },
+      best: resolvedBest,
+      missKind: classifyMissKind(
+        { action: played.action, immediatePoints: played.immediatePoints },
+        resolvedBest,
+        evidence,
+        loss.expectedPointDifferential,
+        distinctChoiceCount,
+      ),
+      deltas: {
+        immediatePoints: oracleBest.immediatePoints - played.immediatePoints,
+        expectedPointDifferential: loss.expectedPointDifferential,
+        ...(loss.winProbability !== null ? { winProbability: loss.winProbability } : {}),
+      },
+      evidence,
+      principalVariation: oracleBest.principalVariation,
+    };
+  }
+
+  const fritzMove: FritzSecondOpinion | null = snapshot ? computeFritzReferenceMove(snapshot) : null;
 
   const referenceSource: ReviewCoachingReferenceSource = evidence.source === 'heuristic' && fritzMove ? 'fritz' : 'oracle';
   const resolvedBest: { readonly action: ReviewAction; readonly immediatePoints: number } =

@@ -1,9 +1,13 @@
 import type { ReviewAction } from '@racehorse/game-core/review';
 import type { PositionalFeatureName } from '@racehorse/review-engine';
-import type { ReviewCoachingFacts, ReviewCoachingProse, ReviewFeatureDelta } from './reviewCoachingFacts';
+import {
+  REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  type ReviewCoachingFacts,
+  type ReviewCoachingProse,
+  type ReviewFeatureDelta,
+} from './reviewCoachingFacts';
 
-/** Product-owner ship gate: default off; sample generation opts in explicitly. */
-export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false;
+export { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from './reviewCoachingFacts';
 
 /**
  * Phase D1 (game-review-oracle-upgrade-2026-09-13.md): deterministic prose
@@ -340,7 +344,7 @@ function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
  */
 export function buildReviewCoachingProse(facts: ReviewCoachingFacts, enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED): ReviewCoachingProse {
   if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
-    return facts.agreement.contested ? buildContestedFeatureDeltaProse(facts) : buildFeatureDeltaProse(facts);
+    return facts.agreement?.contested ? buildContestedFeatureDeltaProse(facts) : buildFeatureDeltaProse(facts);
   }
   switch (facts.missKind) {
     case 'correct':

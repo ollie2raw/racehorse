@@ -38,9 +38,10 @@ describe('default-off positional prose truth', () => {
 
   it.each(['search', 'heuristic'] as const)('caps unresolved %s disagreements at Inaccuracy', tier => {
     const agreement = { oracleVsFritz: 'disagree' as const, playedMatch: 'fritz' as const, contested: true };
-    expect(capSeverityForContestedDecision('Blunder', agreement, tier)).toBe('Inaccuracy');
-    expect(capSeverityForContestedDecision('Mistake', agreement, tier)).toBe('Inaccuracy');
-    expect(capSeverityForContestedDecision('Best', agreement, tier)).toBe('Best');
-    expect(capSeverityForContestedDecision('Blunder', agreement, 'exact')).toBe('Blunder');
+    expect(capSeverityForContestedDecision('Blunder', agreement, tier)).toBe('Blunder');
+    expect(capSeverityForContestedDecision('Blunder', agreement, tier, true)).toBe('Inaccuracy');
+    expect(capSeverityForContestedDecision('Mistake', agreement, tier, true)).toBe('Inaccuracy');
+    expect(capSeverityForContestedDecision('Best', agreement, tier, true)).toBe('Best');
+    expect(capSeverityForContestedDecision('Blunder', agreement, 'exact', true)).toBe('Blunder');
   });
 });

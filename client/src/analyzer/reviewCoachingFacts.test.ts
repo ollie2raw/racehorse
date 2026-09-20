@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import type { PlacementPosition } from '@racehorse/game-core/types';
+import { REVIEW_FIXTURE_CORPUS } from '../../../packages/game-core/src/reviewFixtureCorpus';
+import { evaluateReviewPosition } from '../../../packages/review-engine/src/evaluateReviewPosition';
+import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { buildReviewCoachingFacts } from './reviewCoachingFacts';
+
+const fritzReferenceSpy = vi.hoisted(() => vi.fn(() => {
+  throw new Error('Fritz must not run while positional explanations are disabled.');
+}));
+
+vi.mock('./reviewFritzSecondOpinion', () => ({ computeFritzReferenceMove: fritzReferenceSpy }));
 
 const play = (low: number, high: number, position: PlacementPosition = 'left'): ReviewAction => ({
   kind: 'play',
@@ -324,6 +333,32 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
     const evalOut = evaluation({ candidates: [candidate(action)], playedAction: action });
     const facts = buildReviewCoachingFacts(evalOut);
     expect(facts.prose).toBeUndefined();
+  });
+});
+
+describe('default-off F2 compatibility', () => {
+  const budget = { maxNodes: 200_000, maxHiddenStateSamples: 100, maxPlyDepth: 2, seed: 'racehorse-review-default-seed' };
+
+  it('is byte-identical to main’s facts/prose contract across REVIEW_FIXTURE_CORPUS and never invokes Fritz', () => {
+    for (const fixture of REVIEW_FIXTURE_CORPUS) {
+      const evaluation = evaluateReviewPosition(fixture.snapshot, budget, 0.02);
+      const facts = buildReviewCoachingFacts(evaluation, fixture.snapshot);
+      const mainContractFacts = {
+        played: { action: evaluation.played.action, immediatePoints: evaluation.played.immediatePoints },
+        best: { action: evaluation.best.action, immediatePoints: evaluation.best.immediatePoints },
+        missKind: facts.missKind,
+        deltas: {
+          immediatePoints: evaluation.best.immediatePoints - evaluation.played.immediatePoints,
+          expectedPointDifferential: evaluation.loss.expectedPointDifferential,
+          ...(evaluation.loss.winProbability !== null ? { winProbability: evaluation.loss.winProbability } : {}),
+        },
+        evidence: evaluation.evidence,
+        principalVariation: evaluation.best.principalVariation,
+      };
+      expect(JSON.stringify(facts)).toBe(JSON.stringify(mainContractFacts));
+      expect(JSON.stringify(buildReviewCoachingProse(facts))).toBe(JSON.stringify(buildReviewCoachingProse(mainContractFacts)));
+    }
+    expect(fritzReferenceSpy).not.toHaveBeenCalled();
   });
 });
 
