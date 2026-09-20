@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
-import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
+import type { GameAnalysis, ReviewEvidenceDisclosure } from '../../analyzer/moveAnalyzer.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
@@ -260,11 +260,18 @@ export function usePostGamePivotalReview({
   // worker spawned, nothing will ever resolve) -- unchanged from before.
   const [accuracyModelPending, setAccuracyModelPending] = useState(false);
   const [accuracyModel, setAccuracyModel] = useState<GameAccuracyModelResult | undefined>(undefined);
+  // Derived alongside accuracyModel, from the same resolved data, so
+  // GameReviewer's evidence banner stops being permanently pinned to
+  // LEGACY_ANALYSIS_DISCLOSURE once real oracle coverage exists -- see
+  // deriveReviewEvidence's doc comment (moveAnalyzer.ts) for the gate.
+  const [evidence, setEvidence] = useState<ReviewEvidenceDisclosure | undefined>(undefined);
 
   useEffect(() => {
     if (reviewWorkerSnapshots.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- tracks reviewWorkerBatch's own async lifecycle (see accuracyModelPending's doc comment above), not a prop-derived value computable during render
       setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setEvidence(undefined);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModelPending(false);
       return;
@@ -272,6 +279,8 @@ export function usePostGamePivotalReview({
     if (!reviewWorkerBatch.done) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModel(undefined);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setEvidence(undefined);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModelPending(true);
       return;
@@ -289,11 +298,20 @@ export function usePostGamePivotalReview({
     // relocated here from client/src/analyzer/gameAccuracyModel.ts in E2
     // (Phase E) so server-side reconciliation can compute the identical
     // result -- import it directly from the package, never statically from
-    // anywhere in the standard bot-match path.
-    void import('@racehorse/review-engine').then(({ computeGameAccuracyModel }) => {
+    // anywhere in the standard bot-match path. deriveReviewEvidence lives in
+    // moveAnalyzer.ts, itself only reachable dynamically from this hook for
+    // the same lazy-boundary reason (see the analyzeMoveLogDeferred import
+    // above) -- bundled into this same dynamic import, matching
+    // MultiplayerGameShell.tsx's existing Promise.all pattern for two
+    // dynamic imports resolved together.
+    void Promise.all([
+      import('@racehorse/review-engine'),
+      import('../../analyzer/moveAnalyzer.ts'),
+    ]).then(([{ computeGameAccuracyModel }, { deriveReviewEvidence }]) => {
       if (cancelled) return;
       const model = computeGameAccuracyModel(evaluations);
       setAccuracyModel(model);
+      setEvidence(deriveReviewEvidence(model));
       setAccuracyModelPending(false);
 
       // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): fire-and-
@@ -360,8 +378,12 @@ export function usePostGamePivotalReview({
   // this change's blast radius to those call sites.
   const exposedPostGameAnalysis = useMemo(() => {
     if (!postGameAnalysis || accuracyModel === undefined) return postGameAnalysis;
-    return { ...postGameAnalysis, accuracyModel };
-  }, [postGameAnalysis, accuracyModel]);
+    // evidence is set in the same state update as accuracyModel above, so
+    // by the time accuracyModel !== undefined, evidence is too -- but the
+    // `?? postGameAnalysis.evidence` fallback keeps this honest (rather
+    // than asserting) if that ever stops being true.
+    return { ...postGameAnalysis, accuracyModel, evidence: evidence ?? postGameAnalysis.evidence };
+  }, [postGameAnalysis, accuracyModel, evidence]);
 
   const skipPostGameReview = useCallback(() => {
     setPostGameReviewDismissed(true);

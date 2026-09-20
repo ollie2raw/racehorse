@@ -7,6 +7,9 @@ import {
   saveGameAnalysis,
   enrichMovesWithFritz,
   evalStateBuilders,
+  deriveReviewEvidence,
+  LEGACY_ANALYSIS_DISCLOSURE,
+  type GameAccuracyModelResult,
 } from './moveAnalyzer';
 import type { MoveEntry } from '../game/moveLogger';
 import type { BoardState } from '../types';
@@ -486,5 +489,49 @@ describe('moveAnalyzer — A5 analyzer dual-read shim', () => {
     expect(analysis.analyzedMoves[0].rating).not.toBe('Brilliant');
     expect(analysis.analyzedMoves[0].score).toBe(72);
     expect(analysis.analyzedMoves[0].bestBreakdown).toBeUndefined();
+  });
+});
+
+describe('deriveReviewEvidence', () => {
+  function accuracyModel(overrides: Partial<GameAccuracyModelResult>): GameAccuracyModelResult {
+    return {
+      status: 'complete',
+      accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
+      accuracy: 90,
+      grade: 'A',
+      heuristicMoveCount: 0,
+      totalNonForcedMoveCount: 20,
+      coverageFraction: 1,
+      ...overrides,
+    };
+  }
+
+  it('no accuracyModel at all (never resolved / true pre-oracle game) -- the legacy disclosure', () => {
+    expect(deriveReviewEvidence(undefined)).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+  });
+
+  it('accuracyModel resolved but below the coverage floor (accuracy: null) -- still the legacy disclosure, not a fabricated oracle claim', () => {
+    const model = accuracyModel({ status: 'partial', accuracy: null, grade: null, coverageFraction: 0.1 });
+    expect(deriveReviewEvidence(model)).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+  });
+
+  it('status: complete, coverage floor cleared -- high confidence, rolled up as a single "Oracle analysis" label', () => {
+    const model = accuracyModel({ status: 'complete', accuracy: 95, heuristicMoveCount: 0 });
+    expect(deriveReviewEvidence(model)).toEqual({
+      source: 'oracle',
+      confidence: 'high',
+      displayLabel: 'Oracle analysis',
+      reason: 'oracle-coverage-full',
+    });
+  });
+
+  it('status: partial, coverage floor still cleared -- medium confidence, same "Oracle analysis" label', () => {
+    const model = accuracyModel({ status: 'partial', accuracy: 80, heuristicMoveCount: 3, coverageFraction: 0.6 });
+    expect(deriveReviewEvidence(model)).toEqual({
+      source: 'oracle',
+      confidence: 'medium',
+      displayLabel: 'Oracle analysis',
+      reason: 'oracle-coverage-cleared-floor',
+    });
   });
 });

@@ -59,8 +59,18 @@ export type GameAnalysis = {
   oracleLabel: string;
   worstHandNumber: number | null;
   consequenceByMoveNumber: Record<number, ConsequenceChain>;
-  /** Disclosure for the legacy V1 heuristic evaluator. Optional for persisted pre-Batch-0 records. */
-  evidence?: LegacyReviewEvaluationDisclosure;
+  /**
+   * Disclosure of how trustworthy this game's analysis is, shown as the
+   * banner atop GameReviewer. Optional for persisted pre-Batch-0 records
+   * (treated as the legacy disclosure when absent, same as today).
+   * `buildGameSummary` below always sets this to `LEGACY_ANALYSIS_DISCLOSURE`
+   * at construction time, since the synchronous analyzer has no access to
+   * `reviewWorkerBatch` data (same reason `accuracyModel` starts undefined
+   * -- see that field's doc comment). `deriveReviewEvidence` is how a
+   * caller with real oracle data (usePostGamePivotalReview.ts, once
+   * `accuracyModel` resolves) overrides this default with the real state.
+   */
+  evidence?: ReviewEvidenceDisclosure;
   /**
    * C4 (phase-c-accuracy-model-spec.md section 6): the calibrated accuracy
    * model's result, additive alongside the legacy `accuracy`/`grade` fields
@@ -82,6 +92,49 @@ export const LEGACY_ANALYSIS_DISCLOSURE: LegacyReviewEvaluationDisclosure = {
   displayLabel: 'Legacy heuristic estimate',
   reason: 'incomplete-v1-position-snapshot',
 };
+
+/**
+ * Widens `LegacyReviewEvaluationDisclosure`'s single closed literal shape
+ * to also express a real oracle-backed disclosure, without touching the
+ * shared game-core contract (that type intentionally stays a closed legacy
+ * literal -- see reviewContracts.ts). `LEGACY_ANALYSIS_DISCLOSURE` is a
+ * valid `ReviewEvidenceDisclosure` as-is (each of its literal fields is a
+ * member of the corresponding wider field here).
+ */
+export type ReviewEvidenceDisclosure = {
+  readonly source: 'heuristic' | 'oracle';
+  readonly confidence: 'low' | 'medium' | 'high';
+  readonly displayLabel: string;
+  readonly reason: string;
+};
+
+/**
+ * Rolls the per-move exact/search/heuristic evidence tiers already on each
+ * `ReviewEvaluationV1` up into one game-level disclosure, reusing
+ * `computeGameAccuracyModel`'s own coverage-floor gate rather than
+ * inventing a second threshold: `accuracyModel.accuracy` is null exactly
+ * when `coverageFraction < MINIMUM_COVERAGE_FLOOR` (see
+ * packages/review-engine/src/gameAccuracyModel.ts), so `accuracy !== null`
+ * *is* "resolved with real coverage" for this purpose. Below that floor,
+ * or when no accuracyModel exists at all (never resolved, or a true
+ * pre-oracle legacy game with no V2 snapshots), the legacy disclosure is
+ * the honest answer -- there isn't yet enough real oracle coverage to
+ * claim otherwise.
+ */
+export function deriveReviewEvidence(
+  accuracyModel: GameAccuracyModelResult | undefined,
+): ReviewEvidenceDisclosure {
+  if (!accuracyModel || accuracyModel.accuracy === null) return LEGACY_ANALYSIS_DISCLOSURE;
+  return {
+    source: 'oracle',
+    confidence: accuracyModel.status === 'complete' ? 'high' : 'medium',
+    displayLabel: 'Oracle analysis',
+    reason:
+      accuracyModel.status === 'complete'
+        ? 'oracle-coverage-full'
+        : 'oracle-coverage-cleared-floor',
+  };
+}
 
 type StoredAnalysisItem = {
   id: string;

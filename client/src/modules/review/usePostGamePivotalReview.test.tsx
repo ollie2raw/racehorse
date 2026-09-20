@@ -8,12 +8,23 @@ import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/reviewContra
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import type { ReviewBatchState } from './useReviewWorkerBatch.ts';
 import { logger } from '../../utils/logger.ts';
+import { LEGACY_ANALYSIS_DISCLOSURE } from '../../analyzer/moveAnalyzer.ts';
 import { usePostGamePivotalReview, type UsePostGamePivotalReviewParams } from './usePostGamePivotalReview.ts';
 
 const analyzeMoveLogDeferred = vi.fn();
-vi.mock('../../analyzer/moveAnalyzer.ts', () => ({
-  analyzeMoveLogDeferred: (...args: unknown[]) => analyzeMoveLogDeferred(...args),
-}));
+vi.mock('../../analyzer/moveAnalyzer.ts', async () => {
+  // deriveReviewEvidence/LEGACY_ANALYSIS_DISCLOSURE use the real
+  // implementation -- the evidence-derivation tests below assert on its
+  // actual behavior, not a stub. Only analyzeMoveLogDeferred is faked, same
+  // as before.
+  const actual = await vi.importActual<typeof import('../../analyzer/moveAnalyzer.ts')>(
+    '../../analyzer/moveAnalyzer.ts',
+  );
+  return {
+    ...actual,
+    analyzeMoveLogDeferred: (...args: unknown[]) => analyzeMoveLogDeferred(...args),
+  };
+});
 vi.mock('../../training/pivotalReview/pivotalTurnSelector.ts', () => ({
   selectPivotalTurnsFromAnalysis: vi.fn(() => null),
 }));
@@ -298,6 +309,14 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     // The legacy fields must survive the merge untouched.
     expect(result.current.postGameAnalysis?.accuracy).toBe(42);
     expect(result.current.postGameAnalysis?.grade).toBe('B');
+    // Coverage clears the floor but this batch has heuristic-tier decisions
+    // (status: 'partial') -- medium confidence, not the legacy banner.
+    expect(result.current.postGameAnalysis?.evidence).toEqual({
+      source: 'oracle',
+      confidence: 'medium',
+      displayLabel: 'Oracle analysis',
+      reason: 'oracle-coverage-cleared-floor',
+    });
   });
 
   it('worker batch done with coverage below the floor -- accuracyModel merges in with accuracy/grade null, not the legacy numbers', async () => {
@@ -322,6 +341,63 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
     expect(accuracyModel?.accuracy).toBeNull();
     expect(accuracyModel?.grade).toBeNull();
+    // Below the coverage floor -- not "real coverage" yet, so evidence
+    // stays the legacy disclosure rather than claiming oracle confidence.
+    expect(result.current.postGameAnalysis?.evidence).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+  });
+});
+
+describe('usePostGamePivotalReview — evidence banner reflects real oracle coverage, not a hardcoded legacy constant', () => {
+  const baseAnalysis = { fake: true, accuracy: 42, grade: 'B', evidence: LEGACY_ANALYSIS_DISCLOSURE } as never;
+
+  it('fully-covered oracle match (status: complete, zero heuristic decisions) -- no longer shows the legacy banner', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    for (let i = 0; i < 20; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    expect(result.current.postGameAnalysis?.accuracyModel?.status).toBe('complete');
+    expect(result.current.postGameAnalysis?.evidence).toEqual({
+      source: 'oracle',
+      confidence: 'high',
+      displayLabel: 'Oracle analysis',
+      reason: 'oracle-coverage-full',
+    });
+    expect(result.current.postGameAnalysis?.evidence).not.toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+  });
+
+  it('no oracle data at all (zero snapshots, never resolved) -- the legacy disclosure still correctly appears', async () => {
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+
+    const { result } = render();
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.accuracyModelPending).toBe(false);
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+    expect(result.current.postGameAnalysis?.evidence).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+  });
+
+  it('a true pre-oracle legacy game (no reviewSnapshotRecorder at all) -- the legacy disclosure still correctly appears', async () => {
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
+
+    const { result } = render({ reviewSnapshotRecorder: undefined });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+    expect(result.current.postGameAnalysis?.evidence).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
   });
 });
 
