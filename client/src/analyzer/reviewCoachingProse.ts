@@ -83,7 +83,7 @@ const FEATURE_META: Record<PositionalFeatureName, { label: string; higherIsBette
 };
 
 /** True when `referenceValue` is the stronger outcome for this feature, given its polarity. */
-function referenceWinsFeature(delta: ReviewFeatureDelta): boolean {
+export function referenceWinsFeature(delta: ReviewFeatureDelta): boolean {
   const meta = FEATURE_META[delta.feature];
   return meta.higherIsBetter ? delta.delta > 0 : delta.delta < 0;
 }
