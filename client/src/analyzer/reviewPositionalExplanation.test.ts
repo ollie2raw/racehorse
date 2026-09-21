@@ -7,7 +7,7 @@ function facts(): ReviewCoachingFacts {
   return { played: { action: { kind: 'play', tile: { low: 2, high: 4 }, position: 'left' }, immediatePoints: 5 },
     best: { action: { kind: 'play', tile: { low: 2, high: 4 }, position: 'right' }, immediatePoints: 0 },
     referenceSource: 'oracle', missKind: 'same_tile_wrong_end',
-    deltas: { immediatePoints: -5, expectedPointDifferential: 0 },
+    deltas: { immediatePoints: -5, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
     evidence: { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' }, principalVariation: [],
     agreement: { oracleVsFritz: 'agree', playedMatch: 'neither', contested: false },
     featureDeltas: [{ feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 },
@@ -35,7 +35,7 @@ describe('default-off positional prose truth', () => {
   it('renders a measured value-gap fallback without inventing a positional cause', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
-      deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 2, referenceExpectedPointDifferential: 2 },
       featureDeltas: [],
     }, true);
     expect(prose.headline).toContain('2 more points overall, including the immediate score');
@@ -43,7 +43,7 @@ describe('default-off positional prose truth', () => {
     expect(`${prose.detail} ${prose.takeaway}`).not.toContain('end control');
   });
 
-  it('credits Fritz for a heuristic-tier expected-value fallback', () => {
+  it('never attributes an oracle-loss expected value to Fritz', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
       referenceSource: 'fritz',
@@ -51,14 +51,14 @@ describe('default-off positional prose truth', () => {
       deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
       featureDeltas: [],
     }, true);
-    expect(prose.headline).toContain("Fritz's read is worth about 2 more points");
-    expect(prose.headline).not.toContain('oracle');
+    expect(prose.headline).toBe('No meaningful positional difference in the measured features.');
+    expect(prose.headline).not.toContain("Fritz's read is worth about");
   });
 
   it('does not cite a negative immediate gap as support for the reference move', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
-      deltas: { immediatePoints: -1, expectedPointDifferential: 0 },
+      deltas: { immediatePoints: -1, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
       featureDeltas: [],
     }, true);
     expect(prose.headline).toBe('No meaningful positional difference in the measured features.');
@@ -66,30 +66,30 @@ describe('default-off positional prose truth', () => {
   });
 
   it.each([0.01, 0.22])('requires a material expected gap (%s)', expectedPointDifferential => {
-    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 0, expectedPointDifferential }, featureDeltas: [] }, true);
+    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 0, expectedPointDifferential, referenceExpectedPointDifferential: expectedPointDifferential }, featureDeltas: [] }, true);
     expect(prose.headline).toBe('No meaningful positional difference in the measured features.');
   });
 
   it.each([VALUE_GAP_MIN_POINTS, 1.43])('renders a material expected gap (%s)', expectedPointDifferential => {
-    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 0, expectedPointDifferential }, featureDeltas: [] }, true);
+    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 0, expectedPointDifferential, referenceExpectedPointDifferential: expectedPointDifferential }, featureDeltas: [] }, true);
     expect(prose.headline).toContain('more point');
     expect(prose.headline).not.toContain('about 0 more');
   });
 
   it('requires a nonnegative expected gap before citing immediate points', () => {
-    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 1, expectedPointDifferential: -1 }, featureDeltas: [] }, true);
+    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: 1, expectedPointDifferential: -1, referenceExpectedPointDifferential: -1 }, featureDeltas: [] }, true);
     expect(prose.headline).toBe('No meaningful positional difference in the measured features.');
   });
 
   it('treats expected value as total value including a mixed immediate score', () => {
-    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: -2, expectedPointDifferential: 7 }, featureDeltas: [] }, true);
+    const prose = buildReviewCoachingProse({ ...facts(), deltas: { immediatePoints: -2, expectedPointDifferential: 7, referenceExpectedPointDifferential: 7 }, featureDeltas: [] }, true);
     expect(prose.headline).toContain('7 more points overall, including the immediate score');
   });
 
   it('keeps the no-meaningful-difference prose for a genuine zero value gap', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
-      deltas: { immediatePoints: 0, expectedPointDifferential: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
       featureDeltas: [],
     }, true);
     expect(prose).toEqual({

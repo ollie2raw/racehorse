@@ -127,16 +127,19 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
   const playedAction = actionLabel(facts.played.action);
   const top = deltas[0];
   const second = deltas[1];
-  const expectedGap = facts.deltas.expectedPointDifferential;
+  // Only this explicitly displayed-reference-relative field can support a
+  // claim about "the engine's line" or "Fritz's read". The legacy expected
+  // field is oracle loss and is unavailable for Fritz-referenced heuristics.
+  const expectedGap = facts.deltas.referenceExpectedPointDifferential;
   const immediateGap = facts.deltas.immediatePoints;
   // Candidate expected values are net swings from this decision point, so they
   // already include immediate scoring; do not add immediatePoints to this value.
-  if (!top && expectedGap >= VALUE_GAP_MIN_POINTS) return {
+  if (!top && expectedGap !== undefined && expectedGap >= VALUE_GAP_MIN_POINTS) return {
     headline: `${referenceLabelAtSentenceStart} is worth about ${formatNumber(expectedGap)} more ${pointsWord(expectedGap)} overall, including the immediate score.`,
     detail: 'The value difference is measured, but none of the tracked positional features favors the reference move.',
     takeaway: 'The point difference is real even though the measured features do not explain it.',
   };
-  if (!top && immediateGap > 0 && expectedGap >= 0) return {
+  if (!top && immediateGap > 0 && (expectedGap === undefined || expectedGap >= 0)) return {
     headline: `${referenceAction} scores ${formatNumber(immediateGap)} more ${pointsWord(immediateGap)} immediately.`,
     detail: 'The score difference is measured, but none of the tracked positional features favors the reference move.',
     takeaway: 'The immediate point difference is real even though the measured features do not explain it.',
@@ -245,11 +248,12 @@ function buildSameTileWrongEndProse(facts: ReviewCoachingFacts): ReviewCoachingP
   const bestSpot = best ? positionText(best.position) : 'the other end';
   const playedSpot = played ? positionText(played.position) : 'this end';
 
-  const hasGap = facts.deltas.expectedPointDifferential > 0 || facts.deltas.immediatePoints > 0;
+  const referenceExpectedGap = facts.deltas.referenceExpectedPointDifferential;
+  const hasGap = (referenceExpectedGap !== undefined && referenceExpectedGap > 0) || facts.deltas.immediatePoints > 0;
   const gapClause = hasGap
     ? ` -- worth about ${formatNumber(
-        facts.deltas.expectedPointDifferential > 0 ? facts.deltas.expectedPointDifferential : facts.deltas.immediatePoints,
-      )} ${pointsWord(facts.deltas.expectedPointDifferential > 0 ? facts.deltas.expectedPointDifferential : facts.deltas.immediatePoints)}`
+        referenceExpectedGap !== undefined && referenceExpectedGap > 0 ? referenceExpectedGap : facts.deltas.immediatePoints,
+      )} ${pointsWord(referenceExpectedGap !== undefined && referenceExpectedGap > 0 ? referenceExpectedGap : facts.deltas.immediatePoints)}`
     : '';
 
   return {
@@ -277,7 +281,7 @@ function buildMissedScoreProse(facts: ReviewCoachingFacts): ReviewCoachingProse 
 }
 
 function buildReplyRiskProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const totalLoss = formatNumber(facts.deltas.expectedPointDifferential);
+  const totalLoss = formatNumber(facts.deltas.referenceExpectedPointDifferential ?? 0);
   return {
     headline: `Even on the scoreboard now, costlier over the rest of the hand.`,
     detail: `This move scored about the same as the best option right now, but it left a position that cost roughly ${totalLoss} ${pointsWord(facts.deltas.expectedPointDifferential)} in expected value over the rest of the hand.`,
@@ -286,7 +290,7 @@ function buildReplyRiskProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
 }
 
 function buildBetterTileProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const gap = formatNumber(facts.deltas.expectedPointDifferential);
+  const gap = formatNumber(facts.deltas.referenceExpectedPointDifferential ?? 0);
   const best = playAction(facts.best.action);
   return {
     headline: `A different tile rated higher${best ? ` -- ${tileText(best.tile)}` : ''} -- for no single clear reason.`,
@@ -298,9 +302,10 @@ function buildBetterTileProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
 function buildPassOrDrawProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
   const playedIsPlay = facts.played.action.kind === 'play';
   const bestIsPlay = facts.best.action.kind === 'play';
-  const hasGap = facts.deltas.expectedPointDifferential > 0;
+  const referenceExpectedGap = facts.deltas.referenceExpectedPointDifferential;
+  const hasGap = referenceExpectedGap !== undefined && referenceExpectedGap > 0;
   const gapClause = hasGap
-    ? ` -- worth about ${formatNumber(facts.deltas.expectedPointDifferential)} ${pointsWord(facts.deltas.expectedPointDifferential)}`
+    ? ` -- worth about ${formatNumber(referenceExpectedGap)} ${pointsWord(referenceExpectedGap)}`
     : '';
 
   if (playedIsPlay && !bestIsPlay) {

@@ -13,7 +13,7 @@ function facts(overrides: Partial<ReviewCoachingFacts>): ReviewCoachingFacts {
     played: { action: play(0, 1), immediatePoints: 0 },
     best: { action: play(0, 1), immediatePoints: 0 },
     missKind: 'correct',
-    deltas: { immediatePoints: 0, expectedPointDifferential: 0 },
+    deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
     evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
     principalVariation: [],
     referenceSource: 'oracle',
@@ -36,6 +36,7 @@ function realNumbersOnFacts(f: ReviewCoachingFacts): number[] {
     f.best.immediatePoints,
     f.deltas.immediatePoints,
     f.deltas.expectedPointDifferential,
+    ...(f.deltas.referenceExpectedPointDifferential === undefined ? [] : [f.deltas.referenceExpectedPointDifferential]),
   ];
   if (f.deltas.winProbability !== undefined) values.push(f.deltas.winProbability);
   // Every value is also checked as its rounded-to-1-decimal, abs'd form,
@@ -75,7 +76,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
       missKind: 'same_tile_wrong_end',
       played: { action: play(2, 2, 'right'), immediatePoints: 0 },
       best: { action: play(2, 2, 'left'), immediatePoints: 5 },
-      deltas: { immediatePoints: 5, expectedPointDifferential: 0 },
+      deltas: { immediatePoints: 5, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
     });
     const prose = buildReviewCoachingProse(f);
     const combined = `${prose.headline} ${prose.detail} ${prose.takeaway}`.toLowerCase();
@@ -90,7 +91,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
       missKind: 'missed_score',
       played: { action: play(0, 1), immediatePoints: 0 },
       best: { action: play(5, 6), immediatePoints: 20 },
-      deltas: { immediatePoints: 20, expectedPointDifferential: 20 },
+      deltas: { immediatePoints: 20, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
     });
     const prose = buildReviewCoachingProse(f);
     expect(prose.headline).toMatch(/20/);
@@ -103,7 +104,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
       missKind: 'reply_risk',
       played: { action: play(0, 1), immediatePoints: 10 },
       best: { action: play(5, 6), immediatePoints: 10 },
-      deltas: { immediatePoints: 0, expectedPointDifferential: 20 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
     });
     const prose = buildReviewCoachingProse(f);
     expect(prose.detail).toMatch(/20/);
@@ -115,7 +116,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
       missKind: 'better_tile',
       played: { action: play(0, 1), immediatePoints: 0 },
       best: { action: play(5, 6), immediatePoints: 10 },
-      deltas: { immediatePoints: 10, expectedPointDifferential: 20 },
+      deltas: { immediatePoints: 10, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
     });
     const prose = buildReviewCoachingProse(f);
     const combined = `${prose.headline} ${prose.detail}`.toLowerCase();
@@ -139,7 +140,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
       missKind: 'pass_or_draw',
       played: { action: play(3, 4), immediatePoints: 0 },
       best: { action: { kind: 'draw' }, immediatePoints: 0 },
-      deltas: { immediatePoints: 0, expectedPointDifferential: 8 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 8, referenceExpectedPointDifferential: 8 },
     });
     const prose = buildReviewCoachingProse(f);
     expect(prose.detail.toLowerCase()).toMatch(/draw/);
@@ -190,7 +191,7 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         missKind: 'same_tile_wrong_end',
         played: { action: play(2, 2, 'right'), immediatePoints: 0 },
         best: { action: play(2, 2, 'left'), immediatePoints: 5 },
-        deltas: { immediatePoints: 5, expectedPointDifferential: 0 },
+        deltas: { immediatePoints: 5, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
       }),
     ],
     [
@@ -199,7 +200,7 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         missKind: 'missed_score',
         played: { action: play(0, 1), immediatePoints: 0 },
         best: { action: play(5, 6), immediatePoints: 20 },
-        deltas: { immediatePoints: 20, expectedPointDifferential: 20 },
+        deltas: { immediatePoints: 20, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
       }),
     ],
     [
@@ -208,7 +209,7 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         missKind: 'reply_risk',
         played: { action: play(0, 1), immediatePoints: 10 },
         best: { action: play(5, 6), immediatePoints: 10 },
-        deltas: { immediatePoints: 0, expectedPointDifferential: 20 },
+        deltas: { immediatePoints: 0, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
       }),
     ],
     [
@@ -217,7 +218,7 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         missKind: 'better_tile',
         played: { action: play(0, 1), immediatePoints: 0 },
         best: { action: play(5, 6), immediatePoints: 10 },
-        deltas: { immediatePoints: 10, expectedPointDifferential: 20 },
+        deltas: { immediatePoints: 10, expectedPointDifferential: 20, referenceExpectedPointDifferential: 20 },
       }),
     ],
     [
@@ -226,7 +227,7 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
         missKind: 'pass_or_draw',
         played: { action: play(3, 4), immediatePoints: 0 },
         best: { action: { kind: 'draw' }, immediatePoints: 0 },
-        deltas: { immediatePoints: 0, expectedPointDifferential: 8 },
+        deltas: { immediatePoints: 0, expectedPointDifferential: 8, referenceExpectedPointDifferential: 8 },
       }),
     ],
     ['unknown (precise tier)', facts({ missKind: 'unknown', evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' } })],

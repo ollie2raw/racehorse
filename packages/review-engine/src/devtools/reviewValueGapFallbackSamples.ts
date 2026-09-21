@@ -33,8 +33,10 @@ export function writeValueGapFallbackSamples(): number {
     })
     .filter(({ facts }) =>
       (unresolvedValueGapMagnitude(facts) ?? 0) > 0
-      && (facts.deltas.expectedPointDifferential >= VALUE_GAP_MIN_POINTS
-        || (facts.deltas.immediatePoints > 0 && facts.deltas.expectedPointDifferential >= 0)));
+      && ((facts.deltas.referenceExpectedPointDifferential ?? -Infinity) >= VALUE_GAP_MIN_POINTS
+        || (facts.deltas.immediatePoints > 0
+          && (facts.deltas.referenceExpectedPointDifferential === undefined
+            || facts.deltas.referenceExpectedPointDifferential >= 0))));
   const sections = samples.map(({ facts, snapshot, file, prose }, index) => [
     `## ${index + 1}. ${facts.evidence.source}`,
     '',
@@ -42,7 +44,7 @@ export function writeValueGapFallbackSamples(): number {
     `- Played: ${actionText(facts.played.action)} (${points(facts.played.immediatePoints)})`,
     `- Reference: ${actionText(facts.best.action)} (${points(facts.best.immediatePoints)})`,
     `- Fallback: ${prose.headline}`,
-    `- Value gaps: expectedPointDifferential ${valueText(facts.deltas.expectedPointDifferential)}; immediatePoints ${valueText(facts.deltas.immediatePoints)}${facts.deltas.winProbability === undefined ? '' : `; winProbability ${valueText(facts.deltas.winProbability)}`}.`,
+    `- Value gaps: oracleExpectedPointDifferential ${valueText(facts.deltas.expectedPointDifferential)}; referenceExpectedPointDifferential ${facts.deltas.referenceExpectedPointDifferential === undefined ? 'unavailable' : valueText(facts.deltas.referenceExpectedPointDifferential)}; immediatePoints ${valueText(facts.deltas.immediatePoints)}${facts.deltas.winProbability === undefined ? '' : `; winProbability ${valueText(facts.deltas.winProbability)}`}.`,
     '',
   ].join('\n'));
   writeFileSync(SAMPLE_PATH, ['# Review value-gap fallback samples', '', `| cases | ${samples.length} |`, '', ...sections].join('\n'));

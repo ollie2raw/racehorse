@@ -146,7 +146,19 @@ export type ReviewCoachingFacts = {
   readonly missKind: ReviewCoachingMissKind;
   readonly deltas: {
     readonly immediatePoints: number;
+    /**
+     * Oracle-best minus played expected value. This is the review-loss value
+     * used by accuracy/classification, not necessarily the displayed
+     * coaching reference at heuristic tier.
+     */
     readonly expectedPointDifferential: number;
+    /**
+     * Displayed-reference minus played expected value on the evaluation's
+     * net, immediate-score-inclusive scale. Absent when the displayed
+     * reference has no calibrated comparable candidate value (Fritz at
+     * heuristic tier); prose must not infer it from oracle loss or raw rank.
+     */
+    readonly referenceExpectedPointDifferential?: number;
     readonly winProbability?: number;
   };
   readonly evidence: ReviewEvaluationEvidence;
@@ -359,6 +371,7 @@ export function buildReviewCoachingFacts(
       deltas: {
         immediatePoints: oracleBest.immediatePoints - played.immediatePoints,
         expectedPointDifferential: loss.expectedPointDifferential,
+        referenceExpectedPointDifferential: loss.expectedPointDifferential,
         ...(loss.winProbability !== null ? { winProbability: loss.winProbability } : {}),
       },
       evidence,
@@ -389,6 +402,14 @@ export function buildReviewCoachingFacts(
   const deltas: ReviewCoachingFacts['deltas'] = {
     immediatePoints: resolvedBest.immediatePoints - played.immediatePoints,
     expectedPointDifferential: loss.expectedPointDifferential,
+    // At exact/search tier the displayed reference is the oracle candidate,
+    // so this is the same calibrated comparison as the evaluation loss. At
+    // heuristic tier Fritz is the displayed reference, but every heuristic
+    // candidate deliberately has a placeholder expected value of zero; do
+    // not fabricate a Fritz-relative value claim from that oracle loss.
+    ...(referenceSource === 'oracle'
+      ? { referenceExpectedPointDifferential: loss.expectedPointDifferential }
+      : {}),
     ...(loss.winProbability !== null ? { winProbability: loss.winProbability } : {}),
   };
 
