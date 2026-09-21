@@ -72,8 +72,10 @@ Two fresh independent facts passes were compared because canonical per-record fa
 | overall | 559 | 25 | 16 | 111 | 129 | 0 |
 
 | previous zero-loss bucket-b cases | 82 |
-| true displayed-reference ties | 12 |
+| true displayed-reference ties from previous bucket-b cases | 12 |
 | true displayed-reference ties (search) | 12 |
 | true displayed-reference ties (heuristic) | 0 |
 | previous bucket-b cases moved to another category | 70 |
 | supported sentences (played != displayed reference) | 190/281 | 67.6% |
+
+This is one fresh shared facts pass. Its displayed-reference denominator is 281 versus PR #285's 280, consistent with already-measured Fritz-reference jitter; 67.6% versus 67.5% is not coverage improvement attributable to this semantic correction. The 12 above are surviving ties from the old 82 bucket-b cases; the 25 in the table are all displayed-reference zero-gap decisions in this fresh pass.
