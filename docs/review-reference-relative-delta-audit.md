@@ -26,8 +26,10 @@ At heuristic tier the visible reference is Fritz, but the existing expected-poin
 
 There are **0** current heuristic rendered expected-value claims attributed to Fritz: heuristic `loss.expectedPointDifferential` is always zero, so the material expected-value fallback cannot fire. The immediate-score fallback can still render a directly board-derived score difference and does not state an expected-value claim. The defect affects the historical interpretation of the 70 heuristic cases among the prior 82 zero-loss bucket and would make a future equality/value sentence false or misattributed if reused unchanged.
 
+Machine check: one corrected-corpus pass scanned all 1,212 recorded decisions and found **0** rendered sentences that both used a Fritz reference with unavailable `referenceExpectedPointDifferential` and contained an expected-value/equality form (including `Fritz's read … worth`, `worth about 0`, or `even overall`).
+
 ## Available data and correction path
 
 **Path B — unavailable.** The evaluation candidate list can match Fritz's action exactly (tile plus placement/end), but heuristic candidate expected values are all intentional zero placeholders. Candidate ranking or `rawScore` cannot be converted into a comparable point differential. No new Fritz valuation/search will be added here.
 
-The correction must expose a separate displayed-reference expected delta only when the evaluation supplies a calibrated candidate value for that displayed action (exact/search oracle reference). It must be unavailable for heuristic Fritz references. Oracle loss remains separate for accuracy/classification. Any reference-relative expected-value prose must read only the new field.
+The correction exposes a separate displayed-reference expected delta only when the evaluation supplies a calibrated candidate value for that displayed action (exact/search oracle reference). It is unavailable for heuristic Fritz references. Oracle loss remains separate for accuracy/classification. Any reference-relative expected-value prose reads only the new field; unavailable is never converted to numeric zero.
