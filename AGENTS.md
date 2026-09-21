@@ -122,3 +122,17 @@ Automated invariants (`npm run check:architecture --prefix client`, run in CI on
 - Godfile LOC caps: `server/src/http/routes/dailyFritz.ts` ≤800, `client/src/match/session/actions/useLiveMatchActions.ts` ≤400, `client/src/AppRoutes.tsx` ≤500 lines.
 
 Do not add routes to `index.ts` / `dailyFritz.ts` blobs — split into a dedicated route/registrar file instead, following the existing `dailyFritz*Route.ts` / `register*Handlers.ts` patterns.
+
+## 11. Review-study known defect
+
+- KNOWN DEFECT: contested flag nondeterministic (cause: Fritz `chooseBotMove('master')` uses a wall-clock bounded search in `client/src/modules/fritz/botHeuristics.ts`); compute one study from one shared facts pass.
+
+## 12. Review-engine handoff checklist
+
+- Read `/Users/olivermorid/racehorse-dominoes/PROGRESS-F.md` first; it is not git-tracked and is outside worktrees.
+- Review explanation sample deliverable: `docs/review-explanation-samples.md` only (never `docs/scoping/` or variants).
+- Before every push, run in order: lint, typecheck, `npm run check:architecture --prefix client`, then relevant tests — all four.
+- Recorded-client-policy corpus cursor mismatch is known: skip it unless explicitly fixing the replayer.
+- INV-20: review-engine may use `node:` imports only under `src/devtools`.
+- After push/force-push, allow `gh pr checks` 5–8 minutes to register; an initial pending list is not final.
+- Fritz's time-bounded search is not seeded — studies over the recorded corpus have ~1-in-several-hundred record-level jitter between runs. Don't treat single-record differences as meaningful; compute both/all tables in a study from one shared facts pass, not separate re-evaluations.
