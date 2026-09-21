@@ -23,6 +23,14 @@ export type ExplanationCoverageBucket = {
 };
 
 export type RenderedExplanationBucket = 'positional' | 'value-gap' | 'no-difference';
+export type NoDifferenceSplitBucket = 'a' | 'b' | 'c' | 'd';
+
+export function classifyNoDifferenceSplit(facts: ReviewCoachingFacts): NoDifferenceSplitBucket | null {
+  if (classifyRenderedExplanationProse(facts) !== 'no-difference') return null;
+  if (JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action)) return 'a';
+  if (facts.deltas.expectedPointDifferential === 0) return 'b';
+  return facts.deltas.expectedPointDifferential > 0 && facts.deltas.expectedPointDifferential < VALUE_GAP_MIN_POINTS ? 'c' : 'd';
+}
 
 /** Classifies the enabled player-facing headline, not a duplicate truth predicate. */
 export function classifyRenderedExplanationProse(facts: ReviewCoachingFacts): RenderedExplanationBucket | null {
@@ -152,8 +160,7 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
       if (bucket !== 'no-difference') distinctSupported += 1;
     }
     if (bucket === 'no-difference') {
-      const gap = facts.deltas.expectedPointDifferential;
-      const size = identical ? 0 : gap === 0 ? 1 : gap > 0 && gap < VALUE_GAP_MIN_POINTS ? 2 : 3;
+      const size = 'abcd'.indexOf(classifyNoDifferenceSplit(facts)!);
       noDifference[facts.evidence.source][size] += 1;
     }
   }
