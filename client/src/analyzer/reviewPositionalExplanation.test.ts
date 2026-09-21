@@ -43,6 +43,73 @@ describe('default-off positional prose truth', () => {
     expect(`${prose.detail} ${prose.takeaway}`).not.toContain('end control');
   });
 
+  it('renders an exact displayed-reference tie, with only a structured immediate-score tradeoff', () => {
+    const f = {
+      ...facts(),
+      played: { action: { kind: 'play' as const, tile: { low: 1, high: 2 }, position: 'left' as const }, immediatePoints: 2 },
+      best: { action: { kind: 'play' as const, tile: { low: 3, high: 4 }, position: 'right' as const }, immediatePoints: 1 },
+      deltas: { immediatePoints: -1, expectedPointDifferential: 7, referenceExpectedPointDifferential: 0 },
+      featureDeltas: [],
+    };
+    const prose = buildReviewCoachingProse(f, true);
+    expect(prose.headline).toBe('The review rates these two moves even overall, although 3-4 at the right end scores 1 fewer point immediately.');
+    expect(prose.headline).not.toContain("Fritz's read");
+    expect(prose.headline).toContain(String(Math.abs(f.deltas.immediatePoints)));
+  });
+
+  it('does not invent an immediate-score clause for an exact tie with equal scoring', () => {
+    const prose = buildReviewCoachingProse({
+      ...facts(),
+      played: { action: { kind: 'play', tile: { low: 1, high: 2 }, position: 'left' }, immediatePoints: 0 },
+      best: { action: { kind: 'play', tile: { low: 3, high: 4 }, position: 'right' }, immediatePoints: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
+      featureDeltas: [],
+    }, true);
+    expect(prose.headline).toBe('The review rates these two moves even overall.');
+    expect(prose.headline).not.toMatch(/scores|point/);
+  });
+
+  it.each([
+    ['unavailable', undefined],
+    ['sub-material', VALUE_GAP_MIN_POINTS - 0.01],
+  ] as const)('does not call a %s reference gap equal', (_label, referenceExpectedPointDifferential) => {
+    const prose = buildReviewCoachingProse({
+      ...facts(),
+      played: { action: { kind: 'play', tile: { low: 1, high: 2 }, position: 'left' }, immediatePoints: 0 },
+      best: { action: { kind: 'play', tile: { low: 3, high: 4 }, position: 'right' }, immediatePoints: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0, ...(referenceExpectedPointDifferential === undefined ? {} : { referenceExpectedPointDifferential }) },
+      featureDeltas: [],
+    }, true);
+    expect(prose.headline).not.toContain('even overall');
+    expect(prose.headline).toContain('No meaningful positional difference');
+  });
+
+  it('keeps material value and feature-backed explanations ahead of equality prose', () => {
+    const material = buildReviewCoachingProse({
+      ...facts(),
+      played: { action: { kind: 'play', tile: { low: 1, high: 2 }, position: 'left' }, immediatePoints: 0 },
+      best: { action: { kind: 'play', tile: { low: 3, high: 4 }, position: 'right' }, immediatePoints: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 1, referenceExpectedPointDifferential: 1 },
+      featureDeltas: [],
+    }, true);
+    expect(material.headline).toContain('is worth about 1 more point overall');
+    const positional = buildReviewCoachingProse({ ...facts(), featureDeltas: [{ feature: 'endControlScore', playedValue: 1, referenceValue: 2, delta: 1 }] }, true);
+    expect(positional.headline).toContain('biggest gap');
+    expect(positional.headline).not.toContain('even overall');
+  });
+
+  it('never emits equality prose for identical or forced actions', () => {
+    const identical = buildReviewCoachingProse({
+      ...facts(),
+      best: facts().played,
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
+      featureDeltas: [],
+    }, true);
+    const forced = buildReviewCoachingProse({ ...facts(), missKind: 'forced', featureDeltas: [] }, true);
+    expect(identical.headline).not.toContain('even overall');
+    expect(forced.headline).not.toContain('even overall');
+  });
+
   it('never attributes an oracle-loss expected value to Fritz', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
@@ -55,14 +122,14 @@ describe('default-off positional prose truth', () => {
     expect(prose.headline).not.toContain("Fritz's read is worth about");
   });
 
-  it('does not cite a negative immediate gap as support for the reference move', () => {
+  it('states a directly measured negative immediate tradeoff only with an exact overall tie', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
       deltas: { immediatePoints: -1, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
       featureDeltas: [],
     }, true);
-    expect(prose.headline).toBe('No meaningful positional difference in the measured features.');
-    expect(prose.headline).not.toContain('fewer point');
+    expect(prose.headline).toContain('even overall');
+    expect(prose.headline).toContain('1 fewer point immediately');
   });
 
   it.each([0.01, 0.22])('requires a material expected gap (%s)', expectedPointDifferential => {
@@ -86,17 +153,13 @@ describe('default-off positional prose truth', () => {
     expect(prose.headline).toContain('7 more points overall, including the immediate score');
   });
 
-  it('keeps the no-meaningful-difference prose for a genuine zero value gap', () => {
+  it('renders the equality fallback for a genuine displayed-reference zero value gap', () => {
     const prose = buildReviewCoachingProse({
       ...facts(),
       deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
       featureDeltas: [],
     }, true);
-    expect(prose).toEqual({
-      headline: 'No meaningful positional difference in the measured features.',
-      detail: '2-4 at the left end and 2-4 at the right end have no feature difference above the reporting threshold.',
-      takeaway: 'The measured features do not explain a preference between these moves.',
-    });
+    expect(prose.headline).toBe('The review rates these two moves even overall.');
   });
 
   it('only cites feature values that favor the recommended move', () => {

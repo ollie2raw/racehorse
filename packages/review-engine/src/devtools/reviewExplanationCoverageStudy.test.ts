@@ -58,6 +58,15 @@ describe('review explanation coverage classification', () => {
     expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
   }, 60_000);
 
+  it('uses the rendered true-equality wording as the classifier contract', () => {
+    const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
+      .find(facts => classifyRenderedExplanationProse(facts) === 'equal-value')!;
+    const headline = buildReviewCoachingProse(facts, true).headline.replace(/^Contested:\s*/, '');
+    expect(facts.deltas.referenceExpectedPointDifferential).toBe(0);
+    expect(headline.startsWith('The review rates these two moves even overall')).toBe(true);
+    expect(classifyRenderedExplanationProse(facts)).toBe('equal-value');
+  }, 60_000);
+
   it('does not treat a heuristic zeroed oracle loss as a displayed-reference tie', () => {
     const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
     const classify = (suffix: string) => classifyRenderedExplanationProse(buildReviewCoachingFacts(byId(suffix).evaluation, byId(suffix).snapshot, true));

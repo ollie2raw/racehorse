@@ -105,6 +105,11 @@ function actionLabel(action: ReviewAction): string {
   return word === 'draw' ? 'drawing' : 'passing';
 }
 
+/** Review actions are structured, so this preserves tile, end, and non-play identity. */
+function actionsEqual(left: ReviewAction, right: ReviewAction): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
  * feat/review-positional-features, build brief item 2: "rewrite the prose
  * generator to produce prose from the RANKED FEATURE DELTA -- largest
@@ -115,7 +120,7 @@ function actionLabel(action: ReviewAction): string {
  * `referenceValue` or a `facts.deltas`/`played`/`best` field, per the D1
  * repo rule (enforced by reviewCoachingProse.truthTest.test.ts).
  */
-function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+function buildFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
   // The recommendation comes from the review reference. A feature sentence
   // may only be used to explain that recommendation when the reference
   // actually wins the feature after applying its polarity. Ranking all
@@ -139,6 +144,19 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
     detail: 'The value difference is measured, but none of the tracked positional features favors the reference move.',
     takeaway: 'The point difference is real even though the measured features do not explain it.',
   };
+  // This is deliberately exact: only a measured displayed-reference delta of
+  // zero can support equality prose. In particular, undefined (heuristic
+  // Fritz reference values) is unknown, never a zero-point tie.
+  if (includeTrueReferenceEquality && !top && !actionsEqual(facts.played.action, facts.best.action) && expectedGap === 0) {
+    const immediateClause = immediateGap === 0
+      ? ''
+      : `, although ${referenceAction} scores ${formatNumber(immediateGap)} ${immediateGap > 0 ? 'more' : 'fewer'} ${pointsWord(immediateGap)} immediately`;
+    return {
+      headline: `The review rates these two moves even overall${immediateClause}.`,
+      detail: 'The measured positional features do not explain a preference between these moves.',
+      takeaway: 'The displayed reference and the move played have the same measured overall value.',
+    };
+  }
   if (!top && immediateGap > 0 && (expectedGap === undefined || expectedGap >= 0)) return {
     headline: `${referenceAction} scores ${formatNumber(immediateGap)} more ${pointsWord(immediateGap)} immediately.`,
     detail: 'The score difference is measured, but none of the tracked positional features favors the reference move.',
@@ -175,8 +193,8 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
  * capping how harshly this decision can be labeled elsewhere in the
  * pipeline.
  */
-function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const base = buildFeatureDeltaProse(facts);
+function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
+  const base = buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
   const referenceAction = actionLabel(facts.best.action);
   const otherEngineAction = facts.referenceSource === 'fritz'
     ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
@@ -376,9 +394,15 @@ function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
  * already on the object (missKind, deltas, evidence, principalVariation,
  * played/best actions).
  */
-export function buildReviewCoachingProse(facts: ReviewCoachingFacts, enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED): ReviewCoachingProse {
+export function buildReviewCoachingProse(
+  facts: ReviewCoachingFacts,
+  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  includeTrueReferenceEquality: boolean = true,
+): ReviewCoachingProse {
   if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
-    return facts.agreement?.contested ? buildContestedFeatureDeltaProse(facts) : buildFeatureDeltaProse(facts);
+    return facts.agreement?.contested
+      ? buildContestedFeatureDeltaProse(facts, includeTrueReferenceEquality)
+      : buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
   }
   switch (facts.missKind) {
     case 'correct':

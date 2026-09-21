@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { buildReviewCoachingFacts, capSeverityForContestedDecision, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
 import { lossBandLabelForEvaluation } from '../../../../client/src/analyzer/gameAccuracyModel';
 import { buildReviewCoachingProse, referenceWinsFeature, VALUE_GAP_MIN_POINTS } from '../../../../client/src/analyzer/reviewCoachingProse';
+import type { ReviewAction } from '@racehorse/game-core/review';
 import { replayRecordedSelfPlay, type RecordedPosition } from './replayRecordedSelfPlay';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -23,7 +24,7 @@ export type ExplanationCoverageBucket = {
   readonly resolved: boolean;
 };
 
-export type RenderedExplanationBucket = 'positional' | 'value-gap' | 'no-difference';
+export type RenderedExplanationBucket = 'positional' | 'value-gap' | 'equal-value' | 'no-difference';
 export type NoDifferenceSplitBucket = 'a' | 'b' | 'c' | 'd' | 'unavailable';
 
 export function classifyNoDifferenceSplit(facts: ReviewCoachingFacts): NoDifferenceSplitBucket | null {
@@ -40,8 +41,106 @@ export function classifyRenderedExplanationProse(facts: ReviewCoachingFacts): Re
   if (facts.missKind === 'forced') return null;
   const headline = buildReviewCoachingProse(facts, true).headline.replace(/^Contested:\s*/, '');
   if (headline.startsWith('No meaningful positional difference')) return 'no-difference';
+  if (headline.startsWith('The review rates these two moves even overall')) return 'equal-value';
   if (headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')) return 'value-gap';
   return 'positional';
+}
+
+function actionText(action: ReviewAction): string {
+  if (action.kind === 'play') return `${action.tile.low}-${action.tile.high} at ${action.position}`;
+  return action.kind === 'draw' ? 'draw' : 'pass';
+}
+
+function actionMatches(left: ReviewAction, right: ReviewAction): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+type TrueEqualCoverage = {
+  readonly denominator: number;
+  readonly positional: number;
+  readonly materialValueGap: number;
+  readonly equalValue: number;
+  readonly immediateOnly: number;
+  readonly genericNoDifference: number;
+  readonly unavailable: number;
+  readonly belowFloor: number;
+  readonly other: number;
+  readonly samples: number;
+};
+
+type MutableTrueEqualCoverage = { -readonly [Key in keyof TrueEqualCoverage]: TrueEqualCoverage[Key] };
+
+/**
+ * Writes the post-template measurement and its human-review samples from one
+ * shared facts pass. The historical PR #285 and semantic-correction sections
+ * are deliberately retained verbatim.
+ */
+export function writeTrueReferenceEqualProseStudy(): TrueEqualCoverage {
+  const records = replayRecordedSelfPlay(SELF_PLAY_DIR);
+  const measured = records.map(record => ({ ...record, facts: buildReviewCoachingFacts(record.evaluation, record.snapshot, true) }))
+    .filter(({ facts }) => facts.missKind !== 'forced');
+  const coverage: Omit<MutableTrueEqualCoverage, 'samples'> = {
+    denominator: 0, positional: 0, materialValueGap: 0, equalValue: 0, immediateOnly: 0,
+    genericNoDifference: 0, unavailable: 0, belowFloor: 0, other: 0,
+  };
+  const equalSamples: typeof measured = [];
+  for (const item of measured) {
+    const { facts } = item;
+    if (actionMatches(facts.played.action, facts.best.action)) continue;
+    coverage.denominator += 1;
+    const headline = buildReviewCoachingProse(facts, true).headline.replace(/^Contested:\s*/, '');
+    const bucket = classifyRenderedExplanationProse(facts)!;
+    if (bucket === 'positional') coverage.positional += 1;
+    else if (bucket === 'equal-value') {
+      coverage.equalValue += 1;
+      equalSamples.push(item);
+    } else if (bucket === 'value-gap') {
+      if (headline.includes('is worth about')) coverage.materialValueGap += 1;
+      else coverage.immediateOnly += 1;
+    } else {
+      coverage.genericNoDifference += 1;
+      const gap = facts.deltas.referenceExpectedPointDifferential;
+      if (gap === undefined) coverage.unavailable += 1;
+      else if (gap > 0 && gap < VALUE_GAP_MIN_POINTS) coverage.belowFloor += 1;
+      else coverage.other += 1;
+    }
+  }
+  const supported = coverage.positional + coverage.materialValueGap + coverage.equalValue + coverage.immediateOnly;
+  const section = [
+    '## True displayed-reference equality fallback', '',
+    '| metric | count |', '| --- | ---: |',
+    `| played != displayed reference denominator | ${coverage.denominator} |`,
+    `| positional | ${coverage.positional} |`,
+    `| material value-gap | ${coverage.materialValueGap} |`,
+    `| equal-value rendered | ${coverage.equalValue} |`,
+    `| immediate-only supported | ${coverage.immediateOnly} |`,
+    `| generic no-difference / unsupported | ${coverage.genericNoDifference} |`,
+    `| supported | ${supported}/${coverage.denominator} | ${((supported / coverage.denominator) * 100).toFixed(1)}% |`, '',
+    '| remaining unsupported category | count |', '| --- | ---: |',
+    `| displayed-reference value unavailable | ${coverage.unavailable} |`,
+    `| positive gap below 0.25 | ${coverage.belowFloor} |`,
+    `| other | ${coverage.other} |`, '',
+  ].join('\n');
+  const current = readFileSync(REPORT_PATH, 'utf8');
+  const historical = current.split('\n## True displayed-reference equality fallback\n')[0].trimEnd();
+  writeFileSync(REPORT_PATH, `${historical}\n\n${section}`);
+  const samplePath = resolve(ROOT, 'docs/review-true-equal-prose-samples.md');
+  const sampleSections = equalSamples.map(({ facts, snapshot, file }, index) => [
+    `## ${index + 1}. ${facts.evidence.source}`,
+    '',
+    `- Decision ID: ${snapshot.identifiers.decisionId}`,
+    `- Position: ${file}`,
+    `- Played: ${actionText(facts.played.action)}`,
+    `- Displayed reference: ${actionText(facts.best.action)}`,
+    `- referenceExpectedPointDifferential: ${facts.deltas.referenceExpectedPointDifferential}`,
+    `- Immediate delta: ${facts.deltas.immediatePoints}`,
+    `- Contested: ${facts.agreement?.contested === true}`,
+    `- Previous prose: ${buildReviewCoachingProse(facts, true, false).headline}`,
+    `- New prose: ${buildReviewCoachingProse(facts, true).headline}`,
+    '',
+  ].join('\n'));
+  writeFileSync(samplePath, ['# True displayed-reference equality prose samples', '', `| rendered equality cases | ${equalSamples.length} |`, '', ...sampleSections].join('\n'));
+  return { ...coverage, samples: equalSamples.length };
 }
 
 export function classifyExplanationCoverage(facts: ReviewCoachingFacts): ExplanationCoverageBucket | null {
@@ -200,7 +299,7 @@ function formatReport(counts: CoverageCounts, valueGaps: UnresolvedValueGapCount
 
 function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string {
   const eligible = factsList.filter(facts => classifyRenderedExplanationProse(facts) !== null);
-  const buckets = { positional: 0, 'value-gap': 0, 'no-difference': 0 };
+  const buckets = { positional: 0, 'value-gap': 0, 'equal-value': 0, 'no-difference': 0 };
   // `ReviewCoachingFacts` has no identity flag, so compare the structured actions.
   const noDifference = { exact: [0, 0, 0, 0, 0], search: [0, 0, 0, 0, 0], heuristic: [0, 0, 0, 0, 0] } as Record<ExplanationTier, number[]>;
   const missKinds = new Map<string, number>();
@@ -226,8 +325,8 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
   const totalNoDifference = [0, 1, 2, 3, 4].map(index => (['exact', 'search', 'heuristic'] as const).reduce((sum, tier) => sum + noDifference[tier][index], 0));
   return [
     '## Rendered prose coverage', '', '| bucket | count | percent |', '| --- | ---: | ---: |',
-    ...(['positional', 'value-gap', 'no-difference'] as const).map(bucket => `| ${bucket} | ${buckets[bucket]} | ${percent(buckets[bucket])} |`),
-    `| supported-sentence coverage | ${buckets.positional + buckets['value-gap']} | ${percent(buckets.positional + buckets['value-gap'])} |`, '',
+    ...(['positional', 'value-gap', 'equal-value', 'no-difference'] as const).map(bucket => `| ${bucket} | ${buckets[bucket]} | ${percent(buckets[bucket])} |`),
+    `| supported-sentence coverage | ${buckets.positional + buckets['value-gap'] + buckets['equal-value']} | ${percent(buckets.positional + buckets['value-gap'] + buckets['equal-value'])} |`, '',
     `| supported-sentence coverage (played != reference) | ${distinctSupported} | ${((distinctSupported / distinctChoices) * 100).toFixed(1)}% |`, '',
     '## Rendered no-difference denominator breakdown', '', '| tier | played == reference | played != reference, exactly zero | played != reference, below 0.25 | played != reference, non-reference-favoring | played != reference, expected value unavailable |', '| --- | ---: | ---: | ---: | ---: | ---: |', ...rows, `| overall | ${totalNoDifference.join(' | ')} |`, '',
     '## Eligible missKind distribution', '', '| missKind | count |', '| --- | ---: |', ...[...missKinds.entries()].sort().map(([kind, count]) => `| ${kind} | ${count} |`), '',
