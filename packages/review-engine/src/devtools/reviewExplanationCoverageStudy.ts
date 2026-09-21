@@ -5,7 +5,8 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildReviewCoachingFacts, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
+import { buildReviewCoachingFacts, capSeverityForContestedDecision, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
+import { lossBandLabelForEvaluation } from '../../../../client/src/analyzer/gameAccuracyModel';
 import { buildReviewCoachingProse, referenceWinsFeature, VALUE_GAP_MIN_POINTS } from '../../../../client/src/analyzer/reviewCoachingProse';
 import { replayRecordedSelfPlay, type RecordedPosition } from './replayRecordedSelfPlay';
 
@@ -177,6 +178,25 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
   ].join('\n');
 }
 
+function formatJitterReport(positions: readonly RecordedPosition[]): string {
+  // The canonical per-record facts were not persisted, so A/B are fresh independent Fritz runs.
+  const pass = () => new Map(positions.map(record => [record.snapshot.identifiers.decisionId, { record, facts: buildReviewCoachingFacts(record.evaluation, record.snapshot, true) }]));
+  const a = pass();
+  const b = pass();
+  if (a.size !== b.size || [...a.keys()].some(id => !b.has(id))) throw new Error('Jitter passes have different eligible decision IDs.');
+  let contested = 0; let bucket = 0; let split = 0; let severity = 0;
+  const eligible = [...a].filter(([, value]) => classifyRenderedExplanationProse(value.facts) !== null);
+  for (const [id, left] of eligible) {
+    const right = b.get(id)!;
+    if (left.facts.agreement?.contested !== right.facts.agreement?.contested) contested += 1;
+    if (classifyRenderedExplanationProse(left.facts) !== classifyRenderedExplanationProse(right.facts)) bucket += 1;
+    if (classifyNoDifferenceSplit(left.facts) !== classifyNoDifferenceSplit(right.facts)) split += 1;
+    const base = lossBandLabelForEvaluation(left.record.evaluation);
+    if (base && capSeverityForContestedDecision(base, left.facts.agreement!, left.facts.evidence.source, true) !== capSeverityForContestedDecision(base, right.facts.agreement!, right.facts.evidence.source, true)) severity += 1;
+  }
+  return ['## Jitter measurement', '', 'Two fresh independent facts passes were compared because canonical per-record facts were not persisted.', '', `| eligible decisions compared | ${eligible.length} |`, `| contested flips | ${contested} |`, `| rendered top-level bucket flips | ${bucket} |`, `| denominator sub-split flips | ${split} |`, `| capped-severity flips | ${severity} |`, ''].join('\n');
+}
+
 export function runCoverageStudy(): { readonly selfPlayPositions: number; readonly clientPolicy: 'included' | 'skipped'; readonly clientPolicyReason?: string } {
   const selfPlay = replayRecordedSelfPlay(SELF_PLAY_DIR);
   let positions = selfPlay;
@@ -189,7 +209,7 @@ export function runCoverageStudy(): { readonly selfPlayPositions: number; readon
     clientPolicyReason = error instanceof Error ? error.message : String(error);
   }
   const factsList = buildFacts(positions);
-  writeFileSync(REPORT_PATH, `${formatReport(countPositions(factsList), countUnresolvedValueGaps(factsList))}\n${formatRenderedReport(factsList)}`);
+  writeFileSync(REPORT_PATH, `${formatReport(countPositions(factsList), countUnresolvedValueGaps(factsList))}\n${formatRenderedReport(factsList)}\n${formatJitterReport(positions)}`);
   return { selfPlayPositions: selfPlay.length, clientPolicy, ...(clientPolicyReason ? { clientPolicyReason } : {}) };
 }
 
