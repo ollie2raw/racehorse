@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
 import { buildReviewCoachingProse, referenceWinsFeature } from '../../../../client/src/analyzer/reviewCoachingProse';
 import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
-import { classifyExplanationCoverage, unresolvedValueGapMagnitude } from './reviewExplanationCoverageStudy';
+import { classifyExplanationCoverage, classifyNoDifferenceSplit, classifyRenderedExplanationProse, unresolvedValueGapMagnitude } from './reviewExplanationCoverageStudy';
 
 describe('review explanation coverage classification', () => {
   const records = replayRecordedSelfPlay(resolve(process.cwd(), 'fixtures/recorded-self-play'));
@@ -48,5 +48,28 @@ describe('review explanation coverage classification', () => {
       expect(facts.deltas.expectedPointDifferential !== 0 || facts.deltas.immediatePoints !== 0).toBe(true);
       expect(unresolvedValueGapMagnitude(facts)).toBeGreaterThan(0);
     }
+  }, 60_000);
+
+  it('uses the rendered value-gap wording as the classifier contract', () => {
+    const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
+      .find(facts => classifyRenderedExplanationProse(facts) === 'value-gap')!;
+    const headline = buildReviewCoachingProse(facts, true).headline;
+    expect(headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')).toBe(true);
+    expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
+  }, 60_000);
+
+  it('classifies positional, no-difference, identical, and zero-expected-gap tie fixtures from rendered prose', () => {
+    const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
+    const classify = (suffix: string) => classifyRenderedExplanationProse(buildReviewCoachingFacts(byId(suffix).evaluation, byId(suffix).snapshot, true));
+    expect(classify(':0:move-31')).toBe('no-difference');
+    expect(classifyNoDifferenceSplit(buildReviewCoachingFacts(byId(':0:move-31').evaluation, byId(':0:move-31').snapshot, true))).toBe('b');
+    const factsList = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true));
+    const positional = factsList
+      .find(facts => classifyRenderedExplanationProse(facts) === 'positional')!;
+    expect(classifyRenderedExplanationProse(positional)).toBe('positional');
+    const identical = factsList
+      .find(facts => JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action))!;
+    expect(classifyRenderedExplanationProse(identical)).toBe('no-difference');
+    expect(classifyNoDifferenceSplit(identical)).toBe('a');
   }, 60_000);
 });

@@ -5,8 +5,9 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildReviewCoachingFacts, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
-import { referenceWinsFeature } from '../../../../client/src/analyzer/reviewCoachingProse';
+import { buildReviewCoachingFacts, capSeverityForContestedDecision, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
+import { lossBandLabelForEvaluation } from '../../../../client/src/analyzer/gameAccuracyModel';
+import { buildReviewCoachingProse, referenceWinsFeature, VALUE_GAP_MIN_POINTS } from '../../../../client/src/analyzer/reviewCoachingProse';
 import { replayRecordedSelfPlay, type RecordedPosition } from './replayRecordedSelfPlay';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -21,6 +22,25 @@ export type ExplanationCoverageBucket = {
   /** Whether a measured feature actually favors the reference move. */
   readonly resolved: boolean;
 };
+
+export type RenderedExplanationBucket = 'positional' | 'value-gap' | 'no-difference';
+export type NoDifferenceSplitBucket = 'a' | 'b' | 'c' | 'd';
+
+export function classifyNoDifferenceSplit(facts: ReviewCoachingFacts): NoDifferenceSplitBucket | null {
+  if (classifyRenderedExplanationProse(facts) !== 'no-difference') return null;
+  if (JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action)) return 'a';
+  if (facts.deltas.expectedPointDifferential === 0) return 'b';
+  return facts.deltas.expectedPointDifferential > 0 && facts.deltas.expectedPointDifferential < VALUE_GAP_MIN_POINTS ? 'c' : 'd';
+}
+
+/** Classifies the enabled player-facing headline, not a duplicate truth predicate. */
+export function classifyRenderedExplanationProse(facts: ReviewCoachingFacts): RenderedExplanationBucket | null {
+  if (facts.missKind === 'forced') return null;
+  const headline = buildReviewCoachingProse(facts, true).headline.replace(/^Contested:\s*/, '');
+  if (headline.startsWith('No meaningful positional difference')) return 'no-difference';
+  if (headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')) return 'value-gap';
+  return 'positional';
+}
 
 export function classifyExplanationCoverage(facts: ReviewCoachingFacts): ExplanationCoverageBucket | null {
   if (facts.missKind === 'forced') return null;
@@ -123,6 +143,60 @@ function formatReport(counts: CoverageCounts, valueGaps: UnresolvedValueGapCount
   ].join('\n');
 }
 
+function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string {
+  const eligible = factsList.filter(facts => classifyRenderedExplanationProse(facts) !== null);
+  const buckets = { positional: 0, 'value-gap': 0, 'no-difference': 0 };
+  // `ReviewCoachingFacts` has no identity flag, so compare the structured actions.
+  const noDifference = { exact: [0, 0, 0, 0], search: [0, 0, 0, 0], heuristic: [0, 0, 0, 0] } as Record<ExplanationTier, number[]>;
+  const missKinds = new Map<string, number>();
+  let distinctChoices = 0;
+  let distinctSupported = 0;
+  for (const facts of eligible) {
+    const bucket = classifyRenderedExplanationProse(facts)!;
+    buckets[bucket] += 1;
+    missKinds.set(facts.missKind, (missKinds.get(facts.missKind) ?? 0) + 1);
+    const identical = JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action);
+    if (!identical) {
+      distinctChoices += 1;
+      if (bucket !== 'no-difference') distinctSupported += 1;
+    }
+    if (bucket === 'no-difference') {
+      const size = 'abcd'.indexOf(classifyNoDifferenceSplit(facts)!);
+      noDifference[facts.evidence.source][size] += 1;
+    }
+  }
+  const percent = (count: number) => `${((count / eligible.length) * 100).toFixed(1)}%`;
+  const rows = (['exact', 'search', 'heuristic'] as const).map(tier => `| ${tier} | ${noDifference[tier].join(' | ')} |`);
+  const totalNoDifference = [0, 1, 2, 3].map(index => (['exact', 'search', 'heuristic'] as const).reduce((sum, tier) => sum + noDifference[tier][index], 0));
+  return [
+    '## Rendered prose coverage', '', '| bucket | count | percent |', '| --- | ---: | ---: |',
+    ...(['positional', 'value-gap', 'no-difference'] as const).map(bucket => `| ${bucket} | ${buckets[bucket]} | ${percent(buckets[bucket])} |`),
+    `| supported-sentence coverage | ${buckets.positional + buckets['value-gap']} | ${percent(buckets.positional + buckets['value-gap'])} |`, '',
+    `| supported-sentence coverage (played != reference) | ${distinctSupported} | ${((distinctSupported / distinctChoices) * 100).toFixed(1)}% |`, '',
+    '## Rendered no-difference denominator breakdown', '', '| tier | played == reference | played != reference, exactly zero | played != reference, below 0.25 | played != reference, non-reference-favoring |', '| --- | ---: | ---: | ---: | ---: |', ...rows, `| overall | ${totalNoDifference.join(' | ')} |`, '',
+    '## Eligible missKind distribution', '', '| missKind | count |', '| --- | ---: |', ...[...missKinds.entries()].sort().map(([kind, count]) => `| ${kind} | ${count} |`), '',
+  ].join('\n');
+}
+
+function formatJitterReport(positions: readonly RecordedPosition[]): string {
+  // The canonical per-record facts were not persisted, so A/B are fresh independent Fritz runs.
+  const pass = () => new Map(positions.map(record => [record.snapshot.identifiers.decisionId, { record, facts: buildReviewCoachingFacts(record.evaluation, record.snapshot, true) }]));
+  const a = pass();
+  const b = pass();
+  if (a.size !== b.size || [...a.keys()].some(id => !b.has(id))) throw new Error('Jitter passes have different eligible decision IDs.');
+  let contested = 0; let bucket = 0; let split = 0; let severity = 0;
+  const eligible = [...a].filter(([, value]) => classifyRenderedExplanationProse(value.facts) !== null);
+  for (const [id, left] of eligible) {
+    const right = b.get(id)!;
+    if (left.facts.agreement?.contested !== right.facts.agreement?.contested) contested += 1;
+    if (classifyRenderedExplanationProse(left.facts) !== classifyRenderedExplanationProse(right.facts)) bucket += 1;
+    if (classifyNoDifferenceSplit(left.facts) !== classifyNoDifferenceSplit(right.facts)) split += 1;
+    const base = lossBandLabelForEvaluation(left.record.evaluation);
+    if (base && capSeverityForContestedDecision(base, left.facts.agreement!, left.facts.evidence.source, true) !== capSeverityForContestedDecision(base, right.facts.agreement!, right.facts.evidence.source, true)) severity += 1;
+  }
+  return ['## Jitter measurement', '', 'Two fresh independent facts passes were compared because canonical per-record facts were not persisted.', '', `| eligible decisions compared | ${eligible.length} |`, `| contested flips | ${contested} |`, `| rendered top-level bucket flips | ${bucket} |`, `| denominator sub-split flips | ${split} |`, `| capped-severity flips | ${severity} |`, ''].join('\n');
+}
+
 export function runCoverageStudy(): { readonly selfPlayPositions: number; readonly clientPolicy: 'included' | 'skipped'; readonly clientPolicyReason?: string } {
   const selfPlay = replayRecordedSelfPlay(SELF_PLAY_DIR);
   let positions = selfPlay;
@@ -135,7 +209,7 @@ export function runCoverageStudy(): { readonly selfPlayPositions: number; readon
     clientPolicyReason = error instanceof Error ? error.message : String(error);
   }
   const factsList = buildFacts(positions);
-  writeFileSync(REPORT_PATH, formatReport(countPositions(factsList), countUnresolvedValueGaps(factsList)));
+  writeFileSync(REPORT_PATH, `${formatReport(countPositions(factsList), countUnresolvedValueGaps(factsList))}\n${formatRenderedReport(factsList)}\n${formatJitterReport(positions)}`);
   return { selfPlayPositions: selfPlay.length, clientPolicy, ...(clientPolicyReason ? { clientPolicyReason } : {}) };
 }
 
