@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
 import { buildReviewCoachingProse, referenceWinsFeature } from '../../../../client/src/analyzer/reviewCoachingProse';
 import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
-import { classifyExplanationCoverage } from './reviewExplanationCoverageStudy';
+import { classifyExplanationCoverage, unresolvedValueGapMagnitude } from './reviewExplanationCoverageStudy';
 
 describe('review explanation coverage classification', () => {
   const records = replayRecordedSelfPlay(resolve(process.cwd(), 'fixtures/recorded-self-play'));
@@ -27,6 +27,26 @@ describe('review explanation coverage classification', () => {
     for (const { facts, prose } of resolved) {
       expect(classifyExplanationCoverage(facts)?.resolved).toBe(true);
       expect(prose.headline).toMatch(/biggest gap: .+\.$/);
+    }
+  }, 60_000);
+
+  it('classifies backed value gaps from recorded self-play facts', () => {
+    const unresolved = records
+      .map(({ evaluation, snapshot }) => ({ facts: buildReviewCoachingFacts(evaluation, snapshot, true) }))
+      .filter(({ facts }) => classifyExplanationCoverage(facts)?.resolved === false);
+    const zeroGap = unresolved.filter(({ facts }) => unresolvedValueGapMagnitude(facts) === 0).slice(0, 3);
+    const nonzeroGap = unresolved.filter(({ facts }) => (unresolvedValueGapMagnitude(facts) ?? 0) > 0).slice(0, 3);
+    expect(zeroGap).toHaveLength(3);
+    expect(nonzeroGap).toHaveLength(3);
+
+    for (const { facts } of zeroGap) {
+      expect(facts.deltas.expectedPointDifferential).toBe(0);
+      expect(facts.deltas.immediatePoints).toBe(0);
+      expect(unresolvedValueGapMagnitude(facts)).toBe(0);
+    }
+    for (const { facts } of nonzeroGap) {
+      expect(facts.deltas.expectedPointDifferential !== 0 || facts.deltas.immediatePoints !== 0).toBe(true);
+      expect(unresolvedValueGapMagnitude(facts)).toBeGreaterThan(0);
     }
   }, 60_000);
 });
