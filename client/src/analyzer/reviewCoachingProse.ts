@@ -105,6 +105,11 @@ function actionLabel(action: ReviewAction): string {
   return word === 'draw' ? 'drawing' : 'passing';
 }
 
+/** Review actions are structured, so this preserves tile, end, and non-play identity. */
+function actionsEqual(left: ReviewAction, right: ReviewAction): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
  * feat/review-positional-features, build brief item 2: "rewrite the prose
  * generator to produce prose from the RANKED FEATURE DELTA -- largest
@@ -139,6 +144,19 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
     detail: 'The value difference is measured, but none of the tracked positional features favors the reference move.',
     takeaway: 'The point difference is real even though the measured features do not explain it.',
   };
+  // This is deliberately exact: only a measured displayed-reference delta of
+  // zero can support equality prose. In particular, undefined (heuristic
+  // Fritz reference values) is unknown, never a zero-point tie.
+  if (!top && !actionsEqual(facts.played.action, facts.best.action) && expectedGap === 0) {
+    const immediateClause = immediateGap === 0
+      ? ''
+      : `, although ${referenceAction} scores ${formatNumber(immediateGap)} ${immediateGap > 0 ? 'more' : 'fewer'} ${pointsWord(immediateGap)} immediately`;
+    return {
+      headline: `The review rates these two moves even overall${immediateClause}.`,
+      detail: 'The measured positional features do not explain a preference between these moves.',
+      takeaway: 'The displayed reference and the move played have the same measured overall value.',
+    };
+  }
   if (!top && immediateGap > 0 && (expectedGap === undefined || expectedGap >= 0)) return {
     headline: `${referenceAction} scores ${formatNumber(immediateGap)} more ${pointsWord(immediateGap)} immediately.`,
     detail: 'The score difference is measured, but none of the tracked positional features favors the reference move.',
