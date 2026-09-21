@@ -5,8 +5,9 @@ import { REVIEW_FIXTURE_CORPUS } from '../../../packages/game-core/src/reviewFix
 import { evaluateReviewPosition } from '../../../packages/review-engine/src/evaluateReviewPosition';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { buildReviewCoachingFacts } from './reviewCoachingFacts';
+import type { FritzSecondOpinion } from './reviewFritzSecondOpinion';
 
-const fritzReferenceSpy = vi.hoisted(() => vi.fn(() => {
+const fritzReferenceSpy = vi.hoisted(() => vi.fn<() => FritzSecondOpinion | null>(() => {
   throw new Error('Fritz must not run while positional explanations are disabled.');
 }));
 
