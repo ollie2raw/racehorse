@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
 import { buildReviewCoachingProse, referenceWinsFeature } from '../../../../client/src/analyzer/reviewCoachingProse';
 import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
-import { classifyExplanationCoverage, unresolvedValueGapMagnitude } from './reviewExplanationCoverageStudy';
+import { classifyExplanationCoverage, classifyRenderedExplanationProse, unresolvedValueGapMagnitude } from './reviewExplanationCoverageStudy';
 
 describe('review explanation coverage classification', () => {
   const records = replayRecordedSelfPlay(resolve(process.cwd(), 'fixtures/recorded-self-play'));
@@ -48,5 +48,13 @@ describe('review explanation coverage classification', () => {
       expect(facts.deltas.expectedPointDifferential !== 0 || facts.deltas.immediatePoints !== 0).toBe(true);
       expect(unresolvedValueGapMagnitude(facts)).toBeGreaterThan(0);
     }
+  }, 60_000);
+
+  it('uses the rendered value-gap wording as the classifier contract', () => {
+    const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
+      .find(facts => classifyRenderedExplanationProse(facts) === 'value-gap')!;
+    const headline = buildReviewCoachingProse(facts, true).headline;
+    expect(headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')).toBe(true);
+    expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
   }, 60_000);
 });
