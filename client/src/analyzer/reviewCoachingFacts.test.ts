@@ -309,9 +309,9 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
   });
 
   it('makes a Fritz heuristic reference delta unavailable rather than treating zeroed oracle loss as a tie', () => {
-    const played = play(0, 1, 'left');
-    const fritz = play(0, 1, 'right');
-    const oracle = play(5, 6, 'left');
+    const fixture = REVIEW_FIXTURE_CORPUS.find(candidate => candidate.snapshot.legalActions.length >= 2)!;
+    const [played, fritz] = fixture.snapshot.legalActions;
+    const oracle = fritz;
     fritzReferenceSpy.mockReturnValueOnce({ action: fritz, immediatePoints: 0, isMinimaxEndgame: false });
     const facts = buildReviewCoachingFacts(
       evaluation({
@@ -320,7 +320,7 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
         bestAction: oracle,
         evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
       }),
-      {} as ReviewPositionSnapshotV2,
+      fixture.snapshot as ReviewPositionSnapshotV2,
       true,
     );
     expect(facts.referenceSource).toBe('fritz');
@@ -373,6 +373,7 @@ describe('default-off F2 compatibility', () => {
   const budget = { maxNodes: 200_000, maxHiddenStateSamples: 100, maxPlyDepth: 2, seed: 'racehorse-review-default-seed' };
 
   it('is byte-identical to main’s facts/prose contract across REVIEW_FIXTURE_CORPUS and never invokes Fritz', () => {
+    fritzReferenceSpy.mockClear();
     for (const fixture of REVIEW_FIXTURE_CORPUS) {
       const evaluation = evaluateReviewPosition(fixture.snapshot, budget, 0.02);
       const facts = buildReviewCoachingFacts(evaluation, fixture.snapshot);
