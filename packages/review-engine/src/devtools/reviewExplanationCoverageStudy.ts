@@ -153,7 +153,7 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
     }
     if (bucket === 'no-difference') {
       const gap = facts.deltas.expectedPointDifferential;
-      const size = identical ? 0 : gap === 0 && facts.deltas.immediatePoints === 0 ? 1 : gap > 0 && gap < VALUE_GAP_MIN_POINTS ? 2 : 3;
+      const size = identical ? 0 : gap === 0 ? 1 : gap > 0 && gap < VALUE_GAP_MIN_POINTS ? 2 : 3;
       noDifference[facts.evidence.source][size] += 1;
     }
   }
