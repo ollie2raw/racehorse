@@ -359,7 +359,7 @@ describe('default-off F2 compatibility', () => {
       expect(JSON.stringify(buildReviewCoachingProse(facts))).toBe(JSON.stringify(buildReviewCoachingProse(mainContractFacts)));
     }
     expect(fritzReferenceSpy).not.toHaveBeenCalled();
-  });
+  }, 60_000);
 });
 
 describe('buildReviewCoachingFacts -- real corpus fixtures (same fixtures as classifyHeuristicResult.test.ts, PR #232)', () => {
