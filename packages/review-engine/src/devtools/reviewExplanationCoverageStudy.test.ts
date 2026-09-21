@@ -58,11 +58,11 @@ describe('review explanation coverage classification', () => {
     expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
   }, 60_000);
 
-  it('classifies positional, no-difference, identical, and zero-expected-gap tie fixtures from rendered prose', () => {
+  it('does not treat a heuristic zeroed oracle loss as a displayed-reference tie', () => {
     const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
     const classify = (suffix: string) => classifyRenderedExplanationProse(buildReviewCoachingFacts(byId(suffix).evaluation, byId(suffix).snapshot, true));
     expect(classify(':0:move-31')).toBe('no-difference');
-    expect(classifyNoDifferenceSplit(buildReviewCoachingFacts(byId(':0:move-31').evaluation, byId(':0:move-31').snapshot, true))).toBe('b');
+    expect(classifyNoDifferenceSplit(buildReviewCoachingFacts(byId(':0:move-31').evaluation, byId(':0:move-31').snapshot, true))).toBe('unavailable');
     const factsList = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true));
     const positional = factsList
       .find(facts => classifyRenderedExplanationProse(facts) === 'positional')!;

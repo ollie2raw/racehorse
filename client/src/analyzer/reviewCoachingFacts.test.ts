@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
+import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { PlacementPosition } from '@racehorse/game-core/types';
 import { REVIEW_FIXTURE_CORPUS } from '../../../packages/game-core/src/reviewFixtureCorpus';
 import { evaluateReviewPosition } from '../../../packages/review-engine/src/evaluateReviewPosition';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { buildReviewCoachingFacts } from './reviewCoachingFacts';
+import type { FritzSecondOpinion } from './reviewFritzSecondOpinion';
 
-const fritzReferenceSpy = vi.hoisted(() => vi.fn(() => {
+const fritzReferenceSpy = vi.hoisted(() => vi.fn<() => FritzSecondOpinion | null>(() => {
   throw new Error('Fritz must not run while positional explanations are disabled.');
 }));
 
@@ -296,6 +297,39 @@ describe('buildReviewCoachingFacts -- heuristic-path input (zeroed values)', () 
 });
 
 describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
+  it('keeps oracle loss separate from the displayed oracle-reference delta', () => {
+    const played = play(0, 1);
+    const best = play(5, 6);
+    const candidates = [
+      candidate(played, { value: { expectedPointDifferential: 2, winProbability: null } }),
+      candidate(best, { value: { expectedPointDifferential: 7, winProbability: null } }),
+    ];
+    const facts = buildReviewCoachingFacts(evaluation({ candidates, playedAction: played, bestAction: best }));
+    expect(facts.deltas.expectedPointDifferential).toBe(5);
+    expect(facts.deltas.referenceExpectedPointDifferential).toBe(5);
+  });
+
+  it('makes a Fritz heuristic reference delta unavailable rather than treating zeroed oracle loss as a tie', () => {
+    const fixture = REVIEW_FIXTURE_CORPUS.find(candidate => candidate.snapshot.legalActions.length >= 2)!;
+    const [played, fritz] = fixture.snapshot.legalActions;
+    const oracle = fritz;
+    fritzReferenceSpy.mockReturnValueOnce({ action: fritz, immediatePoints: 0, isMinimaxEndgame: false });
+    const facts = buildReviewCoachingFacts(
+      evaluation({
+        candidates: [candidate(played), candidate(oracle), candidate(fritz)],
+        playedAction: played,
+        bestAction: oracle,
+        evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
+      }),
+      fixture.snapshot as ReviewPositionSnapshotV2,
+      true,
+    );
+    expect(facts.referenceSource).toBe('fritz');
+    expect(facts.best.action).toEqual(fritz);
+    expect(facts.deltas.expectedPointDifferential).toBe(0);
+    expect(facts.deltas.referenceExpectedPointDifferential).toBeUndefined();
+  });
+
   it('omits winProbability from deltas when the evaluation has none', () => {
     const played = play(0, 1);
     const best = play(5, 6);
@@ -340,6 +374,7 @@ describe('default-off F2 compatibility', () => {
   const budget = { maxNodes: 200_000, maxHiddenStateSamples: 100, maxPlyDepth: 2, seed: 'racehorse-review-default-seed' };
 
   it('is byte-identical to main’s facts/prose contract across REVIEW_FIXTURE_CORPUS and never invokes Fritz', () => {
+    fritzReferenceSpy.mockClear();
     for (const fixture of REVIEW_FIXTURE_CORPUS) {
       const evaluation = evaluateReviewPosition(fixture.snapshot, budget, 0.02);
       const facts = buildReviewCoachingFacts(evaluation, fixture.snapshot);
@@ -350,6 +385,7 @@ describe('default-off F2 compatibility', () => {
         deltas: {
           immediatePoints: evaluation.best.immediatePoints - evaluation.played.immediatePoints,
           expectedPointDifferential: evaluation.loss.expectedPointDifferential,
+          referenceExpectedPointDifferential: evaluation.loss.expectedPointDifferential,
           ...(evaluation.loss.winProbability !== null ? { winProbability: evaluation.loss.winProbability } : {}),
         },
         evidence: evaluation.evidence,

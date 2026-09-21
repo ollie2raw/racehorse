@@ -2,7 +2,7 @@
  * Reports positional-explanation coverage from committed recorded corpora.
  * This is a manually invoked devtool: `npx tsx src/devtools/reviewExplanationCoverageStudy.ts`.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildReviewCoachingFacts, capSeverityForContestedDecision, type ReviewCoachingFacts } from '../../../../client/src/analyzer/reviewCoachingFacts';
@@ -24,13 +24,15 @@ export type ExplanationCoverageBucket = {
 };
 
 export type RenderedExplanationBucket = 'positional' | 'value-gap' | 'no-difference';
-export type NoDifferenceSplitBucket = 'a' | 'b' | 'c' | 'd';
+export type NoDifferenceSplitBucket = 'a' | 'b' | 'c' | 'd' | 'unavailable';
 
 export function classifyNoDifferenceSplit(facts: ReviewCoachingFacts): NoDifferenceSplitBucket | null {
   if (classifyRenderedExplanationProse(facts) !== 'no-difference') return null;
   if (JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action)) return 'a';
-  if (facts.deltas.expectedPointDifferential === 0) return 'b';
-  return facts.deltas.expectedPointDifferential > 0 && facts.deltas.expectedPointDifferential < VALUE_GAP_MIN_POINTS ? 'c' : 'd';
+  const referenceGap = facts.deltas.referenceExpectedPointDifferential;
+  if (referenceGap === undefined) return 'unavailable';
+  if (referenceGap === 0) return 'b';
+  return referenceGap > 0 && referenceGap < VALUE_GAP_MIN_POINTS ? 'c' : 'd';
 }
 
 /** Classifies the enabled player-facing headline, not a duplicate truth predicate. */
@@ -59,9 +61,62 @@ export function unresolvedValueGapMagnitude(facts: ReviewCoachingFacts): number 
   const coverage = classifyExplanationCoverage(facts);
   if (!coverage || coverage.resolved) return null;
   return Math.max(
-    Math.abs(facts.deltas.expectedPointDifferential),
+    Math.abs(facts.deltas.referenceExpectedPointDifferential ?? 0),
     Math.abs(facts.deltas.immediatePoints),
   );
+}
+
+type ReferenceRelativeCategory = 'same-reference' | 'equal' | 'below-floor' | 'material-positive' | 'unavailable' | 'other';
+
+function referenceRelativeCategory(facts: ReviewCoachingFacts): ReferenceRelativeCategory {
+  if (JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action)) return 'same-reference';
+  const gap = facts.deltas.referenceExpectedPointDifferential;
+  if (gap === undefined) return 'unavailable';
+  if (gap === 0) return 'equal';
+  if (gap > 0 && gap < VALUE_GAP_MIN_POINTS) return 'below-floor';
+  if (gap >= VALUE_GAP_MIN_POINTS) return 'material-positive';
+  return 'other';
+}
+
+/** Appends a one-pass reference-relative correction without rewriting the historical PR #285 tables. */
+export function appendReferenceRelativeCorrectionStudy(): string {
+  // Match the historical study denominator: forced/no-choice records are not
+  // explanation decisions and are excluded before every correction count.
+  const factsList = buildFacts(replayRecordedSelfPlay(SELF_PLAY_DIR))
+    .filter(facts => facts.missKind !== 'forced');
+  const tiers: ExplanationTier[] = ['exact', 'search', 'heuristic'];
+  const categories: ReferenceRelativeCategory[] = ['same-reference', 'equal', 'below-floor', 'material-positive', 'unavailable', 'other'];
+  const count = (tier: ExplanationTier | 'overall', category: ReferenceRelativeCategory) => factsList.filter(facts =>
+    (tier === 'overall' || facts.evidence.source === tier) && referenceRelativeCategory(facts) === category,
+  ).length;
+  const oldBucketB = factsList.filter(facts =>
+    classifyRenderedExplanationProse(facts) === 'no-difference'
+    && JSON.stringify(facts.played.action) !== JSON.stringify(facts.best.action)
+    && facts.deltas.expectedPointDifferential === 0,
+  );
+  const trueTies = oldBucketB.filter(facts => facts.deltas.referenceExpectedPointDifferential === 0);
+  const tieByTier = (tier: ExplanationTier) => trueTies.filter(facts => facts.evidence.source === tier).length;
+  const distinct = factsList.filter(facts => JSON.stringify(facts.played.action) !== JSON.stringify(facts.best.action));
+  const supported = distinct.filter(facts => classifyRenderedExplanationProse(facts) !== 'no-difference');
+  const rows = [...tiers, 'overall' as const].map(tier =>
+    `| ${tier} | ${categories.map(category => count(tier, category)).join(' | ')} |`,
+  );
+  const section = [
+    '## Reference-relative semantic correction', '',
+    '| tier | played == displayed reference | displayed-reference expected gap == 0 | positive gap below 0.25 | positive/material expected gap | expected value unavailable | sign-inconsistent/other |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+    ...rows, '',
+    `| previous zero-loss bucket-b cases | ${oldBucketB.length} |`,
+    `| true displayed-reference ties | ${trueTies.length} |`,
+    `| true displayed-reference ties (search) | ${tieByTier('search')} |`,
+    `| true displayed-reference ties (heuristic) | ${tieByTier('heuristic')} |`,
+    `| previous bucket-b cases moved to another category | ${oldBucketB.length - trueTies.length} |`,
+    `| supported sentences (played != displayed reference) | ${supported.length}/${distinct.length} | ${((supported.length / distinct.length) * 100).toFixed(1)}% |`, '',
+  ].join('\n');
+  const current = readFileSync(REPORT_PATH, 'utf8');
+  const historical = current.split('\n## Reference-relative semantic correction\n')[0].trimEnd();
+  writeFileSync(REPORT_PATH, `${historical}\n\n${section}`);
+  return section;
 }
 
 type CoverageCounts = Record<ExplanationTier, Record<'yes' | 'no', Record<'yes' | 'no', number>>>;
@@ -147,7 +202,7 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
   const eligible = factsList.filter(facts => classifyRenderedExplanationProse(facts) !== null);
   const buckets = { positional: 0, 'value-gap': 0, 'no-difference': 0 };
   // `ReviewCoachingFacts` has no identity flag, so compare the structured actions.
-  const noDifference = { exact: [0, 0, 0, 0], search: [0, 0, 0, 0], heuristic: [0, 0, 0, 0] } as Record<ExplanationTier, number[]>;
+  const noDifference = { exact: [0, 0, 0, 0, 0], search: [0, 0, 0, 0, 0], heuristic: [0, 0, 0, 0, 0] } as Record<ExplanationTier, number[]>;
   const missKinds = new Map<string, number>();
   let distinctChoices = 0;
   let distinctSupported = 0;
@@ -161,19 +216,20 @@ function formatRenderedReport(factsList: readonly ReviewCoachingFacts[]): string
       if (bucket !== 'no-difference') distinctSupported += 1;
     }
     if (bucket === 'no-difference') {
-      const size = 'abcd'.indexOf(classifyNoDifferenceSplit(facts)!);
+      const split = classifyNoDifferenceSplit(facts)!;
+      const size = ['a', 'b', 'c', 'd', 'unavailable'].indexOf(split);
       noDifference[facts.evidence.source][size] += 1;
     }
   }
   const percent = (count: number) => `${((count / eligible.length) * 100).toFixed(1)}%`;
   const rows = (['exact', 'search', 'heuristic'] as const).map(tier => `| ${tier} | ${noDifference[tier].join(' | ')} |`);
-  const totalNoDifference = [0, 1, 2, 3].map(index => (['exact', 'search', 'heuristic'] as const).reduce((sum, tier) => sum + noDifference[tier][index], 0));
+  const totalNoDifference = [0, 1, 2, 3, 4].map(index => (['exact', 'search', 'heuristic'] as const).reduce((sum, tier) => sum + noDifference[tier][index], 0));
   return [
     '## Rendered prose coverage', '', '| bucket | count | percent |', '| --- | ---: | ---: |',
     ...(['positional', 'value-gap', 'no-difference'] as const).map(bucket => `| ${bucket} | ${buckets[bucket]} | ${percent(buckets[bucket])} |`),
     `| supported-sentence coverage | ${buckets.positional + buckets['value-gap']} | ${percent(buckets.positional + buckets['value-gap'])} |`, '',
     `| supported-sentence coverage (played != reference) | ${distinctSupported} | ${((distinctSupported / distinctChoices) * 100).toFixed(1)}% |`, '',
-    '## Rendered no-difference denominator breakdown', '', '| tier | played == reference | played != reference, exactly zero | played != reference, below 0.25 | played != reference, non-reference-favoring |', '| --- | ---: | ---: | ---: | ---: |', ...rows, `| overall | ${totalNoDifference.join(' | ')} |`, '',
+    '## Rendered no-difference denominator breakdown', '', '| tier | played == reference | played != reference, exactly zero | played != reference, below 0.25 | played != reference, non-reference-favoring | played != reference, expected value unavailable |', '| --- | ---: | ---: | ---: | ---: | ---: |', ...rows, `| overall | ${totalNoDifference.join(' | ')} |`, '',
     '## Eligible missKind distribution', '', '| missKind | count |', '| --- | ---: |', ...[...missKinds.entries()].sort().map(([kind, count]) => `| ${kind} | ${count} |`), '',
   ].join('\n');
 }
