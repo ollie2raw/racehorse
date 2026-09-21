@@ -88,6 +88,9 @@ export function referenceWinsFeature(delta: ReviewFeatureDelta): boolean {
   return meta.higherIsBetter ? delta.delta > 0 : delta.delta < 0;
 }
 
+/** Small expected-value differences below this are not useful player-facing evidence. */
+export const VALUE_GAP_MIN_POINTS = 0.25;
+
 function describeFeatureDelta(delta: ReviewFeatureDelta, referenceLabel: string, playedLabel: string): string {
   const meta = FEATURE_META[delta.feature];
   const magnitude = formatNumber(delta.delta);
@@ -119,10 +122,25 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
   // absolute gaps previously let a played-favoring value lead the sentence.
   const deltas = (facts.featureDeltas ?? []).filter(referenceWinsFeature);
   const referenceLabel = facts.referenceSource === 'fritz' ? "Fritz's read" : 'the engine’s line';
+  const referenceLabelAtSentenceStart = referenceLabel[0].toUpperCase() + referenceLabel.slice(1);
   const referenceAction = actionLabel(facts.best.action);
   const playedAction = actionLabel(facts.played.action);
   const top = deltas[0];
   const second = deltas[1];
+  const expectedGap = facts.deltas.expectedPointDifferential;
+  const immediateGap = facts.deltas.immediatePoints;
+  // Candidate expected values are net swings from this decision point, so they
+  // already include immediate scoring; do not add immediatePoints to this value.
+  if (!top && expectedGap >= VALUE_GAP_MIN_POINTS) return {
+    headline: `${referenceLabelAtSentenceStart} is worth about ${formatNumber(expectedGap)} more ${pointsWord(expectedGap)} overall, including the immediate score.`,
+    detail: 'The value difference is measured, but none of the tracked positional features favors the reference move.',
+    takeaway: 'The point difference is real even though the measured features do not explain it.',
+  };
+  if (!top && immediateGap > 0 && expectedGap >= 0) return {
+    headline: `${referenceAction} scores ${formatNumber(immediateGap)} more ${pointsWord(immediateGap)} immediately.`,
+    detail: 'The score difference is measured, but none of the tracked positional features favors the reference move.',
+    takeaway: 'The immediate point difference is real even though the measured features do not explain it.',
+  };
   if (!top) return {
     headline: 'No meaningful positional difference in the measured features.',
     detail: `${playedAction} and ${referenceAction} have no feature difference above the reporting threshold.`,
