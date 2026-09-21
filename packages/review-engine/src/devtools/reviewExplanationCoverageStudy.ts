@@ -80,7 +80,10 @@ function referenceRelativeCategory(facts: ReviewCoachingFacts): ReferenceRelativ
 
 /** Appends a one-pass reference-relative correction without rewriting the historical PR #285 tables. */
 export function appendReferenceRelativeCorrectionStudy(): string {
-  const factsList = buildFacts(replayRecordedSelfPlay(SELF_PLAY_DIR));
+  // Match the historical study denominator: forced/no-choice records are not
+  // explanation decisions and are excluded before every correction count.
+  const factsList = buildFacts(replayRecordedSelfPlay(SELF_PLAY_DIR))
+    .filter(facts => facts.missKind !== 'forced');
   const tiers: ExplanationTier[] = ['exact', 'search', 'heuristic'];
   const categories: ReferenceRelativeCategory[] = ['same-reference', 'equal', 'below-floor', 'material-positive', 'unavailable', 'other'];
   const count = (tier: ExplanationTier | 'overall', category: ReferenceRelativeCategory) => factsList.filter(facts =>
