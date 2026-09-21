@@ -281,7 +281,11 @@ function buildMissedScoreProse(facts: ReviewCoachingFacts): ReviewCoachingProse 
 }
 
 function buildReplyRiskProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const totalLoss = formatNumber(facts.deltas.referenceExpectedPointDifferential ?? 0);
+  const referenceExpectedGap = facts.deltas.referenceExpectedPointDifferential;
+  // This path normally has an oracle reference, but preserve the structured
+  // contract for every caller: unavailable is not a zero-point tie.
+  if (referenceExpectedGap === undefined) return buildUnknownProse(facts);
+  const totalLoss = formatNumber(referenceExpectedGap);
   return {
     headline: `Even on the scoreboard now, costlier over the rest of the hand.`,
     detail: `This move scored about the same as the best option right now, but it left a position that cost roughly ${totalLoss} ${pointsWord(facts.deltas.expectedPointDifferential)} in expected value over the rest of the hand.`,
@@ -290,7 +294,10 @@ function buildReplyRiskProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
 }
 
 function buildBetterTileProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const gap = formatNumber(facts.deltas.referenceExpectedPointDifferential ?? 0);
+  const referenceExpectedGap = facts.deltas.referenceExpectedPointDifferential;
+  // Do not turn an unavailable Fritz-relative value into a numeric claim.
+  if (referenceExpectedGap === undefined) return buildUnknownProse(facts);
+  const gap = formatNumber(referenceExpectedGap);
   const best = playAction(facts.best.action);
   return {
     headline: `A different tile rated higher${best ? ` -- ${tileText(best.tile)}` : ''} -- for no single clear reason.`,

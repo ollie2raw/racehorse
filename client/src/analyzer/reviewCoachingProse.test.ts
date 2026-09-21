@@ -245,6 +245,47 @@ describe('buildReviewCoachingProse -- truth test: every number in prose traces b
 });
 
 describe('buildReviewCoachingProse -- refuses unsupported certainty without a numeric delta', () => {
+  const unavailableFritzFacts = (missKind: ReviewCoachingFacts['missKind']): ReviewCoachingFacts => facts({
+    missKind,
+    referenceSource: 'fritz',
+    evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
+    played: { action: play(0, 1), immediatePoints: 0 },
+    best: { action: play(5, 6), immediatePoints: 0 },
+    deltas: { immediatePoints: 0, expectedPointDifferential: 7 },
+  });
+
+  it.each(['reply_risk', 'better_tile'] as const)('%s preserves unavailable reference value instead of rendering zero', missKind => {
+    const prose = buildReviewCoachingProse(unavailableFritzFacts(missKind));
+    const text = `${prose.headline} ${prose.detail} ${prose.takeaway}`;
+    expect(text).not.toMatch(/0 points|worth about 0|even overall/i);
+    expect(text).not.toContain("Fritz's read is worth");
+    expect(text).toContain('Too early in the review to say for sure.');
+  });
+
+  it('does not treat unavailable Fritz value as zero, equality, or a sub-material gap', () => {
+    const prose = buildReviewCoachingProse(unavailableFritzFacts('reply_risk'));
+    expect(prose.headline).not.toContain('No meaningful positional difference');
+    expect(`${prose.headline} ${prose.detail}`).not.toMatch(/0 points|equal|even overall|about 0/i);
+  });
+
+  it('still allows directly supported immediate-score prose when Fritz value is unavailable', () => {
+    const prose = buildReviewCoachingProse({
+      ...unavailableFritzFacts('same_tile_wrong_end'),
+      deltas: { immediatePoints: 2, expectedPointDifferential: 7 },
+      featureDeltas: [],
+    }, true);
+    expect(prose.headline).toContain('scores 2 more points immediately');
+  });
+
+  it('still allows feature-backed Fritz prose when Fritz value is unavailable', () => {
+    const prose = buildReviewCoachingProse({
+      ...unavailableFritzFacts('same_tile_wrong_end'),
+      featureDeltas: [{ feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 }],
+    }, true);
+    expect(prose.headline).toContain("Fritz's read");
+    expect(prose.headline).toContain('biggest gap');
+  });
+
   it('does not claim "clearly stronger" style language when best.immediatePoints is 0 (no real gap to point to)', () => {
     const f = facts({
       missKind: 'correct',
