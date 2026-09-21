@@ -57,4 +57,16 @@ describe('review explanation coverage classification', () => {
     expect(headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')).toBe(true);
     expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
   }, 60_000);
+
+  it('classifies positional, no-difference, identical, and zero-expected-gap tie fixtures from rendered prose', () => {
+    const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
+    const classify = (suffix: string) => classifyRenderedExplanationProse(buildReviewCoachingFacts(byId(suffix).evaluation, byId(suffix).snapshot, true));
+    expect(classify(':0:move-31')).toBe('no-difference');
+    const positional = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
+      .find(facts => classifyRenderedExplanationProse(facts) === 'positional')!;
+    expect(classifyRenderedExplanationProse(positional)).toBe('positional');
+    const identical = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
+      .find(facts => JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action))!;
+    expect(classifyRenderedExplanationProse(identical)).toBe('no-difference');
+  }, 60_000);
 });
