@@ -172,16 +172,45 @@ All of the following, in order:
 - Converting Fritz Master's wall-clock deadlines to node budgets for cross-machine reproducibility (small and localized; do it if F1 reproducibility issues appear).
 - MP-specific adjustments beyond what already shipped in E5.
 
-## Chess.com-parity roadmap (filled in by F1e)
+## Chess.com-parity roadmap (F1e audit)
 
-| Capability | Status | Evidence | Planned |
-|---|---|---|---|
-| Win-probability graph over the game | _F1e to fill_ | | |
-| Per-move classification | _F1e to fill_ | | |
-| Key-moment list | _F1e to fill_ (E3 pivotal selector exists for live sessions only) | | |
-| Best move on board | _F1e to fill_ | | |
-| Retry-a-mistake | _F1e to fill_ | | |
-| Reopen historical game with same explanations | _F1e to fill_ (E3 explicitly left reopen/pivotal out of scope) | | |
+**Audit context (2026-09-21).** Phases A–E engineering is shipped. F2 prose
+engineering is shipped behind its default-off flag: PR #285's historical study
+is 189/280 (67.5%); PR #286 corrected displayed-reference semantics; and PR
+#287's one shared facts pass is 201/280 (71.8%), with 12 rendered true-equality
+cases and 79 remaining unsupported (70 displayed-reference values unavailable,
+9 below the materiality floor, 0 other). Heuristic Fritz expected value is
+unavailable by design. Contested Fritz jitter remains an activation blocker;
+F1c is unrun; and prose voice is not human-approved for public activation. The
+71.8% is a pass-specific rendered-coverage measurement, not an accuracy score.
+
+| Capability | Status | Current evidence | Exact gap | Roadmap action |
+|---|---|---|---|---|
+| Win-probability / advantage graph | missing | `ReviewEvaluationV1` carries candidate `value.winProbability` (`packages/review-engine/src/reviewCaptureSchema.ts`); `GameReviewer` renders move navigation, ratings, coaching, and PV only (`client/src/analyzer/GameReviewer.tsx`). No review chart/graph component or rendering path exists (repository search of analyzer, pivotal-review, and bot review surfaces). | No user-facing over-game probability/advantage timeline, including no linked move cursor. | **F1e-1 advantage timeline** — show a review-wide, cursor-linked advantage series; primary systems: `GameReviewer.tsx`, `GameReviewer.css`, persisted `game_reviews` evaluations; dependency: stable per-review facts/persistence; can follow public prose activation because the current per-move review remains understandable without a graph. |
+| Per-move classification | present | `GameReviewer` navigates every analyzed move with `cursor` and `selectedHandNumber`, reads each resolved evaluation via `decisionIdByMoveNumber`, and renders `selectMoveHeuristicClassification` / `heuristicClassificationToDisplay` plus rating state (`client/src/analyzer/GameReviewer.tsx`). Coverage includes `GameReviewer.heuristicRender.test.tsx`, `GameReviewer.searchBadge.test.tsx`, and `GameReviewer.coachingPanel.test.tsx`; post-game entry is `PostGameReviewPrompt` → `openReviewGameFromPrompt` in `client/src/modules/review/usePostGamePivotalReview.ts`. | None for the normal in-memory post-game flow; historical reopen remains separately missing below. | none |
+| Key-moment / mistake list | partial | `selectPivotalTurns` ranks up to three scorable player decisions by expected loss (`client/src/training/pivotalReview/pivotalTurnSelector.ts`); `PivotalTurnReviewCard` and `PivotalReviewSummary` render the selected turns and lessons, with tests. `BotPivotalReviewPortal` wires it, but `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and `usePostGamePivotalReview.ts` documents the path as inert on main. | The selector/list is not reachable in the normal current post-game flow and is not reconstructed for history. | **F1e-2 reachable key moments** — expose a deterministic, linked key-moment list from the regular Game Review; primary systems: pivotal selector/cards and `GameReviewer`; dependency: F1c/determinism for trustworthy contested ranking, then historical review loading for reuse; required before public prose activation only if the launch promise includes a curated mistake list, otherwise can follow the core review launch. |
+| Best/reference move shown on board | partial | `GameReviewer` renders the review board and a `gr-ghost-tile` when an oracle best tile differs (`client/src/analyzer/GameReviewer.tsx`); it labels the tile “Best move.” It also has a synthetic PV board stepper (`GameReviewer.pvBoard.test.tsx`), while that test records production's current state as “No continuation recorded for this move.” `PivotalTurnReviewCard` shows best action text, not a placement overlay. | The ghost tile does not show the exact reference placement/end/branch spatially; production PVs are empty, so the stepper cannot provide that visualization. | **F1e-3 reference-placement overlay** — show the exact displayed reference action on the pre-move board, including end/branch; primary systems: `GameReviewer.tsx`, Board overlay API, `ReviewAction`; dependency: no new evaluation semantics, but must honor F2 displayed-reference source labels; can follow activation because text/reference facts remain available. |
+| Retry-a-mistake / try-again | missing | `PivotalTurnReviewCard` only steps through reflection cards and completes notes; `PivotalReviewSummary` only selects a hand. The match `rematch` routes are whole-game multiplayer flow (`server/src/multiplayer/registerRematchPregameHandlers.ts`), and the history scrubber is disabled after game over (`client/src/bot/view-model/resolveHistoryScrubberView.ts`). No reviewed-state replay/alternative-comparison action exists. | A reviewed decision cannot launch a playable reconstruction of that position or compare a retry against its reference. | **F1e-4 decision retry sandbox** — start a non-persistent practice state from a selected reviewed snapshot and compare the retry to the stored reference; primary systems: review snapshots, Board/match runtime, GameReviewer; dependency: retained review snapshots plus explicit practice-state ownership; can follow public prose activation because it is instructional depth, not required to understand a review. |
+| Reopen historical completed game with same review/explanations | missing | Server persists `evaluations`, accuracy result, versions, game digest and source match id (`server/src/http/routes/gameReviewsRoute.ts`, `server/src/reviewPersistence/queryLatestGameReview.ts`) and writes best-effort from `usePostGamePivotalReview.ts` / `postGameReviewWrite.ts`. The GET route is tested in `server/src/http/routes/gameReviewsRoute.test.ts`, but no client calls GET `/api/game-reviews`; `GameReviewer` consumes only live `analysis` and `reviewWorkerBatch`. The in-game history scrubber is explicitly unavailable after game over. | No normal history route reconstructs the stored decision sequence/evidence/explanations. Recomputing is not an equivalent substitute: Fritz wall-clock jitter can change contested metadata, and the read route returns latest rather than an exact selected version. | **F1e-5 historical review replay** — route a completed game to its persisted versioned review and render stored evaluations/facts without recomputation; primary systems: game history UI, GET `/api/game-reviews`, `GameReviewer`, review payload/version selection; dependency: stable facts result and a version-pinned read contract; **required before public Game Review launch** because reopening the same review is part of a trustworthy review promise. |
+
+### F1e parity conclusion
+
+**Present: 1. Partial: 2. Missing: 3.** Per-move classification is the one
+complete locked surface in the current in-memory post-game flow. Key moments
+and reference-on-board are presentation/UX gaps: their underlying selector and
+board data exist, but the first is currently inert and the second does not show
+the reference placement spatially. The advantage graph and retry sandbox are
+post-launch instructional enhancements; their absence does not make a single
+move's current review incomprehensible.
+
+Historical reopen is a persistence/architecture gap and, together with the
+existing Fritz contested-jitter defect, is a launch blocker: public review
+cannot promise the same decision sequence, evidence tier, or explanation after
+reopen until it loads a stable stored facts result. F1e-5 and the lightest
+determinism/consistency work that guarantees one stable facts result per review
+should precede public Game Review launch. F1e-1, F1e-3, and F1e-4 can follow
+without compromising the core review promise; F1e-2 is required before launch
+only if curated key moments are part of the launch commitment.
 
 ## Risks
 
@@ -252,4 +281,3 @@ Replace mock-only pool evidence with a real-worker byte-identical test at 1 vers
 7. Open each track as its own PR off main. No user-visible, classification, accuracy-number, or stored-data changes may merge without product-owner review. Devtools/docs/pure-additive PRs require full `gh pr checks` output and Server Validation passed by name before merge. Rebuild `dist/` clean before trusting local results.
 
 One agent, one session, no subagents. Report after verification + docs PR, F1b launch, F1b results, and each PR opened, using plain tables. Checkpoint after each step: commit to its branch and update untracked `PROGRESS-F.md` (step, status, branch, next step, blockers; at most 10 lines). Preserve the earlier two-failed-fix-attempt stop rule, package-scoped development tests, once-per-PR full validation, and all hard constraints. If sandboxing blocks an action, report the exact command for the product owner to run; do not work around it.
-
