@@ -120,7 +120,7 @@ function actionsEqual(left: ReviewAction, right: ReviewAction): boolean {
  * `referenceValue` or a `facts.deltas`/`played`/`best` field, per the D1
  * repo rule (enforced by reviewCoachingProse.truthTest.test.ts).
  */
-function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+function buildFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
   // The recommendation comes from the review reference. A feature sentence
   // may only be used to explain that recommendation when the reference
   // actually wins the feature after applying its polarity. Ranking all
@@ -147,7 +147,7 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
   // This is deliberately exact: only a measured displayed-reference delta of
   // zero can support equality prose. In particular, undefined (heuristic
   // Fritz reference values) is unknown, never a zero-point tie.
-  if (!top && !actionsEqual(facts.played.action, facts.best.action) && expectedGap === 0) {
+  if (includeTrueReferenceEquality && !top && !actionsEqual(facts.played.action, facts.best.action) && expectedGap === 0) {
     const immediateClause = immediateGap === 0
       ? ''
       : `, although ${referenceAction} scores ${formatNumber(immediateGap)} ${immediateGap > 0 ? 'more' : 'fewer'} ${pointsWord(immediateGap)} immediately`;
@@ -193,8 +193,8 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse
  * capping how harshly this decision can be labeled elsewhere in the
  * pipeline.
  */
-function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const base = buildFeatureDeltaProse(facts);
+function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
+  const base = buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
   const referenceAction = actionLabel(facts.best.action);
   const otherEngineAction = facts.referenceSource === 'fritz'
     ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
@@ -394,9 +394,15 @@ function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
  * already on the object (missKind, deltas, evidence, principalVariation,
  * played/best actions).
  */
-export function buildReviewCoachingProse(facts: ReviewCoachingFacts, enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED): ReviewCoachingProse {
+export function buildReviewCoachingProse(
+  facts: ReviewCoachingFacts,
+  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  includeTrueReferenceEquality: boolean = true,
+): ReviewCoachingProse {
   if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
-    return facts.agreement?.contested ? buildContestedFeatureDeltaProse(facts) : buildFeatureDeltaProse(facts);
+    return facts.agreement?.contested
+      ? buildContestedFeatureDeltaProse(facts, includeTrueReferenceEquality)
+      : buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
   }
   switch (facts.missKind) {
     case 'correct':

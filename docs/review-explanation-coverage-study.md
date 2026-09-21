@@ -79,3 +79,21 @@ Two fresh independent facts passes were compared because canonical per-record fa
 | supported sentences (played != displayed reference) | 190/281 | 67.6% |
 
 This is one fresh shared facts pass. Its displayed-reference denominator is 281 versus PR #285's 280, consistent with already-measured Fritz-reference jitter; 67.6% versus 67.5% is not coverage improvement attributable to this semantic correction. The 12 above are surviving ties from the old 82 bucket-b cases; the 25 in the table are all displayed-reference zero-gap decisions in this fresh pass.
+
+## True displayed-reference equality fallback
+
+| metric | count |
+| --- | ---: |
+| played != displayed reference denominator | 281 |
+| positional | 162 |
+| material value-gap | 30 |
+| equal-value rendered | 12 |
+| immediate-only supported | 0 |
+| generic no-difference / unsupported | 77 |
+| supported | 204/281 | 72.6% |
+
+| remaining unsupported category | count |
+| --- | ---: |
+| displayed-reference value unavailable | 68 |
+| positive gap below 0.25 | 9 |
+| other | 0 |
