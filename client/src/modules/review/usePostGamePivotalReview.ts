@@ -221,10 +221,13 @@ export function usePostGamePivotalReview({
   // snapshots / match identity change; survives GameReviewer remount so cursor
   // and reopen reuse the same published facts. Persistence still writes only
   // evaluations (F1e-5 will later persist/load this artifact).
+  // Identity uses decision IDs (always present on stubs) rather than
+  // computeGameDigest, which requires integrity digests not present in every
+  // test fixture.
   const coachingFactsStore = useMemo((): ReviewCoachingFactsStore<ReviewCoachingFacts> | null => {
     if (reviewWorkerSnapshots.length === 0) return null;
-    const digest = computeGameDigest(reviewWorkerSnapshots);
-    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`${sourceMatchId}:${digest}`);
+    const decisionKey = reviewWorkerSnapshots.map((s) => s.identifiers.decisionId).join(',');
+    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`${sourceMatchId}:${decisionKey}`);
   }, [sourceMatchId, reviewWorkerSnapshots]);
 
   const snapshotsByDecisionId = useMemo(() => {

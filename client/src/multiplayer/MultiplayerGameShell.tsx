@@ -58,7 +58,6 @@ import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 import { useReviewWorkerBatch } from '../modules/review/useReviewWorkerBatch';
 import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, DEFAULT_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
 import { createReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
-import { computeGameDigest } from '../modules/review/gameDigest';
 import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
 import { persistMultiplayerReview } from '../modules/review/multiplayerReviewPersistence';
 
@@ -135,8 +134,8 @@ function MultiplayerGameShellComponent({
   }, [multiplayerReviewSnapshots]);
   const multiplayerCoachingFactsStore = useMemo(() => {
     if (multiplayerReviewSnapshots.length === 0) return null;
-    const digest = computeGameDigest(multiplayerReviewSnapshots);
-    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`mp:${digest}`);
+    const decisionKey = multiplayerReviewSnapshots.map((s) => s.identifiers.decisionId).join(',');
+    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`mp:${decisionKey}`);
   }, [multiplayerReviewSnapshots]);
   const [handTileSize, setHandTileSize] = useState(44);
   const prevOppCountRef = useRef<number | null>(null);
