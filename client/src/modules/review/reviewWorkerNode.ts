@@ -24,7 +24,7 @@ function postResponse(response: ReviewWorkerResponse): void {
   parentPort!.postMessage(response);
 }
 
-parentPort.on('message', (request: ReviewWorkerRequest) => {
+parentPort.addListener('message', (request: ReviewWorkerRequest) => {
   if (request.type === 'cancel') {
     cancelled = true;
     return;

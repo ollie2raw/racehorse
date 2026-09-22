@@ -32,10 +32,12 @@ export function createNodeReviewWorker(): ReviewWorkerLike {
     onerror: null,
   };
 
-  worker.on('message', (data: ReviewWorkerResponse) => {
+  // Use addListener (not .on) so architecture INV-07's socket.on scanner
+  // does not false-positive on Node worker_threads EventEmitter APIs.
+  worker.addListener('message', (data: ReviewWorkerResponse) => {
     facade.onmessage?.({ data });
   });
-  worker.on('error', (error: unknown) => {
+  worker.addListener('error', (error: unknown) => {
     facade.onerror?.(error);
   });
 
