@@ -113,7 +113,7 @@ Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts
 |---|---|---|---|
 | **F2a** | M | `computePositionalFeatures(snapshot, candidateAction)` in `packages/review-engine`, tier-agnostic, from public state + actor hand + `knownMissingPipEvidence` only. v1 features: pip denial / opponent outs left; end/number control; hand-shape bottleneck (orphans, playableNext, mobility); known-missing-pip exploitation; score-margin urgency; tile-count/boneyard pressure; double/hub-opening risk | Typechecks; no import of `BotMatchState`; deterministic |
 | **F2b** | M | Parity tests against `botHeuristics.ts` / `solveHeuristicOpening.ts` over the recorded corpus that compare **feature values** (tolerance stated), not just which move ranks best | Documented per-feature parity; any deviations listed with reason |
-| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and the `contested` cap. Cap constants remain Inaccuracy; F1c reported engine-wins for search/heuristic so contested-cap treatment needs a follow-up PR before Ship Gate | Unit tests for each tier and agreement case |
+| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and contested metadata. F1c/D2 applied: search/heuristic engine-wins → no automatic Inaccuracy severity cap; contested remains factual; exact stays ground-truth authoritative | Unit tests for each tier and agreement case |
 | **F2d** | M | Extend `ReviewCoachingFacts` with per-feature played-vs-reference values; generate prose from ranked feature deltas. Truth tests: every number in prose appears in structured facts; no sentence without support | Truth tests pass; "no meaningful difference" path covered |
 | **F2e** | S | `docs/review-explanation-samples.md`: 30 real moves from the recorded corpus (mixed tiers, mixed classifications), old prose vs new prose, with the feature values behind each sentence | Product owner reviews (see Ship gate) |
 
@@ -248,10 +248,18 @@ adjudications).
 
 D2 branches: search → oracle-wins; heuristic → Fritz-wins; exact aggregate →
 indistinguishable. Locked decision 1’s reference sources already match the
-winners. Contested Inaccuracy cap is **not** finalized as the permanent
-search/heuristic disagreement treatment under the engine-wins branch — a
-**production contested/classification follow-up PR is REQUIRED** before Ship
-Gate (do not silently change behavior here). Exact never uses contested cap.
+winners.
+
+**F1c production application (D2 behavior):** search D2 winner = oracle, CI
+`[+0.390, +0.772]`; heuristic D2 winner = Fritz, CI `[−0.859, −0.355]`.
+Existing reference policy already matched both winners, so **no
+reference-policy reversal** was required. Disagreement remains reportable as
+`agreement.contested`. The provisional automatic Inaccuracy severity cap is
+**retired** for search/heuristic under the engine-wins branch — validated
+reference classifications can again surface Mistake/Blunder. Exact remains
+exact-ground-truth authoritative (no disagreement-based cap). The F1c Ship
+Gate requirement is complete once the held production behavior PR that
+encodes this policy merges.
 
 Canonical write-up:
 `docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md`.
