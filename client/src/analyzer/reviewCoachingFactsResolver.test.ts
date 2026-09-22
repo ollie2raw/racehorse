@@ -50,7 +50,7 @@ function evaluation(args: {
     snapshotId: args.snapshotId,
     rulesVersion: 1,
     reviewEngineVersion: 'review-engine-v1',
-    evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic' },
+    evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
     played,
     best,
     candidates: args.candidates,
