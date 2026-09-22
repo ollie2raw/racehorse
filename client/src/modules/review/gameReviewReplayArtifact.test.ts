@@ -146,12 +146,30 @@ describe('F1e-5 historical replay artifact', () => {
     expect(buildFacts).toHaveBeenCalledTimes(2);
   });
 
-  it('hydrates identical decision identity, facts, and prose on reload', () => {
+  it('hydrates identical decision identity, facts, prose, and actor pre-move hand on reload', () => {
     const search = evaluation('d-search', 'search');
     const heuristic = evaluation('d-heur', 'heuristic');
     const store = createReviewCoachingFactsStore<ReviewCoachingFacts>('hydrate');
+    const liveAnalysis = minimalAnalysis([1, 2]);
+    liveAnalysis.analyzedMoves[0].handBefore = [
+      [0, 1],
+      [2, 3],
+      [4, 5],
+    ];
+    liveAnalysis.analyzedMoves[0].validMoves = [
+      [0, 1],
+      [2, 3],
+    ];
+    liveAnalysis.analyzedMoves[0].playedTile = [0, 1];
+    liveAnalysis.analyzedMoves[1].handBefore = [
+      [4, 5],
+      [6, 6],
+    ];
+    liveAnalysis.analyzedMoves[1].validMoves = [[6, 6]];
+    liveAnalysis.analyzedMoves[1].playedTile = [6, 6];
+
     const artifact = buildGameReviewReplayArtifact({
-      analysis: minimalAnalysis([1, 2]),
+      analysis: liveAnalysis,
       evaluationsByDecisionId: new Map([
         ['d-search', search],
         ['d-heur', heuristic],
@@ -209,6 +227,19 @@ describe('F1e-5 historical replay artifact', () => {
     );
     expect(hydrated.analysis.analyzedMoves.map((m) => m.moveNumber)).toEqual([1, 2]);
     expect(hydrated.reviewWorkerBatch.resultsByDecisionId.get('d-search')).toEqual(search);
+    // Same hand context: actor pre-move hand + playable tile set + played tile.
+    expect(hydrated.analysis.analyzedMoves[0].handBefore).toEqual(
+      liveAnalysis.analyzedMoves[0].handBefore,
+    );
+    expect(hydrated.analysis.analyzedMoves[0].validMoves).toEqual(
+      liveAnalysis.analyzedMoves[0].validMoves,
+    );
+    expect(hydrated.analysis.analyzedMoves[0].playedTile).toEqual(
+      liveAnalysis.analyzedMoves[0].playedTile,
+    );
+    expect(hydrated.analysis.analyzedMoves[1].handBefore).toEqual(
+      liveAnalysis.analyzedMoves[1].handBefore,
+    );
   });
 
   it('marks legacy rows without recomputing', () => {

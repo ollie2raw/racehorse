@@ -48,6 +48,11 @@ export type BuildGameReviewReplayArtifactInput = {
  * store — never a second independent Fritz construction path inside the
  * persistence writer. Rendered prose is snapshotted (no renderer-version
  * dispatcher exists in-repo).
+ *
+ * Actor pre-move hand context is already inside `analysis.analyzedMoves[]`
+ * (`handBefore`, `validMoves`, `playedTile` / `action`). Artifact v1 does not
+ * duplicate those fields — historical GameReviewer reuses the same
+ * `buildReviewDecisionHandContext` path as live review.
  */
 export function buildGameReviewReplayArtifact(
   input: BuildGameReviewReplayArtifactInput,

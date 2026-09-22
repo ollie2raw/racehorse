@@ -19,6 +19,8 @@ import type { ReviewCoachingFacts, ReviewCoachingProse } from './reviewCoachingF
 import { createReviewCoachingFactsResolver } from './reviewCoachingFactsResolver';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
+import { buildReviewDecisionHandContext } from './reviewDecisionHandContext';
+import { GameReviewerHandContext } from './GameReviewerHandContext';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -265,6 +267,11 @@ export default function GameReviewer({
 
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
 
+  const handContext = useMemo(
+    () => (current ? buildReviewDecisionHandContext(current) : null),
+    [current],
+  );
+
   const showGhostTile = Boolean(
     current &&
       current.action === 'place' &&
@@ -337,6 +344,8 @@ export default function GameReviewer({
               ) : null}
             </div>
             </div>
+
+            {handContext ? <GameReviewerHandContext handContext={handContext} /> : null}
 
             <div className="gr-move-nav">
               <button
