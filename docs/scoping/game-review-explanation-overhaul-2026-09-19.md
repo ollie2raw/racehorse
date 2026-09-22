@@ -1,8 +1,8 @@
 # Game Review Overhaul — Explanation, Coverage & Oracle Validation (Phase F)
 
-**Status:** Approved for execution. Build as independently reviewable PRs. Follow the hold points; do not skip them.
+**Status (2026-09-22 closeout):** **Phase F ENGINEERING COMPLETE.** Admin-cohort launch readiness remains **BLOCKED** on human voice sign-off, production migration of `replay_artifact`, cohort config confirmation, and a real-admin smoke test. See `docs/game-review-phase-f-closeout.md`.
 
-**Date:** 2026-09-19
+**Date:** 2026-09-19 (plan); status reconciled 2026-09-22.
 
 **Predecessor:** `docs/scoping/game-review-oracle-upgrade-2026-09-13.md` (Phases A–E, shipped/merged). Do not re-litigate anything decided there.
 
@@ -90,8 +90,8 @@ A prior agent run was interrupted by a rate limit while four tracks were in flig
 
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
-| **F0a** | S | Audit every worktree/branch (`git worktree list`, `.claude/worktrees/*`): commits ahead of main, uncommitted files, typecheck, tests, PR existence. Commit uncommitted work to its own branch as a WIP recovery commit; delete nothing. | Table per track: done / partial / not started, with evidence |
-| **F0b** | XS | Map each recovered artifact to a step below (e.g. `computePositionalFeatures.ts` → F2a; `oracleVsFritzHeadToHead.ts` → F1a) and mark which are reusable as-is vs. need rework | No step is rebuilt from scratch if a valid recovered artifact exists |
+| **F0a** | S | Audit every worktree/branch (`git worktree list`, `.claude/worktrees/*`): commits ahead of main, uncommitted files, typecheck, tests, PR existence. Commit uncommitted work to its own branch as a WIP recovery commit; delete nothing. | **COMPLETE** — see F0-AUDIT.md |
+| **F0b** | XS | Map each recovered artifact to a step below (e.g. `computePositionalFeatures.ts` → F2a; `oracleVsFritzHeadToHead.ts` → F1a) and mark which are reusable as-is vs. need rework | **COMPLETE** — no step rebuilt from scratch if a valid recovered artifact existed |
 
 Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts`, a parity test, and `client/src/analyzer/reviewFritzSecondOpinion.ts`; Track D has `client/src/devtools/oracleVsFritzHeadToHead.ts` (+16 passing tests), `scripts/sql/fritz-master-vs-humans-winrate.sql`, and the D6 conflict note in `docs/fritz-difficulty-tiers-source-of-truth-audit.md`; Tracks B and C are believed unstarted. The 600-game runs were probably killed; `docs/oracle-strength-validation-runs/` was empty at last check.
 
@@ -99,23 +99,23 @@ Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts
 
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
-| **F1a** | S | Committed head-to-head devtool: Fritz Master vs oracle top move; identical seeded deals; seat rotation; fixed seeds; parallelized across cores; results written to files | Reruns produce identical results; unit tests pass |
-| **F1b** | M | 600+ game runs for (i) default oracle, (ii) oracle with Fritz Master as heuristic-tier fallback. Win rate, CI, mean margin, split by phase | Numbers reported; D1 decision rule applied and stated |
-| **F1c** | M | Disagreement adjudication (D2 rules above) on the recorded-corpus decisions where the engines disagree | **REPORTED 2026-09-21** — see `docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md`; per-tier table below |
-| **F1d** | XS | `scripts/sql/fritz-master-vs-humans-winrate.sql` review-ready. **Not run against production.** Handed to the product owner | SQL is read-only, aggregate-only, no PII |
-| **F1e** | S | Chess.com-parity audit: win-probability graph, per-move classification, key-moment list, best-move on board, retry-a-mistake: present / partial / missing. Missing items added to a roadmap section of this doc | Table with file evidence per row |
-| **F1f** | S | Design note: luck-vs-skill separation (judge decision quality on information available to the player; show outcome and hidden-hand reveal separately). Where it plugs into classification | Written note; no code |
-| **F1g** | XS | Flag the 2200 vs 2400 conflict in docs (code says 2200 in `glicko2.ts`, `fritzConfig.ts`, `PlayVsFritz.tsx`; docs say 2400) | Conflict recorded; no number chosen by the agent |
+| **F1a** | S | Committed head-to-head devtool: Fritz Master vs oracle top move; identical seeded deals; seat rotation; fixed seeds; parallelized across cores; results written to files | **COMPLETE** — PR #280 |
+| **F1b** | M | 600+ game runs for (i) default oracle, (ii) oracle with Fritz Master as heuristic-tier fallback. Win rate, CI, mean margin, split by phase | **COMPLETE** — D1 applied; reference policy retained |
+| **F1c** | M | Disagreement adjudication (D2 rules above) on the recorded-corpus decisions where the engines disagree | **COMPLETE** — reported + applied (#290/#291); see `docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md` |
+| **F1d** | XS | `scripts/sql/fritz-master-vs-humans-winrate.sql` review-ready. **Not run against production.** Handed to the product owner | **COMPLETE** on main (closeout); SQL is read-only, aggregate-only, no PII |
+| **F1e** | S | Chess.com-parity audit: win-probability graph, per-move classification, key-moment list, best-move on board, retry-a-mistake: present / partial / missing. Missing items added to a roadmap section of this doc | **COMPLETE** — table below; F1e-5 historical reopen also COMPLETE in code |
+| **F1f** | S | Design note: luck-vs-skill separation (judge decision quality on information available to the player; show outcome and hidden-hand reveal separately). Where it plugs into classification | **COMPLETE** — `docs/scoping/game-review-luck-versus-skill-design.md` (no UI) |
+| **F1g** | XS | Flag the 2200 vs 2400 conflict in docs (code says 2200 in `glicko2.ts`, `fritzConfig.ts`, `PlayVsFritz.tsx`; docs say 2400) | **COMPLETE** — conflict recorded; no number chosen by the agent |
 
 ### F2 — Positional feature layer and feature-delta explanations
 
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
-| **F2a** | M | `computePositionalFeatures(snapshot, candidateAction)` in `packages/review-engine`, tier-agnostic, from public state + actor hand + `knownMissingPipEvidence` only. v1 features: pip denial / opponent outs left; end/number control; hand-shape bottleneck (orphans, playableNext, mobility); known-missing-pip exploitation; score-margin urgency; tile-count/boneyard pressure; double/hub-opening risk | Typechecks; no import of `BotMatchState`; deterministic |
-| **F2b** | M | Parity tests against `botHeuristics.ts` / `solveHeuristicOpening.ts` over the recorded corpus that compare **feature values** (tolerance stated), not just which move ranks best | Documented per-feature parity; any deviations listed with reason |
-| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and contested metadata. F1c/D2 applied: search/heuristic engine-wins → no automatic Inaccuracy severity cap; contested remains factual; exact stays ground-truth authoritative | Unit tests for each tier and agreement case |
-| **F2d** | M | Extend `ReviewCoachingFacts` with per-feature played-vs-reference values; generate prose from ranked feature deltas. Truth tests: every number in prose appears in structured facts; no sentence without support | Truth tests pass; "no meaningful difference" path covered |
-| **F2e** | S | `docs/review-explanation-samples.md`: 30 real moves from the recorded corpus (mixed tiers, mixed classifications), old prose vs new prose, with the feature values behind each sentence | Product owner reviews (see Ship gate) |
+| **F2a** | M | `computePositionalFeatures(snapshot, candidateAction)` in `packages/review-engine`, tier-agnostic, from public state + actor hand + `knownMissingPipEvidence` only. v1 features: pip denial / opponent outs left; end/number control; hand-shape bottleneck (orphans, playableNext, mobility); known-missing-pip exploitation; score-margin urgency; tile-count/boneyard pressure; double/hub-opening risk | **COMPLETE** |
+| **F2b** | M | Parity tests against `botHeuristics.ts` / `solveHeuristicOpening.ts` over the recorded corpus that compare **feature values** (tolerance stated), not just which move ranks best | **COMPLETE** |
+| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and contested metadata. F1c/D2 applied: search/heuristic engine-wins → no automatic Inaccuracy severity cap; contested remains factual; exact stays ground-truth authoritative | **COMPLETE** — D2 applied in #291 |
+| **F2d** | M | Extend `ReviewCoachingFacts` with per-feature played-vs-reference values; generate prose from ranked feature deltas. Truth tests: every number in prose appears in structured facts; no sentence without support | **COMPLETE** — truth tests on main |
+| **F2e** | S | `docs/review-explanation-samples.md`: 30 real moves from the recorded corpus (mixed tiers, mixed classifications), old prose vs new prose, with the feature values behind each sentence | **ENGINEERING COMPLETE** — samples + sign-off packet exist; **product-owner voice approval PENDING** |
 
 ### F3 — Coverage gate (#226)
 
@@ -218,42 +218,52 @@ All of the following, in order:
 3. Truth tests green; no Fritz rating anywhere in touched copy.
 4. Prose is enabled behind the flag for the admin cohort only first. `POST_GAME_REVIEW_VISIBLE` is unchanged.
 
+**Ship Gate status (2026-09-22):** (1) COMPLETE · (2) PENDING product-owner voice sign-off (`docs/review-explanation-voice-signoff-packet.md`) · (3) AUTOMATED COMPLETE · (4) PENDING prose flag enablement after (2). Full closeout: `docs/game-review-phase-f-closeout.md`.
+
 ## Human-owned decisions (agents must not resolve these)
 
 | Decision | Owner | Status |
 |---|---|---|
-| Is the review voice right? (sample doc sign-off) | Product owner | Pending F2e |
-| Run `fritz-master-vs-humans-winrate.sql` against production (or approve an agent run) | Product owner | Pending F1d |
-| Which Fritz Master number is intended, 2200 or 2400 | Product owner | Open; agents must not pick one |
-| Approve any proposal to change the oracle's heuristic-tier fallback or search budget | Product owner | Only if F1b triggers it |
-| Enable prose for the admin cohort | Product owner | After Ship gate |
-| Manual production verification of Phase E with a real admin login (complete match → review appears → persists → reopens) | Product owner | Still open from Phase E |
+| Is the review voice right? (sample doc sign-off) | Product owner | **PENDING** — packet `docs/review-explanation-voice-signoff-packet.md` (full set: `docs/review-explanation-samples.md`) |
+| Run `fritz-master-vs-humans-winrate.sql` against production (or approve an agent run) | Product owner | Optional — SQL on main at `scripts/sql/fritz-master-vs-humans-winrate.sql`; **not** a launch blocker |
+| Which Fritz Master number is intended, 2200 or 2400 | Product owner | Open; agents must not pick one — **not** an admin-cohort review launch blocker |
+| Approve any proposal to change the oracle's heuristic-tier fallback or search budget | Product owner | Closed for F1b (policy retained); reopen only for a new product decision |
+| Enable prose for the admin cohort (`REVIEW_POSITIONAL_EXPLANATIONS_ENABLED`) | Product owner | **PENDING** after voice sign-off |
+| Apply `2026-09-22_game_reviews_replay_artifact.sql` in production | Ops / product owner | **DEPLOYMENT BLOCKER** — not applied during engineering |
+| Manual production verification (admin login → match → review → persist → reopen) | Product owner | **PENDING** — checklist in closeout doc |
 
 ## Explicitly deferred
 
 - Hub/branch-geometry tactics and multi-ply tactical narrative (requires new geometry analysis and populated principal variations; `principalVariation` is currently always empty).
 - Consolidating the ported feature logic back into `botHeuristics.ts` (production regression risk).
 - Raising the search budget (blocked by latency and by the fact that the 2% coverage problem is a metric problem, not a compute problem).
-- Implementing luck-vs-skill separation and any hidden-hand reveal UI.
+- Implementing luck-vs-skill separation and any hidden-hand reveal UI (design note: `docs/scoping/game-review-luck-versus-skill-design.md`).
 - Converting Fritz Master's wall-clock deadlines to node budgets for cross-machine reproducibility (small and localized; do it if F1 reproducibility issues appear).
 - MP-specific adjustments beyond what already shipped in E5.
+- Broader public rollout beyond admin cohort (separate product decision).
+- F1e-1 advantage graph, F1e-2 reachable key moments, F1e-3 spatial placement overlay, F1e-4 retry sandbox (parity roadmap; nonblocking for Phase F engineering closeout).
 
 ## Chess.com-parity roadmap (F1e audit)
 
-**Audit context (2026-09-21).** Phases A–E engineering is shipped. F2 prose
-engineering is shipped behind its default-off flag: PR #285's historical study
-is 189/280 (67.5%); PR #286 corrected displayed-reference semantics; and PR
-#287's one shared facts pass is 201/280 (71.8%), with 12 rendered true-equality
-cases and 79 remaining unsupported (70 displayed-reference values unavailable,
-9 below the materiality floor, 0 other). Heuristic Fritz expected value is
-unavailable by design. Contested Fritz jitter remains an activation blocker;
-F1c is unrun; and prose voice is not human-approved for public activation. The
-71.8% is a pass-specific rendered-coverage measurement, not an accuracy score.
+**Audit context (reconciled 2026-09-22).** Phases A–E engineering is shipped. F1c/D2
+is complete and applied (`#291`). F2 prose engineering is shipped behind
+`REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false`. Historical reopen (F1e-5) is
+complete in code (`#292`); production migration of `replay_artifact` remains an
+ops step. Contested Fritz Master wall-clock jitter remains a known activation
+risk for contested metadata, not an unfinished Phase F engineering track.
+Prose voice is **not** human-approved. See `docs/game-review-phase-f-closeout.md`.
+
+Historical coverage notes (unchanged measurements): PR #285 study 189/280 (67.5%);
+PR #286 corrected displayed-reference semantics; PR #287 shared facts pass
+201/280 (71.8%), with 12 rendered true-equality cases and 79 remaining
+unsupported (70 displayed-reference values unavailable, 9 below floor, 0 other).
+Heuristic Fritz expected value is unavailable by design. The 71.8% figure is a
+pass-specific rendered-coverage measurement, not an accuracy score.
 
 | Capability | Status | Current evidence | Exact gap | Roadmap action |
 |---|---|---|---|---|
 | Win-probability / advantage graph | missing | `ReviewEvaluationV1` carries candidate `value.winProbability` (`packages/review-engine/src/reviewCaptureSchema.ts`); `GameReviewer` renders move navigation, ratings, coaching, and PV only (`client/src/analyzer/GameReviewer.tsx`). No review chart/graph component or rendering path exists (repository search of analyzer, pivotal-review, and bot review surfaces). | No user-facing over-game probability/advantage timeline, including no linked move cursor. | **F1e-1 advantage timeline** — show a review-wide, cursor-linked advantage series; primary systems: `GameReviewer.tsx`, `GameReviewer.css`, persisted `game_reviews` evaluations; dependency: stable per-review facts/persistence; can follow public prose activation because the current per-move review remains understandable without a graph. |
-| Per-move classification | present | `GameReviewer` navigates every analyzed move with `cursor` and `selectedHandNumber`, reads each resolved evaluation via `decisionIdByMoveNumber`, and renders `selectMoveHeuristicClassification` / `heuristicClassificationToDisplay` plus rating state (`client/src/analyzer/GameReviewer.tsx`). Coverage includes `GameReviewer.heuristicRender.test.tsx`, `GameReviewer.searchBadge.test.tsx`, and `GameReviewer.coachingPanel.test.tsx`; post-game entry is `PostGameReviewPrompt` → `openReviewGameFromPrompt` in `client/src/modules/review/usePostGamePivotalReview.ts`. | None for the normal in-memory post-game flow; historical reopen remains separately missing below. | none |
+| Per-move classification | present | `GameReviewer` navigates every analyzed move with `cursor` and `selectedHandNumber`, reads each resolved evaluation via `decisionIdByMoveNumber`, and renders `selectMoveHeuristicClassification` / `heuristicClassificationToDisplay` plus rating state (`client/src/analyzer/GameReviewer.tsx`). Coverage includes `GameReviewer.heuristicRender.test.tsx`, `GameReviewer.searchBadge.test.tsx`, and `GameReviewer.coachingPanel.test.tsx`; post-game entry is `PostGameReviewPrompt` → `openReviewGameFromPrompt` in `client/src/modules/review/usePostGamePivotalReview.ts`. | None for the normal in-memory post-game flow; historical reopen is present for artifact rows (F1e-5) — production migration still required. | none |
 | Key-moment / mistake list | partial | `selectPivotalTurns` ranks up to three scorable player decisions by expected loss (`client/src/training/pivotalReview/pivotalTurnSelector.ts`); `PivotalTurnReviewCard` and `PivotalReviewSummary` render the selected turns and lessons, with tests. `BotPivotalReviewPortal` wires it, but `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and `usePostGamePivotalReview.ts` documents the path as inert on main. | The selector/list is not reachable in the normal current post-game flow and is not reconstructed for history. | **F1e-2 reachable key moments** — expose a deterministic, linked key-moment list from the regular Game Review; primary systems: pivotal selector/cards and `GameReviewer`; dependency: F1c/determinism for trustworthy contested ranking, then historical review loading for reuse; required before public prose activation only if the launch promise includes a curated mistake list, otherwise can follow the core review launch. |
 | Best/reference move shown on board | partial | `GameReviewer` renders the review board and a `gr-ghost-tile` when an oracle best tile differs (`client/src/analyzer/GameReviewer.tsx`); it labels the tile “Best move.” It also has a synthetic PV board stepper (`GameReviewer.pvBoard.test.tsx`), while that test records production's current state as “No continuation recorded for this move.” `PivotalTurnReviewCard` shows best action text, not a placement overlay. | The ghost tile does not show the exact reference placement/end/branch spatially; production PVs are empty, so the stepper cannot provide that visualization. | **F1e-3 reference-placement overlay** — show the exact displayed reference action on the pre-move board, including end/branch; primary systems: `GameReviewer.tsx`, Board overlay API, `ReviewAction`; dependency: no new evaluation semantics, but must honor F2 displayed-reference source labels; can follow activation because text/reference facts remain available. |
 | Retry-a-mistake / try-again | missing | `PivotalTurnReviewCard` only steps through reflection cards and completes notes; `PivotalReviewSummary` only selects a hand. The match `rematch` routes are whole-game multiplayer flow (`server/src/multiplayer/registerRematchPregameHandlers.ts`), and the history scrubber is disabled after game over (`client/src/bot/view-model/resolveHistoryScrubberView.ts`). No reviewed-state replay/alternative-comparison action exists. | A reviewed decision cannot launch a playable reconstruction of that position or compare a retry against its reference. | **F1e-4 decision retry sandbox** — start a non-persistent practice state from a selected reviewed snapshot and compare the retry to the stored reference; primary systems: review snapshots, Board/match runtime, GameReviewer; dependency: retained review snapshots plus explicit practice-state ownership; can follow public prose activation because it is instructional depth, not required to understand a review. |
