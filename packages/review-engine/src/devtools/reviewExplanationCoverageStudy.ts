@@ -40,9 +40,20 @@ export function classifyNoDifferenceSplit(facts: ReviewCoachingFacts): NoDiffere
 export function classifyRenderedExplanationProse(facts: ReviewCoachingFacts): RenderedExplanationBucket | null {
   if (facts.missKind === 'forced') return null;
   const headline = buildReviewCoachingProse(facts, true).headline.replace(/^Contested:\s*/, '');
-  if (headline.startsWith('No meaningful positional difference')) return 'no-difference';
   if (headline.startsWith('The review rates these two moves even overall')) return 'equal-value';
-  if (headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')) return 'value-gap';
+  if (
+    (headline.includes('prefers') && headline.includes('overall'))
+    || headline.includes('is worth about')
+    || (headline.includes(' scores ') && headline.includes(' immediately'))
+  ) {
+    return 'value-gap';
+  }
+  if (
+    headline.startsWith('No meaningful positional difference')
+    || headline.startsWith('This one is genuinely close')
+  ) {
+    return 'no-difference';
+  }
   return 'positional';
 }
 

@@ -7,11 +7,15 @@ import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
 import { evaluateReviewPosition } from '../evaluateReviewPosition';
 
 function expectSentenceStartsToBePresentable(prose: { headline: string; detail: string; takeaway: string }): void {
-  for (const sentence of `${prose.headline} ${prose.detail} ${prose.takeaway}`.split(/(?<=[.!?])\s+/)) {
-    const trimmed = sentence.trim();
-    // A rendered sentence begins with normal capitalization, or with the
-    // tile token that names the move (for example, "2-4 at left").
-    expect(trimmed).toMatch(/^(?:[A-Z]|\d+-\d+\b)/);
+  for (const part of [prose.headline, prose.detail, prose.takeaway]) {
+    if (!part.trim()) continue;
+    for (const sentence of part.split(/(?<=[.!?])\s+/)) {
+      const trimmed = sentence.trim();
+      if (!trimmed) continue;
+      // A rendered sentence begins with normal capitalization, or with the
+      // tile token that names the move (for example, "2-4 at left").
+      expect(trimmed).toMatch(/^(?:[A-Z]|\d+-\d+\b)/);
+    }
   }
 }
 

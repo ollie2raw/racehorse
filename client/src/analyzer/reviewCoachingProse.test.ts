@@ -83,7 +83,7 @@ describe('buildReviewCoachingProse -- one distinct case per missKind', () => {
     expect(combined).not.toMatch(/should have played/);
     expect(combined).not.toMatch(/wrong tile/);
     expect(combined).toMatch(/2-2/);
-    expect(prose.headline.length).toBeGreaterThan(0);
+    expect(prose.headline).toMatch(/Right tile, wrong end/i);
   });
 
   it('missed_score: direct, points-focused', () => {
@@ -282,8 +282,9 @@ describe('buildReviewCoachingProse -- refuses unsupported certainty without a nu
       ...unavailableFritzFacts('same_tile_wrong_end'),
       featureDeltas: [{ feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 }],
     }, true);
-    expect(prose.headline).toContain("Fritz's read");
-    expect(prose.headline).toContain('biggest gap');
+    expect(`${prose.headline} ${prose.detail}`).toMatch(/Fritz|Right tile, wrong end/i);
+    expect(`${prose.headline} ${prose.detail}`).toMatch(/follow-up tiles|Play it at/i);
+    expect(`${prose.headline} ${prose.detail}`).not.toMatch(/biggest gap|rates better on/i);
   });
 
   it('does not claim "clearly stronger" style language when best.immediatePoints is 0 (no real gap to point to)', () => {

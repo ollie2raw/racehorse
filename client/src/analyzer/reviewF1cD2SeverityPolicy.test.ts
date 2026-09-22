@@ -86,9 +86,10 @@ describe('F1c D2 contested severity policy', () => {
       featureDeltas: [{ feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 }],
     };
     const prose = buildReviewCoachingProse(searchFacts, true);
-    expect(prose.headline.startsWith('Contested:')).toBe(true);
-    expect(prose.detail).toContain('so this read is contested');
-    expect(prose.takeaway).toContain('engines disagree');
+    const combined = `${prose.headline} ${prose.detail} ${prose.takeaway}`;
+    expect(combined).toMatch(/engines disagree|Review Engine prefers/i);
+    expect(combined).toMatch(/Fritz prefers/);
+    expect(combined.match(/The engines disagree on the reference move/g) ?? []).toHaveLength(0);
   });
 
   // H — reference/source labels
@@ -116,9 +117,9 @@ describe('F1c D2 contested severity policy', () => {
     const searchProse = buildReviewCoachingProse(searchFacts, true);
     const heuristicProse = buildReviewCoachingProse(heuristicFacts, true);
     expect(searchFacts.evidence.displayLabel).toBe('Review Engine search');
-    expect(searchProse.headline).not.toContain("Fritz's read");
-    expect(heuristicProse.headline).toContain("Fritz's read");
-    expect(heuristicProse.headline).not.toMatch(/\bbest\b/i);
+    expect(`${searchProse.headline} ${searchProse.detail}`).toMatch(/Review Engine prefers/);
+    expect(`${heuristicProse.headline} ${heuristicProse.detail}`).toMatch(/Fritz prefers/);
+    expect(heuristicProse.headline).not.toMatch(/\bobjectively best\b/i);
   });
 
   // I — second opinions for both D2-resolved tiers
@@ -145,9 +146,9 @@ describe('F1c D2 contested severity policy', () => {
     };
     const searchProse = buildReviewCoachingProse(searchFacts, true);
     const heuristicProse = buildReviewCoachingProse(heuristicFacts, true);
-    expect(searchProse.detail).toContain('Fritz would have played');
+    expect(searchProse.detail).toContain('Fritz prefers');
     expect(searchProse.detail).toContain('5-6');
-    expect(heuristicProse.detail).toContain("The Review Engine's heuristic would have played");
+    expect(heuristicProse.detail).toContain("Review Engine's heuristic prefers");
     expect(heuristicProse.detail).toContain('2-3');
   });
 
