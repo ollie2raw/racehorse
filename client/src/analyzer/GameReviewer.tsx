@@ -15,10 +15,12 @@ import { selectMoveHeuristicClassification } from './useMoveHeuristicClassificat
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
 import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
-import type { ReviewCoachingFacts } from './reviewCoachingFacts';
+import type { ReviewCoachingFacts, ReviewCoachingProse } from './reviewCoachingFacts';
 import { createReviewCoachingFactsResolver } from './reviewCoachingFactsResolver';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
+import { buildReviewDecisionHandContext } from './reviewDecisionHandContext';
+import { GameReviewerHandContext } from './GameReviewerHandContext';
 import '../styles/dossierRecord.css';
 import './GameReviewer.css';
 
@@ -36,6 +38,17 @@ interface GameReviewerProps {
   coachingFactsStore?: ReviewCoachingFactsStore<ReviewCoachingFacts> | null;
   /** Snapshots keyed by decision id — required for Fritz-derived facts. */
   snapshotsByDecisionId?: ReadonlyMap<string, ReviewPositionSnapshotV2>;
+  /**
+   * F1e-5 historical mode: pre-persisted facts+prose keyed by decision id.
+   * When set, coaching is taken from this map and the live resolver/Fritz
+   * path is not used (and snapshots need not be supplied).
+   */
+  historicalCoachingByDecisionId?: ReadonlyMap<
+    string,
+    { readonly facts: ReviewCoachingFacts; readonly prose: ReviewCoachingProse }
+  >;
+  /** Optional banner for legacy rows without a replay artifact. */
+  historicalLegacyNotice?: string | null;
   title?: string;
   scopeHandNumber?: number | null;
   /** 1-based move index within the starting hand (default 1). */
@@ -74,11 +87,14 @@ export default function GameReviewer({
   decisionIdByMoveNumber,
   coachingFactsStore = null,
   snapshotsByDecisionId,
+  historicalCoachingByDecisionId,
+  historicalLegacyNotice = null,
   title = 'Game Review',
   scopeHandNumber = null,
   initialMoveIndex = 1,
   opponentLabel = 'Fritz',
 }: GameReviewerProps) {
+  const isHistoricalReplay = Boolean(historicalCoachingByDecisionId);
   const hands = useMemo(() => analysis?.hands ?? [], [analysis?.hands]);
   const [selectedHandNumber, setSelectedHandNumber] = useState<number | null>(null);
   const [cursor, setCursor] = useState(0);
@@ -109,17 +125,20 @@ export default function GameReviewer({
 
   // Resolver may be recreated when batch/snapshots identities change; the
   // published Map on `factsStore` is the cache, so constructions are not lost.
+  // Historical replay skips the live resolver entirely (no Fritz / no rebuild).
   const coachingFactsResolver = useMemo(
     () =>
-      createReviewCoachingFactsResolver({
-        store: factsStore,
-        getEvaluation: (decisionId) => reviewWorkerBatch?.resultsByDecisionId.get(decisionId),
-        getSnapshot: (decisionId) => snapshotsByDecisionId?.get(decisionId),
-        eligibleDecisionIds: snapshotsByDecisionId
-          ? [...snapshotsByDecisionId.keys()]
-          : [...(reviewWorkerBatch?.resultsByDecisionId.keys() ?? [])],
-      }),
-    [factsStore, reviewWorkerBatch, snapshotsByDecisionId],
+      isHistoricalReplay
+        ? null
+        : createReviewCoachingFactsResolver({
+            store: factsStore,
+            getEvaluation: (decisionId) => reviewWorkerBatch?.resultsByDecisionId.get(decisionId),
+            getSnapshot: (decisionId) => snapshotsByDecisionId?.get(decisionId),
+            eligibleDecisionIds: snapshotsByDecisionId
+              ? [...snapshotsByDecisionId.keys()]
+              : [...(reviewWorkerBatch?.resultsByDecisionId.keys() ?? [])],
+          }),
+    [factsStore, reviewWorkerBatch, snapshotsByDecisionId, isHistoricalReplay],
   );
 
   useEffect(() => {
@@ -156,10 +175,15 @@ export default function GameReviewer({
   const coaching = useMemo(() => {
     if (!currentDecisionId || !reviewWorkerBatch) return null;
     if (!reviewWorkerBatch.resultsByDecisionId.has(currentDecisionId)) return null;
+    if (historicalCoachingByDecisionId) {
+      const persisted = historicalCoachingByDecisionId.get(currentDecisionId);
+      return persisted ? { facts: persisted.facts, prose: persisted.prose } : null;
+    }
+    if (!coachingFactsResolver) return null;
     const facts = coachingFactsResolver.getFacts(currentDecisionId);
     if (!facts) return null;
     return { facts, prose: buildReviewCoachingProse(facts) };
-  }, [currentDecisionId, reviewWorkerBatch, coachingFactsResolver]);
+  }, [currentDecisionId, reviewWorkerBatch, coachingFactsResolver, historicalCoachingByDecisionId]);
 
   // Explicit, honest states for every case that isn't a resolved result --
   // never a fabricated placeholder claiming an answer exists.
@@ -243,6 +267,11 @@ export default function GameReviewer({
 
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
 
+  const handContext = useMemo(
+    () => (current ? buildReviewDecisionHandContext(current) : null),
+    [current],
+  );
+
   const showGhostTile = Boolean(
     current &&
       current.action === 'place' &&
@@ -274,6 +303,11 @@ export default function GameReviewer({
                 <span className="gr-evidence-label">
                   {evidence.displayLabel} · {evidence.confidence} confidence
                 </span>
+                {historicalLegacyNotice ? (
+                  <p className="gr-legacy-notice" role="status">
+                    {historicalLegacyNotice}
+                  </p>
+                ) : null}
               </div>
               <button type="button" className="dfd__btn gr-close-btn" onClick={onClose}>
                 Close
@@ -310,6 +344,8 @@ export default function GameReviewer({
               ) : null}
             </div>
             </div>
+
+            {handContext ? <GameReviewerHandContext handContext={handContext} /> : null}
 
             <div className="gr-move-nav">
               <button

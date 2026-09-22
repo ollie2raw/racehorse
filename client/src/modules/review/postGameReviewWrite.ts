@@ -1,6 +1,7 @@
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { apiPost } from '../../api/client.ts';
+import type { GameReviewReplayArtifactV1 } from './gameReviewReplayArtifact.ts';
 
 export type PostGameReviewWriteBody = {
   gameDigest: string;
@@ -10,6 +11,8 @@ export type PostGameReviewWriteBody = {
   accuracyModelResult: GameAccuracyModelResult;
   mode: 'pvf' | 'mp' | 'multiplayer';
   sourceMatchId?: string | null;
+  /** F1e-5 Path A historical replay artifact (optional for legacy writes). */
+  replayArtifact?: GameReviewReplayArtifactV1 | null;
 };
 
 /**

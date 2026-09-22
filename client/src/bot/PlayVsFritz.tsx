@@ -6,6 +6,7 @@ import { GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
 import "./PlayVsFritz.css";
+import { HistoricalGameReviewPortal } from "../modules/review/HistoricalGameReviewPortal";
 
 /* ---- High-Fidelity Home Icons ---- */
 const IconLightning = ({ color = "currentColor" }: { color?: string }) => (
@@ -215,6 +216,8 @@ export default function PlayVsFritz({
             <h1 className="pvf-title">Play vs Fritz</h1>
             <p className="pvf-subtitle">Choose your tier and format, then start a match against Fritz.</p>
           </div>
+
+          <HistoricalGameReviewPortal />
 
           <div className="pvf-opponent-card">
             {/* 1. Background Image */}

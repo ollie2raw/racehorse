@@ -336,8 +336,9 @@ export function usePostGamePivotalReview({
     ]).then(([{ computeGameAccuracyModel }, { deriveReviewEvidence }]) => {
       if (cancelled) return;
       const model = computeGameAccuracyModel(evaluations);
+      const nextEvidence = deriveReviewEvidence(model);
       setAccuracyModel(model);
-      setEvidence(deriveReviewEvidence(model));
+      setEvidence(nextEvidence);
       setAccuracyModelPending(false);
 
       // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): fire-and-
@@ -360,7 +361,42 @@ export function usePostGamePivotalReview({
       // Local analysis/UI is available to guests and non-cohort users, but
       // server persistence remains cohort-gated. This preserves the original
       // in-memory fallback without issuing writes that the server would reject.
-      if (reviewPersistenceEnabled && evaluations.length > 0) {
+      //
+      // F1e-5: wait for GameAnalysis so the replay artifact can carry boards /
+      // navigation. Writing evaluations-only first would win the idempotency
+      // key and permanently omit the artifact on a later retry.
+      if (reviewPersistenceEnabled && evaluations.length > 0 && postGameAnalysis && coachingFactsStore) {
+        void Promise.all([
+          import('./postGameReviewWrite.ts'),
+          import('./gameReviewReplayArtifact.ts'),
+        ])
+          .then(([{ postGameReviewWrite }, { buildGameReviewReplayArtifact }]) => {
+            const replayArtifact = buildGameReviewReplayArtifact({
+              analysis: { ...postGameAnalysis, accuracyModel: model, evidence: nextEvidence },
+              evaluationsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+              decisionIdByMoveNumber,
+              snapshotsByDecisionId,
+              coachingFactsStore,
+            });
+            postGameReviewWrite({
+              gameDigest: computeGameDigest(reviewWorkerSnapshots),
+              reviewEngineVersion: evaluations[0].reviewEngineVersion,
+              accuracyModelVersion: model.accuracyModelVersion,
+              evaluations,
+              accuracyModelResult: model,
+              mode: 'pvf',
+              sourceMatchId,
+              replayArtifact,
+            });
+          })
+          .catch(() => {
+            // Persistence must never affect local state or the post-game UI.
+          });
+      } else if (reviewPersistenceEnabled && evaluations.length > 0 && !postGameAnalysis) {
+        // Analysis still pending — this effect re-runs when postGameAnalysis lands.
+      } else if (reviewPersistenceEnabled && evaluations.length > 0) {
+        // No coaching store (edge): still persist evaluations for classification
+        // reopen, without falsely claiming a replay artifact.
         void import('./postGameReviewWrite.ts')
           .then(({ postGameReviewWrite }) => {
             postGameReviewWrite({
@@ -373,9 +409,7 @@ export function usePostGamePivotalReview({
               sourceMatchId,
             });
           })
-          .catch(() => {
-            // Persistence must never affect local state or the post-game UI.
-          });
+          .catch(() => {});
       }
     }).catch((error) => {
       if (cancelled) return;
@@ -394,7 +428,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, sourceMatchId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
 
   // Merged only into the value exposed as `postGameAnalysis` below -- the
   // internal `postGameAnalysis` state above (read by pivotalSelection,
