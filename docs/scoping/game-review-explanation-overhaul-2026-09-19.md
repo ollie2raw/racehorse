@@ -155,7 +155,7 @@ Note: recorded-client-policy snapshot replay remains skipped (known cursor misma
 |---|---|---|---|
 | **F4a** | M | Worker-pool parallelization of `runReviewBatch`; output byte-identical regardless of worker count | **COMPLETE** — see below |
 | **F4b** | S | Per-decision wall-clock ceiling on the oracle; overrun sets `search.complete = false`, never reorders candidates silently | Test with a forced-slow position — **COMPLETE** — see below |
-| **F4c** | XS | Before/after wall-clock for a master-tier corpus game | Measured numbers only — **pending** |
+| **F4c** | XS | Before/after wall-clock for a master-tier corpus game | Measured numbers only — **COMPLETE** — see below |
 
 #### F4a result (2026-09-22)
 
@@ -182,7 +182,22 @@ Provenance: selective port of recovered deadline work from `11765141` / `f1b8e0a
 
 **Forced-slow evidence:** `evaluateReviewPosition.deadline.test.ts` (injected clock + midgame spy); `solveExactEndgame` forced-overrun clock test; pool mix test in `runReviewBatchPool.test.ts` (1 vs 2 workers, independent per-decision clocks).
 
-F4c remains pending.
+#### F4c result (2026-09-22)
+
+Canonical artifact: `docs/review-latency-validation.md` (+ raw `docs/review-latency-validation.raw.json`).
+
+| field | value |
+| --- | --- |
+| BEFORE SHA | `339a28369a5f334308a48d2b37e2b829bb9390bc` (first parent of F4a `625ec62b`) |
+| AFTER SHA | `bedf444b33019829dfa8ba8d74e660b795c9000e` |
+| Game | `client-policy:demo-client-policy-master-1:0` (117 decisions; search 74 / heuristic 43) |
+| Protocol | 1 warm-up + 5 measured each side; median headline |
+| BEFORE median | 1264.80 ms (serial) |
+| AFTER median | 1041.34 ms (pool size 8) |
+| Delta | −223.46 ms (−17.67%) |
+| Deadline-incomplete (AFTER) | 0 |
+
+**F4 engineering status:** F4a COMPLETE · F4b COMPLETE · F4c COMPLETE. Phase F engineering work COMPLETE, subject only to existing ship/production gates (human-owned launch decisions unchanged).
 
 ## Sequencing
 
@@ -377,7 +392,7 @@ bootstrap path from `11765141` reused. Search budget unchanged.
 `search.complete = false` without reordering candidates. Default 2000ms
 from recovered `11765141`. Forced-slow + F4a pool regression evidence in
 `evaluateReviewPosition.deadline.test.ts` and `runReviewBatchPool.test.ts`.
-F4c before/after timing remains pending.
+**F4c (2026-09-22):** measured; see `docs/review-latency-validation.md`. Median −17.67% on fixed master game; 0 deadline incompletes.
 
 ### Amended execution order and reporting
 

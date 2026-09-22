@@ -1,0 +1,82 @@
+{
+  "status": "complete",
+  "protocol": {
+    "warmups": 1,
+    "measuredRuns": 5,
+    "headline": "median total batch wall-clock",
+    "beforeMode": "serial evaluateReviewPosition from baseline worktree",
+    "afterMode": "runReviewBatchPool with defaultReviewWorkerPoolSize + production F4b ceiling"
+  },
+  "environment": {
+    "beforeSha": "339a28369a5f334308a48d2b37e2b829bb9390bc",
+    "afterSha": "bedf444b33019829dfa8ba8d74e660b795c9000e",
+    "nodeVersion": "v25.4.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "hostCpuCount": 8,
+    "effectiveWorkerCount": 8,
+    "loadavgAtEnd": [
+      5.01220703125,
+      3.57958984375,
+      3.9951171875
+    ]
+  },
+  "game": {
+    "gameId": "client-policy:demo-client-policy-master-1:0",
+    "corpusFile": "strong-policy-top-tier--tier-master--seed-demo-client-policy-master-1--games-5.jsonl",
+    "decisions": 117,
+    "beforeTiers": {
+      "exact": 0,
+      "search": 74,
+      "heuristic": 43
+    },
+    "afterTiers": {
+      "exact": 0,
+      "search": 74,
+      "heuristic": 43
+    }
+  },
+  "budget": {
+    "maxNodes": 200000,
+    "maxHiddenStateSamples": 100,
+    "maxPlyDepth": 2,
+    "seed": "racehorse-review-default-seed"
+  },
+  "coverageThreshold": 0.02,
+  "wallClockCeilingMsNote": "AFTER uses engine default DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS=2000 (budget omits maxWallClockMs). BEFORE baseline has no ceiling.",
+  "headline": {
+    "beforeMedianMs": 1264.803833,
+    "afterMedianMs": 1041.3396659999999,
+    "absoluteDeltaMs": -223.4641670000001,
+    "percentDelta": -17.667891349598726
+  },
+  "rawRunsMs": {
+    "before": [
+      1210.789542,
+      1203.9736249999996,
+      1985.4388750000007,
+      1430.0436660000005,
+      1264.803833
+    ],
+    "after": [
+      962.8426249999993,
+      929.9168750000008,
+      1077.0314170000001,
+      1079.6416249999984,
+      1041.3396659999999
+    ]
+  },
+  "completeness": {
+    "beforeIncomplete": 0,
+    "afterIncomplete": 0,
+    "afterDeadlineIncomplete": 0,
+    "bestActionMismatches": 0
+  },
+  "caveats": [
+    "BEFORE is serial evaluation in-process from the pre-F4a baseline SHA; AFTER includes worker create/loader overhead.",
+    "AFTER applies the production 2000ms per-decision ceiling; BEFORE has no wall-clock ceiling.",
+    "If afterDeadlineIncomplete > 0, the wall-clock delta is not a pure parallelization speedup.",
+    "Node timing only — not a browser latency claim.",
+    "No production budgets/config were changed for this measurement."
+  ]
+}
