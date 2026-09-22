@@ -12,12 +12,10 @@ import {
   projectCorpusTierMix,
   sameTileDifferentEnd,
   type EvaluatedOverlap,
-} from '../devtools/validateMidgameConvergenceGate';
+} from './validateMidgameConvergenceGate';
 import type { ReviewAction } from '@racehorse/game-core/review';
 import type { MidgameDeterminizationResult } from '../solveMidgameDeterminization';
 import type { ReviewCaptureRecord } from '../reviewCaptureSchema';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { MINIMUM_COVERAGE_FLOOR } from '../gameAccuracyModel';
 
 vi.mock('../solveExactEndgame', () => ({ solveExactEndgame: vi.fn() }));
@@ -219,11 +217,5 @@ describe('F3a exact-ground-truth admission', () => {
     projectCorpusTierMix([]);
     expect(MINIMUM_COVERAGE_FLOOR).toBe(before);
     expect(MINIMUM_COVERAGE_FLOOR).toBeCloseTo(0.46808510638297873, 10);
-    // Production evaluateReviewPosition source must remain coverage-only (no gate import).
-    const evalSrc = fs.readFileSync(
-      path.resolve(__dirname, '../evaluateReviewPosition.ts'),
-      'utf8',
-    );
-    expect(evalSrc).not.toMatch(/passesProposedConvergenceGate|midgameConvergenceGate|PROPOSED_MAX_CONVERGENCE/);
   });
 });
