@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis, ReviewEvidenceDisclosure } from '../../analyzer/moveAnalyzer.ts';
+import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
@@ -34,6 +35,10 @@ import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   DEFAULT_REVIEW_DISPATCH_BUDGET,
 } from './reviewEngineConfig.ts';
+import {
+  createReviewCoachingFactsStore,
+  type ReviewCoachingFactsStore,
+} from './reviewCoachingFactsStore.ts';
 import {
   buildPivotalReviewSession,
   savePivotalReviewSession,
@@ -211,6 +216,27 @@ export function usePostGamePivotalReview({
     () => buildDecisionIdByMoveNumber(reviewWorkerSnapshots, moveLog),
     [reviewWorkerSnapshots, moveLog],
   );
+
+  // Canonical coaching-facts store for this review instance. Fresh Map when
+  // snapshots / match identity change; survives GameReviewer remount so cursor
+  // and reopen reuse the same published facts. Persistence still writes only
+  // evaluations (F1e-5 will later persist/load this artifact).
+  // Identity uses decision IDs (always present on stubs) rather than
+  // computeGameDigest, which requires integrity digests not present in every
+  // test fixture.
+  const coachingFactsStore = useMemo((): ReviewCoachingFactsStore<ReviewCoachingFacts> | null => {
+    if (reviewWorkerSnapshots.length === 0) return null;
+    const decisionKey = reviewWorkerSnapshots.map((s) => s.identifiers.decisionId).join(',');
+    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`${sourceMatchId}:${decisionKey}`);
+  }, [sourceMatchId, reviewWorkerSnapshots]);
+
+  const snapshotsByDecisionId = useMemo(() => {
+    const map = new Map<string, ReviewPositionSnapshotV2>();
+    for (const snapshot of reviewWorkerSnapshots) {
+      map.set(snapshot.identifiers.decisionId, snapshot);
+    }
+    return map;
+  }, [reviewWorkerSnapshots]);
 
   useEffect(() => {
     if (!reviewWorkerBatch.done) return;
@@ -460,6 +486,8 @@ export function usePostGamePivotalReview({
     accuracyModelPending,
     reviewWorkerBatch,
     decisionIdByMoveNumber,
+    coachingFactsStore,
+    snapshotsByDecisionId,
     pivotalSelection,
     skipPostGameReview,
     reopenPostGameReview,

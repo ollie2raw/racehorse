@@ -9,11 +9,14 @@ import {
 } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
+import type { ReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
+import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
 import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
-import { buildReviewCoachingFacts } from './reviewCoachingFacts';
+import type { ReviewCoachingFacts } from './reviewCoachingFacts';
+import { createReviewCoachingFactsResolver } from './reviewCoachingFactsResolver';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
 import '../styles/dossierRecord.css';
@@ -25,6 +28,14 @@ interface GameReviewerProps {
   analysis: GameAnalysis | null;
   reviewWorkerBatch?: ReviewBatchState;
   decisionIdByMoveNumber?: ReadonlyMap<number, string>;
+  /**
+   * Review-instance store for canonical coaching facts. Owned by the post-game
+   * / multiplayer runtime so close→reopen reuses published facts. When omitted
+   * (unit tests), a local store scoped to this mount is used.
+   */
+  coachingFactsStore?: ReviewCoachingFactsStore<ReviewCoachingFacts> | null;
+  /** Snapshots keyed by decision id — required for Fritz-derived facts. */
+  snapshotsByDecisionId?: ReadonlyMap<string, ReviewPositionSnapshotV2>;
   title?: string;
   scopeHandNumber?: number | null;
   /** 1-based move index within the starting hand (default 1). */
@@ -61,6 +72,8 @@ export default function GameReviewer({
   analysis,
   reviewWorkerBatch,
   decisionIdByMoveNumber,
+  coachingFactsStore = null,
+  snapshotsByDecisionId,
   title = 'Game Review',
   scopeHandNumber = null,
   initialMoveIndex = 1,
@@ -78,6 +91,36 @@ export default function GameReviewer({
   if (reviewSessionKey !== trackedReviewSessionKey) {
     setTrackedReviewSessionKey(reviewSessionKey);
   }
+
+  // Fallback store for tests / callers that have not threaded the runtime store.
+  // Still review-session scoped — never a module-global cache.
+  const localIdentity = `local:${reviewSessionKey}`;
+  const [localFactsStore, setLocalFactsStore] = useState(() => ({
+    reviewIdentity: localIdentity,
+    byDecisionId: new Map<string, ReviewCoachingFacts>(),
+  }));
+  if (!coachingFactsStore && localFactsStore.reviewIdentity !== localIdentity) {
+    setLocalFactsStore({
+      reviewIdentity: localIdentity,
+      byDecisionId: new Map(),
+    });
+  }
+  const factsStore = coachingFactsStore ?? localFactsStore;
+
+  // Resolver may be recreated when batch/snapshots identities change; the
+  // published Map on `factsStore` is the cache, so constructions are not lost.
+  const coachingFactsResolver = useMemo(
+    () =>
+      createReviewCoachingFactsResolver({
+        store: factsStore,
+        getEvaluation: (decisionId) => reviewWorkerBatch?.resultsByDecisionId.get(decisionId),
+        getSnapshot: (decisionId) => snapshotsByDecisionId?.get(decisionId),
+        eligibleDecisionIds: snapshotsByDecisionId
+          ? [...snapshotsByDecisionId.keys()]
+          : [...(reviewWorkerBatch?.resultsByDecisionId.keys() ?? [])],
+      }),
+    [factsStore, reviewWorkerBatch, snapshotsByDecisionId],
+  );
 
   useEffect(() => {
     if (!open || !analysis) return;
@@ -106,15 +149,17 @@ export default function GameReviewer({
   // the same reviewWorkerBatch/decisionIdByMoveNumber props
   // ratingCoachingCopy already reads just below -- the only place in this
   // component a resolved ReviewEvaluationV1 is available.
+  // Facts come from the review-instance resolver so cursor / re-render
+  // never re-runs Fritz-derived construction for the same decision.
   const currentDecisionId = current ? decisionIdByMoveNumber?.get(current.moveNumber) : undefined;
 
   const coaching = useMemo(() => {
     if (!currentDecisionId || !reviewWorkerBatch) return null;
-    const resolvedEvaluation = reviewWorkerBatch.resultsByDecisionId.get(currentDecisionId);
-    if (!resolvedEvaluation) return null;
-    const facts = buildReviewCoachingFacts(resolvedEvaluation);
+    if (!reviewWorkerBatch.resultsByDecisionId.has(currentDecisionId)) return null;
+    const facts = coachingFactsResolver.getFacts(currentDecisionId);
+    if (!facts) return null;
     return { facts, prose: buildReviewCoachingProse(facts) };
-  }, [currentDecisionId, reviewWorkerBatch]);
+  }, [currentDecisionId, reviewWorkerBatch, coachingFactsResolver]);
 
   // Explicit, honest states for every case that isn't a resolved result --
   // never a fabricated placeholder claiming an answer exists.

@@ -20,6 +20,8 @@ export function BotMatchInGameOverlays({
   currentAnalysis,
   reviewWorkerBatch,
   decisionIdByMoveNumber,
+  coachingFactsStore,
+  snapshotsByDecisionId,
   reviewerScopeHandNumber,
   reviewerInitialMoveIndex,
   opponentLabel,
@@ -99,6 +101,8 @@ export function BotMatchInGameOverlays({
             analysis={currentAnalysis}
             reviewWorkerBatch={reviewWorkerBatch}
             decisionIdByMoveNumber={decisionIdByMoveNumber}
+            coachingFactsStore={coachingFactsStore}
+            snapshotsByDecisionId={snapshotsByDecisionId}
             scopeHandNumber={reviewerScopeHandNumber}
             initialMoveIndex={reviewerInitialMoveIndex}
             title="Game Review"

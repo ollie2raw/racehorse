@@ -10,6 +10,8 @@ import { isMultiplayerPostGameReviewLocallyEligible } from '../training/pivotalR
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
+import type { ReviewCoachingFacts } from '../analyzer/reviewCoachingFacts';
+import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import {
   type MoveEntry,
   snapshotBoardState,
@@ -55,6 +57,7 @@ import type {
 import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 import { useReviewWorkerBatch } from '../modules/review/useReviewWorkerBatch';
 import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, DEFAULT_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
+import { createReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
 import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
 import { persistMultiplayerReview } from '../modules/review/multiplayerReviewPersistence';
 
@@ -122,6 +125,18 @@ function MultiplayerGameShellComponent({
     }
     return result;
   }, [multiplayerMoveLog]);
+  const multiplayerSnapshotsByDecisionId = useMemo(() => {
+    const map = new Map<string, ReviewPositionSnapshotV2>();
+    for (const snapshot of multiplayerReviewSnapshots) {
+      map.set(snapshot.identifiers.decisionId, snapshot);
+    }
+    return map;
+  }, [multiplayerReviewSnapshots]);
+  const multiplayerCoachingFactsStore = useMemo(() => {
+    if (multiplayerReviewSnapshots.length === 0) return null;
+    const decisionKey = multiplayerReviewSnapshots.map((s) => s.identifiers.decisionId).join(',');
+    return createReviewCoachingFactsStore<ReviewCoachingFacts>(`mp:${decisionKey}`);
+  }, [multiplayerReviewSnapshots]);
   const [handTileSize, setHandTileSize] = useState(44);
   const prevOppCountRef = useRef<number | null>(null);
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
@@ -1151,6 +1166,8 @@ function MultiplayerGameShellComponent({
         analysis={currentAnalysis}
         reviewWorkerBatch={multiplayerReviewWorkerBatch}
         decisionIdByMoveNumber={multiplayerDecisionIdByMoveNumber}
+        coachingFactsStore={multiplayerCoachingFactsStore}
+        snapshotsByDecisionId={multiplayerSnapshotsByDecisionId}
         title="Game Review"
       />
     </React.Suspense>
