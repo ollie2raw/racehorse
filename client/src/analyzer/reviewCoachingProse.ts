@@ -104,13 +104,14 @@ function actionShort(action: ReviewAction): string {
 function placementContrast(
   played: Extract<ReviewAction, { kind: 'play' }> | null,
   best: Extract<ReviewAction, { kind: 'play' }> | null,
-): { playedSpot: string; bestSpot: string } {
+): { playedSpot: string; bestSpot: string; branchVsBranch: boolean } {
   const playedRaw = played ? positionText(played.position) : 'this end';
   const bestRaw = best ? positionText(best.position) : 'the other end';
-  if (playedRaw === bestRaw && playedRaw === 'a branch end') {
-    return { playedSpot: 'this branch', bestSpot: 'the other branch' };
+  const branchVsBranch = playedRaw === 'a branch end' && bestRaw === 'a branch end';
+  if (branchVsBranch) {
+    return { playedSpot: 'this branch', bestSpot: 'the other branch', branchVsBranch: true };
   }
-  return { playedSpot: playedRaw, bestSpot: bestRaw };
+  return { playedSpot: playedRaw, bestSpot: bestRaw, branchVsBranch: false };
 }
 
 /** Review actions are structured, so this preserves tile, end, and non-play identity. */
@@ -129,12 +130,23 @@ function isSameTileWrongEnd(facts: ReviewCoachingFacts): boolean {
   );
 }
 
+function isTrueDisplayedEquality(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): boolean {
+  return includeTrueReferenceEquality
+    && facts.deltas.referenceExpectedPointDifferential === 0
+    && !actionsEqual(facts.played.action, facts.best.action);
+}
+
 function referenceAuthorityName(facts: ReviewCoachingFacts): string {
   return facts.referenceSource === 'fritz' ? "Fritz's read" : 'the Review Engine';
 }
 
 function countWord(value: number, singular: string, plural: string): string {
   return Math.round(Math.abs(value) * 10) / 10 === 1 ? singular : plural;
+}
+
+/** True when the played move is stronger on this feature (opposite of referenceWins). */
+function playedWinsFeature(delta: ReviewFeatureDelta): boolean {
+  return FEATURE_HIGHER_IS_BETTER[delta.feature] ? delta.delta < 0 : delta.delta > 0;
 }
 
 /**
@@ -173,8 +185,26 @@ function translateFeatureWhy(delta: ReviewFeatureDelta): string | null {
   }
 }
 
-function featureHeadlineFor(delta: ReviewFeatureDelta, sameTileWrongEnd: boolean): string {
-  if (sameTileWrongEnd) return 'Right tile, wrong end.';
+/**
+ * Prefer literal outs over near-duplicate endDangerPenalty "easy replies"
+ * phrasing when both favor the reference.
+ */
+function selectDistinctWhyDeltas(deltas: readonly ReviewFeatureDelta[]): ReviewFeatureDelta[] {
+  const hasOuts = deltas.some((d) => d.feature === 'opponentOutsLeft');
+  return deltas
+    .filter((d) => !(hasOuts && d.feature === 'endDangerPenalty'))
+    .slice(0, 2);
+}
+
+function sameTileWrongHeadline(facts: ReviewCoachingFacts): string {
+  const played = playAction(facts.played.action);
+  const best = playAction(facts.best.action);
+  const { branchVsBranch } = placementContrast(played, best);
+  return branchVsBranch ? 'Right tile, wrong branch.' : 'Right tile, wrong end.';
+}
+
+function featureHeadlineFor(delta: ReviewFeatureDelta, sameTileWrongEnd: boolean, facts: ReviewCoachingFacts): string {
+  if (sameTileWrongEnd) return sameTileWrongHeadline(facts);
   switch (delta.feature) {
     case 'opponentOutsLeft':
     case 'endDangerPenalty':
@@ -189,10 +219,58 @@ function featureHeadlineFor(delta: ReviewFeatureDelta, sameTileWrongEnd: boolean
 }
 
 function joinWhyClauses(deltas: readonly ReviewFeatureDelta[]): string | null {
-  const clauses = deltas.map(translateFeatureWhy).filter((clause): clause is string => clause !== null);
+  const clauses = selectDistinctWhyDeltas(deltas)
+    .map(translateFeatureWhy)
+    .filter((clause): clause is string => clause !== null);
   if (clauses.length === 0) return null;
   if (clauses.length === 1) return clauses[0];
   return `${clauses[0]}, and ${clauses[1]}`;
+}
+
+/** Prefer placement language when both actions share the same tile. */
+function preferredValueGapSubject(facts: ReviewCoachingFacts): string {
+  if (isSameTileWrongEnd(facts) || facts.missKind === 'same_tile_wrong_end') {
+    const played = playAction(facts.played.action);
+    const best = playAction(facts.best.action);
+    const { bestSpot } = placementContrast(played, best);
+    return bestSpot;
+  }
+  return actionShort(facts.best.action);
+}
+
+/** Explicit candidate phrase for WHY clauses after naming two lines. */
+function preferredLineSubject(facts: ReviewCoachingFacts): string {
+  const play = playAction(facts.best.action);
+  if (!play) return "The Review Engine's line";
+  if (isSameTileWrongEnd(facts)) {
+    const { bestSpot, branchVsBranch } = placementContrast(playAction(facts.played.action), play);
+    if (branchVsBranch || bestSpot === 'the other branch') return 'The other branch';
+    if (bestSpot === 'a branch end') return 'The branch placement';
+    return `The ${bestSpot.replace(/^the /, '').replace(/\s+/g, '-')} placement`;
+  }
+  return `The ${tileText(play.tile)} line`;
+}
+
+/** Contested preference clause that distinguishes branch-vs-branch placements. */
+function contestedPreferenceClause(
+  facts: ReviewCoachingFacts,
+  preferred: string,
+  otherEngineAction: string,
+): string {
+  const sameTile = isSameTileWrongEnd(facts);
+  const played = playAction(facts.played.action);
+  const best = playAction(facts.best.action);
+  const { bestSpot, branchVsBranch } = placementContrast(played, best);
+  if (facts.referenceSource === 'fritz') {
+    return `Fritz prefers ${preferred}, while the Review Engine's heuristic prefers ${otherEngineAction}.`;
+  }
+  if (sameTile && branchVsBranch) {
+    return `The Review Engine prefers ${bestSpot}, while Fritz prefers ${otherEngineAction}.`;
+  }
+  if (sameTile && bestSpot === 'a branch end') {
+    return `The Review Engine prefers the branch placement, while Fritz prefers ${otherEngineAction}.`;
+  }
+  return `The Review Engine prefers ${preferred}, while Fritz prefers ${otherEngineAction}.`;
 }
 
 function buildMatchedReferenceProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
@@ -221,15 +299,32 @@ function buildMatchedReferenceProse(facts: ReviewCoachingFacts): ReviewCoachingP
   };
 }
 
-function buildTrueEqualityProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
+function buildTrueEqualityProse(facts: ReviewCoachingFacts, contested: boolean): ReviewCoachingProse {
   const immediateGap = facts.deltas.immediatePoints;
   const referenceAction = actionLabel(facts.best.action);
   const immediateClause = immediateGap === 0
     ? ''
     : `, although ${referenceAction} scores ${formatNumber(immediateGap)} ${immediateGap > 0 ? 'more' : 'fewer'} ${pointsWord(immediateGap)} immediately`;
+  if (!contested) {
+    return {
+      headline: `The review rates these two moves even overall${immediateClause}.`,
+      detail: '',
+      takeaway: '',
+    };
+  }
+  const otherEngineAction = facts.referenceSource === 'fritz'
+    ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
+    : (facts.fritzMove ? actionLabel(facts.fritzMove.action) : 'a different line');
+  const preferred = actionLabel(facts.best.action);
+  const sameTile = isSameTileWrongEnd(facts);
+  const branchNote = sameTile
+    ? 'prefer different placements of the same tile'
+    : 'prefer different moves';
   return {
     headline: `The review rates these two moves even overall${immediateClause}.`,
-    detail: '',
+    detail: facts.referenceSource === 'fritz'
+      ? `Fritz prefers ${preferred}, while the Review Engine's heuristic prefers ${otherEngineAction}, but this review doesn't show an overall value edge between the two displayed placements.`
+      : `The Review Engine prefers ${preferred}, while Fritz prefers ${otherEngineAction}; they ${branchNote}, but this review doesn't show an overall value edge between the two displayed placements.`,
     takeaway: '',
   };
 }
@@ -237,13 +332,13 @@ function buildTrueEqualityProse(facts: ReviewCoachingFacts): ReviewCoachingProse
 function buildValueGapWithoutFeaturesProse(facts: ReviewCoachingFacts, expectedGap: number): ReviewCoachingProse {
   const authority = referenceAuthorityName(facts);
   const authorityStart = authority[0].toUpperCase() + authority.slice(1);
-  const preferred = actionShort(facts.best.action);
+  const preferred = preferredValueGapSubject(facts);
   const immediateSame = facts.deltas.immediatePoints === 0;
   const detail = immediateSame
-    ? 'Both moves score the same immediately, but the measured positional features don\'t isolate a reliable single reason for the gap.'
-    : 'The measured positional features don\'t isolate a reliable single reason for the gap.';
+    ? 'Both moves score the same immediately, but we don\'t have a reliable single positional reason for the gap.'
+    : 'We don\'t have a reliable single positional reason for the gap.';
   return {
-    headline: `${authorityStart} prefers ${preferred} here by about ${formatNumber(expectedGap)} ${pointsWord(expectedGap)} overall.`,
+    headline: `${authorityStart} prefers ${preferred} by about ${formatNumber(expectedGap)} ${pointsWord(expectedGap)} overall.`,
     detail,
     takeaway: '',
   };
@@ -260,14 +355,14 @@ function buildImmediateOnlyGapProse(facts: ReviewCoachingFacts): ReviewCoachingP
 }
 
 function buildCloseUnexplainedProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
-  const preferred = actionShort(facts.best.action);
+  const preferred = preferredValueGapSubject(facts);
   const authority = referenceAuthorityName(facts);
   if (facts.missKind === 'same_tile_wrong_end' || isSameTileWrongEnd(facts)) {
     const played = playAction(facts.played.action);
     const best = playAction(facts.best.action);
     const { playedSpot, bestSpot } = placementContrast(played, best);
     return {
-      headline: 'Right tile, wrong end.',
+      headline: sameTileWrongHeadline(facts),
       detail: `Play it at ${bestSpot}, not ${playedSpot}. The positional features we can measure don't give either placement a clear edge beyond that.`,
       takeaway: 'You found the right tile — check every legal end before placing it.',
     };
@@ -284,17 +379,16 @@ function buildFeatureBackedProse(
   deltas: readonly ReviewFeatureDelta[],
 ): ReviewCoachingProse {
   const top = deltas[0];
-  const whyDeltas = deltas.slice(0, 2);
-  const why = joinWhyClauses(whyDeltas);
+  const why = joinWhyClauses(deltas);
   const sameTile = isSameTileWrongEnd(facts) || facts.missKind === 'same_tile_wrong_end';
   const played = playAction(facts.played.action);
   const best = playAction(facts.best.action);
   const { playedSpot, bestSpot } = placementContrast(played, best);
-  const preferred = actionShort(facts.best.action);
+  const preferred = preferredValueGapSubject(facts);
   const authority = referenceAuthorityName(facts);
   const immediateGap = facts.deltas.immediatePoints;
 
-  let headline = featureHeadlineFor(top, sameTile);
+  let headline = featureHeadlineFor(top, sameTile, facts);
   if (!sameTile && !why) {
     headline = `${authority[0].toUpperCase() + authority.slice(1)} prefers ${preferred} here.`;
   }
@@ -325,9 +419,13 @@ function buildFeatureBackedProse(
 }
 
 /**
- * Positional-flag path: translate ranked reference-winning feature deltas
- * (and value gaps) into coaching voice. Every number comes from structured
- * facts. Internal feature labels / unit scores never appear in prose.
+ * Player-facing precedence (positional path):
+ * 1. played === displayed reference → affirmative
+ * 2. true displayed-value equality → equality (never "wrong end")
+ * 3. supported positional WHY → coaching explanation
+ * 4. supported overall value gap, no WHY → value-gap fallback
+ * 5. otherwise close/unexplained
+ * Contested disagreement disclosure composes with 2–5 without contradicting them.
  */
 function buildFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
   const deltas = (facts.featureDeltas ?? []).filter(referenceWinsFeature);
@@ -339,37 +437,45 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReference
     return buildMatchedReferenceProse(facts);
   }
 
-  if (!top && expectedGap !== undefined && expectedGap >= VALUE_GAP_MIN_POINTS) {
-    return buildValueGapWithoutFeaturesProse(facts, expectedGap);
+  // Equality outranks missKind / feature-backed "wrong end" language.
+  if (isTrueDisplayedEquality(facts, includeTrueReferenceEquality)) {
+    return buildTrueEqualityProse(facts, false);
   }
 
-  if (includeTrueReferenceEquality && !top && expectedGap === 0) {
-    return buildTrueEqualityProse(facts);
+  if (top) {
+    return buildFeatureBackedProse(facts, deltas);
+  }
+
+  if (expectedGap !== undefined && expectedGap >= VALUE_GAP_MIN_POINTS) {
+    return buildValueGapWithoutFeaturesProse(facts, expectedGap);
   }
 
   if (!top && immediateGap > 0 && (expectedGap === undefined || expectedGap >= 0)) {
     return buildImmediateOnlyGapProse(facts);
   }
 
-  if (!top) {
-    return buildCloseUnexplainedProse(facts);
-  }
-
-  return buildFeatureBackedProse(facts, deltas);
+  return buildCloseUnexplainedProse(facts);
 }
 
 /**
  * Contested search/heuristic: disclose disagreement once, then the
  * D2-aligned primary preference, then at most one supported WHY.
+ * Heuristic contested never issues an unsupported placement imperative.
  */
 function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
   if (actionsEqual(facts.played.action, facts.best.action)) {
     return buildMatchedReferenceProse(facts);
   }
 
+  if (isTrueDisplayedEquality(facts, includeTrueReferenceEquality)) {
+    return buildTrueEqualityProse(facts, true);
+  }
+
   const deltas = (facts.featureDeltas ?? []).filter(referenceWinsFeature);
-  const why = joinWhyClauses(deltas.slice(0, 1));
+  const why = joinWhyClauses(deltas);
+  const opposing = (facts.featureDeltas ?? []).filter(playedWinsFeature);
   const preferred = actionLabel(facts.best.action);
+  const preferredShort = preferredValueGapSubject(facts);
   const otherEngineAction = facts.referenceSource === 'fritz'
     ? (facts.oracleMove ? actionLabel(facts.oracleMove.action) : 'a different line')
     : (facts.fritzMove ? actionLabel(facts.fritzMove.action) : 'a different line');
@@ -378,32 +484,36 @@ function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrue
   const best = playAction(facts.best.action);
   const { playedSpot, bestSpot } = placementContrast(played, best);
   const expectedGap = facts.deltas.referenceExpectedPointDifferential;
+  const lineSubject = preferredLineSubject(facts);
 
   if (facts.referenceSource === 'fritz') {
-    let detail = `Fritz prefers ${preferred}, while the Review Engine's heuristic prefers ${otherEngineAction}.`;
-    if (why) detail += ` Fritz's placement ${why}.`;
-    else if (sameTile) detail += ` Play it at ${bestSpot}, not ${playedSpot}.`;
-    else detail += " The positional features we can measure don't give either placement a clear edge.";
+    // D2: Fritz is primary for heuristic disagreements — not exact truth.
+    let detail = contestedPreferenceClause(facts, preferred, otherEngineAction);
+    if (why) {
+      // Only cite features that actually favor Fritz's displayed reference.
+      detail += ` Fritz's placement ${why}.`;
+    } else if (opposing.length > 0) {
+      detail += ` The Review Engine's measured positional features favor ${otherEngineAction}, while Fritz prefers the displayed reference.`;
+    }
+    // No "Play it at …" imperative: contested heuristic is a judgment call.
     return {
       headline: 'This one is close.',
       detail,
-      takeaway: sameTile ? 'You found the right tile — check every legal end before placing it.' : '',
+      takeaway: '',
     };
   }
 
-  let detail = `The Review Engine prefers ${preferred}, while Fritz prefers ${otherEngineAction}.`;
+  let detail = contestedPreferenceClause(facts, preferred, otherEngineAction);
   if (why) {
-    detail += ` That line ${why}.`;
+    detail += ` ${lineSubject} ${why}.`;
   } else if (expectedGap !== undefined && expectedGap >= VALUE_GAP_MIN_POINTS) {
-    detail += ` The Review Engine's line is worth about ${formatNumber(expectedGap)} more ${pointsWord(expectedGap)} overall.`;
+    detail += ` The Review Engine prefers ${preferredShort} by about ${formatNumber(expectedGap)} more ${pointsWord(expectedGap)} overall.`;
   } else if (sameTile) {
-    detail += ` Play it at ${bestSpot}, not ${playedSpot}.`;
-  } else if (includeTrueReferenceEquality && expectedGap === 0) {
-    detail += ' The review rates the two candidate values even overall.';
+    detail += ` Prefer ${bestSpot}, not ${playedSpot}.`;
   }
 
   return {
-    headline: sameTile ? 'Right tile, wrong end.' : 'The engines disagree here.',
+    headline: sameTile ? sameTileWrongHeadline(facts) : 'The engines disagree here.',
     detail,
     takeaway: sameTile ? 'You found the right tile — check every legal end before placing it.' : '',
   };

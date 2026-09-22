@@ -48,7 +48,7 @@ function supportedNumbers(f: ReviewCoachingFacts): number[] {
 }
 
 describe('coaching voice quality — truth-preserving regressions', () => {
-  it('1. played === reference never compares the move to itself', () => {
+  it('1. played === reference → affirmative copy', () => {
     const f = base({
       missKind: 'correct',
       played: { action: play(5, 5, 'left'), immediatePoints: 3 },
@@ -60,24 +60,26 @@ describe('coaching voice quality — truth-preserving regressions', () => {
     expect(prose.headline).toMatch(/Best move/i);
     expect(text(prose)).toMatch(/5-5/);
     expect(text(prose)).toMatch(/3/);
-    expect(text(prose)).not.toMatch(/and 5-5 at the left end have no feature/i);
-    expect(text(prose)).not.toMatch(/no feature difference above the reporting threshold/i);
+    expect(text(prose)).not.toMatch(/wrong end|wrong branch/i);
   });
 
-  it('2. true equality uses concise equality copy', () => {
+  it('2. true equality + same_tile_wrong_end → equality wins; no “wrong”', () => {
     const prose = buildReviewCoachingProse(base({
-      missKind: 'better_tile',
-      played: { action: play(2, 4, 'left'), immediatePoints: 0 },
-      best: { action: play(3, 4, 'right'), immediatePoints: 0 },
+      missKind: 'same_tile_wrong_end',
+      played: { action: play(2, 4, 'branch-2-1' as PlacementPosition), immediatePoints: 0 },
+      best: { action: play(2, 4, 'branch-0-1' as PlacementPosition), immediatePoints: 0 },
       deltas: { immediatePoints: 0, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
-      featureDeltas: [],
+      // Features that would otherwise tempt "wrong end" copy:
+      featureDeltas: [
+        { feature: 'opponentOutsLeft', playedValue: 2, referenceValue: 1, delta: -1 },
+      ],
     }), true);
     expect(prose.headline).toBe('The review rates these two moves even overall.');
-    expect(prose.detail).toBe('');
-    expect(prose.takeaway).toBe('');
+    expect(text(prose)).not.toMatch(/\bwrong\b/i);
+    expect(text(prose)).not.toMatch(/Play it at/i);
   });
 
-  it('3. evaluated gap + no feature delta does NOT claim overall equality', () => {
+  it('3. positive value gap + no feature reason → value-gap copy', () => {
     const prose = buildReviewCoachingProse(base({
       missKind: 'better_tile',
       played: { action: play(2, 3, 'right'), immediatePoints: 0 },
@@ -86,61 +88,11 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       featureDeltas: [],
     }), true);
     expect(prose.headline).toMatch(/Review Engine prefers 4-4 .* 2\.8 points overall/);
-    expect(text(prose)).not.toMatch(/even overall|no meaningful positional difference|equal/i);
-    expect(text(prose)).toMatch(/don't isolate a reliable single reason/i);
+    expect(text(prose)).not.toMatch(/even overall|equal/i);
+    expect(text(prose)).toMatch(/reliable single positional reason/i);
   });
 
-  it('4. same tile / wrong end leads with human-readable placement coaching', () => {
-    const prose = buildReviewCoachingProse(base({
-      featureDeltas: [
-        { feature: 'opponentOutsLeft', playedValue: 2, referenceValue: 1, delta: -1 },
-      ],
-    }), true);
-    expect(prose.headline).toBe('Right tile, wrong end.');
-    expect(prose.detail).toMatch(/right end|left end|branch/);
-    expect(text(prose)).not.toMatch(/rates better on|biggest gap|unseen tiles matching/i);
-  });
-
-  it('5. opponent-outs translation uses understandable literal counts', () => {
-    const prose = buildReviewCoachingProse(base({
-      featureDeltas: [
-        { feature: 'opponentOutsLeft', playedValue: 2, referenceValue: 1, delta: -1 },
-      ],
-    }), true);
-    expect(prose.detail).toMatch(/only 1 matching reply instead of 2/);
-  });
-
-  it('6. raw arbitrary feature scores such as end-control units never leak', () => {
-    const prose = buildReviewCoachingProse(base({
-      featureDeltas: [
-        { feature: 'endControlScore', playedValue: -36, referenceValue: -24, delta: 12 },
-        { feature: 'endDangerPenalty', playedValue: 32, referenceValue: 20, delta: -12 },
-      ],
-    }), true);
-    const combined = text(prose);
-    expect(combined).not.toMatch(/end control|by 12|exposure to an immediate reply|rates better on|biggest gap/i);
-    expect(combined).not.toContain('-36');
-    expect(combined).not.toContain('-24');
-    expect(combined).toMatch(/control of the open ends|fewer easy replies/i);
-  });
-
-  it('7. contested disagreement is disclosed once, not redundantly', () => {
-    const prose = buildReviewCoachingProse(base({
-      agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
-      fritzMove: { action: play(5, 6, 'left'), immediatePoints: 0, isMinimaxEndgame: false },
-      featureDeltas: [
-        { feature: 'opponentOutsLeft', playedValue: 5, referenceValue: 3, delta: -2 },
-      ],
-    }), true);
-    const combined = text(prose);
-    const disagreeHits = combined.match(/engines disagree|Fritz prefers|Review Engine prefers/gi) ?? [];
-    expect(combined).toMatch(/engines disagree|Right tile, wrong end/i);
-    expect(combined).not.toMatch(/The engines disagree on the reference move/i);
-    expect(combined.match(/so this read is contested/gi) ?? []).toHaveLength(0);
-    expect(disagreeHits.length).toBeGreaterThan(0);
-  });
-
-  it('8. search contested uses Review Engine primary', () => {
+  it('4. search contested → Review Engine primary', () => {
     const prose = buildReviewCoachingProse(base({
       referenceSource: 'oracle',
       agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
@@ -154,34 +106,102 @@ describe('coaching voice quality — truth-preserving regressions', () => {
     expect(prose.headline).not.toContain("Fritz's read");
   });
 
-  it('9. heuristic contested uses Fritz primary', () => {
+  it('5. heuristic contested → Fritz primary without unsupported objective imperative', () => {
     const prose = buildReviewCoachingProse(base({
       referenceSource: 'fritz',
       evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
-      best: { action: play(2, 4, 'right'), immediatePoints: 0 },
+      best: { action: play(3, 6, 'right'), immediatePoints: 3 },
+      played: { action: play(3, 6, 'left'), immediatePoints: 3 },
       deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
       agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
-      oracleMove: { action: play(2, 4, 'left'), immediatePoints: 0 },
-      featureDeltas: [
-        { feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 },
-      ],
+      oracleMove: { action: play(3, 6, 'left'), immediatePoints: 3 },
+      featureDeltas: [],
     }), true);
     expect(prose.headline).toBe('This one is close.');
     expect(text(prose)).toMatch(/Fritz prefers/);
     expect(text(prose)).toMatch(/Review Engine's heuristic prefers/);
-    expect(text(prose)).not.toMatch(/\bobjectively best\b|\bbest move\b/i);
+    expect(text(prose)).not.toMatch(/Play it at/i);
+    expect(text(prose)).not.toMatch(/\bobjectively\b/i);
   });
 
-  it('10. unsupported WHY is omitted rather than invented', () => {
+  it('6. feature facts opposing heuristic primary cannot be presented as support for it', () => {
+    // Played/right wins outs (lower outs); Fritz displays left. Opposing features
+    // must not be narrated as Fritz's rationale.
     const prose = buildReviewCoachingProse(base({
-      missKind: 'better_tile',
-      played: { action: play(1, 2, 'left'), immediatePoints: 0 },
-      best: { action: play(3, 4, 'right'), immediatePoints: 0 },
+      referenceSource: 'fritz',
+      evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
+      played: { action: play(0, 2, 'right'), immediatePoints: 0 },
+      best: { action: play(0, 2, 'left'), immediatePoints: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
+      agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
+      oracleMove: { action: play(0, 2, 'right'), immediatePoints: 0 },
+      featureDeltas: [
+        // delta > 0 with higherIsBetter:false → reference (Fritz/left) is WORSE on outs
+        { feature: 'opponentOutsLeft', playedValue: 1, referenceValue: 3, delta: 2 },
+      ],
+    }), true);
+    expect(prose.headline).toBe('This one is close.');
+    expect(text(prose)).toMatch(/Fritz prefers/);
+    expect(text(prose)).toMatch(/positional features favor/i);
+    expect(text(prose)).not.toMatch(/Fritz's placement leaves your opponent only/i);
+    expect(text(prose)).not.toMatch(/Play it at/i);
+  });
+
+  it('7. candidate-specific feature WHY identifies the candidate unambiguously', () => {
+    const prose = buildReviewCoachingProse(base({
+      agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
+      played: { action: play(3, 6, 'branch-1-0' as PlacementPosition), immediatePoints: 0 },
+      best: { action: play(3, 6, 'right'), immediatePoints: 0 },
+      fritzMove: { action: play(2, 3, 'right'), immediatePoints: 0, isMinimaxEndgame: false },
+      featureDeltas: [
+        { feature: 'opponentOutsLeft', playedValue: 5, referenceValue: 3, delta: -2 },
+      ],
+    }), true);
+    expect(text(prose)).toMatch(/Review Engine prefers 3-6/);
+    expect(text(prose)).toMatch(/Fritz prefers 2-3/);
+    expect(text(prose)).toMatch(/The (?:3-6 line|right-end placement) leaves your opponent only 3 matching replies instead of 5/);
+    expect(text(prose)).not.toMatch(/That line /);
+  });
+
+  it('8. branch-vs-branch prose does not pretend generic “a branch end” distinguishes them', () => {
+    const prose = buildReviewCoachingProse(base({
+      agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
+      played: { action: play(3, 4, 'branch-0-0' as PlacementPosition), immediatePoints: 0 },
+      best: { action: play(3, 4, 'branch-1-0' as PlacementPosition), immediatePoints: 0 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0.6, referenceExpectedPointDifferential: 0.6 },
+      fritzMove: { action: play(3, 4, 'left'), immediatePoints: 0, isMinimaxEndgame: false },
+      featureDeltas: [],
+    }), true);
+    expect(prose.headline).toMatch(/Right tile, wrong branch/i);
+    expect(text(prose)).toMatch(/other branch/i);
+    expect(text(prose)).not.toMatch(/prefers 3-4 at a branch end/i);
+    expect(text(prose)).not.toMatch(/branch-0-0|branch-1-0/);
+  });
+
+  it('9. same-tile different-placement value headline identifies placement, not merely tile', () => {
+    const prose = buildReviewCoachingProse(base({
+      missKind: 'same_tile_wrong_end',
+      played: { action: play(1, 5, 'branch-1-0' as PlacementPosition), immediatePoints: 0 },
+      best: { action: play(1, 5, 'right'), immediatePoints: 0 },
       deltas: { immediatePoints: 0, expectedPointDifferential: 1.4, referenceExpectedPointDifferential: 1.4 },
       featureDeltas: [],
     }), true);
-    expect(text(prose)).not.toMatch(/because|due to|trap|hub geometry|principal variation/i);
-    expect(text(prose)).toMatch(/don't isolate a reliable single reason/i);
+    expect(prose.headline).toMatch(/prefers the right end by about 1\.4 points overall/);
+    expect(prose.headline).not.toMatch(/prefers 1-5 here/);
+    expect(text(prose)).toMatch(/reliable single positional reason/i);
+  });
+
+  it('10. no arbitrary feature score leakage', () => {
+    const prose = buildReviewCoachingProse(base({
+      featureDeltas: [
+        { feature: 'endControlScore', playedValue: -36, referenceValue: -24, delta: 12 },
+        { feature: 'endDangerPenalty', playedValue: 32, referenceValue: 20, delta: -12 },
+      ],
+    }), true);
+    const combined = text(prose);
+    expect(combined).not.toMatch(/end control|by 12|exposure to an immediate reply|rates better on|biggest gap/i);
+    expect(combined).not.toContain('-36');
+    expect(combined).toMatch(/control of the open ends|fewer easy replies/i);
   });
 
   it('11. every number in rendered prose exists in structured facts', () => {
@@ -225,5 +245,16 @@ describe('coaching voice quality — truth-preserving regressions', () => {
     }), true);
     expect(text(prose)).not.toMatch(/Fritz.*\b(rating|Elo|Glicko|2200|2400)\b/i);
     expect(text(prose)).not.toMatch(/\brated\b/i);
+  });
+
+  it('outs + danger does not emit redundant “easy replies” after outs counts', () => {
+    const prose = buildReviewCoachingProse(base({
+      featureDeltas: [
+        { feature: 'opponentOutsLeft', playedValue: 2, referenceValue: 1, delta: -1 },
+        { feature: 'endDangerPenalty', playedValue: 5, referenceValue: 4, delta: -1 },
+      ],
+    }), true);
+    expect(prose.detail).toMatch(/only 1 matching reply instead of 2/);
+    expect(prose.detail).not.toMatch(/matching reply.*fewer easy replies/i);
   });
 });

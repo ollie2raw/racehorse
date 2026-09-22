@@ -9,7 +9,9 @@ function facts(): ReviewCoachingFacts {
     best: { action: { kind: 'play', tile: { low: 2, high: 4 }, position: 'right' }, immediatePoints: 0 },
     referenceSource: 'oracle',
     missKind: 'same_tile_wrong_end',
-    deltas: { immediatePoints: -5, expectedPointDifferential: 0, referenceExpectedPointDifferential: 0 },
+    // Non-zero displayed-reference gap so feature-backed / wrong-end paths are reachable.
+    // True equality (gap === 0) outranks those paths by product contract.
+    deltas: { immediatePoints: -5, expectedPointDifferential: 1.2, referenceExpectedPointDifferential: 1.2 },
     evidence: { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' },
     principalVariation: [],
     agreement: { oracleVsFritz: 'agree', playedMatch: 'neither', contested: false },
@@ -39,6 +41,8 @@ describe('default-off positional prose truth', () => {
       f.played.immediatePoints,
       f.best.immediatePoints,
       f.deltas.immediatePoints,
+      f.deltas.expectedPointDifferential,
+      f.deltas.referenceExpectedPointDifferential!,
       ...(f.featureDeltas ?? []).flatMap((delta) => [delta.playedValue, delta.referenceValue, delta.delta]),
     ].map(Math.abs);
     for (const number of text.match(/\d+(?:\.\d+)?/g) ?? []) expect(supported).toContain(Number(number));
@@ -55,7 +59,7 @@ describe('default-off positional prose truth', () => {
     expect(prose.headline).toMatch(/prefers .* by about 2 points overall/);
     expect(proseText(prose)).not.toMatch(/even overall|equal|no meaningful positional difference/i);
     expect(proseText(prose)).not.toContain('end control');
-    expect(proseText(prose)).toMatch(/don't isolate a reliable single reason|positional features/i);
+    expect(proseText(prose)).toMatch(/reliable single positional reason/i);
   });
 
   it('renders an exact displayed-reference tie, with only a structured immediate-score tradeoff', () => {
@@ -114,6 +118,7 @@ describe('default-off positional prose truth', () => {
     expect(material.headline).toMatch(/prefers .* by about 1 point overall/);
     const positional = buildReviewCoachingProse({
       ...facts(),
+      deltas: { immediatePoints: -5, expectedPointDifferential: 1.2, referenceExpectedPointDifferential: 1.2 },
       featureDeltas: [{ feature: 'endControlScore', playedValue: 1, referenceValue: 2, delta: 1 }],
     }, true);
     expect(positional.headline).toMatch(/Right tile, wrong end|control/i);
@@ -215,6 +220,7 @@ describe('default-off positional prose truth', () => {
   it('only cites feature values that favor the recommended move', () => {
     const f = {
       ...facts(),
+      deltas: { immediatePoints: -5, expectedPointDifferential: 1.2, referenceExpectedPointDifferential: 1.2 },
       featureDeltas: [
         { feature: 'endControlScore' as const, playedValue: 2, referenceValue: 8, delta: 6 },
         { feature: 'endDangerPenalty' as const, playedValue: 9, referenceValue: 3, delta: -6 },

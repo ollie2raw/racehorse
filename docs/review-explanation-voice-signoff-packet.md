@@ -25,7 +25,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** 1.2000000000000002
 - **Player-facing NEW prose:**
   - Headline: Right tile, wrong end.
-  - Why: Play it at a branch end, not the right end — that placement leaves your opponent only 1 matching reply instead of 2, and leaves fewer easy replies for your opponent.
+  - Why: Play it at a branch end, not the right end — that placement leaves your opponent only 1 matching reply instead of 2.
   - Takeaway: You found the right tile — check every legal end before placing it.
 - **Supporting structured facts (audit):** endControlScore: played -36, reference -48, delta -12; handShapeMobilityScore: played 1, reference -1, delta -2; opponentOutsLeft: played 2, reference 1, delta -1; endDangerPenalty: played 5, reference 4, delta -1; immediateΔ=0; expectedΔ=1.2000000000000002.
 
@@ -54,8 +54,8 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Contested:** no
 - **referenceExpectedPointDifferential:** 2.833333333333333
 - **Player-facing NEW prose:**
-  - Headline: The Review Engine prefers 4-4 here by about 2.8 points overall.
-  - Why: Both moves score the same immediately, but the measured positional features don't isolate a reliable single reason for the gap.
+  - Headline: The Review Engine prefers 4-4 by about 2.8 points overall.
+  - Why: Both moves score the same immediately, but we don't have a reliable single positional reason for the gap.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** opponentOutsLeft: played 2, reference 4, delta 2; handShapeMobilityScore: played 2, reference 0, delta -2; endDangerPenalty: played 3.0681818181818183, reference 4.318181818181818, delta 1.25; handShapeOrphanCount: played 1, reference 2, delta 1; immediateΔ=0; expectedΔ=2.833333333333333.
 
@@ -70,7 +70,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** 1.88
 - **Player-facing NEW prose:**
   - Headline: Right tile, wrong end.
-  - Why: The Review Engine prefers 2-5 at a branch end, while Fritz prefers 2-5 at the left end. That line keeps more control of the open ends.
+  - Why: The Review Engine prefers the branch placement, while Fritz prefers 2-5 at the left end. The branch placement keeps more control of the open ends, and leaves fewer easy replies for your opponent.
   - Takeaway: You found the right tile — check every legal end before placing it.
 - **Supporting structured facts (audit):** endControlScore: played -36, reference -24, delta 12; endDangerPenalty: played 32, reference 20, delta -12; immediateΔ=0; expectedΔ=1.88.
 
@@ -85,7 +85,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** 7.34
 - **Player-facing NEW prose:**
   - Headline: Right tile, wrong end.
-  - Why: The Review Engine prefers 3-6 at the right end, while Fritz prefers 2-3 at the right end. That line leaves your opponent only 3 matching replies instead of 5.
+  - Why: The Review Engine prefers 3-6 at the right end, while Fritz prefers 2-3 at the right end. The right-end placement leaves your opponent only 3 matching replies instead of 5.
   - Takeaway: You found the right tile — check every legal end before placing it.
 - **Supporting structured facts (audit):** endControlScore: played -12, reference -36, delta -24; handShapeMobilityScore: played -1, reference -5, delta -4; endDangerPenalty: played 11.454545454545453, reference 14, delta 2.5454545454545467; opponentOutsLeft: played 5, reference 3, delta -2; immediateΔ=0; expectedΔ=7.34.
 
@@ -99,8 +99,8 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Contested:** yes
 - **referenceExpectedPointDifferential:** 0.5699999999999998
 - **Player-facing NEW prose:**
-  - Headline: Right tile, wrong end.
-  - Why: The Review Engine prefers 3-4 at a branch end, while Fritz prefers 3-4 at the left end. The Review Engine's line is worth about 0.6 more points overall.
+  - Headline: Right tile, wrong branch.
+  - Why: The Review Engine prefers the other branch, while Fritz prefers 3-4 at the left end. The Review Engine prefers the other branch by about 0.6 more points overall.
   - Takeaway: You found the right tile — check every legal end before placing it.
 - **Supporting structured facts (audit):** no supported feature delta above reporting threshold; immediateΔ=0; expectedΔ=0.5699999999999998.
 
@@ -115,8 +115,8 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
   - Headline: This one is close.
-  - Why: Fritz prefers 3-6 at the right end, while the Review Engine's heuristic prefers 3-6 at the left end. Play it at the right end, not the left end.
-  - Takeaway: You found the right tile — check every legal end before placing it.
+  - Why: Fritz prefers 3-6 at the right end, while the Review Engine's heuristic prefers 3-6 at the left end.
+  - Takeaway: (none)
 - **Supporting structured facts (audit):** no supported feature delta above reporting threshold; immediateΔ=0; expectedΔ=0.
 
 ## Packet sample 8 — heuristic contested — close placement
@@ -130,8 +130,8 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
   - Headline: This one is close.
-  - Why: Fritz prefers 0-2 at the left end, while the Review Engine's heuristic prefers 0-2 at the right end. Play it at the left end, not the right end.
-  - Takeaway: You found the right tile — check every legal end before placing it.
+  - Why: Fritz prefers 0-2 at the left end, while the Review Engine's heuristic prefers 0-2 at the right end. The Review Engine's measured positional features favor 0-2 at the right end, while Fritz prefers the displayed reference.
+  - Takeaway: (none)
 - **Supporting structured facts (audit):** endControlScore: played -24, reference -48, delta -24; endDangerPenalty: played 16, reference 36, delta 20; opponentOutsLeft: played 4, reference 9, delta 5; immediateΔ=0; expectedΔ=0.
 
 ## Packet sample 9 — search — true displayed-reference equality
@@ -141,12 +141,12 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Played:** 2-4 at branch-2-1 (0 immediate points)
 - **Displayed reference:** 2-4 at branch-0-1 (oracle; 0 immediate points)
 - **Classification / evidence:** missKind=`same_tile_wrong_end`; tier=`search`; display=`Review Engine search`
-- **Contested:** yes
+- **Contested:** no
 - **referenceExpectedPointDifferential:** 0
 - **Player-facing NEW prose:**
-  - Headline: Right tile, wrong end.
-  - Why: The Review Engine prefers 2-4 at a branch end, while Fritz prefers 2-4 at a branch end. Play it at the other branch, not this branch.
-  - Takeaway: You found the right tile — check every legal end before placing it.
+  - Headline: The review rates these two moves even overall.
+  - Why: (none)
+  - Takeaway: (none)
 - **Supporting structured facts (audit):** endControlScore: played -36, reference -48, delta -12; endDangerPenalty: played 28, reference 36, delta 8; opponentOutsLeft: played 7, reference 8, delta 1; immediateΔ=0; expectedΔ=0.
 
 ## Packet sample 10 — search — value-gap fallback
@@ -159,7 +159,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Contested:** no
 - **referenceExpectedPointDifferential:** 1.4299999999999997
 - **Player-facing NEW prose:**
-  - Headline: The Review Engine prefers 1-5 here by about 1.4 points overall.
-  - Why: Both moves score the same immediately, but the measured positional features don't isolate a reliable single reason for the gap.
+  - Headline: The Review Engine prefers the right end by about 1.4 points overall.
+  - Why: Both moves score the same immediately, but we don't have a reliable single positional reason for the gap.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** endDangerPenalty: played 30, reference 50, delta 20; endControlScore: played -24, reference -36, delta -12; opponentOutsLeft: played 9, reference 12, delta 3; immediateΔ=0; expectedΔ=1.4299999999999997.
