@@ -25,21 +25,18 @@ function evaluation(
     immediatePoints: 0,
     principalVariation: [],
   });
+  const evidence =
+    source === 'exact'
+      ? ({ source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' } as const)
+      : source === 'search'
+        ? ({ source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' } as const)
+        : ({ source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' } as const);
   return {
     evaluationVersion: 1,
     snapshotId,
     rulesVersion: 1,
     reviewEngineVersion: 'review-engine-v1',
-    evidence: {
-      source,
-      confidence: source === 'exact' ? 'high' : source === 'search' ? 'medium' : 'low',
-      displayLabel:
-        source === 'exact'
-          ? 'Exact analysis'
-          : source === 'search'
-            ? 'Review Engine search'
-            : 'Heuristic estimate',
-    },
+    evidence,
     played: candidate(played, 0),
     best: candidate(best, 4),
     candidates: [candidate(played, 0), candidate(best, 4)],

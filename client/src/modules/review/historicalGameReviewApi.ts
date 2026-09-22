@@ -19,7 +19,7 @@ export async function fetchGameReviewById(reviewId: string): Promise<GameReviewR
   const result = await apiGet<GameReviewReadPayload>(
     `/api/game-reviews/by-id/${encodeURIComponent(reviewId)}`,
   );
-  if (!result.ok || !result.data) return null;
+  if (result.error || !result.data) return null;
   return result.data;
 }
 
@@ -29,7 +29,7 @@ export async function fetchRecentGameReviews(
   const result = await apiGet<{ reviews: RecentGameReviewListEntry[] }>(
     `/api/game-reviews/recent?limit=${Math.max(1, Math.min(20, Math.floor(limit)))}`,
   );
-  if (!result.ok || !result.data?.reviews) return [];
+  if (result.error || !result.data?.reviews) return [];
   return result.data.reviews;
 }
 
