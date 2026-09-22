@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../components';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import {
@@ -107,24 +107,19 @@ export default function GameReviewer({
   }
   const factsStore = coachingFactsStore ?? localFactsStore;
 
-  const batchRef = useRef(reviewWorkerBatch);
-  batchRef.current = reviewWorkerBatch;
-  const snapshotsRef = useRef(snapshotsByDecisionId);
-  snapshotsRef.current = snapshotsByDecisionId;
-
+  // Resolver may be recreated when batch/snapshots identities change; the
+  // published Map on `factsStore` is the cache, so constructions are not lost.
   const coachingFactsResolver = useMemo(
     () =>
       createReviewCoachingFactsResolver({
         store: factsStore,
-        getEvaluation: (decisionId) => batchRef.current?.resultsByDecisionId.get(decisionId),
-        getSnapshot: (decisionId) => snapshotsRef.current?.get(decisionId),
+        getEvaluation: (decisionId) => reviewWorkerBatch?.resultsByDecisionId.get(decisionId),
+        getSnapshot: (decisionId) => snapshotsByDecisionId?.get(decisionId),
         eligibleDecisionIds: snapshotsByDecisionId
           ? [...snapshotsByDecisionId.keys()]
           : [...(reviewWorkerBatch?.resultsByDecisionId.keys() ?? [])],
       }),
-    // Resolver identity follows the store; getters read latest batch/snapshots via refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: store identity is the lifetime boundary
-    [factsStore],
+    [factsStore, reviewWorkerBatch, snapshotsByDecisionId],
   );
 
   useEffect(() => {
