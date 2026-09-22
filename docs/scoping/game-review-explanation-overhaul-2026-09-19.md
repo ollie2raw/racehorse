@@ -191,26 +191,20 @@ F1c is unrun; and prose voice is not human-approved for public activation. The
 | Key-moment / mistake list | partial | `selectPivotalTurns` ranks up to three scorable player decisions by expected loss (`client/src/training/pivotalReview/pivotalTurnSelector.ts`); `PivotalTurnReviewCard` and `PivotalReviewSummary` render the selected turns and lessons, with tests. `BotPivotalReviewPortal` wires it, but `PIVOTAL_REVIEW_WIZARD_ENABLED` is false and `usePostGamePivotalReview.ts` documents the path as inert on main. | The selector/list is not reachable in the normal current post-game flow and is not reconstructed for history. | **F1e-2 reachable key moments** — expose a deterministic, linked key-moment list from the regular Game Review; primary systems: pivotal selector/cards and `GameReviewer`; dependency: F1c/determinism for trustworthy contested ranking, then historical review loading for reuse; required before public prose activation only if the launch promise includes a curated mistake list, otherwise can follow the core review launch. |
 | Best/reference move shown on board | partial | `GameReviewer` renders the review board and a `gr-ghost-tile` when an oracle best tile differs (`client/src/analyzer/GameReviewer.tsx`); it labels the tile “Best move.” It also has a synthetic PV board stepper (`GameReviewer.pvBoard.test.tsx`), while that test records production's current state as “No continuation recorded for this move.” `PivotalTurnReviewCard` shows best action text, not a placement overlay. | The ghost tile does not show the exact reference placement/end/branch spatially; production PVs are empty, so the stepper cannot provide that visualization. | **F1e-3 reference-placement overlay** — show the exact displayed reference action on the pre-move board, including end/branch; primary systems: `GameReviewer.tsx`, Board overlay API, `ReviewAction`; dependency: no new evaluation semantics, but must honor F2 displayed-reference source labels; can follow activation because text/reference facts remain available. |
 | Retry-a-mistake / try-again | missing | `PivotalTurnReviewCard` only steps through reflection cards and completes notes; `PivotalReviewSummary` only selects a hand. The match `rematch` routes are whole-game multiplayer flow (`server/src/multiplayer/registerRematchPregameHandlers.ts`), and the history scrubber is disabled after game over (`client/src/bot/view-model/resolveHistoryScrubberView.ts`). No reviewed-state replay/alternative-comparison action exists. | A reviewed decision cannot launch a playable reconstruction of that position or compare a retry against its reference. | **F1e-4 decision retry sandbox** — start a non-persistent practice state from a selected reviewed snapshot and compare the retry to the stored reference; primary systems: review snapshots, Board/match runtime, GameReviewer; dependency: retained review snapshots plus explicit practice-state ownership; can follow public prose activation because it is instructional depth, not required to understand a review. |
-| Reopen historical completed game with same review/explanations | missing | Server persists `evaluations`, accuracy result, versions, game digest and source match id (`server/src/http/routes/gameReviewsRoute.ts`, `server/src/reviewPersistence/queryLatestGameReview.ts`) and writes best-effort from `usePostGamePivotalReview.ts` / `postGameReviewWrite.ts`. The GET route is tested in `server/src/http/routes/gameReviewsRoute.test.ts`, but no client calls GET `/api/game-reviews`; `GameReviewer` consumes only live `analysis` and `reviewWorkerBatch`. The in-game history scrubber is explicitly unavailable after game over. | No normal history route reconstructs the stored decision sequence/evidence/explanations. Recomputing is not an equivalent substitute: Fritz wall-clock jitter can change contested metadata, and the read route returns latest rather than an exact selected version. | **F1e-5 historical review replay** — route a completed game to its persisted versioned review and render stored evaluations/facts without recomputation; primary systems: game history UI, GET `/api/game-reviews`, `GameReviewer`, review payload/version selection; dependency: stable facts result and a version-pinned read contract; **required before public Game Review launch** because reopening the same review is part of a trustworthy review promise. |
+| Reopen historical completed game with same review/explanations | present | Server persists versioned `replay_artifact` (artifactVersion 1: analysis navigation/boards + canonical coaching facts + rendered prose) alongside evaluations (`supabase/migrations/2026-09-22_game_reviews_replay_artifact.sql`, write via `postGameReviewWrite` / PR #289 store). Exact read: `GET /api/game-reviews/by-id/:reviewId`. History entry: Play vs Fritz “Recent reviews” → Review Game (`HistoricalGameReviewPortal`). GameReviewer historical mode hydrates stored facts/prose with zero Fritz/worker recomputation. Legacy rows without artifact show an explicit notice and do not recompute. | None for new artifact rows; legacy rows intentionally lack replayable explanations. | none — F1e-5 complete for replayable artifact rows |
 
 ### F1e parity conclusion
 
-**Present: 1. Partial: 2. Missing: 3.** Per-move classification is the one
-complete locked surface in the current in-memory post-game flow. Key moments
-and reference-on-board are presentation/UX gaps: their underlying selector and
-board data exist, but the first is currently inert and the second does not show
-the reference placement spatially. The advantage graph and retry sandbox are
-post-launch instructional enhancements; their absence does not make a single
-move's current review incomprehensible.
+**Present: 2. Partial: 2. Missing: 2.** Per-move classification and historical
+reopen (F1e-5) are complete locked surfaces for rows that include the
+versioned replay artifact. Key moments and reference-on-board remain
+presentation/UX gaps. The advantage graph and retry sandbox remain post-launch
+enhancements.
 
-Historical reopen is a persistence/architecture gap and, together with the
-existing Fritz contested-jitter defect, is a launch blocker: public review
-cannot promise the same decision sequence, evidence tier, or explanation after
-reopen until it loads a stable stored facts result. F1e-5 and the lightest
-determinism/consistency work that guarantees one stable facts result per review
-should precede public Game Review launch. F1e-1, F1e-3, and F1e-4 can follow
-without compromising the core review promise; F1e-2 is required before launch
-only if curated key moments are part of the launch commitment.
+Historical reopen loads the persisted Path A artifact (canonical
+`ReviewCoachingFacts` + rendered prose + analysis navigation) by exact review
+id. It does not recompute Fritz. Legacy rows without `replay_artifact` show an
+honest unavailable notice. Public prose / positional flags remain default-off.
 
 ### Review facts consistency contract
 
@@ -223,13 +217,12 @@ rather than independently re-running Fritz-derived fact construction.
 This is **intra-review consistency**, not cross-review determinism: Fritz
 Master remains wall-clock bounded (`botHeuristics.ts` unchanged), so two
 independently created reviews of the same game may still differ. Historical
-replay (F1e-5) must **persist/load** the canonical review artifact instead of
-recomputing it; that persistence path is still unsolved. Public prose /
-positional flags remain default-off.
+replay (F1e-5) **persists/loads** the canonical review artifact (including
+rendered prose) instead of recomputing it.
 
 Owner: review-runtime `ReviewCoachingFactsStore` (fresh per match digest) +
-lazy `createReviewCoachingFactsResolver` inside the reviewer. Eager map build
-is avoided so decisions the product never opens do not pay Fritz cost.
+lazy `createReviewCoachingFactsResolver` inside the reviewer; persistence
+builds the artifact through that same store before POST.
 
 ### F1c disagreement adjudication (D2) — reported
 
@@ -258,8 +251,7 @@ reference-policy reversal** was required. Disagreement remains reportable as
 **retired** for search/heuristic under the engine-wins branch — validated
 reference classifications can again surface Mistake/Blunder. Exact remains
 exact-ground-truth authoritative (no disagreement-based cap). The F1c Ship
-Gate requirement is complete once the held production behavior PR that
-encodes this policy merges.
+Gate requirement is **COMPLETE** (PR #291 squash `da17515e`).
 
 Canonical write-up:
 `docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md`.
