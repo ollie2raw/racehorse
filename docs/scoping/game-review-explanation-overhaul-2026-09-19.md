@@ -121,9 +121,33 @@ Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts
 
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
-| **F3a** | M | Validation study: for positions where both search tier and exact solver apply, how well does the convergence diagnostic (vs. coverage fraction) predict agreement with exact? Report flip rate and error rate | Numbers only; no code change to the gate yet |
-| **F3b** | M | If the coverage-gate rule above is met: implement the new gate, bump `accuracyModelVersion`, recalibrate `MINIMUM_COVERAGE_FLOOR` and the accuracy model on the recorded corpus | Stored analyses unchanged; version bump visible; no silent shift in displayed accuracy |
-| **F3c** | XS | Report tier mix before/after on the 100-game corpus | Measured numbers only |
+| **F3a** | M | Validation study: for positions where both search tier and exact solver apply, how well does the convergence diagnostic (vs. coverage fraction) predict agreement with exact? Report flip rate and error rate | **COMPLETE** — see below; numbers only; no production gate change |
+| **F3b** | M | If the coverage-gate rule above is met: implement the new gate, bump `accuracyModelVersion`, recalibrate `MINIMUM_COVERAGE_FLOOR` and the accuracy model on the recorded corpus | **CANCELLED** — F3a FAIL; retain existing coverage gate |
+| **F3c** | XS | Report tier mix before/after on the 100-game corpus | **COMPLETE** (measured in F3a report) |
+
+#### F3a result (2026-09-22)
+
+Canonical report: `docs/review-convergence-gate-validation.md` (devtools port of `ce2a658c`).
+
+Precommitted proposed gate (from hold/f3b `90c0d914`, not tuned on this run): `coverage >= 0.02 AND sameTopAction AND valueDelta <= 0.26`.
+
+| metric | value |
+| --- | ---: |
+| Exact-complete validation denominator (locked-yard self-play replay) | 16 |
+| Existing-gate admitted / errors / error rate | 16 / 3 / **18.75%** (95% CI [6.59%, 43.01%]) |
+| Convergence admitted (total) | 16 |
+| Newly admitted / errors / error rate | **0** / 0 / n/a |
+| Newly rejected (exact-overlap) | 0 |
+| Exact-overlap flip rate | 0% |
+| Corpus non-forced flip rate (projected) | 337 / 6791 = **4.96%** (all newly rejected; newly admitted 0) |
+| Tier mix before (non-forced) | exact 109 / search 3689 / heuristic 2993 |
+| Tier mix after (projected) | exact 109 / search 3352 / heuristic 3330 |
+
+**F3 DECISION: FAIL — retain existing coverage gate**
+
+Internal: `INSUFFICIENT_EVIDENCE` (newly admitted = 0 under the AND gate with the same coverage floor; inconclusive samples are not PASS). F3b is **not** allowed to proceed.
+
+Note: recorded-client-policy snapshot replay remains skipped (known cursor mismatch); exact-overlap used replayable recorded-self-play locked-yard positions only. Corpus tier-mix used all 12,973 stored evaluations.
 
 ### F4 — Review latency
 
@@ -307,6 +331,8 @@ Master's wall-clock cutoffs are in protected `botHeuristics.ts`; byte-identical 
 ### Track B split
 
 F3a is a validation study only. Preserve F3b gate changes in `evaluateReviewPosition.ts`, floor changes in `gameAccuracyModel.ts`, recalibration harness, and associated changes on held branch `hold/f3b-convergence-gate`. The F3a PR must not change the gate, floor, or any displayed number. Fix `validateMidgameConvergenceGate` to exclude positions with `exact.complete === false` and report the excluded count. Adoption still requires the pre-committed coverage decision rule and product-owner review.
+
+**F3a outcome (2026-09-22):** FAIL — retain existing coverage gate. F3b cancelled / not adopted. See `docs/review-convergence-gate-validation.md`.
 
 ### F2b parity
 
