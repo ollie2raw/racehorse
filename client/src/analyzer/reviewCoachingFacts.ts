@@ -67,13 +67,14 @@ export type ReviewAgreement = {
 /**
  * PROVISIONAL -- replace with Track D2 disagreement-adjudication numbers
  * when available (per the build brief: a parallel track is producing real
- * per-tier win-rate/disagreement data; these are named placeholders, not a
- * calibrated result). `git log --all --oneline | grep -i
- * "track-d\|oracle-strength\|disagreement"` found no merged Track D2 work
- * as of this PR -- these constants ship as an explicit, labeled stand-in so
- * a contested search/heuristic decision can never read as a confident
+ * F1c (2026-09-21) reported D2 engine-wins for search (oracle) and heuristic
+ * (Fritz), with exact aggregate indistinguishable. Under D2's engine-wins
+ * branch, unresolved contested-cap treatment for those tiers is no longer the
+ * final Ship-Gate state — a separate held production PR must apply that
+ * branch. Until then these Inaccuracy caps remain the shipped stand-in so a
+ * contested search/heuristic decision can never read as a confident
  * Blunder/Mistake off an unresolved engine disagreement, without
- * pretending a specific cap threshold has been measured.
+ * pretending Ship-Gate contested policy is settled.
  */
 export const CONTESTED_SEVERITY_CAP_SEARCH: LossBandLabel = 'Inaccuracy';
 export const CONTESTED_SEVERITY_CAP_HEURISTIC: LossBandLabel = 'Inaccuracy';

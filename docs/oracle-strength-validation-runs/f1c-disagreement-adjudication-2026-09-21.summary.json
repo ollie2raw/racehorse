@@ -1,0 +1,218 @@
+{
+  "status": "complete",
+  "pairedRolloutsPerPolicy": 128,
+  "policies": [
+    "uniform-legal",
+    "immediate-score"
+  ],
+  "policyAudit": [
+    {
+      "name": "uniform-legal",
+      "implementation": "rollout() \u2192 getLegalMoves + uniform createDeterministicRandom pick",
+      "importsFritzLogic": false,
+      "importsOracleReviewRankingOrSearch": false
+    },
+    {
+      "name": "immediate-score",
+      "implementation": "rollout() \u2192 computePlayScore(simulatePlacement) max, uniform among ties",
+      "importsFritzLogic": false,
+      "importsOracleReviewRankingOrSearch": false
+    }
+  ],
+  "policyProvenance": "Both continuations use game-core legal/scoring primitives only; neither is Fritz-derived nor oracle-derived.",
+  "metric": "SIGN: oracleValue \u2212 fritzValue (positive favors oracle). Exact uses expectedPointDifferential; rollouts use actor\u2212opponent hand-end score under matched seeds.",
+  "actionFreezing": "Oracle action from recorded evaluation.best once; Fritz via computeFritzReferenceMove once per decision; reused across all policies/samples.",
+  "decisions": 12973,
+  "games": 100,
+  "disagreements": 3447,
+  "fritzResolutions": 8909,
+  "excludedInfeasible": 7,
+  "incompleteExact": 21,
+  "exactAdjudicated": 39,
+  "rolloutAdjudicated": 3401,
+  "totalRolloutSamples": 1741312,
+  "loadSamples": [
+    {
+      "at": "2026-09-22T02:43:59.730Z",
+      "loadavg": [
+        3.26611328125,
+        3.32177734375,
+        3.2119140625
+      ]
+    },
+    {
+      "at": "2026-09-22T02:48:59.789Z",
+      "loadavg": [
+        2.6953125,
+        3.22509765625,
+        3.2333984375
+      ]
+    },
+    {
+      "at": "2026-09-22T02:52:12.074Z",
+      "loadavg": [
+        3.08349609375,
+        3.0751953125,
+        3.15966796875
+      ]
+    }
+  ],
+  "loadExceeded": false,
+  "tiers": [
+    {
+      "tier": "exact",
+      "disagreements": 60,
+      "adjudicated": 60,
+      "excluded": 0,
+      "games": 25,
+      "meanValueGap": 0.9073350694444445,
+      "ci95": [
+        -0.8160069444444443,
+        2.816710069444445
+      ],
+      "policyIntervals": [
+        [
+          -0.5130570023148149,
+          2.5780658143939394
+        ],
+        [
+          -0.8160069444444443,
+          2.816710069444445
+        ]
+      ],
+      "winner": "contested-cap-Inaccuracy",
+      "indistinguishableShare": 0.6333333333333333,
+      "oracleWins": 16,
+      "fritzWins": 6,
+      "tiesOrIndistinguishable": 38
+    },
+    {
+      "tier": "search",
+      "disagreements": 1902,
+      "adjudicated": 1902,
+      "excluded": 0,
+      "games": 100,
+      "meanValueGap": 0.5530465463985279,
+      "ci95": [
+        0.3898024072558647,
+        0.7721671388101983
+      ],
+      "policyIntervals": [
+        [
+          0.3898024072558647,
+          0.5217686024162548
+        ],
+        [
+          0.5412381329113924,
+          0.7721671388101983
+        ]
+      ],
+      "winner": "oracle",
+      "indistinguishableShare": 0.8228180862250263,
+      "oracleWins": 302,
+      "fritzWins": 35,
+      "tiesOrIndistinguishable": 1565
+    },
+    {
+      "tier": "heuristic",
+      "disagreements": 1485,
+      "adjudicated": 1478,
+      "excluded": 7,
+      "games": 100,
+      "meanValueGap": -0.5901926167117727,
+      "ci95": [
+        -0.8587185329861111,
+        -0.3546603732638889
+      ],
+      "policyIntervals": [
+        [
+          -0.5371642380617978,
+          -0.3546603732638889
+        ],
+        [
+          -0.8587185329861111,
+          -0.6080899432209222
+        ]
+      ],
+      "winner": "fritz",
+      "indistinguishableShare": 0.8430311231393776,
+      "oracleWins": 47,
+      "fritzWins": 185,
+      "tiesOrIndistinguishable": 1246
+    }
+  ],
+  "rowsSummary": {
+    "count": 3440,
+    "byMethod": {
+      "complete-exact": 39,
+      "paired-rollouts": 3401
+    },
+    "byTier": {
+      "exact": 60,
+      "search": 1902,
+      "heuristic": 1478
+    }
+  },
+  "exactDecisionIds": [
+    "self-play:demo-ordinary-pvf-1:0:move-84",
+    "self-play:demo-ordinary-pvf-1:0:move-107",
+    "self-play:demo-strong-policy-1:1:move-101",
+    "self-play:demo-strong-policy-1:4:move-148",
+    "self-play:demo-strong-policy-1:4:move-150",
+    "self-play:demo-strong-policy-1:4:move-152",
+    "client-policy:demo-client-policy-standard-1:0:move-122",
+    "client-policy:demo-client-policy-standard-1:0:move-123",
+    "client-policy:demo-client-policy-standard-wide25-1:3:move-121",
+    "client-policy:demo-client-policy-standard-wide25-1:3:move-122",
+    "client-policy:demo-client-policy-standard-wide25-1:3:move-186",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-27",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-28",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-29",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-74",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-75",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-76",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-81",
+    "client-policy:demo-client-policy-standard-wide25-1:5:move-82",
+    "client-policy:demo-client-policy-standard-wide25-1:7:move-95",
+    "client-policy:demo-client-policy-standard-wide25-1:7:move-101",
+    "client-policy:demo-client-policy-standard-wide25-1:11:move-95",
+    "client-policy:demo-client-policy-standard-wide25-1:16:move-88",
+    "client-policy:demo-client-policy-standard-wide25-1:16:move-89",
+    "client-policy:demo-client-policy-standard-wide25-1:16:move-95",
+    "client-policy:demo-client-policy-standard-wide25-1:24:move-122",
+    "client-policy:demo-client-policy-hard-1:2:move-138",
+    "client-policy:demo-client-policy-hard-1:2:move-139",
+    "client-policy:demo-client-policy-hard-1:4:move-39",
+    "client-policy:demo-client-policy-hard-1:4:move-40",
+    "client-policy:demo-client-policy-hard-1:4:move-45",
+    "client-policy:demo-client-policy-hard-1:4:move-46",
+    "client-policy:demo-client-policy-hard-1:4:move-49",
+    "client-policy:demo-client-policy-hard-1:4:move-50",
+    "client-policy:demo-client-policy-hard-wide25-1:0:move-168",
+    "client-policy:demo-client-policy-hard-wide25-1:1:move-123",
+    "client-policy:demo-client-policy-hard-wide25-1:2:move-43",
+    "client-policy:demo-client-policy-hard-wide25-1:19:move-61",
+    "client-policy:demo-client-policy-hard-wide25-1:19:move-184",
+    "client-policy:demo-client-policy-hard-wide25-1:20:move-34",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-32",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-33",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-34",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-36",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-37",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-39",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-43",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-44",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-45",
+    "client-policy:demo-client-policy-hard-wide25-1:22:move-50",
+    "client-policy:demo-client-policy-master-1:1:move-59",
+    "client-policy:demo-client-policy-master-1:3:move-27",
+    "client-policy:demo-client-policy-master-wide25-1:4:move-28",
+    "client-policy:demo-client-policy-master-wide25-1:7:move-21",
+    "client-policy:demo-client-policy-master-wide25-1:7:move-23",
+    "client-policy:demo-client-policy-master-wide25-1:7:move-25",
+    "client-policy:demo-client-policy-master-wide25-1:7:move-26",
+    "client-policy:demo-client-policy-master-wide25-1:8:move-28",
+    "client-policy:demo-client-policy-master-wide25-1:15:move-101",
+    "client-policy:demo-client-policy-master-wide25-1:24:move-75"
+  ]
+}

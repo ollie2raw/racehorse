@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": { "types": ["node", "vite/client", "vitest/globals"] },
+  "include": [
+    "src/devtools/adjudicateOracleDisagreements.ts",
+    "src/devtools/adjudicateOracleDisagreements.test.ts",
+    "src/devtools/replayRecordedClientPolicy.ts",
+    "src/devtools/replayRecordedClientPolicy.test.ts"
+  ],
+  "exclude": []
+}
