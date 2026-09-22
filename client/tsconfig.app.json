@@ -35,5 +35,11 @@
     }
   },
   "include": ["src", "../packages/match-protocol/src"],
-  "exclude": ["src/devtools", "**/*.behaviorTests.ts"]
+  "exclude": [
+    "src/devtools",
+    "**/*.behaviorTests.ts",
+    "src/modules/review/reviewWorkerNode.ts",
+    "src/modules/review/reviewWorkerPool.node.ts",
+    "src/modules/review/runReviewBatchPool.realWorker.test.ts"
+  ]
 }

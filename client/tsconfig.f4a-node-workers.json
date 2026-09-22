@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.f4a-node-workers.tsbuildinfo",
+    "types": ["node", "vite/client", "vitest/globals"],
+    "lib": ["ES2022"]
+  },
+  "include": [
+    "src/modules/review/reviewWorkerNode.ts",
+    "src/modules/review/reviewWorkerPool.node.ts",
+    "src/modules/review/runReviewBatchPool.realWorker.test.ts",
+    "src/modules/review/runReviewBatchPool.ts",
+    "src/modules/review/reviewWorkerTypes.ts"
+  ],
+  "exclude": []
+}

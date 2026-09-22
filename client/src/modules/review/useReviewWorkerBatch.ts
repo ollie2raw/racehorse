@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { ReviewDispatchBudget } from '@racehorse/review-engine';
 import type { ReviewWorkerRequest, ReviewWorkerResponse } from './reviewWorkerTypes';
+import { partitionIndices } from './runReviewBatchPool';
+import { createBrowserReviewWorker } from './reviewWorkerPool.browser';
 
 export type ReviewBatchState = {
   readonly resultsByDecisionId: ReadonlyMap<string, ReviewEvaluationV1>;
@@ -25,65 +27,40 @@ export type ReviewWorkerLike = {
 };
 
 function defaultCreateWorker(): ReviewWorkerLike {
-  return new Worker(new URL('./reviewWorker.ts', import.meta.url), { type: 'module' });
+  return createBrowserReviewWorker() as unknown as ReviewWorkerLike;
 }
 
 /**
- * B5 UI wiring (game-review-oracle-upgrade-2026-09-13.md): the streaming-
- * capable hook around the B5 worker. Built as real, incremental state
- * (resultsByDecisionId / errorsByDecisionId / pendingDecisionIds fill in as
- * messages arrive, not one final blob) even though nothing consumes it
- * incrementally yet -- retrofitting this shape later would be more
- * expensive than building it right the first time.
+ * B5 (game-review-oracle-upgrade-2026-09-13.md) UI wiring, extended by
+ * F4a (perf/review-batch-worker-pool) to spread a batch's decisions across
+ * a pool of `poolSize` workers instead of one.
  *
- * `createWorker` is injectable (defaults to the real `new Worker(...)`)
- * specifically so this hook is testable without real Worker/jsdom support --
- * same testability-split principle B5's own runReviewBatch/reviewWorker
- * split already established. Read via a ref updated every render rather
- * than as an effect dependency: a factory function is semantically stable
- * regardless of its reference identity (it's "how do I construct a
- * worker", not batch input), and putting it in the dependency array would
- * make the effect re-run -- spawning a new worker and re-running the whole
- * batch -- every time a caller passes a non-memoized inline function,
- * which is the common case for a default parameter's replacement value.
- * (Confirmed the hard way: an inline `() => worker` in this file's own
- * first test draft created a new reference every render, re-triggering the
- * effect on every internal setState and crashing the test worker with an
- * infinite render loop before this fix.)
+ * DETERMINISM: each worker runs unmodified `runReviewBatch` over a
+ * deterministic `partitionIndices` slice. Hook state is keyed by decisionId,
+ * so arrival order never affects the final Maps. Default `poolSize` stays 1
+ * so existing single-worker tests keep their exact request/response shape;
+ * production opts into a larger pool via `defaultReviewWorkerPoolSize()`.
  *
- * Cancellation on unmount sends the message-based { type: 'cancel' } B5
- * already built (so any snapshot in flight still finishes and its result
- * stays valid -- see runReviewBatch.ts's own reasoning), then terminates
- * the worker to reclaim the OS thread, since no listener will remain
- * attached to receive anything further either way.
+ * `done` flips only after every pool worker reports its own `done`. The
+ * completion counter is incremented outside React's setState updater so
+ * Strict Mode double-invokes cannot over-count.
  */
 export function useReviewWorkerBatch(
   snapshots: readonly ReviewPositionSnapshotV2[],
   budget: ReviewDispatchBudget,
   coverageThreshold: number,
   createWorker: () => ReviewWorkerLike = defaultCreateWorker,
+  poolSize: number = 1,
 ): ReviewBatchState & { cancel: () => void } {
   const [state, setState] = useState<ReviewBatchState>(EMPTY_STATE);
-  const workerRef = useRef<ReviewWorkerLike | null>(null);
+  const workersRef = useRef<ReviewWorkerLike[]>([]);
   const createWorkerRef = useRef(createWorker);
-  // Kept fresh in its own effect (runs after every render, no dependency
-  // array) rather than written directly during render -- React flags
-  // writing to a ref mid-render even for this "latest value" pattern.
+  const poolSizeRef = useRef(poolSize);
   useEffect(() => {
     createWorkerRef.current = createWorker;
+    poolSizeRef.current = poolSize;
   });
 
-  // React's documented "adjusting state when a prop changes" pattern
-  // (react.dev/reference/react/useState#storing-information-from-previous-renders):
-  // reset state synchronously during render, not inside an effect, when
-  // the batch inputs change identity. Tracked via *state* (read/write
-  // during render is what useState is for), not a ref -- reading a ref's
-  // `.current` during render is itself flagged by this repo's hooks lint
-  // gate (react-hooks/refs), which is why this isn't a ref-based check.
-  // This -- not the effect below -- is what resets `state` for a new
-  // batch; the effect only spawns the worker and applies message-driven
-  // updates. Deliberately avoids react-hooks/set-state-in-effect, which
-  // `lint:hooks` enforces at zero tolerance.
   const [lastInputs, setLastInputs] = useState<{
     snapshots: readonly ReviewPositionSnapshotV2[];
     budget: ReviewDispatchBudget;
@@ -111,44 +88,67 @@ export function useReviewWorkerBatch(
   useEffect(() => {
     if (snapshots.length === 0) return;
 
-    const worker = createWorkerRef.current();
-    workerRef.current = worker;
+    const partitions = partitionIndices(snapshots.length, poolSizeRef.current);
+    const workers = partitions.map(() => createWorkerRef.current());
+    workersRef.current = workers;
+    let doneWorkerCount = 0;
 
-    worker.onmessage = (event) => {
-      const message = event.data;
-      setState((prev) => {
-        if (message.type === 'result') {
-          const resultsByDecisionId = new Map(prev.resultsByDecisionId);
-          resultsByDecisionId.set(message.decisionId, message.evaluation);
-          const pendingDecisionIds = new Set(prev.pendingDecisionIds);
-          pendingDecisionIds.delete(message.decisionId);
-          return { ...prev, resultsByDecisionId, pendingDecisionIds };
-        }
-        if (message.type === 'error') {
-          const errorsByDecisionId = new Map(prev.errorsByDecisionId);
-          errorsByDecisionId.set(message.decisionId, message.message);
-          const pendingDecisionIds = new Set(prev.pendingDecisionIds);
-          pendingDecisionIds.delete(message.decisionId);
-          return { ...prev, errorsByDecisionId, pendingDecisionIds };
-        }
-        return { ...prev, done: true };
-      });
-    };
+    workers.forEach((worker, workerIndex) => {
+      const partitionSnapshots = partitions[workerIndex].map((index) => snapshots[index]);
 
-    const request: ReviewWorkerRequest = { type: 'run', snapshots, budget, coverageThreshold };
-    worker.postMessage(request);
+      worker.onmessage = (event) => {
+        const message = event.data;
+        if (message.type === 'done') {
+          doneWorkerCount += 1;
+          const allDone = doneWorkerCount >= workers.length;
+          if (allDone) {
+            setState((prev) => ({ ...prev, done: true }));
+          }
+          return;
+        }
+        setState((prev) => {
+          if (message.type === 'result') {
+            const resultsByDecisionId = new Map(prev.resultsByDecisionId);
+            resultsByDecisionId.set(message.decisionId, message.evaluation);
+            const pendingDecisionIds = new Set(prev.pendingDecisionIds);
+            pendingDecisionIds.delete(message.decisionId);
+            return { ...prev, resultsByDecisionId, pendingDecisionIds };
+          }
+          if (message.type === 'error') {
+            const errorsByDecisionId = new Map(prev.errorsByDecisionId);
+            errorsByDecisionId.set(message.decisionId, message.message);
+            const pendingDecisionIds = new Set(prev.pendingDecisionIds);
+            pendingDecisionIds.delete(message.decisionId);
+            return { ...prev, errorsByDecisionId, pendingDecisionIds };
+          }
+          return prev;
+        });
+      };
+
+      const request: ReviewWorkerRequest = {
+        type: 'run',
+        snapshots: partitionSnapshots,
+        budget,
+        coverageThreshold,
+      };
+      worker.postMessage(request);
+    });
 
     return () => {
       const cancelMessage: ReviewWorkerRequest = { type: 'cancel' };
-      worker.postMessage(cancelMessage);
-      worker.terminate();
-      workerRef.current = null;
+      for (const worker of workers) {
+        worker.postMessage(cancelMessage);
+        worker.terminate();
+      }
+      workersRef.current = [];
     };
   }, [snapshots, budget, coverageThreshold]);
 
   const cancel = () => {
     const cancelMessage: ReviewWorkerRequest = { type: 'cancel' };
-    workerRef.current?.postMessage(cancelMessage);
+    for (const worker of workersRef.current) {
+      worker.postMessage(cancelMessage);
+    }
   };
 
   return { ...state, cancel };
