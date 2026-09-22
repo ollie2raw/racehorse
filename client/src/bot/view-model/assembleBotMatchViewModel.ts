@@ -322,6 +322,8 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       currentAnalysis: review.currentAnalysis,
       reviewWorkerBatch: review.reviewWorkerBatch,
       decisionIdByMoveNumber: review.decisionIdByMoveNumber,
+      coachingFactsStore: review.coachingFactsStore,
+      snapshotsByDecisionId: review.snapshotsByDecisionId,
       reviewerScopeHandNumber: review.reviewerScopeHandNumber,
       reviewerInitialMoveIndex: review.reviewerInitialMoveIndex,
       opponentLabel,
