@@ -101,7 +101,7 @@ Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts
 |---|---|---|---|
 | **F1a** | S | Committed head-to-head devtool: Fritz Master vs oracle top move; identical seeded deals; seat rotation; fixed seeds; parallelized across cores; results written to files | Reruns produce identical results; unit tests pass |
 | **F1b** | M | 600+ game runs for (i) default oracle, (ii) oracle with Fritz Master as heuristic-tier fallback. Win rate, CI, mean margin, split by phase | Numbers reported; D1 decision rule applied and stated |
-| **F1c** | M | Disagreement adjudication (D2 rules above) on the recorded-corpus decisions where the engines disagree | Per-tier table; D2 decision rule applied and stated |
+| **F1c** | M | Disagreement adjudication (D2 rules above) on the recorded-corpus decisions where the engines disagree | **REPORTED 2026-09-21** — see `docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md`; per-tier table below |
 | **F1d** | XS | `scripts/sql/fritz-master-vs-humans-winrate.sql` review-ready. **Not run against production.** Handed to the product owner | SQL is read-only, aggregate-only, no PII |
 | **F1e** | S | Chess.com-parity audit: win-probability graph, per-move classification, key-moment list, best-move on board, retry-a-mistake: present / partial / missing. Missing items added to a roadmap section of this doc | Table with file evidence per row |
 | **F1f** | S | Design note: luck-vs-skill separation (judge decision quality on information available to the player; show outcome and hidden-hand reveal separately). Where it plugs into classification | Written note; no code |
@@ -113,7 +113,7 @@ Known claims to verify (not to trust): Track A has `computePositionalFeatures.ts
 |---|---|---|---|
 | **F2a** | M | `computePositionalFeatures(snapshot, candidateAction)` in `packages/review-engine`, tier-agnostic, from public state + actor hand + `knownMissingPipEvidence` only. v1 features: pip denial / opponent outs left; end/number control; hand-shape bottleneck (orphans, playableNext, mobility); known-missing-pip exploitation; score-margin urgency; tile-count/boneyard pressure; double/hub-opening risk | Typechecks; no import of `BotMatchState`; deterministic |
 | **F2b** | M | Parity tests against `botHeuristics.ts` / `solveHeuristicOpening.ts` over the recorded corpus that compare **feature values** (tolerance stated), not just which move ranks best | Documented per-feature parity; any deviations listed with reason |
-| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and the `contested` cap. Provisional cap constants are allowed only if clearly flagged, until F1c reports | Unit tests for each tier and agreement case |
+| **F2c** | S | Reference-move resolver implementing Locked decisions 1–3, including the agreement field and the `contested` cap. Cap constants remain Inaccuracy; F1c reported engine-wins for search/heuristic so contested-cap treatment needs a follow-up PR before Ship Gate | Unit tests for each tier and agreement case |
 | **F2d** | M | Extend `ReviewCoachingFacts` with per-feature played-vs-reference values; generate prose from ranked feature deltas. Truth tests: every number in prose appears in structured facts; no sentence without support | Truth tests pass; "no meaningful difference" path covered |
 | **F2e** | S | `docs/review-explanation-samples.md`: 30 real moves from the recorded corpus (mixed tiers, mixed classifications), old prose vs new prose, with the feature values behind each sentence | Product owner reviews (see Ship gate) |
 
@@ -230,6 +230,31 @@ positional flags remain default-off.
 Owner: review-runtime `ReviewCoachingFactsStore` (fresh per match digest) +
 lazy `createReviewCoachingFactsResolver` inside the reviewer. Eager map build
 is avoided so decisions the product never opens do not pay Fritz cost.
+
+### F1c disagreement adjudication (D2) — reported
+
+Corpus: 100 recorded games (self-play + client-policy), 12,973 decisions,
+3,447 oracle/Fritz disagreements. Sign: `oracle − Fritz` (positive favors
+oracle). Actions frozen once per decision (Fritz resolved once; reused across
+128 paired rollouts × 2 non-Fritz/non-oracle continuation policies). Exact
+uses complete exact solve where available (39 exact / 3,401 rollout
+adjudications).
+
+| tier | disagreements | oracle wins | Fritz wins | ties/indistinguishable | mean oracle−Fritz gap | 95% CI | D2 result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| exact | 60 | 16 | 6 | 38 | +0.907 | [−0.816, +2.817] | indistinguishable (exact remains per-decision ground truth; no contested cap vs exact) |
+| search | 1,902 | 302 | 35 | 1,565 | +0.553 | [+0.390, +0.772] | **oracle wins** |
+| heuristic | 1,485 | 47 | 185 | 1,246 | −0.590 | [−0.859, −0.355] | **Fritz wins** |
+
+D2 branches: search → oracle-wins; heuristic → Fritz-wins; exact aggregate →
+indistinguishable. Locked decision 1’s reference sources already match the
+winners. Contested Inaccuracy cap is **not** finalized as the permanent
+search/heuristic disagreement treatment under the engine-wins branch — a
+**production contested/classification follow-up PR is REQUIRED** before Ship
+Gate (do not silently change behavior here). Exact never uses contested cap.
+
+Canonical write-up:
+`docs/oracle-strength-validation-runs/f1c-disagreement-adjudication-2026-09-21.md`.
 
 ## Risks
 
