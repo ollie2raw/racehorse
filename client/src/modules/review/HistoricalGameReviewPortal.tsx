@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import GameReviewer from '../../analyzer/GameReviewer';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   fetchRecentGameReviews,
   loadHistoricalGameReview,
@@ -7,6 +6,8 @@ import {
 } from './historicalGameReviewApi';
 import type { HistoricalGameReviewHydration } from './hydrateHistoricalGameReview';
 import './HistoricalGameReviewPortal.css';
+
+const GameReviewer = lazy(() => import('../../analyzer/GameReviewer'));
 
 type HistoricalGameReviewPortalProps = {
   /**
@@ -129,18 +130,20 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
         ) : null}
       </section>
       {hydration ? (
-        <GameReviewer
-          open={open}
-          onClose={() => setOpen(false)}
-          analysis={hydration.analysis}
-          reviewWorkerBatch={hydration.reviewWorkerBatch}
-          decisionIdByMoveNumber={hydration.decisionIdByMoveNumber}
-          historicalCoachingByDecisionId={
-            hydration.hasReplayArtifact ? hydration.historicalCoachingByDecisionId : new Map()
-          }
-          historicalLegacyNotice={hydration.legacyNotice}
-          title="Game Review"
-        />
+        <Suspense fallback={null}>
+          <GameReviewer
+            open={open}
+            onClose={() => setOpen(false)}
+            analysis={hydration.analysis}
+            reviewWorkerBatch={hydration.reviewWorkerBatch}
+            decisionIdByMoveNumber={hydration.decisionIdByMoveNumber}
+            historicalCoachingByDecisionId={
+              hydration.hasReplayArtifact ? hydration.historicalCoachingByDecisionId : new Map()
+            }
+            historicalLegacyNotice={hydration.legacyNotice}
+            title="Game Review"
+          />
+        </Suspense>
       ) : null}
     </>
   );
