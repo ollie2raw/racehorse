@@ -355,7 +355,14 @@ Use `packages/review-engine/fixtures/recorded-self-play` for per-feature numeric
 
 ### F4 acceptance
 
-Replace mock-only pool evidence with a real-worker byte-identical test at 1 versus N workers. Fix the three recovered client TypeScript errors. Apply the wall-clock ceiling to the **whole** `evaluateReviewPosition` path, with a forced-slow test; an exact-solver-only ceiling is insufficient. Preserve incomplete-result labeling and the prohibition on silently changing candidate rankings.
+**F4a (2026-09-22):** real-worker byte-identical 1-vs-N evidence is in
+`runReviewBatchPool.realWorker.test.ts` (Node worker_threads; counts 1/2/4;
+fixture `REVIEW_FIXTURE_CORPUS[0..12)`). Recovered client Node typing /
+bootstrap path from `11765141` reused. Search budget unchanged.
+
+**F4b still pending:** apply the wall-clock ceiling to the **whole**
+`evaluateReviewPosition` path, with a forced-slow test; do not silently
+change candidate rankings. F4c before/after timing remains pending.
 
 ### Amended execution order and reporting
 
