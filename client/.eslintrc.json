@@ -26,7 +26,10 @@
   },
   "ignorePatterns": [
     "**/*.behaviorTests.ts",
-    "src/devtools/**"
+    "src/devtools/**",
+    "src/modules/review/reviewWorkerNode.ts",
+    "src/modules/review/reviewWorkerPool.node.ts",
+    "src/modules/review/runReviewBatchPool.realWorker.test.ts"
   ],
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
