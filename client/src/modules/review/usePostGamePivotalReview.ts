@@ -34,6 +34,7 @@ import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnosti
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   DEFAULT_REVIEW_DISPATCH_BUDGET,
+  defaultReviewWorkerPoolSize,
 } from './reviewEngineConfig.ts';
 import {
   createReviewCoachingFactsStore,
@@ -201,10 +202,15 @@ export function usePostGamePivotalReview({
   // still no rating/coaching-copy translation happening in this hook
   // itself (that's classifyHeuristicResult's job, called from the render
   // layer, not here).
+  // F4a: omit createWorker (default browser workers) but opt into a
+  // hardware-sized pool. useReviewWorkerBatch's own default poolSize stays 1
+  // so existing single-worker tests keep byte-stable contracts.
   const reviewWorkerBatch = useReviewWorkerBatch(
     reviewWorkerSnapshots,
     DEFAULT_REVIEW_DISPATCH_BUDGET,
     DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+    undefined,
+    defaultReviewWorkerPoolSize(),
   );
 
   // Computed once here (this hook already holds both reviewWorkerSnapshots

@@ -24,3 +24,14 @@ export const DEFAULT_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
 };
 
 export const DEFAULT_REVIEW_COVERAGE_THRESHOLD = 0.02;
+
+/**
+ * F4a default browser worker-pool size. Lives here (not in
+ * useReviewWorkerBatch) so callers that mock the hook module still get this
+ * pure hardware-derived number. Cap 8; fallback 4 when navigator is absent.
+ * Does not change search budgets or coverage thresholds.
+ */
+export function defaultReviewWorkerPoolSize(): number {
+  const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined;
+  return Math.max(1, Math.min(cores && cores > 0 ? cores : 4, 8));
+}

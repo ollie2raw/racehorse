@@ -153,9 +153,24 @@ Note: recorded-client-policy snapshot replay remains skipped (known cursor misma
 
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
-| **F4a** | M | Worker-pool parallelization of `runReviewBatch`; output byte-identical regardless of worker count | Same snapshot + budget → identical JSON on 1 and N workers |
-| **F4b** | S | Per-decision wall-clock ceiling on the oracle; overrun sets `search.complete = false`, never reorders candidates silently | Test with a forced-slow position |
-| **F4c** | XS | Before/after wall-clock for a master-tier corpus game | Measured numbers only |
+| **F4a** | M | Worker-pool parallelization of `runReviewBatch`; output byte-identical regardless of worker count | **COMPLETE** — see below |
+| **F4b** | S | Per-decision wall-clock ceiling on the oracle; overrun sets `search.complete = false`, never reorders candidates silently | Test with a forced-slow position — **pending** |
+| **F4c** | XS | Before/after wall-clock for a master-tier corpus game | Measured numbers only — **pending** |
+
+#### F4a result (2026-09-22)
+
+Provenance: selective port of recovered `11765141` / `perf/f4-review-worker-pool` onto fresh main after F3a. **Excluded** recovered F4b cooperative-deadline changes in `evaluateReviewPosition` / `solveExactEndgame` / `searchGameTree` / `combinations` / `maxWallClockMs`.
+
+Implementation: `runReviewBatchPool.ts` + browser/Node worker adapters + `useReviewWorkerBatch` poolSize (default 1; production opts in via `defaultReviewWorkerPoolSize()`).
+
+Acceptance evidence:
+- Real Node `worker_threads`: `runReviewBatchPool.realWorker.test.ts`
+- Fixture: `REVIEW_FIXTURE_CORPUS` snapshots [0..12)
+- Worker counts: **1, 2, 4** — JSON.stringify of `toOrderedEvaluations` **byte-identical** to each other and to sequential `runReviewBatch`
+- Ordering: `runReviewBatchPool.test.ts` out-of-order arrival still emits canonical decision order
+- Search budget / coverage threshold **unchanged** (`DEFAULT_REVIEW_DISPATCH_BUDGET` still 200k/100/2; threshold 0.02)
+
+F4b and F4c remain pending.
 
 ## Sequencing
 
