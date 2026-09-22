@@ -1,10 +1,10 @@
-export { evaluateReviewPosition } from './evaluateReviewPosition';
+export { evaluateReviewPosition, DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS, WALL_CLOCK_CEILING_DIAGNOSTIC } from './evaluateReviewPosition';
 export type { ReviewDispatchBudget, ReviewSearchBudget } from './evaluateReviewPosition';
 export { sampleHiddenAllocation } from './sampleHiddenAllocation';
 export type { ReviewHiddenAllocation } from './sampleHiddenAllocation';
 export { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 export type { ReviewHiddenPoolEligibility } from './hiddenPoolEligibility';
-export { solveExactEndgame } from './solveExactEndgame';
+export { solveExactEndgame, EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS } from './solveExactEndgame';
 export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
 export { solveMidgameDeterminization } from './solveMidgameDeterminization';
 export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';

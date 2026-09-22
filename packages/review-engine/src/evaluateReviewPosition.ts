@@ -40,7 +40,24 @@ export type ReviewDispatchBudget = {
   readonly maxHiddenStateSamples: number;
   readonly maxPlyDepth: number;
   readonly seed: string | number;
+  /**
+   * F4b per-decision wall-clock safety ceiling (ms). Optional — when omitted,
+   * {@link DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS} applies inside
+   * evaluateReviewPosition. Does not replace node/sample/ply budgets.
+   */
+  readonly maxWallClockMs?: number;
 };
+
+/**
+ * Default per-decision oracle wall-clock ceiling (F4b). Provenance: recovered
+ * F4 WIP `11765141` / `f1b8e0aa` (same 2_000ms as
+ * EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS) — generous vs observed corpus
+ * oracle max ~473ms. Safety net only; not a product-tuned SLO and not a
+ * substitute for search strength budgets.
+ */
+export const DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS = 2_000;
+
+export const WALL_CLOCK_CEILING_DIAGNOSTIC = 'wall-clock safety ceiling exceeded';
 
 function findPlayedCandidate(
   snapshot: ReviewPositionSnapshotV2,
@@ -175,6 +192,14 @@ function withHeuristicFallbackReason(
  * #226) can be revisited without a code change once real product/data
  * review calibrates it.
  *
+ * F4b: one absolute wall-clock deadline starts here for the whole decision
+ * (exact / midgame / heuristic fallthrough). Nested solvers share
+ * `shouldStop` and must not reset a fresh ceiling. Overrun retains the
+ * candidates/ranking already produced and sets `search.complete = false`.
+ *
+ * `now` is injectable for deterministic forced-slow tests; production uses
+ * `performance.now()`.
+ *
  * Dispatch, with every fallback edge reasoned through in research rather
  * than assumed:
  *  - `drawableCount === 0` -> solveExactEndgame. Non-null -> `exact`/`high`.
@@ -206,9 +231,42 @@ export function evaluateReviewPosition(
   snapshot: ReviewPositionSnapshotV2,
   budget: ReviewDispatchBudget,
   coverageThreshold: number,
+  now: () => number = () => performance.now(),
+): ReviewEvaluationV1 {
+  const startedAt = now();
+  const ceiling = budget.maxWallClockMs ?? DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS;
+  if (!(ceiling >= 0)) throw new Error('maxWallClockMs must be non-negative.');
+  let exceeded = false;
+  const shouldStop = () => {
+    exceeded ||= now() - startedAt > ceiling;
+    return exceeded;
+  };
+  const result = evaluateWithinDeadline(snapshot, budget, coverageThreshold, shouldStop);
+  if (!shouldStop()) return result;
+  // Preserve candidates/ranking; mark incomplete instead of claiming completion.
+  return {
+    ...result,
+    search: { ...result.search, complete: false },
+    diagnostics: [...result.diagnostics, WALL_CLOCK_CEILING_DIAGNOSTIC],
+  };
+}
+
+function evaluateWithinDeadline(
+  snapshot: ReviewPositionSnapshotV2,
+  budget: ReviewDispatchBudget,
+  coverageThreshold: number,
+  shouldStop: () => boolean,
 ): ReviewEvaluationV1 {
   if (snapshot.preAction.boneyard.drawableCount === 0) {
-    const exact = solveExactEndgame(snapshot, { maxNodes: budget.maxNodes });
+    // Nested exact solver must not apply a second independent ceiling —
+    // Infinity defers entirely to the shared shouldStop from this decision.
+    const exact = solveExactEndgame(
+      snapshot,
+      { maxNodes: budget.maxNodes, maxWallClockMs: Infinity },
+      6,
+      Date.now,
+      shouldStop,
+    );
     if (exact !== null) return adaptExactEndgameResult(snapshot, exact);
     return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'locked-yard-infeasible');
   }
@@ -218,6 +276,8 @@ export function evaluateReviewPosition(
     { maxNodes: budget.maxNodes, maxHiddenStateSamples: budget.maxHiddenStateSamples },
     budget.seed,
     budget.maxPlyDepth,
+    6,
+    shouldStop,
   );
   if (midgame === null) {
     return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'globally-infeasible');

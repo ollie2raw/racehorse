@@ -9,8 +9,9 @@ import { runReviewBatchPool, toOrderedEvaluations } from './runReviewBatchPool';
 
 /**
  * F4a acceptance: real Node worker_threads, not mocks.
- * Budget matches production shape (no maxWallClockMs / F4b fields).
- * Fixture: first 12 hand-authored REVIEW_FIXTURE_CORPUS snapshots.
+ * Budget matches production shape (optional maxWallClockMs omitted — engine
+ * applies DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS). Reduced node/sample budget
+ * for speed; F4a identity claim is independent of absolute strength.
  */
 const BUDGET: ReviewDispatchBudget = {
   maxNodes: 20_000,

@@ -47,11 +47,15 @@ export function runReviewBatch(
   budget: ReviewDispatchBudget,
   coverageThreshold: number,
   callbacks: RunReviewBatchCallbacks,
+  /** F4b test seam: injectable clock for deterministic wall-clock ceilings. */
+  now?: () => number,
 ): void {
   for (const snapshot of snapshots) {
     if (callbacks.isCancelled()) break;
     try {
-      const evaluation = evaluateReviewPosition(snapshot, budget, coverageThreshold);
+      const evaluation = now
+        ? evaluateReviewPosition(snapshot, budget, coverageThreshold, now)
+        : evaluateReviewPosition(snapshot, budget, coverageThreshold);
       callbacks.onResult(snapshot.identifiers.decisionId, evaluation);
     } catch (error) {
       callbacks.onError(snapshot.identifiers.decisionId, error instanceof Error ? error.message : String(error));

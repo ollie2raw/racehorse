@@ -230,6 +230,30 @@ describe('solveExactEndgame (B2)', () => {
     expect(keys).toEqual(['2-6@left', '2-6@right']);
   });
 
+  it('F4b: wall-clock ceiling marks complete false on a forced-slow run without fabricating full coverage', () => {
+    const snapshot = feasibleSnapshot();
+    let calls = 0;
+    const fakeNow = () => {
+      calls += 1;
+      return calls === 1 ? 0 : 1_000_000;
+    };
+    const tinyCeilingBudget = { maxNodes: 10_000, maxWallClockMs: 1 };
+    const result = solveExactEndgame(snapshot, tinyCeilingBudget, 6, fakeNow);
+
+    expect(result).not.toBeNull();
+    expect(result!.complete).toBe(false);
+    expect(result!.hiddenStateSamples).toBe(0);
+    expect(result!.coverage).toBe(0);
+    expect(result!.candidates).toHaveLength(snapshot.legalActions.length);
+  });
+
+  it('F4b: does not fire the wall-clock ceiling for a normal-speed run at the default ceiling', () => {
+    const snapshot = feasibleSnapshot();
+    const result = solveExactEndgame(snapshot, GENEROUS_BUDGET);
+    expect(result!.complete).toBe(true);
+    expect(result!.hiddenStateSamples).toBe(3);
+  });
+
   it('enumerates exactly C(n,k) allocations -- verified independently against the true combinatorial count', () => {
     const snapshot = feasibleSnapshot();
     const result = solveExactEndgame(snapshot, GENEROUS_BUDGET);
