@@ -52,6 +52,15 @@
   text-transform: uppercase;
 }
 
+.gr-legacy-notice {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 220, 160, 0.85);
+}
+}
+
 .gr-close-btn,
 .gr-nav-btn {
   height: 36px;
