@@ -10,7 +10,10 @@
   "plugins": ["react-hooks"],
   "ignorePatterns": [
     "**/*.behaviorTests.ts",
-    "src/devtools/**"
+    "src/devtools/**",
+    "src/modules/review/reviewWorkerNode.ts",
+    "src/modules/review/reviewWorkerPool.node.ts",
+    "src/modules/review/runReviewBatchPool.realWorker.test.ts"
   ],
   "rules": {
     "react-hooks/rules-of-hooks": "error",
