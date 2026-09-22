@@ -154,7 +154,7 @@ Note: recorded-client-policy snapshot replay remains skipped (known cursor misma
 | Step | Size | Deliverable | Acceptance |
 |---|---|---|---|
 | **F4a** | M | Worker-pool parallelization of `runReviewBatch`; output byte-identical regardless of worker count | **COMPLETE** — see below |
-| **F4b** | S | Per-decision wall-clock ceiling on the oracle; overrun sets `search.complete = false`, never reorders candidates silently | Test with a forced-slow position — **pending** |
+| **F4b** | S | Per-decision wall-clock ceiling on the oracle; overrun sets `search.complete = false`, never reorders candidates silently | Test with a forced-slow position — **COMPLETE** — see below |
 | **F4c** | XS | Before/after wall-clock for a master-tier corpus game | Measured numbers only — **pending** |
 
 #### F4a result (2026-09-22)
@@ -170,7 +170,19 @@ Acceptance evidence:
 - Ordering: `runReviewBatchPool.test.ts` out-of-order arrival still emits canonical decision order
 - Search budget / coverage threshold **unchanged** (`DEFAULT_REVIEW_DISPATCH_BUDGET` still 200k/100/2; threshold 0.02)
 
-F4b and F4c remain pending.
+#### F4b result (2026-09-22)
+
+Provenance: selective port of recovered deadline work from `11765141` / `f1b8e0aa` + metadata-retain fix `572578cb`. Fresh branch `perf/f4b-oracle-wall-clock-ceiling` on main after F4a.
+
+**Deadline scope:** starts at `evaluateReviewPosition` (`startedAt` + absolute ceiling). Nested exact/midgame/search share one cooperative `shouldStop`. Exact path receives `maxWallClockMs: Infinity` so it does **not** reset a fresh nested allowance.
+
+**Timeout semantics:** overrun returns a structurally valid evaluation with `search.complete = false`, diagnostic `wall-clock safety ceiling exceeded`, and **preserved** candidates/`best` from the deterministic allocation/sample averaging contract (incomplete allocations/samples are discarded, never partially ranked).
+
+**Ceiling / provenance:** `DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS = 2000` (same recovered default as `EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS`). Generous vs observed corpus oracle max ~473ms. Optional `ReviewDispatchBudget.maxWallClockMs` override for tests. Not a product-tuned SLO; search node/sample/ply budgets unchanged.
+
+**Forced-slow evidence:** `evaluateReviewPosition.deadline.test.ts` (injected clock + midgame spy); `solveExactEndgame` forced-overrun clock test; pool mix test in `runReviewBatchPool.test.ts` (1 vs 2 workers, independent per-decision clocks).
+
+F4c remains pending.
 
 ## Sequencing
 
@@ -360,9 +372,12 @@ Use `packages/review-engine/fixtures/recorded-self-play` for per-feature numeric
 fixture `REVIEW_FIXTURE_CORPUS[0..12)`). Recovered client Node typing /
 bootstrap path from `11765141` reused. Search budget unchanged.
 
-**F4b still pending:** apply the wall-clock ceiling to the **whole**
-`evaluateReviewPosition` path, with a forced-slow test; do not silently
-change candidate rankings. F4c before/after timing remains pending.
+**F4b (2026-09-22):** whole-decision wall-clock ceiling at
+`evaluateReviewPosition` with shared `shouldStop`; overrun →
+`search.complete = false` without reordering candidates. Default 2000ms
+from recovered `11765141`. Forced-slow + F4a pool regression evidence in
+`evaluateReviewPosition.deadline.test.ts` and `runReviewBatchPool.test.ts`.
+F4c before/after timing remains pending.
 
 ### Amended execution order and reporting
 
