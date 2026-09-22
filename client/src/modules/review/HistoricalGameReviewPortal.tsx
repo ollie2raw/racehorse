@@ -21,27 +21,39 @@ type HistoricalGameReviewPortalProps = {
  * GameReviewer in historical mode (zero worker / Fritz recomputation).
  */
 export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPortalProps) {
-  const [accessEnabled, setAccessEnabled] = useState(enabled === true);
-  const [entries, setEntries] = useState<RecentGameReviewListEntry[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
+  const [probedAccess, setProbedAccess] = useState<boolean | null>(null);
+  const accessEnabled = enabled !== undefined ? enabled : probedAccess === true;
+
+  // null = loading for the current accessEnabled=true session
+  const [entries, setEntries] = useState<RecentGameReviewListEntry[] | null>(null);
+  const [listKey, setListKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [hydration, setHydration] = useState<HistoricalGameReviewHydration | null>(null);
   const [open, setOpen] = useState(false);
   const [loadingReview, setLoadingReview] = useState(false);
 
-  useEffect(() => {
-    if (enabled !== undefined) {
-      setAccessEnabled(enabled);
-      return;
+  // Reset list when access flips on — render-phase adjustment (not an effect).
+  const [trackedAccess, setTrackedAccess] = useState(accessEnabled);
+  if (accessEnabled !== trackedAccess) {
+    setTrackedAccess(accessEnabled);
+    if (accessEnabled) {
+      setEntries(null);
+      setListKey((k) => k + 1);
+    } else {
+      setEntries([]);
     }
+  }
+
+  useEffect(() => {
+    if (enabled !== undefined) return;
     let cancelled = false;
     void import('../../api/client.ts')
       .then(({ apiGet }) => apiGet<{ enabled: boolean }>('/api/game-reviews/access'))
       .then((result) => {
-        if (!cancelled) setAccessEnabled(result.data?.enabled === true && !result.error);
+        if (!cancelled) setProbedAccess(result.data?.enabled === true && !result.error);
       })
       .catch(() => {
-        if (!cancelled) setAccessEnabled(false);
+        if (!cancelled) setProbedAccess(false);
       });
     return () => {
       cancelled = true;
@@ -49,26 +61,19 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
   }, [enabled]);
 
   useEffect(() => {
-    if (!accessEnabled) {
-      setEntries([]);
-      return;
-    }
+    if (!accessEnabled) return;
     let cancelled = false;
-    setLoadingList(true);
     void fetchRecentGameReviews(8)
       .then((reviews) => {
         if (!cancelled) setEntries(reviews);
       })
       .catch(() => {
         if (!cancelled) setEntries([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingList(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [accessEnabled]);
+  }, [accessEnabled, listKey]);
 
   const openReview = useCallback((reviewId: string) => {
     setLoadingReview(true);
@@ -88,16 +93,19 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
 
   if (!accessEnabled) return null;
 
+  const loadingList = entries === null;
+  const rows = entries ?? [];
+
   return (
     <>
       <section className="rh-recent-reviews" aria-label="Recent game reviews">
         <p className="rh-recent-reviews__eyebrow">Recent reviews</p>
         {loadingList ? <p className="rh-recent-reviews__status">Loading…</p> : null}
-        {!loadingList && entries.length === 0 ? (
+        {!loadingList && rows.length === 0 ? (
           <p className="rh-recent-reviews__status">No saved reviews yet.</p>
         ) : null}
         <ul className="rh-recent-reviews__list">
-          {entries.map((entry) => (
+          {rows.map((entry) => (
             <li key={entry.id} className="rh-recent-reviews__row">
               <span className="rh-recent-reviews__meta">
                 {entry.mode.toUpperCase()} · {new Date(entry.createdAt).toLocaleString()}
