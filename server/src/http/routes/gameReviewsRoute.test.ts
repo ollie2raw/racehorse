@@ -98,9 +98,14 @@ function makeHarness() {
   return async (
     method: 'GET' | 'POST',
     path: string,
-    options: { body?: unknown; query?: Record<string, string> } = {},
+    options: { body?: unknown; query?: Record<string, string>; params?: Record<string, string> } = {},
   ) => {
-    const handler = routes.get(`${method} ${path}`);
+    let handler = routes.get(`${method} ${path}`);
+    let params = options.params ?? {};
+    if (!handler && method === 'GET' && path.startsWith('/api/game-reviews/by-id/')) {
+      handler = routes.get('GET /api/game-reviews/by-id/:reviewId');
+      params = { reviewId: path.slice('/api/game-reviews/by-id/'.length) };
+    }
     if (!handler) throw new Error(`no route ${method} ${path}`);
     let status = 200;
     let json: unknown;
@@ -114,7 +119,7 @@ function makeHarness() {
         return res;
       },
     };
-    await handler({ body: options.body ?? {}, query: options.query ?? {}, params: {} }, res);
+    await handler({ body: options.body ?? {}, query: options.query ?? {}, params }, res);
     return { status, body: json as Record<string, unknown> };
   };
 }
@@ -300,6 +305,7 @@ describe('GET /api/game-reviews', () => {
 
     expect(readRes.status).toBe(200);
     expect(readRes.body).toEqual({
+      id: expect.any(String),
       gameDigest: baseReviewBody.gameDigest,
       reviewEngineVersion: baseReviewBody.reviewEngineVersion,
       accuracyModelVersion: baseReviewBody.accuracyModelVersion,
@@ -308,8 +314,91 @@ describe('GET /api/game-reviews', () => {
       mode: baseReviewBody.mode,
       sourceMatchId: null,
       createdAt: expect.any(String),
+      replayArtifact: null,
       source: 'client-asserted',
     });
+  });
+
+  it('F1e-5: persists and returns replayArtifact unchanged; by-id is exact', async () => {
+    const replayArtifact = {
+      artifactVersion: 1,
+      analysis: { accuracy: 90, analyzedMoves: [] },
+      decisionIds: [{ moveNumber: 1, decisionId: 'd1' }],
+      decisions: [
+        {
+          decisionId: 'd1',
+          coachingFacts: { missKind: 'better_tile' },
+          coachingProse: { headline: 'h', detail: 'd', takeaway: 't' },
+        },
+      ],
+    };
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const writeRes = await request('POST', '/api/game-reviews', {
+      body: { ...baseReviewBody, gameDigest: 'digest-replay', replayArtifact },
+    });
+    expect(writeRes.status).toBe(201);
+    const reviewId = (writeRes.body.review as { id: string }).id;
+
+    // Insert a newer row for the same digest under a different engine version.
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    await request('POST', '/api/game-reviews', {
+      body: {
+        ...baseReviewBody,
+        gameDigest: 'digest-replay',
+        reviewEngineVersion: 'review-engine-v2',
+        replayArtifact: {
+          ...replayArtifact,
+          decisions: [
+            {
+              decisionId: 'd1',
+              coachingFacts: { missKind: 'better_tile' },
+              coachingProse: { headline: 'NEWER', detail: 'd', takeaway: 't' },
+            },
+          ],
+        },
+      },
+    });
+
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const byId = await request('GET', `/api/game-reviews/by-id/${reviewId}`);
+    expect(byId.status).toBe(200);
+    expect(byId.body.id).toBe(reviewId);
+    expect(byId.body.replayArtifact).toEqual(replayArtifact);
+    expect((byId.body.replayArtifact as { decisions: { coachingProse: { headline: string } }[] }).decisions[0]
+      .coachingProse.headline).toBe('h');
+
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const latest = await request('GET', '/api/game-reviews', { query: { gameDigest: 'digest-replay' } });
+    expect(latest.status).toBe(200);
+    expect(
+      (latest.body.replayArtifact as { decisions: { coachingProse: { headline: string } }[] }).decisions[0]
+        .coachingProse.headline,
+    ).toBe('NEWER');
+  });
+
+  it('F1e-5: rejects unsupported replayArtifact versions', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const res = await request('POST', '/api/game-reviews', {
+      body: {
+        ...baseReviewBody,
+        gameDigest: 'digest-bad-version',
+        replayArtifact: { artifactVersion: 99, analysis: {}, decisionIds: [], decisions: [] },
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/artifactVersion/);
+  });
+
+  it('F1e-5: lists recent reviews for history entry', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    await request('POST', '/api/game-reviews', {
+      body: { ...baseReviewBody, gameDigest: 'digest-recent-1' },
+    });
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
+    const list = await request('GET', '/api/game-reviews/recent', { query: { limit: '5' } });
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body.reviews)).toBe(true);
+    expect((list.body.reviews as unknown[]).length).toBeGreaterThan(0);
   });
 
   it('E0d: 401s when unauthenticated', async () => {

@@ -1,3 +1,8 @@
+import {
+  parseGameReviewReplayArtifact,
+  type GameReviewReplayArtifactV1,
+} from './gameReviewReplayArtifact';
+
 export type GameReviewMode = 'pvf' | 'mp' | 'multiplayer';
 
 export interface GameReviewInsertInput {
@@ -9,6 +14,8 @@ export interface GameReviewInsertInput {
   accuracyModelResult: Record<string, unknown>;
   mode: GameReviewMode;
   sourceMatchId?: string | null;
+  /** F1e-5 optional versioned historical replay payload. */
+  replayArtifact?: GameReviewReplayArtifactV1 | null;
 }
 
 export interface GameReviewInsertPayload {
@@ -20,6 +27,7 @@ export interface GameReviewInsertPayload {
   accuracy_model_result: Record<string, unknown>;
   mode: GameReviewMode;
   source_match_id?: string;
+  replay_artifact?: GameReviewReplayArtifactV1;
 }
 
 export function buildGameReviewInsertPayload(input: GameReviewInsertInput): GameReviewInsertPayload {
@@ -37,6 +45,9 @@ export function buildGameReviewInsertPayload(input: GameReviewInsertInput): Game
   if (sourceMatchId) {
     payload.source_match_id = sourceMatchId;
   }
+  if (input.replayArtifact) {
+    payload.replay_artifact = input.replayArtifact;
+  }
 
   return payload;
 }
@@ -47,7 +58,7 @@ export function buildGameReviewInsertPayload(input: GameReviewInsertInput): Game
  * deep-validated here -- they persist as opaque jsonb, the same trust boundary
  * daily_fritz_runs.hand_deals already uses for client-computed JSON blobs. This
  * function only enforces the fields the idempotency key and RLS ownership
- * depend on being present and well-typed.
+ * depend on being present and well-typed. `replayArtifact` is version-gated.
  */
 export function parseGameReviewRequestBody(
   body: unknown,
@@ -90,6 +101,11 @@ export function parseGameReviewRequestBody(
 
   const sourceMatchId = typeof record.sourceMatchId === 'string' ? record.sourceMatchId : null;
 
+  const replayParsed = parseGameReviewReplayArtifact(record.replayArtifact);
+  if (replayParsed && 'error' in replayParsed) {
+    return { error: replayParsed.error };
+  }
+
   return {
     userId,
     gameDigest,
@@ -99,5 +115,6 @@ export function parseGameReviewRequestBody(
     accuracyModelResult: record.accuracyModelResult as Record<string, unknown>,
     mode,
     sourceMatchId,
+    replayArtifact: replayParsed,
   };
 }

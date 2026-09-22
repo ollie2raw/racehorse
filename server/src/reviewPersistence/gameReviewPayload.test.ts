@@ -49,7 +49,7 @@ describe('parseGameReviewRequestBody', () => {
 
   it('parses a well-formed body into a GameReviewInsertInput', () => {
     const result = parseGameReviewRequestBody(rawBody, baseInput.userId);
-    expect(result).toEqual({ ...baseInput, sourceMatchId: null });
+    expect(result).toEqual({ ...baseInput, sourceMatchId: null, replayArtifact: null });
   });
 
   it('carries a trimmed sourceMatchId through when present', () => {

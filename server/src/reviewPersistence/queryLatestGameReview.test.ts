@@ -19,6 +19,7 @@ const row: GameReviewRow = {
   mode: 'pvf',
   source_match_id: null,
   created_at: '2026-09-18T00:00:00.000Z',
+  replay_artifact: null,
 };
 
 beforeEach(() => {
@@ -66,6 +67,7 @@ describe('queryLatestGameReview', () => {
 describe('toGameReviewReadResult', () => {
   it('camelCases the row and stamps source: client-asserted -- E0d trust-boundary marker', () => {
     expect(toGameReviewReadResult(row)).toEqual({
+      id: row.id,
       gameDigest: row.game_digest,
       reviewEngineVersion: row.review_engine_version,
       accuracyModelVersion: row.accuracy_model_version,
@@ -74,6 +76,7 @@ describe('toGameReviewReadResult', () => {
       mode: row.mode,
       sourceMatchId: row.source_match_id,
       createdAt: row.created_at,
+      replayArtifact: null,
       source: 'client-asserted',
     });
   });

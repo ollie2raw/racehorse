@@ -1,5 +1,9 @@
 import { supabaseFetch } from '../supabaseUtils';
 import type { GameReviewMode } from './gameReviewPayload';
+import {
+  parseGameReviewReplayArtifact,
+  type GameReviewReplayArtifactV1,
+} from './gameReviewReplayArtifact';
 
 export type GameReviewRow = {
   id: string;
@@ -12,9 +16,11 @@ export type GameReviewRow = {
   mode: GameReviewMode;
   source_match_id: string | null;
   created_at: string;
+  replay_artifact: GameReviewReplayArtifactV1 | null;
 };
 
 export type GameReviewReadResult = {
+  id: string;
   gameDigest: string;
   reviewEngineVersion: string;
   accuracyModelVersion: string;
@@ -23,6 +29,11 @@ export type GameReviewReadResult = {
   mode: GameReviewMode;
   sourceMatchId: string | null;
   createdAt: string;
+  /**
+   * F1e-5 versioned historical replay payload when present. Null/absent on
+   * legacy rows — clients must not recompute Fritz for those.
+   */
+  replayArtifact: GameReviewReplayArtifactV1 | null;
   /**
    * E0d trust-boundary marker: stamped into the payload itself, not left as
    * a doc comment only -- mirrors the established LEGACY_REVIEW_EVALUATION_DISCLOSURE
@@ -33,6 +44,15 @@ export type GameReviewReadResult = {
    * TRUST BOUNDARY comment for the full reasoning.
    */
   source: 'client-asserted';
+};
+
+export type GameReviewListEntry = {
+  id: string;
+  gameDigest: string;
+  sourceMatchId: string | null;
+  mode: GameReviewMode;
+  createdAt: string;
+  hasReplayArtifact: boolean;
 };
 
 /**
@@ -46,16 +66,8 @@ export type GameReviewReadResult = {
  * route: the user_id filter below is the *only* thing preventing one user
  * from reading another user's row.
  *
- * Returns the latest row (by created_at) for a given game_digest, not the
- * full history -- more than one row can exist per digest if a re-analysis
- * under a newer reviewEngineVersion/accuracyModelVersion was ever persisted
- * (the idempotency key includes both version columns for exactly that
- * reason). "Latest" is the pragmatic default while nothing writes more than
- * one row per digest yet (E1 hasn't shipped a re-analysis call site) --
- * deliberately NOT extended with optional reviewEngineVersion/
- * accuracyModelVersion exact-match query params here, but the two-argument
- * signature (userId, gameDigest) leaves room to add an options object later
- * without a breaking change to existing callers.
+ * Returns the latest row (by created_at) for a given game_digest. Prefer
+ * `queryGameReviewById` when the client holds a specific review id.
  */
 export async function queryLatestGameReview(
   userId: string,
@@ -68,8 +80,37 @@ export async function queryLatestGameReview(
   return rows[0] ?? null;
 }
 
+/** Exact review-id lookup — ownership-filtered. Never returns another user's row. */
+export async function queryGameReviewById(
+  userId: string,
+  reviewId: string,
+): Promise<GameReviewRow | null> {
+  const rows = await supabaseFetch<GameReviewRow[]>(
+    `/rest/v1/game_reviews?user_id=eq.${encodeURIComponent(userId)}&id=eq.${encodeURIComponent(reviewId)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ?? null;
+}
+
+/** Recent reviews for the authenticated user (history entry surface). */
+export async function queryRecentGameReviews(
+  userId: string,
+  limit: number = 10,
+): Promise<GameReviewRow[]> {
+  const safeLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+  const rows = await supabaseFetch<GameReviewRow[]>(
+    `/rest/v1/game_reviews?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=${safeLimit}`,
+    { method: 'GET' },
+  );
+  return rows;
+}
+
 export function toGameReviewReadResult(row: GameReviewRow): GameReviewReadResult {
+  const parsed = parseGameReviewReplayArtifact(row.replay_artifact);
+  const replayArtifact =
+    parsed === null ? null : 'error' in parsed ? null : parsed;
   return {
+    id: row.id,
     gameDigest: row.game_digest,
     reviewEngineVersion: row.review_engine_version,
     accuracyModelVersion: row.accuracy_model_version,
@@ -78,6 +119,18 @@ export function toGameReviewReadResult(row: GameReviewRow): GameReviewReadResult
     mode: row.mode,
     sourceMatchId: row.source_match_id,
     createdAt: row.created_at,
+    replayArtifact,
     source: 'client-asserted',
+  };
+}
+
+export function toGameReviewListEntry(row: GameReviewRow): GameReviewListEntry {
+  return {
+    id: row.id,
+    gameDigest: row.game_digest,
+    sourceMatchId: row.source_match_id,
+    mode: row.mode,
+    createdAt: row.created_at,
+    hasReplayArtifact: row.replay_artifact != null,
   };
 }
