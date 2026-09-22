@@ -65,31 +65,58 @@ export type ReviewAgreement = {
 };
 
 /**
- * PROVISIONAL -- replace with Track D2 disagreement-adjudication numbers
- * when available (per the build brief: a parallel track is producing real
- * F1c (2026-09-21) reported D2 engine-wins for search (oracle) and heuristic
- * (Fritz), with exact aggregate indistinguishable. Under D2's engine-wins
- * branch, unresolved contested-cap treatment for those tiers is no longer the
- * final Ship-Gate state — a separate held production PR must apply that
- * branch. Until then these Inaccuracy caps remain the shipped stand-in so a
- * contested search/heuristic decision can never read as a confident
- * Blunder/Mistake off an unresolved engine disagreement, without
- * pretending Ship-Gate contested policy is settled.
+ * F1c / D2 (2026-09-21) contested-severity policy.
+ *
+ * Corpus: 3,447 oracle/Fritz disagreements (39 exact / 3,401 rollout / 7
+ * infeasible). Sign: oracle − Fritz. Continuation policies were
+ * `uniform-legal` and `immediate-score` (game-core only; neither Fritz- nor
+ * oracle-derived).
+ *
+ * | tier      | D2 result        | mean gap | 95% CI              |
+ * | exact     | indistinguishable| +0.907   | [−0.816, +2.817]    |
+ * | search    | oracle wins      | +0.553   | [+0.390, +0.772]    |
+ * | heuristic | Fritz wins       | −0.590   | [−0.859, −0.355]    |
+ *
+ * Locked reference choice already matched both winners (search → oracle,
+ * heuristic → Fritz). Exact remains per-decision ground truth. The D2
+ * indistinguishable branch (automatic Inaccuracy severity cap) did **not**
+ * fire for search or heuristic, so disagreement stays reportable as
+ * `agreement.contested` without suppressing Mistake/Blunder from the
+ * validated reference classification.
+ *
+ * `severityCap: null` means no disagreement-based cap. A future study that
+ * lands the indistinguishable branch for a tier would set a concrete cap
+ * here rather than resurrecting silent provisional constants.
  */
-export const CONTESTED_SEVERITY_CAP_SEARCH: LossBandLabel = 'Inaccuracy';
-export const CONTESTED_SEVERITY_CAP_HEURISTIC: LossBandLabel = 'Inaccuracy';
+export type ContestedSeverityTierPolicy = {
+  readonly severityCap: LossBandLabel | null;
+};
+
+export const F1C_D2_CONTESTED_SEVERITY_POLICY: Readonly<
+  Record<ReviewEvaluationEvidence['source'], ContestedSeverityTierPolicy>
+> = {
+  exact: { severityCap: null },
+  search: { severityCap: null },
+  heuristic: { severityCap: null },
+};
 
 const LOSS_BAND_ORDER: readonly LossBandLabel[] = ['Best', 'Inaccuracy', 'Mistake', 'Blunder'];
 
 /**
- * Caps a computed loss-band label when the decision is contested (oracle
- * and Fritz disagree at search/heuristic tier) -- per the build brief:
- * "the decision's classification is 'contested' and its severity must be
- * capped below Blunder/Mistake -- UNLESS the exact tier settles it". Exact
- * tier is never capped, matched here by checking `evidenceSource` directly
- * rather than trusting `agreement.contested` alone (which this module
- * already forces to `false` at exact tier -- this is a second, explicit
- * guard against a future caller passing a mismatched pair).
+ * Resolves loss-band severity given agreement + evidence tier.
+ *
+ * Contested (`agreement.contested`) is factual disagreement metadata and is
+ * intentionally independent of this function — callers must not infer
+ * contested from the returned label, and must not treat contested as an
+ * automatic Inaccuracy after F1c for search/heuristic.
+ *
+ * Exact never applied a contested severity cap (exact ground truth). After
+ * F1c, search/heuristic also have `severityCap: null`, so Mistake/Blunder
+ * from the validated reference survive engine disagreement.
+ *
+ * Name retained for call-site compatibility with the pre-F1c helper; behavior
+ * is now the D2-resolved identity (or a future explicit cap if a tier policy
+ * is updated).
  */
 export function capSeverityForContestedDecision(
   label: LossBandLabel,
@@ -97,8 +124,9 @@ export function capSeverityForContestedDecision(
   evidenceSource: ReviewEvaluationEvidence['source'],
   enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
 ): LossBandLabel {
-  if (!enablePositionalExplanations || evidenceSource === 'exact' || !agreement.contested) return label;
-  const cap = evidenceSource === 'search' ? CONTESTED_SEVERITY_CAP_SEARCH : CONTESTED_SEVERITY_CAP_HEURISTIC;
+  if (!enablePositionalExplanations || !agreement.contested) return label;
+  const cap = F1C_D2_CONTESTED_SEVERITY_POLICY[evidenceSource].severityCap;
+  if (cap === null) return label;
   return LOSS_BAND_ORDER.indexOf(label) > LOSS_BAND_ORDER.indexOf(cap) ? cap : label;
 }
 

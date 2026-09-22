@@ -180,12 +180,18 @@ describe('default-off positional prose truth', () => {
     expect(prose.detail).not.toContain('hand mobility');
   });
 
-  it.each(['search', 'heuristic'] as const)('caps unresolved %s disagreements at Inaccuracy', tier => {
-    const agreement = { oracleVsFritz: 'disagree' as const, playedMatch: 'fritz' as const, contested: true };
-    expect(capSeverityForContestedDecision('Blunder', agreement, tier)).toBe('Blunder');
-    expect(capSeverityForContestedDecision('Blunder', agreement, tier, true)).toBe('Inaccuracy');
-    expect(capSeverityForContestedDecision('Mistake', agreement, tier, true)).toBe('Inaccuracy');
-    expect(capSeverityForContestedDecision('Best', agreement, tier, true)).toBe('Best');
-    expect(capSeverityForContestedDecision('Blunder', agreement, 'exact', true)).toBe('Blunder');
-  });
+  it.each(['search', 'heuristic'] as const)(
+    'F1c D2: %s disagreement no longer auto-caps Mistake/Blunder at Inaccuracy',
+    tier => {
+      const agreement = { oracleVsFritz: 'disagree' as const, playedMatch: 'fritz' as const, contested: true };
+      // Pre-F1c (flag on) would have returned Inaccuracy for Blunder/Mistake.
+      expect(capSeverityForContestedDecision('Blunder', agreement, tier, true)).toBe('Blunder');
+      expect(capSeverityForContestedDecision('Mistake', agreement, tier, true)).toBe('Mistake');
+      expect(capSeverityForContestedDecision('Best', agreement, tier, true)).toBe('Best');
+      expect(capSeverityForContestedDecision('Inaccuracy', agreement, tier, true)).toBe('Inaccuracy');
+      expect(capSeverityForContestedDecision('Blunder', agreement, 'exact', true)).toBe('Blunder');
+      // Default-off flag still leaves severity untouched.
+      expect(capSeverityForContestedDecision('Blunder', agreement, tier)).toBe('Blunder');
+    },
+  );
 });

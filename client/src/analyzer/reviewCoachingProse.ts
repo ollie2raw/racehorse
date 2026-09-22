@@ -187,11 +187,10 @@ function buildFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReference
 /**
  * Same feature-delta basis as `buildFeatureDeltaProse`, but for a contested
  * decision (`facts.agreement.contested`, i.e. oracle and Fritz picked
- * different moves at search/heuristic tier) -- per the build brief,
- * disagreement must be surfaced honestly rather than presented as a
- * confident verdict, since `capSeverityForContestedDecision` is already
- * capping how harshly this decision can be labeled elsewhere in the
- * pipeline.
+ * different moves at search/heuristic tier). After F1c, severity is no
+ * longer auto-capped at Inaccuracy for those tiers — disagreement is still
+ * disclosed here as contested metadata plus the losing engine's second
+ * opinion (Fritz at search; Review Engine heuristic / oracle at heuristic).
  */
 function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrueReferenceEquality: boolean): ReviewCoachingProse {
   const base = buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
