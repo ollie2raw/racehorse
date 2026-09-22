@@ -10,6 +10,8 @@ export type GameTreeWalkOutcome = {
 };
 
 export type GameTreeWalkConfig = {
+  /** Cooperative per-decision wall-clock stop (F4b). Shared absolute deadline. */
+  readonly shouldStop?: () => boolean;
   readonly actorId: string;
   readonly opponentId: string;
   /** Depth is the number of plies already walked from the search's root (0 at the root). */
@@ -60,14 +62,14 @@ export function searchGameTree(
   config: GameTreeWalkConfig,
   budget: NodeBudget,
 ): GameTreeWalkOutcome {
-  if (budget.count >= budget.max) {
+  if (budget.count >= budget.max || config.shouldStop?.()) {
     return { finished: false, diff: config.leafValue(state) };
   }
   budget.count += 1;
 
   let current = state;
   while (canDraw(current, current.playerIds[current.currentPlayerIndex])) {
-    if (budget.count >= budget.max) {
+    if (budget.count >= budget.max || config.shouldStop?.()) {
       return { finished: false, diff: config.leafValue(current) };
     }
     const drawerId = current.playerIds[current.currentPlayerIndex];
@@ -88,6 +90,12 @@ export function searchGameTree(
   let chosen: number | null = null;
 
   for (const move of moves) {
+    // Stop sibling expansion on deadline; callers discard unfinished
+    // allocations/samples so partial diffs never enter averages.
+    if (config.shouldStop?.()) {
+      finished = false;
+      break;
+    }
     const action: ReviewAction =
       move.type === 'play' ? { kind: 'play', tile: move.tile, position: move.position } : { kind: 'pass' };
     const command = commandForAction(current, currentId, action);

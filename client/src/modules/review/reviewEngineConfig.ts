@@ -26,6 +26,16 @@ export const DEFAULT_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
 export const DEFAULT_REVIEW_COVERAGE_THRESHOLD = 0.02;
 
 /**
+ * F4b: per-decision wall-clock safety ceiling lives on
+ * `ReviewDispatchBudget.maxWallClockMs` (optional). When omitted,
+ * `@racehorse/review-engine`'s `DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS` (2000)
+ * applies inside `evaluateReviewPosition`. Intentionally NOT set on
+ * {@link DEFAULT_REVIEW_DISPATCH_BUDGET} so production search node/sample/ply
+ * budgets stay unchanged and F4a byte-identity tests keep comparing the same
+ * budget object shape; the engine default is the documented ceiling.
+ */
+
+/**
  * F4a default browser worker-pool size. Lives here (not in
  * useReviewWorkerBatch) so callers that mock the hook module still get this
  * pure hardware-derived number. Cap 8; fallback 4 when navigator is absent.

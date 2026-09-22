@@ -7,14 +7,30 @@
  * helper only fixes the order of *index* tuples, not of `items` itself.
  */
 export function enumerateCombinations<T>(items: readonly T[], size: number): readonly (readonly T[])[] {
-  if (size < 0 || size > items.length) return [];
-  if (size === 0) return [[]];
+  return Array.from(enumerateCombinationsLazy(items, size));
+}
 
-  const combinations: T[][] = [];
+/**
+ * Same fixed lexicographic index-tuple walk as `enumerateCombinations`, but
+ * yielding one combination at a time. Used by solveExactEndgame's wall-clock
+ * ceiling so elapsed time can be checked between allocations instead of only
+ * after an eager full materialization (itself an unbounded-time hazard for
+ * large hidden pools). Sequence and order match `enumerateCombinations`.
+ */
+export function* enumerateCombinationsLazy<T>(
+  items: readonly T[],
+  size: number,
+): Generator<readonly T[], void, void> {
+  if (size < 0 || size > items.length) return;
+  if (size === 0) {
+    yield [];
+    return;
+  }
+
   const indices = Array.from({ length: size }, (_, i) => i);
 
   while (true) {
-    combinations.push(indices.map((index) => items[index]));
+    yield indices.map((index) => items[index]);
 
     let pivot = size - 1;
     while (pivot >= 0 && indices[pivot] === items.length - size + pivot) {
@@ -27,6 +43,20 @@ export function enumerateCombinations<T>(items: readonly T[], size: number): rea
       indices[i] = indices[i - 1] + 1;
     }
   }
+}
 
-  return combinations;
+/**
+ * n-choose-k without materializing combinations. Lets solveExactEndgame know
+ * the true allocation count for `coverage` without paying the enumeration
+ * cost the wall-clock ceiling exists to bound. Returns 0 for out-of-range
+ * size (matching the empty-result convention of the enumerators).
+ */
+export function countCombinations(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  const bound = Math.min(k, n - k);
+  let result = 1;
+  for (let i = 0; i < bound; i += 1) {
+    result = (result * (n - i)) / (i + 1);
+  }
+  return Math.round(result);
 }

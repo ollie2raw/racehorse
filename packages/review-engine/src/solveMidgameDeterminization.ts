@@ -189,6 +189,7 @@ export function solveMidgameDeterminization(
   seed: string | number,
   maxPlyDepth: number,
   maxPips = 6,
+  shouldStop?: () => boolean,
 ): MidgameDeterminizationResult | null {
   const { actorId, opponentId } = snapshot.identifiers;
   const { opponentTileCount, scores, board } = snapshot.preAction;
@@ -210,6 +211,7 @@ export function solveMidgameDeterminization(
   const nodeBudget: NodeBudget = { count: 0, max: budget.maxNodes };
 
   const walkConfig: GameTreeWalkConfig = {
+    shouldStop,
     actorId,
     opponentId,
     isCutoff: (state, depth) => state.handOver || state.gameOver || depth >= maxPlyDepth,
@@ -225,6 +227,10 @@ export function solveMidgameDeterminization(
   let complete = true;
 
   for (let i = 0; i < budget.maxHiddenStateSamples; i += 1) {
+    if (shouldStop?.()) {
+      complete = false;
+      break;
+    }
     const subSeed = `${seed}:${i}`;
     const allocation = sampleHiddenAllocation(snapshot, subSeed, maxPips);
     if (allocation === null) {

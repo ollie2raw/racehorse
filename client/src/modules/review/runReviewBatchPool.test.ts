@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
-import type { ReviewDispatchBudget } from '@racehorse/review-engine';
+import { REVIEW_FIXTURE_CORPUS } from '../../../../packages/game-core/src/reviewFixtureCorpus';
+import { evaluateReviewPosition, WALL_CLOCK_CEILING_DIAGNOSTIC, type ReviewDispatchBudget } from '@racehorse/review-engine';
 import {
   partitionIndices,
   runReviewBatchPool,
@@ -252,5 +253,83 @@ describe('runReviewBatchPool', () => {
       createWorker,
     });
     expect(JSON.stringify(toOrderedEvaluations(snapshots, pooled))).toEqual(JSON.stringify(sequentialOrdered));
+  });
+
+  it('F4b: mixed normal+forced-timeout decisions stay byte-identical across 1 vs 2 workers; timeout does not poison siblings', async () => {
+    const fixtures = REVIEW_FIXTURE_CORPUS.filter((f) => f.snapshot.preAction.boneyard.drawableCount > 0).slice(0, 2);
+    expect(fixtures.length).toBe(2);
+    const snapshots = fixtures.map((f) => f.snapshot);
+    const timeoutId = snapshots[0].identifiers.decisionId;
+
+    const budget: ReviewDispatchBudget = {
+      maxNodes: 5_000,
+      maxHiddenStateSamples: 8,
+      maxPlyDepth: 2,
+      seed: 'f4b-pool-mix',
+      maxWallClockMs: 100,
+    };
+
+    const makeNowForDecision = (decisionId: string): (() => number) => {
+      if (decisionId !== timeoutId) return () => 0;
+      let calls = 0;
+      return () => {
+        calls += 1;
+        return calls === 1 ? 0 : 1_000_000;
+      };
+    };
+
+    const createWorkerWithPerDecisionClock = (): ReviewWorkerLike => {
+      const worker: ReviewWorkerLike = {
+        postMessage: vi.fn((message: ReviewWorkerRequest) => {
+          if (message.type === 'cancel') return;
+          queueMicrotask(() => {
+            for (const snapshot of message.snapshots) {
+              try {
+                const evaluation = evaluateReviewPosition(
+                  snapshot,
+                  message.budget,
+                  message.coverageThreshold,
+                  makeNowForDecision(snapshot.identifiers.decisionId),
+                );
+                worker.onmessage?.({ data: { type: 'result', decisionId: snapshot.identifiers.decisionId, evaluation } });
+              } catch (error) {
+                worker.onmessage?.({
+                  data: {
+                    type: 'error',
+                    decisionId: snapshot.identifiers.decisionId,
+                    message: error instanceof Error ? error.message : String(error),
+                  },
+                });
+              }
+            }
+            worker.onmessage?.({ data: { type: 'done' } });
+          });
+        }),
+        terminate: vi.fn(),
+        onmessage: null,
+        onerror: null,
+      };
+      return worker;
+    };
+
+    const runPool = async (poolSize: number) => {
+      const result = await runReviewBatchPool(snapshots, budget, COVERAGE_THRESHOLD, {
+        poolSize,
+        createWorker: createWorkerWithPerDecisionClock,
+      });
+      expect([...result.errorsByDecisionId]).toEqual([]);
+      return toOrderedEvaluations(snapshots, result);
+    };
+
+    const ordered1 = await runPool(1);
+    const ordered2 = await runPool(2);
+    expect(JSON.stringify(ordered1)).toEqual(JSON.stringify(ordered2));
+
+    const timeoutEval = ordered1[0] as ReviewEvaluationV1;
+    const normalEval = ordered1[1] as ReviewEvaluationV1;
+    expect(timeoutEval.search.complete).toBe(false);
+    expect(timeoutEval.diagnostics).toContain(WALL_CLOCK_CEILING_DIAGNOSTIC);
+    expect(normalEval.search.complete).toBe(true);
+    expect(normalEval.diagnostics).not.toContain(WALL_CLOCK_CEILING_DIAGNOSTIC);
   });
 });
