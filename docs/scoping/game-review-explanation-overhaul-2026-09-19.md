@@ -212,6 +212,25 @@ should precede public Game Review launch. F1e-1, F1e-3, and F1e-4 can follow
 without compromising the core review promise; F1e-2 is required before launch
 only if curated key moments are part of the launch commitment.
 
+### Review facts consistency contract
+
+Within **one review instance**, each decision has at most one canonical
+`ReviewCoachingFacts` result (keyed by stable decision ID). Production
+consumers (`GameReviewer` coaching, contested metadata, displayed Fritz
+reference / prose derived from those facts) must reuse that published result
+rather than independently re-running Fritz-derived fact construction.
+
+This is **intra-review consistency**, not cross-review determinism: Fritz
+Master remains wall-clock bounded (`botHeuristics.ts` unchanged), so two
+independently created reviews of the same game may still differ. Historical
+replay (F1e-5) must **persist/load** the canonical review artifact instead of
+recomputing it; that persistence path is still unsolved. Public prose /
+positional flags remain default-off.
+
+Owner: review-runtime `ReviewCoachingFactsStore` (fresh per match digest) +
+lazy `createReviewCoachingFactsResolver` inside the reviewer. Eager map build
+is avoided so decisions the product never opens do not pay Fritz cost.
+
 ## Risks
 
 - **Oracle may not be stronger than Fritz.** The 80-game result is underpowered. F1 is designed to find out honestly; the decision rules above fix the response in advance.
@@ -229,7 +248,7 @@ only if curated key moments are part of the launch commitment.
 | Fritz Master | `client/src/modules/fritz/botHeuristics.ts` (do not modify), `client/src/modules/fritz/fritzConfig.ts` |
 | Ratings (constants, not measurements) | `server/src/ranking/glicko2.ts`, `client/src/ranking/glicko2.ts` |
 | Accuracy model | `packages/review-engine/src/accuracyModelCalibration.ts`, `MINIMUM_COVERAGE_FLOOR` |
-| Coaching | `reviewCoachingProse.ts`, `buildReviewCoachingFacts` |
+| Coaching | `reviewCoachingProse.ts`, `buildReviewCoachingFacts`, `reviewCoachingFactsResolver.ts`, `reviewCoachingFactsStore.ts` |
 | Corpora | `packages/review-engine/fixtures/recorded-self-play`, `recorded-client-policy` |
 | Prior plans | `docs/scoping/game-review-oracle-upgrade-2026-09-13.md`, `docs/game-review-analyzer-audit.md` |
 
