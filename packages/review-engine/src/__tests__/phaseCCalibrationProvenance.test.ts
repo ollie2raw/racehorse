@@ -1,0 +1,99 @@
+import { describe, expect, it } from 'vitest';
+import { dedupeCandidatesByTile, isForcedDecision } from '@racehorse/game-core/review';
+import { CALIBRATED_K, LOSS_BAND_BOUNDARIES } from '../accuracyModelCalibration';
+import {
+  RECORDED_CLIENT_POLICY_DIR,
+  RECORDED_SELF_PLAY_DIR,
+  evaluateFixtureCorpus,
+  fitBoundaries,
+  fitKLeastSquares,
+  readCorpusDir,
+} from '../devtools/calibrateAccuracyModel';
+
+/**
+ * Provenance regression: published v4 constants are recoverable under
+ * tile-level forced on the committed recorded corpora. Action-level forced
+ * on the same corpora does NOT recover those constants / [65,85] check.
+ * Diagnostic only — does not publish new constants.
+ */
+describe('Phase C calibration provenance (diagnostic)', () => {
+  const selfPlay = readCorpusDir(RECORDED_SELF_PLAY_DIR);
+  const client = readCorpusDir(RECORDED_CLIENT_POLICY_DIR);
+  const strong = selfPlay.filter((r) => r.batchTag === 'strong-policy-top-tier');
+  const ordinary = client.filter((r) => r.tier === 'standard');
+  const worstLegal = evaluateFixtureCorpus().filter((f) => f.category === 'deliberately_poor');
+
+  function scorableLosses(
+    records: typeof strong,
+    forced: 'tile' | 'action',
+  ): number[] {
+    return records
+      .filter((r) => {
+        const isForced =
+          forced === 'tile'
+            ? dedupeCandidatesByTile(r.evaluation.candidates).length <= 1
+            : isForcedDecision(r.evaluation.candidates);
+        return !isForced && r.evaluation.evidence.source !== 'heuristic';
+      })
+      .map((r) => r.evaluation.loss.expectedPointDifferential);
+  }
+
+  it('tile-level forced re-fit reproduces published K within 1e-9 and exact bands', () => {
+    const strongLosses = scorableLosses(strong, 'tile');
+    const ordinaryLosses = scorableLosses(ordinary, 'tile');
+    const poorLosses = worstLegal
+      .filter((f) => dedupeCandidatesByTile(f.evaluation.candidates).length > 1)
+      .filter((f) => f.evaluation.evidence.source !== 'heuristic')
+      .map((f) => f.evaluation.loss.expectedPointDifferential);
+
+    const k = fitKLeastSquares([
+      {
+        label: 'strong',
+        meanLoss: strongLosses.reduce((s, v) => s + v, 0) / strongLosses.length,
+        targetAccuracy: 95,
+      },
+      {
+        label: 'poor',
+        meanLoss: poorLosses.reduce((s, v) => s + v, 0) / poorLosses.length,
+        targetAccuracy: 15,
+      },
+    ]);
+    const bands = fitBoundaries(strongLosses, ordinaryLosses, poorLosses);
+
+    expect(Math.abs(k - CALIBRATED_K)).toBeLessThan(1e-9);
+    expect(bands).toEqual(LOSS_BAND_BOUNDARIES);
+
+    const ordinaryMean = ordinaryLosses.reduce((s, v) => s + v, 0) / ordinaryLosses.length;
+    const ordinaryPred = 100 * Math.exp(-k * ordinaryMean);
+    expect(ordinaryPred).toBeGreaterThanOrEqual(65);
+    expect(ordinaryPred).toBeLessThanOrEqual(85);
+  });
+
+  it('action-level forced on the same corpus moves ordinary predicted accuracy outside [65,85]', () => {
+    const strongLosses = scorableLosses(strong, 'action');
+    const ordinaryLosses = scorableLosses(ordinary, 'action');
+    const poorLosses = worstLegal
+      .filter((f) => !isForcedDecision(f.evaluation.candidates))
+      .filter((f) => f.evaluation.evidence.source !== 'heuristic')
+      .map((f) => f.evaluation.loss.expectedPointDifferential);
+
+    const k = fitKLeastSquares([
+      {
+        label: 'strong',
+        meanLoss: strongLosses.reduce((s, v) => s + v, 0) / strongLosses.length,
+        targetAccuracy: 95,
+      },
+      {
+        label: 'poor',
+        meanLoss: poorLosses.reduce((s, v) => s + v, 0) / poorLosses.length,
+        targetAccuracy: 15,
+      },
+    ]);
+    const ordinaryMean = ordinaryLosses.reduce((s, v) => s + v, 0) / ordinaryLosses.length;
+    const ordinaryPred = 100 * Math.exp(-k * ordinaryMean);
+    expect(ordinaryPred).toBeGreaterThan(85);
+
+    const bands = fitBoundaries(strongLosses, ordinaryLosses, poorLosses);
+    expect(bands.bestTolerance).toBe(0);
+  });
+});

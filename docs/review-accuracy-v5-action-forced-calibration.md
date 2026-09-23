@@ -206,6 +206,128 @@ Product presentation rules (unchanged on #300):
 | Ordinary PVF ∈ [65, 85] under **fitted** candidate | **FAIL** |
 | Heuristic Estimate excluded from scored accuracy | PASS (product #300) |
 | Partial presentation / historical freeze | PASS (product #300) |
+| Tile-level re-fit reproduces published K/bands; action-level breaks [65,85] | **PASS** (provenance regression) |
+
+---
+
+## Phase C contract provenance audit
+
+Supporting machine output:
+`docs/review-accuracy-v5-phase-c-provenance-audit.raw.json`  
+Diagnostic script:
+`packages/review-engine/src/devtools/auditPhaseCCalibrationProvenance.ts`  
+Regression:
+`packages/review-engine/src/__tests__/phaseCCalibrationProvenance.test.ts`
+
+### Published model provenance
+
+| Constant / target | Value | Introducing commit | Methodology / source | Corpus revision | Forced semantics |
+| --- | --- | --- | --- | --- | --- |
+| Forced / `isScorable` | `dedupeCandidatesByTile(...).length === 1` | `d545cd15` (C1) | Phase C0 §2a literally coded tile-dedupe | n/a | **A. tile-level** |
+| `CALIBRATED_K` (first) | `0.1657…` | `48b85258` (C2b) | `fitKLeastSquares` strong→95, poor→15 | early 5-game + n=2 poor | **tile-level** (via live `isScorable`) |
+| `CALIBRATED_K` (v3/v4 published) | `0.19770906562806756` | `ac7be98f` (v3; unchanged in `943f5612` v4) | same fit; poor corpus expanded to n=44 | recorded trees as of v4 | **tile-level** |
+| `bestTolerance` | `0.13` | C2b → retained through v4 | p75(strong scorable losses) | same | **tile-level** |
+| `inaccuracyToMistake` | `0.895` → **`0.79`** | v3 → v4 `943f5612` | p75(ordinary PVF); moved when standard sample widened 5→30 | v4 recorded trees | **tile-level** |
+| `mistakeToBlunder` | `10.251` → **`5.98`** | v2 → v3 | p10(poor); moved with poor expansion | v3+ fixtures | **tile-level** |
+| Ordinary band `[65,85]` | hardcoded | `48b85258` | **Not in C0/parent scoping docs.** Harness field `pvfBotMatchStandardBand`. Commit message: ordinary ~85.9 “just outside… reported, not forced.” | C2b corpus | Evaluated under **tile-level** |
+| Strong target 95 | harness | `48b85258` | Comment: midpoint of “~92–98” — that band itself is harness commentary, not C0 numeric lock | — | — |
+| Poor target 15 | harness | `48b85258` | Comment: “comfortably below &lt;25” — also harness commentary | — | — |
+
+**Answer to §2:** the published v4 K, bands, and acceptance checks were calibrated / evaluated using **A. tile-level forced exclusion**. Proven from `reviewAccuracy.ts` history (`dedupeCandidatesByTile` from C1 until `86db51b2` on this PR) and from exact re-fit reproduction under tile-level today.
+
+That means the corrected action-level population is being judged against targets that **encode the old denominator**, not a neutral semantics-free contract. This does **not** by itself authorize changing the targets — it establishes provenance for the project lead.
+
+### Historical reproduction
+
+Recorded corpus trees at `943f5612` (v4) vs `HEAD`:
+
+- `recorded-self-play` tree SHA: **identical**
+- `recorded-client-policy` tree SHA: **identical**
+- Fixture IDs: **identical** (54)
+- `fitKLeastSquares` / `fitBoundaries` / targets: **no method drift**
+
+Re-fit with **tile-level** forced on today’s identical recorded trees + live `deliberately_poor` re-eval:
+
+| | Published | Reproduced | Δ |
+| --- | ---: | ---: | ---: |
+| K | `0.19770906562806756` | `0.19770906571710167` | `~9×10⁻¹¹` (float) |
+| bestTolerance | `0.13` | `0.13` | 0 |
+| inaccuracyToMistake | `0.79` | `0.79` | 0 |
+| mistakeToBlunder | `5.98` | `5.98` | 0 |
+| Ordinary predicted (fitted K) | — | **84.60** ∈ [65,85] | — |
+
+**Historical calibration reproduced: YES** (bands exact; K within float epsilon).
+
+### Corpus drift
+
+Independent of forced semantics: **no recorded-corpus drift** between v4 publish and HEAD. Engine code gained F4b deadline plumbing after v4, but recorded evaluations are frozen JSONL — histograms for K/band fit from records are unaffected. Live fixture re-eval for poor-play still recovers published bands.
+
+### Forced-semantic dependency
+
+| Config | Scorable denom | Ordinary mean loss | Fitted K | Ordinary pred | In [65,85]? | Best band |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| Historical(=current) + **tile** | 3,798 | 0.846 | 0.197709… | **84.60** | YES | 0.13 |
+| Historical(=current) + **action** | 5,538 | 0.629 | 0.200942… | **88.13** | NO | **0** |
+
+Because historical recorded corpus ≡ current, cells “historical×…” and “current×…” are the same for recorded data.
+
+### 2×2 counterfactual
+
+Same table as above (corpus identity collapses historical/current). Root attribution:
+
+1. **Primary:** forced-semantic correction (tile → action)
+2. **Not primary:** corpus drift (none on recorded trees)
+3. **Not primary:** harness/method drift (none)
+
+### Best-band degeneracy
+
+`bestTolerance = p75(strong scorable losses)`.
+
+| Forced mode | Strong scorable n | Zero-loss share | p75 |
+| --- | ---: | ---: | ---: |
+| Tile | 211 | 71.1% | **0.13** |
+| Action | 292 | **75.7%** | **0** |
+
+Action-level adds 81 strong-policy scorable decisions that were tile-forced (same-tile multi-placement). Enough additional exact-zero losses push zero mass past 75%, so p75 becomes exactly 0. This is **expected mathematical behavior** of the locked percentile rule on a more zero-inflated population — not a coding bug — and it violates the method’s own documented intent (“not `=== 0` exactly”).
+
+### Newly scored 1,740 composition (diagnosis only; forced rule unchanged)
+
+| Metric | Count / share |
+| --- | --- |
+| Exact zero loss | **1,561 (89.7%)** |
+| Tiny positive ≤ published Best 0.13 | 14 |
+| Above tiny | 165 |
+| All placement values exactly equal | **956** |
+| Played tied for best value | **1,561** |
+| Nonzero loss p50 / p90 | 0.75 / 3.30 |
+
+Equal values do **not** make a decision forced. They do explain the calibration shift: the newly included population is overwhelmingly zero-loss / tied-best placement choice.
+
+### Ordinary PVF acceptance provenance
+
+`[65, 85]` classification: **post-hoc empirical validation range / manually chosen product expectation**, hardcoded in the C2b harness — **not** a formally derived Phase C0 objective, and **not** present in `phase-c-accuracy-model-spec.md` or the parent oracle-upgrade scoping doc.
+
+Evidence: `calibrateAccuracyModel.ts` `pvfBotMatchStandardBand`; commit `48b85258` message explicitly notes ordinary ~85.9 was already outside and “reported, not forced.”
+
+Strong→95 and poor→15 are likewise harness-authored anchors referencing undocumented commentary bands (~92–98, &lt;25), not C0 numeric locks.
+
+### Decision required (project lead)
+
+Mechanically knowable (done):
+
+- Original publish used **tile-level** forced
+- Today’s harness + identical recorded corpus **reproduces** v4 under tile-level
+- Break under action-level is **semantics**, not corpus/harness drift
+- Best=0 is percentile math on &gt;75% zero mass
+- `[65,85]` is harness-empirical, already soft at introduction
+
+**Not** uniquely specified by Phase C without new policy:
+
+- Whether `[65,85]` remains binding after correcting the denominator that produced the ordinary distribution it was watching
+- How to replace degenerate Best=0 while preserving “search tolerance ≠ exact zero”
+- Whether a new signed-off Phase C revision should re-derive acceptance ranges under action-level
+
+Phase C does **not** uniquely specify a valid v5 calibration that both (a) uses action-level forced and (b) satisfies the historical `[65,85]` check without a lead decision.
 
 ---
 
@@ -217,12 +339,8 @@ Leave `CALIBRATED_K` / `LOSS_BAND_BOUNDARIES` at the signed-off **v4** numeric
 values. Keep `accuracyModelVersion = accuracy-model-v5-action-forced-2026-09-22`
 as the version stamp for **action-level forced semantics** already shipping on
 #300 (denominator change), with explicit documentation that **numeric
-recalibration is blocked** pending project-lead decision on:
-
-1. Whether the locked ordinary PVF validation band [65, 85] must be revised
-   under action-level forced (method change — not agent-invented), and/or
-2. How to handle degenerate `bestTolerance = 0` when strong-policy p75 collapses
-   (e.g. alternate percentile, minimum tolerance floor) — again a method
-   change requiring lead approval.
+recalibration is blocked** pending project-lead decision on the provenance
+items above (historical empirical acceptance ranges vs corrected denominator;
+degenerate Best percentile).
 
 # V5 CALIBRATION: BLOCKED

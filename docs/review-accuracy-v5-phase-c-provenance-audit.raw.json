@@ -1,0 +1,373 @@
+{
+  "provenanceNote": {
+    "publishedForcedSemantics": "tile-level (dedupeCandidatesByTile(...).length === 1) from C1 d545cd15 through C4 until 86db51b2",
+    "publishedK": 0.19770906562806756,
+    "publishedBands": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    },
+    "ordinaryBand6585": "Hardcoded in calibrateAccuracyModel.ts at C2b 48b85258 as pvfBotMatchStandardBand; NOT in Phase C0/parent scoping docs. Commit message: ordinary landed ~85.9 just outside — reported, not forced. Classification: post-hoc empirical validation range / manually chosen product expectation, not a formally derived objective.",
+    "strongTarget95": "Harness midpoint of undocumented ~92-98 daily-fritz-master band comment in calibrateAccuracyModel.ts; not in Phase C0 numeric targets.",
+    "poorTarget15": "Harness choice “comfortably below <25 ceiling” comment; <25 itself is harness commentary, not C0 numeric lock.",
+    "recordedCorpusIdentityVsV4Commit943f5612": "IDENTICAL tree SHAs for recorded-self-play and recorded-client-policy.",
+    "fixtureIdsVsV4": "IDENTICAL id list (54 fixtures).",
+    "harnessMethodDriftVsV4": "NONE in fitKLeastSquares / fitBoundaries / targets.",
+    "engineCodeDriftSinceV4": "evaluateReviewPosition / exact / midgame gained F4b deadline plumbing; recorded evaluations are frozen so recorded histograms are unaffected. Live fixture re-eval may differ."
+  },
+  "counterfactual2x2": {
+    "historical_tile": {
+      "label": "historical(=current recorded) + tile-level forced",
+      "forcedMode": "tile",
+      "accounting": {
+        "total": 12973,
+        "forced": 6182,
+        "exact": 109,
+        "search": 3689,
+        "heuristic": 2993,
+        "scorable": 3798
+      },
+      "allScorable": {
+        "count": 3798,
+        "mean": 0.6613349131121644,
+        "median": 0,
+        "p75": 0.41000000000000003,
+        "p90": 2,
+        "p95": 4,
+        "zeroShare": 0.6769352290679305
+      },
+      "strong": {
+        "count": 211,
+        "mean": 0.4428120063191153,
+        "median": 0,
+        "p75": 0.12999999999999995,
+        "p90": 1.7,
+        "p95": 2.1550000000000002,
+        "zeroShare": 0.7109004739336493
+      },
+      "ordinary": {
+        "count": 1255,
+        "mean": 0.8459495351925633,
+        "median": 0,
+        "p75": 0.79,
+        "p90": 3,
+        "p95": 4.765999999999998,
+        "zeroShare": 0.6191235059760957
+      },
+      "poor": {
+        "count": 44,
+        "mean": 9.292142857142856,
+        "median": 8.36,
+        "p75": 10.360000000000001,
+        "p90": 12.853000000000002,
+        "p95": 15.606500000000004,
+        "zeroShare": 0
+      },
+      "fittedK": 0.19770906571710167,
+      "bands": {
+        "bestTolerance": 0.12999999999999995,
+        "inaccuracyToMistake": 0.79,
+        "mistakeToBlunder": 5.98
+      },
+      "predictedWithFittedK": {
+        "strong": 91.61749417887678,
+        "ordinary": 84.59864870592033,
+        "poor": 15.927215349194773,
+        "ordinaryInBand65_85": true
+      },
+      "predictedWithPublishedK": {
+        "strong": 91.61749418248884,
+        "ordinary": 84.59864871229216,
+        "poor": 15.927215362371644
+      },
+      "reproductionDeltasVsPublished": {
+        "kDelta": 8.90341134152095e-11,
+        "bestToleranceDelta": 0,
+        "inaccuracyToMistakeDelta": 0,
+        "mistakeToBlunderDelta": 0,
+        "kMatchesPublished": false,
+        "bandsMatchPublished": true
+      }
+    },
+    "historical_action": {
+      "label": "historical(=current recorded) + action-level forced",
+      "forcedMode": "action",
+      "accounting": {
+        "total": 12973,
+        "forced": 4064,
+        "exact": 167,
+        "search": 5371,
+        "heuristic": 3371,
+        "scorable": 5538
+      },
+      "allScorable": {
+        "count": 5538,
+        "mean": 0.4959239195858916,
+        "median": 0,
+        "p75": 0.020000000000000018,
+        "p90": 1.5,
+        "p95": 3.0629999999999926,
+        "zeroShare": 0.746117732033225
+      },
+      "strong": {
+        "count": 292,
+        "mean": 0.35901826484018257,
+        "median": 0,
+        "p75": 0,
+        "p90": 1.5800000000000034,
+        "p95": 2.0679999999999996,
+        "zeroShare": 0.7568493150684932
+      },
+      "ordinary": {
+        "count": 1834,
+        "mean": 0.628596873864049,
+        "median": 0,
+        "p75": 0.24750000000000005,
+        "p90": 2,
+        "p95": 4,
+        "zeroShare": 0.7050163576881134
+      },
+      "poor": {
+        "count": 44,
+        "mean": 9.292142857142856,
+        "median": 8.36,
+        "p75": 10.360000000000001,
+        "p90": 12.853000000000002,
+        "p95": 15.606500000000004,
+        "zeroShare": 0
+      },
+      "fittedK": 0.20094184929012865,
+      "bands": {
+        "bestTolerance": 0,
+        "inaccuracyToMistake": 0.24750000000000005,
+        "mistakeToBlunder": 5.98
+      },
+      "predictedWithFittedK": {
+        "strong": 93.03989614060039,
+        "ordinary": 88.13403385390839,
+        "poor": 15.455884682218576,
+        "ordinaryInBand65_85": false
+      },
+      "predictedWithPublishedK": {
+        "strong": 93.14794357395242,
+        "ordinary": 88.31331468259258,
+        "poor": 15.927215362371644
+      },
+      "reproductionDeltasVsPublished": {
+        "kDelta": 0.0032327836620610895,
+        "bestToleranceDelta": -0.12999999999999995,
+        "inaccuracyToMistakeDelta": -0.5425,
+        "mistakeToBlunderDelta": 0,
+        "kMatchesPublished": false,
+        "bandsMatchPublished": false
+      }
+    },
+    "current_tile": {
+      "label": "current corpus + tile-level forced (identical recorded tree to v4)",
+      "forcedMode": "tile",
+      "accounting": {
+        "total": 12973,
+        "forced": 6182,
+        "exact": 109,
+        "search": 3689,
+        "heuristic": 2993,
+        "scorable": 3798
+      },
+      "allScorable": {
+        "count": 3798,
+        "mean": 0.6613349131121644,
+        "median": 0,
+        "p75": 0.41000000000000003,
+        "p90": 2,
+        "p95": 4,
+        "zeroShare": 0.6769352290679305
+      },
+      "strong": {
+        "count": 211,
+        "mean": 0.4428120063191153,
+        "median": 0,
+        "p75": 0.12999999999999995,
+        "p90": 1.7,
+        "p95": 2.1550000000000002,
+        "zeroShare": 0.7109004739336493
+      },
+      "ordinary": {
+        "count": 1255,
+        "mean": 0.8459495351925633,
+        "median": 0,
+        "p75": 0.79,
+        "p90": 3,
+        "p95": 4.765999999999998,
+        "zeroShare": 0.6191235059760957
+      },
+      "poor": {
+        "count": 44,
+        "mean": 9.292142857142856,
+        "median": 8.36,
+        "p75": 10.360000000000001,
+        "p90": 12.853000000000002,
+        "p95": 15.606500000000004,
+        "zeroShare": 0
+      },
+      "fittedK": 0.19770906571710167,
+      "bands": {
+        "bestTolerance": 0.12999999999999995,
+        "inaccuracyToMistake": 0.79,
+        "mistakeToBlunder": 5.98
+      },
+      "predictedWithFittedK": {
+        "strong": 91.61749417887678,
+        "ordinary": 84.59864870592033,
+        "poor": 15.927215349194773,
+        "ordinaryInBand65_85": true
+      },
+      "predictedWithPublishedK": {
+        "strong": 91.61749418248884,
+        "ordinary": 84.59864871229216,
+        "poor": 15.927215362371644
+      },
+      "reproductionDeltasVsPublished": {
+        "kDelta": 8.90341134152095e-11,
+        "bestToleranceDelta": 0,
+        "inaccuracyToMistakeDelta": 0,
+        "mistakeToBlunderDelta": 0,
+        "kMatchesPublished": false,
+        "bandsMatchPublished": true
+      }
+    },
+    "current_action": {
+      "label": "current corpus + action-level forced",
+      "forcedMode": "action",
+      "accounting": {
+        "total": 12973,
+        "forced": 4064,
+        "exact": 167,
+        "search": 5371,
+        "heuristic": 3371,
+        "scorable": 5538
+      },
+      "allScorable": {
+        "count": 5538,
+        "mean": 0.4959239195858916,
+        "median": 0,
+        "p75": 0.020000000000000018,
+        "p90": 1.5,
+        "p95": 3.0629999999999926,
+        "zeroShare": 0.746117732033225
+      },
+      "strong": {
+        "count": 292,
+        "mean": 0.35901826484018257,
+        "median": 0,
+        "p75": 0,
+        "p90": 1.5800000000000034,
+        "p95": 2.0679999999999996,
+        "zeroShare": 0.7568493150684932
+      },
+      "ordinary": {
+        "count": 1834,
+        "mean": 0.628596873864049,
+        "median": 0,
+        "p75": 0.24750000000000005,
+        "p90": 2,
+        "p95": 4,
+        "zeroShare": 0.7050163576881134
+      },
+      "poor": {
+        "count": 44,
+        "mean": 9.292142857142856,
+        "median": 8.36,
+        "p75": 10.360000000000001,
+        "p90": 12.853000000000002,
+        "p95": 15.606500000000004,
+        "zeroShare": 0
+      },
+      "fittedK": 0.20094184929012865,
+      "bands": {
+        "bestTolerance": 0,
+        "inaccuracyToMistake": 0.24750000000000005,
+        "mistakeToBlunder": 5.98
+      },
+      "predictedWithFittedK": {
+        "strong": 93.03989614060039,
+        "ordinary": 88.13403385390839,
+        "poor": 15.455884682218576,
+        "ordinaryInBand65_85": false
+      },
+      "predictedWithPublishedK": {
+        "strong": 93.14794357395242,
+        "ordinary": 88.31331468259258,
+        "poor": 15.927215362371644
+      },
+      "reproductionDeltasVsPublished": {
+        "kDelta": 0.0032327836620610895,
+        "bestToleranceDelta": -0.12999999999999995,
+        "inaccuracyToMistakeDelta": -0.5425,
+        "mistakeToBlunderDelta": 0,
+        "kMatchesPublished": false,
+        "bandsMatchPublished": false
+      }
+    }
+  },
+  "historicalReproduction": {
+    "attempt": "Re-fit on current(=historical) recorded corpus with tile-level forced + live worst_legal re-eval",
+    "kDelta": 8.90341134152095e-11,
+    "bestToleranceDelta": 0,
+    "inaccuracyToMistakeDelta": 0,
+    "mistakeToBlunderDelta": 0,
+    "kMatchesPublished": false,
+    "bandsMatchPublished": true,
+    "fittedK": 0.19770906571710167,
+    "fittedBands": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    },
+    "note": "Deltas exist — inspect live worst_legal re-eval / float paths."
+  },
+  "bestBandDegeneracy": {
+    "tile": {
+      "mode": "tile",
+      "n": 211,
+      "zeroCount": 150,
+      "zeroShare": 0.7109004739336493,
+      "p75": 0.12999999999999995,
+      "whyBestBecomesZero": "p75(strong) is nonzero under this forced mode."
+    },
+    "action": {
+      "mode": "action",
+      "n": 292,
+      "zeroCount": 221,
+      "zeroShare": 0.7568493150684932,
+      "p75": 0,
+      "whyBestBecomesZero": "p75(strong scorable losses) is exactly 0 because ≥75% of strong-policy scorable decisions have loss===0 under this forced mode."
+    }
+  },
+  "newlyScored1740": {
+    "count": 1740,
+    "exactZeroLoss": 1561,
+    "exactZeroShare": 0.8971264367816092,
+    "tinyPositiveLoss_le_publishedBestTolerance": 14,
+    "aboveTiny": 165,
+    "allPlacementValuesExactlyEqual": 956,
+    "playedTiedForBestValue": 1561,
+    "nonzeroQuantiles": {
+      "count": 179,
+      "p10": 0.14800000000000005,
+      "p50": 0.75,
+      "p75": 1.665,
+      "p90": 3.304000000000002,
+      "p95": 4.5249999999999995
+    },
+    "note": "Forced semantics unchanged: multi-placement remains not-forced even when values are equal."
+  },
+  "conclusion": {
+    "rootCause": "Forced-semantic dependency of the published acceptance contract: v4 K/bands/[65,85] check were produced under tile-level forced. Action-level expands scorable with near-zero-loss same-tile placements → mean loss drops → ordinary predicted accuracy rises above 85; strong p75 collapses to 0 → Best=0. Corpus identity and harness method are NOT the primary break (recorded trees identical; fit code unchanged).",
+    "phaseCUniquelySpecifiesValidV5": false,
+    "projectLeadDecisionRequired": [
+      "Whether historical empirical [65,85] (already soft-failed at C2b intro at ~85.9) remains binding under corrected denominator",
+      "How to treat degenerate Best=p75(strong)=0 when zero-inflated mass exceeds 75% after action-level inclusion",
+      "Whether to re-derive acceptance ranges under action-level as a new signed-off Phase C revision (not agent-invented)"
+    ]
+  }
+}
