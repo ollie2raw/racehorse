@@ -86,9 +86,10 @@ describe('F1c D2 contested severity policy', () => {
       featureDeltas: [{ feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 }],
     };
     const prose = buildReviewCoachingProse(searchFacts, true);
-    expect(prose.headline.startsWith('Contested:')).toBe(true);
-    expect(prose.detail).toContain('so this read is contested');
-    expect(prose.takeaway).toContain('engines disagree');
+    const combined = `${prose.headline} ${prose.detail} ${prose.takeaway}`;
+    expect(combined).toMatch(/engines disagree|Review Engine prefers/i);
+    expect(combined).toMatch(/Fritz prefers/);
+    expect(combined.match(/The engines disagree on the reference move/g) ?? []).toHaveLength(0);
   });
 
   // H — reference/source labels
@@ -116,13 +117,15 @@ describe('F1c D2 contested severity policy', () => {
     const searchProse = buildReviewCoachingProse(searchFacts, true);
     const heuristicProse = buildReviewCoachingProse(heuristicFacts, true);
     expect(searchFacts.evidence.displayLabel).toBe('Review Engine search');
-    expect(searchProse.headline).not.toContain("Fritz's read");
-    expect(heuristicProse.headline).toContain("Fritz's read");
-    expect(heuristicProse.headline).not.toMatch(/\bbest\b/i);
+    expect(`${searchProse.headline} ${searchProse.detail}`).toMatch(/Review Engine prefers/);
+    expect(heuristicProse.headline).toBe('The engines disagree here.');
+    expect(heuristicProse.detail).toMatch(/^Fritz's placement /);
+    expect(heuristicProse.headline).not.toMatch(/\bobjectively best\b/i);
   });
 
-  // I — second opinions for both D2-resolved tiers
-  it('I: search shows Fritz second opinion; heuristic shows Review Engine alternative', () => {
+  // I — second opinions: search still names Fritz; heuristic with supporting
+  // features cites Fritz's placement only (no unsupported second-engine restatement).
+  it('I: search shows Fritz second opinion; heuristic with feature WHY stays Fritz-primary', () => {
     const searchFacts: ReviewCoachingFacts = {
       played: { action: play(0, 1), immediatePoints: 0 },
       best: { action: play(2, 3, 'right'), immediatePoints: 0 },
@@ -145,10 +148,12 @@ describe('F1c D2 contested severity policy', () => {
     };
     const searchProse = buildReviewCoachingProse(searchFacts, true);
     const heuristicProse = buildReviewCoachingProse(heuristicFacts, true);
-    expect(searchProse.detail).toContain('Fritz would have played');
+    expect(searchProse.detail).toContain('Fritz prefers');
     expect(searchProse.detail).toContain('5-6');
-    expect(heuristicProse.detail).toContain("The Review Engine's heuristic would have played");
-    expect(heuristicProse.detail).toContain('2-3');
+    expect(heuristicProse.headline).toBe('The engines disagree here.');
+    expect(heuristicProse.detail).toMatch(/^Fritz's placement /);
+    expect(heuristicProse.detail).not.toMatch(/Review Engine's heuristic prefers/);
+    expect(heuristicProse.detail).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
   });
 
   // J

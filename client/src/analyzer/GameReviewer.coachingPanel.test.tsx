@@ -146,7 +146,9 @@ describe('GameReviewer D2 coaching panel -- resolved prose per missKind', () => 
     });
     renderReviewer(evalOut);
     const headline = document.body.querySelector('.gr-advice-headline')?.textContent ?? '';
-    expect(headline).toContain('2-2');
+    const body = document.body.textContent ?? '';
+    expect(headline).toMatch(/Right tile, wrong end/i);
+    expect(body).toContain('2-2');
     expect(headline.toLowerCase()).not.toMatch(/should have played/);
   });
 

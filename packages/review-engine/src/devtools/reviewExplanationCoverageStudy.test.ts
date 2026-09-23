@@ -22,11 +22,12 @@ describe('review explanation coverage classification', () => {
 
     for (const { facts, prose } of unresolved) {
       expect(classifyExplanationCoverage(facts)?.resolved).toBe(false);
-      expect(prose.headline).toContain('No meaningful positional difference');
+      expect(prose.headline).not.toMatch(/biggest gap:|rates better on/i);
     }
     for (const { facts, prose } of resolved) {
       expect(classifyExplanationCoverage(facts)?.resolved).toBe(true);
-      expect(prose.headline).toMatch(/biggest gap: .+\.$/);
+      expect(prose.headline).not.toMatch(/biggest gap:/i);
+      expect(prose.headline.length).toBeGreaterThan(0);
     }
   }, 60_000);
 
@@ -54,7 +55,11 @@ describe('review explanation coverage classification', () => {
     const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
       .find(facts => classifyRenderedExplanationProse(facts) === 'value-gap')!;
     const headline = buildReviewCoachingProse(facts, true).headline;
-    expect(headline.includes('is worth about') || headline.includes(' scores ') && headline.includes(' immediately')).toBe(true);
+    expect(
+      (headline.includes('prefers') && headline.includes('overall'))
+      || headline.includes('is worth about')
+      || (headline.includes(' scores ') && headline.includes(' immediately')),
+    ).toBe(true);
     expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
   }, 60_000);
 
@@ -69,16 +74,24 @@ describe('review explanation coverage classification', () => {
 
   it('does not treat a heuristic zeroed oracle loss as a displayed-reference tie', () => {
     const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
-    const classify = (suffix: string) => classifyRenderedExplanationProse(buildReviewCoachingFacts(byId(suffix).evaluation, byId(suffix).snapshot, true));
-    expect(classify(':0:move-31')).toBe('no-difference');
-    expect(classifyNoDifferenceSplit(buildReviewCoachingFacts(byId(':0:move-31').evaluation, byId(':0:move-31').snapshot, true))).toBe('unavailable');
+    const move31Facts = buildReviewCoachingFacts(byId(':0:move-31').evaluation, byId(':0:move-31').snapshot, true);
+    const move31Bucket = classifyRenderedExplanationProse(move31Facts);
+    // Heuristic Fritz-relative expected value is unavailable by design — must
+    // never be classified as a true displayed-reference equality tie.
+    expect(move31Bucket).not.toBe('equal-value');
+    expect(move31Facts.deltas.referenceExpectedPointDifferential).toBeUndefined();
+    expect(buildReviewCoachingProse(move31Facts, true).headline).not.toMatch(/even overall/i);
+    expect(classifyNoDifferenceSplit(move31Facts)).not.toBe('b');
     const factsList = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true));
     const positional = factsList
       .find(facts => classifyRenderedExplanationProse(facts) === 'positional')!;
     expect(classifyRenderedExplanationProse(positional)).toBe('positional');
     const identical = factsList
-      .find(facts => JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action))!;
-    expect(classifyRenderedExplanationProse(identical)).toBe('no-difference');
-    expect(classifyNoDifferenceSplit(identical)).toBe('a');
+      .find(facts => JSON.stringify(facts.played.action) === JSON.stringify(facts.best.action) && facts.missKind !== 'forced')!;
+    // Matched reference now renders affirmative coaching ("Best move."), not
+    // the old self-comparison "no meaningful difference" bucket.
+    expect(buildReviewCoachingProse(identical, true).headline).toMatch(/Best move/i);
+    expect(classifyRenderedExplanationProse(identical)).toBe('positional');
+    expect(classifyNoDifferenceSplit(identical)).toBeNull();
   }, 60_000);
 });

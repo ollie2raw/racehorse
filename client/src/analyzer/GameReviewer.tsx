@@ -528,12 +528,16 @@ export default function GameReviewer({
                   <div className="gr-advice-section">
                     <span className="gr-advice-kicker">What happened</span>
                     <p className="gr-advice-copy gr-advice-headline">{coaching.prose.headline}</p>
-                    <p className="gr-advice-copy">{coaching.prose.detail}</p>
+                    {coaching.prose.detail ? (
+                      <p className="gr-advice-copy">{coaching.prose.detail}</p>
+                    ) : null}
                   </div>
-                  <div className="gr-advice-section">
-                    <span className="gr-advice-kicker">What to remember</span>
-                    <p className="gr-advice-copy gr-advice-takeaway">{coaching.prose.takeaway}</p>
-                  </div>
+                  {coaching.prose.takeaway ? (
+                    <div className="gr-advice-section">
+                      <span className="gr-advice-kicker">What to remember</span>
+                      <p className="gr-advice-copy gr-advice-takeaway">{coaching.prose.takeaway}</p>
+                    </div>
+                  ) : null}
                 </>
               ) : coachingStatus === 'pending' ? (
                 <p className="gr-coaching-muted">Analyzing this move…</p>

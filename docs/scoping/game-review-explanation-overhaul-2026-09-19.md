@@ -218,7 +218,7 @@ All of the following, in order:
 3. Truth tests green; no Fritz rating anywhere in touched copy.
 4. Prose is enabled behind the flag for the admin cohort only first. `POST_GAME_REVIEW_VISIBLE` is unchanged.
 
-**Ship Gate status (2026-09-22):** (1) COMPLETE · (2) PENDING product-owner voice sign-off (`docs/review-explanation-voice-signoff-packet.md`) · (3) AUTOMATED COMPLETE · (4) PENDING prose flag enablement after (2). Full closeout: `docs/game-review-phase-f-closeout.md`.
+**Ship Gate status (2026-09-22):** (1) COMPLETE · (2) **REJECTED on prior voice; PENDING re-review** of regenerated packet after coaching-voice pass (`docs/review-explanation-voice-signoff-packet.md`, branch `feat/review-coaching-voice-quality`) · (3) AUTOMATED COMPLETE · (4) PENDING prose flag enablement after (2). Full closeout: `docs/game-review-phase-f-closeout.md`.
 
 ## Human-owned decisions (agents must not resolve these)
 
