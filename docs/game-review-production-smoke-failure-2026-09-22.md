@@ -91,9 +91,12 @@ Forced predicate corrected from tile-level to **action-level**. Corpus audit
 | Scorable denom before → after | 3,798 → **5,538 (+45.8%)** |
 
 `accuracyModelVersion` bumped to `accuracy-model-v5-action-forced-2026-09-22`
-for **new** analyses only. `CALIBRATED_K` / `LOSS_BAND_BOUNDARIES` unchanged;
-**follow-up recalibration is required** before treating accuracy/grade as fully
-trustworthy under the expanded denominator. Historical artifacts untouched.
+for **new** analyses only. Numeric recalibration under Phase C methodology was
+attempted and **BLOCKED** — see
+`docs/review-accuracy-v5-action-forced-calibration.md` (ordinary PVF predicted
+88.1 ∉ [65, 85]; degenerate `bestTolerance=0`). `CALIBRATED_K` /
+`LOSS_BAND_BOUNDARIES` remain v4 signed-off values. Historical artifacts
+untouched.
 
 ## Historical review
 

@@ -29,10 +29,20 @@
  * multi-placement decisions are no longer excluded as forced. Corpus audit
  * on recorded-client-policy + recorded-self-play (12,973 decisions): 2,118
  * (16.3%) previously misclassified as forced; scorable denominator +45.8%
- * (3,798 → 5,538). CALIBRATED_K / LOSS_BAND_BOUNDARIES are UNCHANGED in v5
- * and **require a follow-up recalibration** before treating accuracy/grade
- * as fully trustworthy under the expanded denominator — this bump only
- * versions the forced-predicate semantic change for new analyses.
+ * (3,798 → 5,538).
+ *
+ * *** v5 NUMERIC RECALIBRATION — BLOCKED 2026-09-22 ***
+ * Phase C harness re-run under action-level forced
+ * (`docs/review-accuracy-v5-action-forced-calibration.md`): candidate
+ * K≈0.2009 and bands best=0 / inacc→mistake≈0.2475 / mistake→blunder=5.98.
+ * Rejected because (1) ordinary PVF predicted accuracy 88.1 is outside the
+ * locked [65, 85] validation band, and (2) bestTolerance=0 is degenerate vs
+ * the method’s non-zero “search tolerance” intent. CALIBRATED_K /
+ * LOSS_BAND_BOUNDARIES therefore remain the v4 signed-off numbers until
+ * project-lead resolves the acceptance-band / Best-tolerance method issue.
+ * This version string still identifies action-level forced semantics for
+ * new analyses; it does NOT claim the v4 numeric fit was re-derived for the
+ * expanded denominator.
  *
  * This sign-off clears CALIBRATED_K, LOSS_BAND_BOUNDARIES, and
  * ACCURACY_MODEL_CALIBRATION_VERSION for exactly two consumers, wired in
