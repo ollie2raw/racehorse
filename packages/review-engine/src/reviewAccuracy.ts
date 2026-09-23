@@ -1,4 +1,4 @@
-import { dedupeCandidatesByTile } from '@racehorse/game-core/review';
+import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { ACCURACY_MODEL_CALIBRATION_VERSION, CALIBRATED_K } from './accuracyModelCalibration';
 
@@ -24,22 +24,23 @@ export const UNCALIBRATED_DEFAULT_K = 0.1;
  * `LOSS_BAND_BOUNDARIES` changes (re-fit against new data, or a change to
  * the fitting method itself) -- always change accuracyModelCalibration.ts,
  * never this constant directly.
+ *
+ * Also bumped when the scorable/forced predicate semantics change (v5:
+ * action-level forced, not tile-level), because that changes which
+ * decisions enter the calibrated denominator.
  */
 export const ACCURACY_MODEL_VERSION: string = ACCURACY_MODEL_CALIBRATION_VERSION;
 
 /**
  * C0 spec section 2: a decision counts toward headline accuracy only if it
- * is neither forced (there was only one real choice) nor heuristic-only
- * (the evaluation never cleared the coverage bar for a real point-
- * differential estimate). Exported so C2 (histogram computation) and C4
- * (cutover condition) can both reuse this exact predicate rather than each
- * re-deriving their own notion of "scorable."
+ * is neither forced (exactly one legal ReviewAction, including placement)
+ * nor heuristic-only. Same-tile multi-placement choices are scorable.
  */
 export function isScorable(
   evaluation: ReviewEvaluationV1,
   candidates: readonly ReviewCandidateEvaluationV1[],
 ): boolean {
-  const forced = dedupeCandidatesByTile(candidates).length === 1;
+  const forced = isForcedDecision(candidates);
   const heuristicOnly = evaluation.evidence.source === 'heuristic';
   return !forced && !heuristicOnly;
 }

@@ -48,8 +48,6 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(accuracyStat).toHaveTextContent('…');
     expect(gradeStat).toHaveTextContent('…');
     expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
-    expect(screen.queryByText('B', { selector: '.is-accent' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/moves analyzed/i)).not.toBeInTheDocument();
   });
 
   it('accuracyModel undefined: renders the legacy accuracy/grade exactly as before, no coverage copy', () => {
@@ -62,13 +60,12 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     );
     expect(screen.getByText('77.3%')).toBeInTheDocument();
     expect(screen.getByText('B', { selector: '.is-accent' })).toBeInTheDocument();
-    expect(screen.queryByText(/moves analyzed/i)).not.toBeInTheDocument();
   });
 
-  it('accuracyModel.accuracy === null: shows Partial / Fritz\'s read and the "N of M moves analyzed" copy -- never the legacy number standing in', () => {
+  it('accuracyModel.accuracy === null: shows Partial / Fritz\'s read and explicit accounting', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
-      accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
       accuracy: null,
       grade: null,
       heuristicMoveCount: 20,
@@ -82,19 +79,17 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         accuracyModelPending={false}
       />,
     );
-    expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
-    expect(screen.queryByText('B', { selector: '.is-accent' })).not.toBeInTheDocument();
     expect(screen.getByText('Partial')).toBeInTheDocument();
     expect(screen.getByText("Fritz's read")).toBeInTheDocument();
-    expect(screen.getByText('27 of 47 moves analyzed')).toBeInTheDocument();
+    expect(screen.getByText('27 scored · 20 estimates · 47 non-forced')).toBeInTheDocument();
   });
 
-  it('accuracyModel.accuracy populated: renders the new accuracy/grade in place of the legacy ones, plus the coverage copy', () => {
+  it('partial with scored accuracy: qualifies accuracy and suppresses letter grade', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
-      accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
       accuracy: 88.1,
-      grade: 'A',
+      grade: null,
       heuristicMoveCount: 5,
       totalNonForcedMoveCount: 40,
       coverageFraction: 35 / 40,
@@ -106,17 +101,16 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         accuracyModelPending={false}
       />,
     );
-    // The new numbers replace the legacy ones (77.3% / B) in the same slot.
-    expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
-    expect(screen.getByText('88.1%')).toBeInTheDocument();
-    expect(screen.getByText('A', { selector: '.is-accent' })).toBeInTheDocument();
-    expect(screen.getByText('35 of 40 moves analyzed')).toBeInTheDocument();
+    expect(screen.getByText('Scored accuracy: 88.1%')).toBeInTheDocument();
+    expect(screen.queryByText('A', { selector: '.is-accent' })).not.toBeInTheDocument();
+    expect(screen.getByText('—', { selector: '.is-accent' })).toBeInTheDocument();
+    expect(screen.getByText('35 scored · 5 estimates · 40 non-forced')).toBeInTheDocument();
   });
 
-  it('status:"complete" with accuracyModel populated still shows the new numbers, not "Partial"', () => {
+  it('status complete: shows unqualified accuracy + letter grade', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'complete',
-      accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
       accuracy: 95,
       grade: 'S',
       heuristicMoveCount: 0,
@@ -132,13 +126,37 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     );
     expect(screen.getByText('95.0%')).toBeInTheDocument();
     expect(screen.getByText('S', { selector: '.is-accent' })).toBeInTheDocument();
-    expect(screen.queryByText('Partial')).not.toBeInTheDocument();
-    expect(screen.getByText('30 of 30 moves analyzed')).toBeInTheDocument();
+    expect(screen.queryByText(/Scored accuracy/)).not.toBeInTheDocument();
   });
 
-  it('never renders the legacy per-hand breakdown -- that depth now lives only in GameReviewer', () => {
-    render(<PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending={false} />);
-    expect(screen.queryByText("Per-hand scores use Fritz's classic scoring model.")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Move accuracy by hand')).not.toBeInTheDocument();
+  it('unavailable non-forced via ledger: Incomplete review, no letter grade', () => {
+    const accuracyModel: GameAccuracyModelResult = {
+      status: 'complete',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
+      accuracy: 90,
+      grade: 'A',
+      heuristicMoveCount: 0,
+      totalNonForcedMoveCount: 10,
+      coverageFraction: 1,
+    };
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis({ accuracyModel })}
+        accuracyModelPending={false}
+        decisionLedger={{
+          scoredCount: 8,
+          estimateCount: 0,
+          forcedCount: 2,
+          unavailableCount: 1,
+          pendingCount: 0,
+          totalDecisions: 11,
+          entries: [],
+        }}
+      />,
+    );
+    expect(screen.getByText('Partial')).toBeInTheDocument();
+    expect(screen.getByText('Incomplete review')).toBeInTheDocument();
+    expect(screen.queryByText('A', { selector: '.is-accent' })).not.toBeInTheDocument();
   });
 });

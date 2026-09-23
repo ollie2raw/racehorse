@@ -1,0 +1,382 @@
+{
+  "frozen": {
+    "reviewEngineVersion": "review-engine-v1",
+    "accuracyModelCandidateVersion": "accuracy-model-v5-action-forced-2026-09-22",
+    "searchBudget": {
+      "maxNodes": 200000,
+      "maxHiddenStateSamples": 100,
+      "maxPlyDepth": 2,
+      "seed": "calibrate-accuracy-model-fixtures"
+    },
+    "coverageGate": 0.02,
+    "corpusRevision": "recorded-self-play + recorded-client-policy as committed 2026-09-17; fixtures REVIEW_FIXTURE_CORPUS",
+    "fixtureIds": [
+      "opening-double-from-live-deal",
+      "near-win-multi-choice-defense",
+      "hidden-allocation-ambiguous-midgame",
+      "forced-single-play-midgame",
+      "scoring-branch-chain",
+      "nested-branch-decision",
+      "locked-yard-five-tile-endgame",
+      "locked-yard-feasible-endgame",
+      "second-pass-blocks-hand",
+      "deliberately-poor-avoided-branch-and-score",
+      "deliberately-poor-flat-continuation-over-branch",
+      "deliberately-poor-opening-s21-a10",
+      "deliberately-poor-opening-s95-a11",
+      "deliberately-poor-opening-s15-a13",
+      "deliberately-poor-opening-s24-a9",
+      "deliberately-poor-opening-s94-a11",
+      "deliberately-poor-opening-s58-a9",
+      "deliberately-poor-opening-s30-a9",
+      "deliberately-poor-opening-s14-a8",
+      "deliberately-poor-opening-s93-a4",
+      "deliberately-poor-opening-s10-a10",
+      "deliberately-poor-opening-s1-a7",
+      "deliberately-poor-opening-s72-a4",
+      "deliberately-poor-opening-s79-a9",
+      "deliberately-poor-opening-s13-a4",
+      "deliberately-poor-opening-s76-a10",
+      "deliberately-poor-midgame-s37-a13",
+      "deliberately-poor-midgame-s38-a23",
+      "deliberately-poor-midgame-s31-a18",
+      "deliberately-poor-midgame-s27-a15",
+      "deliberately-poor-midgame-s63-a14",
+      "deliberately-poor-midgame-s39-a13",
+      "deliberately-poor-midgame-s60-a15",
+      "deliberately-poor-midgame-s90-a18",
+      "deliberately-poor-midgame-s47-a15",
+      "deliberately-poor-midgame-s45-a14",
+      "deliberately-poor-midgame-s25-a16",
+      "deliberately-poor-midgame-s93-a17",
+      "deliberately-poor-midgame-s44-a17",
+      "deliberately-poor-midgame-s14-a21",
+      "deliberately-poor-midgame-s42-a14",
+      "deliberately-poor-midgame-s20-a14",
+      "deliberately-poor-midgame-s64-a15",
+      "deliberately-poor-midgame-s76-a14",
+      "deliberately-poor-midgame-s74-a13",
+      "deliberately-poor-midgame-s80-a23",
+      "deliberately-poor-endgame-s54-a31",
+      "deliberately-poor-endgame-s78-a27",
+      "deliberately-poor-endgame-s22-a12",
+      "deliberately-poor-endgame-s77-a27",
+      "deliberately-poor-endgame-s11-a24",
+      "deliberately-poor-endgame-s10-a24",
+      "deliberately-poor-endgame-s69-a24"
+    ],
+    "calibrationAlgorithm": "fitKLeastSquares (grid + golden-section) anchors: strong-policy mean→95, worst_legal mean→15; fitBoundaries: best=p75(strong), inacc→mistake=p75(ordinary PVF), mistake→blunder=p10(poor)",
+    "fittingObjective": "sum of squared residuals vs target accuracies 95 and 15",
+    "acceptanceChecks": {
+      "historicalV4OrdinaryPvfBand": [
+        65,
+        85
+      ],
+      "ordinaryPvfIsV5Gate": false,
+      "poorPlayAccuracy": {
+        "lt": 60,
+        "gt": 0
+      },
+      "strongPolicyTarget": 95,
+      "poorPlayTarget": 15,
+      "strongAboveOrdinaryAbovePoor": true,
+      "monotonicity": true,
+      "forcedInvariance": true,
+      "optimalCeiling": 100,
+      "retainPublishedLossBands": true
+    }
+  },
+  "preRecalVersion": "accuracy-model-v5-action-forced-2026-09-22",
+  "oldConstants": {
+    "k": 0.19770906562806756,
+    "boundaries": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    }
+  },
+  "forcedCorrection": {
+    "totalDecisions": 12973,
+    "wronglyForced": 2118,
+    "wronglyForcedExactSearch": 1740,
+    "old": {
+      "total": 12973,
+      "forced": 6182,
+      "exactScored": 109,
+      "searchScored": 3689,
+      "heuristicEstimate": 2993,
+      "unavailable": 0,
+      "scorableDenominator": 3798,
+      "losses": {
+        "count": 3798,
+        "mean": 0.6613349131121644,
+        "median": 0,
+        "p75": 0.41000000000000003,
+        "p90": 2,
+        "p95": 4
+      }
+    },
+    "new": {
+      "total": 12973,
+      "forced": 4064,
+      "exactScored": 167,
+      "searchScored": 5371,
+      "heuristicEstimate": 3371,
+      "unavailable": 0,
+      "scorableDenominator": 5538,
+      "losses": {
+        "count": 5538,
+        "mean": 0.4959239195858916,
+        "median": 0,
+        "p75": 0.020000000000000018,
+        "p90": 1.5,
+        "p95": 3.0629999999999926
+      }
+    }
+  },
+  "newlyScored1740": {
+    "count": 1740,
+    "byTier": {
+      "standard": 655,
+      "master": 610,
+      "hard": 475
+    },
+    "bySource": {
+      "search": 1682,
+      "exact": 58
+    },
+    "sameTileMultiPlacementShare": 1,
+    "sameTileMultiPlacementCount": 1740,
+    "losses": {
+      "count": 1740,
+      "mean": 0.13487164750957856,
+      "median": 0,
+      "p75": 0,
+      "p90": 0.051000000000001586,
+      "p95": 0.7714999999999986
+    },
+    "bandDistUnderOldBoundaries": {
+      "Best": 1575,
+      "Inaccuracy": 78,
+      "Mistake": 84,
+      "Blunder": 3
+    },
+    "bandDistUnderNewBoundaries": {
+      "Best": 1561,
+      "Inaccuracy": 34,
+      "Mistake": 142,
+      "Blunder": 3
+    }
+  },
+  "gameAccuracyUnderCurrentK": {
+    "oldTileForced": {
+      "gameCount": 100,
+      "median": 88.62065718510074,
+      "p10": 79.74444524141875,
+      "p90": 93.88982504906603,
+      "mean": 87.74485108601988,
+      "gradeDistribution": {
+        "S": 0,
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0,
+        "null": 100
+      }
+    },
+    "newActionForced": {
+      "gameCount": 100,
+      "median": 91.06426889884655,
+      "p10": 85.27623630180959,
+      "p90": 94.91753427626034,
+      "mean": 90.66784190555154,
+      "gradeDistribution": {
+        "S": 0,
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0,
+        "null": 100
+      }
+    }
+  },
+  "aggregateFit": {
+    "method": "fitKLeastSquares (grid + golden-section) anchors: strong-policy mean→95, worst_legal mean→15; fitBoundaries: best=p75(strong), inacc→mistake=p75(ordinary PVF), mistake→blunder=p10(poor)",
+    "oldK": 0.19770906562806756,
+    "candidateV5K": 0.20094184929012865,
+    "publishedV5K": 0.20094184929012865,
+    "strongMeanLoss": 0.35901826484018257,
+    "poorMeanLoss": 9.292142857142858,
+    "ordinaryMeanLoss": 0.6285968738640492,
+    "predictedStrong": 93.03989614060039,
+    "predictedOrdinary": 88.13403385390839,
+    "predictedPoor": 15.455884682218576,
+    "ordinaryWithinHistoricalV4Band65_85": false,
+    "ordinaryPvfIsV5Gate": false
+  },
+  "lossBands": {
+    "old": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    },
+    "mechanicalPercentileCandidate": {
+      "bestTolerance": 0,
+      "inaccuracyToMistake": 0.24750000000000005,
+      "mistakeToBlunder": 5.98
+    },
+    "retainedPublished": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    },
+    "retainedMatchesV4": true,
+    "v5Policy": "retain published semantic thresholds; reject mechanical Best=0"
+  },
+  "distributionsWithV5K": {
+    "gameCount": 100,
+    "median": 90.92499711991574,
+    "p10": 85.05443791836879,
+    "p90": 94.8366130104286,
+    "mean": 90.52408685118483,
+    "gradeDistribution": {
+      "S": 0,
+      "A": 0,
+      "B": 0,
+      "C": 0,
+      "D": 0,
+      "null": 100
+    }
+  },
+  "harnessReport": {
+    "histograms": {
+      "dailyFritzMasterStrong": {
+        "label": "daily-fritz-master, strong-policy-top-tier batch (FritzTier master)",
+        "role": "k-fit-anchor",
+        "count": 292,
+        "mean": 0.35901826484018257,
+        "median": 0,
+        "p10": 0,
+        "p90": 1.5800000000000034
+      },
+      "pvfBotMatchStandard": {
+        "label": "pvf-bot-match, tier standard",
+        "role": "validation",
+        "count": 1834,
+        "mean": 0.628596873864049,
+        "median": 0,
+        "p10": 0,
+        "p90": 2
+      },
+      "worstLegal": {
+        "label": "reviewFixtureCorpus deliberately_poor (worst_legal strategy)",
+        "role": "k-fit-anchor",
+        "count": 44,
+        "mean": 9.292142857142856,
+        "median": 8.36,
+        "p10": 5.98,
+        "p90": 12.853000000000002
+      },
+      "forcedMove": {
+        "count": 1,
+        "fixtureIds": [
+          "forced-single-play-midgame"
+        ]
+      },
+      "informational": {
+        "dailyFritzMasterOrdinaryTierSelfPlay": {
+          "label": "daily-fritz-master, ordinary-pvf-tier batch (FritzTier standard)",
+          "role": "informational",
+          "count": 226,
+          "mean": 0.5196165191740413,
+          "median": 0,
+          "p10": 0,
+          "p90": 1.56
+        },
+        "pvfBotMatchHardTier": {
+          "label": "pvf-bot-match, tier hard",
+          "role": "informational",
+          "count": 1538,
+          "mean": 0.4101192024273951,
+          "median": 0,
+          "p10": 0,
+          "p90": 1.2129999999999996
+        },
+        "pvfBotMatchMasterTier": {
+          "label": "pvf-bot-match, tier master",
+          "role": "informational",
+          "count": 1648,
+          "mean": 0.4493628640776698,
+          "median": 0,
+          "p10": 0,
+          "p90": 1.0029999999999994
+        }
+      }
+    },
+    "fit": {
+      "method": "least-squares (grid-search bracket + golden-section refinement) against 2 anchors: daily-fritz-master strong-policy-top-tier mean loss -> target accuracy 95 (midpoint of the 92-98 band), and worst_legal mean loss -> target accuracy 15 (comfortably below the <25 ceiling). Forced semantics: action-level (isForcedDecision).",
+      "k": 0.20094184919427788,
+      "targets": {
+        "strongPolicy": 95,
+        "poorPlay": 15
+      },
+      "boundaries": {
+        "bestTolerance": 0.12999999999999995,
+        "inaccuracyToMistake": 0.79,
+        "mistakeToBlunder": 5.98
+      },
+      "boundaryMethod": "v5: RETAIN published semantic thresholds (bestTolerance / inaccuracyToMistake / mistakeToBlunder) from v4. Loss quantity unchanged; only eligibility changed. Mechanical percentile fitBoundaries (p75 strong / p75 ordinary / p10 poor) is reported separately as mechanicalPercentileBoundaries and is NOT published.",
+      "mechanicalPercentileBoundaries": {
+        "bestTolerance": 0,
+        "inaccuracyToMistake": 0.24750000000000005,
+        "mistakeToBlunder": 5.98
+      }
+    },
+    "predictedMeanAccuracy": {
+      "dailyFritzMasterStrong": 93.0398961438021,
+      "pvfBotMatchStandard": 88.13403385921859,
+      "worstLegal": 15.455884695984507,
+      "dailyFritzMasterOrdinaryTierSelfPlay": 90.08534346644623,
+      "pvfBotMatchHardTier": 92.08942124646371,
+      "pvfBotMatchMasterTier": 91.36608799593027
+    },
+    "validation": {
+      "historicalV4OrdinaryPvfBand": [
+        65,
+        85
+      ],
+      "ordinaryPvfPredictedAccuracy": 88.13403385921859,
+      "ordinaryWithinHistoricalV4Band": false,
+      "ordinaryPvfIsV5Gate": false
+    }
+  },
+  "lossHistogramsActionLevel": {
+    "strong": {
+      "label": "strong",
+      "role": "k-fit-anchor",
+      "count": 292,
+      "mean": 0.35901826484018257,
+      "median": 0,
+      "p10": 0,
+      "p90": 1.5800000000000034
+    },
+    "ordinary": {
+      "label": "ordinary",
+      "role": "validation",
+      "count": 1834,
+      "mean": 0.628596873864049,
+      "median": 0,
+      "p10": 0,
+      "p90": 2
+    },
+    "poor": {
+      "label": "poor",
+      "role": "k-fit-anchor",
+      "count": 44,
+      "mean": 9.292142857142856,
+      "median": 8.36,
+      "p10": 5.98,
+      "p90": 12.853000000000002
+    }
+  }
+}

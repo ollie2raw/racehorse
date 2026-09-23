@@ -1,5 +1,9 @@
 import { GameOverlayPortal } from '../../components/GameOverlayPortal';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
+import {
+  formatDecisionAccountingSummary,
+  type PlayerDecisionLedgerSummary,
+} from '../../modules/review/reviewDecisionAccounting';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
 
@@ -15,61 +19,78 @@ export type PostGameReviewPromptProps = {
   opponentScore: number;
   opponentLabel: string;
   analysis: GameAnalysis;
-  /**
-   * C4 UI follow-up: true while reviewWorkerBatch is still computing this
-   * game's per-decision ReviewEvaluationV1 data. While true, the accuracy
-   * stat block shows a loading state -- never a legacy-then-swap flash, and
-   * never a premature "Partial" before the real coverage is known.
-   */
   accuracyModelPending: boolean;
+  decisionLedger?: PlayerDecisionLedgerSummary | null;
   onReviewGame: () => void;
   onSkip: () => void;
 };
 
 /**
- * Three distinct states for `analysis.accuracyModel`, per the C4 follow-up
- * spec revision (phase-c-accuracy-model-spec.md section 6) -- deliberately
- * not collapsed into one fallback:
- *  - `undefined` -- this GameAnalysis predates C4, or no caller computed
- *    one (e.g. review capture produced nothing for this game). Render the
- *    legacy accuracy/grade exactly as before.
- *  - `accuracy === null` -- computed, but coverage never cleared
- *    MINIMUM_COVERAGE_FLOOR. Render "Partial / Fritz's read" plus the real
- *    "N of M moves analyzed" count. NEVER fall back to the legacy number
- *    here -- it would misrepresent what the new model actually found.
- *  - `accuracy !== null` -- coverage cleared the floor. Render the new
- *    accuracy/grade in the same slot the legacy ones used, plus the same
- *    coverage line (coverage may still be under 100%).
- * `accuracyModelPending` is a fourth, temporal state layered on top of all
- * three: while true, none of the above render -- a loading placeholder
- * does, so the stat block never flashes legacy numbers before swapping to
- * the real ones.
+ * Accuracy / grade presentation under partial coverage:
+ * - complete (all non-forced calibrated): accuracy % + letter grade
+ * - partial with scored accuracy: "Scored accuracy: X%" and NO letter grade
+ * - unavailable non-forced / below floor: Partial / Incomplete, no grade
  */
 function resolveAccuracyStatValues({
   analysis,
   accuracyModelPending,
+  decisionLedger,
 }: {
   analysis: GameAnalysis;
   accuracyModelPending: boolean;
+  decisionLedger?: PlayerDecisionLedgerSummary | null;
 }): { accuracyText: string; gradeText: string; coverageText: string | null } {
   if (accuracyModelPending) {
     return { accuracyText: '…', gradeText: '…', coverageText: null };
   }
 
   const { accuracyModel } = analysis;
+  const coverageText = decisionLedger
+    ? formatDecisionAccountingSummary(decisionLedger)
+    : null;
 
   if (accuracyModel === undefined) {
-    return { accuracyText: `${analysis.accuracy.toFixed(1)}%`, gradeText: analysis.grade, coverageText: null };
+    return { accuracyText: `${analysis.accuracy.toFixed(1)}%`, gradeText: analysis.grade, coverageText };
   }
 
-  const scorableCount = accuracyModel.totalNonForcedMoveCount - accuracyModel.heuristicMoveCount;
-  const coverageText = `${scorableCount} of ${accuracyModel.totalNonForcedMoveCount} moves analyzed`;
+  const unavailableNonForced = decisionLedger?.unavailableCount ?? 0;
+  const hasEstimates =
+    (decisionLedger?.estimateCount ?? 0) > 0 || accuracyModel.heuristicMoveCount > 0;
+  const isPartial = accuracyModel.status === 'partial' || hasEstimates || unavailableNonForced > 0;
+
+  const fallbackCoverage =
+    coverageText
+    ?? `${accuracyModel.totalNonForcedMoveCount - accuracyModel.heuristicMoveCount} scored · ${accuracyModel.heuristicMoveCount} estimate${accuracyModel.heuristicMoveCount === 1 ? '' : 's'} · ${accuracyModel.totalNonForcedMoveCount} non-forced`;
+
+  if (unavailableNonForced > 0) {
+    return {
+      accuracyText: 'Partial',
+      gradeText: 'Incomplete review',
+      coverageText: fallbackCoverage,
+    };
+  }
 
   if (accuracyModel.accuracy === null) {
-    return { accuracyText: 'Partial', gradeText: "Fritz's read", coverageText };
+    return {
+      accuracyText: 'Partial',
+      gradeText: "Fritz's read",
+      coverageText: fallbackCoverage,
+    };
   }
 
-  return { accuracyText: `${accuracyModel.accuracy.toFixed(1)}%`, gradeText: accuracyModel.grade ?? '—', coverageText };
+  if (isPartial) {
+    return {
+      accuracyText: `Scored accuracy: ${accuracyModel.accuracy.toFixed(1)}%`,
+      gradeText: '—',
+      coverageText: fallbackCoverage,
+    };
+  }
+
+  return {
+    accuracyText: `${accuracyModel.accuracy.toFixed(1)}%`,
+    gradeText: accuracyModel.grade ?? '—',
+    coverageText: fallbackCoverage,
+  };
 }
 
 export function PostGameReviewPrompt({
@@ -83,6 +104,7 @@ export function PostGameReviewPrompt({
   opponentLabel,
   analysis,
   accuracyModelPending,
+  decisionLedger = null,
   onReviewGame,
   onSkip,
 }: PostGameReviewPromptProps) {
@@ -91,7 +113,11 @@ export function PostGameReviewPrompt({
   const margin = Math.abs(youScore - opponentScore);
   const marginTone = won === true ? 'is-win' : won === false ? 'is-loss' : '';
   const accentClass = accent === 'blue' ? ' dfd--blue' : '';
-  const { accuracyText, gradeText, coverageText } = resolveAccuracyStatValues({ analysis, accuracyModelPending });
+  const { accuracyText, gradeText, coverageText } = resolveAccuracyStatValues({
+    analysis,
+    accuracyModelPending,
+    decisionLedger,
+  });
 
   return (
     <GameOverlayPortal>

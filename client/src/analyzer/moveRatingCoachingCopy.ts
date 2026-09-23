@@ -3,12 +3,17 @@ import type { MoveRating } from './moveAnalyzer';
 export type CoachingCopyTier = 'precise' | 'heuristic';
 
 /**
- * Rounds an absolute score gap to one decimal and drops a trailing ".0" so
- * whole-number gaps don't read as fake precision (e.g. "2 points" not
- * "2.0 points").
+ * Formats an absolute score gap for user-facing copy.
+ * - Exactly 0 → null (caller must use tied/best wording, never "0 points behind")
+ * - Positive but below 0.1 display precision → "less than 0.1 point"
+ * - Otherwise one decimal, dropping trailing ".0"
  */
-function formatGap(gap: number): string {
-  const rounded = Math.round(Math.abs(gap) * 10) / 10;
+export function formatScoreGapForDisplay(gap: number): string | null {
+  const abs = Math.abs(gap);
+  if (abs === 0 || Object.is(abs, -0)) return null;
+  if (abs < 0.1) return 'less than 0.1 point';
+  const rounded = Math.round(abs * 10) / 10;
+  if (rounded === 0) return 'less than 0.1 point';
   const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   return `${label} point${rounded === 1 ? '' : 's'}`;
 }
@@ -19,20 +24,8 @@ function formatGap(gap: number): string {
  * only in numbers the system already computed -- never invented tactical
  * commentary. A lookup keyed by (rating, tier), not free-text generation.
  *
- * Two tiers, matching the honesty split the badge system already draws:
- * - 'precise' (exact/search oracle results): the real, calibrated
- *   normalized score gap (`loss.expectedPointDifferential`) is cited when
- *   the caller has one; without it, the copy still describes the bucket
- *   truthfully (what the bucket means) without inventing a number.
- * - 'heuristic': the underlying rawScore is explicitly documented
- *   (reviewContracts.ts) as *not* a real point differential -- this tier's
- *   copy is qualitative only and ignores any gap the caller passes, for
- *   the same reason classifyHeuristicResult coarsens to 3 buckets instead
- *   of the full 6-way scale.
- *
- * Brilliant is a precise-tier-only bucket meaning "exact match with the
- * best option" -- there is no real gap to cite for it, so a passed gap is
- * always ignored for that rating specifically.
+ * Classification-aware: badge semantics and WHY copy must never contradict
+ * (e.g. Mistake cannot say "A solid option"; Best cannot say "behind").
  */
 export function moveRatingCoachingCopy(
   rating: MoveRating,
@@ -42,42 +35,110 @@ export function moveRatingCoachingCopy(
   if (tier === 'heuristic') {
     switch (rating) {
       case 'Good':
-        return 'A reasonable option among the choices available, by the engine\'s early-position estimate.';
+        return 'A reasonable option among the choices available, by Fritz\'s early-position read.';
       case 'Inaccuracy':
-        return 'A weaker option among the choices available, by the engine\'s early-position estimate.';
+        return 'A weaker option among the choices available, by Fritz\'s early-position read.';
       case 'Blunder':
-        return 'The weakest option among the choices available, by the engine\'s early-position estimate.';
+        return 'The weakest option among the choices available, by Fritz\'s early-position read.';
+      case 'Brilliant':
+      case 'Great':
+        return 'Matches Fritz\'s early-position read for this turn.';
+      case 'Mistake':
+        return 'A meaningful miss relative to Fritz\'s early-position read.';
       default:
-        // The heuristic classifier only ever produces Good/Inaccuracy/Blunder
-        // buckets -- any other rating reaching here would be a caller error,
-        // not a real case to write copy for.
         return null;
     }
   }
 
-  const gap = rating === 'Brilliant' ? undefined : scoreGap;
+  const gapLabel =
+    rating === 'Brilliant'
+      ? null
+      : scoreGap === undefined
+        ? undefined
+        : formatScoreGapForDisplay(scoreGap);
+
   switch (rating) {
     case 'Brilliant':
       return 'The exact top-scoring line for this position.';
     case 'Great':
-      return gap !== undefined
-        ? `Very close to the best option -- about ${formatGap(gap)} behind.`
+      if (gapLabel === null && scoreGap !== undefined) {
+        return 'Tied with the best option available.';
+      }
+      return gapLabel
+        ? `Very close to the best option -- about ${gapLabel} behind.`
         : 'Very close to the best option available.';
     case 'Good':
-      return gap !== undefined
-        ? `A solid option, about ${formatGap(gap)} behind the best available.`
+      if (gapLabel === null && scoreGap !== undefined) {
+        return 'Tied with the best option available.';
+      }
+      return gapLabel
+        ? `A solid option, about ${gapLabel} behind the best available.`
         : 'A solid, close option compared to the best available.';
     case 'Inaccuracy':
-      return gap !== undefined
-        ? `About ${formatGap(gap)} behind the best option -- a noticeably weaker choice.`
-        : 'A noticeably weaker choice than the best option available.';
+      if (gapLabel === null && scoreGap !== undefined) {
+        return 'A small miss relative to the best option — within display precision of even.';
+      }
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a small miss.`
+        : 'A small miss compared to the best option available.';
     case 'Mistake':
-      return gap !== undefined
-        ? `About ${formatGap(gap)} behind the best option -- a significant miss.`
-        : 'A significant miss compared to the best option available.';
+      if (gapLabel === null && scoreGap !== undefined) {
+        return 'A meaningful miss relative to the best option.';
+      }
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a meaningful miss.`
+        : 'A meaningful miss compared to the best option available.';
     case 'Blunder':
-      return gap !== undefined
-        ? `About ${formatGap(gap)} behind the best option -- the costliest choice available.`
-        : 'The costliest choice available this turn.';
+      if (gapLabel === null && scoreGap !== undefined) {
+        return 'A major miss relative to the best option available.';
+      }
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a major miss.`
+        : 'A major miss compared to the best option available.';
   }
+}
+
+/**
+ * WHY-this-rating for calibrated (exact/search) labels, including Best.
+ * Separate from MoveRating so Best is first-class and cannot fall through
+ * to legacy Good/"solid option" wording.
+ */
+export function calibratedRatingCoachingCopy(
+  label: 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder',
+  scoreGap?: number,
+): string {
+  const gapLabel = scoreGap === undefined ? undefined : formatScoreGapForDisplay(scoreGap);
+
+  switch (label) {
+    case 'Best':
+      return gapLabel == null
+        ? 'Top move — matches the review reference for this position.'
+        : 'Top move within the review\'s supported comparison.';
+    case 'Inaccuracy':
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a small miss.`
+        : 'A small miss compared to the best option available.';
+    case 'Mistake':
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a meaningful miss.`
+        : 'A meaningful miss compared to the best option available.';
+    case 'Blunder':
+      return gapLabel
+        ? `About ${gapLabel} behind the best option -- a major miss.`
+        : 'A major miss compared to the best option available.';
+  }
+}
+
+export function forcedDecisionCoachingCopy(): string {
+  return 'Only legal move — not graded.';
+}
+
+export function estimateDecisionCoachingCopy(matchedPrimary: boolean): string {
+  return matchedPrimary
+    ? "Estimate — matches Fritz's early-position read. Not a calibrated grade."
+    : "Estimate — Fritz's early-position read differs. Not a calibrated grade.";
+}
+
+export function unavailableDecisionCoachingCopy(): string {
+  return 'Review data unavailable for this decision — not graded.';
 }

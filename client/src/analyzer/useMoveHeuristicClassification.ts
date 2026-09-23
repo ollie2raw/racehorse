@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
+import type { ReviewAction } from '@racehorse/game-core/review';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { classifyHeuristicResult, type HeuristicClassification } from './classifyHeuristicResult';
 import { lossBandLabelForEvaluation } from './gameAccuracyModel';
+
+export type SelectMoveClassificationOptions = {
+  /** D2 primary reference for heuristic tier (Fritz action when available). */
+  readonly primaryReferenceAction?: ReviewAction | null;
+};
 
 /**
  * Progressive-enhancement lookup for a single rendered move (game-review-
@@ -13,30 +19,26 @@ import { lossBandLabelForEvaluation } from './gameAccuracyModel';
  * or null otherwise.
  *
  * Heuristic-sourced results go through classifyHeuristicResult's coarse
- * 3-bucket scale, unchanged from Phase C. Exact/search-sourced results (D5)
- * go through lossBandLabelForEvaluation -- the same calibrated
- * per-decision label the game's own accuracyModel uses
- * (phase-c-accuracy-model-spec.md section 4a) -- instead of falling back to
- * the legacy move.rating (classifyMove) scorer.
- *
- * null covers three cases deliberately treated the same way by design, not
- * merged accidentally: no decisionId for this move, a decisionId that
- * hasn't resolved yet (still pending in the worker batch), and a resolved
- * result that lossBandLabelForEvaluation/classifyHeuristicResult can't
- * label at all -- a forced decision (single real candidate), for any
- * evidence source. In every case the caller's correct behavior is
- * identical: render the legacy rating unchanged -- there is no per-move
- * loading state, since "not yet resolved" is already a valid,
- * already-handled render (the legacy rating).
+ * 3-bucket scale. When primaryReferenceAction is supplied (D2), that
+ * classification is Fritz-relative. Exact/search-sourced results (D5)
+ * go through lossBandLabelForEvaluation.
  */
 export function selectMoveHeuristicClassification(
   decisionId: string | null | undefined,
   reviewWorkerBatch: ReviewBatchState,
+  options?: SelectMoveClassificationOptions,
 ): HeuristicClassification | null {
   if (!decisionId) return null;
   const evaluation = reviewWorkerBatch.resultsByDecisionId.get(decisionId);
   if (!evaluation) return null;
-  if (evaluation.evidence.source === 'heuristic') return classifyHeuristicResult(evaluation);
+  if (evaluation.evidence.source === 'heuristic') {
+    return classifyHeuristicResult(
+      evaluation,
+      options?.primaryReferenceAction
+        ? { primaryReferenceAction: options.primaryReferenceAction }
+        : undefined,
+    );
+  }
   const label = lossBandLabelForEvaluation(evaluation);
   return label ? { kind: 'calibrated', label } : null;
 }
@@ -45,9 +47,10 @@ export function selectMoveHeuristicClassification(
 export function useMoveHeuristicClassification(
   decisionId: string | null | undefined,
   reviewWorkerBatch: ReviewBatchState,
+  options?: SelectMoveClassificationOptions,
 ): HeuristicClassification | null {
   return useMemo(
-    () => selectMoveHeuristicClassification(decisionId, reviewWorkerBatch),
-    [decisionId, reviewWorkerBatch],
+    () => selectMoveHeuristicClassification(decisionId, reviewWorkerBatch, options),
+    [decisionId, reviewWorkerBatch, options],
   );
 }

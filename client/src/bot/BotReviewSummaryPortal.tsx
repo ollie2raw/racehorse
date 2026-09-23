@@ -5,6 +5,7 @@ import { PostGameReviewPrompt } from '../training/pivotalReview/PostGameReviewPr
 import type { PivotalReviewSession } from '../training/pivotalReview/pivotalReviewStorage';
 import type { PivotalTurnSelection } from '../training/pivotalReview/pivotalTurnSelector';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
+import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
 
 export interface BotReviewSummaryPortalProps {
   pivotalReviewWizardEnabled: boolean;
@@ -12,6 +13,7 @@ export interface BotReviewSummaryPortalProps {
   pivotalSelection: PivotalTurnSelection | null;
   postGameAnalysis: GameAnalysis | null;
   accuracyModelPending: boolean;
+  decisionLedger?: PlayerDecisionLedgerSummary | null;
   opponentLabel: string;
   showPostGameReviewPrompt: boolean;
   winnerId: 'you' | 'bot' | null;
@@ -30,6 +32,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
   pivotalSelection,
   postGameAnalysis,
   accuracyModelPending,
+  decisionLedger = null,
   opponentLabel,
   showPostGameReviewPrompt,
   winnerId,
@@ -67,6 +70,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
           opponentLabel={opponentLabel}
           analysis={postGameAnalysis}
           accuracyModelPending={accuracyModelPending}
+          decisionLedger={decisionLedger}
           onReviewGame={onOpenReviewGameFromPrompt}
           onSkip={onSkipPostGameReview}
         />

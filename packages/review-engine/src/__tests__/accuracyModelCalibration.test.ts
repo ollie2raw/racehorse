@@ -90,9 +90,15 @@ describe('published artifact sanity -- accuracyModelCalibration.ts', () => {
     expect(mistakeToBlunder).toBeGreaterThan(inaccuracyToMistake);
   });
 
-  it('CALIBRATED_K is a real positive finite number', () => {
-    expect(CALIBRATED_K).toBeGreaterThan(0);
+  it('CALIBRATED_K is the exact v5 action-level fit', () => {
+    expect(CALIBRATED_K).toBe(0.20094184929012865);
     expect(Number.isFinite(CALIBRATED_K)).toBe(true);
+  });
+
+  it('LOSS_BAND_BOUNDARIES retain the published semantic thresholds', () => {
+    expect(LOSS_BAND_BOUNDARIES.bestTolerance).toBeCloseTo(0.13, 10);
+    expect(LOSS_BAND_BOUNDARIES.inaccuracyToMistake).toBe(0.79);
+    expect(LOSS_BAND_BOUNDARIES.mistakeToBlunder).toBe(5.98);
   });
 });
 

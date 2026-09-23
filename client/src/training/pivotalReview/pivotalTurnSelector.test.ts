@@ -17,13 +17,14 @@ describe('oracle pivotal ranking', () => {
     expect(result.candidates.map((c) => c.moveNumber)).toEqual([1, 2]);
   });
 
-  it('excludes opponents, heuristic, tile-forced, and uncorrelated decisions', () => {
+  it('excludes opponents, heuristic, action-forced, and uncorrelated decisions', () => {
     const fixture = matchFixture([100, 90, 80, 70, 6]);
     fixture.moveLog[0].player = 'opponent';
     const heuristic = fixture.evaluationsByDecisionId.get('decision-2')!;
     fixture.evaluationsByDecisionId.set('decision-2', { ...heuristic, evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' } });
     const forced = fixture.evaluationsByDecisionId.get('decision-3')!;
-    fixture.evaluationsByDecisionId.set('decision-3', { ...forced, candidates: [forced.played, { ...forced.played, action: { kind: 'play', tile: { low: 0, high: 1 }, position: 'right' } }] });
+    // True one-action forced (placement-distinct). Same-tile multi-placement is NOT forced.
+    fixture.evaluationsByDecisionId.set('decision-3', { ...forced, candidates: [forced.played], best: forced.played });
     fixture.decisionIdByMoveNumber.delete(4);
     const result = selectPivotalTurns(fixture.moveLog, { ...fixture });
     expect(result.candidates.map((c) => c.moveNumber)).toEqual([5]);

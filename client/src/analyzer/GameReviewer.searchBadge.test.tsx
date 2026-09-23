@@ -16,19 +16,25 @@ function candidate(low: number, high: number, rawScore?: number): ReviewCandidat
   };
 }
 
-function evaluationWithEvidence(evidence: ReviewEvaluationV1['evidence']): ReviewEvaluationV1 {
-  const candidates = [candidate(1, 2)];
+function evaluationWithEvidence(
+  evidence: ReviewEvaluationV1['evidence'],
+  expectedPointDifferential = 0.5,
+): ReviewEvaluationV1 {
+  const played = candidate(1, 2);
+  const best = candidate(3, 4);
+  const other = candidate(0, 5);
+  const candidates = [played, best, other];
   return {
     evaluationVersion: 1,
     snapshotId: 'x',
     rulesVersion: 1,
     reviewEngineVersion: 'review-engine-v1',
     evidence,
-    played: candidates[0],
-    best: candidates[0],
+    played,
+    best,
     candidates,
-    loss: { expectedPointDifferential: 0, winProbability: null },
-    search: { nodes: 1, depth: 0, hiddenStateSamples: 0, coverage: 1, complete: true },
+    loss: { expectedPointDifferential, winProbability: null },
+    search: { nodes: 3, depth: 0, hiddenStateSamples: 0, coverage: 1, complete: true },
     diagnostics: [],
   };
 }
@@ -176,9 +182,9 @@ describe('GameReviewer search-tier badge render wiring', () => {
     expect(document.body.querySelector('.gr-move-row-badge')).toBeNull();
   });
 
-  it('does not interfere with the existing heuristic badge path -- a heuristic-tier move renders exactly as before', () => {
+  it('heuristic-tier move shows Estimate (not provisional Blunder) with Est. badge', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
-    // played (candidates[0]) is the worst-scoring candidate -> heuristic Blunder bucket.
+    // Differentiated candidates — production never maps these to Blunder.
     const candidates = [candidate(3, 6, -51.7), candidate(0, 4, 30.53), candidate(0, 1, -15.77)];
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', heuristicEvaluation(candidates)]]),
@@ -195,10 +201,11 @@ describe('GameReviewer search-tier badge render wiring', () => {
       />,
     );
 
-    const ratingEl = screen.getByText('Blunder', { selector: '.gr-move-row-rating' });
-    expect(ratingEl).toHaveClass('is-blunder');
+    const ratingEl = screen.getByText('Estimate', { selector: '.gr-move-row-rating' });
+    expect(ratingEl).toHaveClass('is-estimate');
     expect(screen.getByText('Est.')).toBeInTheDocument();
     expect(screen.getByText('Est.')).toHaveClass('gr-move-row-badge', 'is-heuristic');
     expect(screen.queryByText('Search')).not.toBeInTheDocument();
+    expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
   });
 });

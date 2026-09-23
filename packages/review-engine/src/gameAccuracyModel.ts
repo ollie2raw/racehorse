@@ -1,4 +1,4 @@
-import { dedupeCandidatesByTile } from '@racehorse/game-core/review';
+import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { accuracyFromEvaluations, ACCURACY_MODEL_VERSION } from './reviewAccuracy';
 import { gradeFromAccuracy } from './accuracyGrade';
@@ -70,20 +70,23 @@ export type GameAccuracyModelResult = {
  * forced, if ANY has `evidence.source === 'heuristic'`, `status` is
  * `'partial'`. Only when ZERO non-forced decisions are heuristic-tier is
  * `status` `'complete'`. Forced decisions are excluded from this check
- * either way -- same forced predicate as
- * `isScorable`/`lossBandLabelForEvaluation`.
+ * either way -- same action-level forced predicate as
+ * `isScorable`/`lossBandLabelForEvaluation` (`isForcedDecision`).
  *
  * `accuracy`/`grade`, precisely (the C4 follow-up revision): populated
  * whenever `coverageFraction >= MINIMUM_COVERAGE_FLOOR`, regardless of
  * `status` -- a real game commonly has `status: 'partial'` (some
- * heuristic-tier decisions) while still clearing the coverage floor, in
- * which case a real accuracy/grade is shown rather than suppressed.
+ * heuristic-tier decisions) while still clearing the coverage floor.
+ * USER-FACING grade must still be suppressed on partial coverage (see
+ * PostGameReviewPrompt); the `grade` field here may populate for
+ * reconciliation but must not be presented as a whole-game letter when
+ * heuristic estimates remain.
  */
 export function computeGameAccuracyModel(
   evaluations: readonly ReviewEvaluationV1[],
 ): GameAccuracyModelResult {
   const nonForced = evaluations.filter(
-    (evaluation) => dedupeCandidatesByTile(evaluation.candidates).length > 1,
+    (evaluation) => !isForcedDecision(evaluation.candidates),
   );
   const heuristicMoveCount = nonForced.filter(
     (evaluation) => evaluation.evidence.source === 'heuristic',
@@ -120,7 +123,10 @@ export function computeGameAccuracyModel(
     status,
     accuracyModelVersion: result.accuracyModelVersion,
     accuracy: result.accuracy,
-    grade: gradeFromAccuracy(result.accuracy),
+    // Letter grade is a whole-game claim: only when every non-forced
+    // decision was calibrated/scorable (status complete). Partial coverage
+    // may still expose scored accuracy; never an unqualified A/B/C.
+    grade: status === 'complete' ? gradeFromAccuracy(result.accuracy) : null,
     heuristicMoveCount,
     totalNonForcedMoveCount,
     coverageFraction,

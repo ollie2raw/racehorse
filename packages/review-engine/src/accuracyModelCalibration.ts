@@ -23,13 +23,36 @@
  * `ACCURACY_MODEL_CALIBRATION_VERSION` and republish this whole file, never
  * edit the constants in place silently.
  *
- * *** SIGNED OFF -- 2026-09-17, this v4 run. *** Product/data review of the
- * observed distribution (spec section 5 step 5) is complete for this run:
- * histograms, the fitted k/boundaries, and the pvf-bot-match hard/master
- * tier-ordering finding (persists in direction at n=1063/1119, but shrinks
- * to statistical noise -- z ~= 0.54 on independent 25-game data; not a
- * blocker, handed back as a separate possible `botHeuristics.ts`
- * investigation, not fixed here) were all reviewed and accepted.
+ * *** SIGNED OFF -- 2026-09-22, v5 action-forced semantic migration. ***
+ *
+ * Forced predicate: action-level (`isForcedDecision` /
+ * `countDistinctLegalActions(candidates) <= 1`). One tile with multiple
+ * legal placements is NOT forced. See
+ * `docs/review-accuracy-v5-action-forced-calibration.md`.
+ *
+ * History on this PR:
+ *  1. Mechanical migration attempt under action-level → BLOCKED (ordinary
+ *     PVF ~88.1 outside historical [65,85]; mechanical Best quantile → 0).
+ *  2. Phase C provenance audit → published v4 K/bands/[65,85] were produced
+ *     under obsolete tile-level forced on identical recorded trees.
+ *  3. Project-lead policy: authorize v5 as a forced-semantics migration —
+ *     refit K only; retain published semantic loss bands; demote [65,85] to
+ *     historical v4 empirical validation (not a v5 gate).
+ *  4. This file: final v5 constants under that policy.
+ *
+ * Aggregate (`CALIBRATED_K`): Phase C `fitKLeastSquares` over the corrected
+ * action-level eligible exact/search population (strong→95, poor→15). Exact
+ * harness float — do not hand-round.
+ *
+ * Loss bands (`LOSS_BAND_BOUNDARIES`): RETAINED from v4. The per-action loss
+ * quantity `value(best) - value(played)` did not change; only eligibility
+ * changed. Mechanical percentile re-fit under the zero-inflated newly
+ * eligible same-tile/multi-placement mass collapses Best to 0 (p75(strong))
+ * — rejected as a prevalence-driven quantile degeneracy, not a change in
+ * severity semantics. Treat these thresholds as semantic thresholds on the
+ * unchanged loss quantity, not population-share targets.
+ *
+ * Grades: unchanged (`gradeFromAccuracy` cutoffs).
  *
  * This sign-off clears CALIBRATED_K, LOSS_BAND_BOUNDARIES, and
  * ACCURACY_MODEL_CALIBRATION_VERSION for exactly two consumers, wired in
@@ -52,10 +75,22 @@
  * and any UI change are separate, later work.
  */
 
-/** Spec section 3's single free parameter. Fitted 2026-09-17 (v4) -- unchanged from v3 since the strong-policy and worst_legal anchors this fits against are untouched by this run's corpus widening. See the harness report for method and full histogram detail. */
-export const CALIBRATED_K = 0.19770906562806756;
+/**
+ * Frozen calibration corpus revision for the v5 action-forced fit.
+ * Bump this string AND recalibrate deliberately when recorded trees or
+ * `REVIEW_FIXTURE_CORPUS` deliberately_poor fixtures change — do not silently
+ * accept a drifted scorable denominator.
+ */
+export const V5_CALIBRATION_CORPUS_REVISION =
+  'recorded-self-play+recorded-client-policy@2026-09-17+REVIEW_FIXTURE_CORPUS.deliberately_poor';
 
-/** Spec section 4a's three loss-band boundary constants. Same fitting run as CALIBRATED_K -- always version and republish together. */
+/** Action-level exact+search scorable count on the frozen recorded corpora (12,973 decisions). */
+export const V5_FROZEN_RECORDED_SCORABLE_DENOMINATOR = 5538;
+
+/** Spec section 3's single free parameter. Fitted 2026-09-22 (v5) via `fitKLeastSquares` under action-level forced. */
+export const CALIBRATED_K = 0.20094184929012865;
+
+/** Spec section 4a's three loss-band boundary constants. Semantic thresholds retained from v4 (see file header). */
 export type CalibratedLossBandBoundaries = {
   readonly bestTolerance: number;
   readonly inaccuracyToMistake: number;
@@ -63,10 +98,9 @@ export type CalibratedLossBandBoundaries = {
 };
 
 export const LOSS_BAND_BOUNDARIES: CalibratedLossBandBoundaries = {
+  // Retained from v4 publish (`943f5612`). Not re-derived from action-level
+  // percentiles — mechanical Best=0 was rejected under the v5 migration policy.
   bestTolerance: 0.12999999999999995,
-  // Only this boundary moved from v3 (0.895 -> 0.79): it's fit from
-  // pvf-bot-match standard-tier's own losses (p75), and standard-tier's
-  // sample widened from 5 to 30 games this run.
   inaccuracyToMistake: 0.79,
   mistakeToBlunder: 5.98,
 };
@@ -79,4 +113,4 @@ export const LOSS_BAND_BOUNDARIES: CalibratedLossBandBoundaries = {
  * calibration artifact's own version, not a value reviewAccuracy.ts reads
  * or stamps onto anything today.
  */
-export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v4-calibrated-2026-09-17';
+export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v5-action-forced-2026-09-22';

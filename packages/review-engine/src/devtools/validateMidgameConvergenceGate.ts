@@ -23,7 +23,7 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dedupeCandidatesByTile, type ReviewAction, type ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
+import { isForcedDecision, type ReviewAction, type ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { deserializeReviewCaptureRecordsFromJsonl, type ReviewCaptureRecord } from '../reviewCaptureSchema';
 import { solveExactEndgame } from '../solveExactEndgame';
 import {
@@ -371,7 +371,7 @@ export function compareGates(overlaps: readonly EvaluatedOverlap[]): GateCompari
 export type Tier = 'exact' | 'search' | 'heuristic';
 
 function isForced(evaluation: { readonly candidates: readonly unknown[] }): boolean {
-  return dedupeCandidatesByTile(evaluation.candidates as never).length === 1;
+  return isForcedDecision(evaluation.candidates as never);
 }
 
 function oldTier(evaluation: ReviewCaptureRecord['evaluation']): Tier {
