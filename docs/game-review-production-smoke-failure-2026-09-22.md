@@ -79,9 +79,21 @@ One canonical `ReviewPresentationRecord` per decision:
 
 Hard rules A–G from the integrity brief are enforced in presentation builders + tests (`reviewProductionIntegrity.test.ts`, `GameReviewer.productionIntegrity.e2e.test.tsx`).
 
-## Accuracy / grade denominator
+## Accuracy model version (v5)
 
-Unchanged calibration/thresholds. Denominator remains scorable exact|search non-forced. Forced excluded. Heuristic excluded from accuracy %. Unavailable non-forced → summary shows **Partial / Incomplete review** (does not present a fully authoritative score).
+Forced predicate corrected from tile-level to **action-level**. Corpus audit
+(recorded-client-policy + recorded-self-play, 12,973 decisions):
+
+| Metric | Value |
+| --- | --- |
+| Wrongly forced (tile=1, actions>1) | **2,118 (16.3%)** |
+| Of which exact/search tier | 1,740 |
+| Scorable denom before → after | 3,798 → **5,538 (+45.8%)** |
+
+`accuracyModelVersion` bumped to `accuracy-model-v5-action-forced-2026-09-22`
+for **new** analyses only. `CALIBRATED_K` / `LOSS_BAND_BOUNDARIES` unchanged;
+**follow-up recalibration is required** before treating accuracy/grade as fully
+trustworthy under the expanded denominator. Historical artifacts untouched.
 
 ## Historical review
 

@@ -4,7 +4,12 @@ import { computePlayScore, simulatePlacement } from './scoring';
 import type { BoardState, GameState, PlacementPosition, Tile } from './types';
 import { GAME_COMMAND_VERSION, GAME_RULES_VERSION } from './versions';
 
-export { dedupeCandidatesByTile } from './reviewCandidateDedupe';
+export {
+  dedupeCandidatesByTile,
+  countDistinctLegalActions,
+  isForcedDecision,
+  reviewActionIdentityKey,
+} from './reviewCandidateDedupe';
 
 export const REVIEW_POSITION_SNAPSHOT_VERSION = 2 as const;
 export const REVIEW_EVALUATION_VERSION = 1 as const;

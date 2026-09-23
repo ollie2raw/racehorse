@@ -3,7 +3,7 @@ import type { HeuristicClassification } from './classifyHeuristicResult';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 
 describe('heuristicClassificationToDisplay', () => {
-  it('forced -> Forced/forced, no badge (visible, not graded)', () => {
+  it('forced -> Forced/forced, no badge', () => {
     const classification: HeuristicClassification = { kind: 'forced' };
     expect(heuristicClassificationToDisplay(classification)).toEqual({
       label: 'Forced',
@@ -12,8 +12,17 @@ describe('heuristicClassificationToDisplay', () => {
     });
   });
 
-  it('unclear/globally-infeasible -> Unclear/unclear, unclear badge', () => {
-    const classification: HeuristicClassification = { kind: 'unclear', reason: 'globally-infeasible' };
+  it('estimate -> Estimate/estimate, heuristic badge', () => {
+    const classification: HeuristicClassification = { kind: 'estimate', matchedPrimary: true };
+    expect(heuristicClassificationToDisplay(classification)).toEqual({
+      label: 'Estimate',
+      ratingClass: 'estimate',
+      badge: 'heuristic',
+    });
+  });
+
+  it('unclear/primary-absent -> Unclear', () => {
+    const classification: HeuristicClassification = { kind: 'unclear', reason: 'primary-absent' };
     expect(heuristicClassificationToDisplay(classification)).toEqual({
       label: 'Unclear',
       ratingClass: 'unclear',
@@ -21,43 +30,7 @@ describe('heuristicClassificationToDisplay', () => {
     });
   });
 
-  it('unclear/flat-spread -> Unclear/unclear, unclear badge (same display as globally-infeasible)', () => {
-    const classification: HeuristicClassification = { kind: 'unclear', reason: 'flat-spread' };
-    expect(heuristicClassificationToDisplay(classification)).toEqual({
-      label: 'Unclear',
-      ratingClass: 'unclear',
-      badge: 'unclear',
-    });
-  });
-
-  it('bucket/Good -> Good/good, heuristic badge (same label/class as the legacy exact-path Good)', () => {
-    const classification: HeuristicClassification = { kind: 'bucket', bucket: 'Good' };
-    expect(heuristicClassificationToDisplay(classification)).toEqual({
-      label: 'Good',
-      ratingClass: 'good',
-      badge: 'heuristic',
-    });
-  });
-
-  it('bucket/Inaccuracy -> Inaccuracy/inaccuracy, heuristic badge', () => {
-    const classification: HeuristicClassification = { kind: 'bucket', bucket: 'Inaccuracy' };
-    expect(heuristicClassificationToDisplay(classification)).toEqual({
-      label: 'Inaccuracy',
-      ratingClass: 'inaccuracy',
-      badge: 'heuristic',
-    });
-  });
-
-  it('bucket/Blunder -> Blunder/blunder, heuristic badge -- never visually identical to an exact Blunder due to the badge', () => {
-    const classification: HeuristicClassification = { kind: 'bucket', bucket: 'Blunder' };
-    expect(heuristicClassificationToDisplay(classification)).toEqual({
-      label: 'Blunder',
-      ratingClass: 'blunder',
-      badge: 'heuristic',
-    });
-  });
-
-  it('D5: calibrated/Mistake -> Mistake/mistake, no badge -- so GameReviewer\'s display?.badge ?? searchTier fallback still shows the search-tier badge', () => {
+  it('calibrated/Mistake -> Mistake, no badge', () => {
     const classification: HeuristicClassification = { kind: 'calibrated', label: 'Mistake' };
     expect(heuristicClassificationToDisplay(classification)).toEqual({
       label: 'Mistake',

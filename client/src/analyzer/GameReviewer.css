@@ -399,6 +399,9 @@
 .gr-move-row.is-forced {
   border-left-color: rgba(148, 163, 184, 0.45);
 }
+.gr-move-row.is-estimate {
+  border-left-color: rgba(148, 163, 184, 0.55);
+}
 .gr-move-row.is-unavailable {
   border-left-color: rgba(148, 163, 184, 0.35);
   opacity: 0.85;
@@ -441,6 +444,7 @@
 .gr-move-row-rating.is-mistake { color: #f2a63a; }
 .gr-move-row-rating.is-blunder { color: var(--df-loss); }
 .gr-move-row-rating.is-forced { color: var(--dfd-dim); }
+.gr-move-row-rating.is-estimate { color: var(--dfd-dim); }
 .gr-move-row-rating.is-unavailable { color: var(--dfd-dim); }
 .gr-move-row-rating.is-best { color: var(--df-win); }
 /* Deliberately distinct from every bucket color above -- an Unclear result

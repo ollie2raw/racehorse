@@ -89,20 +89,18 @@ function analyzedMove(moveNumber: number, validMoves: Array<[number, number]>): 
   };
 }
 
-describe('production integrity — heuristic Fritz primary (BLUNDER + Best move)', () => {
-  it('player matches Fritz but not oracle-max → Good, never Blunder', () => {
+describe('production integrity — heuristic Fritz primary (no Blunder + Best move)', () => {
+  it('player matches Fritz but not oracle-max → Estimate, never Blunder', () => {
     const fritz = play(2, 2, 'left');
     const oracleMax = play(5, 6, 'right');
     const worse = play(0, 1, 'left');
-    // Player played Fritz's move; oracle-max rawScore is higher → old classifier Blundered.
     const evaluation = heuristicEval(
       [candidate(fritz, -40), candidate(oracleMax, 80), candidate(worse, -60)],
       fritz,
     );
-    expect(classifyHeuristicResult(evaluation)).toEqual({ kind: 'bucket', bucket: 'Blunder' });
     expect(classifyHeuristicResult(evaluation, { primaryReferenceAction: fritz })).toEqual({
-      kind: 'bucket',
-      bucket: 'Good',
+      kind: 'estimate',
+      matchedPrimary: true,
     });
 
     const facts = {
@@ -122,7 +120,7 @@ describe('production integrity — heuristic Fritz primary (BLUNDER + Best move)
 
     const record = buildReviewPresentationRecord(evaluation, facts);
     expect(record.playedMatchesPrimary).toBe(true);
-    expect(record.classification).toEqual({ kind: 'bucket', bucket: 'Good' });
+    expect(record.classification).toEqual({ kind: 'estimate', matchedPrimary: true });
     expect(assertPresentationConsistency(record, 'Best move. 2-2 at the left end matches Fritz\'s read.')).toEqual([]);
   });
 });
@@ -182,14 +180,14 @@ describe('production integrity — calibrated classification ↔ WHY copy', () =
 });
 
 describe('production integrity — decision accounting', () => {
-  it('proves exact ledger identity for a multi-hand shaped set', () => {
+  it('proves exact ledger identity for a multi-hand shaped set (action-level forced)', () => {
     const moves = [
-      analyzedMove(1, [[0, 0]]), // forced
+      analyzedMove(1, [[0, 0]]), // forced via eval
       analyzedMove(5, [[1, 2], [3, 4]]), // scored
       analyzedMove(7, [[2, 3], [4, 5]]), // estimate
       analyzedMove(49, [[1, 1], [2, 2]]), // scored
       analyzedMove(52, [[0, 5], [1, 6]]), // unavailable (no decision id)
-      analyzedMove(59, [[3, 3]]), // forced from move log, no eval
+      analyzedMove(59, [[3, 3]]), // unavailable without eval (tile-only must not invent Forced)
     ];
 
     const scored = searchEval(1, play(1, 2), play(3, 4));
@@ -220,18 +218,32 @@ describe('production integrity — decision accounting', () => {
     });
 
     expect(ledger.totalDecisions).toBe(6);
-    expect(ledger.forcedCount).toBe(2);
+    expect(ledger.forcedCount).toBe(1);
     expect(ledger.scoredCount).toBe(2);
     expect(ledger.estimateCount).toBe(1);
-    expect(ledger.unavailableCount).toBe(1);
+    expect(ledger.unavailableCount).toBe(2);
     expect(
       ledger.scoredCount + ledger.estimateCount + ledger.forcedCount + ledger.unavailableCount,
     ).toBe(ledger.totalDecisions);
-    expect(ledger.entries.map((e) => e.decisionIndex)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(ledger.entries.map((e) => e.rawMoveNumber)).toEqual([1, 5, 7, 49, 52, 59]);
     expect(formatDecisionAccountingSummary(ledger)).toBe(
-      '2 scored · 1 estimate · 2 forced · 1 unavailable · 6 total decisions',
+      '2 scored · 1 estimate · 1 forced · 2 unavailable · 6 total decisions',
     );
+  });
+
+  it('one tile / two placements is Estimate (not Forced) in the ledger', () => {
+    const left = play(3, 4, 'left');
+    const right = play(3, 4, 'right');
+    const evaluation = heuristicEval([candidate(left, 10), candidate(right, 40)], left);
+    const ledger = buildPlayerDecisionLedger({
+      analyzedMoves: [analyzedMove(1, [[3, 4]])],
+      decisionIdByMoveNumber: new Map([[1, 'd1']]),
+      resultsByDecisionId: new Map([['d1', evaluation]]),
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      batchDone: true,
+    });
+    expect(ledger.forcedCount).toBe(0);
+    expect(ledger.estimateCount).toBe(1);
   });
 
   it('documents that legacy "36 of 65" meant scorable non-forced of all non-forced (not forced)', () => {

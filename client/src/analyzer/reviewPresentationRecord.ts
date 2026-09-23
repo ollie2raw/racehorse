@@ -115,8 +115,8 @@ export function assertPresentationConsistency(
   const headline = coachingHeadline ?? '';
 
   if (record.playedMatchesPrimary) {
-    if (label === 'Mistake' || label === 'Blunder') {
-      violations.push('played matches primary reference but classification is worse than Best/Good');
+    if (label === 'Mistake' || label === 'Blunder' || label === 'Inaccuracy' || label === 'Good') {
+      violations.push('played matches primary reference but classification is a severity label');
     }
     if (/\b(weakest|significant miss|meaningful miss|costliest|noticeably weaker|major miss)\b/i.test(headline)) {
       violations.push('played matches primary but coaching headline describes a miss');
@@ -149,6 +149,8 @@ export function presentationLabel(record: ReviewPresentationRecord): string | nu
       return c.bucket;
     case 'calibrated':
       return c.label;
+    case 'estimate':
+      return 'Estimate';
     case 'forced':
       return 'Forced';
     case 'unclear':

@@ -133,6 +133,12 @@ export function forcedDecisionCoachingCopy(): string {
   return 'Only legal move — not graded.';
 }
 
+export function estimateDecisionCoachingCopy(matchedPrimary: boolean): string {
+  return matchedPrimary
+    ? "Estimate — matches Fritz's early-position read. Not a calibrated grade."
+    : "Estimate — Fritz's early-position read differs. Not a calibrated grade.";
+}
+
 export function unavailableDecisionCoachingCopy(): string {
   return 'Review data unavailable for this decision — not graded.';
 }

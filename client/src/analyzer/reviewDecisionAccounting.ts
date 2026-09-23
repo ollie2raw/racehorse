@@ -1,6 +1,5 @@
-import { dedupeCandidatesByTile } from '@racehorse/game-core/review';
+import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
-import type { MoveEntry } from '../game/moveLogger';
 import type { AnalyzedMove } from './moveAnalyzer';
 
 /**
@@ -35,12 +34,7 @@ export type PlayerDecisionLedgerSummary = {
 };
 
 function isForcedFromEvaluation(evaluation: ReviewEvaluationV1): boolean {
-  return dedupeCandidatesByTile(evaluation.candidates).length <= 1;
-}
-
-function isForcedFromMove(move: AnalyzedMove | MoveEntry): boolean {
-  // validMoves lists distinct legal tiles (not placements). One tile ⇒ forced.
-  return Array.isArray(move.validMoves) && move.validMoves.length === 1;
+  return isForcedDecision(evaluation.candidates);
 }
 
 /**
@@ -51,7 +45,8 @@ function isForcedFromMove(move: AnalyzedMove | MoveEntry): boolean {
  *     = scored + estimate + forced + unavailable
  *     = analyzedMoves.length (every human decision appears exactly once)
  *
- * Nothing may silently disappear from the sidebar.
+ * Forced is ACTION-level (placement-distinct). Move-log `validMoves` is
+ * tile-only and must NOT invent forced without an evaluation.
  */
 export function buildPlayerDecisionLedger(args: {
   readonly analyzedMoves: readonly AnalyzedMove[];
@@ -90,11 +85,9 @@ export function buildPlayerDecisionLedger(args: {
       }
     } else if (!batchDone && (pending || (decisionId != null && !errored))) {
       status = 'pending';
-    } else if (isForcedFromMove(move)) {
-      // Batch done (or no modern batch) and no evaluation: still recognize
-      // forced from the move log so forced never silently becomes "scored."
-      status = decisionId == null || errored || batchDone ? 'forced' : 'pending';
     } else if (!decisionId || errored || batchDone) {
+      // Without an evaluation we cannot prove action-level forced from
+      // tile-only validMoves — surface as unavailable, never invent Forced.
       status = 'unavailable';
     } else {
       status = 'pending';
@@ -150,11 +143,12 @@ export function summarizeLedger(entries: readonly PlayerDecisionLedgerEntry[]): 
 
 /**
  * Explicit accounting copy for the post-game summary.
- * Replaces ambiguous "N of M moves analyzed".
  */
 export function formatDecisionAccountingSummary(summary: PlayerDecisionLedgerSummary): string {
   const parts: string[] = [`${summary.scoredCount} scored`];
-  if (summary.estimateCount > 0) parts.push(`${summary.estimateCount} estimate`);
+  if (summary.estimateCount > 0) {
+    parts.push(`${summary.estimateCount} estimate${summary.estimateCount === 1 ? '' : 's'}`);
+  }
   if (summary.forcedCount > 0) parts.push(`${summary.forcedCount} forced`);
   if (summary.unavailableCount > 0) parts.push(`${summary.unavailableCount} unavailable`);
   if (summary.pendingCount > 0) parts.push(`${summary.pendingCount} pending`);
@@ -162,12 +156,6 @@ export function formatDecisionAccountingSummary(summary: PlayerDecisionLedgerSum
   return parts.join(' · ');
 }
 
-/**
- * Legacy accuracyModel coverage line meaning (pre-integrity fix), kept for
- * audit/docs: scorableNonForced / totalNonForced among worker evaluations only.
- * Forced decisions were already excluded from both sides; the gap was
- * heuristic-tier non-forced decisions — not forced moves.
- */
 export function legacyCoverageCounts(accuracyModel: {
   readonly totalNonForcedMoveCount: number;
   readonly heuristicMoveCount: number;

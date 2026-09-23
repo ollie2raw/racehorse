@@ -88,7 +88,8 @@ describe('computeGameAccuracyModel -- cutover trigger (spec section 6)', () => {
     // populate here. See the dedicated coverage-floor describe block below
     // for the case where coverage does NOT clear the floor.
     expect(result.accuracy).toBeGreaterThan(0);
-    expect(result.grade).not.toBeNull();
+    // Partial coverage must not expose a whole-game letter grade.
+    expect(result.grade).toBeNull();
   });
 
   it('multiple heuristic-tier decisions are all counted', () => {
@@ -149,15 +150,16 @@ describe('computeGameAccuracyModel -- coverage-floor decoupling (C4 follow-up, s
     expect(MINIMUM_COVERAGE_FLOOR).toBeCloseTo(0.46808510638297873, 10);
   });
 
-  it('status:"partial" with coverage clearing the floor still populates accuracy/grade -- status no longer gates them', () => {
+  it('status:"partial" with coverage clearing the floor populates accuracy but NOT letter grade', () => {
     // 60/100 scorable = 0.6 coverage, well above the 0.468 floor, but
-    // heuristicCount > 0 keeps status partial.
+    // heuristicCount > 0 keeps status partial. Accuracy may populate for
+    // scored subset; whole-game letter grade must stay null.
     const evaluations = evaluationsWithRatio(60, 40);
     const result = computeGameAccuracyModel(evaluations);
     expectPartial(result);
     expect(result.coverageFraction).toBeCloseTo(0.6, 10);
     expect(result.accuracy).not.toBeNull();
-    expect(result.grade).not.toBeNull();
+    expect(result.grade).toBeNull();
   });
 
   it('status:"partial" with coverage below the floor keeps accuracy/grade null', () => {

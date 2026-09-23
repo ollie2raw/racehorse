@@ -73,9 +73,24 @@ function heuristicDecision(): ReviewEvaluationV1 {
 }
 
 describe('isScorable', () => {
-  it('is false for a forced decision (single distinct candidate)', () => {
+  it('is false for a forced decision (single distinct action)', () => {
     const decision = forcedDecision();
     expect(isScorable(decision, decision.candidates)).toBe(false);
+  });
+
+  it('same-tile two placements is scorable (not forced)', () => {
+    const left = candidate(3, 4, 0);
+    const right: ReviewCandidateEvaluationV1 = {
+      ...candidate(3, 4, 1),
+      action: { kind: 'play', tile: { low: 3, high: 4 }, position: 'right' },
+    };
+    const decision: ReviewEvaluationV1 = {
+      ...scorableDecision(1),
+      played: left,
+      best: right,
+      candidates: [left, right],
+    };
+    expect(isScorable(decision, decision.candidates)).toBe(true);
   });
 
   it('is false for a heuristic-only decision', () => {

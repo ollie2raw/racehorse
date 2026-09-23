@@ -16,6 +16,7 @@ import { heuristicClassificationToDisplay } from './heuristicClassificationToDis
 import { selectMoveSearchTier } from './useMoveSearchTier';
 import {
   calibratedRatingCoachingCopy,
+  estimateDecisionCoachingCopy,
   forcedDecisionCoachingCopy,
   moveRatingCoachingCopy,
   unavailableDecisionCoachingCopy,
@@ -274,7 +275,12 @@ export default function GameReviewer({
     const classification = presentation.classification;
 
     if (classification?.kind === 'forced') return forcedDecisionCoachingCopy();
-    if (classification?.kind === 'unclear') return null;
+    if (classification?.kind === 'unclear') {
+      if (classification.reason === 'primary-absent') {
+        return "Unclear — Fritz's preferred line wasn't among the heuristic candidates, so no comparison is shown.";
+      }
+      return null;
+    }
 
     if (
       reviewWorkerBatch?.done
@@ -286,7 +292,11 @@ export default function GameReviewer({
       return unavailableDecisionCoachingCopy();
     }
 
+    if (classification?.kind === 'estimate') {
+      return estimateDecisionCoachingCopy(classification.matchedPrimary);
+    }
     if (classification?.kind === 'bucket') {
+      // Research path only — should not appear in production.
       return moveRatingCoachingCopy(classification.bucket, 'heuristic');
     }
     if (classification?.kind === 'calibrated') {

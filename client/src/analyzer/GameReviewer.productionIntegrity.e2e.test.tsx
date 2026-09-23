@@ -145,9 +145,9 @@ describe('GameReviewer production-shaped multi-hand integrity E2E', () => {
 
     const accuracyModel = {
       status: 'partial' as const,
-      accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
       accuracy: 90.9,
-      grade: 'A' as const,
+      grade: null,
       heuristicMoveCount: 1,
       totalNonForcedMoveCount: 4,
       coverageFraction: 0.75,
@@ -194,10 +194,10 @@ describe('GameReviewer production-shaped multi-hand integrity E2E', () => {
     const heurRecord = buildReviewPresentationRecord(heuristicContested, heurFacts);
     const heurProse = buildReviewCoachingProse(heurFacts, false);
     // Non-positional correct path uses "Solid pick" / "strongest option" —
-    // must still be consistent with Good, never Blunder.
+    // must still be consistent with Estimate, never Blunder.
     expect(heurProse.headline.toLowerCase()).toMatch(/solid pick|strongest option|best move|top score/);
     expect(assertPresentationConsistency(heurRecord, heurProse.headline)).toEqual([]);
-    expect(heurRecord.classification).toEqual({ kind: 'bucket', bucket: 'Good' });
+    expect(heurRecord.classification).toEqual({ kind: 'estimate', matchedPrimary: true });
 
     // Positional matched-reference path (production cohort) says Best move.
     const positionalProse = buildReviewCoachingProse(
@@ -240,7 +240,7 @@ describe('GameReviewer production-shaped multi-hand integrity E2E', () => {
     expect(within(list).queryByText('#70')).not.toBeInTheDocument();
 
     expect(within(rows[0]!).getByText('Forced')).toBeInTheDocument();
-    expect(within(rows[1]!).getByText('Good')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Estimate')).toBeInTheDocument();
     expect(within(rows[2]!).getByText('Mistake')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('Best')).toBeInTheDocument();
     expect(within(rows[4]!).getByText('Blunder')).toBeInTheDocument();

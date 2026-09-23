@@ -182,9 +182,9 @@ describe('GameReviewer search-tier badge render wiring', () => {
     expect(document.body.querySelector('.gr-move-row-badge')).toBeNull();
   });
 
-  it('does not interfere with the existing heuristic badge path -- a heuristic-tier move renders exactly as before', () => {
+  it('heuristic-tier move shows Estimate (not provisional Blunder) with Est. badge', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
-    // played (candidates[0]) is the worst-scoring candidate -> heuristic Blunder bucket.
+    // Differentiated candidates — production never maps these to Blunder.
     const candidates = [candidate(3, 6, -51.7), candidate(0, 4, 30.53), candidate(0, 1, -15.77)];
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', heuristicEvaluation(candidates)]]),
@@ -201,10 +201,11 @@ describe('GameReviewer search-tier badge render wiring', () => {
       />,
     );
 
-    const ratingEl = screen.getByText('Blunder', { selector: '.gr-move-row-rating' });
-    expect(ratingEl).toHaveClass('is-blunder');
+    const ratingEl = screen.getByText('Estimate', { selector: '.gr-move-row-rating' });
+    expect(ratingEl).toHaveClass('is-estimate');
     expect(screen.getByText('Est.')).toBeInTheDocument();
     expect(screen.getByText('Est.')).toHaveClass('gr-move-row-badge', 'is-heuristic');
     expect(screen.queryByText('Search')).not.toBeInTheDocument();
+    expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
   });
 });

@@ -23,13 +23,16 @@
  * `ACCURACY_MODEL_CALIBRATION_VERSION` and republish this whole file, never
  * edit the constants in place silently.
  *
- * *** SIGNED OFF -- 2026-09-17, this v4 run. *** Product/data review of the
- * observed distribution (spec section 5 step 5) is complete for this run:
- * histograms, the fitted k/boundaries, and the pvf-bot-match hard/master
- * tier-ordering finding (persists in direction at n=1063/1119, but shrinks
- * to statistical noise -- z ~= 0.54 on independent 25-game data; not a
- * blocker, handed back as a separate possible `botHeuristics.ts`
- * investigation, not fixed here) were all reviewed and accepted.
+ * *** SIGNED OFF -- 2026-09-17, v4 run (k + loss bands). ***
+ * v5 (2026-09-22): forced predicate corrected from tile-level
+ * (`dedupeCandidatesByTile`) to action-level (`isForcedDecision`). Same-tile
+ * multi-placement decisions are no longer excluded as forced. Corpus audit
+ * on recorded-client-policy + recorded-self-play (12,973 decisions): 2,118
+ * (16.3%) previously misclassified as forced; scorable denominator +45.8%
+ * (3,798 → 5,538). CALIBRATED_K / LOSS_BAND_BOUNDARIES are UNCHANGED in v5
+ * and **require a follow-up recalibration** before treating accuracy/grade
+ * as fully trustworthy under the expanded denominator — this bump only
+ * versions the forced-predicate semantic change for new analyses.
  *
  * This sign-off clears CALIBRATED_K, LOSS_BAND_BOUNDARIES, and
  * ACCURACY_MODEL_CALIBRATION_VERSION for exactly two consumers, wired in
@@ -79,4 +82,4 @@ export const LOSS_BAND_BOUNDARIES: CalibratedLossBandBoundaries = {
  * calibration artifact's own version, not a value reviewAccuracy.ts reads
  * or stamps onto anything today.
  */
-export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v4-calibrated-2026-09-17';
+export const ACCURACY_MODEL_CALIBRATION_VERSION = 'accuracy-model-v5-action-forced-2026-09-22';

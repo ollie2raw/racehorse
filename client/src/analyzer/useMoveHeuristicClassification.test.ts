@@ -106,7 +106,7 @@ describe('selectMoveHeuristicClassification', () => {
     expect(selectMoveHeuristicClassification('d1', batch)).toEqual({ kind: 'forced' });
   });
 
-  it('classifies a resolved heuristic result with real differentiated candidates into a real bucket', () => {
+  it('classifies a resolved heuristic result with real differentiated candidates as Estimate', () => {
     const candidates = [candidate(0, 4, 30.53), candidate(3, 6, -15.77), candidate(0, 1, -51.7)];
     const batch = batchState({
       resultsByDecisionId: new Map([
@@ -119,9 +119,9 @@ describe('selectMoveHeuristicClassification', () => {
         ],
       ]),
     });
-    // Same real numbers/expected outcome as classifyHeuristicResult's own
-    // ambiguous-midgame fixture test -- this test is about the selector's
-    // lookup/routing, not re-deriving classification correctness.
-    expect(selectMoveHeuristicClassification('d1', batch)).toEqual({ kind: 'bucket', bucket: 'Inaccuracy' });
+    expect(selectMoveHeuristicClassification('d1', batch)).toEqual({
+      kind: 'estimate',
+      matchedPrimary: false,
+    });
   });
 });

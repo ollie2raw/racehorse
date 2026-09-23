@@ -10,6 +10,39 @@ function tileIdentityKey(action: ReviewAction): string {
 }
 
 /**
+ * Full action identity including placement / end / branch.
+ * Same-tile left vs right (or branch A vs B) are DISTINCT legal decisions.
+ */
+export function reviewActionIdentityKey(action: ReviewAction): string {
+  return JSON.stringify(action);
+}
+
+/**
+ * Count distinct legal ReviewAction choices among candidates.
+ * Placement-distinct actions remain distinct — do NOT use
+ * `dedupeCandidatesByTile` for forced/scorable predicates.
+ */
+export function countDistinctLegalActions(
+  candidates: readonly { readonly action: ReviewAction }[],
+): number {
+  const keys = new Set<string>();
+  for (const candidate of candidates) {
+    keys.add(reviewActionIdentityKey(candidate.action));
+  }
+  return keys.size;
+}
+
+/**
+ * A decision is forced only when the player had exactly ONE legal action
+ * (including placement). One playable tile with two ends is NOT forced.
+ */
+export function isForcedDecision(
+  candidates: readonly { readonly action: ReviewAction }[],
+): boolean {
+  return countDistinctLegalActions(candidates) <= 1;
+}
+
+/**
  * Collapses candidates that are the same tile at different board positions
  * (left/right/branch-N-M) into one entry, keeping the highest rawScore
  * among its variants. Exported and independently tested since tile-identity
@@ -20,6 +53,10 @@ function tileIdentityKey(action: ReviewAction): string {
  * classification (`classifyHeuristicResult.ts`, which re-exports this) and
  * server-reusable aggregate computation (`@racehorse/review-engine`'s
  * `reviewAccuracy.ts`), which has no dependency on client code.
+ *
+ * IMPORTANT: tile dedupe is for heuristic *spread / research* analysis only.
+ * It must NOT decide forced vs scorable — use `isForcedDecision` /
+ * `countDistinctLegalActions` for that.
  */
 export function dedupeCandidatesByTile(
   candidates: readonly ReviewCandidateEvaluationV1[],

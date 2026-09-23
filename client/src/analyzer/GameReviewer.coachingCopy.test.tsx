@@ -111,12 +111,12 @@ describe('GameReviewer coaching-copy render wiring', () => {
     expect(screen.getByText(/meaningful miss/i)).toBeInTheDocument();
   });
 
-  it('renders qualitative, number-free coaching copy for a resolved heuristic-tier move', () => {
+  it('renders Estimate coaching copy for a resolved heuristic-tier move (no severity)', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
-    // played (candidates[0]) is the worst-scoring candidate -> heuristic Blunder bucket.
     const candidates = [candidate(3, 6, -51.7), candidate(0, 4, 30.53), candidate(0, 1, -15.77)];
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', heuristicEvaluation(candidates)]]),
+      done: true,
     });
     const decisionIdByMoveNumber = new Map([[1, 'd1']]);
 
@@ -130,9 +130,9 @@ describe('GameReviewer coaching-copy render wiring', () => {
       />,
     );
 
-    const copyEl = screen.getByText(/weakest option among the choices available/i);
-    expect(copyEl).toBeInTheDocument();
-    expect(copyEl.textContent).not.toMatch(/\d/);
+    expect(screen.getByText(/Why this rating/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not a calibrated grade/i)).toBeInTheDocument();
+    expect(screen.queryByText(/weakest option/i)).not.toBeInTheDocument();
   });
 
   it('renders forced-decision coaching copy (not graded)', () => {
@@ -157,8 +157,12 @@ describe('GameReviewer coaching-copy render wiring', () => {
     expect(screen.getAllByText(/Only legal move/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders no coaching copy for an unclear result', () => {
+  it('renders Unclear coaching when Fritz primary is absent from candidates', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
+    // Differentiated scores so production classify would be Estimate if a
+    // primary were present; without coaching facts / Fritz, flat research
+    // path is not used — production classify returns Estimate with
+    // matchedPrimary false when no primary is supplied.
     const flatCandidates = [candidate(0, 4, 10), candidate(3, 6, 8), candidate(0, 1, 6)];
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', heuristicEvaluation(flatCandidates)]]),
@@ -175,7 +179,9 @@ describe('GameReviewer coaching-copy render wiring', () => {
       />,
     );
 
-    expect(screen.queryByText(/Why this rating/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Why this rating/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Estimate/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
   });
 
   it('does not disturb the existing legacy rating/badge rendering from #234/#235', () => {
