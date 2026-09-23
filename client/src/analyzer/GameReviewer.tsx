@@ -47,6 +47,14 @@ interface GameReviewerProps {
     string,
     { readonly facts: ReviewCoachingFacts; readonly prose: ReviewCoachingProse }
   >;
+  /**
+   * Live positional coaching prose (Gate 4). Defaults false (fail closed) so
+   * local/non-cohort GameReviewer surfaces never inherit the product ship
+   * constant alone. Cohort call sites pass
+   * `isPositionalCoachingProseEnabled(serverCohort)`. Historical mode ignores
+   * this and renders persisted prose as written.
+   */
+  enablePositionalExplanations?: boolean;
   /** Optional banner for legacy rows without a replay artifact. */
   historicalLegacyNotice?: string | null;
   title?: string;
@@ -88,6 +96,7 @@ export default function GameReviewer({
   coachingFactsStore = null,
   snapshotsByDecisionId,
   historicalCoachingByDecisionId,
+  enablePositionalExplanations = false,
   historicalLegacyNotice = null,
   title = 'Game Review',
   scopeHandNumber = null,
@@ -137,8 +146,9 @@ export default function GameReviewer({
             eligibleDecisionIds: snapshotsByDecisionId
               ? [...snapshotsByDecisionId.keys()]
               : [...(reviewWorkerBatch?.resultsByDecisionId.keys() ?? [])],
+            enablePositionalExplanations,
           }),
-    [factsStore, reviewWorkerBatch, snapshotsByDecisionId, isHistoricalReplay],
+    [factsStore, reviewWorkerBatch, snapshotsByDecisionId, isHistoricalReplay, enablePositionalExplanations],
   );
 
   useEffect(() => {
@@ -182,8 +192,14 @@ export default function GameReviewer({
     if (!coachingFactsResolver) return null;
     const facts = coachingFactsResolver.getFacts(currentDecisionId);
     if (!facts) return null;
-    return { facts, prose: buildReviewCoachingProse(facts) };
-  }, [currentDecisionId, reviewWorkerBatch, coachingFactsResolver, historicalCoachingByDecisionId]);
+    return { facts, prose: buildReviewCoachingProse(facts, enablePositionalExplanations) };
+  }, [
+    currentDecisionId,
+    reviewWorkerBatch,
+    coachingFactsResolver,
+    historicalCoachingByDecisionId,
+    enablePositionalExplanations,
+  ]);
 
   // Explicit, honest states for every case that isn't a resolved result --
   // never a fabricated placeholder claiming an answer exists.

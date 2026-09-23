@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
 import {
   isBotPostGameReviewEligible,
   isBotPostGameReviewLocallyEligible,
   isMultiplayerPostGameReviewEligible,
   isPlayVsFritzResultOverlayMode,
+  isPositionalCoachingProseEnabled,
   isPostGameReviewEnabled,
   isReviewCaptureEnabled,
   type BotPostGameReviewContext,
@@ -47,5 +49,11 @@ describe('post-game review beta gate', () => {
     expect(isReviewCaptureEnabled({ ...fritzMatch, isDailyFritzMode: true })).toBe(false);
     expect(isReviewCaptureEnabled({ ...fritzMatch, isJourneyTrial: true })).toBe(false);
     expect(isReviewCaptureEnabled({ ...fritzMatch, isGhostMode: true })).toBe(false);
+  });
+
+  it('Gate 4: positional prose requires ship constant + cohort + visible switch', () => {
+    expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(true);
+    expect(isPositionalCoachingProseEnabled(true)).toBe(true);
+    expect(isPositionalCoachingProseEnabled(false)).toBe(false);
   });
 });

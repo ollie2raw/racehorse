@@ -26,9 +26,9 @@ function proseText(prose: { headline: string; detail: string; takeaway: string }
   return `${prose.headline} ${prose.detail} ${prose.takeaway}`;
 }
 
-describe('default-off positional prose truth', () => {
-  it('preserves the default-off ship gate', () => {
-    expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(false);
+describe('positional prose ship gate + fail-closed builders', () => {
+  it('ship constant is approved; builders still default off without an explicit enable', () => {
+    expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(true);
     expect(buildReviewCoachingProse(facts())).not.toEqual(buildReviewCoachingProse(facts(), true));
   });
 

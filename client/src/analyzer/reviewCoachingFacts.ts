@@ -9,9 +9,10 @@ import type {
 import { computePositionalFeatures, POSITIONAL_FEATURE_NAMES, type PositionalFeatureName } from '@racehorse/review-engine';
 import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
+import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../appRouteTypes';
 
-/** Product-owner ship gate: default off; sample generation opts in explicitly. */
-export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false;
+/** Re-export ship gate for analyzer/devtools callers. */
+export { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED };
 
 export type ReviewCoachingMissKind =
   | 'better_tile'
@@ -122,7 +123,7 @@ export function capSeverityForContestedDecision(
   label: LossBandLabel,
   agreement: ReviewAgreement,
   evidenceSource: ReviewEvaluationEvidence['source'],
-  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  enablePositionalExplanations: boolean = false,
 ): LossBandLabel {
   if (!enablePositionalExplanations || !agreement.contested) return label;
   const cap = F1C_D2_CONTESTED_SEVERITY_POLICY[evidenceSource].severityCap;
@@ -371,7 +372,7 @@ export function resolveAgreement(
 export function buildReviewCoachingFacts(
   evaluation: ReviewEvaluationV1,
   snapshot?: ReviewPositionSnapshotV2,
-  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  enablePositionalExplanations: boolean = false,
 ): ReviewCoachingFacts {
   const { played, best: oracleBest, evidence, candidates, loss } = evaluation;
   if (candidates.length === 0) {

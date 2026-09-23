@@ -1,4 +1,4 @@
-import { POST_GAME_REVIEW_VISIBLE } from '../../appRouteTypes';
+import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
 
 /**
  * Post-game review eligibility (v1).
@@ -15,6 +15,17 @@ export const POST_GAME_REVIEW_DEFERRED_DAILY_FRITZ = true;
 
 export function isPostGameReviewEnabled(serverCohortEnabled = false): boolean {
   return Boolean(serverCohortEnabled && POST_GAME_REVIEW_VISIBLE);
+}
+
+/**
+ * Approved positional coaching prose (#298) for cohort-eligible surfaces only.
+ *
+ * Reuses the existing server cohort decision (`usePostGameReviewAccess` →
+ * `/api/game-reviews/access`); does not duplicate allowlist IDs client-side.
+ * Guest / loading / transport failure leave `serverCohortEnabled` false → off.
+ */
+export function isPositionalCoachingProseEnabled(serverCohortEnabled = false): boolean {
+  return Boolean(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED && isPostGameReviewEnabled(serverCohortEnabled));
 }
 
 export type BotPostGameReviewContext = {

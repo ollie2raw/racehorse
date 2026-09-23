@@ -26,6 +26,13 @@ export const JOURNEY_MODE_VISIBLE = true;
 export const POST_GAME_REVIEW_VISIBLE = true;
 
 /**
+ * Product ship gate for approved positional coaching prose (Gate 2 / #298).
+ * Not a universal UI switch — combine with resolved server cohort via
+ * `isPositionalCoachingProseEnabled(serverCohortEnabled)`.
+ */
+export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = true;
+
+/**
  * One AppMode, defined in `./types`.
  *
  * This module used to carry a second, hand-maintained copy of the union. The

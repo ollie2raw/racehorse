@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   isBotPostGameReviewLocallyEligible,
+  isPositionalCoachingProseEnabled,
   isReviewCaptureEnabled,
 } from '../../training/pivotalReview/postGameReviewPolicy.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
@@ -44,6 +45,7 @@ export function useReviewRuntime({
 
   const { user: authUser, loading: authLoading } = useAuth();
   const serverCohortEnabled = usePostGameReviewAccess(authUser?.id, authLoading);
+  const enablePositionalExplanations = isPositionalCoachingProseEnabled(serverCohortEnabled);
 
   const reviewModeContext = {
     mode: bootstrap.mode,
@@ -81,6 +83,7 @@ export function useReviewRuntime({
     moveLog: [...moveLog],
     botPostGameReviewEligible,
     reviewPersistenceEnabled: serverCohortEnabled,
+    enablePositionalExplanations,
     fritzTier,
     winningScore,
     showPostGameOverlays,
@@ -108,6 +111,7 @@ export function useReviewRuntime({
     botPostGameReviewEligible,
     reviewCaptureEnabled,
     reviewSnapshotRecorder,
+    enablePositionalExplanations,
     showPostGameReviewPrompt,
     showPlayVsFritzResultOverlay,
   };

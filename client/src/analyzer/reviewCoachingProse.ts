@@ -1,7 +1,6 @@
 import type { ReviewAction } from '@racehorse/game-core/review';
 import type { PositionalFeatureName } from '@racehorse/review-engine';
 import {
-  REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
   type ReviewCoachingFacts,
   type ReviewCoachingProse,
   type ReviewFeatureDelta,
@@ -711,7 +710,12 @@ function buildUnknownProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
  */
 export function buildReviewCoachingProse(
   facts: ReviewCoachingFacts,
-  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  /**
+   * Fail closed by default. Production call sites must pass the cohort-gated
+   * decision from `isPositionalCoachingProseEnabled`; do not inherit the ship
+   * constant here or non-cohort local review would leak approved prose.
+   */
+  enablePositionalExplanations: boolean = false,
   includeTrueReferenceEquality: boolean = true,
 ): ReviewCoachingProse {
   if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
