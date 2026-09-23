@@ -490,14 +490,15 @@ function buildContestedFeatureDeltaProse(facts: ReviewCoachingFacts, includeTrue
     // D2: Fritz is primary for heuristic disagreements — not exact truth.
     // Contested ≠ “close”: without a grounded displayed-reference value gap,
     // never claim the alternatives are nearly equal.
-    let detail = contestedPreferenceClause(facts, preferred, otherEngineAction);
+    // With no supported feature WHY, stop after the disagreement headline.
+    let detail = '';
     if (why) {
       // Only cite features that actually favor Fritz's displayed reference.
-      detail += ` Fritz's placement ${why}.`;
+      detail = `Fritz's placement ${why}.`;
     } else if (opposing.length > 0) {
-      detail += sameTile
-        ? ` The measured positional features favor ${playedSpot}, but Fritz prefers ${bestSpot}.`
-        : ` The measured positional features favor ${otherEngineAction}, but Fritz prefers ${preferred}.`;
+      detail = sameTile
+        ? `The measured positional features favor ${playedSpot}, but Fritz prefers ${bestSpot}.`
+        : `The measured positional features favor ${otherEngineAction}, but Fritz prefers ${preferred}.`;
     }
     // No "Play it at …" imperative: contested heuristic is a judgment call.
     return {

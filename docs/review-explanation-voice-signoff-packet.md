@@ -115,7 +115,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
   - Headline: The engines disagree here.
-  - Why: Fritz prefers 3-6 at the right end, while the Review Engine's heuristic prefers 3-6 at the left end.
+  - Why: (none)
   - Takeaway: (none)
 - **Supporting structured facts (audit):** no supported feature delta above reporting threshold; immediateΔ=0; expectedΔ=0.
 
@@ -130,7 +130,7 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
   - Headline: The engines disagree here.
-  - Why: Fritz prefers 0-2 at the left end, while the Review Engine's heuristic prefers 0-2 at the right end. The measured positional features favor the right end, but Fritz prefers the left end.
+  - Why: The measured positional features favor the right end, but Fritz prefers the left end.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** endControlScore: played -24, reference -48, delta -24; endDangerPenalty: played 16, reference 36, delta 20; opponentOutsLeft: played 4, reference 9, delta 5; immediateΔ=0; expectedΔ=0.
 
@@ -141,11 +141,11 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Played:** 2-4 at branch-2-1 (0 immediate points)
 - **Displayed reference:** 2-4 at branch-0-1 (oracle; 0 immediate points)
 - **Classification / evidence:** missKind=`same_tile_wrong_end`; tier=`search`; display=`Review Engine search`
-- **Contested:** no
+- **Contested:** yes
 - **referenceExpectedPointDifferential:** 0
 - **Player-facing NEW prose:**
   - Headline: The review rates these two moves even overall.
-  - Why: (none)
+  - Why: The Review Engine prefers 2-4 at a branch end, while Fritz prefers 2-4 at a branch end; they prefer different placements of the same tile, but this review doesn't show an overall value edge between the two displayed placements.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** endControlScore: played -36, reference -48, delta -12; endDangerPenalty: played 28, reference 36, delta 8; opponentOutsLeft: played 7, reference 8, delta 1; immediateΔ=0; expectedΔ=0.
 

@@ -106,20 +106,19 @@ describe('coaching voice quality — truth-preserving regressions', () => {
     expect(prose.headline).not.toContain("Fritz's read");
   });
 
-  it('5. heuristic contested → Fritz primary without unsupported objective imperative', () => {
+  it('5. heuristic contested + unavailable EV → engines disagree, no unsupported closeness', () => {
     const prose = buildReviewCoachingProse(base({
       referenceSource: 'fritz',
       evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
       best: { action: play(3, 6, 'right'), immediatePoints: 3 },
       played: { action: play(3, 6, 'left'), immediatePoints: 3 },
-      deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0 },
       agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
       oracleMove: { action: play(3, 6, 'left'), immediatePoints: 3 },
       featureDeltas: [],
     }), true);
     expect(prose.headline).toBe('The engines disagree here.');
-    expect(text(prose)).toMatch(/Fritz prefers/);
-    expect(text(prose)).toMatch(/Review Engine's heuristic prefers/);
+    expect(prose.detail).toBe('');
     expect(text(prose)).not.toMatch(/Play it at/i);
     expect(text(prose)).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
     expect(text(prose)).not.toMatch(/\bobjectively\b/i);
@@ -133,7 +132,7 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
       played: { action: play(0, 2, 'right'), immediatePoints: 0 },
       best: { action: play(0, 2, 'left'), immediatePoints: 0 },
-      deltas: { immediatePoints: 0, expectedPointDifferential: 2 },
+      deltas: { immediatePoints: 0, expectedPointDifferential: 0 },
       agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
       oracleMove: { action: play(0, 2, 'right'), immediatePoints: 0 },
       featureDeltas: [
@@ -142,10 +141,9 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       ],
     }), true);
     expect(prose.headline).toBe('The engines disagree here.');
-    expect(text(prose)).toMatch(/Fritz prefers/);
-    expect(text(prose)).toMatch(/measured positional features favor the right end/i);
-    expect(text(prose)).toMatch(/Fritz prefers the left end/i);
+    expect(prose.detail).toMatch(/^The measured positional features favor the right end, but Fritz prefers the left end\.?$/);
     expect(text(prose)).not.toMatch(/displayed reference/i);
+    expect(text(prose)).not.toMatch(/Review Engine's measured positional features/i);
     expect(text(prose)).not.toMatch(/Fritz's placement leaves your opponent only/i);
     expect(text(prose)).not.toMatch(/Play it at/i);
     expect(text(prose)).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
