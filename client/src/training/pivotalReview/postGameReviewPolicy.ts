@@ -1,5 +1,4 @@
-import { POST_GAME_REVIEW_VISIBLE } from '../../appRouteTypes';
-import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../analyzer/reviewCoachingFacts';
+import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
 
 /**
  * Post-game review eligibility (v1).

@@ -9,17 +9,10 @@ import type {
 import { computePositionalFeatures, POSITIONAL_FEATURE_NAMES, type PositionalFeatureName } from '@racehorse/review-engine';
 import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
+import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../appRouteTypes';
 
-/**
- * Product ship gate for approved positional coaching prose (Gate 2 / #298).
- *
- * This is NOT a universal UI switch. Live render and persistence must combine
- * it with resolved server cohort eligibility via
- * `isPositionalCoachingProseEnabled(serverCohortEnabled)` so non-cohort local
- * review surfaces do not leak the new explanations. Sample/devtools callers
- * may still pass `true` explicitly.
- */
-export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = true;
+/** Re-export ship gate for analyzer/devtools callers. */
+export { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED };
 
 export type ReviewCoachingMissKind =
   | 'better_tile'

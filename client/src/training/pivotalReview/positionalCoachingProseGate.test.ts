@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
-  type ReviewCoachingFacts,
-} from '../../analyzer/reviewCoachingFacts';
+import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
+import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts';
 import { buildReviewCoachingProse } from '../../analyzer/reviewCoachingProse';
-import { POST_GAME_REVIEW_VISIBLE } from '../../appRouteTypes';
 import {
   isBotPostGameReviewLocallyEligible,
   isPositionalCoachingProseEnabled,

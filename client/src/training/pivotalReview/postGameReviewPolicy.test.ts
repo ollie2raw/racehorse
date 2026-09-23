@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
 import {
   isBotPostGameReviewEligible,
   isBotPostGameReviewLocallyEligible,
@@ -9,7 +10,6 @@ import {
   isReviewCaptureEnabled,
   type BotPostGameReviewContext,
 } from './postGameReviewPolicy';
-import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../analyzer/reviewCoachingFacts';
 
 const fritzMatch: BotPostGameReviewContext = {
   mode: 'bot',
