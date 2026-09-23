@@ -65,7 +65,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText(/moves analyzed/i)).not.toBeInTheDocument();
   });
 
-  it('accuracyModel.accuracy === null: shows Partial / Fritz\'s read and the "N of M moves analyzed" copy -- never the legacy number standing in', () => {
+  it('accuracyModel.accuracy === null: shows Partial / Fritz\'s read and explicit scored/estimate accounting -- never the legacy number standing in', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
       accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
@@ -86,10 +86,10 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText('B', { selector: '.is-accent' })).not.toBeInTheDocument();
     expect(screen.getByText('Partial')).toBeInTheDocument();
     expect(screen.getByText("Fritz's read")).toBeInTheDocument();
-    expect(screen.getByText('27 of 47 moves analyzed')).toBeInTheDocument();
+    expect(screen.getByText('27 scored · 20 estimate · 47 non-forced')).toBeInTheDocument();
   });
 
-  it('accuracyModel.accuracy populated: renders the new accuracy/grade in place of the legacy ones, plus the coverage copy', () => {
+  it('accuracyModel.accuracy populated: renders the new accuracy/grade in place of the legacy ones, plus explicit accounting', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
       accuracyModelVersion: 'accuracy-model-v4-calibrated-2026-09-17',
@@ -110,7 +110,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
     expect(screen.getByText('88.1%')).toBeInTheDocument();
     expect(screen.getByText('A', { selector: '.is-accent' })).toBeInTheDocument();
-    expect(screen.getByText('35 of 40 moves analyzed')).toBeInTheDocument();
+    expect(screen.getByText('35 scored · 5 estimate · 40 non-forced')).toBeInTheDocument();
   });
 
   it('status:"complete" with accuracyModel populated still shows the new numbers, not "Partial"', () => {
@@ -133,7 +133,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.getByText('95.0%')).toBeInTheDocument();
     expect(screen.getByText('S', { selector: '.is-accent' })).toBeInTheDocument();
     expect(screen.queryByText('Partial')).not.toBeInTheDocument();
-    expect(screen.getByText('30 of 30 moves analyzed')).toBeInTheDocument();
+    expect(screen.getByText('30 scored · 0 estimate · 30 non-forced')).toBeInTheDocument();
   });
 
   it('never renders the legacy per-hand breakdown -- that depth now lives only in GameReviewer', () => {

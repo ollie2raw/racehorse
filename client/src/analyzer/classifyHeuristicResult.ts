@@ -39,6 +39,15 @@ function findCandidateByAction(
   return candidates.find((c) => JSON.stringify(c.action) === key);
 }
 
+export type ClassifyHeuristicOptions = {
+  /**
+   * D2: when present, heuristic classification is Fritz-relative (or any
+   * explicit primary reference), not oracle-max rawScore relative. Matching
+   * the primary can never render Blunder/Inaccuracy.
+   */
+  readonly primaryReferenceAction?: ReviewAction;
+};
+
 /**
  * Phase C (game-review-oracle-upgrade-2026-09-13.md): classifies a
  * heuristic-confidence ReviewEvaluationV1 into the coarse 3-bucket scale,
@@ -47,8 +56,16 @@ function findCandidateByAction(
  * touches nor replaces. Client-side (not packages/review-engine) because
  * bucket/rating policy is a presentation concern, the same reasoning that
  * already keeps classifyMove and MoveRating client-side.
+ *
+ * When `primaryReferenceAction` is supplied (D2 Fritz-primary path), loss is
+ * measured against that action's rawScore among candidates — never against
+ * the oracle-heuristic max alone. That removes the BLUNDER + "Best move"
+ * contradiction when the player matches Fritz but not the oracle max.
  */
-export function classifyHeuristicResult(evaluation: ReviewEvaluationV1): HeuristicClassification {
+export function classifyHeuristicResult(
+  evaluation: ReviewEvaluationV1,
+  options?: ClassifyHeuristicOptions,
+): HeuristicClassification {
   // Unconditional, before anything else: no valid hidden-state model at
   // all is a different kind of not-knowing than "the heuristic evaluated
   // fine but everything looked equally good" -- confirmed during research
@@ -89,6 +106,25 @@ export function classifyHeuristicResult(evaluation: ReviewEvaluationV1): Heurist
     // means the upstream result is malformed, not a legitimate runtime
     // case to paper over with a guess.
     throw new Error('classifyHeuristicResult: no rawScore found for the played action.');
+  }
+
+  const primary = options?.primaryReferenceAction;
+  if (primary) {
+    if (JSON.stringify(evaluation.played.action) === JSON.stringify(primary)) {
+      return { kind: 'bucket', bucket: 'Good' };
+    }
+    const primaryCandidate = findCandidateByAction(evaluation.candidates, primary);
+    const primaryRawScore = primaryCandidate?.rawScore;
+    if (typeof primaryRawScore === 'number') {
+      if (playedRawScore >= primaryRawScore) return { kind: 'bucket', bucket: 'Good' };
+      const normalizedLoss = (primaryRawScore - playedRawScore) / spread;
+      if (normalizedLoss <= GOOD_THRESHOLD) return { kind: 'bucket', bucket: 'Good' };
+      if (normalizedLoss <= INACCURACY_THRESHOLD) return { kind: 'bucket', bucket: 'Inaccuracy' };
+      return { kind: 'bucket', bucket: 'Blunder' };
+    }
+    // Primary known but not among heuristic candidates: cannot honestly
+    // claim Blunder via oracle-max ranking. Treat as a miss without overclaiming.
+    return { kind: 'bucket', bucket: 'Inaccuracy' };
   }
 
   const normalizedLoss = (best - playedRawScore) / spread;

@@ -36,11 +36,9 @@ export function heuristicClassificationToDisplay(classification: HeuristicClassi
       // display shape itself; both render identically as "Unclear" today.
       return { label: 'Unclear', ratingClass: 'unclear', badge: 'unclear' };
     case 'forced':
-      // Matches the legacy system's own single-legal-tile precedent
-      // exactly (classifyMove: validTiles.length === 1 -> Good(80)) -- same
-      // label, same class, no badge, since this isn't a judgment call to
-      // flag as uncertain.
-      return { label: 'Good', ratingClass: 'good', badge: null };
+      // Product contract: forced decisions remain visible as FORCED and are
+      // excluded from accuracy — never silently graded as Good.
+      return { label: 'Forced', ratingClass: 'forced', badge: null };
     case 'calibrated':
       // D5 (game-review-oracle-upgrade-2026-09-13.md Phase D): the
       // calibrated exact/search-evidence label. No badge -- deliberately

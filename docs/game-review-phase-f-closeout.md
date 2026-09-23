@@ -8,9 +8,9 @@
 
 **PHASE F ENGINEERING: COMPLETE**
 
-**ADMIN-COHORT LAUNCH READINESS: BLOCKED**
+**ADMIN-COHORT LAUNCH READINESS: BLOCKED — production smoke failed**
 
-Engineering for the planned A–F Game Review overhaul is complete on `origin/main`. Admin-cohort launch remains blocked on **human voice sign-off**, **deployment of the historical `replay_artifact` migration**, **cohort configuration confirmation**, and a **real-admin production smoke test**. Broader public rollout is a separate product decision.
+Engineering for the planned A–F Game Review overhaul is complete on `origin/main`. Ops applied the historical `replay_artifact` migration and redeployed; cohort access was confirmed. **Human A–R smoke failed** with P0 presentation/integrity defects. See `docs/game-review-production-smoke-failure-2026-09-22.md`. Integrity fix branch `fix/review-production-integrity` is held for project-lead review — do not mark Game Review validated and do not broaden rollout.
 
 ---
 

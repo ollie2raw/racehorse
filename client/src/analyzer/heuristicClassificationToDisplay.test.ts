@@ -3,11 +3,11 @@ import type { HeuristicClassification } from './classifyHeuristicResult';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 
 describe('heuristicClassificationToDisplay', () => {
-  it('forced -> Good/good, no badge (matches the legacy single-legal-tile precedent exactly)', () => {
+  it('forced -> Forced/forced, no badge (visible, not graded)', () => {
     const classification: HeuristicClassification = { kind: 'forced' };
     expect(heuristicClassificationToDisplay(classification)).toEqual({
-      label: 'Good',
-      ratingClass: 'good',
+      label: 'Forced',
+      ratingClass: 'forced',
       badge: null,
     });
   });

@@ -192,7 +192,7 @@ describe('GameReviewer heuristic-classification render wiring', () => {
     expect(badgeEl).toHaveClass('is-search');
   });
 
-  it('D5: a forced exact-source result (single real candidate) still renders identically to legacy behavior', () => {
+  it('D5: a forced exact-source result (single real candidate) renders Forced (not graded)', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
     const forcedExactResult: ReviewEvaluationV1 = {
       ...heuristicEvaluation([candidate(0, 4, 30.53)]),
@@ -200,10 +200,11 @@ describe('GameReviewer heuristic-classification render wiring', () => {
     };
     const reviewWorkerBatch = batchState({
       resultsByDecisionId: new Map([['d1', forcedExactResult]]),
+      done: true,
     });
     const decisionIdByMoveNumber = new Map([[1, 'd1']]);
 
-    const withBatchRender = render(
+    render(
       <GameReviewer
         open
         onClose={vi.fn()}
@@ -212,14 +213,7 @@ describe('GameReviewer heuristic-classification render wiring', () => {
         decisionIdByMoveNumber={decisionIdByMoveNumber}
       />,
     );
-    const withBatchHtml = document.body.querySelector('.gr-move-row')?.outerHTML;
-    expect(withBatchHtml).toContain('Blunder');
-    withBatchRender.unmount();
-
-    const legacyRender = render(<GameReviewer open onClose={vi.fn()} analysis={analysis} />);
-    const legacyHtml = document.body.querySelector('.gr-move-row')?.outerHTML;
-    legacyRender.unmount();
-
-    expect(withBatchHtml).toEqual(legacyHtml);
+    expect(screen.getByText('Forced', { selector: '.gr-move-row-rating' })).toBeInTheDocument();
+    expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
   });
 });

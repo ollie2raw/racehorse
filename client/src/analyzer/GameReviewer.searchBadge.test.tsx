@@ -16,19 +16,25 @@ function candidate(low: number, high: number, rawScore?: number): ReviewCandidat
   };
 }
 
-function evaluationWithEvidence(evidence: ReviewEvaluationV1['evidence']): ReviewEvaluationV1 {
-  const candidates = [candidate(1, 2)];
+function evaluationWithEvidence(
+  evidence: ReviewEvaluationV1['evidence'],
+  expectedPointDifferential = 0.5,
+): ReviewEvaluationV1 {
+  const played = candidate(1, 2);
+  const best = candidate(3, 4);
+  const other = candidate(0, 5);
+  const candidates = [played, best, other];
   return {
     evaluationVersion: 1,
     snapshotId: 'x',
     rulesVersion: 1,
     reviewEngineVersion: 'review-engine-v1',
     evidence,
-    played: candidates[0],
-    best: candidates[0],
+    played,
+    best,
     candidates,
-    loss: { expectedPointDifferential: 0, winProbability: null },
-    search: { nodes: 1, depth: 0, hiddenStateSamples: 0, coverage: 1, complete: true },
+    loss: { expectedPointDifferential, winProbability: null },
+    search: { nodes: 3, depth: 0, hiddenStateSamples: 0, coverage: 1, complete: true },
     diagnostics: [],
   };
 }

@@ -14,10 +14,16 @@ import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
-import { moveRatingCoachingCopy } from './moveRatingCoachingCopy';
+import {
+  calibratedRatingCoachingCopy,
+  forcedDecisionCoachingCopy,
+  moveRatingCoachingCopy,
+  unavailableDecisionCoachingCopy,
+} from './moveRatingCoachingCopy';
 import type { ReviewCoachingFacts, ReviewCoachingProse } from './reviewCoachingFacts';
 import { createReviewCoachingFactsResolver } from './reviewCoachingFactsResolver';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
+import { buildReviewPresentationRecord } from './reviewPresentationRecord';
 import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
 import { buildReviewDecisionHandContext } from './reviewDecisionHandContext';
 import { GameReviewerHandContext } from './GameReviewerHandContext';
@@ -257,28 +263,58 @@ export default function GameReviewer({
   const ratingCoachingCopy = useMemo(() => {
     if (!current) return null;
     const decisionId = decisionIdByMoveNumber?.get(current.moveNumber);
-    const classification = reviewWorkerBatch
-      ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch)
-      : null;
-    // forced (nothing to explain) and unclear (explaining it confidently
-    // defeats the point of flagging it unclear) deliberately get no copy.
-    if (classification?.kind === 'forced' || classification?.kind === 'unclear') return null;
+    const resolvedEvaluation = decisionId ? reviewWorkerBatch?.resultsByDecisionId.get(decisionId) : undefined;
+    const factsForMove =
+      decisionId && historicalCoachingByDecisionId?.has(decisionId)
+        ? historicalCoachingByDecisionId.get(decisionId)!.facts
+        : decisionId && coachingFactsResolver
+          ? coachingFactsResolver.getFacts(decisionId)
+          : null;
+    const presentation = buildReviewPresentationRecord(resolvedEvaluation, factsForMove ?? null);
+    const classification = presentation.classification;
+
+    if (classification?.kind === 'forced') return forcedDecisionCoachingCopy();
+    if (classification?.kind === 'unclear') return null;
+
+    if (
+      reviewWorkerBatch?.done
+      && decisionId
+      && !resolvedEvaluation
+      && (reviewWorkerBatch.errorsByDecisionId.has(decisionId)
+        || !reviewWorkerBatch.pendingDecisionIds.has(decisionId))
+    ) {
+      return unavailableDecisionCoachingCopy();
+    }
+
     if (classification?.kind === 'bucket') {
       return moveRatingCoachingCopy(classification.bucket, 'heuristic');
     }
-    const resolvedEvaluation = decisionId ? reviewWorkerBatch?.resultsByDecisionId.get(decisionId) : undefined;
-    const isPreciseSource =
-      resolvedEvaluation?.evidence.source === 'exact' || resolvedEvaluation?.evidence.source === 'search';
-    const scoreGap = isPreciseSource ? Math.abs(resolvedEvaluation!.loss.expectedPointDifferential) : undefined;
-    return moveRatingCoachingCopy(current.rating, 'precise', scoreGap);
-  }, [current, decisionIdByMoveNumber, reviewWorkerBatch]);
+    if (classification?.kind === 'calibrated') {
+      const scoreGap = Math.abs(resolvedEvaluation?.loss.expectedPointDifferential ?? 0);
+      return calibratedRatingCoachingCopy(classification.label, scoreGap);
+    }
+
+    // Legacy fallback only when no modern evaluation path is wired.
+    if (!reviewWorkerBatch || !decisionId) {
+      return moveRatingCoachingCopy(current.rating, 'precise');
+    }
+    return null;
+  }, [
+    current,
+    decisionIdByMoveNumber,
+    reviewWorkerBatch,
+    coachingFactsResolver,
+    historicalCoachingByDecisionId,
+  ]);
 
   const currentOracleEvaluation = current && decisionIdByMoveNumber && reviewWorkerBatch
     ? reviewWorkerBatch.resultsByDecisionId.get(decisionIdByMoveNumber.get(current.moveNumber) ?? '')
     : undefined;
-  const oracleBestAction = currentOracleEvaluation?.best.action;
-  const oracleBestTile = oracleBestAction?.kind === 'play'
-    ? [oracleBestAction.tile.low, oracleBestAction.tile.high] as [number, number]
+  // Board "Best move" must use the same primary reference as coaching (D2:
+  // Fritz for heuristic), not a separate oracle-only ghost.
+  const presentationBestAction = coaching?.facts.best.action ?? currentOracleEvaluation?.best.action;
+  const oracleBestTile = presentationBestAction?.kind === 'play'
+    ? [presentationBestAction.tile.low, presentationBestAction.tile.high] as [number, number]
     : undefined;
 
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
@@ -499,14 +535,43 @@ export default function GameReviewer({
               ) : null}
               {moves.map((move, idx) => {
                 const decisionId = decisionIdByMoveNumber?.get(move.moveNumber);
-                const classification = reviewWorkerBatch
-                  ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch)
-                  : null;
+                const evaluation = decisionId && reviewWorkerBatch
+                  ? reviewWorkerBatch.resultsByDecisionId.get(decisionId)
+                  : undefined;
+                const factsForMove =
+                  decisionId && historicalCoachingByDecisionId?.has(decisionId)
+                    ? historicalCoachingByDecisionId.get(decisionId)!.facts
+                    : decisionId
+                      // Read published facts only — never call getFacts here.
+                      // Sidebar enumeration must not construct Fritz for every
+                      // row on each render (breaks once-per-decision caching).
+                      ? factsStore.byDecisionId.get(decisionId) ?? null
+                      : null;
+                const presentation = buildReviewPresentationRecord(evaluation, factsForMove ?? null);
+                const classification = presentation.classification
+                  ?? (reviewWorkerBatch
+                    ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch, {
+                        primaryReferenceAction: factsForMove?.best.action,
+                      })
+                    : null);
+
+                const unavailable =
+                  Boolean(reviewWorkerBatch?.done)
+                  && Boolean(decisionId || reviewWorkerBatch)
+                  && !evaluation
+                  && classification == null
+                  && !(decisionId && reviewWorkerBatch?.pendingDecisionIds.has(decisionId));
+
                 const display = classification ? heuristicClassificationToDisplay(classification) : null;
                 const searchTier = reviewWorkerBatch ? selectMoveSearchTier(decisionId, reviewWorkerBatch) : null;
-                const label = display?.label ?? move.rating;
-                const rowRatingClass = display?.ratingClass ?? ratingClass(move.rating);
-                const badge = display?.badge ?? searchTier;
+                const label = unavailable
+                  ? 'Unavailable'
+                  : (display?.label ?? move.rating);
+                const rowRatingClass = unavailable
+                  ? 'unavailable'
+                  : (display?.ratingClass ?? ratingClass(move.rating));
+                const badge = unavailable ? null : (display?.badge ?? searchTier);
+                const decisionIndex = idx + 1;
                 return (
                   <button
                     key={`${move.moveNumber}-${idx}`}
@@ -516,7 +581,7 @@ export default function GameReviewer({
                     className={`gr-move-row is-${rowRatingClass}${idx === cursor ? ' is-active' : ''}`}
                     onClick={() => setCursor(idx)}
                   >
-                    <span className="gr-move-row-num">#{move.moveNumber}</span>
+                    <span className="gr-move-row-num">#{decisionIndex}</span>
                     <span className="gr-move-row-played">{formatPlayedLabel(move)}</span>
                     <span className="gr-move-row-rating-cell">
                       <span className={`gr-move-row-rating is-${rowRatingClass}`}>{label}</span>

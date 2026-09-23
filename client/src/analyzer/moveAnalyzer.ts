@@ -125,14 +125,23 @@ export function deriveReviewEvidence(
   accuracyModel: GameAccuracyModelResult | undefined,
 ): ReviewEvidenceDisclosure {
   if (!accuracyModel || accuracyModel.accuracy === null) return LEGACY_ANALYSIS_DISCLOSURE;
+  // Modern V2 reviews that clear the coverage floor are never labeled
+  // "Legacy" — including mixed exact/search/heuristic (status: partial).
+  // Partial means some decisions used heuristic evidence, not that capture
+  // was pre-oracle incomplete.
+  if (accuracyModel.status === 'complete') {
+    return {
+      source: 'oracle',
+      confidence: 'high',
+      displayLabel: 'Review Engine analysis',
+      reason: 'oracle-coverage-full',
+    };
+  }
   return {
     source: 'oracle',
-    confidence: accuracyModel.status === 'complete' ? 'high' : 'medium',
-    displayLabel: 'Oracle analysis',
-    reason:
-      accuracyModel.status === 'complete'
-        ? 'oracle-coverage-full'
-        : 'oracle-coverage-cleared-floor',
+    confidence: 'medium',
+    displayLabel: 'Review Engine analysis',
+    reason: 'oracle-coverage-cleared-floor',
   };
 }
 

@@ -515,22 +515,22 @@ describe('deriveReviewEvidence', () => {
     expect(deriveReviewEvidence(model)).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
   });
 
-  it('status: complete, coverage floor cleared -- high confidence, rolled up as a single "Oracle analysis" label', () => {
+  it('status: complete, coverage floor cleared -- high confidence Review Engine analysis', () => {
     const model = accuracyModel({ status: 'complete', accuracy: 95, heuristicMoveCount: 0 });
     expect(deriveReviewEvidence(model)).toEqual({
       source: 'oracle',
       confidence: 'high',
-      displayLabel: 'Oracle analysis',
+      displayLabel: 'Review Engine analysis',
       reason: 'oracle-coverage-full',
     });
   });
 
-  it('status: partial, coverage floor still cleared -- medium confidence, same "Oracle analysis" label', () => {
+  it('status: partial, coverage floor still cleared -- medium confidence, never Legacy', () => {
     const model = accuracyModel({ status: 'partial', accuracy: 80, heuristicMoveCount: 3, coverageFraction: 0.6 });
     expect(deriveReviewEvidence(model)).toEqual({
       source: 'oracle',
       confidence: 'medium',
-      displayLabel: 'Oracle analysis',
+      displayLabel: 'Review Engine analysis',
       reason: 'oracle-coverage-cleared-floor',
     });
   });

@@ -68,6 +68,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         pivotalSelection={modals.pivotalSelection}
         postGameAnalysis={modals.postGameAnalysis}
         accuracyModelPending={modals.accuracyModelPending}
+        decisionLedger={modals.decisionLedger}
         opponentLabel={opponentLabel}
         showPostGameReviewPrompt={modals.showPostGameReviewPrompt}
         winnerId={match.winnerId}

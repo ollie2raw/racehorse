@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis, ReviewEvidenceDisclosure } from '../../analyzer/moveAnalyzer.ts';
 import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts.ts';
+import { buildPlayerDecisionLedger } from '../../analyzer/reviewDecisionAccounting.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
@@ -467,24 +468,29 @@ export function usePostGamePivotalReview({
     setPostGameReviewDismissed(false);
   }, []);
 
+  // accuracyModel/evidence are merged onto the analysis exposed to the
+  // post-game prompt. Opening GameReviewer MUST use that same merged
+  // object — otherwise the header stays pinned to LEGACY while the prompt
+  // already shows calibrated accuracy/grade (production smoke failure
+  // 2026-09-22).
   const openHandScopedReview = useCallback(
     (handNumber: number) => {
-      if (!postGameAnalysis) return;
+      if (!exposedPostGameAnalysis) return;
       setReviewerScopeHandNumber(handNumber);
-      setCurrentAnalysis(postGameAnalysis);
+      setCurrentAnalysis(exposedPostGameAnalysis);
       setAnalyzerOpen(true);
     },
-    [postGameAnalysis],
+    [exposedPostGameAnalysis],
   );
 
   const openReviewGameFromPrompt = useCallback(() => {
-    if (!postGameAnalysis) return;
+    if (!exposedPostGameAnalysis) return;
     setPostGameReviewDismissed(true);
     setReviewerScopeHandNumber(null);
     setReviewerInitialMoveIndex(1);
-    setCurrentAnalysis(postGameAnalysis);
+    setCurrentAnalysis(exposedPostGameAnalysis);
     setAnalyzerOpen(true);
-  }, [postGameAnalysis]);
+  }, [exposedPostGameAnalysis]);
 
   const completePivotalTurnReview = useCallback(
     (reflections: PivotalTurnReflection[]) => {
@@ -508,6 +514,24 @@ export function usePostGamePivotalReview({
     setPivotalReviewSummary(null);
   }, [pivotalReviewSummary]);
 
+  const decisionLedger = useMemo(() => {
+    if (!exposedPostGameAnalysis) return null;
+    return buildPlayerDecisionLedger({
+      analyzedMoves: exposedPostGameAnalysis.analyzedMoves,
+      decisionIdByMoveNumber,
+      resultsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+      errorsByDecisionId: reviewWorkerBatch.errorsByDecisionId,
+      pendingDecisionIds: reviewWorkerBatch.pendingDecisionIds,
+      batchDone: reviewWorkerBatch.done,
+    });
+  }, [exposedPostGameAnalysis, decisionIdByMoveNumber, reviewWorkerBatch]);
+
+  // While the reviewer is open, always prefer the merged exposed analysis so
+  // provenance cannot stay LEGACY after accuracy/evidence resolve — without a
+  // syncing effect (react-hooks/set-state-in-effect).
+  const reviewerAnalysis =
+    analyzerOpen && exposedPostGameAnalysis ? exposedPostGameAnalysis : currentAnalysis;
+
   const closeAnalyzer = useCallback(() => {
     setAnalyzerOpen(false);
     setReviewerScopeHandNumber(null);
@@ -517,7 +541,7 @@ export function usePostGamePivotalReview({
   return {
     analyzerOpen,
     setAnalyzerOpen,
-    currentAnalysis,
+    currentAnalysis: reviewerAnalysis,
     setCurrentAnalysis,
     reviewerScopeHandNumber,
     setReviewerScopeHandNumber,
@@ -532,6 +556,7 @@ export function usePostGamePivotalReview({
     postGameAnalysis: exposedPostGameAnalysis,
     postGameAnalysisPending,
     accuracyModelPending,
+    decisionLedger,
     reviewWorkerBatch,
     decisionIdByMoveNumber,
     coachingFactsStore,
