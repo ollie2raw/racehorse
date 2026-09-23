@@ -314,7 +314,7 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     expect(result.current.postGameAnalysis?.evidence).toEqual({
       source: 'oracle',
       confidence: 'medium',
-      displayLabel: 'Oracle analysis',
+      displayLabel: 'Review Engine analysis',
       reason: 'oracle-coverage-cleared-floor',
     });
   });
@@ -371,7 +371,7 @@ describe('usePostGamePivotalReview — evidence banner reflects real oracle cove
     expect(result.current.postGameAnalysis?.evidence).toEqual({
       source: 'oracle',
       confidence: 'high',
-      displayLabel: 'Oracle analysis',
+      displayLabel: 'Review Engine analysis',
       reason: 'oracle-coverage-full',
     });
     expect(result.current.postGameAnalysis?.evidence).not.toEqual(LEGACY_ANALYSIS_DISCLOSURE);

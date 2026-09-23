@@ -3,7 +3,7 @@ import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
 import {
   formatDecisionAccountingSummary,
   type PlayerDecisionLedgerSummary,
-} from '../../analyzer/reviewDecisionAccounting';
+} from '../../modules/review/reviewDecisionAccounting';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
 

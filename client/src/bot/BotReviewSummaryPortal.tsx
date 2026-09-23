@@ -5,7 +5,7 @@ import { PostGameReviewPrompt } from '../training/pivotalReview/PostGameReviewPr
 import type { PivotalReviewSession } from '../training/pivotalReview/pivotalReviewStorage';
 import type { PivotalTurnSelection } from '../training/pivotalReview/pivotalTurnSelector';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
-import type { PlayerDecisionLedgerSummary } from '../analyzer/reviewDecisionAccounting';
+import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
 
 export interface BotReviewSummaryPortalProps {
   pivotalReviewWizardEnabled: boolean;

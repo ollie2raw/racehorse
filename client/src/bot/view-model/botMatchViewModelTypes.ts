@@ -2,7 +2,7 @@ import type { RefObject, Dispatch, SetStateAction } from 'react';
 import type { BoardHandle } from '../../components';
 import type { MoveEntry } from '../../game/moveLogger';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
-import type { PlayerDecisionLedgerSummary } from '../../analyzer/reviewDecisionAccounting';
+import type { PlayerDecisionLedgerSummary } from '../../modules/review/reviewDecisionAccounting';
 import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts.ts';
 import type { ReviewBatchState } from '../../modules/review/useReviewWorkerBatch.ts';
 import type { ReviewCoachingFactsStore } from '../../modules/review/reviewCoachingFactsStore.ts';

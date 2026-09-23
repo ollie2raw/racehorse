@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis, ReviewEvidenceDisclosure } from '../../analyzer/moveAnalyzer.ts';
 import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts.ts';
-import { buildPlayerDecisionLedger } from '../../analyzer/reviewDecisionAccounting.ts';
+import { buildPlayerDecisionLedger } from './reviewDecisionAccounting.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { computeGameDigest } from './gameDigest.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
@@ -515,7 +515,7 @@ export function usePostGamePivotalReview({
   }, [pivotalReviewSummary]);
 
   const decisionLedger = useMemo(() => {
-    if (!exposedPostGameAnalysis) return null;
+    if (!exposedPostGameAnalysis?.analyzedMoves) return null;
     return buildPlayerDecisionLedger({
       analyzedMoves: exposedPostGameAnalysis.analyzedMoves,
       decisionIdByMoveNumber,
