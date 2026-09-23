@@ -305,6 +305,8 @@ export type InGameOverlayViewModel = {
   decisionIdByMoveNumber: ReadonlyMap<number, string>;
   coachingFactsStore: ReviewCoachingFactsStore<ReviewCoachingFacts> | null;
   snapshotsByDecisionId: ReadonlyMap<string, ReviewPositionSnapshotV2>;
+  /** Cohort-gated positional coaching prose (Gate 4). */
+  enablePositionalExplanations: boolean;
   reviewerScopeHandNumber: number | null;
   reviewerInitialMoveIndex: number;
   opponentLabel: string;

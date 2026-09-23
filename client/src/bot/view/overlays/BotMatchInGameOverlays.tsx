@@ -22,6 +22,7 @@ export function BotMatchInGameOverlays({
   decisionIdByMoveNumber,
   coachingFactsStore,
   snapshotsByDecisionId,
+  enablePositionalExplanations,
   reviewerScopeHandNumber,
   reviewerInitialMoveIndex,
   opponentLabel,
@@ -103,6 +104,7 @@ export function BotMatchInGameOverlays({
             decisionIdByMoveNumber={decisionIdByMoveNumber}
             coachingFactsStore={coachingFactsStore}
             snapshotsByDecisionId={snapshotsByDecisionId}
+            enablePositionalExplanations={enablePositionalExplanations}
             scopeHandNumber={reviewerScopeHandNumber}
             initialMoveIndex={reviewerInitialMoveIndex}
             title="Game Review"

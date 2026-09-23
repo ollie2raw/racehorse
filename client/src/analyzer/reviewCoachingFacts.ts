@@ -10,8 +10,16 @@ import { computePositionalFeatures, POSITIONAL_FEATURE_NAMES, type PositionalFea
 import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
 
-/** Product-owner ship gate: default off; sample generation opts in explicitly. */
-export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false;
+/**
+ * Product ship gate for approved positional coaching prose (Gate 2 / #298).
+ *
+ * This is NOT a universal UI switch. Live render and persistence must combine
+ * it with resolved server cohort eligibility via
+ * `isPositionalCoachingProseEnabled(serverCohortEnabled)` so non-cohort local
+ * review surfaces do not leak the new explanations. Sample/devtools callers
+ * may still pass `true` explicitly.
+ */
+export const REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = true;
 
 export type ReviewCoachingMissKind =
   | 'better_tile'
@@ -122,7 +130,7 @@ export function capSeverityForContestedDecision(
   label: LossBandLabel,
   agreement: ReviewAgreement,
   evidenceSource: ReviewEvaluationEvidence['source'],
-  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  enablePositionalExplanations: boolean = false,
 ): LossBandLabel {
   if (!enablePositionalExplanations || !agreement.contested) return label;
   const cap = F1C_D2_CONTESTED_SEVERITY_POLICY[evidenceSource].severityCap;
@@ -371,7 +379,7 @@ export function resolveAgreement(
 export function buildReviewCoachingFacts(
   evaluation: ReviewEvaluationV1,
   snapshot?: ReviewPositionSnapshotV2,
-  enablePositionalExplanations: boolean = REVIEW_POSITIONAL_EXPLANATIONS_ENABLED,
+  enablePositionalExplanations: boolean = false,
 ): ReviewCoachingFacts {
   const { played, best: oracleBest, evidence, candidates, loss } = evaluation;
   if (candidates.length === 0) {

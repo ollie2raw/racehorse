@@ -69,7 +69,8 @@ export function buildGameReviewReplayArtifact(
     buildFacts: input.buildFacts,
     enablePositionalExplanations: input.enablePositionalExplanations,
   });
-  const buildProse = input.buildProse ?? ((facts: ReviewCoachingFacts) => buildReviewCoachingProse(facts));
+  const buildProse = input.buildProse
+    ?? ((facts: ReviewCoachingFacts) => buildReviewCoachingProse(facts, input.enablePositionalExplanations === true));
 
   const decisionIds = [...input.decisionIdByMoveNumber.entries()]
     .sort((a, b) => a[0] - b[0])

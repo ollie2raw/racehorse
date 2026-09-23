@@ -58,7 +58,7 @@ Accepted recovery / plan root (see `PROGRESS-F.md` / `F0-AUDIT.md`). No re-audit
 | F2a–F2d | COMPLETE | Positional features, parity, reference resolver + D2 policy, coaching facts/prose + truth tests |
 | F2e | ENGINEERING COMPLETE / HUMAN PENDING | `docs/review-explanation-samples.md` (30 samples) + sign-off packet below |
 
-Product flag: `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = false` (default-off).
+Product flag: `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = true` (ship gate); live enablement is `isPositionalCoachingProseEnabled(serverCohort)` only.
 
 ### F3 — Coverage gate
 
@@ -130,22 +130,25 @@ Worker pool deterministic; 2000 ms per-decision ceiling; measured −17.67% medi
 | # | Requirement | Status | Evidence | Owner | Next action |
 | --- | --- | --- | --- | --- | --- |
 | 1 | F1b/F1c reported and rules applied | **AUTOMATED GATE COMPLETE** | D1/D2 docs + `#291` production policy + tests (`reviewF1cD2SeverityPolicy.test.ts`) | — | none |
-| 2 | F2e samples exist **and** product owner reviews ≥10 and approves voice | **HUMAN APPROVAL PENDING** | 30 samples in `docs/review-explanation-samples.md`; packet: `docs/review-explanation-voice-signoff-packet.md` | Product owner | Approve/reject voice |
-| 3 | Truth tests green; no Fritz numeric rating in user-facing review copy | **AUTOMATED GATE COMPLETE** | `reviewCoachingProse.test.ts` truth cases; `reviewF1cD2SeverityPolicy.test.ts` J; `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED` default-off; Fritz 2200 is PVF tier label / Glicko constant — not coaching prose | — | Keep Gate 3 green on enable |
-| 4 | Prose enabled for admin cohort only; `POST_GAME_REVIEW_VISIBLE` unchanged | **HUMAN / CONFIG PENDING** | Review UI: `POST_GAME_REVIEW_VISIBLE = true`; cohort: `POST_GAME_REVIEW_COHORT_USER_IDS`; **positional prose still `false`** | Product owner + deploy | After Gate 2: flip prose flag for cohort; confirm allowlist |
+| 2 | F2e samples exist **and** product owner reviews ≥10 and approves voice | **COMPLETE / PRODUCT OWNER APPROVED** | Packet `docs/review-explanation-voice-signoff-packet.md`; coaching voice PR `#298` merged `1048df18018c800e26e1ab6333ff8328d89b1f41` | Product owner | none |
+| 3 | Truth tests green; no Fritz numeric rating in user-facing review copy | **AUTOMATED GATE COMPLETE** | `reviewCoachingProse.test.ts` truth cases; `reviewF1cD2SeverityPolicy.test.ts` J; Fritz 2200 is PVF tier label / Glicko constant — not coaching prose | — | Keep Gate 3 green |
+| 4 | Prose enabled for admin cohort only; `POST_GAME_REVIEW_VISIBLE` unchanged | **IMPLEMENTED (code) / OPS PENDING** | `isPositionalCoachingProseEnabled(serverCohort)` = ship constant ∧ cohort ∧ visible; GameReviewer + artifact fail closed without cohort; non-cohort local review unchanged | Deploy/ops | Apply migration → deploy → confirm cohort → A–R smoke |
 
 ---
 
-## Current flag / cohort state (do not change in closeout)
+## Current flag / cohort state
 
 | Knob | Current value | Role |
 | --- | --- | --- |
 | `POST_GAME_REVIEW_VISIBLE` | `true` | Client release switch for review surfaces |
-| `POST_GAME_REVIEW_COHORT_USER_IDS` | server env allowlist | Persistence + cohort access |
+| `POST_GAME_REVIEW_COHORT_USER_IDS` | server env allowlist | Persistence + cohort access (server-owned) |
 | `isPostGameReviewEnabled` | `serverCohort && POST_GAME_REVIEW_VISIBLE` | Persistence / gated APIs |
-| `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED` | **`false`** | Positional / F2 prose path |
+| `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED` | **`true`** (product ship gate) | Approved positional prose may render **only** when combined with cohort via `isPositionalCoachingProseEnabled` |
+| `isPositionalCoachingProseEnabled` | ship ∧ cohort ∧ visible | Live render + replay-artifact snapshot boundary |
 
-Non-cohort users: local in-memory review may still appear where locally eligible; **server persistence and cohort APIs fail closed** outside the allowlist.
+Non-cohort users: local in-memory review may still appear where locally eligible; **positional coaching prose and server persistence fail closed** outside the allowlist.
+
+**Production migration still NOT applied.** **Production smoke still PENDING.**
 
 ---
 

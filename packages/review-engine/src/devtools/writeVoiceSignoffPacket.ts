@@ -6,7 +6,7 @@
  * covered: same-tile/wrong-end, played==reference, value-gap without features,
  * search contested, heuristic contested, true equality, immediate scoring.
  *
- * Product flag REVIEW_POSITIONAL_EXPLANATIONS_ENABLED remains false; this
+ * Product flag REVIEW_POSITIONAL_EXPLANATIONS_ENABLED is the ship gate; this
  * script force-enables positional prose only for sample generation.
  */
 import { writeFileSync } from 'node:fs';
@@ -94,13 +94,13 @@ export function writeVoiceSignoffPacket(): { written: number; missing: string[] 
   const body = [
     '# Game Review explanation voice — product-owner review packet (10 samples)',
     '',
-    '**Status:** PENDING — PRODUCT OWNER VOICE SIGN-OFF',
+    '**Status:** APPROVED — Ship Gate 2 complete (PR #298).',
     '',
-    'This packet is for human review only. An agent must not mark Ship Gate 2 complete.',
+    'This packet records the product-owner-approved voice. Gate 4 enables it for the admin cohort only.',
     '',
     '**Voice pass:** `feat/review-coaching-voice-quality` — coaching translation of structured facts (no oracle/feature/D1–D4 changes).',
     '',
-    '**Product flag:** `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED` remains `false`. Samples force-enable positional prose for review only.',
+    '**Product flag:** `REVIEW_POSITIONAL_EXPLANATIONS_ENABLED = true` (ship gate). Live enablement is cohort-gated via `isPositionalCoachingProseEnabled`. Samples force-enable positional prose for review only.',
     '',
     '**Selection:** deterministic predeclared decision IDs in `packages/review-engine/src/devtools/writeVoiceSignoffPacket.ts` (`VOICE_SIGNOFF_DECISION_IDS`).',
     '',

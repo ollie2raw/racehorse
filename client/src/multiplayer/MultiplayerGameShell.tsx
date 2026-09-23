@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { isMultiplayerPostGameReviewLocallyEligible } from '../training/pivotalReview/postGameReviewPolicy';
+import { isMultiplayerPostGameReviewLocallyEligible, isPositionalCoachingProseEnabled } from '../training/pivotalReview/postGameReviewPolicy';
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
@@ -1168,6 +1168,7 @@ function MultiplayerGameShellComponent({
         decisionIdByMoveNumber={multiplayerDecisionIdByMoveNumber}
         coachingFactsStore={multiplayerCoachingFactsStore}
         snapshotsByDecisionId={multiplayerSnapshotsByDecisionId}
+        enablePositionalExplanations={isPositionalCoachingProseEnabled(multiplayerReviewCohortEnabled)}
         title="Game Review"
       />
     </React.Suspense>

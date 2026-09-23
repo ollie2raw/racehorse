@@ -56,6 +56,12 @@ export type UsePostGamePivotalReviewParams = {
   botPostGameReviewEligible: boolean;
   /** Server cohort gate for persistence; local analysis/UI is independent. */
   reviewPersistenceEnabled?: boolean;
+  /**
+   * Gate 4: when true, persisted replay artifacts snapshot approved positional
+   * coaching prose. Must match the live GameReviewer prop for the same review
+   * so the shared coachingFactsStore does not mix enablement modes.
+   */
+  enablePositionalExplanations?: boolean;
   fritzTier: FritzTier;
   winningScore: number;
   showPostGameOverlays: boolean;
@@ -91,6 +97,7 @@ export function usePostGamePivotalReview({
   moveLog,
   botPostGameReviewEligible,
   reviewPersistenceEnabled = true,
+  enablePositionalExplanations = false,
   fritzTier,
   winningScore,
   showPostGameOverlays,
@@ -383,6 +390,7 @@ export function usePostGamePivotalReview({
               decisionIdByMoveNumber,
               snapshotsByDecisionId,
               coachingFactsStore,
+              enablePositionalExplanations,
             });
             postGameReviewWrite({
               gameDigest: computeGameDigest(reviewWorkerSnapshots),
@@ -434,7 +442,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
 
   // Merged only into the value exposed as `postGameAnalysis` below -- the
   // internal `postGameAnalysis` state above (read by pivotalSelection,
@@ -528,6 +536,7 @@ export function usePostGamePivotalReview({
     decisionIdByMoveNumber,
     coachingFactsStore,
     snapshotsByDecisionId,
+    enablePositionalExplanations,
     pivotalSelection,
     skipPostGameReview,
     reopenPostGameReview,

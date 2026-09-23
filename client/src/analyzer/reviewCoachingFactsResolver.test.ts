@@ -258,9 +258,9 @@ describe('createReviewCoachingFactsResolver — intra-review consistency', () =>
     expect(prose1).toEqual(prose2);
   });
 
-  it('H: default positional flag remains off (public prose unchanged)', async () => {
+  it('H: ship constant is approved; callers must still pass an explicit enable', async () => {
     const { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } = await import('./reviewCoachingFacts');
-    expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(false);
+    expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(true);
   });
 
   it('measurement: duplicate constructions are 0 after double-request pass', () => {
