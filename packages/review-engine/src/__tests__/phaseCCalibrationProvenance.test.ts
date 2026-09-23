@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dedupeCandidatesByTile, isForcedDecision } from '@racehorse/game-core/review';
-import { CALIBRATED_K, LOSS_BAND_BOUNDARIES } from '../accuracyModelCalibration';
+import { LOSS_BAND_BOUNDARIES } from '../accuracyModelCalibration';
 import {
   RECORDED_CLIENT_POLICY_DIR,
   RECORDED_SELF_PLAY_DIR,
@@ -10,11 +10,14 @@ import {
   readCorpusDir,
 } from '../devtools/calibrateAccuracyModel';
 
+/** Frozen v4 published K — provenance only; not the live production constant. */
+const V4_PUBLISHED_K = 0.19770906562806756;
+
 /**
  * Provenance regression: published v4 constants are recoverable under
  * tile-level forced on the committed recorded corpora. Action-level forced
- * on the same corpora does NOT recover those constants / [65,85] check.
- * Diagnostic only — does not publish new constants.
+ * on the same corpora does NOT recover those constants / historical [65,85]
+ * check. Diagnostic only — live production uses action-level + refit K.
  */
 describe('Phase C calibration provenance (diagnostic)', () => {
   const selfPlay = readCorpusDir(RECORDED_SELF_PLAY_DIR);
@@ -38,7 +41,7 @@ describe('Phase C calibration provenance (diagnostic)', () => {
       .map((r) => r.evaluation.loss.expectedPointDifferential);
   }
 
-  it('tile-level forced re-fit reproduces published K within 1e-9 and exact bands', () => {
+  it('tile-level forced re-fit reproduces historical v4 K within 1e-9 and exact retained bands', () => {
     const strongLosses = scorableLosses(strong, 'tile');
     const ordinaryLosses = scorableLosses(ordinary, 'tile');
     const poorLosses = worstLegal
@@ -60,7 +63,7 @@ describe('Phase C calibration provenance (diagnostic)', () => {
     ]);
     const bands = fitBoundaries(strongLosses, ordinaryLosses, poorLosses);
 
-    expect(Math.abs(k - CALIBRATED_K)).toBeLessThan(1e-9);
+    expect(Math.abs(k - V4_PUBLISHED_K)).toBeLessThan(1e-9);
     expect(bands).toEqual(LOSS_BAND_BOUNDARIES);
 
     const ordinaryMean = ordinaryLosses.reduce((s, v) => s + v, 0) / ordinaryLosses.length;
@@ -69,7 +72,7 @@ describe('Phase C calibration provenance (diagnostic)', () => {
     expect(ordinaryPred).toBeLessThanOrEqual(85);
   });
 
-  it('action-level forced on the same corpus moves ordinary predicted accuracy outside [65,85]', () => {
+  it('action-level forced on the same corpus moves ordinary predicted accuracy outside historical [65,85]', () => {
     const strongLosses = scorableLosses(strong, 'action');
     const ordinaryLosses = scorableLosses(ordinary, 'action');
     const poorLosses = worstLegal
@@ -91,6 +94,7 @@ describe('Phase C calibration provenance (diagnostic)', () => {
     ]);
     const ordinaryMean = ordinaryLosses.reduce((s, v) => s + v, 0) / ordinaryLosses.length;
     const ordinaryPred = 100 * Math.exp(-k * ordinaryMean);
+    // Historical v4 empirical range — not a v5 gate; still documents the break.
     expect(ordinaryPred).toBeGreaterThan(85);
 
     const bands = fitBoundaries(strongLosses, ordinaryLosses, poorLosses);

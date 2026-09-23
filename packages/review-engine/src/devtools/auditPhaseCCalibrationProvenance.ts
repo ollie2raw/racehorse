@@ -15,7 +15,6 @@ import {
   type ReviewEvaluationV1,
 } from '@racehorse/game-core/review';
 import {
-  CALIBRATED_K as PUBLISHED_K,
   LOSS_BAND_BOUNDARIES as PUBLISHED_BANDS,
 } from '../accuracyModelCalibration';
 import type { ReviewCaptureRecord } from '../reviewCaptureSchema';
@@ -32,7 +31,9 @@ import {
 } from './calibrateAccuracyModel';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const PUBLISHED_K_TARGET = 0.19770906562806756;
+/** Frozen v4 published K for provenance comparison (not live production K). */
+const V4_PUBLISHED_K = 0.19770906562806756;
+const V4_PUBLISHED_K_TARGET = V4_PUBLISHED_K;
 const PUBLISHED_BANDS_TARGET = {
   bestTolerance: 0.12999999999999995,
   inaccuracyToMistake: 0.79,
@@ -139,16 +140,16 @@ function runCell(label: string, mode: ForcedMode, selfPlay: ReviewCaptureRecord[
       })(),
     },
     predictedWithPublishedK: {
-      strong: predicted(strongMean, PUBLISHED_K),
-      ordinary: predicted(ordinaryMean, PUBLISHED_K),
-      poor: predicted(poorMean, PUBLISHED_K),
+      strong: predicted(strongMean, V4_PUBLISHED_K),
+      ordinary: predicted(ordinaryMean, V4_PUBLISHED_K),
+      poor: predicted(poorMean, V4_PUBLISHED_K),
     },
     reproductionDeltasVsPublished: {
-      kDelta: fittedK - PUBLISHED_K_TARGET,
+      kDelta: fittedK - V4_PUBLISHED_K_TARGET,
       bestToleranceDelta: bands.bestTolerance - PUBLISHED_BANDS_TARGET.bestTolerance,
       inaccuracyToMistakeDelta: bands.inaccuracyToMistake - PUBLISHED_BANDS_TARGET.inaccuracyToMistake,
       mistakeToBlunderDelta: bands.mistakeToBlunder - PUBLISHED_BANDS_TARGET.mistakeToBlunder,
-      kMatchesPublished: Math.abs(fittedK - PUBLISHED_K_TARGET) < 1e-12,
+      kMatchesPublished: Math.abs(fittedK - V4_PUBLISHED_K_TARGET) < 1e-12,
       bandsMatchPublished:
         bands.bestTolerance === PUBLISHED_BANDS_TARGET.bestTolerance &&
         bands.inaccuracyToMistake === PUBLISHED_BANDS_TARGET.inaccuracyToMistake &&
@@ -277,7 +278,7 @@ function main(): void {
   const report = {
     provenanceNote: {
       publishedForcedSemantics: 'tile-level (dedupeCandidatesByTile(...).length === 1) from C1 d545cd15 through C4 until 86db51b2',
-      publishedK: PUBLISHED_K,
+      publishedK: V4_PUBLISHED_K,
       publishedBands: PUBLISHED_BANDS,
       ordinaryBand6585:
         'Hardcoded in calibrateAccuracyModel.ts at C2b 48b85258 as pvfBotMatchStandardBand; NOT in Phase C0/parent scoping docs. Commit message: ordinary landed ~85.9 just outside — reported, not forced. Classification: post-hoc empirical validation range / manually chosen product expectation, not a formally derived objective.',

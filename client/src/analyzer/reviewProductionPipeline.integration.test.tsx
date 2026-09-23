@@ -10,7 +10,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { REVIEW_FIXTURE_CORPUS } from '../../../packages/game-core/src/reviewFixtureCorpus';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { isForcedDecision } from '@racehorse/game-core/review';
-import { computeGameAccuracyModel } from '@racehorse/review-engine';
+import {
+  ACCURACY_MODEL_VERSION,
+  LOSS_BAND_BOUNDARIES,
+  computeGameAccuracyModel,
+} from '@racehorse/review-engine';
 import GameReviewer from './GameReviewer';
 import { analyzeMoveLog, deriveReviewEvidence, type AnalyzedMove, type GameAnalysis } from './moveAnalyzer';
 import { buildPlayerDecisionLedger, formatDecisionAccountingSummary } from './reviewDecisionAccounting';
@@ -108,9 +112,18 @@ describe('production review pipeline integration', () => {
     const accuracyModel = computeGameAccuracyModel([...resultsByDecisionId.values()]);
     const evidence = deriveReviewEvidence(accuracyModel);
     expect(evidence.displayLabel.toLowerCase()).not.toContain('legacy');
-    expect(accuracyModel.accuracyModelVersion).toContain('action-forced');
+    expect(accuracyModel.accuracyModelVersion).toBe('accuracy-model-v5-action-forced-2026-09-22');
+    expect(ACCURACY_MODEL_VERSION).toBe('accuracy-model-v5-action-forced-2026-09-22');
+    expect(LOSS_BAND_BOUNDARIES.bestTolerance).toBeCloseTo(0.13, 10);
+    expect(LOSS_BAND_BOUNDARIES.inaccuracyToMistake).toBe(0.79);
+    expect(LOSS_BAND_BOUNDARIES.mistakeToBlunder).toBe(5.98);
     if (accuracyModel.status === 'partial') {
       expect(accuracyModel.grade).toBeNull();
+      expect(accuracyModel.accuracy).not.toBeNull();
+    }
+    if (accuracyModel.status === 'complete') {
+      expect(accuracyModel.grade).not.toBeNull();
+      expect(accuracyModel.accuracy).not.toBeNull();
     }
 
     const analyzedMoves = snapshots.map((s, i) => analyzedFromSnapshot(s, i + 1));

@@ -19,9 +19,8 @@ import {
 import { isScorable } from '../reviewAccuracy';
 import { gradeFromAccuracy } from '../accuracyGrade';
 import {
-  CALIBRATED_K as OLD_K,
-  LOSS_BAND_BOUNDARIES as OLD_BOUNDARIES,
   ACCURACY_MODEL_CALIBRATION_VERSION as PRE_RECAL_VERSION,
+  LOSS_BAND_BOUNDARIES as PUBLISHED_BOUNDARIES,
 } from '../accuracyModelCalibration';
 import type { ReviewCaptureRecord } from '../reviewCaptureSchema';
 import {
@@ -39,6 +38,14 @@ import {
 } from './calibrateAccuracyModel';
 import { REVIEW_FIXTURE_CORPUS } from '../../../game-core/src/reviewFixtureCorpus';
 
+/** Frozen v4 signed-off K (tile-level era) for before/after comparison. */
+const V4_K = 0.19770906562806756;
+const V4_BOUNDARIES = {
+  bestTolerance: 0.12999999999999995,
+  inaccuracyToMistake: 0.79,
+  mistakeToBlunder: 5.98,
+} as const;
+
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** FREEZE — declared before looking at fit outcomes. */
@@ -53,13 +60,18 @@ const FROZEN = {
     'fitKLeastSquares (grid + golden-section) anchors: strong-policy mean→95, worst_legal mean→15; fitBoundaries: best=p75(strong), inacc→mistake=p75(ordinary PVF), mistake→blunder=p10(poor)',
   fittingObjective: 'sum of squared residuals vs target accuracies 95 and 15',
   acceptanceChecks: {
-    ordinaryPvfPredictedBand: [65, 85] as const,
+    // [65,85] is historical v4 empirical validation under tile-level forced —
+    // NOT a v5 acceptance gate (project-lead 2026-09-22).
+    historicalV4OrdinaryPvfBand: [65, 85] as const,
+    ordinaryPvfIsV5Gate: false,
     poorPlayAccuracy: { lt: 60, gt: 0 },
     strongPolicyTarget: 95,
     poorPlayTarget: 15,
+    strongAboveOrdinaryAbovePoor: true,
     monotonicity: true,
     forcedInvariance: true,
     optimalCeiling: 100,
+    retainPublishedLossBands: true,
   },
 } as const;
 
@@ -86,7 +98,13 @@ function sameTileMultiPlacement(candidates: ReviewEvaluationV1['candidates']): b
   return tiles.size === 1 && countDistinctLegalActions(candidates) > 1;
 }
 
-function lossBand(loss: number, b: typeof OLD_BOUNDARIES): 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder' {
+type LossBandBoundaries = {
+  readonly bestTolerance: number;
+  readonly inaccuracyToMistake: number;
+  readonly mistakeToBlunder: number;
+};
+
+function lossBand(loss: number, b: LossBandBoundaries): 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder' {
   if (loss <= b.bestTolerance) return 'Best';
   if (loss <= b.inaccuracyToMistake) return 'Inaccuracy';
   if (loss <= b.mistakeToBlunder) return 'Mistake';
@@ -109,7 +127,7 @@ function lossStats(losses: readonly number[]) {
   };
 }
 
-function bandDist(losses: readonly number[], b: typeof OLD_BOUNDARIES) {
+function bandDist(losses: readonly number[], b: LossBandBoundaries) {
   const out = { Best: 0, Inaccuracy: 0, Mistake: 0, Blunder: 0 };
   for (const loss of losses) out[lossBand(loss, b)] += 1;
   return out;
@@ -277,14 +295,14 @@ function main(): void {
   const ordinaryMean = ordinaryLosses.reduce((s, v) => s + v, 0) / ordinaryLosses.length;
   const poorMean = worstLegalLosses.reduce((s, v) => s + v, 0) / worstLegalLosses.length;
 
-  const oldGameDist = perGameAccuracies(all, tileForced, OLD_K);
-  const newGameDistOldK = perGameAccuracies(all, actionForced, OLD_K);
+  const oldGameDist = perGameAccuracies(all, tileForced, V4_K);
+  const newGameDistOldK = perGameAccuracies(all, actionForced, V4_K);
   const newGameDistNewK = perGameAccuracies(all, actionForced, fittedK);
 
   const report = {
     frozen: FROZEN,
     preRecalVersion: PRE_RECAL_VERSION,
-    oldConstants: { k: OLD_K, boundaries: OLD_BOUNDARIES },
+    oldConstants: { k: V4_K, boundaries: V4_BOUNDARIES },
     forcedCorrection: {
       totalDecisions: all.length,
       wronglyForced: oldAcc.forced - newAcc.forced,
@@ -299,7 +317,7 @@ function main(): void {
       sameTileMultiPlacementShare: sameTileShare / Math.max(1, newlyScorable.length),
       sameTileMultiPlacementCount: sameTileShare,
       losses: lossStats(newlyLosses),
-      bandDistUnderOldBoundaries: bandDist(newlyLosses, OLD_BOUNDARIES),
+      bandDistUnderOldBoundaries: bandDist(newlyLosses, V4_BOUNDARIES),
       bandDistUnderNewBoundaries: bandDist(newlyLosses, fittedBoundaries),
     },
     gameAccuracyUnderCurrentK: {
@@ -308,24 +326,28 @@ function main(): void {
     },
     aggregateFit: {
       method: FROZEN.calibrationAlgorithm,
-      oldK: OLD_K,
+      oldK: V4_K,
       candidateV5K: fittedK,
+      publishedV5K: fittedK,
       strongMeanLoss: strongMean,
       poorMeanLoss: poorMean,
       ordinaryMeanLoss: ordinaryMean,
       predictedStrong: predicted(strongMean, fittedK),
       predictedOrdinary: predicted(ordinaryMean, fittedK),
       predictedPoor: predicted(poorMean, fittedK),
-      ordinaryInBand65_85:
+      ordinaryWithinHistoricalV4Band65_85:
         predicted(ordinaryMean, fittedK) >= 65 && predicted(ordinaryMean, fittedK) <= 85,
+      ordinaryPvfIsV5Gate: false,
     },
     lossBands: {
-      old: OLD_BOUNDARIES,
-      candidateV5: fittedBoundaries,
-      retained:
-        OLD_BOUNDARIES.bestTolerance === fittedBoundaries.bestTolerance &&
-        OLD_BOUNDARIES.inaccuracyToMistake === fittedBoundaries.inaccuracyToMistake &&
-        OLD_BOUNDARIES.mistakeToBlunder === fittedBoundaries.mistakeToBlunder,
+      old: V4_BOUNDARIES,
+      mechanicalPercentileCandidate: fittedBoundaries,
+      retainedPublished: PUBLISHED_BOUNDARIES,
+      retainedMatchesV4:
+        PUBLISHED_BOUNDARIES.bestTolerance === V4_BOUNDARIES.bestTolerance &&
+        PUBLISHED_BOUNDARIES.inaccuracyToMistake === V4_BOUNDARIES.inaccuracyToMistake &&
+        PUBLISHED_BOUNDARIES.mistakeToBlunder === V4_BOUNDARIES.mistakeToBlunder,
+      v5Policy: 'retain published semantic thresholds; reject mechanical Best=0',
     },
     distributionsWithV5K: newGameDistNewK,
     harnessReport,

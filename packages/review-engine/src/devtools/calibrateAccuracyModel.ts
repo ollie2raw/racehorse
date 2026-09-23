@@ -66,6 +66,7 @@ import { fileURLToPath } from 'node:url';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { evaluateReviewPosition, type ReviewDispatchBudget } from '../evaluateReviewPosition';
 import { isScorable } from '../reviewAccuracy';
+import { LOSS_BAND_BOUNDARIES } from '../accuracyModelCalibration';
 import {
   deserializeReviewCaptureRecordsFromJsonl,
   type ReviewCaptureCorpusKind,
@@ -323,8 +324,18 @@ export type CalibrationReport = {
     readonly method: string;
     readonly k: number;
     readonly targets: { readonly strongPolicy: number; readonly poorPlay: number };
+    /**
+     * Published semantic loss bands. Under v5 these are the retained v4
+     * thresholds (not the mechanical percentile re-fit).
+     */
     readonly boundaries: FittedBoundaries;
     readonly boundaryMethod: string;
+    /**
+     * Diagnostic only: what `fitBoundaries` would emit on the current
+     * action-level population. Not published under the v5 migration policy
+     * (Best collapses to 0 from zero-inflated newly eligible actions).
+     */
+    readonly mechanicalPercentileBoundaries: FittedBoundaries;
   };
   readonly predictedMeanAccuracy: {
     readonly dailyFritzMasterStrong: number | null;
@@ -335,8 +346,14 @@ export type CalibrationReport = {
     readonly pvfBotMatchMasterTier: number | null;
   };
   readonly validation: {
-    readonly pvfBotMatchStandardBand: readonly [65, 85];
-    readonly pvfBotMatchStandardInBand: boolean;
+    /**
+     * Historical v4 empirical validation range under tile-level forced.
+     * NOT a v5 acceptance gate (project-lead 2026-09-22). Kept for provenance.
+     */
+    readonly historicalV4OrdinaryPvfBand: readonly [65, 85];
+    readonly ordinaryPvfPredictedAccuracy: number | null;
+    readonly ordinaryWithinHistoricalV4Band: boolean;
+    readonly ordinaryPvfIsV5Gate: false;
   };
 };
 
@@ -378,7 +395,20 @@ export function runCalibration(): CalibrationReport {
     { label: worstLegal.label, meanLoss: worstLegal.mean, targetAccuracy: K_TARGET_POOR_PLAY },
   ]);
 
-  const boundaries = fitBoundaries(strongPolicyLosses, pvfStandardLosses, worstLegalLosses);
+  // Diagnostic percentile re-fit on the current (action-level) population.
+  // v5 does NOT publish these — Best collapses to 0 under zero-inflated
+  // newly eligible same-tile/multi-placement mass. Published bands are the
+  // retained semantic thresholds in accuracyModelCalibration.ts.
+  const mechanicalPercentileBoundaries = fitBoundaries(
+    strongPolicyLosses,
+    pvfStandardLosses,
+    worstLegalLosses,
+  );
+  const boundaries: FittedBoundaries = {
+    bestTolerance: LOSS_BAND_BOUNDARIES.bestTolerance,
+    inaccuracyToMistake: LOSS_BAND_BOUNDARIES.inaccuracyToMistake,
+    mistakeToBlunder: LOSS_BAND_BOUNDARIES.mistakeToBlunder,
+  };
 
   const pvfBotMatchStandardPredicted = predictedMeanAccuracy(pvfBotMatchStandard.mean, fittedK);
 
@@ -391,11 +421,13 @@ export function runCalibration(): CalibrationReport {
       informational: { dailyFritzMasterOrdinaryTierSelfPlay, pvfBotMatchHardTier, pvfBotMatchMasterTier },
     },
     fit: {
-      method: 'least-squares (grid-search bracket + golden-section refinement) against 2 anchors: daily-fritz-master strong-policy-top-tier mean loss -> target accuracy 95 (midpoint of the 92-98 band), and worst_legal mean loss -> target accuracy 15 (comfortably below the <25 ceiling).',
+      method: 'least-squares (grid-search bracket + golden-section refinement) against 2 anchors: daily-fritz-master strong-policy-top-tier mean loss -> target accuracy 95 (midpoint of the 92-98 band), and worst_legal mean loss -> target accuracy 15 (comfortably below the <25 ceiling). Forced semantics: action-level (isForcedDecision).',
       k: fittedK,
       targets: { strongPolicy: K_TARGET_STRONG_POLICY, poorPlay: K_TARGET_POOR_PLAY },
       boundaries,
-      boundaryMethod: 'bestTolerance = p75(strong-policy losses); inaccuracyToMistake = p75(ordinary-PVF losses, not p50 -- both real corpora are zero-inflated enough that p50 is degenerately 0); mistakeToBlunder = p10(poor-play losses). Linear-interpolation percentile.',
+      boundaryMethod:
+        'v5: RETAIN published semantic thresholds (bestTolerance / inaccuracyToMistake / mistakeToBlunder) from v4. Loss quantity unchanged; only eligibility changed. Mechanical percentile fitBoundaries (p75 strong / p75 ordinary / p10 poor) is reported separately as mechanicalPercentileBoundaries and is NOT published.',
+      mechanicalPercentileBoundaries,
     },
     predictedMeanAccuracy: {
       dailyFritzMasterStrong: predictedMeanAccuracy(dailyFritzMasterStrong.mean, fittedK),
@@ -406,8 +438,13 @@ export function runCalibration(): CalibrationReport {
       pvfBotMatchMasterTier: predictedMeanAccuracy(pvfBotMatchMasterTier.mean, fittedK),
     },
     validation: {
-      pvfBotMatchStandardBand: [65, 85],
-      pvfBotMatchStandardInBand: pvfBotMatchStandardPredicted !== null && pvfBotMatchStandardPredicted >= 65 && pvfBotMatchStandardPredicted <= 85,
+      historicalV4OrdinaryPvfBand: [65, 85],
+      ordinaryPvfPredictedAccuracy: pvfBotMatchStandardPredicted,
+      ordinaryWithinHistoricalV4Band:
+        pvfBotMatchStandardPredicted !== null &&
+        pvfBotMatchStandardPredicted >= 65 &&
+        pvfBotMatchStandardPredicted <= 85,
+      ordinaryPvfIsV5Gate: false,
     },
   };
 }

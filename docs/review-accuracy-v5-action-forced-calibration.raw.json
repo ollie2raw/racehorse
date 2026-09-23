@@ -68,19 +68,22 @@
     "calibrationAlgorithm": "fitKLeastSquares (grid + golden-section) anchors: strong-policy mean→95, worst_legal mean→15; fitBoundaries: best=p75(strong), inacc→mistake=p75(ordinary PVF), mistake→blunder=p10(poor)",
     "fittingObjective": "sum of squared residuals vs target accuracies 95 and 15",
     "acceptanceChecks": {
-      "ordinaryPvfPredictedBand": [
+      "historicalV4OrdinaryPvfBand": [
         65,
         85
       ],
+      "ordinaryPvfIsV5Gate": false,
       "poorPlayAccuracy": {
         "lt": 60,
         "gt": 0
       },
       "strongPolicyTarget": 95,
       "poorPlayTarget": 15,
+      "strongAboveOrdinaryAbovePoor": true,
       "monotonicity": true,
       "forcedInvariance": true,
-      "optimalCeiling": 100
+      "optimalCeiling": 100,
+      "retainPublishedLossBands": true
     }
   },
   "preRecalVersion": "accuracy-model-v5-action-forced-2026-09-22",
@@ -201,13 +204,15 @@
     "method": "fitKLeastSquares (grid + golden-section) anchors: strong-policy mean→95, worst_legal mean→15; fitBoundaries: best=p75(strong), inacc→mistake=p75(ordinary PVF), mistake→blunder=p10(poor)",
     "oldK": 0.19770906562806756,
     "candidateV5K": 0.20094184929012865,
+    "publishedV5K": 0.20094184929012865,
     "strongMeanLoss": 0.35901826484018257,
     "poorMeanLoss": 9.292142857142858,
     "ordinaryMeanLoss": 0.6285968738640492,
     "predictedStrong": 93.03989614060039,
     "predictedOrdinary": 88.13403385390839,
     "predictedPoor": 15.455884682218576,
-    "ordinaryInBand65_85": false
+    "ordinaryWithinHistoricalV4Band65_85": false,
+    "ordinaryPvfIsV5Gate": false
   },
   "lossBands": {
     "old": {
@@ -215,12 +220,18 @@
       "inaccuracyToMistake": 0.79,
       "mistakeToBlunder": 5.98
     },
-    "candidateV5": {
+    "mechanicalPercentileCandidate": {
       "bestTolerance": 0,
       "inaccuracyToMistake": 0.24750000000000005,
       "mistakeToBlunder": 5.98
     },
-    "retained": false
+    "retainedPublished": {
+      "bestTolerance": 0.12999999999999995,
+      "inaccuracyToMistake": 0.79,
+      "mistakeToBlunder": 5.98
+    },
+    "retainedMatchesV4": true,
+    "v5Policy": "retain published semantic thresholds; reject mechanical Best=0"
   },
   "distributionsWithV5K": {
     "gameCount": 100,
@@ -303,18 +314,23 @@
       }
     },
     "fit": {
-      "method": "least-squares (grid-search bracket + golden-section refinement) against 2 anchors: daily-fritz-master strong-policy-top-tier mean loss -> target accuracy 95 (midpoint of the 92-98 band), and worst_legal mean loss -> target accuracy 15 (comfortably below the <25 ceiling).",
+      "method": "least-squares (grid-search bracket + golden-section refinement) against 2 anchors: daily-fritz-master strong-policy-top-tier mean loss -> target accuracy 95 (midpoint of the 92-98 band), and worst_legal mean loss -> target accuracy 15 (comfortably below the <25 ceiling). Forced semantics: action-level (isForcedDecision).",
       "k": 0.20094184919427788,
       "targets": {
         "strongPolicy": 95,
         "poorPlay": 15
       },
       "boundaries": {
+        "bestTolerance": 0.12999999999999995,
+        "inaccuracyToMistake": 0.79,
+        "mistakeToBlunder": 5.98
+      },
+      "boundaryMethod": "v5: RETAIN published semantic thresholds (bestTolerance / inaccuracyToMistake / mistakeToBlunder) from v4. Loss quantity unchanged; only eligibility changed. Mechanical percentile fitBoundaries (p75 strong / p75 ordinary / p10 poor) is reported separately as mechanicalPercentileBoundaries and is NOT published.",
+      "mechanicalPercentileBoundaries": {
         "bestTolerance": 0,
         "inaccuracyToMistake": 0.24750000000000005,
         "mistakeToBlunder": 5.98
-      },
-      "boundaryMethod": "bestTolerance = p75(strong-policy losses); inaccuracyToMistake = p75(ordinary-PVF losses, not p50 -- both real corpora are zero-inflated enough that p50 is degenerately 0); mistakeToBlunder = p10(poor-play losses). Linear-interpolation percentile."
+      }
     },
     "predictedMeanAccuracy": {
       "dailyFritzMasterStrong": 93.0398961438021,
@@ -325,11 +341,13 @@
       "pvfBotMatchMasterTier": 91.36608799593027
     },
     "validation": {
-      "pvfBotMatchStandardBand": [
+      "historicalV4OrdinaryPvfBand": [
         65,
         85
       ],
-      "pvfBotMatchStandardInBand": false
+      "ordinaryPvfPredictedAccuracy": 88.13403385921859,
+      "ordinaryWithinHistoricalV4Band": false,
+      "ordinaryPvfIsV5Gate": false
     }
   },
   "lossHistogramsActionLevel": {

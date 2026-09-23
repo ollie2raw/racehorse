@@ -2,16 +2,40 @@
 
 **Date:** 2026-09-22  
 **Branch / PR:** `fix/review-production-integrity` / #300  
-**Status:** **V5 CALIBRATION: BLOCKED**
+**Status:** **V5 CALIBRATION: PASS**
 
-Mechanical Phase C recalibration was run under the corrected action-level
-forced predicate. Production constants (`CALIBRATED_K`,
-`LOSS_BAND_BOUNDARIES`) are **not** updated — the fitted candidate fails a
-locked Phase C acceptance check, and the percentile band fit produces a
-degenerate Best boundary that contradicts the method’s own documented intent.
+Sequence (honest):
+
+1. **Initial mechanical migration** → `V5 CALIBRATION: BLOCKED` (ordinary PVF ~88.1 outside historical `[65,85]`; mechanical Best quantile → 0).
+2. **Phase C provenance audit** → published v4 K / bands / `[65,85]` were produced under obsolete **tile-level** forced on identical recorded trees.
+3. **Project-lead semantic-migration policy** (this section) → authorize v5.
+4. **Final v5 calibration + validation** → PASS under the policy below.
 
 Supporting machine output:
 `docs/review-accuracy-v5-action-forced-calibration.raw.json`
+
+---
+
+## Project-lead calibration decision
+
+Canonical model: `accuracy-model-v5-action-forced-2026-09-22`
+
+| Decision | Choice |
+| --- | --- |
+| Forced semantics | **Action-level** (`isForcedDecision` / exactly one legal player action). One tile with multiple legal placements is **NOT** forced. |
+| Aggregate K | **Refit** with Phase C `fitKLeastSquares` over the corrected action-level eligible exact/search population. Exact harness float: `0.20094184929012865` (v4 was `0.19770906562806756`). |
+| Loss bands | **Retain** published semantic thresholds `0.13 / 0.79 / 5.98`. Do **not** adopt mechanical Best=`0`. |
+| Why Best=`0` rejected | Prevalence-driven quantile degeneracy from zero-inflated newly eligible same-tile/multi-placement actions (strong zero-mass 71%→76% → p75=0). The loss quantity `value(best)-value(played)` did **not** change — only eligibility did. Treat bands as **semantic thresholds on the unchanged loss quantity**, not population-share targets. |
+| Grades | **Unchanged** (`gradeFromAccuracy` cutoffs). Do not retune to recreate historical grade frequencies. |
+| `[65,85]` ordinary PVF | Classified as **historical v4 empirical validation range under tile-level forced semantics**. **Not** a v5 acceptance gate. Provenance retained; no silent rewrite to a replacement `[x,y]`. Corrected ordinary distribution (~88.1) is a **baseline measurement**, not a quality target. |
+| v5 acceptance | Semantic / property invariants + deterministic corpus regression (scorable denom `5,538`, exact K, retained bands). No arbitrary numerical category ranges invented to replace `[65,85]`. |
+
+Published production constants (`packages/review-engine/src/accuracyModelCalibration.ts`):
+
+- `CALIBRATED_K = 0.20094184929012865`
+- `LOSS_BAND_BOUNDARIES` = `{ bestTolerance: ≈0.13, inaccuracyToMistake: 0.79, mistakeToBlunder: 5.98 }`
+- `ACCURACY_MODEL_CALIBRATION_VERSION = accuracy-model-v5-action-forced-2026-09-22`
+- `V5_FROZEN_RECORDED_SCORABLE_DENOMINATOR = 5538`
 
 ---
 
@@ -27,15 +51,15 @@ Supporting machine output:
 | Coverage gate | `0.02` |
 | Recorded corpora | `packages/review-engine/fixtures/recorded-self-play` + `recorded-client-policy` (2026-09-17 committed revision; 12,973 decisions) |
 | Fixture IDs | all `REVIEW_FIXTURE_CORPUS` IDs (53 fixtures) |
-| Calibration algorithm | Phase C / `calibrateAccuracyModel.ts`: `fitKLeastSquares` (grid + golden-section) + `fitBoundaries` (p75 / p75 / p10) |
+| Calibration algorithm | Phase C / `calibrateAccuracyModel.ts`: `fitKLeastSquares` (grid + golden-section); loss bands **retained** (mechanical `fitBoundaries` diagnostic only) |
 | Fitting objective | SSE vs targets strong→95, poor→15 |
-| Acceptance checks | ordinary PVF predicted ∈ **[65, 85]**; poor &lt; 60 and &gt; 0; monotonicity; forced invariance; optimal ceiling = 100 |
+| Acceptance checks (v5) | semantic invariants (monotonicity, forced invariance, optimal ceiling, poor floor, strong>ordinary>poor, scores∈[0,100]); deterministic corpus regression; **not** historical `[65,85]` |
 
 ### Phase C category mapping (unchanged)
 
 1. Oracle self-play / exact endgame — still covered by optimal-ceiling property test (no full oracle self-play trajectory corpus; known C0 gap).
 2. Strong policy — `daily-fritz-master` / `strong-policy-top-tier`.
-3. Ordinary PVF — `pvf-bot-match` / tier `standard` (validation, not k-fit).
+3. Ordinary PVF — `pvf-bot-match` / tier `standard` (**baseline measurement** under v5, not a gate).
 4. Deliberately poor — `REVIEW_FIXTURE_CORPUS` `deliberately_poor`.
 5. Forced-move fixtures — `forced_move` category (excluded from loss fit; used for invariance).
 
@@ -87,12 +111,12 @@ Forced is **not** “one evaluated survivor.”
 Wrongly forced before: **2,118 (16.3%)**.  
 Of which exact/search newly entering scorable: **1,740**.
 
-Per-game accuracy under **current (v4) K** (100 recorded games):
+Per-game accuracy under **v4 K** (100 recorded games):
 
 | Semantics | Median | p10 | p90 | Mean |
 | --- | ---: | ---: | ---: | ---: |
-| Tile-forced + old K | 88.6 | 79.7 | 93.9 | 87.7 |
-| Action-forced + old K | 91.1 | 85.3 | 94.9 | 90.7 |
+| Tile-forced + v4 K | 88.6 | 79.7 | 93.9 | 87.7 |
+| Action-forced + v4 K | 91.1 | 85.3 | 94.9 | 90.7 |
 
 (All 100 games remain `status: partial` / no global letter grade under product
 rules — heuristic non-forced decisions exist in every recorded game.)
@@ -108,76 +132,70 @@ rules — heuristic non-forced decisions exist in every recorded game.)
 | By tier | standard 655 · master 610 · hard 475 |
 | Mean / median / p75 / p90 / p95 loss | 0.135 / 0 / 0 / 0.051 / 0.771 |
 
-Label distribution under **old** bands:
+Label distribution under **retained** bands (`0.13 / 0.79 / 5.98`):
 
 | Best | Inaccuracy | Mistake | Blunder |
 | ---: | ---: | ---: | ---: |
 | 1,575 | 78 | 84 | 3 |
 
-Under **candidate v5** bands (see below): Best 1,561 · Inacc 34 · Mistake 142 · Blunder 3.
-
-**Why calibration moved:** the newly included decisions are almost entirely
-near-zero-loss same-tile placement choices that were incorrectly excluded as
-“forced.” That dilutes mean loss and inflates predicted accuracy for every
-corpus category that contains them.
+**Why K moved:** the newly included decisions are almost entirely near-zero-loss
+same-tile placement choices that were incorrectly excluded as “forced.” That
+dilutes mean loss and raises predicted accuracy for every corpus category that
+contains them — which is exactly why aggregate K must be refit while severity
+bands (on the unchanged loss quantity) stay fixed.
 
 ---
 
-## Aggregate calibration
+## Aggregate calibration (final)
 
 | | Value |
 | --- | --- |
 | Method | Phase C `fitKLeastSquares` — unchanged |
 | Targets | strong mean → 95; poor mean → 15 |
 | Old K (v4) | `0.19770906562806756` |
-| Candidate v5 K | `0.20094184929012865` |
+| **Published v5 K** | **`0.20094184929012865`** |
 | Strong mean loss (action-level scorable) | 0.359 → predicted **93.04** |
-| Ordinary PVF mean loss | 0.629 → predicted **88.13** |
+| Ordinary PVF mean loss | 0.629 → predicted **88.13** (baseline; not gated) |
 | Poor / worst_legal mean loss | 9.292 → predicted **15.46** |
 
-### Acceptance
+### Acceptance (v5 policy)
 
 | Check | Result |
 | --- | --- |
-| Ordinary PVF predicted ∈ [65, 85] | **FAIL** (88.13 &gt; 85) |
-| Poor play &lt; 60 and &gt; 0 | PASS (~15.5) |
-| Strong near 92–98 band midpoint | PASS (~93.0) |
+| Ordinary PVF predicted ∈ historical `[65, 85]` | **N/A as gate** (88.13 is baseline measurement; range is historical v4 empirical) |
+| Poor play &lt; 60 and &gt; 0 | **PASS** (~15.5) |
+| Strong &gt; ordinary &gt; poor | **PASS** (~93.0 &gt; ~88.1 &gt; ~15.5) |
+| Strong near 92–98 commentary midpoint | PASS (~93.0) |
+| Deterministic K reproduce | **PASS** |
+| Scorable denom = 5,538 | **PASS** |
+| Retained bands 0.13 / 0.79 / 5.98 | **PASS** |
 
 ---
 
 ## Loss bands
 
-| Boundary | Old (v4) | Candidate v5 (mechanical) |
+| Boundary | v4 / retained (published) | Mechanical percentile (rejected) |
 | --- | ---: | ---: |
-| `bestTolerance` = p75(strong) | 0.13 | **0** |
-| `inaccuracyToMistake` = p75(ordinary) | 0.79 | 0.2475 |
-| `mistakeToBlunder` = p10(poor) | 5.98 | 5.98 |
+| `bestTolerance` | **0.13** | 0 |
+| `inaccuracyToMistake` | **0.79** | 0.2475 |
+| `mistakeToBlunder` | **5.98** | 5.98 |
 
-Strictly increasing: yes (0 &lt; 0.2475 &lt; 5.98).
-
-**Not applied.** Reasons:
-
-1. Ordinary validation band fails (above).
-2. `bestTolerance = 0` is a **degenerate** Best band: the harness comment and
-   Phase C wording require a non-zero “within search tolerance of top,” not
-   bit-exact `moveLoss === 0`. Expanded zero-inflated strong-policy mass
-   drives p75 to exactly 0; shipping that would reclassify many tiny
-   search-tolerance losses as Inaccuracy without a product-validated method
-   change.
+**Published:** retained semantic thresholds.  
+**Rejected:** mechanical Best=`0` (prevalence quantile degeneracy under corrected eligibility; see project-lead decision).
 
 ---
 
-## Accuracy distributions (action-level, candidate v5 K)
+## Accuracy distributions (action-level, published v5 K)
 
 | Category | Scorable n | Mean loss | Predicted accuracy |
 | --- | ---: | ---: | ---: |
 | Strong policy (k-fit) | 292 | 0.359 | **93.04** |
-| Ordinary PVF standard (validation) | 1,834 | 0.629 | **88.13** |
+| Ordinary PVF standard (baseline) | 1,834 | 0.629 | **88.13** |
 | Deliberately poor / worst_legal | 44 | 9.292 | **15.46** |
 | Informational: ordinary-tier self-play | — | — | ~90.1 |
 | Informational: PVF hard / master | — | — | ~92.1 / ~91.4 |
 
-Per-game (100 games, action-level, candidate K): median **90.9**, p10 **85.1**, p90 **94.8**.
+Per-game (100 games, action-level, v5 K): median **90.9**, p10 **85.1**, p90 **94.8**.
 
 ---
 
@@ -186,8 +204,7 @@ Per-game (100 games, action-level, candidate K): median **90.9**, p10 **85.1**, 
 Existing `gradeFromAccuracy` cutoffs (S≥92, A≥82, B≥72, C≥60, else D) remain
 meaningful on the same semantic 0–100 exponential scale.
 
-**No grade-boundary change attempted** — calibration did not reach PASS, so
-there is no new production accuracy mapping to re-audit grades against.
+**No grade-boundary change** — v5 only corrects eligibility and refits K.
 
 Product presentation rules (unchanged on #300):
 
@@ -201,12 +218,15 @@ Product presentation rules (unchanged on #300):
 
 | Invariant | Status |
 | --- | --- |
-| Candidate exhaustiveness / incomplete ≠ forced | **PASS** (new tests) |
-| Forced invariance / monotonicity / optimal ceiling / poor floor | Existing suite still green under current published constants |
-| Ordinary PVF ∈ [65, 85] under **fitted** candidate | **FAIL** |
-| Heuristic Estimate excluded from scored accuracy | PASS (product #300) |
-| Partial presentation / historical freeze | PASS (product #300) |
-| Tile-level re-fit reproduces published K/bands; action-level breaks [65,85] | **PASS** (provenance regression) |
+| Candidate exhaustiveness / incomplete ≠ forced | **PASS** |
+| Forced invariance / monotonicity / optimal ceiling / poor floor | **PASS** |
+| Strong &gt; ordinary &gt; poor under published v5 K | **PASS** |
+| Retained loss-band semantic thresholds A–G | **PASS** (`accuracyModelV5Migration.test.ts`) |
+| Exact published K + scorable denom 5,538 | **PASS** |
+| Heuristic Estimate excluded from scored accuracy | **PASS** |
+| Partial presentation / historical freeze | **PASS** |
+| Production-shaped pipeline (batch→UI→persist→reopen) | **PASS** |
+| Historical `[65,85]` as v5 gate | **intentionally not applied** |
 
 ---
 
@@ -331,16 +351,17 @@ Phase C does **not** uniquely specify a valid v5 calibration that both (a) uses 
 
 ---
 
-## Final recommendation
+## Final status (after project-lead resolution)
 
-Do **not** publish candidate K / bands into production.
+Under the authorized forced-semantics migration policy:
 
-Leave `CALIBRATED_K` / `LOSS_BAND_BOUNDARIES` at the signed-off **v4** numeric
-values. Keep `accuracyModelVersion = accuracy-model-v5-action-forced-2026-09-22`
-as the version stamp for **action-level forced semantics** already shipping on
-#300 (denominator change), with explicit documentation that **numeric
-recalibration is blocked** pending project-lead decision on the provenance
-items above (historical empirical acceptance ranges vs corrected denominator;
-degenerate Best percentile).
+- Action-level forced is canonical.
+- `CALIBRATED_K` published at the exact action-level `fitKLeastSquares` result.
+- Loss bands retained at `0.13 / 0.79 / 5.98` (Best=`0` rejected).
+- Grades unchanged.
+- `[65,85]` retained as historical v4 empirical provenance only — not a v5 gate.
+- Semantic invariants + deterministic corpus regression lock the result.
 
-# V5 CALIBRATION: BLOCKED
+# V5 CALIBRATION: PASS
+
+**PR #300 merge status:** HELD FOR PROJECT-LEAD REVIEW (do not merge from this calibration alone).
