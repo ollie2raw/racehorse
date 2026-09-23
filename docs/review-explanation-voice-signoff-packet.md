@@ -114,12 +114,12 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Contested:** yes
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
-  - Headline: This one is close.
+  - Headline: The engines disagree here.
   - Why: Fritz prefers 3-6 at the right end, while the Review Engine's heuristic prefers 3-6 at the left end.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** no supported feature delta above reporting threshold; immediateΔ=0; expectedΔ=0.
 
-## Packet sample 8 — heuristic contested — close placement
+## Packet sample 8 — heuristic contested — placement disagreement
 
 - **Decision ID:** `self-play:demo-ordinary-pvf-1:0:move-58`
 - **Position:** `ordinary-pvf-tier--tier-standard--seed-demo-ordinary-pvf-1--games-5.jsonl`; score 14-18; hand [0-2, 5-5, 4-4, 3-3, 1-6, 3-6]; boneyard 12 drawable / 2 dead.
@@ -129,8 +129,8 @@ This packet is for human review only. An agent must not mark Ship Gate 2 complet
 - **Contested:** yes
 - **referenceExpectedPointDifferential:** unavailable
 - **Player-facing NEW prose:**
-  - Headline: This one is close.
-  - Why: Fritz prefers 0-2 at the left end, while the Review Engine's heuristic prefers 0-2 at the right end. The Review Engine's measured positional features favor 0-2 at the right end, while Fritz prefers the displayed reference.
+  - Headline: The engines disagree here.
+  - Why: Fritz prefers 0-2 at the left end, while the Review Engine's heuristic prefers 0-2 at the right end. The measured positional features favor the right end, but Fritz prefers the left end.
   - Takeaway: (none)
 - **Supporting structured facts (audit):** endControlScore: played -24, reference -48, delta -24; endDangerPenalty: played 16, reference 36, delta 20; opponentOutsLeft: played 4, reference 9, delta 5; immediateΔ=0; expectedΔ=0.
 

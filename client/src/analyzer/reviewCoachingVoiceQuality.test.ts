@@ -117,10 +117,11 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       oracleMove: { action: play(3, 6, 'left'), immediatePoints: 3 },
       featureDeltas: [],
     }), true);
-    expect(prose.headline).toBe('This one is close.');
+    expect(prose.headline).toBe('The engines disagree here.');
     expect(text(prose)).toMatch(/Fritz prefers/);
     expect(text(prose)).toMatch(/Review Engine's heuristic prefers/);
     expect(text(prose)).not.toMatch(/Play it at/i);
+    expect(text(prose)).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
     expect(text(prose)).not.toMatch(/\bobjectively\b/i);
   });
 
@@ -140,11 +141,14 @@ describe('coaching voice quality — truth-preserving regressions', () => {
         { feature: 'opponentOutsLeft', playedValue: 1, referenceValue: 3, delta: 2 },
       ],
     }), true);
-    expect(prose.headline).toBe('This one is close.');
+    expect(prose.headline).toBe('The engines disagree here.');
     expect(text(prose)).toMatch(/Fritz prefers/);
-    expect(text(prose)).toMatch(/positional features favor/i);
+    expect(text(prose)).toMatch(/measured positional features favor the right end/i);
+    expect(text(prose)).toMatch(/Fritz prefers the left end/i);
+    expect(text(prose)).not.toMatch(/displayed reference/i);
     expect(text(prose)).not.toMatch(/Fritz's placement leaves your opponent only/i);
     expect(text(prose)).not.toMatch(/Play it at/i);
+    expect(text(prose)).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
   });
 
   it('7. candidate-specific feature WHY identifies the candidate unambiguously', () => {

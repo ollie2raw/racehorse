@@ -36,7 +36,7 @@ export const VOICE_SIGNOFF_DECISION_IDS: readonly {
   { decisionId: 'self-play:demo-ordinary-pvf-1:0:move-101', label: 'search contested — outs translation' },
   { decisionId: 'self-play:demo-ordinary-pvf-1:4:move-35', label: 'search contested — branch vs branch' },
   { decisionId: 'self-play:demo-ordinary-pvf-1:0:move-45', label: 'heuristic contested — Fritz primary' },
-  { decisionId: 'self-play:demo-ordinary-pvf-1:0:move-58', label: 'heuristic contested — close placement' },
+  { decisionId: 'self-play:demo-ordinary-pvf-1:0:move-58', label: 'heuristic contested — placement disagreement' },
   { decisionId: 'self-play:demo-ordinary-pvf-1:1:move-31', label: 'search — true displayed-reference equality' },
   { decisionId: 'self-play:demo-ordinary-pvf-1:0:move-66', label: 'search — value-gap fallback' },
 ];
