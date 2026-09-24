@@ -743,6 +743,13 @@
     grid-template-areas: none;
     padding: 16px 32px 40px;
   }
+  .pvf-root > .pvf-layout {
+    overflow: auto !important;
+  }
+  .pvf-root > .pvf-layout > .pvf-control-panel {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
   .pvf-left-col {
     width: 100% !important;
     flex: 0 0 auto !important;
@@ -750,7 +757,14 @@
   .pvf-control-panel {
     width: 100% !important;
   }
-  .pvf-opponent-card { max-width:460px; height:auto; aspect-ratio: auto; }
+  .pvf-opponent-card {
+    max-width: 460px;
+    height: auto;
+    flex: 0 0 auto !important;
+    aspect-ratio: 1.3;
+  }
+  .pvf-card-header { max-width: 60%; }
+  .pvf-card-description { max-width: 100%; }
   .pvf-difficulty-grid { grid-template-columns:repeat(2,1fr); }
 }
 
