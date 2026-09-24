@@ -41,7 +41,22 @@ function resolveAccuracyStatValues({
   decisionLedger?: PlayerDecisionLedgerSummary | null;
 }): { accuracyText: string; gradeText: string; coverageText: string | null } {
   if (accuracyModelPending) {
-    return { accuracyText: '…', gradeText: '…', coverageText: null };
+    const total = decisionLedger?.totalDecisions;
+    const done =
+      total !== undefined && decisionLedger
+        ? decisionLedger.scoredCount + decisionLedger.forcedCount
+        : undefined;
+    // Progressive Game Review: usable while Tier 3/4 finish in the background.
+    // Final authoritative % stays gated until every non-forced decision is SCORED.
+    const progressText =
+      total !== undefined && done !== undefined
+        ? `Analyzing ${done} / ${total} decisions`
+        : 'Analyzing…';
+    return {
+      accuracyText: 'Analyzing…',
+      gradeText: '—',
+      coverageText: progressText,
+    };
   }
 
   const { accuracyModel } = analysis;
@@ -53,16 +68,41 @@ function resolveAccuracyStatValues({
     return { accuracyText: `${analysis.accuracy.toFixed(1)}%`, gradeText: analysis.grade, coverageText };
   }
 
-  const unavailableNonForced = decisionLedger?.unavailableCount ?? 0;
+  const unavailableNonForced =
+    decisionLedger?.unavailableCount
+    ?? accuracyModel.unavailableMoveCount
+    ?? 0;
   const hasEstimates =
     (decisionLedger?.estimateCount ?? 0) > 0 || accuracyModel.heuristicMoveCount > 0;
   const isPartial = accuracyModel.status === 'partial' || hasEstimates || unavailableNonForced > 0;
 
+  const scoredCount =
+    accuracyModel.totalNonForcedMoveCount
+    - accuracyModel.heuristicMoveCount
+    - unavailableNonForced;
   const fallbackCoverage =
     coverageText
-    ?? `${accuracyModel.totalNonForcedMoveCount - accuracyModel.heuristicMoveCount} scored · ${accuracyModel.heuristicMoveCount} estimate${accuracyModel.heuristicMoveCount === 1 ? '' : 's'} · ${accuracyModel.totalNonForcedMoveCount} non-forced`;
+    ?? [
+      `${Math.max(0, scoredCount)} scored`,
+      ...(accuracyModel.heuristicMoveCount > 0
+        ? [`${accuracyModel.heuristicMoveCount} estimate${accuracyModel.heuristicMoveCount === 1 ? '' : 's'}`]
+        : []),
+      ...(unavailableNonForced > 0
+        ? [`${unavailableNonForced} unavailable`]
+        : []),
+      `${accuracyModel.totalNonForcedMoveCount} non-forced`,
+    ].join(' · ');
 
-  if (unavailableNonForced > 0) {
+  if (unavailableNonForced > 0 && hasEstimates === false && accuracyModel.accuracy !== null) {
+    // Finalized with some UNAVAILABLE residuals: still show scored accuracy.
+    return {
+      accuracyText: `Scored accuracy: ${accuracyModel.accuracy.toFixed(1)}%`,
+      gradeText: '—',
+      coverageText: fallbackCoverage,
+    };
+  }
+
+  if (unavailableNonForced > 0 && accuracyModel.accuracy === null) {
     return {
       accuracyText: 'Partial',
       gradeText: 'Incomplete review',

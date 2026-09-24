@@ -751,7 +751,11 @@ function buildGameSummary(
 
   const worstHand =
     hands.length > 0
-      ? hands.reduce((worst, hand) => (hand.handAccuracy < worst.handAccuracy ? hand : worst))
+      ? hands.reduce((worst, hand) => {
+          if (hand.handAccuracy == null) return worst;
+          if (worst.handAccuracy == null) return hand;
+          return hand.handAccuracy < worst.handAccuracy ? hand : worst;
+        })
       : null;
 
   const consequenceByMoveNumber: Record<number, ConsequenceChain> = {};

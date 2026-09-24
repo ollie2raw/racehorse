@@ -76,8 +76,17 @@ export function buildPlayerDecisionLedger(args: {
 
     if (evaluation) {
       evidenceSource = evaluation.evidence.source;
-      if (isForcedFromEvaluation(evaluation)) {
+      const lifecycle = evaluation.evaluationProvenance?.lifecycle;
+      if (lifecycle === 'FORCED' || isForcedFromEvaluation(evaluation)) {
         status = 'forced';
+      } else if (lifecycle === 'SCORED' || evidenceSource === 'exact' || evidenceSource === 'search') {
+        status = 'scored';
+      } else if (lifecycle === 'PENDING' || lifecycle === 'SEARCHING' || lifecycle === 'FAILED_RETRYABLE') {
+        status = 'pending';
+      } else if (lifecycle === 'FAILED_FATAL' || evaluation.evaluationProvenance?.unavailableReason) {
+        // FAILED_FATAL / legacy unavailable — surface as unavailable only for
+        // corrupt captures; fresh-game completion must not leave these.
+        status = 'unavailable';
       } else if (evidenceSource === 'heuristic') {
         status = 'estimate';
       } else {

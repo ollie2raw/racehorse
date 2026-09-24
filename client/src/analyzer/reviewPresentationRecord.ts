@@ -151,6 +151,8 @@ export function presentationLabel(record: ReviewPresentationRecord): string | nu
       return c.label;
     case 'estimate':
       return 'Estimate';
+    case 'unavailable':
+      return 'Unavailable';
     case 'forced':
       return 'Forced';
     case 'unclear':

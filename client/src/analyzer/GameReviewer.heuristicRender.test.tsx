@@ -96,18 +96,12 @@ describe('GameReviewer heuristic-classification render wiring', () => {
     expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
   });
 
-  it('renders identically to legacy behavior for a move with no resolved data (pending batch)', () => {
-    // GameReviewer renders through GameOverlayPortal (createPortal to
-    // document.body), so RTL's own `container` -- a sibling div, not an
-    // ancestor of the portaled content -- never contains it; querying it
-    // directly would make these assertions pass vacuously (null === null)
-    // regardless of what actually rendered. Unmounting between renders and
-    // querying document.body instead makes this a real comparison.
+  it('shows Analyzing… for a pending decision instead of the legacy Fritz rating', () => {
     const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
     const reviewWorkerBatch = batchState({ pendingDecisionIds: new Set(['d1']) });
     const decisionIdByMoveNumber = new Map([[1, 'd1']]);
 
-    const withBatchRender = render(
+    render(
       <GameReviewer
         open
         onClose={vi.fn()}
@@ -116,15 +110,14 @@ describe('GameReviewer heuristic-classification render wiring', () => {
         decisionIdByMoveNumber={decisionIdByMoveNumber}
       />,
     );
-    const withBatchHtml = document.body.querySelector('.gr-move-row')?.outerHTML;
-    expect(withBatchHtml).toContain('Blunder');
-    withBatchRender.unmount();
+    expect(screen.getByText('Analyzing…', { selector: '.gr-move-row-rating' })).toBeInTheDocument();
+    expect(screen.queryByText('Blunder', { selector: '.gr-move-row-rating' })).not.toBeInTheDocument();
+  });
 
-    const legacyRender = render(<GameReviewer open onClose={vi.fn()} analysis={analysis} />);
-    const legacyHtml = document.body.querySelector('.gr-move-row')?.outerHTML;
-    legacyRender.unmount();
-
-    expect(withBatchHtml).toEqual(legacyHtml);
+  it('without a worker batch, still shows the legacy Fritz rating', () => {
+    const analysis = analysisWithMoves([analyzedMove({ moveNumber: 1, rating: 'Blunder' })]);
+    render(<GameReviewer open onClose={vi.fn()} analysis={analysis} />);
+    expect(screen.getByText('Blunder', { selector: '.gr-move-row-rating' })).toBeInTheDocument();
   });
 
   it('D5: renders the calibrated label (not the legacy rating) for a resolved exact-source result, no badge', () => {

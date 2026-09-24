@@ -13,7 +13,10 @@ import { REVIEW_FIXTURE_CORPUS } from '../../../game-core/src/reviewFixtureCorpu
 // other fixture-driven evaluation in this package.
 const REALISTIC_BUDGET: ReviewDispatchBudget = {
   maxNodes: 200_000,
-  maxHiddenStateSamples: 100,
+  // Match CALIBRATION_FIXTURE_BUDGET: opening maximal-uncertainty fixtures
+  // need >100 samples to clear the 2% coverage diagnostic under the current
+  // evidence/hidden-pool enumerator (see deliberately-poor-opening-s21-a10).
+  maxHiddenStateSamples: 500,
   maxPlyDepth: 2,
   seed: 'deliberately-poor-fixture-check',
 };

@@ -280,7 +280,38 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined();
   });
 
-  it('worker batch done with coverage clearing the floor -- accuracyModel merges in with a real populated accuracy/grade', async () => {
+  it('worker batch done with all exact/search results -- accuracyModel resolves as complete', async () => {
+    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
+    const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
+    for (let i = 0; i < 60; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
+    useReviewWorkerBatchMock.mockReturnValue({
+      resultsByDecisionId,
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    });
+
+    const { result } = render({ reviewSnapshotRecorder: recorder });
+
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
+    expect(accuracyModel?.accuracy).not.toBeNull();
+    expect(accuracyModel?.status).toBe('complete');
+    expect(result.current.postGameAnalysis?.accuracy).toBe(42);
+    expect(result.current.postGameAnalysis?.grade).toBe('B');
+    expect(result.current.postGameAnalysis?.evidence).toEqual({
+      source: 'oracle',
+      confidence: 'high',
+      displayLabel: 'Review Engine analysis',
+      reason: 'oracle-coverage-full',
+    });
+  });
+
+  it('worker batch with residual heuristics and stub snapshots stays Analyzing (finalization gate)', async () => {
     const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
@@ -298,28 +329,12 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     const { result } = render({ reviewSnapshotRecorder: recorder });
 
     await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
-    expect(result.current.accuracyModelPending).toBe(false);
-    // accuracyModel populates via a dynamic import (check:bot-match-lazy
-    // requires gameAccuracyModel.ts never be statically imported from this
-    // eager-bundle-reachable file) -- a real microtask, not synchronous.
-    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
-    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
-    expect(accuracyModel?.accuracy).not.toBeNull();
-    expect(accuracyModel?.coverageFraction).toBeCloseTo(0.6, 10);
-    // The legacy fields must survive the merge untouched.
-    expect(result.current.postGameAnalysis?.accuracy).toBe(42);
-    expect(result.current.postGameAnalysis?.grade).toBe('B');
-    // Coverage clears the floor but this batch has heuristic-tier decisions
-    // (status: 'partial') -- medium confidence, not the legacy banner.
-    expect(result.current.postGameAnalysis?.evidence).toEqual({
-      source: 'oracle',
-      confidence: 'medium',
-      displayLabel: 'Review Engine analysis',
-      reason: 'oracle-coverage-cleared-floor',
-    });
+    // Finalization gate: incomplete escalation must not publish accuracyModel.
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(true));
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
   });
 
-  it('worker batch done with coverage below the floor -- accuracyModel merges in with accuracy/grade null, not the legacy numbers', async () => {
+  it('worker batch below coverage floor with residual heuristics stays Analyzing (finalization gate)', async () => {
     const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
@@ -337,13 +352,8 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
     const { result } = render({ reviewSnapshotRecorder: recorder });
 
     await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
-    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
-    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
-    expect(accuracyModel?.accuracy).toBeNull();
-    expect(accuracyModel?.grade).toBeNull();
-    // Below the coverage floor -- not "real coverage" yet, so evidence
-    // stays the legacy disclosure rather than claiming oracle confidence.
-    expect(result.current.postGameAnalysis?.evidence).toEqual(LEGACY_ANALYSIS_DISCLOSURE);
+    await waitFor(() => expect(result.current.accuracyModelPending).toBe(true));
+    expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
   });
 });
 
@@ -444,7 +454,9 @@ describe('usePostGamePivotalReview — E1 write call site', () => {
     expect(body.reviewEngineVersion).toBe(evaluations[0].reviewEngineVersion);
     expect(body.accuracyModelVersion).toBe(accuracyModel?.accuracyModelVersion);
     expect(body.accuracyModelResult).toBe(accuracyModel);
-    expect(body.evaluations).toEqual(evaluations);
+    expect(body.evaluations).toHaveLength(evaluations.length);
+    // Completion finalize annotates provenance on each evaluation.
+    expect(body.evaluations.every((e: { evaluationProvenance?: { phase: string } }) => e.evaluationProvenance?.phase === 'completion')).toBe(true);
     // The digest hashes the full ordered snapshot array, not just the last
     // entry -- a real assertion against computeGameDigest's own contract,
     // not just "some string was passed".

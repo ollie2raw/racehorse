@@ -11,6 +11,7 @@ export { dedupeCandidatesByTile, isForcedDecision };
  *
  * - `forced`: exactly one legal ReviewAction (placement-distinct).
  * - `estimate`: heuristic-tier non-forced — no calibrated severity.
+ * - `unavailable`: completion/finalization failure with explicit reason.
  * - `unclear`: cannot honestly compare (globally-infeasible, or Fritz
  *   primary absent from candidates, or flat-spread research path).
  * - `calibrated`: exact/search loss-band label.
@@ -20,6 +21,7 @@ export { dedupeCandidatesByTile, isForcedDecision };
 export type HeuristicClassification =
   | { readonly kind: 'forced' }
   | { readonly kind: 'estimate'; readonly matchedPrimary: boolean }
+  | { readonly kind: 'unavailable'; readonly reason: string }
   | { readonly kind: 'unclear'; readonly reason: 'globally-infeasible' | 'flat-spread' | 'primary-absent' }
   | { readonly kind: 'bucket'; readonly bucket: 'Good' | 'Inaccuracy' | 'Blunder' }
   | { readonly kind: 'calibrated'; readonly label: 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder' };
@@ -51,6 +53,13 @@ export function classifyHeuristicResult(
   evaluation: ReviewEvaluationV1,
   options?: ClassifyHeuristicOptions,
 ): HeuristicClassification {
+  if (evaluation.evaluationProvenance?.unavailableReason) {
+    return {
+      kind: 'unavailable',
+      reason: evaluation.evaluationProvenance.unavailableReason,
+    };
+  }
+
   if (evaluation.heuristicFallbackReason === 'globally-infeasible') {
     return { kind: 'unclear', reason: 'globally-infeasible' };
   }

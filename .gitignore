@@ -24,6 +24,9 @@ reset-password.mjs
 dump.rdb
 *.tsbuildinfo
 
+# Review-engine soak outputs (local evidence only; do not commit giants)
+packages/review-engine/src/devtools/soak-results/
+
 # Brainstorming skill scratch dir (local only)
 .superpowers/
 

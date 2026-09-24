@@ -13,6 +13,8 @@ export function heuristicClassificationToDisplay(classification: HeuristicClassi
   switch (classification.kind) {
     case 'estimate':
       return { label: 'Estimate', ratingClass: 'estimate', badge: 'heuristic' };
+    case 'unavailable':
+      return { label: 'Unavailable', ratingClass: 'unavailable', badge: null };
     case 'bucket':
       // Research-only path — should not reach production GameReviewer.
       return {

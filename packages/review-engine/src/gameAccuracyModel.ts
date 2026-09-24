@@ -1,7 +1,8 @@
 import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
-import { accuracyFromEvaluations, ACCURACY_MODEL_VERSION } from './reviewAccuracy';
+import { accuracyFromEvaluations, ACCURACY_MODEL_VERSION, isScorable } from './reviewAccuracy';
 import { gradeFromAccuracy } from './accuracyGrade';
+import { isEvaluationUnavailable } from './finalizeReviewEvaluations';
 
 /**
  * C4 (docs/scoping/phase-c-accuracy-model-spec.md, sections 4a and 6).
@@ -49,16 +50,22 @@ export const MINIMUM_COVERAGE_FLOOR = 0.46808510638297873;
  * the actual trigger conditions.
  */
 export type GameAccuracyModelResult = {
-  /** Diagnostic only -- whether EVERY non-forced decision was solver-scorable. Does NOT gate accuracy/grade below. */
+  /**
+   * Diagnostic: `'complete'` when every non-forced decision is either
+   * exact/search-scored or finalized UNAVAILABLE (zero live ESTIMATE
+   * residuals). Does NOT gate accuracy/grade below.
+   */
   readonly status: 'complete' | 'partial';
   readonly accuracyModelVersion: string;
   /** Populated whenever coverageFraction >= MINIMUM_COVERAGE_FLOOR, regardless of status. */
   readonly accuracy: number | null;
   /** Derived from the new accuracy, not the legacy one. Null exactly when accuracy is null. */
   readonly grade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
-  /** How many non-forced decisions were heuristic-tier. */
+  /** How many non-forced decisions remain heuristic ESTIMATE (not unavailable). */
   readonly heuristicMoveCount: number;
-  /** Total non-forced (scorable-or-heuristic) decisions in scope, for "X of Y moves" copy. */
+  /** Non-forced decisions finalized as UNAVAILABLE (excluded from calibrated accuracy). */
+  readonly unavailableMoveCount?: number;
+  /** Total non-forced decisions in scope, for "X of Y moves" copy. */
   readonly totalNonForcedMoveCount: number;
   /** scorableNonForcedCount / totalNonForcedMoveCount; 0 (never NaN) when totalNonForcedMoveCount is 0. The gate for accuracy/grade above -- deliberately the inverse direction of heuristicMoveCount, not a repurposing of it. */
   readonly coverageFraction: number;
@@ -88,12 +95,17 @@ export function computeGameAccuracyModel(
   const nonForced = evaluations.filter(
     (evaluation) => !isForcedDecision(evaluation.candidates),
   );
+  const unavailableMoveCount = nonForced.filter(isEvaluationUnavailable).length;
   const heuristicMoveCount = nonForced.filter(
-    (evaluation) => evaluation.evidence.source === 'heuristic',
+    (evaluation) =>
+      evaluation.evidence.source === 'heuristic' && !isEvaluationUnavailable(evaluation),
   ).length;
   const totalNonForcedMoveCount = nonForced.length;
-  const scorableNonForcedCount = totalNonForcedMoveCount - heuristicMoveCount;
+  const scorableNonForcedCount = nonForced.filter((evaluation) =>
+    isScorable(evaluation, evaluation.candidates),
+  ).length;
   const coverageFraction = totalNonForcedMoveCount > 0 ? scorableNonForcedCount / totalNonForcedMoveCount : 0;
+  // Complete = no residual ESTIMATE. UNAVAILABLE is allowed on a finalized review.
   const status: 'complete' | 'partial' =
     heuristicMoveCount === 0 && totalNonForcedMoveCount > 0 ? 'complete' : 'partial';
 
@@ -103,6 +115,7 @@ export function computeGameAccuracyModel(
     accuracy: null,
     grade: null,
     heuristicMoveCount,
+    unavailableMoveCount,
     totalNonForcedMoveCount,
     coverageFraction,
   } as const;
@@ -124,10 +137,15 @@ export function computeGameAccuracyModel(
     accuracyModelVersion: result.accuracyModelVersion,
     accuracy: result.accuracy,
     // Letter grade is a whole-game claim: only when every non-forced
-    // decision was calibrated/scorable (status complete). Partial coverage
-    // may still expose scored accuracy; never an unqualified A/B/C.
-    grade: status === 'complete' ? gradeFromAccuracy(result.accuracy) : null,
+    // decision was calibrated/scorable (no estimates, no unavailable gaps).
+    // Unavailable residuals keep status complete for estimate-accounting but
+    // suppress the letter grade — same honesty as partial estimate coverage.
+    grade:
+      status === 'complete' && unavailableMoveCount === 0
+        ? gradeFromAccuracy(result.accuracy)
+        : null,
     heuristicMoveCount,
+    unavailableMoveCount,
     totalNonForcedMoveCount,
     coverageFraction,
   };
