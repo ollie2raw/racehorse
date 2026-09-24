@@ -25,11 +25,22 @@ export const DEFAULT_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
 
 export const DEFAULT_REVIEW_COVERAGE_THRESHOLD = 0.02;
 
-// Re-export completion budget from review-engine (single source of truth).
-export {
-  COMPLETION_REVIEW_DISPATCH_BUDGET,
-  COMPLETION_REVIEW_COVERAGE_THRESHOLD,
-} from '@racehorse/review-engine';
+/**
+ * Post-game completion budget (tier-2 of SEARCH_ESCALATION_TIERS).
+ * Defined locally — do NOT re-export from `@racehorse/review-engine` here:
+ * a value import of that package into the BotMatchScreen graph pulls the
+ * full solver into a shared analyzer chunk and fails check:bot-match-lazy.
+ * Parity with review-engine is locked in productionCompletionConfigParity.
+ */
+export const COMPLETION_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
+  maxNodes: 5_000_000,
+  maxHiddenStateSamples: 2500,
+  maxPlyDepth: 2,
+  seed: 'racehorse-review-tier-2',
+  maxWallClockMs: 120_000,
+};
+
+export const COMPLETION_REVIEW_COVERAGE_THRESHOLD = 0.02;
 
 /**
  * F4b: per-decision wall-clock safety ceiling lives on

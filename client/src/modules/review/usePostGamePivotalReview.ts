@@ -489,7 +489,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewWorkerBatch.errorsByDecisionId, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewWorkerBatch.errorsByDecisionId, reviewWorkerBatch.pendingDecisionIds, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
 
   const exposedPostGameAnalysis = useMemo(() => {
     // Prefer progressive calibrated hands while final accuracyModel is still
