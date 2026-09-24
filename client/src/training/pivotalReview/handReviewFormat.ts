@@ -29,5 +29,6 @@ export function formatHandOutcome(verdict: HandVerdict, opponentLabel: string): 
 }
 
 export function handAccuracyLabel(hand: HandAnalysis): string {
+  if (hand.handAccuracy == null) return '—';
   return `${hand.handAccuracy.toFixed(0)}%`;
 }

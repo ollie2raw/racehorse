@@ -60,6 +60,15 @@
   color: rgba(255, 220, 160, 0.85);
 }
 
+.gr-progress-note {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: rgba(94, 200, 255, 0.95);
+}
+
 .gr-close-btn,
 .gr-nav-btn {
   height: 36px;

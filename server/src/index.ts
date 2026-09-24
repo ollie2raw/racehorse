@@ -266,6 +266,10 @@ import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
 import { registerGameReviewsRoute } from './http/routes/gameReviewsRoute';
 import {
+  registerReviewCompletionJobsRoute,
+  scheduleReviewCompletionSweep,
+} from './reviewCompletion/reviewCompletionWorker';
+import {
   getDailyFritzEventsPersistenceAvailability,
   probeDailyFritzEventsPersistence,
 } from './http/stores/dailyFritzEventStore';
@@ -580,6 +584,7 @@ registerBotMatchesRoutes(app, {
 registerPuzzleRushRoutes(app);
 registerDailyFritzRoutes(app);
 registerGameReviewsRoute(app);
+registerReviewCompletionJobsRoute(app);
 
 registerRoomEventsRoutes(app, {
   getAuthenticatedUserId,
@@ -938,4 +943,5 @@ server.listen(PORT, () => {
   scheduleDailyFritzWarmup();
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
+  scheduleReviewCompletionSweep();
 });

@@ -39,6 +39,12 @@ export function selectMoveHeuristicClassification(
         : undefined,
     );
   }
+  if (evaluation.evaluationProvenance?.unavailableReason) {
+    return {
+      kind: 'unavailable',
+      reason: evaluation.evaluationProvenance.unavailableReason,
+    };
+  }
   const label = lossBandLabelForEvaluation(evaluation);
   return label ? { kind: 'calibrated', label } : null;
 }

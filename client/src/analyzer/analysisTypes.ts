@@ -54,7 +54,12 @@ export type HandAnalysis = {
   startingScores: { you: number; opponent: number };
   endingScores: { you: number; opponent: number };
   analyzedMoves: AnalyzedMove[];
-  handAccuracy: number;
+  /**
+   * Calibrated hand accuracy (same model as game scored accuracy), or
+   * `null` when the hand has no complete calibrated population yet.
+   * Legacy analyzeMoveLog still fills a Fritz-ish mean until overlay runs.
+   */
+  handAccuracy: number | null;
   pivotalMoments: AnalyzedMove[];
   verdict: HandVerdict;
   consequenceChains: ConsequenceChain[];

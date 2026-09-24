@@ -238,7 +238,15 @@ export function runSelfPlayCorpus(options: SelfPlayCorpusOptions): ReviewCapture
         knownMissingPipEvidence: evidence.filter((item) => item.opponentId === opponentId),
       });
 
-      const evaluation = evaluateReviewPosition(snapshot, SELF_PLAY_REALISTIC_BUDGET, SELF_PLAY_COVERAGE_THRESHOLD);
+      // Frozen clock: F4b's real-time ceiling is nondeterministic under CI
+      // load. Harness evaluations must be seed-deterministic; production
+      // completion keeps its own wall-clock budgets.
+      const evaluation = evaluateReviewPosition(
+        snapshot,
+        SELF_PLAY_REALISTIC_BUDGET,
+        SELF_PLAY_COVERAGE_THRESHOLD,
+        () => 0,
+      );
       records.push({
         batchTag,
         corpusKind: SELF_PLAY_CORPUS_KIND,

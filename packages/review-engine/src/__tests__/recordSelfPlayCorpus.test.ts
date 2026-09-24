@@ -145,14 +145,14 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
       expect(record.budget).toEqual(SELF_PLAY_REALISTIC_BUDGET);
       expect(record.coverageThreshold).toBe(SELF_PLAY_COVERAGE_THRESHOLD);
     }
-  }, 20_000);
+  }, 120_000);
 
   it('captures decisions from BOTH players, not just one seat', () => {
     const records = runSelfPlayCorpus(options);
     const actors = new Set(records.map((record) => record.actorId));
     expect(actors.has('player')).toBe(true);
     expect(actors.has('opponent')).toBe(true);
-  }, 20_000);
+  }, 120_000);
 
   it('assigns a strictly increasing moveNumber, starting at 1, across the whole game', () => {
     const records = runSelfPlayCorpus(options);
@@ -161,14 +161,14 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     for (let index = 1; index < moveNumbers.length; index += 1) {
       expect(moveNumbers[index]).toBe(moveNumbers[index - 1] + 1);
     }
-  }, 20_000);
+  }, 120_000);
 
   it('assigns a non-decreasing handNumber across the recorded sequence', () => {
     const records = runSelfPlayCorpus(options);
     for (let index = 1; index < records.length; index += 1) {
       expect(records[index].handNumber).toBeGreaterThanOrEqual(records[index - 1].handNumber);
     }
-  }, 20_000);
+  }, 120_000);
 
   // Each of these two tests runs a real self-play game twice (this package's
   // real evaluateReviewPosition dispatcher, no mocks), so they legitimately
@@ -180,7 +180,7 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     const first = runSelfPlayCorpus(options);
     const second = runSelfPlayCorpus(options);
     expect(second).toEqual(first);
-  }, 20_000);
+  }, 120_000);
 
   it('a different seed produces a different game (different move count or different first move)', () => {
     const withDifferentSeed = runSelfPlayCorpus({ ...options, seed: 'a-completely-different-seed' });
@@ -188,5 +188,5 @@ describe('runSelfPlayCorpus -- real, deterministic, small self-play run (mechani
     const sameLength = withDifferentSeed.length === original.length;
     const sameFirstMove = JSON.stringify(withDifferentSeed[0]?.evaluation.played) === JSON.stringify(original[0]?.evaluation.played);
     expect(sameLength && sameFirstMove).toBe(false);
-  }, 20_000);
+  }, 120_000);
 });

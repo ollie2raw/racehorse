@@ -1,6 +1,7 @@
 import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { ACCURACY_MODEL_CALIBRATION_VERSION, CALIBRATED_K } from './accuracyModelCalibration';
+import { decisionLifecycle } from './finalizeReviewEvaluations';
 
 /**
  * C0 spec (docs/scoping/phase-c-accuracy-model-spec.md), section 3. HISTORICAL
@@ -33,16 +34,24 @@ export const ACCURACY_MODEL_VERSION: string = ACCURACY_MODEL_CALIBRATION_VERSION
 
 /**
  * C0 spec section 2: a decision counts toward headline accuracy only if it
- * is neither forced (exactly one legal ReviewAction, including placement)
- * nor heuristic-only. Same-tile multi-placement choices are scorable.
+ * is neither forced nor heuristic-only. Lifecycle SCORED is authoritative
+ * when present; FAILED_RETRYABLE / PENDING / SEARCHING are never scorable.
  */
 export function isScorable(
   evaluation: ReviewEvaluationV1,
   candidates: readonly ReviewCandidateEvaluationV1[],
 ): boolean {
   const forced = isForcedDecision(candidates);
+  if (forced) return false;
+  const life = decisionLifecycle(evaluation);
+  if (life === 'SCORED') return true;
+  if (life === 'FORCED' || life === 'PENDING' || life === 'SEARCHING'
+    || life === 'FAILED_RETRYABLE' || life === 'FAILED_FATAL') {
+    return false;
+  }
   const heuristicOnly = evaluation.evidence.source === 'heuristic';
-  return !forced && !heuristicOnly;
+  const unavailable = evaluation.evaluationProvenance?.unavailableReason != null;
+  return !heuristicOnly && !unavailable;
 }
 
 export type AccuracyResult =

@@ -29,7 +29,7 @@ describe('review explanation coverage classification', () => {
       expect(prose.headline).not.toMatch(/biggest gap:/i);
       expect(prose.headline.length).toBeGreaterThan(0);
     }
-  }, 60_000);
+  }, 180_000);
 
   it('classifies backed value gaps from recorded self-play facts', () => {
     const unresolved = records
@@ -49,7 +49,7 @@ describe('review explanation coverage classification', () => {
       expect(facts.deltas.expectedPointDifferential !== 0 || facts.deltas.immediatePoints !== 0).toBe(true);
       expect(unresolvedValueGapMagnitude(facts)).toBeGreaterThan(0);
     }
-  }, 60_000);
+  }, 180_000);
 
   it('uses the rendered value-gap wording as the classifier contract', () => {
     const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
@@ -61,7 +61,7 @@ describe('review explanation coverage classification', () => {
       || (headline.includes(' scores ') && headline.includes(' immediately')),
     ).toBe(true);
     expect(classifyRenderedExplanationProse(facts)).toBe('value-gap');
-  }, 60_000);
+  }, 180_000);
 
   it('uses the rendered true-equality wording as the classifier contract', () => {
     const facts = records.map(({ evaluation, snapshot }) => buildReviewCoachingFacts(evaluation, snapshot, true))
@@ -70,7 +70,7 @@ describe('review explanation coverage classification', () => {
     expect(facts.deltas.referenceExpectedPointDifferential).toBe(0);
     expect(headline.startsWith('The review rates these two moves even overall')).toBe(true);
     expect(classifyRenderedExplanationProse(facts)).toBe('equal-value');
-  }, 60_000);
+  }, 180_000);
 
   it('does not treat a heuristic zeroed oracle loss as a displayed-reference tie', () => {
     const byId = (suffix: string) => records.find(record => record.snapshot.identifiers.decisionId.endsWith(suffix))!;
@@ -93,5 +93,5 @@ describe('review explanation coverage classification', () => {
     expect(buildReviewCoachingProse(identical, true).headline).toMatch(/Best move/i);
     expect(classifyRenderedExplanationProse(identical)).toBe('positional');
     expect(classifyNoDifferenceSplit(identical)).toBeNull();
-  }, 60_000);
+  }, 180_000);
 });

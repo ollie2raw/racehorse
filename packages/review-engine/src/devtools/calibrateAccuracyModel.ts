@@ -130,7 +130,11 @@ export function scorableLosses(records: readonly ReviewCaptureRecord[]): number[
  */
 export const CALIBRATION_FIXTURE_BUDGET: ReviewDispatchBudget = {
   maxNodes: 200_000,
-  maxHiddenStateSamples: 100,
+  // Opening fixtures (e.g. deliberately-poor-opening-s21-a10) need ~376+
+  // samples to clear the 2% coverage diagnostic after evidence/hidden-pool
+  // tightening. Historical 100 was enough under the pre-evidence dispatcher;
+  // 500 keeps the corpus scorable without changing K/bands.
+  maxHiddenStateSamples: 500,
   maxPlyDepth: 2,
   seed: 'calibrate-accuracy-model-fixtures',
 };

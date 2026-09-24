@@ -34,7 +34,7 @@ import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './corr
 import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
-  DEFAULT_REVIEW_DISPATCH_BUDGET,
+  COMPLETION_REVIEW_DISPATCH_BUDGET,
   defaultReviewWorkerPoolSize,
 } from './reviewEngineConfig.ts';
 import {
@@ -202,20 +202,14 @@ export function usePostGamePivotalReview({
     reviewCaptureEnabled,
   ]);
 
-  // B5 UI wiring: streaming-capable worker batch, wired as additional state
-  // alongside GameAnalysis -- never merged into postGameAnalysis or
-  // GameAnalysis/AnalyzedMove's own shape. Originally dev-diagnostic-only;
-  // now also exposed below (reviewWorkerBatch, decisionIdByMoveNumber) as
-  // progressive-enhancement data a render layer can opt into per move --
-  // still no rating/coaching-copy translation happening in this hook
-  // itself (that's classifyHeuristicResult's job, called from the render
-  // layer, not here).
-  // F4a: omit createWorker (default browser workers) but opt into a
-  // hardware-sized pool. useReviewWorkerBatch's own default poolSize stays 1
-  // so existing single-worker tests keep byte-stable contracts.
+  // Post-game authoritative batch uses the completion budget so non-forced
+  // decisions clear the 2% search coverage gate (live DEFAULT 100-sample
+  // budget remains for corpus/devtools). Residual heuristics are finalized
+  // as UNAVAILABLE in the accuracy effect — ESTIMATE must not survive as
+  // the authoritative post-game evaluation.
   const reviewWorkerBatch = useReviewWorkerBatch(
     reviewWorkerSnapshots,
-    DEFAULT_REVIEW_DISPATCH_BUDGET,
+    COMPLETION_REVIEW_DISPATCH_BUDGET,
     DEFAULT_REVIEW_COVERAGE_THRESHOLD,
     undefined,
     defaultReviewWorkerPoolSize(),
@@ -305,8 +299,14 @@ export function usePostGamePivotalReview({
   // LEGACY_ANALYSIS_DISCLOSURE once real oracle coverage exists -- see
   // deriveReviewEvidence's doc comment (moveAnalyzer.ts) for the gate.
   const [evidence, setEvidence] = useState<ReviewEvidenceDisclosure | undefined>(undefined);
+  const [finalizedResultsByDecisionId, setFinalizedResultsByDecisionId] = useState<
+    ReadonlyMap<string, import('@racehorse/game-core/review').ReviewEvaluationV1>
+  >(() => new Map());
+  const [calibratedHandsAnalysis, setCalibratedHandsAnalysis] = useState<GameAnalysis | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (reviewWorkerSnapshots.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- tracks reviewWorkerBatch's own async lifecycle (see accuracyModelPending's doc comment above), not a prop-derived value computable during render
       setAccuracyModel(undefined);
@@ -314,80 +314,133 @@ export function usePostGamePivotalReview({
       setEvidence(undefined);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModelPending(false);
-      return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setFinalizedResultsByDecisionId(new Map());
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setCalibratedHandsAnalysis(null);
+      return () => {
+        cancelled = true;
+      };
     }
     if (!reviewWorkerBatch.done) {
+      // Progressive UX: keep final game accuracy gated, but stream calibrated
+      // hand % for hands whose non-forced decisions are already SCORED so
+      // Game Review is usable before Tier 3/4 finishes.
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModel(undefined);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setEvidence(undefined);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setAccuracyModelPending(true);
-      return;
+      if (postGameAnalysis) {
+        void import('./applyCalibratedHandAccuracies.ts').then(({ applyCalibratedHandAccuracies }) => {
+          if (cancelled) return;
+          setCalibratedHandsAnalysis(
+            applyCalibratedHandAccuracies(postGameAnalysis, {
+              decisionIdByMoveNumber,
+              resultsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+              pendingDecisionIds: reviewWorkerBatch.pendingDecisionIds,
+            }),
+          );
+        }).catch(() => { /* progressive hand % is best-effort */ });
+      }
+      return () => {
+        cancelled = true;
+      };
     }
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     setAccuracyModelPending(true);
-    let cancelled = false;
-    const evaluations = Array.from(reviewWorkerBatch.resultsByDecisionId.values());
     // Dynamic import, same reason as analyzeMoveLogDeferred above:
     // @racehorse/review-engine's dependency graph is heavy, and this hook
     // is reachable from BotMatchScreen's eager bundle -- a static import
     // here trips check:bot-match-lazy exactly the way moveAnalyzer.ts's own
-    // value re-export did (C4's first CI fix). computeGameAccuracyModel
-    // relocated here from client/src/analyzer/gameAccuracyModel.ts in E2
-    // (Phase E) so server-side reconciliation can compute the identical
-    // result -- import it directly from the package, never statically from
-    // anywhere in the standard bot-match path. deriveReviewEvidence lives in
-    // moveAnalyzer.ts, itself only reachable dynamically from this hook for
-    // the same lazy-boundary reason (see the analyzeMoveLogDeferred import
-    // above) -- bundled into this same dynamic import, matching
-    // MultiplayerGameShell.tsx's existing Promise.all pattern for two
-    // dynamic imports resolved together.
+    // value re-export did (C4's first CI fix).
     void Promise.all([
       import('@racehorse/review-engine'),
       import('../../analyzer/moveAnalyzer.ts'),
-    ]).then(([{ computeGameAccuracyModel }, { deriveReviewEvidence }]) => {
+      import('./applyCalibratedHandAccuracies.ts'),
+    ]).then(([{ computeGameAccuracyModel, completeReviewEvaluations }, { deriveReviewEvidence }, { applyCalibratedHandAccuracies }]) => {
       if (cancelled) return;
+
+      // Adaptive escalation over worker results — budget exhaustion stays
+      // FAILED_RETRYABLE / pending, never UNAVAILABLE for fresh captures.
+      const completed = completeReviewEvaluations({
+        snapshots: reviewWorkerSnapshots,
+        liveResultsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+        liveErrorsByDecisionId: reviewWorkerBatch.errorsByDecisionId,
+        startTier: 2,
+        maxTier: 4,
+      });
+      setFinalizedResultsByDecisionId(completed.resultsByDecisionId);
+      logger.info('usePostGamePivotalReview', 'review evaluation completion', {
+        reasonCounts: completed.reasonCounts,
+        lifecycleCounts: completed.lifecycleCounts,
+        complete: completed.complete,
+        retryable: completed.retryableDecisionIds.length,
+        fatal: completed.fatalDecisionIds.length,
+        resultCount: completed.resultsByDecisionId.size,
+      });
+
+      const evaluations = Array.from(completed.resultsByDecisionId.values());
+
+      // Nothing to complete — clear pending, skip persistence (E1 empty case).
+      if (evaluations.length === 0) {
+        setFinalizedResultsByDecisionId(completed.resultsByDecisionId);
+        setAccuracyModel(undefined);
+        setEvidence(undefined);
+        setCalibratedHandsAnalysis(null);
+        setAccuracyModelPending(false);
+        return;
+      }
+
       const model = computeGameAccuracyModel(evaluations);
       const nextEvidence = deriveReviewEvidence(model);
+
+      // Finalization gate: do not claim authoritative review until complete.
+      // Still stream progressive hand % for completed hands.
+      if (!completed.complete) {
+        setAccuracyModel(undefined);
+        setEvidence(undefined);
+        setAccuracyModelPending(true);
+        if (postGameAnalysis) {
+          setCalibratedHandsAnalysis(
+            applyCalibratedHandAccuracies(postGameAnalysis, {
+              decisionIdByMoveNumber,
+              resultsByDecisionId: completed.resultsByDecisionId,
+              pendingDecisionIds: new Set(completed.retryableDecisionIds),
+            }),
+          );
+        }
+        return;
+      }
+
       setAccuracyModel(model);
       setEvidence(nextEvidence);
       setAccuracyModelPending(false);
 
-      // E1 (game-review-oracle-upgrade-2026-09-13.md, Phase E): fire-and-
-      // forget persistence write -- never awaited. Persistence failure must
-      // never affect local state or the post-game UI; nothing above this
-      // point depends on what happens here. Skipped when there are zero
-      // resolved evaluations -- nothing real to persist.
-      //
-      // Dynamic import, same lazy-boundary reason as @racehorse/review-engine
-      // above: postGameReviewWrite.ts pulls in api/client.ts -> lib/supabase.ts,
-      // which reads import.meta.env at module scope -- fine under
-      // Vite/Vitest, but a static import here would also load eagerly under
-      // the plain-Node `tsx` runner usePostGamePivotalReview.behaviorTests.ts
-      // uses (npm run test:bot-hooks), where import.meta.env is undefined
-      // and the module throws just from being imported, before any test
-      // even runs. The .catch() below covers both an import failure and a
-      // postGameReviewWrite failure with the same "never affect local
-      // state" handling -- no need to distinguish them.
-      //
-      // Local analysis/UI is available to guests and non-cohort users, but
-      // server persistence remains cohort-gated. This preserves the original
-      // in-memory fallback without issuing writes that the server would reject.
-      //
-      // F1e-5: wait for GameAnalysis so the replay artifact can carry boards /
-      // navigation. Writing evaluations-only first would win the idempotency
-      // key and permanently omit the artifact on a later retry.
-      if (reviewPersistenceEnabled && evaluations.length > 0 && postGameAnalysis && coachingFactsStore) {
+      const analysisForPersist = postGameAnalysis
+        ? applyCalibratedHandAccuracies(
+            { ...postGameAnalysis, accuracyModel: model, evidence: nextEvidence },
+            {
+              decisionIdByMoveNumber,
+              resultsByDecisionId: completed.resultsByDecisionId,
+              pendingDecisionIds: new Set(),
+            },
+          )
+        : null;
+      setCalibratedHandsAnalysis(analysisForPersist);
+
+      // E1 persistence — fire-and-forget; never affects local UI.
+      if (reviewPersistenceEnabled && evaluations.length > 0 && analysisForPersist && coachingFactsStore) {
         void Promise.all([
           import('./postGameReviewWrite.ts'),
           import('./gameReviewReplayArtifact.ts'),
         ])
           .then(([{ postGameReviewWrite }, { buildGameReviewReplayArtifact }]) => {
             const replayArtifact = buildGameReviewReplayArtifact({
-              analysis: { ...postGameAnalysis, accuracyModel: model, evidence: nextEvidence },
-              evaluationsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+              analysis: analysisForPersist,
+              evaluationsByDecisionId: completed.resultsByDecisionId,
               decisionIdByMoveNumber,
               snapshotsByDecisionId,
               coachingFactsStore,
@@ -410,8 +463,6 @@ export function usePostGamePivotalReview({
       } else if (reviewPersistenceEnabled && evaluations.length > 0 && !postGameAnalysis) {
         // Analysis still pending — this effect re-runs when postGameAnalysis lands.
       } else if (reviewPersistenceEnabled && evaluations.length > 0) {
-        // No coaching store (edge): still persist evaluations for classification
-        // reopen, without falsely claiming a replay artifact.
         void import('./postGameReviewWrite.ts')
           .then(({ postGameReviewWrite }) => {
             postGameReviewWrite({
@@ -428,11 +479,6 @@ export function usePostGamePivotalReview({
       }
     }).catch((error) => {
       if (cancelled) return;
-      // Leaves accuracyModel at its default (undefined) -- the prompt falls
-      // back to the legacy accuracy/grade, same as any other GameAnalysis
-      // without a computed accuracyModel. Still clears pending -- a
-      // permanently-pending loading state on import failure would be worse
-      // than the legacy fallback.
       setAccuracyModelPending(false);
       logger.warn(
         'usePostGamePivotalReview',
@@ -443,22 +489,22 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewWorkerBatch.errorsByDecisionId, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
 
-  // Merged only into the value exposed as `postGameAnalysis` below -- the
-  // internal `postGameAnalysis` state above (read by pivotalSelection,
-  // openHandScopedReview, openReviewGameFromPrompt) is left untouched
-  // on purpose. accuracyModel doesn't affect pivotal-turn selection or
-  // GameReviewer's (D2) per-move rendering, so there's no reason to widen
-  // this change's blast radius to those call sites.
   const exposedPostGameAnalysis = useMemo(() => {
+    // Prefer progressive calibrated hands while final accuracyModel is still
+    // gated — Game Review opens immediately with partial hand %.
+    if (calibratedHandsAnalysis) {
+      return {
+        ...calibratedHandsAnalysis,
+        ...(accuracyModel !== undefined
+          ? { accuracyModel, evidence: evidence ?? calibratedHandsAnalysis.evidence }
+          : {}),
+      };
+    }
     if (!postGameAnalysis || accuracyModel === undefined) return postGameAnalysis;
-    // evidence is set in the same state update as accuracyModel above, so
-    // by the time accuracyModel !== undefined, evidence is too -- but the
-    // `?? postGameAnalysis.evidence` fallback keeps this honest (rather
-    // than asserting) if that ever stops being true.
     return { ...postGameAnalysis, accuracyModel, evidence: evidence ?? postGameAnalysis.evidence };
-  }, [postGameAnalysis, accuracyModel, evidence]);
+  }, [postGameAnalysis, accuracyModel, evidence, calibratedHandsAnalysis]);
 
   const skipPostGameReview = useCallback(() => {
     setPostGameReviewDismissed(true);
@@ -516,15 +562,35 @@ export function usePostGamePivotalReview({
 
   const decisionLedger = useMemo(() => {
     if (!exposedPostGameAnalysis?.analyzedMoves) return null;
+    const results =
+      finalizedResultsByDecisionId.size > 0
+        ? finalizedResultsByDecisionId
+        : reviewWorkerBatch.resultsByDecisionId;
     return buildPlayerDecisionLedger({
       analyzedMoves: exposedPostGameAnalysis.analyzedMoves,
       decisionIdByMoveNumber,
-      resultsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
+      resultsByDecisionId: results,
       errorsByDecisionId: reviewWorkerBatch.errorsByDecisionId,
       pendingDecisionIds: reviewWorkerBatch.pendingDecisionIds,
-      batchDone: reviewWorkerBatch.done,
+      batchDone: reviewWorkerBatch.done && accuracyModel !== undefined,
     });
-  }, [exposedPostGameAnalysis, decisionIdByMoveNumber, reviewWorkerBatch]);
+  }, [
+    exposedPostGameAnalysis,
+    decisionIdByMoveNumber,
+    reviewWorkerBatch,
+    finalizedResultsByDecisionId,
+    accuracyModel,
+  ]);
+
+  const exposedReviewWorkerBatch = useMemo(() => {
+    if (finalizedResultsByDecisionId.size === 0) return reviewWorkerBatch;
+    return {
+      ...reviewWorkerBatch,
+      resultsByDecisionId: finalizedResultsByDecisionId,
+      pendingDecisionIds: new Set<string>(),
+      done: reviewWorkerBatch.done && accuracyModel !== undefined,
+    };
+  }, [reviewWorkerBatch, finalizedResultsByDecisionId, accuracyModel]);
 
   // While the reviewer is open, always prefer the merged exposed analysis so
   // provenance cannot stay LEGACY after accuracy/evidence resolve — without a
@@ -557,7 +623,7 @@ export function usePostGamePivotalReview({
     postGameAnalysisPending,
     accuracyModelPending,
     decisionLedger,
-    reviewWorkerBatch,
+    reviewWorkerBatch: exposedReviewWorkerBatch,
     decisionIdByMoveNumber,
     coachingFactsStore,
     snapshotsByDecisionId,

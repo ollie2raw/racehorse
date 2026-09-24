@@ -11,6 +11,7 @@ import {
   type MidgameConvergence,
   type MidgameDeterminizationResult,
 } from './solveMidgameDeterminization';
+import { decideSearchConvergence } from './evaluationConvergence';
 
 /**
  * B0 (game-review-oracle-upgrade-2026-09-13.md): fixed compute budget for a
@@ -156,7 +157,10 @@ function adaptMidgameDeterminizationResult(
     // Structured form of the same data the diagnostics entry above already
     // carries as a formatted string -- both present, not one replacing the
     // other, per Phase C's structured-signal decision.
-    convergence: result.convergence,
+    convergence: {
+      sameTopAction: result.convergence.sameTopAction,
+      valueDelta: result.convergence.valueDelta,
+    },
   };
 }
 
@@ -179,7 +183,12 @@ function withHeuristicFallbackReason(
     ...result,
     heuristicFallbackReason: reason,
     search: searchAttempt ? { ...result.search, coverage: searchAttempt.coverage } : result.search,
-    convergence: searchAttempt ? searchAttempt.convergence : result.convergence,
+    convergence: searchAttempt
+      ? {
+          sameTopAction: searchAttempt.convergence.sameTopAction,
+          valueDelta: searchAttempt.convergence.valueDelta,
+        }
+      : result.convergence,
   };
 }
 
@@ -282,8 +291,15 @@ function evaluateWithinDeadline(
   if (midgame === null) {
     return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'globally-infeasible');
   }
-  if (midgame.coverage >= coverageThreshold) {
-    return adaptMidgameDeterminizationResult(snapshot, midgame, budget.maxPlyDepth);
+  const convergenceGate = decideSearchConvergence(midgame, {
+    coverageDiagnosticThreshold: coverageThreshold,
+  });
+  if (convergenceGate.accepted) {
+    const adapted = adaptMidgameDeterminizationResult(snapshot, midgame, budget.maxPlyDepth);
+    return {
+      ...adapted,
+          diagnostics: [...adapted.diagnostics, `eval-convergence:${convergenceGate.reason}`],
+    };
   }
   return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'coverage-below-threshold', {
     coverage: midgame.coverage,

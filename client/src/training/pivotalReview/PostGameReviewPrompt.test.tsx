@@ -45,9 +45,29 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     );
     const accuracyStat = screen.getByText('Accuracy').closest('.dfd__stat');
     const gradeStat = screen.getByText('Grade').closest('.dfd__stat');
-    expect(accuracyStat).toHaveTextContent('…');
-    expect(gradeStat).toHaveTextContent('…');
+    expect(accuracyStat).toHaveTextContent('Analyzing…');
+    expect(gradeStat).toHaveTextContent('—');
     expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
+  });
+
+  it('pending with ledger: shows Analyzing N / M decisions progress', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        decisionLedger={{
+          scoredCount: 30,
+          estimateCount: 0,
+          forcedCount: 4,
+          unavailableCount: 0,
+          pendingCount: 3,
+          totalDecisions: 37,
+          entries: [],
+        }}
+      />,
+    );
+    expect(screen.getByText('Analyzing 34 / 37 decisions')).toBeInTheDocument();
   });
 
   it('accuracyModel undefined: renders the legacy accuracy/grade exactly as before, no coverage copy', () => {
@@ -129,13 +149,14 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText(/Scored accuracy/)).not.toBeInTheDocument();
   });
 
-  it('unavailable non-forced via ledger: Incomplete review, no letter grade', () => {
+  it('unavailable non-forced via ledger: shows scored accuracy, suppresses letter grade', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'complete',
       accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
       accuracy: 90,
       grade: 'A',
       heuristicMoveCount: 0,
+      unavailableMoveCount: 1,
       totalNonForcedMoveCount: 10,
       coverageFraction: 1,
     };
@@ -155,8 +176,8 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         }}
       />,
     );
-    expect(screen.getByText('Partial')).toBeInTheDocument();
-    expect(screen.getByText('Incomplete review')).toBeInTheDocument();
+    expect(screen.getByText('Scored accuracy: 90.0%')).toBeInTheDocument();
+    expect(screen.getByText('—', { selector: '.is-accent' })).toBeInTheDocument();
     expect(screen.queryByText('A', { selector: '.is-accent' })).not.toBeInTheDocument();
   });
 });

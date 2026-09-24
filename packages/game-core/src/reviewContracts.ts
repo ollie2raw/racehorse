@@ -1,7 +1,8 @@
 import { applyGameCommand, type GameCommand } from './commands';
 import { canDraw, getLegalMoves } from './engine';
 import { computePlayScore, simulatePlacement } from './scoring';
-import type { BoardState, GameState, PlacementPosition, Tile } from './types';
+import { sha256Hex } from './sha256Hex';
+import type { BoardState, Config, GameState, PlacementPosition, Tile } from './types';
 import { GAME_COMMAND_VERSION, GAME_RULES_VERSION } from './versions';
 
 export {
@@ -36,6 +37,36 @@ export type ReviewKnownMissingPipEvidence = {
   readonly openEnds: readonly number[];
 };
 
+/**
+ * Ordered public actions from hand start through (but not including) this
+ * decision's actualAction. Required to reproduce the engine information set
+ * without reconstructing chronology from unrelated telemetry.
+ */
+export type ReviewPublicActionEvent = {
+  readonly sequence: number;
+  readonly actorId: string;
+  readonly kind: 'play' | 'draw' | 'pass';
+  readonly tile?: Tile;
+  readonly position?: PlacementPosition;
+  /** Matchable open-end pip values immediately before this action. */
+  readonly openEnds: readonly number[];
+};
+
+/**
+ * Correctness-relevant subset of Config for hidden-state generation / search.
+ * Deterministically equal to authorityPreState.config fields listed here.
+ */
+export type ReviewRulesetConfig = {
+  readonly maxPips: number;
+  readonly tilesPerPlayer: number;
+  readonly deadTileCount: number;
+  readonly scoringMultiple: number;
+  readonly blockedHandRule: Config['blockedHandRule'];
+  readonly endHandBonus: Config['endHandBonus'];
+  readonly winningScore: number;
+  readonly skipPregameDraw: boolean;
+};
+
 export type ReviewPositionIdentifiers = {
   readonly sessionId: string;
   readonly gameId: string;
@@ -61,6 +92,17 @@ export type ReviewPositionSnapshotV2 = {
   readonly reviewEngineVersion: typeof REVIEW_ENGINE_CONTRACT_VERSION;
   readonly stateDigestVersion: typeof REVIEW_STATE_DIGEST_VERSION;
   readonly identifiers: ReviewPositionIdentifiers;
+  /**
+   * Full correctness-relevant ruleset. Absent only on historical captures —
+   * when absent, derived from winningTarget + DEFAULT_CONFIG defaults for
+   * read compatibility (new captures always populate this).
+   */
+  readonly rulesetConfig?: ReviewRulesetConfig;
+  /**
+   * Ordered public actions in this hand before the decision. Absent only on
+   * historical captures; empty array means hand-start (no prior public acts).
+   */
+  readonly publicActionHistory?: readonly ReviewPublicActionEvent[];
   readonly preAction: {
     readonly board: BoardState | null;
     readonly actorHand: readonly Tile[];
@@ -89,6 +131,11 @@ export type ReviewPositionSnapshotV2 = {
   readonly integrity: {
     readonly authorityPreStateDigest: string;
     readonly authorityPostStateDigest: string;
+    /**
+     * Canonical semantic position hash (SHA-256 over full public fair
+     * serialization). Additive — absent on historical snapshots.
+     */
+    readonly positionHash?: string;
   };
 };
 
@@ -200,6 +247,67 @@ export type ReviewEvaluationV1 = {
     | 'locked-yard-infeasible'
     | 'globally-infeasible'
     | 'coverage-below-threshold';
+  /**
+   * Additive observability / finalization metadata (2026-09-23 coverage
+   * completion contract). Absent on historical evaluations — treat missing
+   * as "live / pre-completion" with legacy estimate semantics.
+   *
+   * `unavailableReason` means this decision must NOT enter calibrated
+   * accuracy and must present as UNAVAILABLE (never ESTIMATE) once a
+   * post-game completion pass has finished. Live analysis may still emit
+   * heuristic estimates without this field.
+   */
+  readonly evaluationProvenance?: ReviewEvaluationProvenance;
+};
+
+/**
+ * Authoritative per-decision analysis lifecycle for fresh completed games.
+ * Budget exhaustion / worker crash / infra → FAILED_RETRYABLE (requeue).
+ * Only corrupt/unsupported source data → FAILED_FATAL.
+ */
+export type ReviewDecisionLifecycle =
+  | 'PENDING'
+  | 'SEARCHING'
+  | 'SCORED'
+  | 'FORCED'
+  | 'FAILED_RETRYABLE'
+  | 'FAILED_FATAL';
+
+/**
+ * Why a non-forced decision lacks an exact/search score after (or during)
+ * evaluation. Closed set for log/artifact answers to "why wasn't X search-scored?"
+ * Budget/exhaustion reasons are FAILED_RETRYABLE, not final UNAVAILABLE.
+ */
+export type ReviewEvaluationNotScoredReason =
+  | 'coverage-below-threshold'
+  | 'coverage-unreachable'
+  | 'locked-yard-infeasible'
+  | 'globally-infeasible'
+  | 'wall-clock-exhausted'
+  | 'node-exhausted'
+  | 'evaluation-error'
+  | 'missing-snapshot'
+  | 'correlation-failure'
+  | 'corrupt-snapshot';
+
+export type ReviewEvaluationProvenance = {
+  /** Which evaluation phase produced this authoritative result. */
+  readonly phase: 'live' | 'completion';
+  /** Lifecycle status — finalized fresh games must be SCORED or FORCED only. */
+  readonly lifecycle?: ReviewDecisionLifecycle;
+  /** Public position hash that produced this evaluation (when known). */
+  readonly positionHash?: string;
+  /** Escalation tier that produced a SCORED result (1–4). */
+  readonly escalationTier?: 1 | 2 | 3 | 4;
+  /**
+   * @deprecated Prefer lifecycle FAILED_* . Retained for mixed-version reads
+   * of the prior UNAVAILABLE finalization path.
+   */
+  readonly unavailableReason?: ReviewEvaluationNotScoredReason;
+  /** Retryable/fatal failure reason when lifecycle is FAILED_*. */
+  readonly failureReason?: ReviewEvaluationNotScoredReason;
+  /** Optional structured note for logs (not shown in player UI). */
+  readonly detail?: string;
 };
 
 export type LegacyReviewEvaluationDisclosure = {
@@ -224,6 +332,8 @@ export type CreateReviewPositionSnapshotV2Input = {
     'handNumber' | 'turnSequence' | 'actorId' | 'opponentId'
   >;
   readonly knownMissingPipEvidence?: readonly ReviewKnownMissingPipEvidence[];
+  /** Ordered public actions in this hand before this decision (canonical). */
+  readonly publicActionHistory?: readonly ReviewPublicActionEvent[];
 };
 
 export type ReviewReplayFixture = {
@@ -323,6 +433,107 @@ export function fnv1a32Hex(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function tileKeyForHash(tile: Tile): [number, number] {
+  return [Math.min(tile.low, tile.high), Math.max(tile.low, tile.high)];
+}
+
+function actionKeyForHash(action: ReviewAction): unknown {
+  if (action.kind === 'play') {
+    return { kind: 'play', tile: tileKeyForHash(action.tile), position: action.position };
+  }
+  return { kind: action.kind };
+}
+
+/**
+ * Canonical normalized serialization of every correctness-relevant public
+ * semantic field used by hidden-state generation and search.
+ */
+export function canonicalizeReviewPositionSemantics(
+  snapshot: Omit<ReviewPositionSnapshotV2, 'integrity'> & {
+    readonly integrity?: ReviewPositionSnapshotV2['integrity'];
+  },
+): string {
+  const { preAction, identifiers } = snapshot;
+  const ruleset = snapshot.rulesetConfig ?? {
+    maxPips: 6,
+    tilesPerPlayer: 7,
+    deadTileCount: preAction.boneyard.deadCount,
+    scoringMultiple: 5,
+    blockedHandRule: 'lowestPips' as const,
+    endHandBonus: 'sumOpponentPenalties' as const,
+    winningScore: preAction.winningTarget,
+    skipPregameDraw: false,
+  };
+  const history = snapshot.publicActionHistory ?? [];
+  return JSON.stringify({
+    snapshotVersion: snapshot.snapshotVersion,
+    rulesVersion: snapshot.rulesVersion,
+    commandVersion: snapshot.commandVersion,
+    reviewEngineVersion: snapshot.reviewEngineVersion,
+    stateDigestVersion: snapshot.stateDigestVersion,
+    rulesetConfig: {
+      maxPips: ruleset.maxPips,
+      tilesPerPlayer: ruleset.tilesPerPlayer,
+      deadTileCount: ruleset.deadTileCount,
+      scoringMultiple: ruleset.scoringMultiple,
+      blockedHandRule: ruleset.blockedHandRule,
+      endHandBonus: ruleset.endHandBonus,
+      winningScore: ruleset.winningScore,
+      skipPregameDraw: ruleset.skipPregameDraw,
+    },
+    identifiers: {
+      gameId: identifiers.gameId,
+      handId: identifiers.handId,
+      decisionId: identifiers.decisionId,
+      handNumber: identifiers.handNumber,
+      actionNumber: identifiers.actionNumber,
+      turnSequence: identifiers.turnSequence,
+      actorId: identifiers.actorId,
+      opponentId: identifiers.opponentId,
+      mode: identifiers.mode,
+    },
+    publicActionHistory: history.map((event) => ({
+      sequence: event.sequence,
+      actorId: event.actorId,
+      kind: event.kind,
+      tile: event.tile ? tileKeyForHash(event.tile) : null,
+      position: event.position ?? null,
+      openEnds: [...event.openEnds].sort((a, b) => a - b),
+    })),
+    preAction: {
+      board: canonicalBoard(preAction.board),
+      actorHand: [...preAction.actorHand].map(tileKeyForHash).sort((a, b) => a[0] - b[0] || a[1] - b[1]),
+      opponentTileCount: preAction.opponentTileCount,
+      boneyard: preAction.boneyard,
+      scores: preAction.scores,
+      winningTarget: preAction.winningTarget,
+      consecutivePasses: preAction.consecutivePasses,
+      handOpen: preAction.handOpen,
+      knownMissingPipEvidence: preAction.knownMissingPipEvidence.map((row) => ({
+        opponentId: row.opponentId,
+        pip: row.pip,
+        reason: row.reason,
+        observedHandNumber: row.observedHandNumber,
+        observedSequence: row.observedSequence,
+        openEnds: [...row.openEnds].sort((a, b) => a - b),
+      })),
+    },
+    legalActions: snapshot.legalActions.map(actionKeyForHash),
+    actualAction: actionKeyForHash(snapshot.actualAction),
+  });
+}
+
+/**
+ * Collision-resistant public fair-position content address (no hidden tiles,
+ * no authority digests). SHA-256 over canonicalizeReviewPositionSemantics.
+ */
+export function computePublicPositionHash(snapshot: Omit<ReviewPositionSnapshotV2, 'integrity'> & {
+  readonly integrity?: ReviewPositionSnapshotV2['integrity'];
+}): string {
+  const canonical = canonicalizeReviewPositionSemantics(snapshot);
+  return `position-v${REVIEW_STATE_DIGEST_VERSION}-sha256:${sha256Hex(canonical)}`;
+}
+
 export function getReviewAuthorityStateDigest(state: GameState): string {
   const serialized = canonicalizeReviewAuthorityState(state);
   return `review-state-v${REVIEW_STATE_DIGEST_VERSION}:${fnv1a32Hex(serialized)}`;
@@ -367,7 +578,18 @@ export function createReviewPositionSnapshotV2(
   const result = applyGameCommand(state, input.command);
   const drawableCount = Math.max(0, state.boneyard.length - state.config.deadTileCount);
 
-  return {
+  const rulesetConfig: ReviewRulesetConfig = {
+    maxPips: state.config.maxPips,
+    tilesPerPlayer: state.config.tilesPerPlayer,
+    deadTileCount: state.config.deadTileCount,
+    scoringMultiple: state.config.scoringMultiple,
+    blockedHandRule: state.config.blockedHandRule,
+    endHandBonus: state.config.endHandBonus,
+    winningScore: state.config.winningScore,
+    skipPregameDraw: state.config.skipPregameDraw ?? false,
+  };
+
+  const base = {
     snapshotVersion: REVIEW_POSITION_SNAPSHOT_VERSION,
     rulesVersion: GAME_RULES_VERSION,
     commandVersion: GAME_COMMAND_VERSION,
@@ -380,6 +602,8 @@ export function createReviewPositionSnapshotV2(
       actorId,
       opponentId,
     },
+    rulesetConfig,
+    publicActionHistory: input.publicActionHistory ?? [],
     preAction: {
       board: state.board,
       actorHand: state.players[actorId].hand,
@@ -405,9 +629,14 @@ export function createReviewPositionSnapshotV2(
       postActionBoard: result.state.board,
       postActionActorScore: result.state.players[actorId].score,
     },
+  } as const;
+
+  return {
+    ...base,
     integrity: {
       authorityPreStateDigest: getReviewAuthorityStateDigest(state),
       authorityPostStateDigest: getReviewAuthorityStateDigest(result.state),
+      positionHash: computePublicPositionHash(base),
     },
   };
 }

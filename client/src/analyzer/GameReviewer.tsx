@@ -365,6 +365,17 @@ export default function GameReviewer({
                 <span className="gr-evidence-label">
                   {evidence.displayLabel} · {evidence.confidence} confidence
                 </span>
+                {reviewWorkerBatch && !reviewWorkerBatch.done ? (
+                  <p className="gr-progress-note" role="status">
+                    {`Analyzing ${
+                      reviewWorkerBatch.resultsByDecisionId.size
+                    } / ${
+                      decisionIdByMoveNumber?.size
+                      ?? reviewWorkerBatch.resultsByDecisionId.size
+                        + reviewWorkerBatch.pendingDecisionIds.size
+                    } decisions`}
+                  </p>
+                ) : null}
                 {historicalLegacyNotice ? (
                   <p className="gr-legacy-notice" role="status">
                     {historicalLegacyNotice}
@@ -532,7 +543,7 @@ export default function GameReviewer({
                         setCursor(0);
                       }}
                     >
-                      Hand {hand.handNumber} · {hand.handAccuracy.toFixed(0)}%
+                      Hand {hand.handNumber} · {hand.handAccuracy == null ? '—' : `${hand.handAccuracy.toFixed(0)}%`}
                     </button>
                   );
                 })}
@@ -565,22 +576,35 @@ export default function GameReviewer({
                       })
                     : null);
 
+                const isAnalyzing =
+                  Boolean(decisionId)
+                  && !evaluation
+                  && Boolean(reviewWorkerBatch)
+                  && (
+                    !reviewWorkerBatch!.done
+                    || reviewWorkerBatch!.pendingDecisionIds.has(decisionId!)
+                  );
+
                 const unavailable =
                   Boolean(reviewWorkerBatch?.done)
                   && Boolean(decisionId || reviewWorkerBatch)
                   && !evaluation
                   && classification == null
-                  && !(decisionId && reviewWorkerBatch?.pendingDecisionIds.has(decisionId));
+                  && !isAnalyzing;
 
                 const display = classification ? heuristicClassificationToDisplay(classification) : null;
                 const searchTier = reviewWorkerBatch ? selectMoveSearchTier(decisionId, reviewWorkerBatch) : null;
-                const label = unavailable
-                  ? 'Unavailable'
-                  : (display?.label ?? move.rating);
-                const rowRatingClass = unavailable
-                  ? 'unavailable'
-                  : (display?.ratingClass ?? ratingClass(move.rating));
-                const badge = unavailable ? null : (display?.badge ?? searchTier);
+                const label = isAnalyzing
+                  ? 'Analyzing…'
+                  : unavailable
+                    ? 'Unavailable'
+                    : (display?.label ?? move.rating);
+                const rowRatingClass = isAnalyzing
+                  ? 'analyzing'
+                  : unavailable
+                    ? 'unavailable'
+                    : (display?.ratingClass ?? ratingClass(move.rating));
+                const badge = isAnalyzing || unavailable ? null : (display?.badge ?? searchTier);
                 const decisionIndex = idx + 1;
                 return (
                   <button

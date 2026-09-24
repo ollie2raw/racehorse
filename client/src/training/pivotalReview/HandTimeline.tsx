@@ -23,7 +23,8 @@ export function HandTimeline({
       <div className="dfd__games htimeline__list">
         {hands.map((hand) => {
           const isWorst = hand.handNumber === worstHandNumber;
-          const accuracyPct = Math.max(0, Math.min(100, hand.handAccuracy));
+          const accuracyPct =
+            hand.handAccuracy == null ? 0 : Math.max(0, Math.min(100, hand.handAccuracy));
           return (
             <button
               key={hand.handNumber}

@@ -25,6 +25,12 @@ export const DEFAULT_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
 
 export const DEFAULT_REVIEW_COVERAGE_THRESHOLD = 0.02;
 
+// Re-export completion budget from review-engine (single source of truth).
+export {
+  COMPLETION_REVIEW_DISPATCH_BUDGET,
+  COMPLETION_REVIEW_COVERAGE_THRESHOLD,
+} from '@racehorse/review-engine';
+
 /**
  * F4b: per-decision wall-clock safety ceiling lives on
  * `ReviewDispatchBudget.maxWallClockMs` (optional). When omitted,

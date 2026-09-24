@@ -56,7 +56,7 @@ import type {
 } from './multiplayerGameShellTypes';
 import { reportOptionalChunkFailure } from '../utils/optionalChunk';
 import { useReviewWorkerBatch } from '../modules/review/useReviewWorkerBatch';
-import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, DEFAULT_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
+import { DEFAULT_REVIEW_COVERAGE_THRESHOLD, COMPLETION_REVIEW_DISPATCH_BUDGET } from '../modules/review/reviewEngineConfig';
 import { createReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
 import { usePostGameReviewAccess } from '../training/pivotalReview/usePostGameReviewAccess';
 import { persistMultiplayerReview } from '../modules/review/multiplayerReviewPersistence';
@@ -115,7 +115,7 @@ function MultiplayerGameShellComponent({
   );
   const multiplayerReviewWorkerBatch = useReviewWorkerBatch(
     multiplayerReviewSnapshots,
-    DEFAULT_REVIEW_DISPATCH_BUDGET,
+    COMPLETION_REVIEW_DISPATCH_BUDGET,
     DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   );
   const multiplayerDecisionIdByMoveNumber = useMemo(() => {

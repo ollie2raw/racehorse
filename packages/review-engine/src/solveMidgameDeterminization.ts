@@ -16,6 +16,12 @@ import { commandForAction, searchGameTree, type GameTreeWalkConfig, type NodeBud
 export type MidgameConvergence = {
   readonly sameTopAction: boolean;
   readonly valueDelta: number;
+  /** |loss_full − loss_half| where loss = best − played expectedPointDifferential. */
+  readonly lossDelta: number;
+  /** Top-2 action identities identical across halfway vs full (or fewer than 2). */
+  readonly rankingStable: boolean;
+  readonly sampleCount: number;
+  readonly feasibleStateEstimate: number;
 };
 
 export type MidgameDeterminizationResult = {
@@ -281,20 +287,39 @@ export function solveMidgameDeterminization(
 
   const candidates = buildCandidates(snapshot.legalActions, board, config, totals, solvedSamples);
   const best = candidates[0];
+  const playedKey = canonicalActionKey(snapshot.actualAction);
+  const played = candidates.find((c) => canonicalActionKey(c.action) === playedKey) ?? best;
+  const fullLoss =
+    (best?.value.expectedPointDifferential ?? 0)
+    - (played?.value.expectedPointDifferential ?? 0);
 
   let convergence: MidgameConvergence;
-  if (checkpointTotals !== null && checkpointSolved > 0) {
+  if (checkpointTotals !== null && checkpointSolved > 0 && best) {
     const halfwayCandidates = buildCandidates(snapshot.legalActions, board, config, checkpointTotals, checkpointSolved);
-    const halfwayBest = halfwayCandidates[0];
+    const halfwayBest = halfwayCandidates[0]!;
+    const halfwayPlayed =
+      halfwayCandidates.find((c) => canonicalActionKey(c.action) === playedKey) ?? halfwayBest;
+    const halfLoss =
+      halfwayBest.value.expectedPointDifferential - halfwayPlayed.value.expectedPointDifferential;
+    const top2 = (list: typeof candidates) =>
+      list.slice(0, 2).map((c) => canonicalActionKey(c.action)).join('|');
     convergence = {
       sameTopAction: canonicalActionKey(halfwayBest.action) === canonicalActionKey(best.action),
       valueDelta: Math.abs(best.value.expectedPointDifferential - halfwayBest.value.expectedPointDifferential),
+      lossDelta: Math.abs(fullLoss - halfLoss),
+      rankingStable: top2(halfwayCandidates) === top2(candidates),
+      sampleCount: solvedSamples,
+      feasibleStateEstimate: totalOpponentHandCombinations,
     };
   } else {
-    // No halfway checkpoint was reachable (budget too small to reach it, or
-    // maxHiddenStateSamples < 2) -- report a neutral, non-fabricated default
-    // rather than inventing a comparison from incomplete data.
-    convergence = { sameTopAction: true, valueDelta: 0 };
+    convergence = {
+      sameTopAction: true,
+      valueDelta: 0,
+      lossDelta: 0,
+      rankingStable: true,
+      sampleCount: solvedSamples,
+      feasibleStateEstimate: totalOpponentHandCombinations,
+    };
   }
 
   return {
