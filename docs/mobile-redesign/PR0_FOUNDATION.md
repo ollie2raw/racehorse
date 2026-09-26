@@ -25,19 +25,21 @@ Approved sources remain `client/src/assets/home/newHOMEdailyfritz.webp` and `hom
 
 Solo's three approved source files are untouched. The heavy rejected Home alternates remain unused. No new export is imported or preloaded by production.
 
-## Validation against pre-change baseline
+## Validation on current `origin/main` plus PR 0
 
 | Gate | PR 0 result | Pre-change comparison |
 |---|---|---|
 | Client typecheck | PASS | PASS |
-| Client lint | PASS; 48 warnings, 0 errors | same 48 warnings |
+| Client lint | PASS; 50 warnings, 0 errors | recovery-base pre-change had 48; newer main adds review-code warnings |
 | Architecture | PASS; 22/22 | PASS; 22/22 |
-| Client production build | PASS; 4,871 modules, 17 prerendered routes | PASS |
-| Client size check | PASS; AppRoutes 94 KB, BotMatchScreen 249 KB, index 480 KB | same guarded sizes |
-| Client Vitest | PASS; 279 files, 2,163 tests | 278 files, 2,161 tests |
-| Existing mobile hub E2E | PASS; 10/10 | PASS; 10/10 |
-| Existing mobile route/game E2E | PASS; 9/9 | PASS; 9/9 |
+| Client production build | PASS; 4,895 modules, 17 prerendered routes | PASS |
+| Client size check | PASS; AppRoutes 94 KB, BotMatchScreen 253 KB, index 481 KB | all current-main limits pass |
+| Client Vitest | PASS; 305 files, 2,322 tests on an isolated full rerun | initial run concurrent with build had two devtools timeouts; both targeted files passed 23/23 without build load |
+| Existing mobile hub E2E | PASS; 10/10 on fresh port 5233 | prior default-port run reused the recovery server and is excluded |
+| Existing mobile route/game E2E | PASS; 9/9 on fresh port 5233 | current-main branch confirmed by server fingerprint |
 | New mobile fixture E2E | PASS; 6/6 | new gate |
 | Pre-game draw behavior runner | PASS; four behavior files using `node --import tsx` | npm script failed before assertions; direct tsx loader passed |
 
-The production preload behavior documented in `PRECHANGE_VALIDATION_AND_PERFORMANCE.md` was deliberately left unchanged. Existing E2E screenshot files regenerated during validation were restored to their pre-run state; new diagnostic screenshots from those runs were removed. Unrelated pre-existing dirty files were not edited, staged or committed.
+After `npm ci` in the clean worktree, `@racehorse/game-core` and `@racehorse/review-engine` were built before the behavior runner; the first runner attempt lacked those generated workspace packages and stopped before assertions. The final production JS contains neither `racehorse_mobile_visual_identity_v1` nor `e2e-mobile-user`. The four new Home exports and two rejected heavy alternatives are absent from production JS/CSS/HTML references.
+
+The production preload behavior documented in `PRECHANGE_VALIDATION_AND_PERFORMANCE.md` was deliberately left unchanged. Existing E2E screenshot files regenerated during validation were restored to their pre-run state; new diagnostic screenshots from those runs were removed. The clean reconciliation worktree contains no unrelated dirty files; the original dirty worktree was not edited, staged or committed. See `PR0_RECONCILIATION.md` for source-branch provenance and the frozen-document inventory.
