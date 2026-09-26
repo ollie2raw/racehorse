@@ -46,6 +46,9 @@ export type ReviewCompletionJobRecord = {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
+  /** Canonical player-decision set captured before analysis begins. */
+  readonly expectedDecisionIds: readonly string[];
+  readonly captureFailures: readonly { decisionId: string; handId: string; sequence: number; reason: string }[];
   readonly decisions: readonly ReviewCompletionDecisionCheckpoint[];
   readonly accuracyModelResult: ReturnType<typeof computeGameAccuracyModel> | null;
   readonly claimToken: string | null;
@@ -214,13 +217,45 @@ export function createReviewCompletionJob(input: {
   readonly sourceMatchId: string;
   readonly userId?: string | null;
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
+  readonly expectedDecisionIds?: readonly string[];
+  readonly captureFailures?: ReviewCompletionJobRecord['captureFailures'];
   readonly liveResultsByDecisionId?: ReadonlyMap<string, ReviewEvaluationV1>;
   readonly now?: number;
 }): ReviewCompletionJobRecord {
   const now = input.now ?? Date.now();
   const live = input.liveResultsByDecisionId ?? new Map<string, ReviewEvaluationV1>();
-  const decisions: ReviewCompletionDecisionCheckpoint[] = input.snapshots.map((snapshot) => {
-    const decisionId = snapshot.identifiers.decisionId;
+  const expectedDecisionIds = input.expectedDecisionIds ?? input.snapshots.map((snapshot) => snapshot.identifiers.decisionId);
+  if (expectedDecisionIds.length === 0 || expectedDecisionIds.some((id) => !id.trim())) {
+    throw new Error('Review completion requires a non-empty expected decision set');
+  }
+  if (new Set(expectedDecisionIds).size !== expectedDecisionIds.length) {
+    throw new Error('Duplicate expected review decision ID');
+  }
+  const snapshotById = new Map(input.snapshots.map((snapshot) => [snapshot.identifiers.decisionId, snapshot] as const));
+  if (snapshotById.size !== input.snapshots.length) throw new Error('Duplicate review snapshot decision ID');
+  if (input.snapshots.some((snapshot) => !expectedDecisionIds.includes(snapshot.identifiers.decisionId))) {
+    throw new Error('Snapshot decision ID is not in expected decision set');
+  }
+  const captureFailures = input.captureFailures ?? [];
+  if (new Set(captureFailures.map((failure) => failure.decisionId)).size !== captureFailures.length
+    || captureFailures.some((failure) => !expectedDecisionIds.includes(failure.decisionId) || snapshotById.has(failure.decisionId))) {
+    throw new Error('Capture failure IDs must be unique expected decisions without snapshots');
+  }
+  const failuresById = new Set(captureFailures.map((failure) => failure.decisionId));
+  if (expectedDecisionIds.some((decisionId) => !snapshotById.has(decisionId) && !failuresById.has(decisionId))) {
+    throw new Error('Every expected decision without a snapshot requires an explicit capture failure');
+  }
+  const decisions: ReviewCompletionDecisionCheckpoint[] = expectedDecisionIds.map((decisionId) => {
+    const snapshot = snapshotById.get(decisionId);
+    if (!snapshot) return {
+      decisionId,
+      positionHash: decisionId,
+      lifecycle: 'PENDING',
+      tierReached: null,
+      evaluation: null,
+      updatedAt: now,
+      attemptCount: 0,
+    };
     const positionHash = snapshot.integrity.positionHash ?? decisionId;
     const existing = live.get(decisionId);
     if (existing && isForcedDecision(existing.candidates)) {
@@ -284,6 +319,8 @@ export function createReviewCompletionJob(input: {
     createdAt: now,
     updatedAt: now,
     snapshots: input.snapshots,
+    expectedDecisionIds,
+    captureFailures,
     decisions,
     accuracyModelResult: null,
     claimToken: null,
@@ -392,10 +429,9 @@ export async function runReviewCompletionPass(
             checkpoint: {
               decisionId: row.decisionId,
               positionHash: row.positionHash,
-              lifecycle: transitionLifecycle(
-                row.lifecycle === 'FAILED_RETRYABLE' ? 'PENDING' : row.lifecycle,
-                'FAILED_FATAL',
-              ),
+              // Capture-integrity failures remain explicitly pending. A
+              // missing snapshot is not an evaluation and cannot be terminal.
+              lifecycle: 'PENDING' as const,
               tierReached: row.tierReached,
               updatedAt: clock,
               attemptCount: row.attemptCount + 1,
@@ -404,7 +440,7 @@ export async function runReviewCompletionPass(
                     ...row.evaluation,
                     evaluationProvenance: {
                       phase: 'completion',
-                      lifecycle: 'FAILED_FATAL',
+                      lifecycle: 'PENDING',
                       failureReason: 'missing-snapshot' as const,
                       positionHash: row.positionHash,
                     },
@@ -493,7 +529,17 @@ export async function runReviewCompletionPass(
   }
 
   const finalDecisions = decisions;
-  const allDone = finalDecisions.every((d) => d.lifecycle === 'SCORED' || d.lifecycle === 'FORCED');
+  const resolvedIds = finalDecisions.filter((d) => d.lifecycle === 'SCORED' || d.lifecycle === 'FORCED').map((d) => d.decisionId);
+  const decisionIds = finalDecisions.map((d) => d.decisionId);
+  const expected = new Set(claimed.expectedDecisionIds);
+  const exactCoverage = expected.size === claimed.expectedDecisionIds.length
+    && new Set(decisionIds).size === expected.size
+    && decisionIds.every((id) => expected.has(id))
+    && resolvedIds.length === expected.size
+    && new Set(resolvedIds).size === expected.size
+    && resolvedIds.every((id) => expected.has(id))
+    && finalDecisions.length === expected.size;
+  const allDone = exactCoverage && finalDecisions.every((d) => d.lifecycle === 'SCORED' || d.lifecycle === 'FORCED');
   const anyFatal = finalDecisions.some((d) => d.lifecycle === 'FAILED_FATAL');
   const evaluations = finalDecisions
     .map((d) => d.evaluation)
@@ -552,10 +598,27 @@ export async function runReviewCompletionPass(
 
 export function jobAuthoritativeComplete(job: ReviewCompletionJobRecord): boolean {
   if (job.status !== 'complete') return false;
-  if (job.decisions.length === 0) return false;
+  if (job.decisions.length === 0 || new Set(job.expectedDecisionIds).size !== job.expectedDecisionIds.length) return false;
+  const decisionIds = job.decisions.map((d) => d.decisionId);
+  if (new Set(decisionIds).size !== decisionIds.length) return false;
   const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
   const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;
-  return forced + scored === job.decisions.length;
+  const counts = job.decisions.map((d) => d.lifecycle);
+  const everyResolvedDecisionHasEvaluation = job.decisions.every((decision) =>
+    decision.evaluation !== null
+      && (decision.lifecycle === 'FORCED'
+        ? isForcedDecision(decision.evaluation.candidates)
+          && decision.evaluation.evaluationProvenance?.lifecycle === 'FORCED'
+        : decision.lifecycle === 'SCORED'
+          && !isForcedDecision(decision.evaluation.candidates)
+          && ['exact', 'search'].includes(decision.evaluation.evidence.source)
+          && decision.evaluation.evaluationProvenance?.lifecycle === 'SCORED'),
+  );
+  return job.decisions.length === job.expectedDecisionIds.length
+    && forced + scored === job.expectedDecisionIds.length
+    && job.decisions.every((d) => job.expectedDecisionIds.includes(d.decisionId))
+    && counts.every((lifecycle) => lifecycle === 'FORCED' || lifecycle === 'SCORED')
+    && everyResolvedDecisionHasEvaluation;
 }
 
 export function finalArtifactFromJob(job: ReviewCompletionJobRecord): {
@@ -564,6 +627,9 @@ export function finalArtifactFromJob(job: ReviewCompletionJobRecord): {
   readonly positionHashes: readonly string[];
   readonly lifecycles: readonly ReviewDecisionLifecycle[];
 } {
+  if (!jobAuthoritativeComplete(job)) {
+    throw new Error('Cannot produce a final review artifact before exact decision coverage completes');
+  }
   return {
     evaluations: job.decisions.map((d) => d.evaluation!).filter(Boolean),
     accuracyModelResult: job.accuracyModelResult,

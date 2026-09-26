@@ -14,6 +14,10 @@ const { getAuthenticatedUserIdMock, warnLogMock } = vi.hoisted(() => ({
   warnLogMock: vi.fn(),
 }));
 
+vi.mock('../../reviewPersistence/gameReviewCohort', () => ({
+  isGameReviewCohortUser: (userId: string | null | undefined) => userId === 'user-a',
+}));
+
 vi.mock('../../platform/auth/supabaseAuth', () => ({
   getAuthenticatedUserId: getAuthenticatedUserIdMock,
 }));
@@ -413,16 +417,25 @@ describe('GET /api/game-reviews', () => {
     expect(res.status).toBe(400);
   });
 
-  it('denies reads and writes for authenticated users outside the cohort', async () => {
+  it('allows authenticated PVF write and exact reopen outside the history cohort', async () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
     const writeRes = await request('POST', '/api/game-reviews', { body: baseReviewBody });
-    expect(writeRes.status).toBe(403);
+    expect(writeRes.status).toBe(201);
 
     getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
     const readRes = await request('GET', '/api/game-reviews', {
       query: { gameDigest: baseReviewBody.gameDigest },
     });
-    expect(readRes.status).toBe(403);
+    expect(readRes.status).toBe(200);
+    expect(readRes.body.gameDigest).toBe(baseReviewBody.gameDigest);
+  });
+
+  it('keeps non-PVF review writes cohort restricted', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
+    const writeRes = await request('POST', '/api/game-reviews', {
+      body: { ...baseReviewBody, gameDigest: 'non-pvf-outside-cohort', mode: 'mp' },
+    });
+    expect(writeRes.status).toBe(403);
   });
 
   it('reports cohort access separately and fails closed for missing auth', async () => {

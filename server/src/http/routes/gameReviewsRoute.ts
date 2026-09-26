@@ -30,14 +30,13 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!isGameReviewCohortUser(authenticatedUserId)) {
-      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
-      return;
-    }
-
     const parsed = parseGameReviewRequestBody(req.body, authenticatedUserId);
     if ('error' in parsed) {
       res.status(400).json({ error: parsed.error });
+      return;
+    }
+    if (parsed.mode !== 'pvf' && !isGameReviewCohortUser(authenticatedUserId)) {
+      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
       return;
     }
 
@@ -92,11 +91,6 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!isGameReviewCohortUser(authenticatedUserId)) {
-      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
-      return;
-    }
-
     const reviewId = typeof req.params.reviewId === 'string' ? req.params.reviewId.trim() : '';
     if (!reviewId) {
       res.status(400).json({ error: 'reviewId is required.' });
@@ -106,6 +100,10 @@ export function registerGameReviewsRoute(app: Application): void {
     try {
       const row = await queryGameReviewById(authenticatedUserId, reviewId);
       if (!row) {
+        res.status(404).json({ error: 'This game has not been analyzed yet.' });
+        return;
+      }
+      if (row.mode !== 'pvf' && !isGameReviewCohortUser(authenticatedUserId)) {
         res.status(404).json({ error: 'This game has not been analyzed yet.' });
         return;
       }
@@ -149,11 +147,6 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!isGameReviewCohortUser(authenticatedUserId)) {
-      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
-      return;
-    }
-
     const gameDigest = typeof req.query.gameDigest === 'string' ? req.query.gameDigest.trim() : '';
     if (!gameDigest) {
       res.status(400).json({ error: 'gameDigest is required.' });
@@ -163,6 +156,10 @@ export function registerGameReviewsRoute(app: Application): void {
     try {
       const row = await queryLatestGameReview(authenticatedUserId, gameDigest);
       if (!row) {
+        res.status(404).json({ error: 'This game has not been analyzed yet.' });
+        return;
+      }
+      if (row.mode !== 'pvf' && !isGameReviewCohortUser(authenticatedUserId)) {
         res.status(404).json({ error: 'This game has not been analyzed yet.' });
         return;
       }

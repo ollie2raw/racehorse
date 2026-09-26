@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { createBotMatch, type BotMatchState } from '../match/runtime/botEngine.ts';
 import type { MoveEntry } from '../../game/moveLogger.ts';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/reviewContracts';
+import { REVIEW_FIXTURE_CORPUS } from '../../../../packages/game-core/src/reviewFixtureCorpus';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import type { ReviewBatchState } from './useReviewWorkerBatch.ts';
 import { logger } from '../../utils/logger.ts';
@@ -36,6 +37,13 @@ const postGameReviewWriteMock = vi.fn();
 vi.mock('./postGameReviewWrite.ts', () => ({
   postGameReviewWrite: (...args: unknown[]) => postGameReviewWriteMock(...args),
 }));
+const enqueueServerReviewCompletionMock = vi.fn();
+const pollServerReviewCompletionMock = vi.fn();
+vi.mock('./reviewCompletionClient.ts', () => ({
+  enqueueServerReviewCompletion: (...args: unknown[]) => enqueueServerReviewCompletionMock(...args),
+  pollServerReviewCompletion: (...args: unknown[]) => pollServerReviewCompletionMock(...args),
+}));
+vi.mock('../../lib/gameServerUrl.ts', () => ({ resolveGameServerUrl: () => 'https://server.test' }));
 
 // Real Worker construction isn't available in jsdom -- mocked the same way
 // analyzeMoveLogDeferred already is, so the accuracyModel wiring tests below
@@ -82,6 +90,7 @@ const defaultParams: UsePostGamePivotalReviewParams = {
   match: gameOverMatch(),
   moveLog,
   botPostGameReviewEligible: true,
+  reviewPersistenceEnabled: false,
   fritzTier: 'standard',
   winningScore: 60,
   showPostGameOverlays: true,
@@ -96,6 +105,14 @@ function makeRecorderWithSnapshots(snapshots: ReviewPositionSnapshotV2[]): Revie
   return { getSnapshots: () => snapshots } as unknown as ReviewSnapshotRecorder;
 }
 
+function reviewSnapshotForDecision(decisionId: string): ReviewPositionSnapshotV2 {
+  return {
+    identifiers: { decisionId, actorId: 'you', actionNumber: Number(decisionId.split('-').at(-1)) || 1 },
+    preAction: { actorHand: [], opponentTileCount: 0 },
+    integrity: { authorityPreStateDigest: `pre-${decisionId}`, authorityPostStateDigest: `post-${decisionId}` },
+  } as unknown as ReviewPositionSnapshotV2;
+}
+
 let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
@@ -104,6 +121,8 @@ beforeEach(() => {
   useReviewWorkerBatchMock.mockReset();
   useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
   postGameReviewWriteMock.mockReset();
+  enqueueServerReviewCompletionMock.mockReset();
+  pollServerReviewCompletionMock.mockReset();
   warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -137,6 +156,116 @@ describe('usePostGamePivotalReview — deferred analysis failure (F19)', () => {
 
     expect(result.current.postGameAnalysis).toBe(analysis);
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
+  it('enqueues authenticated player snapshots and does not dispatch the browser completion worker', async () => {
+    const snapshot = {
+      identifiers: { decisionId: 'fresh-you-1', actorId: 'you' },
+      actualAction: { kind: 'pass' },
+      integrity: { authorityPostStateDigest: 'digest-post-1' },
+    } as unknown as ReviewPositionSnapshotV2;
+    const recorder = {
+      getSnapshots: () => [snapshot],
+      getCaptureFailures: () => [],
+    } as unknown as ReviewSnapshotRecorder;
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-job-1',
+      status: 'pending',
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+    });
+    pollServerReviewCompletionMock.mockResolvedValue(null);
+
+    const { unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+
+    await waitFor(() => expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(1));
+    const request = enqueueServerReviewCompletionMock.mock.calls[0]![0] as {
+      authHeader: string;
+      snapshots: readonly ReviewPositionSnapshotV2[];
+      expectedDecisionIds: readonly string[];
+    };
+    expect(request.authHeader).toBe('Bearer session-token');
+    expect(request.snapshots.map((item) => item.identifiers.decisionId)).toEqual(['fresh-you-1']);
+    expect(request.expectedDecisionIds).toEqual(['fresh-you-1']);
+    expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+    unmount();
+  });
+
+  it('retries durable job creation after a temporary HTTP failure without enabling local completion', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('retryable-job-decision')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [] } as never);
+    enqueueServerReviewCompletionMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jobId: 'durable-retry-job', status: 'pending',
+        progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+      });
+    pollServerReviewCompletionMock.mockResolvedValue(null);
+
+    vi.useFakeTimers();
+    const { result, unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+    try {
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(2);
+      expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+      expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('feeds partial durable checkpoints to Game Review and keeps final accuracy gated', async () => {
+    const snapshots = [reviewSnapshotForDecision('fresh-1'), reviewSnapshotForDecision('fresh-2')];
+    const recorder = makeRecorderWithSnapshots(snapshots);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-progress-job', status: 'pending',
+      progress: { total: 2, forced: 0, scored: 0, remaining: 2 },
+    });
+    const partialEvaluation = {
+      ...scorableEvaluation('fresh-1', 1, EXACT),
+      evaluationProvenance: { phase: 'completion', lifecycle: 'SCORED', positionHash: 'position-1' },
+    } as ReviewEvaluationV1;
+    pollServerReviewCompletionMock.mockResolvedValueOnce({
+      complete: false,
+      status: 'pending',
+      progress: { total: 2, forced: 0, scored: 1, remaining: 1 },
+      decisions: [
+        { decisionId: 'fresh-1', lifecycle: 'SCORED', positionHash: 'position-1' },
+        { decisionId: 'fresh-2', lifecycle: 'PENDING', positionHash: 'position-2' },
+      ],
+      evaluations: [partialEvaluation],
+    });
+
+    const { result } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+
+    await waitFor(() => expect(result.current.reviewWorkerBatch.resultsByDecisionId.size).toBe(1));
+    expect(result.current.reviewWorkerBatch.pendingDecisionIds.has('fresh-2')).toBe(true);
+    expect(result.current.reviewWorkerBatch.done).toBe(false);
+    expect(result.current.accuracyModelPending).toBe(true);
+    expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
+    act(() => result.current.openReviewGameFromPrompt());
+    await waitFor(() => expect(result.current.analyzerOpen).toBe(true));
   });
 });
 
@@ -213,10 +342,6 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   const baseAnalysis = { fake: true, accuracy: 42, grade: 'B' } as never;
 
   it('no captured snapshots -- accuracyModelPending is false and accuracyModel stays undefined (legacy display, no infinite loading)', async () => {
-    // useReviewWorkerBatch's own `done` never flips true when it was given
-    // zero snapshots (no worker is even spawned) -- accuracyModelPending
-    // must be derived from snapshot presence, not `done` alone, or this
-    // case would spin forever.
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
 
     const { result } = render();
@@ -227,7 +352,7 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   });
 
   it('snapshots present but the worker batch has not finished -- accuracyModelPending is true, accuracyModel stays undefined until done', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = [reviewSnapshotForDecision('scorable-0')];
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
@@ -240,7 +365,7 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   });
 
   it('reviewWorkerBatch.done flips true but the dynamic import has not resolved yet -- accuracyModelPending must still be true (regression: it must NOT derive from `done` alone, or the legacy number flashes before the swap)', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = [reviewSnapshotForDecision('scorable-0')];
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     useReviewWorkerBatchMock.mockReturnValue(NOT_DONE_BATCH);
@@ -281,11 +406,11 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   });
 
   it('worker batch done with all exact/search results -- accuracyModel resolves as complete', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = Array.from({ length: 20 }, (_, i) => reviewSnapshotForDecision(`scorable-${i}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
-    for (let i = 0; i < 60; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
+    for (let i = 0; i < 20; i += 1) resultsByDecisionId.set(`scorable-${i}`, scorableEvaluation(`scorable-${i}`, 1, EXACT));
     useReviewWorkerBatchMock.mockReturnValue({
       resultsByDecisionId,
       errorsByDecisionId: new Map(),
@@ -312,7 +437,7 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   });
 
   it('worker batch with residual heuristics and stub snapshots stays Analyzing (finalization gate)', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = Array.from({ length: 60 }, (_, i) => reviewSnapshotForDecision(`scorable-${i}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
@@ -335,7 +460,7 @@ describe('usePostGamePivotalReview — accuracyModel wiring (C4 UI follow-up)', 
   });
 
   it('worker batch below coverage floor with residual heuristics stays Analyzing (finalization gate)', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = Array.from({ length: 20 }, (_, i) => reviewSnapshotForDecision(`scorable-${i}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
@@ -361,7 +486,7 @@ describe('usePostGamePivotalReview — evidence banner reflects real oracle cove
   const baseAnalysis = { fake: true, accuracy: 42, grade: 'B', evidence: LEGACY_ANALYSIS_DISCLOSURE } as never;
 
   it('fully-covered oracle match (status: complete, zero heuristic decisions) -- no longer shows the legacy banner', async () => {
-    const snapshots = [{ identifiers: { decisionId: 'd1' } }] as unknown as ReviewPositionSnapshotV2[];
+    const snapshots = Array.from({ length: 20 }, (_, i) => reviewSnapshotForDecision(`scorable-${i}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const resultsByDecisionId = new Map<string, ReviewEvaluationV1>();
@@ -411,13 +536,15 @@ describe('usePostGamePivotalReview — evidence banner reflects real oracle cove
   });
 });
 
-describe('usePostGamePivotalReview — E1 write call site', () => {
+describe('usePostGamePivotalReview — browser path cannot finalize durable artifacts', () => {
   const baseAnalysis = { fake: true, accuracy: 42, grade: 'B' } as never;
 
   function snapshotWithDigest(digest: string): ReviewPositionSnapshotV2 {
+    const base = REVIEW_FIXTURE_CORPUS[0]!.snapshot;
     return {
-      identifiers: { decisionId: digest },
-      integrity: { authorityPreStateDigest: `pre-${digest}`, authorityPostStateDigest: digest },
+      ...base,
+      identifiers: { decisionId: digest, actorId: 'you', actionNumber: Number(digest.match(/\d+/)?.[0] ?? 1) },
+      integrity: { ...base.integrity, authorityPreStateDigest: `pre-${digest}`, authorityPostStateDigest: digest },
     } as unknown as ReviewPositionSnapshotV2;
   }
 
@@ -427,8 +554,8 @@ describe('usePostGamePivotalReview — E1 write call site', () => {
     return { resultsByDecisionId };
   }
 
-  it('E1(b): fires postGameReviewWrite with the correct body once accuracyModel resolves', async () => {
-    const snapshots = [snapshotWithDigest('d1'), snapshotWithDigest('d2'), snapshotWithDigest('d3')];
+  it('local browser completion may calculate provisional accuracy but cannot persist a final review artifact', async () => {
+    const snapshots = Array.from({ length: 60 }, (_, index) => snapshotWithDigest(`scorable-${index}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const { resultsByDecisionId } = buildScorableBatch();
@@ -443,28 +570,12 @@ describe('usePostGamePivotalReview — E1 write call site', () => {
     const { result } = render({ reviewSnapshotRecorder: recorder, sourceMatchId: 'match-uuid-1' });
 
     await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
-    await waitFor(() => expect(postGameReviewWriteMock).toHaveBeenCalledTimes(1));
-
-    const body = postGameReviewWriteMock.mock.calls[0][0];
-    const evaluations = Array.from(resultsByDecisionId.values());
-    const accuracyModel = result.current.postGameAnalysis?.accuracyModel;
-
-    expect(body.mode).toBe('pvf');
-    expect(body.sourceMatchId).toBe('match-uuid-1');
-    expect(body.reviewEngineVersion).toBe(evaluations[0].reviewEngineVersion);
-    expect(body.accuracyModelVersion).toBe(accuracyModel?.accuracyModelVersion);
-    expect(body.accuracyModelResult).toBe(accuracyModel);
-    expect(body.evaluations).toHaveLength(evaluations.length);
-    // Completion finalize annotates provenance on each evaluation.
-    expect(body.evaluations.every((e: { evaluationProvenance?: { phase: string } }) => e.evaluationProvenance?.phase === 'completion')).toBe(true);
-    // The digest hashes the full ordered snapshot array, not just the last
-    // entry -- a real assertion against computeGameDigest's own contract,
-    // not just "some string was passed".
-    expect(body.gameDigest).toMatch(/^game-digest-v\d+:[0-9a-f]{8}$/);
+    await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
   });
 
-  it('E1(c): a throwing postGameReviewWrite does not crash the hook or block accuracyModel from resolving', async () => {
-    const snapshots = [snapshotWithDigest('d1')];
+  it('does not attempt a local final-artifact write even when local completion resolves', async () => {
+    const snapshots = Array.from({ length: 60 }, (_, index) => snapshotWithDigest(`scorable-${index}`));
     const recorder = makeRecorderWithSnapshots(snapshots);
     analyzeMoveLogDeferred.mockResolvedValueOnce(baseAnalysis);
     const { resultsByDecisionId } = buildScorableBatch();
@@ -475,18 +586,11 @@ describe('usePostGamePivotalReview — E1 write call site', () => {
       done: true,
       cancel: vi.fn(),
     });
-    postGameReviewWriteMock.mockImplementation(() => {
-      throw new Error('simulated persistence failure');
-    });
-
     const { result } = render({ reviewSnapshotRecorder: recorder });
 
-    // The throw must not prevent accuracyModel/accuracyModelPending from
-    // reaching their normal resolved state -- persistence failure must
-    // never affect local state.
     await waitFor(() => expect(result.current.accuracyModelPending).toBe(false));
     await waitFor(() => expect(result.current.postGameAnalysis?.accuracyModel).toBeDefined());
-    expect(postGameReviewWriteMock).toHaveBeenCalledTimes(1);
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
   });
 
   it('E1: does not fire the write when there are zero resolved evaluations (nothing real to persist)', async () => {

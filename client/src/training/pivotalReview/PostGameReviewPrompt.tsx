@@ -27,9 +27,8 @@ export type PostGameReviewPromptProps = {
 
 /**
  * Accuracy / grade presentation under partial coverage:
- * - complete (all non-forced calibrated): accuracy % + letter grade
- * - partial with scored accuracy: "Scored accuracy: X%" and NO letter grade
- * - unavailable non-forced / below floor: Partial / Incomplete, no grade
+ * - complete with exact decision coverage: accuracy % + letter grade
+ * - any incomplete / unavailable decision: analyzing progress, no final grade
  */
 function resolveAccuracyStatValues({
   analysis,
@@ -40,96 +39,33 @@ function resolveAccuracyStatValues({
   accuracyModelPending: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
 }): { accuracyText: string; gradeText: string; coverageText: string | null } {
-  if (accuracyModelPending) {
-    const total = decisionLedger?.totalDecisions;
-    const done =
-      total !== undefined && decisionLedger
-        ? decisionLedger.scoredCount + decisionLedger.forcedCount
-        : undefined;
-    // Progressive Game Review: usable while Tier 3/4 finish in the background.
-    // Final authoritative % stays gated until every non-forced decision is SCORED.
-    const progressText =
-      total !== undefined && done !== undefined
-        ? `Analyzing ${done} / ${total} decisions`
-        : 'Analyzing…';
+  const ledger = decisionLedger;
+  const totalNonForced = ledger ? ledger.totalDecisions - ledger.forcedCount : null;
+  const fullyResolved = Boolean(ledger
+    && ledger.pendingCount === 0
+    && ledger.estimateCount === 0
+    && ledger.unavailableCount === 0
+    && ledger.scoredCount + ledger.forcedCount === ledger.totalDecisions);
+  if (accuracyModelPending || !fullyResolved || !analysis.accuracyModel
+    || analysis.accuracyModel.status !== 'complete'
+    || analysis.accuracyModel.heuristicMoveCount !== 0
+    || (analysis.accuracyModel.unavailableMoveCount ?? 0) !== 0
+    || analysis.accuracyModel.coverageFraction !== 1
+    || analysis.accuracyModel.accuracy === null) {
+    const done = ledger?.scoredCount;
     return {
-      accuracyText: 'Analyzing…',
+      accuracyText: 'Analyzing game…',
       gradeText: '—',
-      coverageText: progressText,
-    };
-  }
-
-  const { accuracyModel } = analysis;
-  const coverageText = decisionLedger
-    ? formatDecisionAccountingSummary(decisionLedger)
-    : null;
-
-  if (accuracyModel === undefined) {
-    return { accuracyText: `${analysis.accuracy.toFixed(1)}%`, gradeText: analysis.grade, coverageText };
-  }
-
-  const unavailableNonForced =
-    decisionLedger?.unavailableCount
-    ?? accuracyModel.unavailableMoveCount
-    ?? 0;
-  const hasEstimates =
-    (decisionLedger?.estimateCount ?? 0) > 0 || accuracyModel.heuristicMoveCount > 0;
-  const isPartial = accuracyModel.status === 'partial' || hasEstimates || unavailableNonForced > 0;
-
-  const scoredCount =
-    accuracyModel.totalNonForcedMoveCount
-    - accuracyModel.heuristicMoveCount
-    - unavailableNonForced;
-  const fallbackCoverage =
-    coverageText
-    ?? [
-      `${Math.max(0, scoredCount)} scored`,
-      ...(accuracyModel.heuristicMoveCount > 0
-        ? [`${accuracyModel.heuristicMoveCount} estimate${accuracyModel.heuristicMoveCount === 1 ? '' : 's'}`]
-        : []),
-      ...(unavailableNonForced > 0
-        ? [`${unavailableNonForced} unavailable`]
-        : []),
-      `${accuracyModel.totalNonForcedMoveCount} non-forced`,
-    ].join(' · ');
-
-  if (unavailableNonForced > 0 && hasEstimates === false && accuracyModel.accuracy !== null) {
-    // Finalized with some UNAVAILABLE residuals: still show scored accuracy.
-    return {
-      accuracyText: `Scored accuracy: ${accuracyModel.accuracy.toFixed(1)}%`,
-      gradeText: '—',
-      coverageText: fallbackCoverage,
-    };
-  }
-
-  if (unavailableNonForced > 0 && accuracyModel.accuracy === null) {
-    return {
-      accuracyText: 'Partial',
-      gradeText: 'Incomplete review',
-      coverageText: fallbackCoverage,
-    };
-  }
-
-  if (accuracyModel.accuracy === null) {
-    return {
-      accuracyText: 'Partial',
-      gradeText: "Fritz's read",
-      coverageText: fallbackCoverage,
-    };
-  }
-
-  if (isPartial) {
-    return {
-      accuracyText: `Scored accuracy: ${accuracyModel.accuracy.toFixed(1)}%`,
-      gradeText: '—',
-      coverageText: fallbackCoverage,
+      coverageText: totalNonForced !== null && done !== undefined
+        ? `Analyzing ${done} / ${totalNonForced} decisions`
+        : 'Analyzing…',
     };
   }
 
   return {
-    accuracyText: `${accuracyModel.accuracy.toFixed(1)}%`,
-    gradeText: accuracyModel.grade ?? '—',
-    coverageText: fallbackCoverage,
+    accuracyText: `${analysis.accuracyModel.accuracy.toFixed(1)}%`,
+    gradeText: analysis.accuracyModel.grade ?? '—',
+    coverageText: formatDecisionAccountingSummary(ledger!),
   };
 }
 

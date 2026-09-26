@@ -21,6 +21,7 @@ export type PlayerReviewAction = ReviewActorAction;
  */
 export class ReviewSnapshotRecorder {
   private snapshots: ReviewPositionSnapshotV2[] = [];
+  private captureFailures: { decisionId: string; actorId: BotPlayerId; handId: string; sequence: number; reason: string }[] = [];
   private nextActionNumber = 1;
   private sessionId: string;
   private gameId: string;
@@ -34,8 +35,13 @@ export class ReviewSnapshotRecorder {
     return this.snapshots;
   }
 
+  getCaptureFailures() {
+    return this.captureFailures;
+  }
+
   clear(ids?: { sessionId?: string; gameId?: string }): void {
     this.snapshots = [];
+    this.captureFailures = [];
     this.nextActionNumber = 1;
     if (ids?.sessionId) this.sessionId = ids.sessionId;
     else this.sessionId = `pvf-session-${Date.now()}`;
@@ -60,8 +66,9 @@ export class ReviewSnapshotRecorder {
 
   /**
    * Capture one actor decision at the true pre-action boundary.
-   * No-ops when `enabled` is false. Swallows capture errors so live play
-   * cannot break if a digest/command envelope fails.
+   * No-ops when `enabled` is false. Capture errors never affect live play,
+   * but are retained against the canonical action ID so review completion
+   * can fail closed instead of silently dropping that decision.
    */
   recordActorDecision(
     preState: BotMatchState,
@@ -73,27 +80,37 @@ export class ReviewSnapshotRecorder {
     if (preState.currentPlayer !== actorId) return null;
     if (preState.handOver || preState.gameOver) return null;
 
+    const actionNumber = this.nextActionNumber;
+    const decisionId = `${this.sessionId}:${actorId}:${actionNumber}`;
+    this.nextActionNumber += 1;
+    const handId = `hand-${preState.handNumber}`;
+    let sequence = actionNumber;
     try {
-      const actionNumber = this.nextActionNumber;
-      const decisionId = `${this.sessionId}:${actorId}:${actionNumber}`;
       const command = buildReviewGameCommand(preState, actorId, action, decisionId);
+      sequence = command.sequence;
       const snapshot = captureReviewSnapshotAtDecision({
         preState,
         command,
         identifiers: {
           sessionId: this.sessionId,
           gameId: this.gameId,
-          handId: `hand-${preState.handNumber}`,
+          handId,
           decisionId,
           mode: 'play-vs-fritz',
           gameNumber: 1,
           actionNumber,
         },
       });
-      this.nextActionNumber += 1;
       this.snapshots = [...this.snapshots, snapshot];
       return snapshot;
-    } catch {
+    } catch (error) {
+      this.captureFailures = [...this.captureFailures, {
+        decisionId,
+        actorId,
+        handId,
+        sequence,
+        reason: error instanceof Error ? error.message : String(error),
+      }];
       return null;
     }
   }

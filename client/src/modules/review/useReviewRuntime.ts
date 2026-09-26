@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
-  isBotPostGameReviewLocallyEligible,
+  isDurablePvfReviewEnabled,
+  isBotPostGameReviewEligible,
   isPositionalCoachingProseEnabled,
   isReviewCaptureEnabled,
 } from '../../training/pivotalReview/postGameReviewPolicy.ts';
@@ -8,7 +9,6 @@ import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { usePostGamePivotalReview } from './usePostGamePivotalReview.ts';
 import { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { useAuth } from '../../auth/useAuth.ts';
-import { usePostGameReviewAccess } from '../../training/pivotalReview/usePostGameReviewAccess.ts';
 import { createLocalMatchId } from '../match/hooks/useBotMatchBootstrap.ts';
 import type { BotMatchScreenProps } from '../match/types.ts';
 import type { UseBotMatchBootstrapResult } from '../match/hooks/useBotMatchBootstrap.ts';
@@ -43,9 +43,13 @@ export function useReviewRuntime({
     isJourneyTrial,
   } = bootstrap;
 
-  const { user: authUser, loading: authLoading } = useAuth();
-  const serverCohortEnabled = usePostGameReviewAccess(authUser?.id, authLoading);
-  const enablePositionalExplanations = isPositionalCoachingProseEnabled(serverCohortEnabled);
+  const { user: authUser, accessToken, loading: authLoading } = useAuth();
+  const authenticatedReviewEnabled = !authLoading && (Boolean(authUser?.id) || import.meta.env.DEV);
+  const durableReviewEnabled = isDurablePvfReviewEnabled({
+    production: import.meta.env.PROD,
+    authenticated: Boolean(accessToken),
+  });
+  const enablePositionalExplanations = isPositionalCoachingProseEnabled(authenticatedReviewEnabled);
 
   const reviewModeContext = {
     mode: bootstrap.mode,
@@ -58,7 +62,10 @@ export function useReviewRuntime({
     isJourneyTrial,
   };
 
-  const botPostGameReviewEligible = isBotPostGameReviewLocallyEligible(reviewModeContext);
+  const botPostGameReviewEligible = isBotPostGameReviewEligible({
+    ...reviewModeContext,
+    authenticatedReviewEnabled,
+  });
 
   const reviewCaptureEnabled = isReviewCaptureEnabled(reviewModeContext);
 
@@ -82,7 +89,8 @@ export function useReviewRuntime({
     match,
     moveLog: [...moveLog],
     botPostGameReviewEligible,
-    reviewPersistenceEnabled: serverCohortEnabled,
+    reviewPersistenceEnabled: durableReviewEnabled,
+    accessToken,
     enablePositionalExplanations,
     fritzTier,
     winningScore,

@@ -94,11 +94,10 @@ export function buildPlayerDecisionLedger(args: {
       }
     } else if (!batchDone && (pending || (decisionId != null && !errored))) {
       status = 'pending';
-    } else if (!decisionId || errored || batchDone) {
-      // Without an evaluation we cannot prove action-level forced from
-      // tile-only validMoves — surface as unavailable, never invent Forced.
-      status = 'unavailable';
     } else {
+      // Missing expected results remain unresolved even after a browser
+      // batch drains. Only an explicit durable terminal evaluation can
+      // classify a decision; omission is never UNAVAILABLE.
       status = 'pending';
     }
 

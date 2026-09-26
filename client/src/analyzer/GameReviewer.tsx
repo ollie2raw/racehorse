@@ -11,7 +11,6 @@ import { sameTileTuple } from '../game/moveLogger';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import type { ReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
-import { selectMoveHeuristicClassification } from './useMoveHeuristicClassification';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
 import { selectMoveSearchTier } from './useMoveSearchTier';
 import {
@@ -25,6 +24,7 @@ import type { ReviewCoachingFacts, ReviewCoachingProse } from './reviewCoachingF
 import { createReviewCoachingFactsResolver } from './reviewCoachingFactsResolver';
 import { buildReviewCoachingProse } from './reviewCoachingProse';
 import { buildReviewPresentationRecord } from './reviewPresentationRecord';
+import { buildReviewCoachingFacts } from './reviewCoachingFacts';
 import { describePrincipalVariationStep, stepPrincipalVariationBoards } from './reviewPrincipalVariationBoard';
 import { buildReviewDecisionHandContext } from './reviewDecisionHandContext';
 import { GameReviewerHandContext } from './GameReviewerHandContext';
@@ -43,12 +43,11 @@ interface GameReviewerProps {
    * (unit tests), a local store scoped to this mount is used.
    */
   coachingFactsStore?: ReviewCoachingFactsStore<ReviewCoachingFacts> | null;
-  /** Snapshots keyed by decision id — required for Fritz-derived facts. */
+  /** Snapshots keyed by decision id for optional position-based explanations. */
   snapshotsByDecisionId?: ReadonlyMap<string, ReviewPositionSnapshotV2>;
   /**
-   * F1e-5 historical mode: pre-persisted facts+prose keyed by decision id.
-   * When set, coaching is taken from this map and the live resolver/Fritz
-   * path is not used (and snapshots need not be supplied).
+   * F1e-5 historical mode: pre-persisted facts keyed by decision id. Legacy
+   * competing-reference facts are rebuilt from the canonical evaluation.
    */
   historicalCoachingByDecisionId?: ReadonlyMap<
     string,
@@ -141,7 +140,7 @@ export default function GameReviewer({
 
   // Resolver may be recreated when batch/snapshots identities change; the
   // published Map on `factsStore` is the cache, so constructions are not lost.
-  // Historical replay skips the live resolver entirely (no Fritz / no rebuild).
+  // Historical replay uses its persisted canonical facts when they are safe.
   const coachingFactsResolver = useMemo(
     () =>
       isHistoricalReplay
@@ -186,18 +185,30 @@ export default function GameReviewer({
   // ratingCoachingCopy already reads just below -- the only place in this
   // component a resolved ReviewEvaluationV1 is available.
   // Facts come from the review-instance resolver so cursor / re-render
-  // never re-runs Fritz-derived construction for the same decision.
+  // never rebuilds facts for the same decision during live review.
   const currentDecisionId = current ? decisionIdByMoveNumber?.get(current.moveNumber) : undefined;
 
   const coaching = useMemo(() => {
     if (!currentDecisionId || !reviewWorkerBatch) return null;
     if (!reviewWorkerBatch.resultsByDecisionId.has(currentDecisionId)) return null;
-    if (historicalCoachingByDecisionId) {
-      const persisted = historicalCoachingByDecisionId.get(currentDecisionId);
-      return persisted ? { facts: persisted.facts, prose: persisted.prose } : null;
-    }
-    if (!coachingFactsResolver) return null;
-    const facts = coachingFactsResolver.getFacts(currentDecisionId);
+    const evaluation = reviewWorkerBatch.resultsByDecisionId.get(currentDecisionId);
+    if (!evaluation) return null;
+    const persisted = historicalCoachingByDecisionId?.get(currentDecisionId)?.facts;
+    const persistedHasCompetingAuthority = Boolean(
+      persisted && (
+        persisted.referenceSource === 'fritz'
+        || persisted.fritzMove
+        || persisted.oracleMove
+        || persisted.agreement?.contested
+      ),
+    );
+    // Current artifacts and live facts stay memoized. Rebuild only a legacy
+    // historical record that stored a competing recommendation.
+    const facts = historicalCoachingByDecisionId
+      ? persisted && !persistedHasCompetingAuthority
+        ? persisted
+        : buildReviewCoachingFacts(evaluation)
+      : coachingFactsResolver?.getFacts(currentDecisionId);
     if (!facts) return null;
     return { facts, prose: buildReviewCoachingProse(facts, enablePositionalExplanations) };
   }, [
@@ -212,8 +223,10 @@ export default function GameReviewer({
   // never a fabricated placeholder claiming an answer exists.
   const coachingStatus: 'resolved' | 'pending' | 'error' | 'unavailable' = coaching
     ? 'resolved'
-    : !currentDecisionId || !reviewWorkerBatch
+    : !reviewWorkerBatch
       ? 'unavailable'
+      : !currentDecisionId
+        ? 'pending'
       : reviewWorkerBatch.errorsByDecisionId.has(currentDecisionId)
         ? 'error'
         : reviewWorkerBatch.pendingDecisionIds.has(currentDecisionId)
@@ -277,7 +290,7 @@ export default function GameReviewer({
     if (classification?.kind === 'forced') return forcedDecisionCoachingCopy();
     if (classification?.kind === 'unclear') {
       if (classification.reason === 'primary-absent') {
-        return "Unclear — Fritz's preferred line wasn't among the heuristic candidates, so no comparison is shown.";
+        return 'This decision needs more analysis before a recommendation is ready.';
       }
       return null;
     }
@@ -320,9 +333,9 @@ export default function GameReviewer({
   const currentOracleEvaluation = current && decisionIdByMoveNumber && reviewWorkerBatch
     ? reviewWorkerBatch.resultsByDecisionId.get(decisionIdByMoveNumber.get(current.moveNumber) ?? '')
     : undefined;
-  // Board "Best move" must use the same primary reference as coaching (D2:
-  // Fritz for heuristic), not a separate oracle-only ghost.
-  const presentationBestAction = coaching?.facts.best.action ?? currentOracleEvaluation?.best.action;
+  // Board "Best move" comes from the same canonical evaluation as review
+  // classification and loss, including on historical replays.
+  const presentationBestAction = currentOracleEvaluation?.best.action;
   const oracleBestTile = presentationBestAction?.kind === 'play'
     ? [presentationBestAction.tile.low, presentationBestAction.tile.high] as [number, number]
     : undefined;
@@ -564,17 +577,12 @@ export default function GameReviewer({
                     ? historicalCoachingByDecisionId.get(decisionId)!.facts
                     : decisionId
                       // Read published facts only — never call getFacts here.
-                      // Sidebar enumeration must not construct Fritz for every
+                      // Sidebar enumeration must not construct facts for every
                       // row on each render (breaks once-per-decision caching).
                       ? factsStore.byDecisionId.get(decisionId) ?? null
                       : null;
                 const presentation = buildReviewPresentationRecord(evaluation, factsForMove ?? null);
-                const classification = presentation.classification
-                  ?? (reviewWorkerBatch
-                    ? selectMoveHeuristicClassification(decisionId, reviewWorkerBatch, {
-                        primaryReferenceAction: factsForMove?.best.action,
-                      })
-                    : null);
+                const classification = presentation.classification;
 
                 const isAnalyzing =
                   Boolean(decisionId)
