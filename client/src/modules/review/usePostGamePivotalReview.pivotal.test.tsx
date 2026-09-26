@@ -10,7 +10,10 @@ import { matchFixture } from '../../training/pivotalReview/pivotalReviewTestFixt
 const controls = vi.hoisted(() => ({ enabled: true }));
 vi.mock('../match/types.ts', () => ({ get PIVOTAL_REVIEW_WIZARD_ENABLED() { return controls.enabled; } }));
 const analyze = vi.fn();
-vi.mock('../../analyzer/moveAnalyzer.ts', () => ({ analyzeMoveLogDeferred: (...args: unknown[]) => analyze(...args) }));
+vi.mock('../../analyzer/moveAnalyzer.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../analyzer/moveAnalyzer.ts')>()),
+  analyzeMoveLogDeferred: (...args: unknown[]) => analyze(...args),
+}));
 const batch = vi.fn();
 vi.mock('./useReviewWorkerBatch', () => ({ useReviewWorkerBatch: () => batch() }));
 vi.mock('./postGameReviewWrite.ts', () => ({ postGameReviewWrite: vi.fn() }));
@@ -41,6 +44,7 @@ function setup() {
     match: { ...createBotMatch(), gameOver: true }, moveLog: fixture.moveLog,
     botPostGameReviewEligible: true, fritzTier: 'standard' as const, winningScore: 60,
     showPostGameOverlays: true, reviewCaptureEnabled: true, sourceMatchId: 'live-match',
+    reviewPersistenceEnabled: false,
     reviewSnapshotRecorder: { getSnapshots: () => snapshots } as unknown as ReviewSnapshotRecorder,
   };
   return { params, state };

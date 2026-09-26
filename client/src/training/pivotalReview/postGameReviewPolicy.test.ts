@@ -7,6 +7,7 @@ import {
   isPlayVsFritzResultOverlayMode,
   isPositionalCoachingProseEnabled,
   isPostGameReviewEnabled,
+  isDurablePvfReviewEnabled,
   isReviewCaptureEnabled,
   type BotPostGameReviewContext,
 } from './postGameReviewPolicy';
@@ -30,9 +31,17 @@ describe('post-game review beta gate', () => {
 
   it('keeps the Play vs Fritz result overlay separate from cohort review visibility', () => {
     expect(isPlayVsFritzResultOverlayMode(fritzMatch)).toBe(true);
-    expect(isBotPostGameReviewEligible({ ...fritzMatch, serverCohortEnabled: false })).toBe(false);
-    expect(isBotPostGameReviewEligible({ ...fritzMatch, serverCohortEnabled: true })).toBe(true);
-    expect(isBotPostGameReviewLocallyEligible({ ...fritzMatch, serverCohortEnabled: false })).toBe(true);
+    expect(isBotPostGameReviewEligible({ ...fritzMatch, authenticatedReviewEnabled: false })).toBe(false);
+    expect(isBotPostGameReviewEligible({ ...fritzMatch, authenticatedReviewEnabled: true })).toBe(true);
+    expect(isBotPostGameReviewLocallyEligible({ ...fritzMatch, authenticatedReviewEnabled: false })).toBe(true);
+  });
+
+  it('uses durable completion for normal authenticated production PVF without cohort enrollment', () => {
+    expect(isBotPostGameReviewEligible({ ...fritzMatch, authenticatedReviewEnabled: true })).toBe(true);
+    expect(isDurablePvfReviewEnabled({ production: true, authenticated: true })).toBe(true);
+    expect(isDurablePvfReviewEnabled({ production: true, authenticated: false })).toBe(true);
+    expect(isDurablePvfReviewEnabled({ production: false, authenticated: true })).toBe(true);
+    expect(isDurablePvfReviewEnabled({ production: false, authenticated: false })).toBe(false);
   });
 
   it('shows multiplayer Analyze Game only for cohort players', () => {
@@ -45,7 +54,7 @@ describe('post-game review beta gate', () => {
   });
 
   it('captures V2 snapshots on PVF independently of review visibility', () => {
-    expect(isReviewCaptureEnabled({ ...fritzMatch, serverCohortEnabled: false })).toBe(true);
+    expect(isReviewCaptureEnabled(fritzMatch)).toBe(true);
     expect(isReviewCaptureEnabled({ ...fritzMatch, isDailyFritzMode: true })).toBe(false);
     expect(isReviewCaptureEnabled({ ...fritzMatch, isJourneyTrial: true })).toBe(false);
     expect(isReviewCaptureEnabled({ ...fritzMatch, isGhostMode: true })).toBe(false);
