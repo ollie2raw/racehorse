@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "stateId": "home/not-played",
+  "route": "/",
+  "apiResponses": [],
+  "expected": { "visibleText": ["Today's Race", "Not played yet today", "Daily Fritz"] }
+}

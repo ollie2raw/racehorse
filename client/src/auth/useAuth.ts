@@ -7,7 +7,7 @@ import { clearCachedSession, setCachedSession } from './sessionToken';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
-import { readE2eDevAuth } from './e2eDevAuth';
+import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 
 export interface UserProfile {
@@ -342,12 +342,14 @@ function useAuthInternal() {
     // after the e2e branch had set the user).
     const e2eAuth = readE2eDevAuth();
     if (e2eAuth) {
+      const mobileIdentity = readMobileVisualIdentity(e2eAuth.user.id);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- dev-only e2e bypass: synchronously replaces the real session-bootstrap effect entirely (see comment above), not a value layered onto external-system sync
       setUser(e2eAuth.user);
       setAccessToken(e2eAuth.token);
       setProfile({
         id: e2eAuth.user.id,
-        username: 'e2e_daily_fritz',
+        username: mobileIdentity?.username ?? 'e2e_daily_fritz',
+        ...(mobileIdentity ? { glicko_rating: mobileIdentity.rating } : {}),
       });
       setLoading(false);
       return () => {

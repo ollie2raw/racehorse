@@ -10,7 +10,8 @@ const repoRoot = path.resolve(clientDir, '..');
 // unresolved `@media (--phone)` etc. and makes the whole matrix a lie. Isolating
 // the port + forcing a rebuild is the fix.
 const REACHABILITY = !!process.env.REACHABILITY || !!process.env.REACHABILITY_AUTHED;
-const CLIENT_PORT = REACHABILITY ? 5233 : 5173;
+const MOBILE_VISUAL = !!process.env.MOBILE_VISUAL;
+const CLIENT_PORT = MOBILE_VISUAL ? 5244 : REACHABILITY ? 5233 : 5173;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${CLIENT_PORT}`;
 const PHONE = { width: 390, height: 844 } as const;
 
@@ -84,6 +85,17 @@ export default defineConfig({
     storageState: WELCOME_DISMISSED,
   },
   projects: [
+    ...(MOBILE_VISUAL ? [{
+      name: 'chromium-mobile-visual',
+      testMatch: ['mobile-landscape-visual.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 844, height: 390 },
+        deviceScaleFactor: 1,
+        timezoneId: 'America/Los_Angeles',
+        reducedMotion: 'reduce' as const,
+      },
+    }] : []),
     // Daily-Fritz-store-coupled mobile test -- see DF_SERIAL_DESKTOP_SPECS'
     // comment above. Split out of the general chromium-mobile project
     // (below) specifically so it can stay workers:1 while
@@ -144,6 +156,7 @@ export default defineConfig({
     {
       name: 'chromium',
       testIgnore: [
+        /mobile-landscape-visual\.spec\.ts/,
         /mobile-390.*\.spec\.ts/,
         /mobile-reachability\.spec\.ts/,
         ...DF_SERIAL_DESKTOP_SPECS,
@@ -207,7 +220,7 @@ export default defineConfig({
           url: `http://localhost:${CLIENT_PORT}`,
           // Reachability always builds fresh — never inherit a stale server's
           // unresolved custom-media. Other projects keep the reuse convenience.
-          reuseExistingServer: REACHABILITY ? false : !process.env.CI,
+          reuseExistingServer: REACHABILITY || MOBILE_VISUAL ? false : !process.env.CI,
           timeout: 60_000,
           env: {
             ...process.env,
@@ -216,7 +229,8 @@ export default defineConfig({
             // Journey content, which is otherwise gated to the admin
             // account (see isAdminUser.ts) — never set outside this
             // Playwright-launched dev server.
-            VITE_E2E_ADMIN_BYPASS: '1',
+            VITE_E2E_ADMIN_BYPASS: MOBILE_VISUAL ? '0' : '1',
+            ...(MOBILE_VISUAL ? { VITE_ADMIN_EMAIL: 'mobile-visual-admin@racehorse.test' } : {}),
           },
         },
       ],

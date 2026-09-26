@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "stateId": "home/completed",
+  "route": "/",
+  "apiResponses": [
+    { "method": "GET", "path": "/api/home/daily-summary", "status": 200, "body": { "ok": true, "today": "2026-09-25", "week": [
+      { "dateKey": "2026-09-21", "label": "Mon", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-22", "label": "Tue", "fritzCompleted": true, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-23", "label": "Wed", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-24", "label": "Thu", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-25", "label": "Fri", "fritzCompleted": true, "puzzleCompleted": false, "complete": false, "isToday": true, "isFuture": false },
+      { "dateKey": "2026-09-26", "label": "Sat", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": true },
+      { "dateKey": "2026-09-27", "label": "Sun", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": true }
+    ], "weeklyCompletedCount": 4, "currentStreakCount": 4, "todayComplete": false } },
+    { "method": "GET", "path": "/api/daily-fritz/today", "status": 200, "body": { "ok": true, "run_date": "2026-09-25", "time_zone": "America/Los_Angeles", "fritz_tier": "elite", "deal_size": 7, "winning_score": 60, "attempt_status": "completed", "next_action": "view_results", "current_game_number": null, "streak": 4, "result": { "verification_status": "verified", "final_score": 130, "opponent_score": 89, "won": true }, "set_result": { "version": 2, "format": "best_of_3", "playerGamesWon": 2, "fritzGamesWon": 0, "totalPointDiff": 41, "setWinner": "player", "games": [
+      { "gameNumber": 1, "seed": "mobile-2026-09-25-game-1", "playerScore": 65, "fritzScore": 42, "playerWon": true, "pointDiff": 23, "completedAt": "2026-09-25T18:31:00.000Z" },
+      { "gameNumber": 2, "seed": "mobile-2026-09-25-game-2", "playerScore": 65, "fritzScore": 47, "playerWon": true, "pointDiff": 18, "completedAt": "2026-09-25T18:42:00.000Z" }
+    ] }, "rank": 7, "leaderboard_preview": [], "verification_status": "verified" } }
+  ],
+  "expected": { "visibleText": ["Today's Race", "Daily Fritz", "View Results", "Placement", "Streak"], "absentText": ["Not played yet today"] }
+}

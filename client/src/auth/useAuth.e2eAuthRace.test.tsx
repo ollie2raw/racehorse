@@ -64,6 +64,7 @@ vi.mock('../lib/analytics', () => ({
 const readE2eDevAuthMock = vi.fn();
 vi.mock('./e2eDevAuth', () => ({
   readE2eDevAuth: () => readE2eDevAuthMock(),
+  readMobileVisualIdentity: () => null,
 }));
 
 const { AuthProvider, useAuth } = await import('./useAuth');

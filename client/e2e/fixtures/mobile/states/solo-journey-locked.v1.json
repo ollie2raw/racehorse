@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "stateId": "solo/journey-locked",
+  "route": "/solo",
+  "apiResponses": [
+    { "method": "GET", "path": "/api/ranking/history/e2e-mobile-user", "status": 200, "body": { "games": [
+      { "played_at": "2026-09-25T17:00:00.000Z", "rating_after": 1412, "rd_after": 70, "delta": 12, "opponent_id": "fritz-rookie", "player_score": 65, "opponent_score": 40, "is_fritz": true }
+    ], "currentRating": 1428, "peakRating": 1480, "provisional": false, "rd": 68 } }
+  ],
+  "localStorage": { "rh_journey_progress_v1": "{\"version\":2,\"activeChapterId\":\"ch1-fritz-trail\",\"chapters\":{\"ch1-fritz-trail\":{\"completedNodeIds\":[],\"lastVisitedNodeId\":null,\"completedAt\":null,\"completionCelebrated\":false}},\"updatedAt\":\"2026-09-25T19:00:00.000Z\"}", "racehorse_nobrainer_solved_v1:e2e-mobile-user": "[\"fixture-lab-hand-1\"]" },
+  "expected": { "visibleText": ["Single Player", "Journey", "Coming Soon", "Matches Played", "1"] }
+}
