@@ -7,7 +7,7 @@ import type {
   ReviewPrincipalVariationStep,
 } from '@racehorse/game-core/review';
 import { computePositionalFeatures, POSITIONAL_FEATURE_NAMES, type PositionalFeatureName } from '@racehorse/review-engine';
-import { computeFritzReferenceMove, type FritzSecondOpinion } from './reviewFritzSecondOpinion';
+import type { FritzSecondOpinion } from './reviewFritzSecondOpinion';
 import type { LossBandLabel } from './gameAccuracyModel';
 import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../appRouteTypes';
 
@@ -30,35 +30,14 @@ export type ReviewCoachingProse = {
   readonly takeaway: string;
 };
 
-/**
- * REFERENCE-MOVE POLICY (feat/review-positional-features): which move
- * `ReviewCoachingFacts.best` actually is, tier-dependent:
- *  - 'oracle': `evaluateReviewPosition`'s own `best` candidate -- exact
- *    tier's authoritative answer, or search tier's primary reference.
- *  - 'fritz': the real `chooseBotMove('master')` policy result (see
- *    `reviewFritzSecondOpinion.ts`) -- heuristic tier's reference, per the
- *    build brief ("Fritz Master's move IS the reference ... labeled as
- *    'Fritz's read'"), never `solveHeuristicOpening`'s own ported-heuristic
- *    candidate (that is `evaluation.best`, exposed here as the `oracleBest`
- *    half of `agreement`'s comparison, never as the taught reference).
- */
+/** New review records always use the Review Engine. `fritz` is retained only
+ * to decode historical artifacts; it is never an active post-game authority. */
 export type ReviewCoachingReferenceSource = 'oracle' | 'fritz';
 
 export type ReviewAgreementPlayedMatch = 'oracle' | 'fritz' | 'both' | 'neither';
 
-/**
- * Per-decision agreement signal (build brief item: "Add a per-decision
- * `agreement` field capturing: oracle-vs-Fritz (agree/disagree) and whether
- * the actually-played move matched the oracle, Fritz, both, or neither.").
- *  - `oracleVsFritz`: 'not-computed' at exact tier (Fritz is never queried
- *    there -- the oracle already settles it, per policy) or when no
- *    `ReviewPositionSnapshotV2` was supplied to `buildReviewCoachingFacts`
- *    (legacy call sites -- see that function's doc comment).
- *  - `contested`: true only when `oracleVsFritz === 'disagree'`, at
- *    search or heuristic tier. Always false at exact tier -- "the exact
- *    tier settles it", per the build brief -- even if a hypothetical future
- *    exact-tier Fritz computation existed and disagreed.
- */
+/** Legacy artifact metadata. New review records set this to not-computed and
+ * never use it to choose a best move, classification, or user-facing copy. */
 export type ReviewAgreement = {
   readonly oracleVsFritz: 'agree' | 'disagree' | 'not-computed';
   readonly playedMatch: ReviewAgreementPlayedMatch;
@@ -195,7 +174,7 @@ export type ReviewCoachingFacts = {
   readonly principalVariation: readonly ReviewPrincipalVariationStep[];
   /** Present only when positional explanations are explicitly enabled. */
   readonly agreement?: ReviewAgreement;
-  /** Fritz's real chooseBotMove('master') result, present only when a snapshot was supplied at search/heuristic tier. */
+  /** @deprecated Historical artifact field. New reviews never populate it. */
   readonly fritzMove?: FritzSecondOpinion;
   /**
    * The oracle's own `best` candidate (`evaluation.best`), present
@@ -341,33 +320,11 @@ export function resolveAgreement(
 }
 
 /**
- * Builds the D0 facts object from a resolved `ReviewEvaluationV1`, extended
- * (feat/review-positional-features) with the tier-dependent reference-move
- * policy, the `agreement` field, and ranked positional `featureDeltas`.
- *
- * `snapshot` is OPTIONAL and deliberately so: computing Fritz's second
- * opinion / reference move requires the real `ReviewPositionSnapshotV2`
- * (see `reviewFritzSecondOpinion.ts`), which not every existing call site
- * has threaded through yet. Every field this function already produced
- * before this change (`played`, `best` at exact/search tier, `missKind`,
- * `deltas`, `evidence`, `principalVariation`) is completely unchanged when
- * `snapshot` is omitted -- `referenceSource` reads `'oracle'`, `agreement`
- * reads `{oracleVsFritz: 'not-computed', ...}`, and `fritzMove`/
- * `featureDeltas` are simply absent. This is what keeps every pre-existing
- * caller and test green without modification.
- *
- * Reference-move policy (build brief, exact wording):
- *  - exact tier: oracle's `best` is authoritative. Fritz is still computed
- *    when a snapshot is available to record agreement, but disagreement
- *    never makes a complete exact result contested.
- *  - search tier: oracle's `best` stays the primary teaching reference;
- *    Fritz's real move is ALWAYS additionally computed and exposed via
- *    `fritzMove` (a second opinion, never substituted for `best`).
- *  - heuristic tier: Fritz's real move IS the reference -- `best` here is
- *    `fritzMove`, not `evaluation.best` (which stays available only via
- *    the `oracleVsFritz` comparison inside `agreement` -- `solveHeuristicOpening`'s
- *    own ported-heuristic candidate is never presented as the teaching
- *    answer at this tier, per the build brief).
+ * Builds coaching facts from the canonical Review Engine evaluation.
+ * `snapshot` is optional and supplies only the position data needed for
+ * positional explanations. Every evidence tier uses `evaluation.best`;
+ * Fritz is not computed here and legacy competing-reference metadata is
+ * omitted.
  */
 export function buildReviewCoachingFacts(
   evaluation: ReviewEvaluationV1,
@@ -401,7 +358,9 @@ export function buildReviewCoachingFacts(
       deltas: {
         immediatePoints: oracleBest.immediatePoints - played.immediatePoints,
         expectedPointDifferential: loss.expectedPointDifferential,
-        referenceExpectedPointDifferential: loss.expectedPointDifferential,
+        ...(['exact', 'search'].includes(evidence.source)
+          ? { referenceExpectedPointDifferential: loss.expectedPointDifferential }
+          : {}),
         ...(loss.winProbability !== null ? { winProbability: loss.winProbability } : {}),
       },
       evidence,
@@ -409,16 +368,19 @@ export function buildReviewCoachingFacts(
     };
   }
 
-  const fritzMove: FritzSecondOpinion | null = snapshot ? computeFritzReferenceMove(snapshot) : null;
-
-  const referenceSource: ReviewCoachingReferenceSource = evidence.source === 'heuristic' && fritzMove ? 'fritz' : 'oracle';
-  const resolvedBest: { readonly action: ReviewAction; readonly immediatePoints: number } =
-    referenceSource === 'fritz' && fritzMove
-      ? { action: fritzMove.action, immediatePoints: fritzMove.immediatePoints }
-      : { action: oracleBest.action, immediatePoints: oracleBest.immediatePoints };
-
-  const comparison = resolveAgreement(played.action, oracleBest.action, fritzMove);
-  const agreement = { ...comparison, contested: evidence.source !== 'exact' && comparison.contested };
+  // The Review Engine evaluation is the sole post-game authority. Fritz may
+  // participate internally in search, but is never a second presentation
+  // reference or a competing recommendation.
+  const referenceSource: ReviewCoachingReferenceSource = 'oracle';
+  const resolvedBest: { readonly action: ReviewAction; readonly immediatePoints: number } = {
+    action: oracleBest.action,
+    immediatePoints: oracleBest.immediatePoints,
+  };
+  const agreement: ReviewAgreement = {
+    playedMatch: actionsEqual(played.action, oracleBest.action) ? 'oracle' : 'neither',
+    oracleVsFritz: 'not-computed',
+    contested: false,
+  };
 
   const distinctChoiceCount = candidates.length;
   const missKind = classifyMissKind(
@@ -432,12 +394,7 @@ export function buildReviewCoachingFacts(
   const deltas: ReviewCoachingFacts['deltas'] = {
     immediatePoints: resolvedBest.immediatePoints - played.immediatePoints,
     expectedPointDifferential: loss.expectedPointDifferential,
-    // At exact/search tier the displayed reference is the oracle candidate,
-    // so this is the same calibrated comparison as the evaluation loss. At
-    // heuristic tier Fritz is the displayed reference, but every heuristic
-    // candidate deliberately has a placeholder expected value of zero; do
-    // not fabricate a Fritz-relative value claim from that oracle loss.
-    ...(referenceSource === 'oracle'
+    ...(['exact', 'search'].includes(evidence.source)
       ? { referenceExpectedPointDifferential: loss.expectedPointDifferential }
       : {}),
     ...(loss.winProbability !== null ? { winProbability: loss.winProbability } : {}),
@@ -462,7 +419,6 @@ export function buildReviewCoachingFacts(
     // principal-variation line to substitute.
     principalVariation: oracleBest.principalVariation,
     agreement,
-    ...(fritzMove ? { fritzMove, oracleMove: { action: oracleBest.action, immediatePoints: oracleBest.immediatePoints } } : {}),
     ...(featureDeltas ? { featureDeltas } : {}),
   };
 }

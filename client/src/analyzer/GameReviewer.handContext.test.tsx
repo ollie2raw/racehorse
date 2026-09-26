@@ -14,9 +14,7 @@ vi.mock('./reviewCoachingFacts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./reviewCoachingFacts')>();
   return {
     ...actual,
-    buildReviewCoachingFacts: vi.fn(() => {
-      throw new Error('buildReviewCoachingFacts must not run for historical hand context');
-    }),
+    buildReviewCoachingFacts: vi.fn(actual.buildReviewCoachingFacts),
   };
 });
 
@@ -186,7 +184,7 @@ describe('GameReviewer Your hand decision context', () => {
     ]);
   });
 
-  it('G/H: historical reopen deep-equals live hand without Fritz/facts/worker', () => {
+  it('G/H: historical reopen preserves the hand and canonicalizes legacy coaching without Fritz/worker', () => {
     const analysis = analysisWithMoves([
       analyzedMove({
         handBefore: [
@@ -263,7 +261,7 @@ describe('GameReviewer Your hand decision context', () => {
       { tile: '3-4', role: 'played' },
       { tile: '5-5', role: 'playable' },
     ]);
-    expect(screen.getByText('Contested: hand reopen')).toBeInTheDocument();
+    expect(screen.queryByText(/Contested|Fritz prefers|engines disagree/i)).not.toBeInTheDocument();
   });
 
   it('I: pass and draw show the hand with no Played badge', () => {

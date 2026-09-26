@@ -1,4 +1,5 @@
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
+import { isForcedDecision } from '@racehorse/game-core/review';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
 import {
   createReviewCoachingFactsResolver,
@@ -39,6 +40,9 @@ export type BuildGameReviewReplayArtifactInput = {
   readonly enablePositionalExplanations?: boolean;
   /** Injected for zero-recompute / measurement tests. */
   readonly buildProse?: (facts: ReviewCoachingFacts) => ReviewCoachingProse;
+  /** Enforce exact expected-ID coverage before writing an authoritative final artifact. */
+  readonly expectedDecisionIds?: readonly string[];
+  readonly assertAuthoritativeComplete?: boolean;
 };
 
 /**
@@ -57,6 +61,25 @@ export type BuildGameReviewReplayArtifactInput = {
 export function buildGameReviewReplayArtifact(
   input: BuildGameReviewReplayArtifactInput,
 ): GameReviewReplayArtifactV1 {
+  if (input.assertAuthoritativeComplete) {
+    const expected = input.expectedDecisionIds ?? [];
+    const expectedSet = new Set(expected);
+    if (expected.length === 0 || expectedSet.size !== expected.length) {
+      throw new Error('Final review artifact requires a non-empty unique expected decision set');
+    }
+    if (input.evaluationsByDecisionId.size !== expectedSet.size
+      || [...input.evaluationsByDecisionId.keys()].some((id) => !expectedSet.has(id))) {
+      throw new Error('Final review artifact evaluation coverage does not match expected decision IDs');
+    }
+    for (const [decisionId, evaluation] of input.evaluationsByDecisionId) {
+      const lifecycle = evaluation.evaluationProvenance?.lifecycle;
+      const forced = isForcedDecision(evaluation.candidates);
+      if ((forced && lifecycle !== 'FORCED')
+        || (!forced && (lifecycle !== 'SCORED' || !['exact', 'search'].includes(evaluation.evidence.source)))) {
+        throw new Error(`Final review artifact contains unresolved decision ${decisionId}`);
+      }
+    }
+  }
   const store =
     input.coachingFactsStore ??
     createReviewCoachingFactsStore<ReviewCoachingFacts>(`persist:${input.analysis.analyzedAt}`);

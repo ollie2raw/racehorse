@@ -309,7 +309,7 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
     expect(facts.deltas.referenceExpectedPointDifferential).toBe(5);
   });
 
-  it('makes a Fritz heuristic reference delta unavailable rather than treating zeroed oracle loss as a tie', () => {
+  it('keeps the Review Engine best move canonical for heuristic evaluations', () => {
     const fixture = REVIEW_FIXTURE_CORPUS.find(candidate => candidate.snapshot.legalActions.length >= 2)!;
     const [played, fritz] = fixture.snapshot.legalActions;
     const oracle = fritz;
@@ -324,10 +324,11 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
       fixture.snapshot as ReviewPositionSnapshotV2,
       true,
     );
-    expect(facts.referenceSource).toBe('fritz');
-    expect(facts.best.action).toEqual(fritz);
+    expect(facts.referenceSource).toBe('oracle');
+    expect(facts.best.action).toEqual(oracle);
     expect(facts.deltas.expectedPointDifferential).toBe(0);
     expect(facts.deltas.referenceExpectedPointDifferential).toBeUndefined();
+    expect(facts.agreement?.contested).toBe(false);
   });
 
   it('omits winProbability from deltas when the evaluation has none', () => {
@@ -373,7 +374,7 @@ describe('buildReviewCoachingFacts -- deltas and evidence passthrough', () => {
 describe('default-off F2 compatibility', () => {
   const budget = { maxNodes: 200_000, maxHiddenStateSamples: 100, maxPlyDepth: 2, seed: 'racehorse-review-default-seed' };
 
-  it('is byte-identical to main’s facts/prose contract across REVIEW_FIXTURE_CORPUS and never invokes Fritz', () => {
+  it('uses one canonical evaluation contract across REVIEW_FIXTURE_CORPUS and never invokes Fritz', () => {
     fritzReferenceSpy.mockClear();
     for (const fixture of REVIEW_FIXTURE_CORPUS) {
       const evaluation = evaluateReviewPosition(fixture.snapshot, budget, 0.02);
@@ -385,7 +386,9 @@ describe('default-off F2 compatibility', () => {
         deltas: {
           immediatePoints: evaluation.best.immediatePoints - evaluation.played.immediatePoints,
           expectedPointDifferential: evaluation.loss.expectedPointDifferential,
-          referenceExpectedPointDifferential: evaluation.loss.expectedPointDifferential,
+          ...(['exact', 'search'].includes(evaluation.evidence.source)
+            ? { referenceExpectedPointDifferential: evaluation.loss.expectedPointDifferential }
+            : {}),
           ...(evaluation.loss.winProbability !== null ? { winProbability: evaluation.loss.winProbability } : {}),
         },
         evidence: evaluation.evidence,

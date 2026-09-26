@@ -17,7 +17,7 @@
  * Does not own game state — reads match and moveLog as inputs.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { GameAnalysis, ReviewEvidenceDisclosure } from '../../analyzer/moveAnalyzer.ts';
 import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts.ts';
@@ -50,13 +50,16 @@ import {
 import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { logger } from '../../utils/logger.ts';
+import { enqueueServerReviewCompletion, pollServerReviewCompletion } from './reviewCompletionClient.ts';
+import { resolveGameServerUrl } from '../../lib/gameServerUrl.ts';
 
 export type UsePostGamePivotalReviewParams = {
   match: BotMatchState;
   moveLog: MoveEntry[];
   botPostGameReviewEligible: boolean;
-  /** Server cohort gate for persistence; local analysis/UI is independent. */
+  /** Selects durable server authority; false is reserved for explicit local/dev review. */
   reviewPersistenceEnabled?: boolean;
+  accessToken?: string | null;
   /**
    * Gate 4: when true, persisted replay artifacts snapshot approved positional
    * coaching prose. Must match the live GameReviewer prop for the same review
@@ -74,7 +77,7 @@ export type UsePostGamePivotalReviewParams = {
   reviewSnapshotRecorder?: ReviewSnapshotRecorder;
   /**
    * A6 persistence gate — deliberately separate from botPostGameReviewEligible.
-   * That flag hides the (currently admin/beta-only) review UI; capture itself
+   * That flag controls review UI; capture itself
    * is enabled much more broadly (isReviewCaptureEnabled, mode-scoped only).
    * Persistence must follow capture, not UI visibility, or snapshots are
    * captured correctly in memory but silently never survive a refresh for
@@ -98,6 +101,7 @@ export function usePostGamePivotalReview({
   moveLog,
   botPostGameReviewEligible,
   reviewPersistenceEnabled = true,
+  accessToken = null,
   enablePositionalExplanations = false,
   fritzTier,
   winningScore,
@@ -122,6 +126,12 @@ export function usePostGamePivotalReview({
   // this can't be a live getSnapshots() call inside useReviewWorkerBatch
   // itself -- same reasoning as the A5 comment on that read).
   const [reviewWorkerSnapshots, setReviewWorkerSnapshots] = useState<readonly ReviewPositionSnapshotV2[]>([]);
+  const [serverJobId, setServerJobId] = useState<string | null>(null);
+  const [serverCompletion, setServerCompletion] = useState<Awaited<ReturnType<typeof pollServerReviewCompletion>>>(null);
+  const [enqueueRetry, setEnqueueRetry] = useState(0);
+  const enqueueKeyRef = useRef<string | null>(null);
+  const loggedCaptureFailureIdsRef = useRef(new Set<string>());
+  const enqueueRetryDelayMs = Math.min(2_000 * 2 ** Math.min(enqueueRetry, 4), 30_000);
 
   useEffect(() => {
     if (!match.gameOver) {
@@ -132,6 +142,10 @@ export function usePostGamePivotalReview({
       setPostGameAnalysis(null);
       setPostGameAnalysisPending(false);
       setReviewWorkerSnapshots([]);
+      setServerJobId(null);
+      setServerCompletion(null);
+      setEnqueueRetry(0);
+      enqueueKeyRef.current = null;
       return;
     }
 
@@ -145,6 +159,17 @@ export function usePostGamePivotalReview({
     if (reviewCaptureEnabled) {
       const capturedSnapshots = reviewSnapshotRecorder?.getSnapshots();
       if (capturedSnapshots) saveReviewSnapshots(capturedSnapshots);
+      for (const failure of reviewSnapshotRecorder?.getCaptureFailures?.() ?? []) {
+        if (loggedCaptureFailureIdsRef.current.has(failure.decisionId)) continue;
+        loggedCaptureFailureIdsRef.current.add(failure.decisionId);
+        logger.error('usePostGamePivotalReview', 'canonical review snapshot capture failed', {
+          decisionId: failure.decisionId,
+          handId: failure.handId,
+          sequence: failure.sequence,
+          captureStatus: 'failed',
+          failureReason: failure.reason,
+        });
+      }
     }
 
     const eligible = botPostGameReviewEligible;
@@ -202,17 +227,102 @@ export function usePostGamePivotalReview({
     reviewCaptureEnabled,
   ]);
 
-  // Post-game authoritative batch uses the completion budget so non-forced
-  // decisions clear the 2% search coverage gate (live DEFAULT 100-sample
-  // budget remains for corpus/devtools). Residual heuristics are finalized
-  // as UNAVAILABLE in the accuracy effect — ESTIMATE must not survive as
-  // the authoritative post-game evaluation.
-  const reviewWorkerBatch = useReviewWorkerBatch(
-    reviewWorkerSnapshots,
+  // Production Game Review is owned by the durable server job.
+  // Browser workers remain available only when durable persistence is explicitly off.
+  useEffect(() => {
+    if (!match.gameOver || !reviewPersistenceEnabled || !reviewCaptureEnabled) return;
+    if (!accessToken) {
+      logger.warn('usePostGamePivotalReview', 'durable review waiting for authenticated session');
+      const retryTimer = setTimeout(() => setEnqueueRetry((attempt) => attempt + 1), enqueueRetryDelayMs);
+      return () => clearTimeout(retryTimer);
+    }
+    const playerSnapshots = reviewWorkerSnapshots.filter((snapshot) => snapshot.identifiers.actorId === 'you');
+    const failures = (reviewSnapshotRecorder?.getCaptureFailures?.() ?? [])
+      .filter((failure) => failure.actorId === 'you')
+      .map(({ decisionId, handId, sequence, reason }) => ({ decisionId, handId, sequence, reason }));
+    if (playerSnapshots.length === 0 && failures.length === 0) return;
+    const expectedDecisionIds = [
+      ...playerSnapshots.map((snapshot) => ({
+        decisionId: snapshot.identifiers.decisionId,
+        sequence: snapshot.identifiers.turnSequence,
+      })),
+      ...failures.map((failure) => ({ decisionId: failure.decisionId, sequence: failure.sequence })),
+    ].sort((a, b) => a.sequence - b.sequence).map((entry) => entry.decisionId);
+    const digest = computeGameDigest(reviewWorkerSnapshots);
+    const requestKey = `${sourceMatchId}:${digest}`;
+    if (enqueueKeyRef.current === requestKey) return;
+    enqueueKeyRef.current = requestKey;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    void enqueueServerReviewCompletion({
+      apiBase: resolveGameServerUrl(),
+      authHeader: `Bearer ${accessToken}`,
+      gameDigest: digest,
+      sourceMatchId,
+      gameId: sourceMatchId,
+      snapshots: playerSnapshots,
+      expectedDecisionIds,
+      captureFailures: failures,
+    }).then((job) => {
+      if (!job) {
+        enqueueKeyRef.current = null;
+        logger.error('usePostGamePivotalReview', 'durable review job creation failed');
+        // Keep the review pending and retry the durable request. In production
+        // local browser completion is disabled, so an HTTP outage cannot
+        // publish subset analysis as authoritative.
+        retryTimer = setTimeout(() => setEnqueueRetry((attempt) => attempt + 1), enqueueRetryDelayMs);
+        return;
+      }
+      setServerJobId(job.jobId);
+    });
+    return () => { if (retryTimer) clearTimeout(retryTimer); };
+  }, [match.gameOver, reviewPersistenceEnabled, reviewCaptureEnabled, reviewWorkerSnapshots, accessToken, sourceMatchId, reviewSnapshotRecorder, enqueueRetry, enqueueRetryDelayMs]);
+
+  useEffect(() => {
+    if (!serverJobId || !accessToken || !reviewPersistenceEnabled) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const result = await pollServerReviewCompletion({
+        apiBase: resolveGameServerUrl(),
+        authHeader: `Bearer ${accessToken}`,
+        jobId: serverJobId,
+      });
+      if (cancelled) return;
+      if (result) setServerCompletion(result);
+      timer = setTimeout(() => { void poll(); }, result?.complete ? 5_000 : 1_000);
+    };
+    void poll();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [serverJobId, accessToken, reviewPersistenceEnabled]);
+
+  // The local batch supports immediate/dev-only review. Cohort-enabled
+  // production Game Review receives its authoritative results from polling.
+  const localReviewWorkerBatch = useReviewWorkerBatch(
+    reviewPersistenceEnabled ? [] : reviewWorkerSnapshots,
     COMPLETION_REVIEW_DISPATCH_BUDGET,
     DEFAULT_REVIEW_COVERAGE_THRESHOLD,
     undefined,
     defaultReviewWorkerPoolSize(),
+  );
+  const serverEvaluationsByDecisionId = useMemo(() => new Map(
+    (serverCompletion?.evaluations ?? []).map((evaluation) => [evaluation.snapshotId, evaluation] as const),
+  ), [serverCompletion]);
+  const serverPendingIds = useMemo(() => new Set(
+    (serverCompletion?.decisions ?? [])
+      .filter((decision) => decision.lifecycle !== 'SCORED' && decision.lifecycle !== 'FORCED')
+      .map((decision) => decision.decisionId),
+  ), [serverCompletion]);
+  const reviewWorkerBatch = useMemo<ReturnType<typeof useReviewWorkerBatch>>(
+    () => reviewPersistenceEnabled
+      ? {
+          resultsByDecisionId: serverEvaluationsByDecisionId,
+          errorsByDecisionId: new Map(),
+          pendingDecisionIds: serverPendingIds,
+          done: serverCompletion?.complete === true,
+          cancel: () => {},
+        }
+      : localReviewWorkerBatch,
+    [reviewPersistenceEnabled, serverEvaluationsByDecisionId, serverPendingIds, serverCompletion?.complete, localReviewWorkerBatch],
   );
 
   // Computed once here (this hook already holds both reviewWorkerSnapshots
@@ -365,13 +475,23 @@ export function usePostGamePivotalReview({
 
       // Adaptive escalation over worker results — budget exhaustion stays
       // FAILED_RETRYABLE / pending, never UNAVAILABLE for fresh captures.
-      const completed = completeReviewEvaluations({
+      const locallyCompleted = reviewPersistenceEnabled ? null : completeReviewEvaluations({
         snapshots: reviewWorkerSnapshots,
         liveResultsByDecisionId: reviewWorkerBatch.resultsByDecisionId,
         liveErrorsByDecisionId: reviewWorkerBatch.errorsByDecisionId,
         startTier: 2,
         maxTier: 4,
       });
+      const completed = locallyCompleted ?? {
+        resultsByDecisionId: serverEvaluationsByDecisionId,
+        reasonCounts: {},
+        lifecycleCounts: { PENDING: serverPendingIds.size, SEARCHING: 0, SCORED: serverCompletion?.progress.scored ?? 0, FORCED: serverCompletion?.progress.forced ?? 0, FAILED_RETRYABLE: 0, FAILED_FATAL: 0 },
+        reevaluatedDecisionIds: [],
+        promotedToSearchOrExact: 0,
+        retryableDecisionIds: [...serverPendingIds],
+        fatalDecisionIds: [],
+        complete: serverCompletion?.complete === true,
+      };
       setFinalizedResultsByDecisionId(completed.resultsByDecisionId);
       logger.info('usePostGamePivotalReview', 'review evaluation completion', {
         reasonCounts: completed.reasonCounts,
@@ -394,12 +514,20 @@ export function usePostGamePivotalReview({
         return;
       }
 
-      const model = computeGameAccuracyModel(evaluations);
+      const model = reviewPersistenceEnabled && serverCompletion?.complete
+        ? (serverCompletion.accuracyModelResult ?? computeGameAccuracyModel(evaluations))
+        : computeGameAccuracyModel(evaluations);
       const nextEvidence = deriveReviewEvidence(model);
 
-      // Finalization gate: do not claim authoritative review until complete.
+      const authoritativeComplete = completed.complete && (
+        reviewPersistenceEnabled
+          ? serverCompletion?.complete === true
+          : import.meta.env.DEV
+      );
+
+      // Finalization gate: production authority requires durable server COMPLETE.
       // Still stream progressive hand % for completed hands.
-      if (!completed.complete) {
+      if (!authoritativeComplete) {
         setAccuracyModel(undefined);
         setEvidence(undefined);
         setAccuracyModelPending(true);
@@ -441,6 +569,10 @@ export function usePostGamePivotalReview({
             const replayArtifact = buildGameReviewReplayArtifact({
               analysis: analysisForPersist,
               evaluationsByDecisionId: completed.resultsByDecisionId,
+              expectedDecisionIds: reviewPersistenceEnabled
+                ? (serverCompletion?.decisions ?? []).map((decision) => decision.decisionId)
+                : [...completed.resultsByDecisionId.keys()],
+              assertAuthoritativeComplete: true,
               decisionIdByMoveNumber,
               snapshotsByDecisionId,
               coachingFactsStore,
@@ -457,8 +589,12 @@ export function usePostGamePivotalReview({
               replayArtifact,
             });
           })
-          .catch(() => {
-            // Persistence must never affect local state or the post-game UI.
+          .catch((error) => {
+            // Persistence must never affect local state or the post-game UI,
+            // but a failed final artifact write must remain observable.
+            logger.warn('usePostGamePivotalReview', 'completed review artifact persistence failed', {
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
       } else if (reviewPersistenceEnabled && evaluations.length > 0 && !postGameAnalysis) {
         // Analysis still pending — this effect re-runs when postGameAnalysis lands.
@@ -489,7 +625,7 @@ export function usePostGamePivotalReview({
     return () => {
       cancelled = true;
     };
-  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewWorkerBatch.errorsByDecisionId, reviewWorkerBatch.pendingDecisionIds, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId]);
+  }, [reviewWorkerSnapshots, reviewWorkerBatch.done, reviewWorkerBatch.resultsByDecisionId, reviewWorkerBatch.errorsByDecisionId, reviewWorkerBatch.pendingDecisionIds, reviewPersistenceEnabled, enablePositionalExplanations, sourceMatchId, postGameAnalysis, coachingFactsStore, decisionIdByMoveNumber, snapshotsByDecisionId, serverEvaluationsByDecisionId, serverPendingIds, serverCompletion]);
 
   const exposedPostGameAnalysis = useMemo(() => {
     // Prefer progressive calibrated hands while final accuracyModel is still

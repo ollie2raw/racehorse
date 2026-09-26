@@ -92,7 +92,7 @@ describe('coaching voice quality — truth-preserving regressions', () => {
     expect(text(prose)).toMatch(/reliable single positional reason/i);
   });
 
-  it('4. search contested → Review Engine primary', () => {
+  it('4. search disagreement signals do not surface as competing post-game authorities', () => {
     const prose = buildReviewCoachingProse(base({
       referenceSource: 'oracle',
       agreement: { oracleVsFritz: 'disagree', playedMatch: 'neither', contested: true },
@@ -101,12 +101,11 @@ describe('coaching voice quality — truth-preserving regressions', () => {
         { feature: 'handShapePlayableNext', playedValue: 1, referenceValue: 3, delta: 2 },
       ],
     }), true);
-    expect(text(prose)).toMatch(/Review Engine prefers/);
-    expect(text(prose)).toMatch(/Fritz prefers/);
-    expect(prose.headline).not.toContain("Fritz's read");
+    expect(text(prose)).not.toMatch(/Fritz prefers|engines disagree|Review Engine prefers/i);
+    expect(text(prose)).toMatch(/right end/i);
   });
 
-  it('5. heuristic contested + unavailable EV → engines disagree, no unsupported closeness', () => {
+  it('5. heuristic disagreement resolves to one Review Engine recommendation', () => {
     const prose = buildReviewCoachingProse(base({
       referenceSource: 'fritz',
       evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
@@ -117,14 +116,15 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       oracleMove: { action: play(3, 6, 'left'), immediatePoints: 3 },
       featureDeltas: [],
     }), true);
-    expect(prose.headline).toBe('The engines disagree here.');
-    expect(prose.detail).toBe('');
+    expect(prose.headline).toBe('Best move.');
+    expect(prose.detail).toMatch(/matching the Review Engine/);
+    expect(text(prose)).not.toMatch(/Fritz|engines disagree/i);
     expect(text(prose)).not.toMatch(/Play it at/i);
     expect(text(prose)).not.toMatch(/\bclose\b|\bnearly equal\b|\bbasically even\b/i);
     expect(text(prose)).not.toMatch(/\bobjectively\b/i);
   });
 
-  it('6. feature facts opposing heuristic primary cannot be presented as support for it', () => {
+  it('6. heuristic review copy follows the Review Engine canonical move', () => {
     // Played/right wins outs (lower outs); Fritz displays left. Opposing features
     // must not be narrated as Fritz's rationale.
     const prose = buildReviewCoachingProse(base({
@@ -140,8 +140,9 @@ describe('coaching voice quality — truth-preserving regressions', () => {
         { feature: 'opponentOutsLeft', playedValue: 1, referenceValue: 3, delta: 2 },
       ],
     }), true);
-    expect(prose.headline).toBe('The engines disagree here.');
-    expect(prose.detail).toMatch(/^The measured positional features favor the right end, but Fritz prefers the left end\.?$/);
+    expect(prose.headline).toBe('Best move.');
+    expect(prose.detail).toMatch(/matches the Review Engine/);
+    expect(text(prose)).not.toMatch(/Fritz|engines disagree/i);
     expect(text(prose)).not.toMatch(/displayed reference/i);
     expect(text(prose)).not.toMatch(/Review Engine's measured positional features/i);
     expect(text(prose)).not.toMatch(/Fritz's placement leaves your opponent only/i);
@@ -159,9 +160,8 @@ describe('coaching voice quality — truth-preserving regressions', () => {
         { feature: 'opponentOutsLeft', playedValue: 5, referenceValue: 3, delta: -2 },
       ],
     }), true);
-    expect(text(prose)).toMatch(/Review Engine prefers 3-6/);
-    expect(text(prose)).toMatch(/Fritz prefers 2-3/);
-    expect(text(prose)).toMatch(/The (?:3-6 line|right-end placement) leaves your opponent only 3 matching replies instead of 5/);
+    expect(text(prose)).not.toMatch(/Fritz|engines disagree/i);
+    expect(text(prose)).toMatch(/that placement leaves your opponent only 3 matching replies instead of 5/);
     expect(text(prose)).not.toMatch(/That line /);
   });
 
@@ -174,7 +174,7 @@ describe('coaching voice quality — truth-preserving regressions', () => {
       fritzMove: { action: play(3, 4, 'left'), immediatePoints: 0, isMinimaxEndgame: false },
       featureDeltas: [],
     }), true);
-    expect(prose.headline).toMatch(/Right tile, wrong branch/i);
+    expect(prose.headline).toMatch(/Review Engine prefers/i);
     expect(text(prose)).toMatch(/other branch/i);
     expect(text(prose)).not.toMatch(/prefers 3-4 at a branch end/i);
     expect(text(prose)).not.toMatch(/branch-0-0|branch-1-0/);

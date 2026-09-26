@@ -90,14 +90,15 @@ function analyzedMove(moveNumber: number, validMoves: Array<[number, number]>): 
 }
 
 describe('production integrity — heuristic Fritz primary (no Blunder + Best move)', () => {
-  it('player matches Fritz but not oracle-max → Estimate, never Blunder', () => {
+  it('player matches stored Fritz preference but canonical evaluation selects another move', () => {
     const fritz = play(2, 2, 'left');
     const oracleMax = play(5, 6, 'right');
     const worse = play(0, 1, 'left');
-    const evaluation = heuristicEval(
+    const baseEvaluation = heuristicEval(
       [candidate(fritz, -40), candidate(oracleMax, 80), candidate(worse, -60)],
       fritz,
     );
+    const evaluation = { ...baseEvaluation, best: baseEvaluation.candidates[1]! };
     expect(classifyHeuristicResult(evaluation, { primaryReferenceAction: fritz })).toEqual({
       kind: 'estimate',
       matchedPrimary: true,
@@ -119,9 +120,10 @@ describe('production integrity — heuristic Fritz primary (no Blunder + Best mo
     } as ReviewCoachingFacts;
 
     const record = buildReviewPresentationRecord(evaluation, facts);
-    expect(record.playedMatchesPrimary).toBe(true);
-    expect(record.classification).toEqual({ kind: 'estimate', matchedPrimary: true });
-    expect(assertPresentationConsistency(record, 'Best move. 2-2 at the left end matches Fritz\'s read.')).toEqual([]);
+    expect(record.primaryReferenceAction).toEqual(evaluation.best.action);
+    expect(record.playedMatchesPrimary).toBe(false);
+    expect(record.classification).toEqual({ kind: 'estimate', matchedPrimary: false });
+    expect(assertPresentationConsistency(record, 'Best move. 2-2 at the left end matches the review reference.')).toEqual([]);
   });
 });
 
@@ -221,12 +223,13 @@ describe('production integrity — decision accounting', () => {
     expect(ledger.forcedCount).toBe(1);
     expect(ledger.scoredCount).toBe(2);
     expect(ledger.estimateCount).toBe(1);
-    expect(ledger.unavailableCount).toBe(2);
+    expect(ledger.unavailableCount).toBe(0);
+    expect(ledger.pendingCount).toBe(2);
     expect(
-      ledger.scoredCount + ledger.estimateCount + ledger.forcedCount + ledger.unavailableCount,
+      ledger.scoredCount + ledger.estimateCount + ledger.forcedCount + ledger.pendingCount,
     ).toBe(ledger.totalDecisions);
     expect(formatDecisionAccountingSummary(ledger)).toBe(
-      '2 scored · 1 estimate · 1 forced · 2 unavailable · 6 total decisions',
+      '2 scored · 1 estimate · 1 forced · 2 pending · 6 total decisions',
     );
   });
 

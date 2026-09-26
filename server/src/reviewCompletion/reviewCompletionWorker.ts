@@ -13,7 +13,6 @@ import {
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { childLogger } from '../logger';
 import { getAuthenticatedUserId } from '../platform/auth/supabaseAuth';
-import { isGameReviewCohortUser } from '../reviewPersistence/gameReviewCohort';
 import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
 import { config } from '../config';
 
@@ -68,6 +67,8 @@ export async function enqueueReviewCompletionJob(input: {
   readonly gameDigest: string;
   readonly sourceMatchId: string;
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
+  readonly expectedDecisionIds: readonly string[];
+  readonly captureFailures?: ReviewCompletionJobRecord['captureFailures'];
   readonly liveResultsByDecisionId?: ReadonlyMap<string, ReviewEvaluationV1>;
 }): Promise<ReviewCompletionJobRecord> {
   const existing = await store.getByGameDigest(input.gameDigest, input.userId);
@@ -79,6 +80,8 @@ export async function enqueueReviewCompletionJob(input: {
     sourceMatchId: input.sourceMatchId,
     userId: input.userId,
     snapshots: input.snapshots,
+    expectedDecisionIds: input.expectedDecisionIds,
+    captureFailures: input.captureFailures,
     liveResultsByDecisionId: input.liveResultsByDecisionId,
   });
   // Durable before acknowledgment.
@@ -152,23 +155,20 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!isGameReviewCohortUser(authenticatedUserId)) {
-      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
-      return;
-    }
-
     const body = req.body as {
       gameDigest?: unknown;
       sourceMatchId?: unknown;
       snapshots?: unknown;
+      expectedDecisionIds?: unknown;
+      captureFailures?: unknown;
       evaluations?: unknown;
     };
     if (typeof body.gameDigest !== 'string' || typeof body.sourceMatchId !== 'string') {
       res.status(400).json({ error: 'gameDigest and sourceMatchId are required.' });
       return;
     }
-    if (!Array.isArray(body.snapshots) || body.snapshots.length === 0) {
-      res.status(400).json({ error: 'snapshots[] is required.' });
+    if (!Array.isArray(body.snapshots) || !Array.isArray(body.expectedDecisionIds) || body.expectedDecisionIds.length === 0) {
+      res.status(400).json({ error: 'snapshots[] and expectedDecisionIds[] are required.' });
       return;
     }
 
@@ -185,6 +185,10 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         gameDigest: body.gameDigest,
         sourceMatchId: body.sourceMatchId,
         snapshots: body.snapshots as ReviewPositionSnapshotV2[],
+        expectedDecisionIds: body.expectedDecisionIds as string[],
+        captureFailures: Array.isArray(body.captureFailures)
+          ? body.captureFailures as ReviewCompletionJobRecord['captureFailures']
+          : [],
         liveResultsByDecisionId: live,
       });
       const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
@@ -193,10 +197,10 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         jobId: job.jobId,
         status: job.status,
         progress: {
-          total: job.decisions.length,
+          total: job.expectedDecisionIds.length,
           forced,
           scored,
-          remaining: job.decisions.length - forced - scored,
+          remaining: job.expectedDecisionIds.length - forced - scored,
         },
       });
     } catch (error) {
@@ -223,10 +227,10 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       status: job.status,
       complete: jobAuthoritativeComplete(job),
       progress: {
-        total: job.decisions.length,
+        total: job.expectedDecisionIds.length,
         forced,
         scored,
-        remaining: job.decisions.length - forced - scored,
+        remaining: job.expectedDecisionIds.length - forced - scored,
       },
       accuracyModelResult: job.accuracyModelResult,
       decisions: job.decisions.map((d) => ({
@@ -235,9 +239,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         lifecycle: d.lifecycle,
         tierReached: d.tierReached,
       })),
-      evaluations: jobAuthoritativeComplete(job)
-        ? job.decisions.map((d) => d.evaluation)
-        : undefined,
+      evaluations: job.decisions.flatMap((d) => d.evaluation ? [d.evaluation] : []),
     });
   });
 

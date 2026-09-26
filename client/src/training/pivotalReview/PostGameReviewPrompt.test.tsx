@@ -45,7 +45,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     );
     const accuracyStat = screen.getByText('Accuracy').closest('.dfd__stat');
     const gradeStat = screen.getByText('Grade').closest('.dfd__stat');
-    expect(accuracyStat).toHaveTextContent('Analyzing…');
+    expect(accuracyStat).toHaveTextContent('Analyzing game…');
     expect(gradeStat).toHaveTextContent('—');
     expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
   });
@@ -67,10 +67,10 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         }}
       />,
     );
-    expect(screen.getByText('Analyzing 34 / 37 decisions')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing 30 / 33 decisions')).toBeInTheDocument();
   });
 
-  it('accuracyModel undefined: renders the legacy accuracy/grade exactly as before, no coverage copy', () => {
+  it('accuracyModel missing: never publishes legacy accuracy without completed analysis', () => {
     render(
       <PostGameReviewPrompt
         {...requiredProps}
@@ -78,11 +78,11 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         accuracyModelPending={false}
       />,
     );
-    expect(screen.getByText('77.3%')).toBeInTheDocument();
-    expect(screen.getByText('B', { selector: '.is-accent' })).toBeInTheDocument();
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+    expect(screen.getByText('—', { selector: '.is-accent' })).toBeInTheDocument();
   });
 
-  it('accuracyModel.accuracy === null: shows Partial / Fritz\'s read and explicit accounting', () => {
+  it('partial coverage never publishes accuracy or Fritz as an authority', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
       accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
@@ -97,14 +97,14 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         {...requiredProps}
         analysis={baseAnalysis({ accuracyModel })}
         accuracyModelPending={false}
+        decisionLedger={{ scoredCount: 27, estimateCount: 20, forcedCount: 0, unavailableCount: 0, pendingCount: 0, totalDecisions: 47, entries: [] }}
       />,
     );
-    expect(screen.getByText('Partial')).toBeInTheDocument();
-    expect(screen.getByText("Fritz's read")).toBeInTheDocument();
-    expect(screen.getByText('27 scored · 20 estimates · 47 non-forced')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing 27 / 47 decisions')).toBeInTheDocument();
   });
 
-  it('partial with scored accuracy: qualifies accuracy and suppresses letter grade', () => {
+  it('partial with scored subset hides accuracy and suppresses letter grade', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'partial',
       accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
@@ -119,12 +119,13 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         {...requiredProps}
         analysis={baseAnalysis({ accuracyModel })}
         accuracyModelPending={false}
+        decisionLedger={{ scoredCount: 35, estimateCount: 5, forcedCount: 0, unavailableCount: 0, pendingCount: 0, totalDecisions: 40, entries: [] }}
       />,
     );
-    expect(screen.getByText('Scored accuracy: 88.1%')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing 35 / 40 decisions')).toBeInTheDocument();
     expect(screen.queryByText('A', { selector: '.is-accent' })).not.toBeInTheDocument();
     expect(screen.getByText('—', { selector: '.is-accent' })).toBeInTheDocument();
-    expect(screen.getByText('35 scored · 5 estimates · 40 non-forced')).toBeInTheDocument();
   });
 
   it('status complete: shows unqualified accuracy + letter grade', () => {
@@ -142,6 +143,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         {...requiredProps}
         analysis={baseAnalysis({ accuracyModel })}
         accuracyModelPending={false}
+        decisionLedger={{ scoredCount: 30, estimateCount: 0, forcedCount: 0, unavailableCount: 0, pendingCount: 0, totalDecisions: 30, entries: [] }}
       />,
     );
     expect(screen.getByText('95.0%')).toBeInTheDocument();
@@ -149,7 +151,7 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText(/Scored accuracy/)).not.toBeInTheDocument();
   });
 
-  it('unavailable non-forced via ledger: shows scored accuracy, suppresses letter grade', () => {
+  it('unavailable non-forced via ledger cannot publish scored accuracy', () => {
     const accuracyModel: GameAccuracyModelResult = {
       status: 'complete',
       accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
@@ -176,8 +178,41 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
         }}
       />,
     );
-    expect(screen.getByText('Scored accuracy: 90.0%')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing 8 / 9 decisions')).toBeInTheDocument();
     expect(screen.getByText('—', { selector: '.is-accent' })).toBeInTheDocument();
     expect(screen.queryByText('A', { selector: '.is-accent' })).not.toBeInTheDocument();
+  });
+
+  it('production failure shape 20 scored / 3 forced / 33 unavailable stays analyzing, never 92.5%', () => {
+    const accuracyModel: GameAccuracyModelResult = {
+      status: 'partial',
+      accuracyModelVersion: 'accuracy-model-v5-action-forced-2026-09-22',
+      accuracy: 92.5,
+      grade: null,
+      heuristicMoveCount: 20,
+      unavailableMoveCount: 33,
+      totalNonForcedMoveCount: 53,
+      coverageFraction: 20 / 53,
+    };
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis({ accuracyModel })}
+        accuracyModelPending={false}
+        decisionLedger={{
+          scoredCount: 20,
+          estimateCount: 0,
+          forcedCount: 3,
+          unavailableCount: 33,
+          pendingCount: 0,
+          totalDecisions: 56,
+          entries: [],
+        }}
+      />,
+    );
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing 20 / 53 decisions')).toBeInTheDocument();
+    expect(screen.queryByText('92.5%')).not.toBeInTheDocument();
   });
 });

@@ -63,7 +63,7 @@ describe('Gate 4 positional coaching prose cohort gate', () => {
   });
 
   it('E: locally available non-cohort review stays usable without new positional prose', () => {
-    expect(isBotPostGameReviewLocallyEligible({ ...fritzMatch, serverCohortEnabled: false })).toBe(true);
+    expect(isBotPostGameReviewLocallyEligible({ ...fritzMatch, authenticatedReviewEnabled: false })).toBe(true);
     expect(isPositionalCoachingProseEnabled(false)).toBe(false);
     const legacy = buildReviewCoachingProse(sampleFacts(), false);
     const approved = buildReviewCoachingProse(sampleFacts(), true);
