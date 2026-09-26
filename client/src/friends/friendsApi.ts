@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { readMobileVisualIdentity } from '../auth/e2eDevAuth';
 
 export type FriendRecord = {
   id: string;
@@ -68,6 +69,10 @@ export function invalidateFriendsCache(userId?: string | null): void {
 }
 
 export async function fetchFriends(userId: string): Promise<FriendsResult> {
+  const mobileIdentity = readMobileVisualIdentity(userId);
+  if (mobileIdentity) {
+    return { friends: mobileIdentity.friends, incoming: [], outgoing: [], error: null };
+  }
   const cached = readFriendsCache(userId);
   if (cached) return cached;
 

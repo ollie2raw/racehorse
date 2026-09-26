@@ -1,6 +1,7 @@
 import { apiGet } from '../api/client';
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
+import { readE2eDevAuth } from '../auth/e2eDevAuth';
 
 export type RatingHistoryGame = {
   played_at: string;
@@ -59,7 +60,7 @@ export async function fetchRankingLeaderboard(
 export async function fetchRatingHistory(
   userId: string,
 ): Promise<{ data: RatingHistoryResponse | null; error: string | null }> {
-  if (!supabase) {
+  if (!supabase && readE2eDevAuth()?.user.id !== userId) {
     return { data: null, error: 'Supabase not configured.' };
   }
 

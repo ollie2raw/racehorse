@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "clock": "2026-09-25T19:00:00.000Z",
+  "timezone": "America/Los_Angeles",
+  "auth": { "userId": "e2e-mobile-user", "bearer": "e2e-daily-fritz" },
+  "profile": {
+    "username": "racehorse_qa",
+    "rating": 1428,
+    "friends": [
+      { "id": "friend-1", "userId": "e2e-friend-1", "username": "ace_player", "online": true },
+      { "id": "friend-2", "userId": "e2e-friend-2", "username": "line_runner", "online": false }
+    ]
+  },
+  "localStorage": { "hasSeenWelcome": "1" },
+  "apiResponses": [
+    { "method": "GET", "path": "/api/tournaments/upcoming", "status": 200, "body": { "ok": true, "tournaments": [] } },
+    { "method": "GET", "path": "/api/tournaments/me", "status": 200, "body": { "ok": true, "registrations": [], "activeAssignedMatch": null, "currentTournamentPhase": null, "activeTournamentId": null, "assignedMatch": null, "countdown": null } },
+    { "method": "GET", "path": "/api/home/daily-summary", "status": 200, "body": { "ok": true, "today": "2026-09-25", "week": [
+      { "dateKey": "2026-09-21", "label": "Mon", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-22", "label": "Tue", "fritzCompleted": true, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-23", "label": "Wed", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-24", "label": "Thu", "fritzCompleted": true, "puzzleCompleted": true, "complete": true, "isToday": false, "isFuture": false },
+      { "dateKey": "2026-09-25", "label": "Fri", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": true, "isFuture": false },
+      { "dateKey": "2026-09-26", "label": "Sat", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": true },
+      { "dateKey": "2026-09-27", "label": "Sun", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": true }
+    ], "weeklyCompletedCount": 3, "currentStreakCount": 3, "todayComplete": false } },
+    { "method": "GET", "path": "/api/daily-fritz/today", "status": 200, "body": { "ok": true, "run_date": "2026-09-25", "time_zone": "America/Los_Angeles", "fritz_tier": "elite", "deal_size": 7, "winning_score": 60, "attempt_status": "none", "next_action": "start_set", "current_game_number": null, "streak": 3, "result": null, "set_result": null, "rank": null, "leaderboard_preview": [] } },
+    { "method": "GET", "path": "/api/social/friends/with-presence", "status": 200, "body": { "ok": true, "friends": [] } },
+    { "method": "GET", "path": "/api/social/feed", "status": 200, "body": { "ok": true, "feed": [] } },
+    { "method": "GET", "path": "/api/social/rivals", "status": 200, "body": { "ok": true, "rivals": [] } },
+    { "method": "GET", "path": "/api/ranking/profile/e2e-mobile-user", "status": 200, "body": { "ok": true, "glicko_rating": 1428, "glicko_rd": 68, "provisional": false, "ranked_games_played": 40, "peak_rating": 1480, "rank": 142, "currentWinStreak": 2 } },
+    { "method": "GET", "path": "/api/ranking/history/e2e-mobile-user", "status": 200, "body": { "games": [], "currentRating": 1428, "peakRating": 1480, "provisional": false, "rd": 68 } },
+    { "method": "GET", "path": "/api/ghost/profile/e2e-mobile-user", "status": 200, "body": { "ok": true, "summary": { "ghostRating": 800, "gamesPlayed": 0, "avgScore": null, "recentScores": [], "paddingGames": 0, "compositeLog": null, "styleProfile": null } } }
+  ]
+}

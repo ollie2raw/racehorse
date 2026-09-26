@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "stateId": "solo/empty",
+  "route": "/solo",
+  "apiResponses": [],
+  "expected": { "visibleText": ["Single Player", "Matches Played", "Win Rate", "Avg Score", "Coming Soon"] }
+}
