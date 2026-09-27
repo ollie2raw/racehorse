@@ -8,11 +8,10 @@ import { resolveAppVersion } from './scripts/appVersion.mjs';
 // @ts-expect-error — build script module, not part of the app's TS program.
 import { localServerMeta } from './scripts/serverFreshness.mjs';
 // @ts-expect-error — shared build-time JavaScript policy, as in PostCSS/Tailwind config.
-import { COMPACT_SHELL_QUERY, WIDE_SHELL_QUERY } from './config/responsivePolicy.js';
+import { WIDE_SHELL_QUERY } from './config/responsivePolicy.js';
 
-// Injects <link rel="preload" fetchpriority="high"> for hero images used as
-// CSS backgrounds on the home screen so Lighthouse discovers LCP resources
-// from the initial HTML document (they aren't discoverable via CSS).
+// Keep the existing wide-screen hero preload. Compact Home uses CSS image-set
+// derivatives only when the Home cards render, so other routes fetch no Home art.
 const HERO_IMAGE_PATTERNS = ['newHOMEdailyfritz', 'homefinalpuzzle'];
 
 function preloadHeroImagePlugin(): Plugin {
@@ -23,13 +22,9 @@ function preloadHeroImagePlugin(): Plugin {
       const assets = Object.keys(ctx.bundle!);
       const preloads = HERO_IMAGE_PATTERNS.flatMap((pattern) => {
         const source = assets.find((asset) => asset.includes(pattern) && !asset.includes(`${pattern}-1x`) && !asset.includes(`${pattern}-2x`) && asset.endsWith('.webp'));
-        const oneX = assets.find((asset) => asset.includes(`${pattern}-1x`) && asset.endsWith('.webp'));
-        const twoX = assets.find((asset) => asset.includes(`${pattern}-2x`) && asset.endsWith('.webp'));
-        if (!source || !oneX || !twoX) return [];
-        return [
-          `<link rel="preload" as="image" type="image/webp" href="/${source}" media="${WIDE_SHELL_QUERY}" fetchpriority="high">`,
-          `<link rel="preload" as="image" type="image/webp" href="/${oneX}" imagesrcset="/${oneX} 1x, /${twoX} 2x" media="${COMPACT_SHELL_QUERY}" fetchpriority="high">`,
-        ];
+        return source
+          ? [`<link rel="preload" as="image" type="image/webp" href="/${source}" media="${WIDE_SHELL_QUERY}" fetchpriority="high">`]
+          : [];
       });
       if (!preloads.length) return html;
       return html.replace('</head>', `  ${preloads.join('\n  ')}\n  </head>`);
