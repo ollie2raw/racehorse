@@ -35,8 +35,10 @@ import {
 import { TournamentRoute } from './routes/tournamentRoutes';
 import { MultiplayerRoute } from './routes/multiplayerRoute';
 import DailyFritzHealthAdminScreen from './admin/DailyFritzHealthAdminScreen';
+import { AppPresentation } from './presentation/AppPresentation';
+import { resolveSurfacePresentation } from './presentation/surfacePresentation';
 
-export default function AppRoutes({
+function AppRoutesContent({
   shell,
   navigation,
   auth,
@@ -179,4 +181,27 @@ export default function AppRoutes({
   }
 
   return fallbackConnectionHost;
+}
+
+
+export default function AppRoutes(props: AppRoutesProps) {
+  const { navigation, auth, learn, social, tournament, multiplayer } = props;
+  const presentationMode = navigation.appMode === 'live' && !spectatorModeEnabled ? 'home' : navigation.appMode;
+  const presentation = resolveSurfacePresentation({
+    mode: presentationMode,
+    joinedMatch: Boolean(social.joinedRoom && multiplayer.state),
+    tournamentView: tournament.tournamentSubView,
+    learnLessonOpen: Boolean(learn.selectedLearnLessonId || learn.learnHowToPlayOpen),
+  });
+  return (
+    <AppPresentation
+      presentation={presentation}
+      mode={navigation.appMode}
+      navigate={navigation.setAppMode}
+      openAuth={auth.handleOpenAuthModal}
+      signOut={auth.handleSignOut}
+    >
+      <AppRoutesContent {...props} />
+    </AppPresentation>
+  );
 }

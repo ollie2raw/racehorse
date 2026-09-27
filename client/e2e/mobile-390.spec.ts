@@ -126,7 +126,9 @@ test.describe('Mobile 390×844 — layout contract', () => {
     await page.goto('/daily-fritz');
     await expect(page.locator('.df-shell--daily-fritz, .df-page').first()).toBeVisible({ timeout: 15_000 });
     await assertNavDoesNotOverlap(page);
-    await assertBottomTabBarVisible(page);
+    // PR 1 focused-flow contract: contextual back, no five-area phone tabs.
+    await expect(page.locator('.rh-bottom-tab-bar')).toHaveCount(0);
+    await expect(page.locator('.rh-nav-context-back')).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await capture(page, `${testInfo.project.name}-daily-fritz`);
   });
@@ -135,7 +137,9 @@ test.describe('Mobile 390×844 — layout contract', () => {
     await page.goto('/solo/fritz');
     await expect(page.locator('.pvf-root, .pvf-layout').first()).toBeVisible({ timeout: 15_000 });
     await assertNavDoesNotOverlap(page);
-    await assertBottomTabBarVisible(page);
+    // PR 1 focused-flow contract: contextual back, no five-area phone tabs.
+    await expect(page.locator('.rh-bottom-tab-bar')).toHaveCount(0);
+    await expect(page.locator('.rh-nav-context-back')).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await capture(page, `${testInfo.project.name}-play-vs-fritz`);
   });

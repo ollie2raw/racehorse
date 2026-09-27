@@ -41,7 +41,7 @@
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-top-rail,
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail {
-  padding: calc(10px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 8px calc(16px + env(safe-area-inset-left, 0px)) !important;
+  padding: 10px 16px 8px !important;
   min-height: var(--match-hud-min-height, 82px) !important;
   background: transparent !important;
   border: 0 !important;
@@ -1174,7 +1174,7 @@
   }
   
   .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail {
-    padding-top: calc(4px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: 4px !important;
     padding-bottom: 4px !important;
     min-height: 44px !important;
   }
@@ -1198,7 +1198,7 @@
 
   .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck {
     padding-top: 6px !important;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: 6px !important;
   }
   
   .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {

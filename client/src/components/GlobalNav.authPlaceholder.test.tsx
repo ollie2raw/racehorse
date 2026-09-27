@@ -2,21 +2,12 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * Regression cover for the header HUD rendering a bare "—" for a signed-in user.
- *
- * "—" is the *signed-out* glyph and "…" is the *unresolved* glyph. Restoring a
- * Supabase session is async, so a signed-in user renders with `user === null`
- * for the whole bootstrap window. Deriving the placeholder from `!user` alone
- * conflates the two and showed real logged-in accounts the signed-out glyph —
- * on a phone (slow network, stalled token refresh) for seconds or indefinitely.
- */
+/** The shell only renders stat blocks for a known signed-in principal. */
 
 const mockAuth = vi.fn();
 vi.mock('../auth/useAuth', () => ({ useAuth: () => mockAuth() }));
 vi.mock('../friends/friendsApi', () => ({ fetchFriends: () => new Promise(() => {}) }));
 vi.mock('./BrandLogo', () => ({ BrandLogo: () => null }));
-vi.mock('./nav/AppBottomTabBar', () => ({ AppBottomTabBar: () => null }));
 
 const { GlobalNav } = await import('./GlobalNav');
 
@@ -30,19 +21,20 @@ describe('GlobalNav — auth placeholder', () => {
     mockAuth.mockReset();
   });
 
-  it('shows the unresolved glyph, never the signed-out glyph, while the session is still restoring', () => {
+  it('does not invent signed-out stats while the session is still restoring', () => {
     mockAuth.mockReturnValue({ user: null, profile: null, loading: true });
     render(<GlobalNav />);
 
-    expect(statValues()).toEqual(['…', '…']);
+    expect(statValues()).toEqual([]);
     expect(screen.queryByText('—')).toBeNull();
   });
 
-  it('shows the signed-out glyph only once auth has settled with no user', () => {
+  it('shows account access with no empty stat placeholders once signed out', () => {
     mockAuth.mockReturnValue({ user: null, profile: null, loading: false });
     render(<GlobalNav />);
 
-    expect(statValues()).toEqual(['—', '—']);
+    expect(statValues()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 
   it('renders the real rating once the profile resolves', () => {
@@ -70,9 +62,8 @@ describe('GlobalNav — auth placeholder', () => {
   });
 
   it('reuses the last known rating for the same user instead of flashing a placeholder', () => {
-    // Each route mounts its own GlobalNav with its own useAuth(), so a
-    // navigation re-runs the whole session bootstrap. The cache is what keeps
-    // the HUD stable across that, including while `user` is briefly null.
+    // The shell remains mounted across routes. The cache still protects the
+    // HUD during a transient auth refresh while `user` is briefly null.
     mockAuth.mockReturnValue({
       user,
       profile: { id: 'user-1', username: 'qa', glicko_rating: 1287.4 },

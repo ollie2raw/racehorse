@@ -87,7 +87,7 @@ export default defineConfig({
   projects: [
     ...(MOBILE_VISUAL ? [{
       name: 'chromium-mobile-visual',
-      testMatch: ['mobile-landscape-visual.spec.ts'],
+      testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 844, height: 390 },
@@ -157,6 +157,7 @@ export default defineConfig({
       name: 'chromium',
       testIgnore: [
         /mobile-landscape-visual\.spec\.ts/,
+        /mobile-shell-contract\.spec\.ts/,
         /mobile-390.*\.spec\.ts/,
         /mobile-reachability\.spec\.ts/,
         ...DF_SERIAL_DESKTOP_SPECS,

@@ -2,17 +2,6 @@
  * Primary Racehorse hub pages are viewport-contained.
  * Do not add page-level vertical overflow. Long content should scroll inside its panel.
  */
-.app:has(.rh-hub-page) {
-  background: transparent;
-}
-
-.app:has(.rh-hub-page) > * {
-  display: flex;
-  flex: 1 1 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
 .rh-hub-page,
 .rh-hub-viewport-contained {
   display: flex;
@@ -24,19 +13,6 @@
   color: #fff;
   font-family: var(--font-body);
   background: var(--hub-bg);
-}
-
-.app:has(.rh-hub-viewport-contained) > * {
-  display: flex;
-  flex: 1 1 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.app:has(.rh-hub-viewport-contained) > * > .rh-hub-viewport-contained {
-  flex: 1 1 0;
-  min-height: 0;
-  max-height: 100%;
 }
 
 .rh-hub-shell {

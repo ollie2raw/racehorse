@@ -1,21 +1,25 @@
 import type { AppMode } from '../../types';
+import type { PrimaryArea } from '../../presentation/surfacePresentation';
 
 export type AppPrimaryTab = {
   label: string;
   shortLabel: string;
   mode: AppMode;
+  area: PrimaryArea;
   activeModes: AppMode[];
 };
 
 export const APP_PRIMARY_TABS: AppPrimaryTab[] = [
   {
     label: 'Multiplayer',
+    area: 'multiplayer',
     shortLabel: 'Multi',
     mode: 'multiplayer',
     activeModes: ['multiplayer'],
   },
   {
     label: 'Single Player',
+    area: 'solo',
     shortLabel: 'Solo',
     mode: 'singlePlayerHub',
     activeModes: [
@@ -29,18 +33,21 @@ export const APP_PRIMARY_TABS: AppPrimaryTab[] = [
   },
   {
     label: 'Tournament',
+    area: 'tournament',
     shortLabel: 'Tourny',
     mode: 'tournament',
     activeModes: ['tournament'],
   },
   {
     label: 'Social',
+    area: 'social',
     shortLabel: 'Social',
     mode: 'feed',
     activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats', 'ratingHistory'],
   },
   {
     label: 'Learn',
+    area: 'learn',
     shortLabel: 'Learn',
     mode: 'learn',
     activeModes: ['learn', 'noBrainer', 'guidedMatchRecorder', 'guidedMatchAnnotator'],

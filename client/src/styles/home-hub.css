@@ -1050,9 +1050,9 @@
 
 .home-top-bar {
   position: absolute;
-  top: calc(14px + env(safe-area-inset-top, 0px));
-  left: calc(16px + env(safe-area-inset-left, 0px));
-  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(14px + var(--rh-safe-top, 0px));
+  left: calc(16px + var(--rh-safe-left, 0px));
+  right: calc(16px + var(--rh-safe-right, 0px));
   z-index: 120;
   display: flex;
   align-items: center;

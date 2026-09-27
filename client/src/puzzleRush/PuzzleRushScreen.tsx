@@ -17,6 +17,7 @@ import type {
   RushPuzzleResult,
 } from './types';
 import './puzzleRush.css';
+import { useGameplayPresentation } from '../presentation/gameplayPresentation';
 
 type Phase = 'intro' | 'starting' | 'running' | 'error' | 'leaderboard';
 
@@ -39,6 +40,7 @@ export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) 
   const [phase, setPhase] = useState<Phase>('intro');
   const [startResponse, setStartResponse] = useState<PuzzleRushStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useGameplayPresentation(phase === 'running' && Boolean(startResponse));
   // Bumped when a run finishes, so returning to the hub re-reads /today and
   // the new personal best / streak show without a hard refresh.
   const [todayNonce, setTodayNonce] = useState(0);

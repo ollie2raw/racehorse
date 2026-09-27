@@ -188,7 +188,7 @@
     flex-shrink: 0;
     height: auto;
     width: 100%;
-    padding-bottom: env(safe-area-inset-bottom, 12px);
+    padding-bottom: 0;
     background: linear-gradient(180deg, rgba(12, 18, 26, 0.95), rgba(8, 12, 18, 0.98));
     border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
