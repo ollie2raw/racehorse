@@ -70,6 +70,8 @@ for (const state of ['home/not-played', 'home/completed'] as const) {
       await expect(page.locator('.daily-fritz-card-container')).toContainText('Placement');
       await expect(page.locator('.daily-fritz-card-container')).toContainText('View Results');
       await expect(page.locator('.streak-label')).toContainText('4 Day Streak');
+      await expect(page.locator('.daily-puzzle-card-container')).toContainText('Not played yet today');
+      await expect(page.locator('.daily-puzzle-card-container button').first()).toHaveAccessibleName(/play/i);
     } else {
       await expect(page.locator('.daily-fritz-card-container')).toContainText('Not played yet today');
       await expect(page.locator('.daily-puzzle-card-container')).toContainText('Not played yet today');

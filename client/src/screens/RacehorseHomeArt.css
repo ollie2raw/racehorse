@@ -889,7 +889,7 @@
 
   .today-home .home-card-content h2 {
     margin: 0;
-    font-size: clamp(20px, 2.8vw, 25px);
+    font-size: clamp(21px, 3.1vw, 27px);
     line-height: 1.05;
     letter-spacing: -0.045em;
     white-space: nowrap;
@@ -929,6 +929,8 @@
   }
 
   .today-home .home-daily-result-summary {
+    display: grid;
+    grid-template-columns: max-content max-content;
     gap: 3px 8px;
     margin-top: 6px;
     font-size: 11px;
@@ -988,7 +990,7 @@
       url('../assets/home/mobile/homefinalpuzzle-2x.webp') 2x
     );
     background-position: 100% 50%;
-    background-size: 145% auto;
+    background-size: 160% auto;
     filter: brightness(1.1) contrast(1.06);
     opacity: 1;
   }
