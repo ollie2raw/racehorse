@@ -61,7 +61,7 @@
 .df-fritz-loading-root {
   position: relative;
   width: 100%;
-  height: 99.5dvh;
+  height: 100%;
   max-height: 100%;
   overflow: hidden;
   color: #f4f0e8;
@@ -81,19 +81,10 @@
   box-sizing: border-box;
 }
 
-.df-fritz-loading-nav {
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.df-fritz-loading-brand {
-  opacity: 0.9;
-}
-
 .df-fritz-loading-back {
+  position: absolute;
+  top: 16px;
+  right: 40px;
   appearance: none;
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   border: 1px solid var(--border-subtle);

@@ -1,10 +1,12 @@
 @import './socialHubTokens.css';
 
-.app:has(.rh-hub-screen) {
+/* Legacy route containers may contain a hub screen. The app presentation shell
+   owns its own header and tabs, so its children must not inherit this flex rule. */
+.app:not(.rh-presentation):has(.rh-hub-screen) {
   background: transparent;
 }
 
-.app:has(.rh-hub-screen) > * {
+.app:not(.rh-presentation):has(.rh-hub-screen) > * {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
