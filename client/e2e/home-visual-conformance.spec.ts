@@ -78,7 +78,12 @@ for (const state of ['home/not-played', 'home/completed'] as const) {
       await expect(page.locator('.streak-label')).toContainText('3 Day Streak');
     }
     if (diagnosticDir) await page.screenshot({ path: `${diagnosticDir}/after-home-844x390-${state.split('/')[1]}.png` });
-    await expect(page).toHaveScreenshot(mobileScreenshotName(state, viewport), { animations: 'disabled', maxDiffPixelRatio: 0.02 });
+    // The two approved pixel goldens are captured in the dedicated visual
+    // project. The general Chromium project still exercises all geometry,
+    // fixture, and interaction assertions on CI's Linux runner.
+    if (test.info().project.name === 'chromium-mobile-visual') {
+      await expect(page).toHaveScreenshot(mobileScreenshotName(state, viewport), { animations: 'disabled', maxDiffPixelRatio: 0.02 });
+    }
   });
 }
 
