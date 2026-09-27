@@ -81,6 +81,16 @@ const BUDGET: ReviewDispatchBudget = { maxNodes: 1000, maxHiddenStateSamples: 10
 const COVERAGE_THRESHOLD = 0.02;
 
 describe('useReviewWorkerBatch', () => {
+  it('does not restart an empty batch when a caller creates a fresh empty array', () => {
+    const createWorker = vi.fn();
+    const { result, rerender } = renderHook(() =>
+      useReviewWorkerBatch([], BUDGET, COVERAGE_THRESHOLD, createWorker));
+
+    rerender();
+    expect(result.current.pendingDecisionIds.size).toBe(0);
+    expect(createWorker).not.toHaveBeenCalled();
+  });
+
   it('transitions from pending through partial results to done, without losing an errored decision', () => {
     const { worker } = makeFakeWorker();
     const snapshots = [makeSnapshot('d1'), makeSnapshot('d2'), makeSnapshot('d3')];
