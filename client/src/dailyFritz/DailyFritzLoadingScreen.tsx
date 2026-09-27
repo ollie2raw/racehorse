@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useState } from 'react';
-import { BrandLogo } from '../components';
 import { Button } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 import './dailyFritz.css';
@@ -60,15 +59,10 @@ export function DailyFritzLoadingScreen({
       </div>
 
       <div className="df-fritz-loading-shell">
-        <nav className="df-fritz-loading-nav">
-          <div className="df-fritz-loading-brand">
-            <BrandLogo iconSize={32} showWordmark={true} />
-          </div>
-          <button type="button" className="df-fritz-loading-back rh-back-button" data-rh-parent-back onClick={onBack}>
-            <span className="df-fritz-loading-back-icon">←</span>
-            <span>Back to Home</span>
-          </button>
-        </nav>
+        <button type="button" className="df-fritz-loading-back rh-back-button" data-rh-parent-back onClick={onBack}>
+          <span className="df-fritz-loading-back-icon">←</span>
+          <span>Back to Home</span>
+        </button>
 
         <main className="df-fritz-loading-main">
           <div

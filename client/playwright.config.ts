@@ -58,6 +58,7 @@ const DF_SERIAL_DESKTOP_SPECS = [
   'daily-fritz-v2.spec.ts',
   'daily-fritz-server-restore.spec.ts',
   'daily-fritz-render-loop.spec.ts',
+  'desktop-shell-regressions.spec.ts',
   // Not Daily-Fritz-store-coupled (confirmed) -- grouped serial only
   // because it's the suite's single slowest file (real played-out
   // matches); whether it could safely move to the parallel group instead
