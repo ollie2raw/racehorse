@@ -46,7 +46,7 @@ body,
   width: 100%;
   padding-top: clamp(16px, 4vh, 32px);
   padding-inline: clamp(12px, 4vw, 60px);
-  padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--space-lg);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -176,7 +176,7 @@ body,
     --hero-top: clamp(34px, 5.6vh, 66px);
     padding-top: clamp(12px, 2.2vh, 24px);
     padding-inline: var(--space-sm);
-    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--space-md);
     height: auto;
     min-height: 100dvh;
   }
@@ -216,8 +216,8 @@ body {
 }
 
 .app {
-  height: 100dvh;
-  min-height: 100dvh;
+  height: 100vh;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -230,6 +230,131 @@ body {
     sans-serif;
   display: flex;
   flex-direction: column;
+}
+
+@supports (height: 100dvh) {
+  .app { height: 100dvh; }
+}
+
+/* Root safe values also reach overlays portaled to body. The shell consumes them for route chrome. */
+:root {
+  --rh-safe-top: env(safe-area-inset-top, 0px);
+  --rh-safe-right: env(safe-area-inset-right, 0px);
+  --rh-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rh-safe-left: env(safe-area-inset-left, 0px);
+}
+
+.app.rh-presentation {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.rh-presentation > .rh-global-nav {
+  height: calc(56px + var(--rh-safe-top));
+  min-height: calc(56px + var(--rh-safe-top));
+  padding-top: var(--rh-safe-top);
+  padding-left: var(--rh-safe-left);
+  padding-right: var(--rh-safe-right);
+}
+
+.rh-presentation-content {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding-inline: var(--rh-safe-left) var(--rh-safe-right);
+}
+
+.rh-presentation-content > * {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  min-width: 0;
+}
+
+.rh-presentation-content > .app {
+  height: 100%;
+  min-height: 0;
+}
+
+.rh-presentation--focused .rh-presentation-content,
+.rh-presentation--utility .rh-presentation-content {
+  padding-bottom: var(--rh-safe-bottom);
+}
+
+.rh-presentation--gameplay .rh-presentation-content {
+  padding-top: var(--rh-safe-top);
+  padding-bottom: var(--rh-safe-bottom);
+}
+
+.rh-presentation-content .home-page-root {
+  min-height: 0;
+}
+
+.rh-presentation .rh-nav-context-back {
+  display: none;
+  flex: 0 0 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 32px;
+  cursor: pointer;
+}
+
+.rh-presentation .rh-nav-context-back:focus-visible {
+  outline: 2px solid var(--tier-standard);
+  outline-offset: -2px;
+}
+
+@media (--compact-shell) {
+  .rh-presentation .rh-nav-context-back { display: inline-flex; }
+  /* Only controls explicitly identified as the shell's parent action yield to contextual chrome. */
+  .app.rh-presentation.rh-presentation--focused .rh-presentation-content [data-rh-parent-back] { display: none; }
+  /* Friends used to cover the viewport as a dialog. Inside the focused route it
+     must occupy the shell's bounded content so contextual Back/account stay operable. */
+  .rh-presentation--focused .rh-presentation-content .friends-page {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: 100%;
+  }
+  .rh-presentation--hub .rh-presentation-content,
+  .rh-presentation--focused .rh-presentation-content,
+  .rh-presentation--utility .rh-presentation-content {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+  .rh-presentation .rh-nav-friends,
+  .rh-presentation .rh-nav-friends-divider { display: none; }
+  .rh-presentation .rh-global-nav--avatar .rh-nav-rating,
+  .rh-presentation .rh-global-nav--avatar .rh-nav-rating-divider,
+  .rh-presentation .rh-global-nav--avatar .rh-nav-friends,
+  .rh-presentation .rh-global-nav--avatar .rh-nav-friends-divider { display: none; }
+}
+
+@media (--compact-shell) and (min-width: 761px) {
+  .rh-presentation .rh-nav-friends { display: flex; }
+  .rh-presentation .rh-nav-friends-divider { display: block; }
+}
+
+@media (--compact-shell) and (max-width: 700px) {
+  .rh-presentation .rh-nav-rating,
+  .rh-presentation .rh-nav-rating-divider { display: none; }
+}
+
+@media (--desk) {
+  .rh-presentation > .rh-global-nav {
+    height: 78px;
+    min-height: 78px;
+  }
 }
 
 /* Play vs Fritz / Journey: direct flex children of .app */

@@ -516,7 +516,7 @@ export default function RacehorseJourneyScreen({
         <div className="rh-journey-trail-scroll relative z-10" ref={scrollRef}>
           <div className="rh-jt-header">
             <div className="rh-jt-header__left">
-              <Button variant="ghost" className="rh-jt-back" onClick={onBack} type="button">
+              <Button variant="ghost" className="rh-jt-back" data-rh-parent-back onClick={onBack} type="button">
                 ← Single Player
               </Button>
               <div className="rh-jt-title-block">
@@ -743,7 +743,6 @@ export default function RacehorseJourneyScreen({
     </div>
   );
 }
-
 
 
 

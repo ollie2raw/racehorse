@@ -251,7 +251,7 @@ export default function GhostSetupScreen({
 
       <div className="pvf-layout">
         <div className="pvf-left-col">
-          <button type="button" className="pvf-back-btn rh-back-button" onClick={onBack}>
+          <button type="button" className="pvf-back-btn rh-back-button" data-rh-parent-back onClick={onBack}>
             <span>←</span> Back to Single Player
           </button>
 
@@ -335,7 +335,7 @@ export default function GhostSetupScreen({
                   <span>Play Ghost</span>
                   <span className="pvf-start-arrow">›</span>
                 </button>
-                <a className="pvf-view-tiers" href="#" onClick={(e) => { e.preventDefault(); onBack(); }}>
+                <a className="pvf-view-tiers" data-rh-parent-back href="#" onClick={(e) => { e.preventDefault(); onBack(); }}>
                   Back to Home ›
                 </a>
               </div>
@@ -510,7 +510,7 @@ export default function GhostSetupScreen({
                   <span>Play Ghost</span>
                   <span className="pvf-start-arrow">›</span>
                 </button>
-                <a className="pvf-view-tiers" href="#" onClick={(e) => { e.preventDefault(); onBack(); }}>
+                <a className="pvf-view-tiers" data-rh-parent-back href="#" onClick={(e) => { e.preventDefault(); onBack(); }}>
                   Back to Home ›
                 </a>
               </div>

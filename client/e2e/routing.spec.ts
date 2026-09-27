@@ -105,12 +105,22 @@ test.describe('browser routing', () => {
     await expect(page.getByRole('heading', { name: /single player/i })).toBeVisible();
   });
 
+  test('a directly loaded lesson returns to its hub through contextual back', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/learn/how-to-play');
+    await expect(page.locator('[data-surface-shell="focused"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Back', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/learn$/);
+    await expect(page.locator('[data-surface-shell="hub"]')).toBeVisible();
+  });
+
   test('a signed-out visitor to a profile link sees a sign-in gate, not "session expired" (P1-4)', async ({ page }) => {
     await page.goto('/players/route-smoke');
     const alert = page.getByRole('alert');
     await expect(alert).toContainText(/sign in to view player profiles/i, { timeout: 15_000 });
     await expect(page.getByText(/session expired/i)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    // The shell also provides a signed-out account trigger; assert the gate's own CTA.
+    await expect(alert.getByRole('button', { name: 'Sign in' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Back to home' })).toBeVisible();
   });
 

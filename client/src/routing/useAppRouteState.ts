@@ -166,7 +166,12 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
       return;
     }
     if (currentPath !== nextPath) {
-      window.history.pushState(window.history.state, '', nextPath);
+      const priorState = window.history.state;
+      window.history.pushState(
+        { ...(priorState && typeof priorState === 'object' ? priorState : {}), rhAppEntry: true, rhPreviousPath: currentPath },
+        '',
+        nextPath,
+      );
     }
   }, [
     activeTournamentId,

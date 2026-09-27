@@ -1,14 +1,11 @@
 import type { CSSProperties } from 'react';
 import type { AppMode } from '../../types';
+import type { PrimaryArea } from '../../presentation/surfacePresentation';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './appPrimaryTabs';
 import './AppBottomTabBar.css';
 
-/** Must match rh-mobile-chrome.css max-width breakpoint (768px). */
-export const PHONE_TAB_MAX_WIDTH_PX = 768;
-
 interface AppBottomTabBarProps {
-  currentMode?: AppMode;
-  activeColor?: string;
+  primaryArea: PrimaryArea | null;
   onNavigate?: (mode: AppMode) => void;
 }
 
@@ -54,12 +51,10 @@ function TabIcon({ label, color }: { label: string; color: string }) {
 }
 
 export function AppBottomTabBar({
-  currentMode,
-  activeColor,
+  primaryArea,
   onNavigate,
 }: AppBottomTabBarProps) {
-  /* Always mount — phone/desktop visibility is CSS-only (rh-mobile-chrome.css).
-     Avoids Safari/layout races where matchMedia gated rendering hid mobile chrome. */
+  /* The presentation owner mounts this only for Hub chrome; CSS selects compact shell. */
   return (
     <nav
       className="rh-bottom-tab-bar"
@@ -67,9 +62,9 @@ export function AppBottomTabBar({
     >
       <div className="rh-bottom-tab-bar__inner">
         {APP_PRIMARY_TABS.map((tab) => {
-          const isActive = currentMode ? tab.activeModes.includes(currentMode) : false;
+          const isActive = primaryArea === tab.area;
           const accent =
-            (isActive && activeColor) || APP_PRIMARY_TAB_COLORS[tab.label] || 'var(--tier-elite)';
+            APP_PRIMARY_TAB_COLORS[tab.label] || 'var(--tier-elite)';
           const color = isActive ? accent : 'rgba(255, 255, 255, 0.45)';
 
           return (

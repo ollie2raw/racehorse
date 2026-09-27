@@ -33,7 +33,7 @@ export function DailyFritzLeaderboardLoading({ onBack }: { onBack: () => void })
           <div className="df-fritz-loading-brand">
             <BrandLogo iconSize={32} showWordmark />
           </div>
-          <button type="button" className="df-fritz-loading-back rh-back-button" onClick={onBack}>
+          <button type="button" className="df-fritz-loading-back rh-back-button" data-rh-parent-back onClick={onBack}>
             <span className="df-fritz-loading-back-icon">←</span>
             <span>Back to Daily Fritz</span>
           </button>

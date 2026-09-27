@@ -20,7 +20,7 @@ export default function GuidedMatchAnnotatorScreen({ onBack }: GuidedMatchAnnota
         title="Guided Match Annotator"
         subtitle={`No current source found at ${GUIDED_MATCH_SOURCE_STORAGE_KEY}.`}
       >
-        <button type="button" className="learn-start-guided-btn" onClick={onBack}>
+        <button type="button" className="learn-start-guided-btn" data-rh-parent-back onClick={onBack}>
           Back to Learn Admin
         </button>
       </LayoutScreen>
@@ -32,7 +32,7 @@ export default function GuidedMatchAnnotatorScreen({ onBack }: GuidedMatchAnnota
       <div className="guided-match-recorder__shell">
         <div className="guided-match-recorder__top">
           <div className="guided-match-recorder__hero">
-            <button type="button" className="guided-match-recorder__back" onClick={onBack}>
+            <button type="button" className="guided-match-recorder__back" data-rh-parent-back onClick={onBack}>
               ← Back to Learn
             </button>
             <div className="guided-match-recorder__eyebrow">Dev Annotator</div>

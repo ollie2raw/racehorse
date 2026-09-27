@@ -1,3 +1,5 @@
+import { WIDE_SHELL_QUERY } from './config/responsivePolicy.js';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -19,7 +21,7 @@ export default {
          * still do. Hub screens use `desk:` for desktop styling; the unprefixed
          * base is the phone layout.
          */
-        desk: { raw: '(min-width: 769px) and (min-height: 600px)' },
+        desk: { raw: WIDE_SHELL_QUERY },
       },
     },
   },

@@ -12,6 +12,7 @@ import { buildDailyFritzHubViewModel } from './dailyFritzHubViewModel';
 import { DailyFritzHubView } from './DailyFritzHubView';
 import { DailyFritzEmbeddedMatchView } from './DailyFritzEmbeddedMatchView';
 import './dailyFritz.css';
+import { useGameplayPresentation } from '../presentation/gameplayPresentation';
 
 export default function DailyFritzScreen({
   user,
@@ -58,6 +59,8 @@ export default function DailyFritzScreen({
     setHubError,
     refreshToday,
   });
+
+  useGameplayPresentation(Boolean(hasEmbeddedMatch && activeRun && embeddedMatchKey));
 
   const [countdownTick, setCountdownTick] = useState(0);
 

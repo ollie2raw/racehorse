@@ -363,10 +363,10 @@ export default function FriendsScreen({
   if (!open) return null;
 
   return (
-    <div className={`friends-page${selectedFriend ? ' has-selection' : ''}`} role="dialog" aria-modal="true" aria-label="Friends">
+    <main className={`friends-page${selectedFriend ? ' has-selection' : ''}`} aria-label="Friends">
       <header className="friends-page-topbar">
         <div className="friends-page-brand">RACEHORSE</div>
-        <button type="button" className="friends-page-back rh-back-button" onClick={onClose}>
+        <button type="button" className="friends-page-back rh-back-button" data-rh-parent-back onClick={onClose}>
           <span aria-hidden="true">←</span>
           <span>Back</span>
         </button>
@@ -736,6 +736,6 @@ export default function FriendsScreen({
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

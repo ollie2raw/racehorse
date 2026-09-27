@@ -596,7 +596,7 @@ export default function GuidedMatchRecorderScreen({
 
         <div className="guided-match-recorder__top">
           <div className="guided-match-recorder__hero">
-            <button type="button" className="guided-match-recorder__back" onClick={onBack}>
+            <button type="button" className="guided-match-recorder__back" data-rh-parent-back onClick={onBack}>
               ← Back to Learn
             </button>
             <div className="guided-match-recorder__eyebrow">Dev Recorder</div>

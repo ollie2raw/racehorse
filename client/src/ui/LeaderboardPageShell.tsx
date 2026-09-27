@@ -87,7 +87,7 @@ export default function LeaderboardPageShell({
       <header className="leaderboard-screen-topbar">
         <div className="leaderboard-screen-wordmark">RACEHORSE</div>
         {showLiveBadge ? <div className="leaderboard-screen-live" aria-hidden="true">Live</div> : <div aria-hidden="true" />}
-        <button type="button" className="leaderboard-screen-backlink rh-back-button" onClick={onClose}>
+        <button type="button" className="leaderboard-screen-backlink rh-back-button" data-rh-parent-back onClick={onClose}>
           <span aria-hidden="true">←</span>
           <span>{backLabel}</span>
         </button>

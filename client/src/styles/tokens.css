@@ -85,7 +85,8 @@
   --very-small-w:       380px;
   --touch-min:          44px;
   --rh-bottom-tab-h:    60px;
-  --rh-bottom-tab-offset: calc(var(--rh-bottom-tab-h) + env(safe-area-inset-bottom, 0px));
+  /* Compatibility alias for route CSS awaiting its owning page PR; tabs are in flow. */
+  --rh-bottom-tab-offset: 0px;
 
   /* Match board arena (inGameBoardShell — Pass A playfield) */
   --rh-arena-mount-bg: rgba(4, 9, 18, 0.96);
@@ -233,8 +234,8 @@
    postcss-custom-media via postcss-global-data pointed at this file).
    Full convention + rationale: docs/breakpoints.md.
 
-     @media (--phone)           { ... }   phone: one column, bottom tabs
-     @media (--desk)            { ... }   desktop and up (the existing line)
+     @media (--phone)           { ... }   legacy width-only page layout
+     @media (--desk)            { ... }   wide shell from responsivePolicy.js
      @media (--below-wide)      { ... }   not a wide viewport: collapse grids
 
    The in-game landscape rules deliberately keep their literal
@@ -242,5 +243,4 @@
    is excluded from this system. See docs/breakpoints.md.
    ------------------------------------------------------------------ */
 @custom-media --phone (max-width: 768px);
-@custom-media --desk (min-width: 769px);
 @custom-media --below-wide (max-width: 900px);

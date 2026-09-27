@@ -75,7 +75,7 @@ export function LearnShell({
 
           {!module.isFinal ? (
             <footer className="learn-academy__dock">
-              <button type="button" className="pvf-back-btn" onClick={isFirst ? onBack : onPrev}>
+              <button type="button" className="pvf-back-btn" data-rh-parent-back={isFirst ? '' : undefined} onClick={isFirst ? onBack : onPrev}>
                 {isFirst ? '← Exit' : '← Back'}
               </button>
               <button type="button" className="pvf-start-btn learn-academy__start-btn" onClick={onNext}>

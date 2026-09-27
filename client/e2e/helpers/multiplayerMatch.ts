@@ -65,7 +65,7 @@ export async function seedPlayerIdentity(context: BrowserContext, identity: E2EP
 
 export async function gotoHome(page: Page) {
   await page.goto('/');
-  await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Racehorse home' })).toBeVisible({ timeout: 20_000 });
 }
 
 export async function waitForMultiplayerSocketConnected(page: Page) {

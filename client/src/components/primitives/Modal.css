@@ -5,7 +5,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(24px + var(--rh-safe-top, 0px))
+    calc(24px + var(--rh-safe-right, 0px))
+    calc(24px + var(--rh-safe-bottom, 0px))
+    calc(24px + var(--rh-safe-left, 0px));
   background: rgba(2, 4, 10, 0.72);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -20,7 +23,7 @@
 .rh-modal-panel {
   width: 100%;
   max-width: 480px;
-  max-height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px - var(--rh-safe-top, 0px) - var(--rh-safe-bottom, 0px));
   overflow-y: auto;
   display: flex;
   flex-direction: column;

@@ -64,7 +64,7 @@ export function DailyFritzLoadingScreen({
           <div className="df-fritz-loading-brand">
             <BrandLogo iconSize={32} showWordmark={true} />
           </div>
-          <button type="button" className="df-fritz-loading-back rh-back-button" onClick={onBack}>
+          <button type="button" className="df-fritz-loading-back rh-back-button" data-rh-parent-back onClick={onBack}>
             <span className="df-fritz-loading-back-icon">←</span>
             <span>Back to Home</span>
           </button>

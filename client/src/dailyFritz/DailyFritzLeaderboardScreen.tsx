@@ -433,7 +433,7 @@ export default function DailyFritzLeaderboardScreen({
                   <p className="dfl-tagline">Everyone plays the same tiles. The only variable is you.</p>
                 </div>
                 <div className="dfl-masthead__actions">
-                  <button type="button" className="dfl-btn" onClick={goBackToDailyFritz}>
+                  <button type="button" className="dfl-btn" data-rh-parent-back onClick={goBackToDailyFritz}>
                     <span aria-hidden>←</span>
                     Daily Fritz
                   </button>

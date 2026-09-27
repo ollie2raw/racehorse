@@ -255,7 +255,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
             </div>
           )}
         </div>
-        <button className="mode-inline-btn rh-back-button" onClick={onBack}>← Back to Learn</button>
+        <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onBack}>← Back to Learn</button>
       </div>
 
       {/* Teacher Panel */}

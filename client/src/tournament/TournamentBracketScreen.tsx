@@ -740,6 +740,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         <div className={`tb-toolbar${isWaitingRoom ? ' tb-toolbar--waiting' : ''}`}>
           <button
             className="tb-back"
+            data-rh-parent-back
             type="button"
             onClick={isTerminalBracket ? props.onExitToHub : props.onBack}
           >

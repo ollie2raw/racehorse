@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useContext, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BrandLogo } from './BrandLogo';
 import { Button } from './primitives';
-import { AppBottomTabBar } from './nav/AppBottomTabBar';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './nav/appPrimaryTabs';
 import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
+import type { PrimaryArea } from '../presentation/surfacePresentation';
+import { RouteChromeOwnedContext } from '../presentation/routeChromeContext';
 import './globalNavAccountMenu.css';
 
 /**
- * Each route mounts its own `<GlobalNav />`, so local state resets on navigation.
+ * The app presentation owner mounts one live GlobalNav across route transitions.
  * Keep last-known HUD values in module scope (per signed-in user) so rating / friends
- * do not flash placeholders while friends refetch or profile is briefly incomplete.
+ * do not flash placeholders during auth restoration.
  *
  * `userId` is the owner of the cached values. It is deliberately readable while
  * `useAuth()` is still resolving the session: during bootstrap `authUser` is null,
@@ -39,6 +40,10 @@ interface GlobalNavProps {
    */
   onSignOut?: () => void;
   currentMode?: AppMode;
+  primaryArea?: PrimaryArea | null;
+  accountPresentation?: 'compact' | 'avatar' | 'hidden';
+  contextual?: boolean;
+  onBack?: () => void;
   activeColor?: string; // Optional dynamic override
   /** Slightly shorter bar + padding for dense hub screens. */
   compactChrome?: boolean;
@@ -57,11 +62,31 @@ const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode }[] = [
   { label: 'Sign out' },
 ];
 
-export function GlobalNav({
+export function GlobalNav(props: GlobalNavProps) {
+  const chromeOwned = useContext(RouteChromeOwnedContext);
+  if (chromeOwned) return <RouteChromeHintAdapter {...props} register={chromeOwned} />;
+  return <GlobalNavChrome {...props} />;
+}
+
+function RouteChromeHintAdapter({
+  activeColor, compactChrome, solidDarkChrome, register,
+}: GlobalNavProps & { register: (hints: import('../presentation/routeChromeContext').RouteChromeHints | null) => void }) {
+  useLayoutEffect(() => {
+    register({ activeColor, compactChrome, solidDarkChrome });
+    return () => register(null);
+  }, [register, activeColor, compactChrome, solidDarkChrome]);
+  return null;
+}
+
+function GlobalNavChrome({
   onNavigate,
   onOpenAuth,
   onSignOut,
   currentMode,
+  primaryArea,
+  accountPresentation = 'compact',
+  contextual,
+  onBack,
   activeColor,
   compactChrome,
   solidDarkChrome,
@@ -192,11 +217,11 @@ export function GlobalNav({
   }).toUpperCase();
 
   const isHome = currentMode === 'home' || !currentMode;
+  const showStats = Boolean(authUser || (!authSettled && globalNavHudCache.userId));
 
   return (
-    <>
     <nav 
-      className={`rh-global-nav relative shrink-0 w-full z-50 h-[56px] ${compactChrome ? 'rh-nav--compact desk:h-[66px]' : 'desk:h-[78px]'}`}
+      className={`rh-global-nav${contextual ? ' rh-global-nav--contextual' : ''}${accountPresentation === 'avatar' ? ' rh-global-nav--avatar' : ''} relative shrink-0 w-full z-50 h-[56px] ${compactChrome ? 'rh-nav--compact desk:h-[66px]' : 'desk:h-[78px]'}`}
       style={{
         boxSizing: 'border-box',
         overflow: 'visible',
@@ -219,6 +244,11 @@ export function GlobalNav({
         }}
       />
       <div className={`rh-nav-inner relative flex h-full min-w-0 items-center justify-between gap-2 max-w-[1440px] mx-auto w-full px-3 desk:grid desk:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] desk:items-center ${compactChrome ? 'desk:px-7 desk:gap-4' : 'desk:px-9 desk:gap-6'}`}>
+        {contextual && onBack && (
+          <button type="button" className="rh-nav-context-back" onClick={onBack} aria-label="Back">
+            <span aria-hidden="true">‹</span>
+          </button>
+        )}
         {/* Left: Brand & Identity */}
         <button
           type="button"
@@ -271,7 +301,9 @@ export function GlobalNav({
           ) : (
             <div className={`flex items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
               {APP_PRIMARY_TABS.map((tab) => {
-                const isActive = tab.activeModes.includes(currentMode as AppMode);
+                const isActive = primaryArea !== undefined
+                  ? primaryArea === tab.area
+                  : tab.activeModes.includes(currentMode as AppMode);
                 const accentColor = (isActive && activeColor) || APP_PRIMARY_TAB_COLORS[tab.label] || 'var(--tier-elite)';
                 const textColor = isActive
                   ? (tab.label === 'Social' && activeColor ? 'var(--text-primary)' : accentColor)
@@ -281,6 +313,7 @@ export function GlobalNav({
                   <button
                     key={tab.label}
                     onClick={() => onNavigate?.(tab.mode)}
+                    aria-current={isActive ? 'page' : undefined}
                     className="rh-nav-tab relative py-2 transition-all"
                     style={{
                       // font-size lives in rh-mobile-chrome.css (.rh-nav-tab):
@@ -309,7 +342,7 @@ export function GlobalNav({
         {/* Right Side: Player Statistics */}
         <div className="rh-nav-stats flex min-w-0 shrink-0 items-center justify-end desk:justify-self-end">
           {/* Rating */}
-          <div className="rh-nav-stat-block flex items-center gap-3 px-5 py-2.5">
+          {showStats && <div className="rh-nav-stat-block rh-nav-rating flex items-center gap-3 px-5 py-2.5">
             <svg className="rh-nav-stat-icon" width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? 'var(--tier-elite)'} xmlns="http://www.w3.org/2000/svg">
               <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
             </svg>
@@ -327,15 +360,15 @@ export function GlobalNav({
                 Rating
               </div>
             </div>
-          </div>
+          </div>}
 
-          <div className="rh-nav-stat-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />
+          {showStats && <div className="rh-nav-stat-divider rh-nav-rating-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />}
 
           {/* Friends Count */}
-          <button
+          {showStats && <button
             type="button"
             onClick={() => onNavigate?.('friends')}
-            className="rh-nav-stat-block flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
+            className="rh-nav-stat-block rh-nav-friends flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
           >
             <svg className="rh-nav-stat-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -355,9 +388,9 @@ export function GlobalNav({
                 Friends
               </div>
             </div>
-          </button>
+          </button>}
 
-          <div className="rh-nav-stat-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />
+          {showStats && <div className="rh-nav-stat-divider rh-nav-friends-divider mx-1 h-[28px] w-px bg-white/5" aria-hidden="true" />}
 
           <div className="rh-nav-user-block flex items-center gap-4 pl-5">
             <div className="rh-nav-account" ref={accountMenuRef}>
@@ -422,11 +455,5 @@ export function GlobalNav({
         </div>
       </div>
     </nav>
-    <AppBottomTabBar
-      currentMode={currentMode}
-      activeColor={activeColor}
-      onNavigate={onNavigate}
-    />
-    </>
   );
 }

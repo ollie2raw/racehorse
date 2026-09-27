@@ -288,7 +288,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         subtitle="This lesson is unavailable right now."
         contentClassName="screen-shell"
       >
-        <button className="mode-inline-btn rh-back-button" onClick={onExit}>
+        <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onExit}>
           ← Back to Learn
         </button>
       </LayoutScreen>
@@ -502,7 +502,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         <div className="learn-match-topbar__center">
           <span>Turn <strong>{stepIndex + 1} / {totalSteps}</strong></span>
         </div>
-        <button type="button" className="claude-mode-topbar__back rh-back-button" onClick={onExit}>
+        <button type="button" className="claude-mode-topbar__back rh-back-button" data-rh-parent-back onClick={onExit}>
           <span aria-hidden="true">⏻</span><span>Leave</span>
         </button>
       </header>

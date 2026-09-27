@@ -1,13 +1,13 @@
 /* Phone chrome — GlobalNav, bottom tab bar clearance and hub scroll containers.
  *
  * Mobile-first: the unprefixed rules below ARE the phone layout. Desktop is
- * layered on top in the `min-width` block at the end of this file.
+ * layered on top by the shared wide-shell query.
  *
  * The desktop condition also requires vertical room. A 390×844 handset is
  * 844px *wide* in landscape, so a width-only breakpoint hands it the desktop
  * layout inside a 390px-tall viewport — which is what removed the phone scroll
  * containers in landscape and left hub content below the fold unreachable.
- * `--rh-desk` in tailwind.config.js (`desk:`) uses the same condition.
+ * Tailwind `desk:` and custom media consume the same responsive policy.
  */
 
 /* ── Phone base ─────────────────────────────────────────────────── */
@@ -68,7 +68,7 @@
    These three have no desktop meaning, and each out-specifies the Tailwind
    utility it replaces, so they must stay inside the phone query rather than
    sit in the base layer relying on the desktop layer to undo them. */
-@media not all and (min-width: 769px) and (min-height: 600px) {
+@media (--compact-shell) {
   .home-main.sp-solo-main .rh-back-button.absolute,
   .home-main.learn-hub-main .rh-back-button.absolute {
     position: relative;
@@ -97,34 +97,6 @@
 }
 
 /*
- * Bottom-tab clearance.
- *
- * The tab bar is `position: fixed`, so it sits over whatever is beneath it.
- * `body` is `overflow: hidden` app-wide, which means hub pages never scroll the
- * document — they scroll inside a panel. Padding therefore has to go on the
- * element that actually scrolls; putting it on a non-scrolling ancestor leaves
- * the last rows of content permanently parked under the bar (that is what put
- * the Daily Puzzle PLAY button and the weekly-goal row behind it).
- */
-.home-shell,
-.home-page-root .home-shell,
-.sp-page,
-.pvf-root,
-.rh-hub-shell {
-  box-sizing: border-box;
-}
-
-.home-main,
-.sp-solo-main,
-.rh-hub-body,
-.rh-hub-inner,
-.df-layout,
-.df-pvf-layout {
-  padding-bottom: calc(16px + var(--rh-bottom-tab-offset));
-  scroll-padding-bottom: var(--rh-bottom-tab-offset);
-}
-
-/*
  * Hub pages must scroll on a phone in BOTH orientations. These containers were
  * previously given `overflow-y: auto` only inside a `max-width: 768px` block,
  * so in landscape (844px wide) they reverted to the desktop fixed-viewport
@@ -141,21 +113,8 @@
   overscroll-behavior-y: contain;
 }
 
-.rh-journey-root .rh-journey-main {
-  padding-bottom: calc(18px + var(--rh-bottom-tab-offset));
-}
-
-.rh-journey-root .rh-journey-detail__actions {
-  padding-bottom: var(--rh-bottom-tab-offset);
-  scroll-margin-bottom: calc(var(--rh-bottom-tab-offset) + 16px);
-}
-
 /* ── Desktop layer ──────────────────────────────────────────────── */
-@media (min-width: 769px) and (min-height: 600px) {
-  .rh-bottom-tab-bar {
-    display: none;
-  }
-
+@media (--desk) {
   .rh-nav-wordmark {
     margin-left: 14px;
     font-size: 22px;
@@ -226,20 +185,7 @@
     display: block;
   }
 
-  .home-main,
-  .sp-solo-main,
-  .rh-hub-body,
-  .rh-hub-inner,
-  .df-layout,
-  .df-pvf-layout {
-    padding-bottom: 0;
-    scroll-padding-bottom: 0;
-  }
 
-  .rh-journey-root .rh-journey-main,
-  .rh-journey-root .rh-journey-detail__actions {
-    padding-bottom: 0;
-  }
 }
 
 /* Tab type. Lives here, not inline, so the narrow-desktop bands below can
@@ -281,7 +227,7 @@
  * utilities carry the same specificity as a bare class here and are emitted
  * later, so an unprefixed rule silently loses.
  */
-@media (--desk) and (max-width: 1279px) and (min-height: 600px) {
+@media (--desk) and (max-width: 1279px) {
   .rh-global-nav .rh-nav-inner {
     display: flex;
     justify-content: space-between;
@@ -315,7 +261,7 @@
 
 /* Below 1024px the tabs and stats alone need the whole row: the wordmark
  * yields to the logo mark, and the tabs drop to their secondary size. */
-@media (--desk) and (max-width: 1023px) and (min-height: 600px) {
+@media (--desk) and (max-width: 1023px) {
   .rh-global-nav .rh-nav-inner {
     padding-left: 10px;
     padding-right: 10px;
