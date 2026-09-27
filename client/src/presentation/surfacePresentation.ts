@@ -34,7 +34,7 @@ export const SURFACE_BY_MODE: Record<AppMode, SurfacePresentation> = {
   dailyFritz: focused('solo', 'home'),
   dailyFritzLeaderboard: focused('solo', 'dailyFritz'),
   journey: focused('solo', 'singlePlayerHub'),
-  puzzleRush: focused('solo', 'singlePlayerHub'),
+  puzzleRush: focused('solo', 'home'),
   noBrainer: focused('learn', 'learn'),
   guidedMatchRecorder: focused('learn', 'learn'),
   guidedMatchAnnotator: focused('learn', 'learn'),

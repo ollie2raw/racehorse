@@ -267,7 +267,7 @@ export default function NoBrainerLabScreen({
                 <Button variant="secondary" size="sm" onClick={() => setReloadTick((n) => n + 1)}>
                   Retry
                 </Button>
-                <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack}>
+                <Button variant="ghost" size="sm" className="rh-back-button" data-rh-parent-back onClick={onBack}>
                   ← Back
                 </Button>
               </div>
@@ -307,7 +307,7 @@ export default function NoBrainerLabScreen({
 
       <MatchLiveLayout
         hudLeft={
-          <button type="button" className="rh-match-solo-action-btn rh-back-button" onClick={onBack}>
+          <button type="button" className="rh-match-solo-action-btn rh-back-button" data-rh-parent-back onClick={onBack}>
             ← LEARN
           </button>
         }
@@ -372,6 +372,7 @@ export default function NoBrainerLabScreen({
             <button
               type="button"
               className="nbl-board-control-btn"
+              data-rh-parent-back
               onClick={onBack}
               title="Back to Learn"
               aria-label="Back to Learn"

@@ -6,7 +6,10 @@
   z-index: 1900;
   display: grid;
   place-items: center;
-  padding: clamp(16px, 2.2vw, 24px);
+  padding: calc(clamp(16px, 2.2vw, 24px) + var(--rh-safe-top))
+    calc(clamp(16px, 2.2vw, 24px) + var(--rh-safe-right))
+    calc(clamp(16px, 2.2vw, 24px) + var(--rh-safe-bottom))
+    calc(clamp(16px, 2.2vw, 24px) + var(--rh-safe-left));
   background: rgba(4, 9, 17, 0.86);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

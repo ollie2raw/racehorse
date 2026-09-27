@@ -9,11 +9,12 @@ import { navigateContextualBack } from './contextualBack';
 import type { SurfacePresentation } from './surfacePresentation';
 
 export function AppPresentation({
-  presentation, mode, navigate, openAuth, signOut, children,
+  presentation, mode, navigate, contextualBackOverride, openAuth, signOut, children,
 }: {
   presentation: SurfacePresentation;
   mode: AppMode;
   navigate: (mode: AppMode) => void;
+  contextualBackOverride?: () => void;
   openAuth: () => void;
   signOut: () => void;
   children: ReactNode;
@@ -35,7 +36,7 @@ export function AppPresentation({
           compactChrome={routeChromeHints?.compactChrome}
           solidDarkChrome={routeChromeHints?.solidDarkChrome}
           contextual={activePresentation.chrome === 'contextual'}
-          onBack={presentation.parentMode ? () => navigateContextualBack(mode, presentation.parentMode!, navigate) : undefined}
+          onBack={presentation.parentMode ? (contextualBackOverride ?? (() => navigateContextualBack(mode, presentation.parentMode!, navigate))) : undefined}
           onNavigate={navigate}
           onOpenAuth={openAuth}
           onSignOut={signOut}

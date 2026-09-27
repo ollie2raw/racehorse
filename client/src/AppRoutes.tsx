@@ -198,6 +198,9 @@ export default function AppRoutes(props: AppRoutesProps) {
       presentation={presentation}
       mode={navigation.appMode}
       navigate={navigation.setAppMode}
+      contextualBackOverride={navigation.appMode === 'learn' && learn.selectedLearnLessonId
+        ? () => learn.setSelectedLearnLessonId(null)
+        : undefined}
       openAuth={auth.handleOpenAuthModal}
       signOut={auth.handleSignOut}
     >

@@ -233,12 +233,15 @@ body {
   flex-direction: column;
 }
 
-/* One viewport and safe-area owner for route chrome. Route internals receive a bounded rectangle. */
-.app.rh-presentation {
+/* Root safe values also reach overlays portaled to body. The shell consumes them for route chrome. */
+:root {
   --rh-safe-top: env(safe-area-inset-top, 0px);
   --rh-safe-right: env(safe-area-inset-right, 0px);
   --rh-safe-bottom: env(safe-area-inset-bottom, 0px);
   --rh-safe-left: env(safe-area-inset-left, 0px);
+}
+
+.app.rh-presentation {
   flex: 1 1 0;
   min-height: 0;
 }
@@ -308,6 +311,18 @@ body {
 
 @media (--compact-shell) {
   .rh-presentation .rh-nav-context-back { display: inline-flex; }
+  /* Only controls explicitly identified as the shell's parent action yield to contextual chrome. */
+  .app.rh-presentation.rh-presentation--focused .rh-presentation-content [data-rh-parent-back] { display: none; }
+  /* Friends used to cover the viewport as a dialog. Inside the focused route it
+     must occupy the shell's bounded content so contextual Back/account stay operable. */
+  .rh-presentation--focused .rh-presentation-content .friends-page {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: 100%;
+  }
   .rh-presentation--hub .rh-presentation-content,
   .rh-presentation--focused .rh-presentation-content,
   .rh-presentation--utility .rh-presentation-content {

@@ -48,7 +48,7 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
     return (
       <div className="rh-pp-screen">
         <div className="rh-pp-header">
-          <button type="button" className="rh-pp-back" onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
+          <button type="button" className="rh-pp-back" data-rh-parent-back onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
           <span className="rh-pp-breadcrumb">Player Profile</span>
         </div>
         <div className="rh-pp-error-state" role="alert">
@@ -74,7 +74,7 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
   return (
     <div className="rh-pp-screen">
       <div className="rh-pp-header">
-        <button type="button" className="rh-pp-back" onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
+        <button type="button" className="rh-pp-back" data-rh-parent-back onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
         <span className="rh-pp-breadcrumb">Player Profile</span>
       </div>
       <main className="rh-pp-content">

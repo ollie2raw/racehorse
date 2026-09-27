@@ -206,7 +206,7 @@ export default function PlayVsFritz({
       <div className="pvf-layout">
         {/* ===== LEFT COLUMN (Title + Fritz Card) ===== */}
         <div className="pvf-left-col">
-          <button className="pvf-back-btn rh-back-button" onClick={onBack}>
+          <button className="pvf-back-btn rh-back-button" data-rh-parent-back onClick={onBack}>
             <span>←</span> Back to Single Player
           </button>
 

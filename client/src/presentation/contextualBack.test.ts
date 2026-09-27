@@ -31,4 +31,10 @@ describe('contextual back', () => {
     expect(navigate).not.toHaveBeenCalled();
     window.removeEventListener('popstate', pop);
   });
+
+  it('sends a directly loaded Puzzle Rush setup to its declared Home parent', () => {
+    window.history.replaceState(null, '', '/puzzle-rush');
+    navigateContextualBack('puzzleRush', 'home', navigate);
+    expect(navigate).toHaveBeenCalledWith('home');
+  });
 });

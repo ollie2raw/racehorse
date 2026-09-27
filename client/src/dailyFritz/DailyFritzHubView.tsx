@@ -81,7 +81,7 @@ export function DailyFritzHubView({
       <div className="df-shell df-shell--daily-fritz">
         <div className="df-layout df-pvf-layout">
           <div className="df-pvf-left-col">
-            <button type="button" className="df-back-btn df-pvf-back-btn rh-back-button" onClick={onBack}>
+            <button type="button" className="df-back-btn df-pvf-back-btn rh-back-button" data-rh-parent-back onClick={onBack}>
               <span aria-hidden>←</span> Back to Home
             </button>
 

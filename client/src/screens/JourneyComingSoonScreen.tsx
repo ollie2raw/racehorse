@@ -46,7 +46,7 @@ export default function JourneyComingSoonScreen({
               Journey is being reworked into something worth the name. It will be back
               when it is ready.
             </p>
-            <Button variant="secondary" className="mt-8" onClick={onBack} type="button">
+            <Button variant="secondary" className="mt-8" data-rh-parent-back onClick={onBack} type="button">
               ← Back to Single Player
             </Button>
           </GlassCard>

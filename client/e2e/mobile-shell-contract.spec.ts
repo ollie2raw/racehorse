@@ -30,6 +30,107 @@ test('focused content has contextual chrome and no primary phone bar', async ({ 
   await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
 });
 
+for (const [route, fixture] of [
+  ['/solo/fritz', 'solo/populated'],
+  ['/solo/ghost', 'solo/populated'],
+  ['/daily-fritz', 'home/not-played'],
+  ['/daily-fritz/leaderboard', 'home/not-played'],
+  ['/journey', 'solo/populated'],
+  ['/puzzle-rush', 'home/not-played'],
+  ['/practice', 'home/not-played'],
+  ['/learn/recorder', 'home/not-played'],
+  ['/learn/guided-annotator', 'home/not-played'],
+  ['/friends', 'solo/populated'],
+  ['/stats', 'solo/populated'],
+  ['/rating-history', 'solo/populated'],
+  ['/players/route-smoke', 'solo/populated'],
+  ['/tournament/route-smoke', 'home/not-played'],
+  ['/tournament/route-smoke/result', 'home/not-played'],
+  ['/learn/how-to-play', 'home/not-played'],
+] as const) {
+  test(`focused ${route} owns one parent Back`, async ({ page }) => {
+    await installMobileFixture(page, fixture);
+    await page.goto(route);
+    await expect(page.locator('[data-surface-shell="focused"]')).toBeVisible();
+    await expect(page.locator('.rh-nav-context-back:visible')).toHaveCount(1);
+    await expect(page.locator('[data-rh-parent-back]:visible')).toHaveCount(0);
+    await expect(page.locator('.rh-bottom-tab-bar')).toHaveCount(0);
+    if (route !== '/practice') await page.locator('.rh-nav-context-back').click({ trial: true });
+    if (route === '/friends') await expect(page.getByRole('main', { name: 'Friends' })).toBeVisible();
+  });
+}
+
+test('focused direct-link Back reaches its declared parent', async ({ page }) => {
+  await page.goto('/solo/fritz');
+  await page.locator('.rh-nav-context-back').click();
+  await expect(page).toHaveURL(/\/solo$/);
+  await page.goto('/puzzle-rush');
+  await page.locator('.rh-nav-context-back').click();
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test('lesson step Back remains distinct from shell parent Back', async ({ page }) => {
+  await page.goto('/learn/how-to-play');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(page.locator('.rh-nav-context-back:visible')).toHaveCount(1);
+  const stepBack = page.getByRole('button', { name: '← Back', exact: true });
+  await expect(stepBack).toBeVisible();
+  await stepBack.click();
+  await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/learn\/how-to-play$/);
+});
+
+test('a real portaled leave modal consumes root safe insets once', async ({ page }) => {
+  await page.goto('/');
+  await page.addStyleTag({ content: ':root { --rh-safe-top: 11px; --rh-safe-right: 13px; --rh-safe-bottom: 17px; --rh-safe-left: 19px; }' });
+  // Mount the production component through its real GameOverlayPortal. Game setup is
+  // deliberately independent of this root/portal CSS inheritance contract.
+  await page.evaluate(async () => {
+    const load = (path: string) => import(path);
+    const [{ default: React }, { default: ReactDomClient }, { default: LeaveGameModal }] = await Promise.all([
+      load('/node_modules/.vite/deps/react.js'),
+      load('/node_modules/.vite/deps/react-dom_client.js'),
+      load('/src/components/LeaveGameModal.tsx'),
+    ]);
+    const host = document.createElement('div');
+    host.id = 'modal-portal-test-host';
+    document.body.append(host);
+    const root = ReactDomClient.createRoot(host);
+    root.render(React.createElement(LeaveGameModal, {
+      onCancel: () => { root.unmount(); host.remove(); },
+      onLeave: () => { throw new Error('Leave is not part of this safe-area test'); },
+    }));
+  });
+  const dialog = page.getByRole('dialog', { name: 'Leave game confirmation' });
+  await expect(dialog).toBeVisible();
+  const geometry = await dialog.evaluate((element) => {
+    const overlay = element.getBoundingClientRect();
+    const card = element.querySelector('.rh-leave-card')!.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const root = getComputedStyle(document.documentElement);
+    return {
+      parent: element.parentElement?.tagName,
+      overlay: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+      card: { left: card.left, right: card.right, top: card.top, bottom: card.bottom },
+      padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(parseFloat),
+      root: ['--rh-safe-top', '--rh-safe-right', '--rh-safe-bottom', '--rh-safe-left'].map((key) => parseFloat(root.getPropertyValue(key))),
+    };
+  });
+  expect(geometry.parent).toBe('BODY');
+  expect(geometry.overlay).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+  expect(geometry.root).toEqual([11, 13, 17, 19]);
+  const base = Math.min(24, Math.max(16, 844 * 0.022));
+  [11, 13, 17, 19].forEach((inset, index) => {
+    expect(geometry.padding[index]).toBeCloseTo(base + inset, 2);
+  });
+  expect(geometry.card.left).toBeGreaterThanOrEqual(geometry.padding[3]);
+  expect(geometry.card.right).toBeLessThanOrEqual(844 - geometry.padding[1]);
+  expect(geometry.card.top).toBeGreaterThanOrEqual(geometry.padding[0]);
+  expect(geometry.card.bottom).toBeLessThanOrEqual(390 - geometry.padding[2]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('focused signed-in chrome keeps account access but omits hub stats', async ({ page }) => {
   await installMobileFixture(page, 'solo/populated');
   await page.goto('/solo/fritz');
@@ -87,7 +188,7 @@ test('safe area is consumed once by header, content, and bottom tabs', async ({ 
   await installMobileFixture(page, 'home/not-played');
   await page.goto('/');
   await expect(page.locator('.rh-presentation')).toBeVisible();
-  await page.addStyleTag({ content: '.app.rh-presentation { --rh-safe-top: 11px; --rh-safe-right: 13px; --rh-safe-bottom: 17px; --rh-safe-left: 19px; }' });
+  await page.addStyleTag({ content: ':root { --rh-safe-top: 11px; --rh-safe-right: 13px; --rh-safe-bottom: 17px; --rh-safe-left: 19px; }' });
   const geometry = await page.evaluate(() => {
     const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
     const header = box('.rh-global-nav');
@@ -105,7 +206,7 @@ test('safe area is consumed once by header, content, and bottom tabs', async ({ 
 test('focused and gameplay shells allocate inset space without a second nav layer', async ({ page }) => {
   await page.goto('/solo/fritz');
   await expect(page.locator('[data-surface-shell="focused"]')).toBeVisible();
-  await page.addStyleTag({ content: '.app.rh-presentation { --rh-safe-top: 11px; --rh-safe-right: 13px; --rh-safe-bottom: 17px; --rh-safe-left: 19px; }' });
+  await page.addStyleTag({ content: ':root { --rh-safe-top: 11px; --rh-safe-right: 13px; --rh-safe-bottom: 17px; --rh-safe-left: 19px; }' });
   const content = page.locator('.rh-presentation-content');
   await expect(content).toHaveCSS('padding-bottom', '17px');
   await expect(content).toHaveCSS('padding-left', '19px');
