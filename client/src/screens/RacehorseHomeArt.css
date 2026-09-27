@@ -250,53 +250,53 @@
     radial-gradient(ellipse 44% 58% at 90% 50%, rgba(56, 148, 255, 0.14) 0%, transparent 58%);
 }
 
-/* Home hero only — heavy left read column; art on the right stays bright */
-.home-main:not(.sp-solo-main):not(.learn-hub-main) .home-card-scrim,
-.rh-img-treatment--home .home-card-scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgba(4, 7, 12, 0.97) 0%,
-    rgba(4, 7, 12, 0.94) 14%,
-    rgba(4, 7, 12, 0.86) 28%,
-    rgba(4, 7, 12, 0.58) 40%,
-    rgba(4, 7, 12, 0.22) 48%,
-    transparent 54%
-  );
-  box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.22);
-}
+/* Legacy wide Home scrim stays with the wide composition until that page is
+   redesigned. Compact Home owns its own art/text boundary below. */
+@media (--desk) {
+  .home-main:not(.sp-solo-main):not(.learn-hub-main) .home-card-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      rgba(4, 7, 12, 0.97) 0%,
+      rgba(4, 7, 12, 0.94) 14%,
+      rgba(4, 7, 12, 0.86) 28%,
+      rgba(4, 7, 12, 0.58) 40%,
+      rgba(4, 7, 12, 0.22) 48%,
+      transparent 54%
+    );
+    box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.22);
+  }
 
-/* Daily Fritz — narrower left read column so visor/eyes sit outside the shadow */
-.home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-fritz-card-container .home-card-scrim {
-  background: linear-gradient(
-    90deg,
-    rgba(4, 7, 12, 0.97) 0%,
-    rgba(4, 7, 12, 0.95) 12%,
-    rgba(4, 7, 12, 0.88) 22%,
-    rgba(4, 7, 12, 0.42) 30%,
-    rgba(4, 7, 12, 0.14) 36%,
-    transparent 40%
-  );
-  box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18);
-}
+  .home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-fritz-card-container .home-card-scrim {
+    background: linear-gradient(
+      90deg,
+      rgba(4, 7, 12, 0.97) 0%,
+      rgba(4, 7, 12, 0.95) 12%,
+      rgba(4, 7, 12, 0.88) 22%,
+      rgba(4, 7, 12, 0.42) 30%,
+      rgba(4, 7, 12, 0.14) 36%,
+      transparent 40%
+    );
+    box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18);
+  }
 
-/* Daily Puzzle teaser — strong left column */
-.home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-puzzle-card-container .home-card-scrim {
-  background: linear-gradient(
-    90deg,
-    rgba(4, 7, 12, 0.97) 0%,
-    rgba(4, 7, 12, 0.95) 14%,
-    rgba(4, 7, 12, 0.88) 28%,
-    rgba(4, 7, 12, 0.48) 40%,
-    rgba(4, 7, 12, 0.12) 48%,
-    transparent 54%
-  );
-  box-shadow:
-    inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18),
-    inset 40px 0 56px -24px rgba(4, 7, 12, 0.14);
+  .home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-puzzle-card-container .home-card-scrim {
+    background: linear-gradient(
+      90deg,
+      rgba(4, 7, 12, 0.97) 0%,
+      rgba(4, 7, 12, 0.95) 14%,
+      rgba(4, 7, 12, 0.88) 28%,
+      rgba(4, 7, 12, 0.48) 40%,
+      rgba(4, 7, 12, 0.12) 48%,
+      transparent 54%
+    );
+    box-shadow:
+      inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18),
+      inset 40px 0 56px -24px rgba(4, 7, 12, 0.14);
+  }
 }
 
 /* Overlay text shadows: rh-image-surface.css */
@@ -454,6 +454,11 @@
 .home-card-content {
   position: relative;
   z-index: 5;
+}
+
+.today-home .home-card-action {
+  width: 188px;
+  height: 50px;
 }
 
 /* ─── Single Player Hub Journey entry — weekly-bar strip ─── */
@@ -775,40 +780,6 @@
   overflow: hidden;
 }
 
-.home-shell .mx-14 {
-  margin-inline: 16px;
-}
-
-.home-mode-tabs > div {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.home-mode-tabs button {
-  display: flex;
-  height: 68px;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-  padding: 6px 3px;
-}
-
-.home-mode-tabs button > span:last-of-type {
-  overflow: hidden;
-  max-width: 100%;
-  color: #b8c7da;
-  font-size: 10px;
-  line-height: 1.1;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-mode-tabs button > span:first-of-type svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* ── Desktop layer ──────────────────────────────────────────────── */
 @media (min-width: 769px) and (min-height: 600px) {
   .home-card-text {
@@ -847,9 +818,264 @@
   }
 }
 
-@media (max-width: 360px) {
-  .home-mode-tabs button > span:last-of-type {
-    font-size: 9px !important;
+/* The compact Home is composed inside AppPresentation's bounded Hub content.
+   The shell owns header, tabs, and safe areas; these rules own only Home. */
+@media (--compact-shell) {
+  .today-home .home-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+    padding: 6px 14px 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .today-home .home-heading {
+    flex: 0 0 auto;
+    min-height: 43px;
+  }
+
+  .today-home .home-heading h1 {
+    font-size: 32px;
+    line-height: 0.98;
+  }
+
+  .today-home .home-subtitle {
+    margin-top: 3px;
+    padding: 0;
+    color: #a7adbc;
+    font-size: 12px;
+    line-height: 1.15;
+  }
+
+  .today-home .home-daily-grid {
+    display: grid;
+    flex: 1 0 157px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    min-height: 157px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .today-home .home-daily-grid > section {
+    display: grid;
+    grid-template-columns: minmax(0, 55%) minmax(0, 45%);
+    min-width: 0;
+    min-height: 0;
+    padding: 12px 13px 11px;
+    border-radius: 16px;
+    background-color: #07101c;
+  }
+
+  .today-home .home-card-content {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 55%) minmax(0, 45%);
+    align-items: stretch;
+    height: auto;
+    min-height: 0;
+  }
+
+  .today-home .home-card-text {
+    display: flex;
+    grid-column: 1;
+    flex-direction: column;
+    justify-content: flex-start;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .today-home .home-card-content h2 {
+    margin: 0;
+    font-size: clamp(20px, 2.8vw, 25px);
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+    white-space: nowrap;
+  }
+
+  .today-home .home-card-description {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 5px;
+    color: #c9d1df;
+    font-size: 13px;
+    line-height: 1.22;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .today-home .home-card-status-wrap {
+    margin-top: 7px;
+  }
+
+  .today-home .home-card-status {
+    gap: 6px;
+    margin-top: 0;
+    color: #b8c1cf;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .today-home .home-card-status > span:first-child {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+  }
+
+  .today-home .home-card-status > span:last-child {
+    color: #b6becd;
+  }
+
+  .today-home .home-daily-result-summary {
+    gap: 3px 8px;
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.1;
+  }
+
+  .today-home .home-daily-result-badge {
+    min-height: 18px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .today-home .home-daily-result-outcome {
+    font-size: 10px;
+  }
+
+  .today-home .home-card-action {
+    z-index: 6;
+    width: min(100%, 188px);
+    min-height: 44px;
+    height: 44px;
+    margin-top: auto;
+    padding: 0 13px;
+    font-size: 15px;
+  }
+
+  .today-home .daily-fritz-card-container .home-card-action {
+    background: #21190d;
+  }
+
+  .today-home .daily-puzzle-card-container .home-card-action {
+    background: #0b1a2c;
+  }
+
+  .today-home .home-card-art {
+    inset: 0 0 0 auto;
+    width: 53%;
+    border-radius: 0 15px 15px 0;
+    mask-image: linear-gradient(90deg, transparent, #000 28%);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 28%);
+  }
+
+  .today-home .home-card-art--fritz {
+    background-image: image-set(
+      url('../assets/home/mobile/newHOMEdailyfritz-1x.webp') 1x,
+      url('../assets/home/mobile/newHOMEdailyfritz-2x.webp') 2x
+    );
+    background-position: 50% 34%;
+    background-size: auto 178%;
+    filter: brightness(1.02) contrast(1.04);
+    opacity: 1;
+  }
+
+  .today-home .home-card-art--puzzle {
+    background-image: image-set(
+      url('../assets/home/mobile/homefinalpuzzle-1x.webp') 1x,
+      url('../assets/home/mobile/homefinalpuzzle-2x.webp') 2x
+    );
+    background-position: 100% 50%;
+    background-size: 145% auto;
+    filter: brightness(1.1) contrast(1.06);
+    opacity: 1;
+  }
+
+  .today-home .home-card-art::after {
+    background: none;
+  }
+
+  .today-home .home-card-scrim,
+  .today-home .daily-fritz-card-container .home-card-scrim,
+  .today-home .daily-puzzle-card-container .home-card-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(90deg, #070d17 0%, rgb(7 13 23 / 95%) 47%, rgb(7 13 23 / 15%) 63%, transparent 78%);
+    box-shadow: none;
+  }
+}
+
+@media (--short-landscape) and (max-width: 760px) {
+  .today-home .home-subtitle,
+  .today-home .home-card-description {
+    display: none;
+  }
+
+  .today-home .home-heading {
+    min-height: 32px;
+  }
+
+  .today-home .home-card-status-wrap {
+    margin-top: 10px;
+  }
+}
+
+@media (--short-landscape) and (max-height: 360px) {
+  .today-home .home-main {
+    gap: 4px;
+    padding-top: 4px;
+  }
+
+  .today-home .home-heading {
+    min-height: 32px;
+  }
+
+  .today-home .home-daily-grid {
+    flex-basis: 143px;
+    min-height: 143px;
+  }
+}
+
+@media (max-width: 500px) and (orientation: portrait) {
+  .today-home .home-main {
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .today-home .home-heading {
+    min-height: 60px;
+  }
+
+  .today-home .home-subtitle,
+  .today-home .home-card-description {
+    display: block;
+  }
+
+  .today-home .home-daily-grid {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .today-home .home-daily-grid > section {
+    min-height: 225px;
+    padding: 19px;
+  }
+
+  .today-home .home-card-art {
+    width: 54%;
+  }
+
+  .today-home .home-card-content h2 {
+    font-size: 26px;
+  }
+
+  .today-home .home-card-description {
+    font-size: 14px;
   }
 }
 

@@ -50,5 +50,5 @@ export async function expectReachable(page: Page, selector: string) {
 
 export function mobileScreenshotName(stateId: MobileFixtureStateId, viewport: { width: number; height: number }) {
   const [screen, state] = stateId.split('/');
-  return `mobile-landscape/${screen}/${state}-${viewport.width}x${viewport.height}.png`;
+  return ['mobile-landscape', screen, `${state}-${viewport.width}x${viewport.height}.png`];
 }
