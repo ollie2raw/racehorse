@@ -18,6 +18,7 @@ const EMPTY_STATE: ReviewBatchState = {
   pendingDecisionIds: new Set(),
   done: false,
 };
+const EMPTY_SNAPSHOTS: readonly ReviewPositionSnapshotV2[] = [];
 
 /** The minimal Worker surface this hook needs -- lets tests inject a fake without real Worker/jsdom support. */
 export type ReviewWorkerLike = {
@@ -52,6 +53,10 @@ export function useReviewWorkerBatch(
   createWorker: () => ReviewWorkerLike = defaultCreateWorker,
   poolSize: number = 1,
 ): ReviewBatchState & { cancel: () => void } {
+  // An empty batch has no work to distinguish by array identity. Normalize it
+  // before the render-phase input check so callers cannot trigger a re-render
+  // loop by constructing a fresh [] when there is no local worker input.
+  const batchSnapshots = snapshots.length === 0 ? EMPTY_SNAPSHOTS : snapshots;
   const [state, setState] = useState<ReviewBatchState>(EMPTY_STATE);
   const workersRef = useRef<ReviewWorkerLike[]>([]);
   const createWorkerRef = useRef(createWorker);
@@ -68,33 +73,33 @@ export function useReviewWorkerBatch(
   } | null>(null);
   if (
     lastInputs === null ||
-    lastInputs.snapshots !== snapshots ||
+    lastInputs.snapshots !== batchSnapshots ||
     lastInputs.budget !== budget ||
     lastInputs.coverageThreshold !== coverageThreshold
   ) {
-    setLastInputs({ snapshots, budget, coverageThreshold });
+    setLastInputs({ snapshots: batchSnapshots, budget, coverageThreshold });
     setState(
-      snapshots.length === 0
+      batchSnapshots.length === 0
         ? EMPTY_STATE
         : {
             resultsByDecisionId: new Map(),
             errorsByDecisionId: new Map(),
-            pendingDecisionIds: new Set(snapshots.map((s) => s.identifiers.decisionId)),
+            pendingDecisionIds: new Set(batchSnapshots.map((s) => s.identifiers.decisionId)),
             done: false,
           },
     );
   }
 
   useEffect(() => {
-    if (snapshots.length === 0) return;
+    if (batchSnapshots.length === 0) return;
 
-    const partitions = partitionIndices(snapshots.length, poolSizeRef.current);
+    const partitions = partitionIndices(batchSnapshots.length, poolSizeRef.current);
     const workers = partitions.map(() => createWorkerRef.current());
     workersRef.current = workers;
     let doneWorkerCount = 0;
 
     workers.forEach((worker, workerIndex) => {
-      const partitionSnapshots = partitions[workerIndex].map((index) => snapshots[index]);
+      const partitionSnapshots = partitions[workerIndex].map((index) => batchSnapshots[index]);
 
       worker.onmessage = (event) => {
         const message = event.data;
@@ -142,7 +147,7 @@ export function useReviewWorkerBatch(
       }
       workersRef.current = [];
     };
-  }, [snapshots, budget, coverageThreshold]);
+  }, [batchSnapshots, budget, coverageThreshold]);
 
   const cancel = () => {
     const cancelMessage: ReviewWorkerRequest = { type: 'cancel' };
