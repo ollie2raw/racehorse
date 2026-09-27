@@ -206,26 +206,26 @@ export default function SinglePlayerHubScreen({
             ← Back to Home
           </Button>
 
-          <div className="relative z-10 text-center">
+          <div className="relative z-10 text-center sp-solo-header">
             <h1
-              className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
+              className="sp-solo-title font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
               style={{ textShadow: "0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)" }}
             >
               Single Player
             </h1>
-            <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
+            <p className="sp-solo-subtitle mt-5 font-normal text-[#727083] opacity-90">
               Sharpen your skills. Master the game at your own pace.
             </p>
           </div>
 
-          <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-5 px-14 sp-solo-content">
             <div className="sp-solo-grid sp-solo-grid--trio items-stretch gap-5">
             {MODES.map((mode) => {
               const isLocked = mode.key === "journey" && !isAdmin;
               return (
               <section
                 key={mode.key}
-                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden px-7 py-8 ${mode.sectionRounded} ${isLocked ? "sp-solo-mode-card--locked cursor-default" : "cursor-pointer"}`}
+                className={`sp-solo-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden ${mode.sectionRounded} ${isLocked ? "sp-solo-mode-card--locked cursor-default" : "cursor-pointer"}`}
                 onClick={isLocked ? undefined : () => onNavigate(mode.key)}
                 aria-disabled={isLocked}
               >
@@ -243,25 +243,23 @@ export default function SinglePlayerHubScreen({
                   ) : null}
                 </div>
                 <div className="home-card-scrim" aria-hidden="true" />
-                <div className="home-card-content relative grid h-[268px] grid-rows-[1fr_auto] gap-7">
-                  <div className={`flex min-h-0 flex-col ${isLocked ? "justify-start pt-9" : "justify-center"}`}>
+                <div className="home-card-content sp-solo-mode-card__content relative grid grid-rows-[1fr_auto]">
+                  <div className="flex min-h-0 flex-col justify-center">
                     <div className="sp-solo-mode-card__text">
                       {mode.eyebrow ? (
-                        <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#8C7BD8]">
+                        <p className="sp-solo-mode-card__eyebrow font-black uppercase text-[#8C7BD8]">
                           {mode.eyebrow}
                         </p>
                       ) : null}
                       <h2
-                        className={`font-bold tracking-[-0.055em] ${mode.eyebrow ? "mt-1 text-[36px]" : "text-[44px]"}`}
+                        className={`sp-solo-mode-card__title font-bold tracking-[-0.055em] ${mode.eyebrow ? "mt-1" : ""}`}
                         style={{ color: mode.titleColor }}
                       >
                         {mode.title}
                       </h2>
-                      {isLocked ? null : (
-                        <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
-                      )}
+                      <p className="sp-solo-mode-card__desc mt-3 leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
                     </div>
-                    <div className="sp-solo-stats mt-6 flex flex-wrap items-center gap-x-10 gap-y-3">
+                    <div className="sp-solo-stats flex flex-wrap items-center">
                       {statsForMode(mode.key, hubStats).map((stat) => (
                         <div key={stat.label} className="flex min-w-0 items-start gap-2">
                           <span className="sp-solo-stat-icon mt-0.5" style={{ color: mode.titleColor }}>
@@ -282,8 +280,8 @@ export default function SinglePlayerHubScreen({
                       e.stopPropagation();
                       if (!isLocked) onNavigate(mode.key);
                     }}
-                    className="self-start"
-                    style={{ width: 188, height: 50, justifyContent: "space-between" }}
+                    className="sp-solo-mode-card__cta self-start"
+                    style={{ justifyContent: "space-between" }}
                     type="button"
                   >
                     <span>{isLocked ? "Coming Soon" : mode.ctaLabel}</span>
