@@ -223,32 +223,153 @@
   100% { opacity: 0.6; }
 }
 
-/* Responsive / Mobile styles */
-@media (--below-wide) {
+/* Home owns this compact strip; AppPresentation owns the available height. */
+@media (--compact-shell) {
   .streak-strip {
-    flex-direction: column;
-    align-items: stretch;
-    margin: 16px 16px 0;
-    padding: 16px;
-    gap: 16px;
+    flex: 0 0 47px;
+    min-height: 47px;
+    margin: 0;
+    padding: 5px 12px;
+    gap: 10px;
+    border-color: rgb(103 217 87 / 18%);
+    border-radius: 15px;
+  }
+
+  .streak-identity {
+    gap: 8px;
+    min-width: 0;
+    flex: 0 1 205px;
+  }
+
+  .streak-flame-wrap {
+    width: 34px;
+    height: 34px;
+  }
+
+  .streak-flame-icon {
+    width: 19px;
+    height: 19px;
+  }
+
+  .streak-label {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .streak-sub {
+    overflow: hidden;
+    max-width: 165px;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .streak-days {
     justify-content: space-between;
-    gap: 8px;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .streak-day {
+    gap: 3px;
+  }
+
+  .day-label {
+    font-size: 10px;
+  }
+
+  .day-dot {
+    width: 22px;
+    height: 22px;
+  }
+
+  .day-check-icon {
+    width: 12px;
+    height: 12px;
   }
 
   .streak-goal {
-    border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding-left: 0;
-    padding-top: 14px;
-    justify-content: space-between;
+    gap: 8px;
     min-width: 0;
+    flex: 0 0 158px;
+    padding-left: 10px;
+  }
+
+  .goal-text {
+    gap: 2px;
+    min-width: 61px;
+  }
+
+  .goal-label {
+    font-size: 10px;
+  }
+
+  .goal-value {
+    font-size: 13px;
   }
 
   .goal-bar-track {
     flex: 1;
-    max-width: 240px;
+    min-width: 30px;
+    max-width: 78px;
+  }
+}
+
+@media (--short-landscape) and (max-width: 760px) {
+  .streak-strip {
+    padding-inline: 8px;
+    gap: 7px;
+  }
+
+  .streak-identity {
+    flex-basis: 153px;
+  }
+
+  .streak-sub,
+  .goal-bar-track {
+    display: none;
+  }
+
+  .streak-goal {
+    flex-basis: 100px;
+    padding-left: 7px;
+  }
+}
+
+@media (--short-landscape) and (max-height: 360px) {
+  .streak-strip {
+    flex-basis: 43px;
+    min-height: 43px;
+  }
+}
+
+@media (max-width: 500px) and (orientation: portrait) {
+  .streak-strip {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .streak-identity {
+    flex-basis: auto;
+  }
+
+  .streak-sub {
+    display: block;
+    max-width: none;
+  }
+
+  .streak-goal {
+    flex-basis: auto;
+    justify-content: space-between;
+    padding: 8px 0 0;
+    border-top: 1px solid rgb(255 255 255 / 8%);
+    border-left: 0;
+  }
+
+  .goal-bar-track {
+    display: block;
   }
 }

@@ -69,6 +69,10 @@ const MULTIPLAYER_SPECS = ['multiplayer-chaos.spec.ts', 'multiplayer-in-match-re
 
 export default defineConfig({
   testDir: './e2e',
+  // Home is the first approved mobile visual baseline. Keep snapshots stable
+  // across host OSes and grouped by screen/state instead of Playwright's
+  // platform-suffixed default path.
+  snapshotPathTemplate: '{testDir}/screenshots/{arg}{ext}',
   // Aborts the run if the client dev server is serving stale config (issue
   // #119) — see e2e/globalSetup.ts.
   globalSetup: './e2e/globalSetup.ts',
@@ -89,7 +93,7 @@ export default defineConfig({
   projects: [
     ...(MOBILE_VISUAL ? [{
       name: 'chromium-mobile-visual',
-      testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts'],
+      testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts', 'home-visual-conformance.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 844, height: 390 },

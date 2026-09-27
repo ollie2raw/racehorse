@@ -7,10 +7,11 @@ import react from '@vitejs/plugin-react';
 import { resolveAppVersion } from './scripts/appVersion.mjs';
 // @ts-expect-error — build script module, not part of the app's TS program.
 import { localServerMeta } from './scripts/serverFreshness.mjs';
+// @ts-expect-error — shared build-time JavaScript policy, as in PostCSS/Tailwind config.
+import { WIDE_SHELL_QUERY } from './config/responsivePolicy.js';
 
-// Injects <link rel="preload" fetchpriority="high"> for hero images used as
-// CSS backgrounds on the home screen so Lighthouse discovers LCP resources
-// from the initial HTML document (they aren't discoverable via CSS).
+// Keep the existing wide-screen hero preload. Compact Home uses CSS image-set
+// derivatives only when the Home cards render, so other routes fetch no Home art.
 const HERO_IMAGE_PATTERNS = ['newHOMEdailyfritz', 'homefinalpuzzle'];
 
 function preloadHeroImagePlugin(): Plugin {
@@ -18,12 +19,11 @@ function preloadHeroImagePlugin(): Plugin {
     name: 'preload-hero-image',
     transformIndexHtml(html, ctx) {
       if (!ctx.bundle) return html;
+      const assets = Object.keys(ctx.bundle!);
       const preloads = HERO_IMAGE_PATTERNS.flatMap((pattern) => {
-        const asset = Object.keys(ctx.bundle!).find(
-          (k) => k.includes(pattern) && k.endsWith('.webp'),
-        );
-        return asset
-          ? [`<link rel="preload" as="image" type="image/webp" href="/${asset}" fetchpriority="high">`]
+        const source = assets.find((asset) => asset.includes(pattern) && !asset.includes(`${pattern}-1x`) && !asset.includes(`${pattern}-2x`) && asset.endsWith('.webp'));
+        return source
+          ? [`<link rel="preload" as="image" type="image/webp" href="/${source}" media="${WIDE_SHELL_QUERY}" fetchpriority="high">`]
           : [];
       });
       if (!preloads.length) return html;

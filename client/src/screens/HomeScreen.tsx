@@ -116,7 +116,7 @@ function StatusRow({
 }) {
   if (status === 'started') {
     return (
-      <div className="mt-6 flex items-center gap-3 text-[15px]">
+      <div className="home-card-status mt-6 flex items-center gap-3 text-[15px]">
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border" style={{ borderColor: `${color}a6` }}>
           <div className="h-2 w-2 rounded-full" style={{ backgroundColor: accentColor }} />
         </span>
@@ -126,7 +126,7 @@ function StatusRow({
   }
   if (status === 'unknown') {
     return (
-      <div className="mt-6 flex items-center gap-3 text-[15px]">
+      <div className="home-card-status mt-6 flex items-center gap-3 text-[15px]">
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20">
           <div className="h-2 w-2 rounded-full bg-white/25" />
         </span>
@@ -135,7 +135,7 @@ function StatusRow({
     );
   }
   return (
-    <div className="mt-6 flex items-center gap-3 text-[15px]">
+    <div className="home-card-status mt-6 flex items-center gap-3 text-[15px]">
       <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20">
         <div className="h-2 w-2 rounded-full bg-white/25" />
       </span>
@@ -198,7 +198,7 @@ export default function RacehorseHomeScreen({
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root desk:min-h-screen"
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root today-home desk:min-h-screen"
       style={themeVars}
     >
       <div className="home-bg" aria-hidden="true">
@@ -218,21 +218,21 @@ export default function RacehorseHomeScreen({
           onSignOut={onSignOut}
         />
 
-        <main className="relative min-h-0 flex-1 overflow-y-auto px-0 pb-[calc(16px+var(--rh-bottom-tab-offset))] pt-4 home-main desk:overflow-visible desk:pb-5 desk:pt-8">
+        <main className="relative min-h-0 flex-1 overflow-y-auto px-0 pt-4 home-main desk:overflow-visible desk:pb-5 desk:pt-8">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
-          <div className="text-center">
+          <div className="home-heading text-center">
             <h1 className="text-[34px] font-black leading-[0.95] tracking-[-0.04em] text-white desk:text-[64px] desk:leading-[0.9] desk:tracking-[-0.05em]" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Race</h1>
-            <p className="mt-2 px-4 text-[15px] font-normal text-[#727083] opacity-90 desk:mt-3 desk:px-0 desk:text-[20px]">Two ways to test your strategy. One daily tradition.</p>
+            <p className="home-subtitle mt-2 px-4 text-[15px] font-normal text-[#727083] opacity-90 desk:mt-3 desk:px-0 desk:text-[20px]">Two ways to test your strategy. One daily tradition.</p>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 px-4 desk:mt-6 desk:grid-cols-2 desk:gap-5 desk:px-14">
+          <div className="home-daily-grid mt-4 grid grid-cols-1 gap-4 px-4 desk:mt-6 desk:grid-cols-2 desk:gap-5 desk:px-14">
             <section className={`daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-5 py-5 desk:px-7 desk:py-8${fritzCompleted ? ' daily-card--completed' : ''}`} aria-label={fritzCompleted ? 'Daily Fritz completed results' : 'Daily Fritz'}>
               <div className="home-card-art home-card-art--fritz" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex items-center desk:h-[268px]">
                 <div className="home-card-text flex flex-1 flex-col justify-center">
                   <h2 className="text-[27px] font-bold tracking-[-0.05em] text-[#E7B64A] desk:text-[44px] desk:tracking-[-0.055em]">Daily Fritz</h2>
-                  <p className="mt-1.5 text-[14px] text-[#C4C1CC] leading-snug desk:mt-3 desk:text-[18px] desk:leading-relaxed">{fritzCompleted ? "Today's result" : 'Best of 3 series. Same deal for everyone.'}</p>
+                  <p className="home-card-description mt-1.5 text-[14px] text-[#C4C1CC] leading-snug desk:mt-3 desk:text-[18px] desk:leading-relaxed">{fritzCompleted ? "Today's result" : 'Best of 3 series. Same deal for everyone.'}</p>
                   {fritzCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Fritz result summary">
                       <span className="home-daily-result-badge" role="status">{fritzResultCopy.badge}</span>
@@ -241,7 +241,7 @@ export default function RacehorseHomeScreen({
                       {fritzResultCopy.outcome && <span className="home-daily-result-outcome" aria-label={`Outcome: ${fritzResultCopy.outcome}`}>{fritzResultCopy.outcome}</span>}
                     </div>
                   )}
-                  {!fritzCompleted && <div className="mt-2">
+                  {!fritzCompleted && <div className="home-card-status-wrap mt-2">
                     <StatusRow
                       status={displayFritzStatus === 'completed' ? 'none' : displayFritzStatus}
                       color="var(--tier-elite)"
@@ -251,8 +251,8 @@ export default function RacehorseHomeScreen({
                   <Button
                     variant="tier-elite"
                     onClick={() => navigate('dailyFritz')}
-                    className="mt-7"
-                    style={{ width: 188, height: 50, justifyContent: 'space-between' }}
+                    className="home-card-action mt-7"
+                    style={{ justifyContent: 'space-between' }}
                   >
                     <span>{fritzCompleted ? 'View Results' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--tier-elite)', opacity: 0.9 }}>›</span>
@@ -264,10 +264,10 @@ export default function RacehorseHomeScreen({
             <section className={`daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-5 py-5 desk:px-7 desk:py-8${puzzleCompleted ? ' daily-card--completed' : ''}`} aria-label={puzzleCompleted ? 'Daily Puzzle completed results' : 'Daily Puzzle'}>
               <div className="home-card-art home-card-art--puzzle" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
-              <div className="home-card-content relative flex h-[268px] items-center">
-                <div className="flex flex-1 flex-col justify-center">
+              <div className="home-card-content relative flex items-center desk:h-[268px]">
+                <div className="home-card-text flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzles</h2>
-                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Beat the clock. Solve as many as you can.'}</p>
+                  <p className="home-card-description mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Beat the clock. Solve as many as you can.'}</p>
                   {puzzleCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Puzzle result summary">
                       <span className="home-daily-result-badge" role="status">{puzzleResultCopy.badge}</span>
@@ -275,7 +275,7 @@ export default function RacehorseHomeScreen({
                       {currentStreakCount > 0 && <span>Streak <strong>{currentStreakCount}</strong></span>}
                     </div>
                   )}
-                  {!puzzleCompleted && <div className="mt-2">
+                  {!puzzleCompleted && <div className="home-card-status-wrap mt-2">
                     <StatusRow
                       status={puzzleStatus === 'completed' ? 'none' : puzzleStatus}
                       color="var(--accent-blue)"
@@ -285,8 +285,8 @@ export default function RacehorseHomeScreen({
                   <Button
                     variant="tier-standard"
                     onClick={() => navigate('puzzleRush')}
-                    className="mt-7"
-                    style={{ width: 188, height: 50, justifyContent: 'space-between' }}
+                    className="home-card-action mt-7"
+                    style={{ justifyContent: 'space-between' }}
                   >
                     <span>{puzzleCompleted ? 'View Results' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--accent-blue)', opacity: 0.9 }}>›</span>
