@@ -1,7 +1,56 @@
 /*
- * Solo hub art: All character images (fritzwave, ghost, lab) now use a standardized 
+ * Solo hub art: All character images (fritzwave, ghost, lab) now use a standardized
  * layout to ensure visual consistency across the Single Player screen.
  */
+
+.sp-solo-header {
+  flex: 0 0 auto;
+}
+
+.sp-solo-title {
+  font-size: 64px;
+}
+
+.sp-solo-subtitle {
+  font-size: 20px;
+}
+
+.sp-solo-content {
+  margin-top: 42px;
+}
+
+.sp-solo-mode-card {
+  padding: 32px 28px;
+}
+
+.sp-solo-mode-card__content {
+  height: 268px;
+  gap: 28px;
+}
+
+.sp-solo-mode-card__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+}
+
+.sp-solo-mode-card__title {
+  font-size: 44px;
+}
+
+.sp-solo-mode-card__desc {
+  font-size: 16px;
+}
+
+.sp-solo-mode-card__cta {
+  width: 188px;
+  height: 50px;
+}
+
+.sp-solo-stats {
+  margin-top: 24px;
+  column-gap: 40px;
+  row-gap: 12px;
+}
 
 .sp-solo-mode-card__text {
   max-width: 55%;
@@ -131,40 +180,19 @@
     0 22px 46px rgba(0, 0, 0, 0.36);
 }
 
-.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked {
-  border-color: rgba(120, 140, 170, 0.16);
-  background: rgba(7, 10, 16, 0.92);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -34px 58px rgba(0, 0, 0, 0.34),
-    0 18px 38px rgba(0, 0, 0, 0.28);
-  filter: none;
-}
-
-.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked:hover {
-  filter: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -34px 58px rgba(0, 0, 0, 0.34),
-    0 18px 38px rgba(0, 0, 0, 0.28);
-}
-
+/* Locked Journey keeps full peer-card identity (purple border/glow, purple
+   title, visible art, real copy) — only the CTA is disabled and the art
+   carries a muted "locked" wash. A gutted placeholder box was the bug this
+   replaced: it read as broken chrome, not a gated mode. */
 .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__art {
-  filter: grayscale(1) brightness(0.42) contrast(1.12) saturate(0.34);
-  opacity: 0.82;
+  filter: grayscale(0.55) brightness(0.78) contrast(1.05) saturate(0.55);
+  opacity: 0.95;
 }
 
 .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__art-slot::after {
-  width: 70%;
-  background: rgba(4, 7, 12, 0.56);
-  box-shadow:
-    54px 0 84px -12px rgba(4, 7, 12, 0.7),
-    inset 0 0 90px rgba(0, 0, 0, 0.26);
-}
-
-.home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .sp-solo-mode-card__text h2 {
-  color: rgba(242, 238, 232, 0.64) !important;
-  text-shadow: 0 4px 28px rgba(0, 0, 0, 0.76);
+  width: 52%;
+  background: rgba(4, 7, 12, 0.3);
+  box-shadow: 48px 0 76px -14px rgba(4, 7, 12, 0.34);
 }
 
 .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container.sp-solo-mode-card--locked .rh-btn {
@@ -334,9 +362,48 @@
   }
 }
 
-@media (--below-wide) {
+@media (--below-wide) and (orientation: portrait) {
   .sp-solo-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sp-solo-title {
+    font-size: clamp(32px, 9vw, 44px);
+  }
+
+  .sp-solo-subtitle {
+    font-size: 15px;
+  }
+
+  .sp-solo-content {
+    margin-top: 20px;
+  }
+
+  .sp-solo-grid .sp-solo-mode-card {
+    min-height: 200px;
+  }
+
+  .sp-solo-mode-card {
+    padding: 20px 22px;
+  }
+
+  .sp-solo-mode-card__content {
+    height: auto;
+    min-height: 168px;
+    gap: 12px;
+  }
+
+  .sp-solo-mode-card__desc {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 14px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .sp-solo-mode-card__cta {
+    width: 100%;
+    height: 46px;
   }
 }
 
@@ -344,5 +411,155 @@
   .sp-solo-main .px-14 {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
+  }
+}
+
+/* Phone hub content never shows its own back affordance — the bottom tab
+   bar handles area switching and browser history handles "back". This
+   holds in both portrait and landscape, so it lives in the shared
+   compact-shell query rather than the landscape-only block below. */
+@media (--compact-shell) {
+  .sp-solo-main .rh-back-button.rh-back-button.rh-back-button {
+    display: none;
+  }
+}
+
+/* ─── Compact landscape hub (844×390 canonical + required range) ─── */
+
+@media (--short-landscape) {
+  .sp-solo-main.pt-4 {
+    padding-top: 2px;
+  }
+
+  .sp-solo-header {
+    flex: 0 0 auto;
+  }
+
+  .sp-solo-title {
+    font-size: clamp(18px, 2.2vw, 22px);
+    line-height: 1;
+  }
+
+  .sp-solo-subtitle {
+    display: block;
+    margin-top: 0;
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .sp-solo-content {
+    margin-top: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+  }
+
+  .sp-solo-content .sp-solo-grid--trio {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .sp-solo-main .px-14 {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .sp-solo-grid--trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .sp-solo-grid .sp-solo-mode-card {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .sp-solo-mode-card {
+    padding: 12px 16px;
+  }
+
+  .sp-solo-mode-card__content {
+    height: 100%;
+    gap: 6px;
+  }
+
+  .sp-solo-mode-card__text {
+    max-width: 62%;
+  }
+
+  .sp-solo-mode-card__title {
+    font-size: clamp(20px, 2.5vw, 25px);
+  }
+
+  .sp-solo-mode-card__desc {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.2;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .sp-solo-stats {
+    margin-top: 8px;
+    column-gap: 18px;
+    row-gap: 4px;
+  }
+
+  .sp-solo-stat-label {
+    font-size: 9px;
+  }
+
+  .sp-solo-stat-value {
+    font-size: 17px;
+  }
+
+  .sp-solo-mode-card__cta {
+    width: 100%;
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .sp-solo-mode-card__art-slot,
+  .daily-fritz-card-container .sp-solo-mode-card__art-slot,
+  .daily-puzzle-card-container .sp-solo-mode-card__art-slot,
+  .journey-card-container .sp-solo-mode-card__art-slot {
+    left: 46%;
+  }
+
+  /* Journey's desktop transform nudges the (horizontally-centered) character
+     into frame with a fixed 110px translate, tuned for a ~500px+ wide desktop
+     slot. At compact card widths (~120-140px art slot) that fixed offset
+     pushes the whole face out of the clipped slot, leaving only a sliver.
+     The source art is already face-centered on a pure black background, so a
+     percentage-based (not fixed-px) reframe keeps it centered in the slot at
+     any card width, matching how Fritz/Ghost's compact art holds up. */
+  .journey-card-container .sp-solo-mode-card__art {
+    transform: scale(1.32) translate(0, -8%);
+  }
+}
+
+/* Below ~700px viewport width, a 3-column grid can no longer keep each
+   card's text zone at the required ≥142px readable width alongside a
+   ≥44px CTA, so switch to a horizontal snap rail (first card whole, next
+   card peeking as an affordance) instead of shrinking text further. */
+@media (--short-landscape) and (max-width: 700px) {
+  .sp-solo-grid--trio {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sp-solo-grid--trio .sp-solo-mode-card {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+
+  .sp-solo-mode-card__text {
+    max-width: 66%;
   }
 }
