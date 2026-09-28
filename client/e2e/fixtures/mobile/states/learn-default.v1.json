@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "stateId": "learn/default",
+  "route": "/learn",
+  "apiResponses": [],
+  "expected": { "visibleText": ["Learn", "How to Play", "Guided Match", "The Lab", "Lesson Library", "Coming Soon"] }
+}

@@ -4,7 +4,6 @@ import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import type { AppMode } from '../types';
 import '../screens/RacehorseHomeArt.css';
-import '../screens/SinglePlayerModes.css';
 import './learn.css';
 import {
   freezeV2Lesson,
@@ -385,12 +384,12 @@ export default function LearnHome({
 
             <div className="relative z-10 text-center">
               <h1
-                className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
+                className="learn-hub-title text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
                 style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}
               >
                 Learn
               </h1>
-              <p className="mt-5 text-[20px] font-normal text-[#727083] opacity-90">
+              <p className="learn-hub-subtitle mt-5 text-[20px] font-normal text-[#727083] opacity-90">
                 Coach Oliver&apos;s practice modes to sharpen your Racehorse strategy.
               </p>
               {guidedV2StartError ? (
@@ -470,7 +469,9 @@ export default function LearnHome({
 
                       <div className={`learn-mode-card__footer${isLocked ? ' learn-mode-card__footer--locked' : ''}`}>
                         {isLocked ? (
-                          <div className="learn-mode-card__soon">COMING SOON</div>
+                          <button type="button" className="learn-mode-card__soon" disabled>
+                            Coming Soon
+                          </button>
                         ) : mode.action === 'howToPlay' ? (
                           <button
                             type="button"
