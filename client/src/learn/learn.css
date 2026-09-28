@@ -9,6 +9,17 @@
   max-height: 100%;
 }
 
+/* The hub root borrows .pvf-root only for its color-tier theming variables;
+   that shared class also carries a `padding-bottom: 40px !important` meant
+   for focused-content screens with no bottom tab bar (Daily Fritz, lessons).
+   On the hub (which has its own bottom tab bar and, at compact landscape
+   sizes, very little vertical budget to begin with) that padding silently
+   ate a large share of the space available for the mode-card grid. Scoped
+   to `.learn-hub-page` so the lesson/authoring branch below keeps it. */
+.learn-hub-page.pvf-root {
+  padding-bottom: 0 !important;
+}
+
 .learn-lesson-screen .learn-guided-cockpit {
   flex: 1 1 0;
   min-height: 0;
@@ -398,10 +409,14 @@
 
 /* Layer 1 — panorama art */
 .learn-hub-main .learn-mode-card .learn-art-slice {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
   z-index: 0;
   overflow: hidden;
+  pointer-events: none;
   background-image: url('../assets/learn/learnmodeimages.webp');
   background-repeat: no-repeat;
   background-size: 400% auto;
@@ -855,7 +870,12 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
 }
 
-@media (--phone) {
+/* Width-only phone rule: only correct for a tall, narrow phone in portrait.
+   Landscape phones in the 667–768px width range also match a width-only
+   query, which would wrongly collapse the 2x2 grid to one column even
+   though there's ample width — the required compact-landscape sizing
+   below owns that range instead. */
+@media (--phone) and (orientation: portrait) {
   .learn-hub-main .px-14 {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
@@ -873,6 +893,125 @@
 
   .learn-hub-main .mt-\[42px\] {
     margin-top: 24px !important;
+  }
+}
+
+/* Phone hub content never shows its own back affordance — the bottom tab
+   bar handles area switching and browser history handles "back". Holds in
+   both portrait and landscape. (Previously inherited from SinglePlayerModes.css
+   via a cross-import; Learn now owns this rule directly.) */
+@media (--compact-shell) {
+  .learn-hub-main .rh-back-button.rh-back-button.rh-back-button {
+    display: none;
+  }
+}
+
+/* ─── Compact landscape hub (844×390 canonical + required range) ───
+   Header ~52 + title band ~40 + tabs ~56 leaves ~224-240px for a 2x2 grid;
+   each row ~106-114 high. Keep 2 columns at every required width (667-932)
+   since width is not the binding constraint here (unlike Solo's 3-column
+   case) — only usable height varies, and only modestly, across that range. */
+@media (--short-landscape) {
+  .learn-hub-main .rh-back-button {
+    display: none;
+  }
+
+  .learn-hub-main .px-14 {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .learn-hub-main .learn-hub-title {
+    font-size: clamp(20px, 2.4vw, 26px);
+    line-height: 1;
+  }
+
+  .learn-hub-main .learn-hub-subtitle {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .learn-hub-main.pt-10 {
+    padding-top: 6px;
+  }
+
+  .learn-hub-main.pb-5 {
+    padding-bottom: 4px;
+  }
+
+  .learn-hub-main .mt-\[42px\] {
+    margin-top: 6px;
+  }
+
+  .learn-hub-main .learn-hub-grid--modes,
+  .learn-hub-main .learn-hub-grid--modes.rh-mode-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 8px 12px;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  .learn-hub-main .learn-mode-card {
+    min-height: 0;
+    height: 100%;
+    padding: 10px 14px;
+  }
+
+  .learn-hub-main .learn-mode-card .learn-mode-card__body::before {
+    top: -8px;
+    bottom: -8px;
+  }
+
+  .learn-hub-main .learn-mode-card__title {
+    font-size: clamp(15px, 1.7vw, 18px);
+    white-space: normal;
+  }
+
+  .learn-hub-main .learn-mode-card__desc {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.2;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .learn-mode-card__footer {
+    padding-top: 8px;
+  }
+
+  .learn-mode-card__footer--locked {
+    padding-top: 6px;
+  }
+
+  .learn-hub-main .learn-mode-card__soon {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  /* Fixed, content-proportionate width (not 100%) -- .pvf-start-btn pins its
+     arrow glyph 24px from the right edge regardless of label width, and a
+     full-width button here buries the card's right-side art exactly the way
+     reference (5) does not. Desktop already uses a fixed 188px for the same
+     reason; this is that same idea scaled down for the compact card. */
+  .learn-pvf-root .learn-hub-main .learn-mode-card__rules-cta.pvf-start-btn,
+  .learn-pvf-root .learn-hub-main .learn-mode-card__play.pvf-start-btn {
+    width: 132px;
+    align-self: flex-start;
+    min-height: 44px;
+    height: 44px;
+    font-size: 13px;
+    margin-top: 0;
+  }
+
+  .learn-hub-main .learn-mode-card__lock {
+    transform: scale(0.8);
   }
 }
 

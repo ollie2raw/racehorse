@@ -13,6 +13,7 @@ const overlays = [
   './states/solo-empty.v1.json',
   './states/solo-populated.v1.json',
   './states/solo-journey-locked.v1.json',
+  './states/learn-default.v1.json',
 ].map((path) => readFixture<MobileFixtureOverlay>(path));
 
 function responseKey(response: MobileApiResponse): string {
