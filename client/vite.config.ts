@@ -131,13 +131,28 @@ export default defineConfig({
             if (id.includes('@supabase/supabase-js')) return 'vendor-supabase';
             if (id.includes('socket.io-client')) return 'vendor-socket';
             if (id.includes('canvas-confetti')) return 'vendor-confetti';
+            // Tiny runtime every compiled component imports. Unpinned, Rollup
+            // hoisted it into the 'analyzer' manual chunk, so the standard bot
+            // path statically imported analyzer just to get it.
+            if (id.includes('/react/compiler-runtime')) return 'vendor-react-compiler';
             return;
           }
+          // Review snapshot contracts: captured during play (ReviewSnapshotRecorder)
+          // and read by analysis. Same reason as above — keep out of 'analyzer'.
+          if (id.includes('/packages/game-core/src/reviewContracts')) return 'review-contracts';
           // Bot match screen — isolate heavy guided / review / analyzer graphs from the entry chunk
           // so BotMatchScreen stays under the CI size budget (behavior unchanged; same eager load).
           if (id.includes('/src/learn/lessonV2')) return 'lesson-v2';
           if (id.includes('/src/modules/guided/')) return 'bot-guided';
           if (id.includes('/src/modules/match/hand-lifecycle/')) return 'bot-hand-lifecycle';
+          // Post-game review capture + durable-completion leaves (same eager load).
+          // Only the leaf modules the bot path already loads — not all of
+          // modules/review/, which also holds review-screen code that imports analyzer.
+          if (
+            /\/src\/modules\/review\/(reviewCompletionClient|durableReviewCompletionJob|correlateSnapshotsToMoveLog|ReviewSnapshotRecorder|reviewSnapshotStorage|captureReviewSnapshotAtDecision|missingPipEvidence\w*|logReviewWorkerBatchDiagnostics)\./.test(id)
+          ) {
+            return 'bot-review-capture';
+          }
           if (id.includes('/src/training/pivotalReview/')) return 'pivotal-review';
           // Game engine must not live in analyzer — moveAnalyzer imports botEngine for replay oracle.
           if (id.includes('/src/modules/match/runtime/botEngine')) return 'bot-engine';

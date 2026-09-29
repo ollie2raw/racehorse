@@ -6,15 +6,14 @@ import type { GameAnalysis } from '../../analyzer/moveAnalyzer';
 import { hydrateHistoricalGameReview } from './hydrateHistoricalGameReview';
 import { buildGameReviewReplayArtifact } from './gameReviewReplayArtifact';
 import { createReviewCoachingFactsStore } from './reviewCoachingFactsStore';
+import { buildReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts';
 import type { ReviewCoachingFacts } from '../../analyzer/reviewCoachingFacts';
 
 vi.mock('../../analyzer/reviewCoachingFacts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../analyzer/reviewCoachingFacts')>();
   return {
     ...actual,
-    buildReviewCoachingFacts: vi.fn(() => {
-      throw new Error('buildReviewCoachingFacts must not run in historical replay');
-    }),
+    buildReviewCoachingFacts: vi.fn(actual.buildReviewCoachingFacts),
   };
 });
 
@@ -80,7 +79,7 @@ const analysis: GameAnalysis = {
 };
 
 describe('F1e-5 historical GameReviewer zero-recompute', () => {
-  it('renders persisted coaching without invoking Fritz, facts builder, or worker', () => {
+  it('rebuilds legacy dual-authority facts from the persisted canonical evaluation without invoking Fritz or worker', () => {
     const eval1 = evaluation('d1');
     const store = createReviewCoachingFactsStore<ReviewCoachingFacts>('hist');
     const artifact = buildGameReviewReplayArtifact({
@@ -128,7 +127,8 @@ describe('F1e-5 historical GameReviewer zero-recompute', () => {
       />,
     );
 
-    expect(screen.getByText('Contested: persisted headline')).toBeInTheDocument();
-    expect(screen.getByText(/persisted detail/)).toBeInTheDocument();
+    expect(screen.queryByText(/Contested|Fritz prefers|engines disagree/i)).not.toBeInTheDocument();
+    expect(document.querySelector('.gr-coaching')).toBeInTheDocument();
+    expect(vi.mocked(buildReviewCoachingFacts)).toHaveBeenCalledTimes(1);
   });
 });

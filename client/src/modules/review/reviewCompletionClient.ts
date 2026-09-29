@@ -23,6 +23,8 @@ export async function enqueueServerReviewCompletion(input: {
   readonly sourceMatchId: string;
   readonly gameId: string;
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
+  readonly expectedDecisionIds: readonly string[];
+  readonly captureFailures?: readonly { decisionId: string; handId: string; sequence: number; reason: string }[];
   readonly evaluations?: readonly ReviewEvaluationV1[];
 }): Promise<EnqueueReviewCompletionResponse | null> {
   try {
@@ -36,6 +38,8 @@ export async function enqueueServerReviewCompletion(input: {
         gameDigest: input.gameDigest,
         sourceMatchId: input.sourceMatchId,
         snapshots: input.snapshots,
+        expectedDecisionIds: input.expectedDecisionIds,
+        captureFailures: input.captureFailures ?? [],
         evaluations: input.evaluations,
       }),
     });
@@ -67,6 +71,8 @@ export async function pollServerReviewCompletion(input: {
   readonly status: string;
   readonly progress: EnqueueReviewCompletionResponse['progress'];
   readonly evaluations?: ReviewEvaluationV1[];
+  readonly decisions: readonly { decisionId: string; lifecycle: string; positionHash: string }[];
+  readonly accuracyModelResult?: import('@racehorse/review-engine').GameAccuracyModelResult | null;
 } | null> {
   try {
     const res = await fetch(`${input.apiBase}/api/review-completion-jobs/${encodeURIComponent(input.jobId)}`, {
@@ -80,6 +86,8 @@ export async function pollServerReviewCompletion(input: {
       status: string;
       progress: EnqueueReviewCompletionResponse['progress'];
       evaluations?: ReviewEvaluationV1[];
+      decisions: { decisionId: string; lifecycle: string; positionHash: string }[];
+      accuracyModelResult?: import('@racehorse/review-engine').GameAccuracyModelResult | null;
     };
   } catch {
     return null;

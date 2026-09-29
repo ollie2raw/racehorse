@@ -129,6 +129,26 @@ describe('ReviewSnapshotRecorder (A3)', () => {
     expect(recorder.getSnapshots()).toHaveLength(0);
   });
 
+  it('preserves a canonical decision ID and structured capture failure when snapshot validation fails', () => {
+    const recorder = new ReviewSnapshotRecorder({ sessionId: 's-capture-failure', gameId: 'g-capture-failure' });
+    const pre = openedMatchWithPlayableDoubleSix();
+    const snap = recorder.recordPlayerDecision(
+      pre,
+      { kind: 'play', tile: { low: 0, high: 0 }, position: 'right' },
+      true,
+    );
+
+    expect(snap).toBeNull();
+    expect(recorder.getSnapshots()).toHaveLength(0);
+    expect(recorder.getCaptureFailures()).toEqual([expect.objectContaining({
+      decisionId: 's-capture-failure:you:1',
+      actorId: 'you',
+      handId: 'hand-1',
+      sequence: toCoreGameState(pre).sequence,
+      reason: expect.any(String),
+    })]);
+  });
+
   it('records one place snapshot whose digests match toCoreGameState factory', () => {
     const recorder = new ReviewSnapshotRecorder({ sessionId: 's-place', gameId: 'g-place' });
     const pre = openedMatchWithPlayableDoubleSix();

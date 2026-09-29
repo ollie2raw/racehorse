@@ -134,7 +134,7 @@ describe('progressive Game Review accuracy gating', () => {
       />,
     );
 
-    expect(screen.getByText(/Analyzing 34 \/ 37 decisions/i)).toBeInTheDocument();
+    expect(screen.getByText(/Analyzing 30 \/ 33 decisions/i)).toBeInTheDocument();
     expect(screen.queryByText('80%')).not.toBeInTheDocument();
     expect(screen.queryByText(/Scored accuracy/)).not.toBeInTheDocument();
     const reviewBtn = screen.getByRole('button', { name: /Review Game/i });

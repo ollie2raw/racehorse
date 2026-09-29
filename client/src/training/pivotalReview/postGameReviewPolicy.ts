@@ -8,8 +8,8 @@ import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from
  * (not `bot`), with its own set-progression / final overlays. Re-enable when
  * set-final flow can host the review prompt without fighting hand interstitials.
  *
- * Visibility is gated by the server cohort response and the client release
- * constant; the latter is the deployment rollback switch.
+ * Standard authenticated Play vs Fritz reviews use the client release
+ * constant as the visibility switch. Multiplayer review remains cohort gated.
  */
 export const POST_GAME_REVIEW_DEFERRED_DAILY_FRITZ = true;
 
@@ -17,15 +17,22 @@ export function isPostGameReviewEnabled(serverCohortEnabled = false): boolean {
   return Boolean(serverCohortEnabled && POST_GAME_REVIEW_VISIBLE);
 }
 
+/** Durable completion is mandatory for production PVF, even before auth resolves. */
+export function isDurablePvfReviewEnabled(input: {
+  production: boolean;
+  authenticated: boolean;
+}): boolean {
+  return input.production || input.authenticated;
+}
+
 /**
- * Approved positional coaching prose (#298) for cohort-eligible surfaces only.
+ * Approved positional coaching prose (#298) for enabled PVF review surfaces.
  *
- * Reuses the existing server cohort decision (`usePostGameReviewAccess` →
- * `/api/game-reviews/access`); does not duplicate allowlist IDs client-side.
- * Guest / loading / transport failure leave `serverCohortEnabled` false → off.
+ * The boolean is the authenticated PVF review visibility decision. Multiplayer
+ * continues to use the server-owned cohort policy.
  */
-export function isPositionalCoachingProseEnabled(serverCohortEnabled = false): boolean {
-  return Boolean(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED && isPostGameReviewEnabled(serverCohortEnabled));
+export function isPositionalCoachingProseEnabled(reviewEnabled = false): boolean {
+  return Boolean(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED && POST_GAME_REVIEW_VISIBLE && reviewEnabled);
 }
 
 export type BotPostGameReviewContext = {
@@ -37,7 +44,7 @@ export type BotPostGameReviewContext = {
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
   isJourneyTrial: boolean;
-  serverCohortEnabled?: boolean;
+  authenticatedReviewEnabled?: boolean;
 };
 
 /** Play vs Fritz result overlay modes (broader than review eligibility). */
@@ -57,7 +64,7 @@ export function isPlayVsFritzResultOverlayMode(ctx: BotPostGameReviewContext): b
 export function isBotPostGameReviewEligible(ctx: BotPostGameReviewContext): boolean {
   return (
     isBotPostGameReviewLocallyEligible(ctx) &&
-    ctx.serverCohortEnabled === true
+    ctx.authenticatedReviewEnabled === true
   );
 }
 

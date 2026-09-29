@@ -38,13 +38,14 @@ for (const viewport of [
       await expect(page.getByRole('heading', { name: 'Daily Fritz' })).toBeVisible({ timeout: 20_000 });
       const start = page.locator('.df-pvf-start-btn');
       await expect(start).toBeEnabled({ timeout: 20_000 });
-      const accessResponse = page.waitForResponse((response) =>
-        response.url().includes('/api/game-reviews/access') && response.request().method() === 'GET');
       const startResponse = page.waitForResponse((response) =>
         response.url().includes('/api/daily-fritz/start') && response.request().method() === 'POST');
       await start.click();
       expect((await startResponse).status()).toBe(200);
-      expect((await accessResponse).status()).toBe(200);
+      // Play vs Fritz review eligibility no longer round-trips the cohort
+      // endpoint (#304: gated on the authenticated session), so there is no
+      // access request to wait for. The regression under test is the render
+      // loop: the match must mount and stay mounted with review enabled.
       const match = page.locator('.bot-match-screen.bot-match-mode-daily-fritz');
       await expect(match).toBeVisible({ timeout: 30_000 });
       await expect(page.locator('[data-surface-shell="gameplay"]')).toBeVisible();

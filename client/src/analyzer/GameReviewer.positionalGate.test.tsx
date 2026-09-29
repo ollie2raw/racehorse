@@ -123,7 +123,7 @@ describe('GameReviewer Gate 4 positional enable prop', () => {
     expect(screen.queryByText(/matching replies/i)).toBeNull();
   });
 
-  it('F: historical cohort review renders persisted approved prose as written', async () => {
+  it('F: historical review derives coaching from the canonical evaluation, never stored dual-authority prose', async () => {
     const facts = {
       played: {
         action: { kind: 'play', tile: { low: 0, high: 2 }, position: 'right' },
@@ -166,12 +166,8 @@ describe('GameReviewer Gate 4 positional enable prop', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText('The engines disagree here.')).toBeTruthy();
-      expect(
-        screen.getByText(
-          'The measured positional features favor the right end, but Fritz prefers the left end.',
-        ),
-      ).toBeTruthy();
+      expect(screen.getByText('Right tile, wrong end.')).toBeTruthy();
     });
+    expect(screen.queryByText(/engines disagree|Fritz prefers/i)).toBeNull();
   });
 });

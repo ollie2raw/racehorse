@@ -176,8 +176,9 @@ describe('GameReviewer production-shaped multi-hand integrity E2E', () => {
     expect(ledger.forcedCount).toBe(1);
     expect(ledger.scoredCount).toBe(3);
     expect(ledger.estimateCount).toBe(1);
-    expect(ledger.unavailableCount).toBe(1);
-    expect(formatDecisionAccountingSummary(ledger)).toContain('unavailable');
+    expect(ledger.pendingCount).toBe(1);
+    expect(ledger.unavailableCount).toBe(0);
+    expect(formatDecisionAccountingSummary(ledger)).toContain('pending');
 
     const heurFacts: ReviewCoachingFacts = {
       played: { action: fritzMatch, immediatePoints: 0 },
@@ -197,14 +198,15 @@ describe('GameReviewer production-shaped multi-hand integrity E2E', () => {
     // must still be consistent with Estimate, never Blunder.
     expect(heurProse.headline.toLowerCase()).toMatch(/solid pick|strongest option|best move|top score/);
     expect(assertPresentationConsistency(heurRecord, heurProse.headline)).toEqual([]);
-    expect(heurRecord.classification).toEqual({ kind: 'estimate', matchedPrimary: true });
+    expect(heurRecord.classification).toEqual({ kind: 'estimate', matchedPrimary: false });
 
-    // Positional matched-reference path (production cohort) says Best move.
+    // Positional copy follows the Review Engine canonical move, even when
+    // the Fritz signal matches the played action.
     const positionalProse = buildReviewCoachingProse(
       { ...heurFacts, featureDeltas: [] },
       true,
     );
-    expect(positionalProse.headline).toMatch(/^Best move\./);
+    expect(positionalProse.headline).not.toMatch(/^Best move\./);
     expect(assertPresentationConsistency(heurRecord, positionalProse.headline)).toEqual([]);
 
     const batch: ReviewBatchState = {

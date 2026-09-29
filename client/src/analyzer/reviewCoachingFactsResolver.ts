@@ -8,11 +8,9 @@ import {
 /**
  * Intra-review coaching-facts consistency owner.
  *
- * Guarantees **intra-review consistency**, not deterministic Fritz output across
- * independently created reviews. Fritz Master (`chooseBotMove('master')`) remains
- * wall-clock bounded; two separate review instances may still disagree on the
- * same decision. Historical replay (F1e-5) must persist/load the canonical
- * artifact rather than recompute it. `botHeuristics.ts` is unchanged.
+ * Guarantees intra-review consistency. Facts are derived from the canonical
+ * Review Engine evaluation; this resolver does not run Fritz. Historical
+ * artifacts with a competing legacy reference are normalized at presentation.
  *
  * Lifetime: one review instance (caller supplies a fresh store / identity).
  * Key: stable decision ID within that instance.
@@ -27,7 +25,7 @@ export type ReviewCoachingFactsInvocationStats = {
   readonly eligibleDecisionCount: number;
   readonly uniqueDecisionsRequested: number;
   readonly factRequests: number;
-  /** Times `buildFacts` ran (Fritz-backed when positional explanations + snapshot). */
+  /** Times `buildFacts` ran. */
   readonly constructions: number;
   readonly duplicateFactRequests: number;
   /** Extra constructions beyond one per unique requested decision. Target: 0. */
@@ -52,7 +50,7 @@ export type CreateReviewCoachingFactsResolverArgs = {
 
 /**
  * Lazy memoizing resolver: first request for a decision may construct (and may
- * invoke Fritz-derived fact construction); every later request in this store
+ * construct facts); every later request in this store
  * reuses the same published object.
  */
 export function createReviewCoachingFactsResolver(

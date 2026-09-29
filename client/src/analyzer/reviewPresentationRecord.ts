@@ -12,7 +12,7 @@ import type { ReviewCoachingFacts } from './reviewCoachingFacts';
  * must all agree with this record — never independent truth sources.
  */
 export type ReviewPresentationRecord = {
-  readonly primaryReferenceSource: 'oracle' | 'fritz' | 'unavailable';
+  readonly primaryReferenceSource: 'oracle' | 'unavailable';
   readonly primaryReferenceAction: ReviewAction | null;
   readonly lossVsPrimary: number | null;
   readonly classification: HeuristicClassification | null;
@@ -31,7 +31,7 @@ function actionsEqual(a: ReviewAction, b: ReviewAction): boolean {
  */
 export function buildReviewPresentationRecord(
   evaluation: ReviewEvaluationV1 | null | undefined,
-  coachingFacts: ReviewCoachingFacts | null | undefined,
+  _coachingFacts: ReviewCoachingFacts | null | undefined,
 ): ReviewPresentationRecord {
   if (!evaluation) {
     return {
@@ -46,39 +46,26 @@ export function buildReviewPresentationRecord(
   }
 
   const evidenceSource = evaluation.evidence.source;
-  const fritzPrimaryAction =
-    coachingFacts?.referenceSource === 'fritz'
-      ? coachingFacts.best.action
-      : coachingFacts?.fritzMove?.action ?? null;
-
-  const primaryReferenceAction =
-    evidenceSource === 'heuristic'
-      ? fritzPrimaryAction
-      : (coachingFacts?.best.action ?? evaluation.best.action);
+  // The persisted evaluation object is the only authority. Coaching facts
+  // can be legacy artifacts that encoded a second recommendation.
+  const primaryReferenceAction = evaluation.best.action;
 
   const primaryReferenceSource: ReviewPresentationRecord['primaryReferenceSource'] =
     primaryReferenceAction == null
-      ? evidenceSource === 'heuristic'
-        ? 'unavailable'
-        : 'oracle'
-      : evidenceSource === 'heuristic'
-        ? 'fritz'
-        : 'oracle';
+      ? 'unavailable'
+      : 'oracle';
 
   const playedMatchesPrimary =
     primaryReferenceAction != null && actionsEqual(evaluation.played.action, primaryReferenceAction);
 
-  const contested = coachingFacts?.agreement?.contested === true;
+  const contested = false;
 
   let classification: HeuristicClassification | null;
   if (evidenceSource === 'heuristic') {
     // D2: Fritz-primary only when Fritz was actually resolved. Never treat
     // oracle evaluation.best as a Fritz stand-in — that recreates Blunder↔Best
     // contradictions and false "Good" when fixtures set best === played.
-    classification = classifyHeuristicResult(
-      evaluation,
-      fritzPrimaryAction ? { primaryReferenceAction: fritzPrimaryAction } : undefined,
-    );
+    classification = classifyHeuristicResult(evaluation);
   } else {
     const label = lossBandLabelForEvaluation(evaluation);
     classification = label ? { kind: 'calibrated', label } : { kind: 'forced' };

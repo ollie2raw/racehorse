@@ -84,6 +84,8 @@ export function completeReviewEvaluations(
     FAILED_RETRYABLE: 0,
     FAILED_FATAL: 0,
   };
+  const expectedIds = input.snapshots.map((snapshot) => snapshot.identifiers.decisionId);
+  const uniqueExpectedIds = new Set(expectedIds);
 
   const bump = (key: string) => {
     reasonCounts[key] = (reasonCounts[key] ?? 0) + 1;
@@ -98,8 +100,11 @@ export function completeReviewEvaluations(
     const canEscalate = Array.isArray(snapshot.preAction?.actorHand)
       && typeof snapshot.preAction?.opponentTileCount === 'number';
     if (!canEscalate) {
-      // Stub / partial snapshot — do not invent FAILED_RETRYABLE; the full
-      // results map is annotated in the post-pass below.
+      // A canonical decision with a malformed/incomplete capture remains
+      // retryable and prevents completion; it cannot disappear from counts.
+      lifecycleCounts.FAILED_RETRYABLE += 1;
+      retryableDecisionIds.push(decisionId);
+      bump('missing-public-surface');
       continue;
     }
 
@@ -207,7 +212,9 @@ export function completeReviewEvaluations(
   }
 
   const complete =
-    lifecycleCounts.PENDING === 0
+    uniqueExpectedIds.size === expectedIds.length
+    && lifecycleCounts.SCORED + lifecycleCounts.FORCED === expectedIds.length
+    && lifecycleCounts.PENDING === 0
     && lifecycleCounts.SEARCHING === 0
     && lifecycleCounts.FAILED_RETRYABLE === 0
     && lifecycleCounts.FAILED_FATAL === 0
