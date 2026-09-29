@@ -1666,35 +1666,42 @@
     min-height: 0 !important;
   }
 
-  /* ── Play vs Fritz result ──────────────────────────────────────────
+  /* ── Match result (Play vs Fritz, online, tournament, ghost) ───────
      Same card as the Daily Fritz result. Left: headline, the two scores,
      rating, review link. Right: final score + margin, actions right under.
-     Deal and Result are dropped here: the subtitle and headline say them. */
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd {
+     Stats past the first two (Deal / Result / Round) are dropped: the
+     headline and subtitle already say them. */
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd {
     width: min(620px, 100%) !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__stats {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__stats {
     grid-row: 1;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__stat:nth-child(n + 3) {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__stat:nth-child(n + 3) {
     display: none !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__standings {
+  /* Close duplicates the Home / Return action on the card and sat on top of
+     the stats; Play vs Fritz has none, so neither does any result card here. */
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__close {
+    display: none !important;
+  }
+
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__standings {
     grid-column: 1;
     grid-row: 2;
     margin: 0 !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__standing {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__standing {
     padding-block: 7px !important;
   }
 
   /* Rating sits under the actions as one line: "RATING  −12 • 1486".
      The section label repeats the pill's own label, so it is hidden. */
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__meta {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__meta {
     grid-column: 2;
     grid-row: 3;
     margin: 0 !important;
@@ -1702,11 +1709,11 @@
     border: 0 !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__meta-label {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__meta-label {
     display: none !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .df-result-meta-pill {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .df-result-meta-pill {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -1714,24 +1721,43 @@
     padding: 7px 12px !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .df-result-meta-value {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .df-result-meta-value {
     margin: 0 !important;
+  }
+
+  .rh-native .df-result-overlay .dfd__meta .rh-go-rating {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    padding: 7px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+  }
+
+  .rh-native .df-result-overlay .dfd__meta .rh-go-rating > strong {
+    font-size: 15px;
+  }
+
+  .rh-native .df-result-overlay .dfd__meta .rh-go-waiting {
+    margin: 6px 0 0;
   }
 
   /* Note / review link auto-place under the scores in column 1, so a row
      only exists when its content does (no gap when signed out). */
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__note {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__note {
     grid-column: 1;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__link {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__link {
     grid-column: 1;
     justify-self: start;
     margin: 0 !important;
   }
 
-  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__actions {
+  .rh-native .df-result-overlay:is([aria-label='Play vs Fritz result'], [aria-label='Game over'], [aria-label='Tournament match complete'], [aria-label$=' match over']) .dfd__actions {
     grid-row: 2;
     align-self: start;
   }
