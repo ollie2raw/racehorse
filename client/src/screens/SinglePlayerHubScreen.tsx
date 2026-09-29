@@ -26,6 +26,8 @@ type CardConfig = {
   title: string;
   titleColor: string;
   desc: string;
+  /** One-line version for the native app's compact cards (desc stays for screen readers). */
+  shortDesc: string;
   variant: "tier-elite" | "tier-standard" | "tier-master";
   chevronColor: string;
   ctaLabel: string;
@@ -81,10 +83,11 @@ const MODES: CardConfig[] = [
     containerClass: "daily-fritz-card-container",
     sectionRounded: "rounded-[20px] rounded-tl-[5px]",
     title: "Play vs Fritz",
-    titleColor: "#E7B64A",
+    titleColor: "#E4A53B",
     desc: "Fritz doesn't go easy. Find out if you're good enough.",
+    shortDesc: "Choose from four different difficulty tiers.",
     variant: "tier-elite",
-    chevronColor: "#FFD76A",
+    chevronColor: "#F3C464",
     ctaLabel: "Play",
   },
   {
@@ -92,10 +95,11 @@ const MODES: CardConfig[] = [
     containerClass: "daily-puzzle-card-container",
     sectionRounded: "rounded-[20px]",
     title: "Ghost Mode",
-    titleColor: "#4FC3F7",
+    titleColor: "#37C7F0",
     desc: "Race against a model of your own game. Can you beat yourself?",
+    shortDesc: "Race a model of yourself or a friend.",
     variant: "tier-standard",
-    chevronColor: "#4FC3F7",
+    chevronColor: "#5FE0FF",
     ctaLabel: "Play",
   },
   {
@@ -103,16 +107,17 @@ const MODES: CardConfig[] = [
     containerClass: "journey-card-container",
     sectionRounded: "rounded-[20px] rounded-tr-[5px]",
     title: "Journey",
-    titleColor: "#C77DFF",
+    titleColor: "#9B6EF3",
     desc: "A long march through Fritz — six chapters of instinct, tempo, and score pressure. Not a daily sprint.",
+    shortDesc: "Six chapters of Fritz.",
     variant: "tier-master",
-    chevronColor: "#C77DFF",
+    chevronColor: "#B994FF",
     ctaLabel: "Start",
   },
 ];
 
 const themeVars = {
-  "--rh-bg": "#050911",
+  "--rh-bg": "#0A0E17",
   "--rh-panel": "#09101A",
   "--rh-panel-2": "#0B121D",
   "--rh-brass": "#D7A64A",
@@ -185,7 +190,7 @@ export default function SinglePlayerHubScreen({
       <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
         <GlobalNav
           currentMode="singlePlayerHub"
-          activeColor="#E7B64A"
+          activeColor="#9B6CFF"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
           onSignOut={onSignOut}
@@ -257,7 +262,10 @@ export default function SinglePlayerHubScreen({
                       >
                         {mode.title}
                       </h2>
-                      <p className="sp-solo-mode-card__desc mt-3 leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
+                      <p className="sp-solo-mode-card__desc mt-3 leading-relaxed text-[#AAA6B4]">
+                        <span className="sp-solo-mode-card__desc-full">{mode.desc}</span>
+                        <span className="sp-solo-mode-card__desc-short" aria-hidden="true">{mode.shortDesc}</span>
+                      </p>
                     </div>
                     <div className="sp-solo-stats flex flex-wrap items-center">
                       {statsForMode(mode.key, hubStats).map((stat) => (

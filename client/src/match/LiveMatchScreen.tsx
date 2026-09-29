@@ -113,7 +113,7 @@ const HandView = React.memo(function HandView({
     const firstRow = hand.slice(0, splitAt);
     const secondRow = hand.slice(splitAt);
     return (
-      <div role="group" aria-label="Your hand" className="hand-container is-stacked">
+      <div role="group" aria-label="Your hand" className="hand-container is-stacked has-multiple-rows">
         <div className="hand-row">{firstRow.map((tile, idx) => renderTile(tile, idx))}</div>
         <div className="hand-row">{secondRow.map((tile, idx) => renderTile(tile, splitAt + idx))}</div>
       </div>
@@ -740,7 +740,10 @@ export function LiveMatchScreen({
                     whoWentOutRaw === 'opponent' ||
                     (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
                     (whoWentOutRaw == null && oppCount === 0);
-                  const winnerSide = resolveWinnerSide(winner);
+                  // Going out for 0 points (leftover pips round down) still wins the hand.
+                  const displayWinner =
+                    winner !== 'none' ? winner : youWentOut ? 'you' : oppWentOut ? 'opponent' : 'none';
+                  const winnerSide = resolveWinnerSide(displayWinner);
 
                   return (
                     <HandOverModal
@@ -758,7 +761,7 @@ export function LiveMatchScreen({
                       })}
                       tileReveals={buildMultiplayerHandOverReveals(
                         handReveal,
-                        winner,
+                        displayWinner,
                         youWentOut,
                         oppWentOut,
                         opponentName,
@@ -776,21 +779,21 @@ export function LiveMatchScreen({
                     type="button"
                     ref={opponentPillRef}
                     style={{ margin: 8 }}
-                    className={`wl-player-pill wl-player-pill-btn score-card ${!isMyTurn ? 'is-active-turn' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                    className={`wl-player-pill wl-player-pill-btn rh-hud-pill score-card ${!isMyTurn ? 'is-active-turn' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
                     onClick={() => onScoreTrackOpenChange(true)}
                     aria-label="Open score track"
                   >
                     <div className="wl-pill-top">
-                      <span className="wl-player-label">{opponentName}</span>
+                      <span className="wl-player-label rh-hud-label">{opponentName}</span>
                     </div>
-                    <AnimatedScore value={opponentScore} className="wl-player-score" />
+                    <AnimatedScore value={opponentScore} className="wl-player-score rh-hud-score" />
                   </button>
                   <TileRack count={opponentTileCount} isActive={!isMyTurn} />
                 </div>
               }
               hudCenter={
                 <div
-                  className="wl-center-status"
+                  className="wl-center-status rh-hud-center"
                   style={{
                     position: 'absolute',
                     left: '50%',
@@ -829,7 +832,7 @@ export function LiveMatchScreen({
                         tone = 'your-turn';
                       }
                       return (
-                        <span className={`wl-turn-label ${tone}`}>
+                        <span className={`wl-turn-label rh-hud-turn ${tone}`}>
                           {label}
                         </span>
                       );
@@ -847,7 +850,7 @@ export function LiveMatchScreen({
                       turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
                     />
                   ) : isHandActive ? (
-                    <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
+                    <span className={`wl-turn-label rh-hud-turn ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
                       {isMyTurn ? 'Your move' : 'Opponent thinking'}
                     </span>
                   ) : null}
@@ -860,14 +863,14 @@ export function LiveMatchScreen({
                 <button
                   type="button"
                   style={{ margin: 8 }}
-                  className={`wl-player-pill wl-player-pill-btn score-card is-you ${isMyTurn ? 'is-active-turn' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
+                  className={`wl-player-pill wl-player-pill-btn rh-hud-pill score-card is-you ${isMyTurn ? 'is-active-turn' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
                   onClick={() => onScoreTrackOpenChange(true)}
                   aria-label="Open score track"
                 >
                   <div className="wl-pill-top">
-                    <span className="wl-player-label">{hudRightLabel}</span>
+                    <span className="wl-player-label rh-hud-label">{hudRightLabel}</span>
                   </div>
-                  <AnimatedScore value={hudRightScore} className="wl-player-score" />
+                  <AnimatedScore value={hudRightScore} className="wl-player-score rh-hud-score" />
                 </button>
               }
               boardInner={
@@ -916,7 +919,7 @@ export function LiveMatchScreen({
                     </div>
                   )}
                   <div
-                    className="wl-controls-tray control-pill"
+                    className="wl-controls-tray control-pill rh-board-controls"
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onDoubleClick={(e) => e.stopPropagation()}
@@ -929,7 +932,7 @@ export function LiveMatchScreen({
                   >
                     <button
                       type="button"
-                      className="wl-control-btn"
+                      className="wl-control-btn rh-board-control-btn"
                       title="Zoom out"
                       aria-label="Zoom out"
                       onClick={(e) => {
@@ -942,7 +945,7 @@ export function LiveMatchScreen({
                     </button>
                     <button
                       type="button"
-                      className="wl-control-btn"
+                      className="wl-control-btn rh-board-control-btn"
                       title="Zoom in"
                       aria-label="Zoom in"
                       onClick={(e) => {
@@ -956,7 +959,7 @@ export function LiveMatchScreen({
                     <RoomReactions feed={roomReactions} onSendChat={onSendRoomChat} onSendEmote={onSendRoomEmote} />
                     <button
                       type="button"
-                      className="wl-control-btn"
+                      className="wl-control-btn rh-board-control-btn"
                       onClick={onToggleMute}
                       title={isMuted ? 'Unmute' : 'Mute'}
                       aria-label={isMuted ? 'Unmute' : 'Mute'}
@@ -965,7 +968,7 @@ export function LiveMatchScreen({
                     </button>
                     <button
                       type="button"
-                      className="wl-control-btn"
+                      className="wl-control-btn rh-board-control-btn"
                       onClick={onToggleFullscreen}
                       title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                       aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
@@ -974,7 +977,7 @@ export function LiveMatchScreen({
                     </button>
                     <button
                       type="button"
-                      className="wl-control-btn"
+                      className="wl-control-btn rh-board-control-btn"
                       onClick={onRequestLeaveConfirm}
                       title="Leave game"
                       aria-label="Leave game"

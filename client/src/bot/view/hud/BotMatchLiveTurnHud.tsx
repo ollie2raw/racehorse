@@ -20,7 +20,7 @@ export function BotMatchLiveTurnHud({
 }: BotMatchLiveTurnHudProps) {
   return (
     <div
-      className={`wl-center-status ${botTurn ? 'is-fritz-turn' : 'is-player-turn'}`}
+      className={`wl-center-status rh-hud-center ${botTurn ? 'is-fritz-turn' : 'is-player-turn'}`}
       data-ui="turn-status"
     >
       {isDailyFritzMode && dailyFritzPackage && (
@@ -30,7 +30,7 @@ export function BotMatchLiveTurnHud({
         </div>
       )}
       {turnLabel && (
-        <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>{turnLabel}</span>
+        <span className={`wl-turn-label rh-hud-turn ${botTurn ? 'opp-turn' : 'your-turn'}`}>{turnLabel}</span>
       )}
       {historyScrubber && historyScrubber.total > 0 && (
         <MatchHistoryScrubber scrubber={historyScrubber} />

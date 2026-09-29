@@ -46,9 +46,9 @@ function formatCountdown(ms: number): string {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
-function buildTournamentCountdownLabel(targetMs: number | null): string {
+function buildTournamentCountdownLabel(targetMs: number | null, nowMs: number = Date.now()): string {
   if (targetMs == null || !Number.isFinite(targetMs)) return '--:--:--';
-  return formatCountdown(targetMs - Date.now());
+  return formatCountdown(targetMs - nowMs);
 }
 
 function formatTimePst(iso: string): string {
@@ -93,9 +93,10 @@ const TournamentCountdownText = memo(function TournamentCountdownText({
   fallback?: string;
 }) {
   const validTarget = targetMs != null && Number.isFinite(targetMs);
+  // `now` must be an input to the label: read Date.now() here instead and the
+  // React Compiler memoizes the label on targetMs alone, freezing the clock.
   const now = useSyncNow(1000, validTarget);
-  void now;
-  const label = validTarget ? buildTournamentCountdownLabel(targetMs) : fallback;
+  const label = validTarget ? buildTournamentCountdownLabel(targetMs, now) : fallback;
 
   return <>{label}</>;
 });

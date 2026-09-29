@@ -35,7 +35,7 @@ export function DailyPuzzleSoloHandDock({
   return (
     <div className="tray-rail">
       <div className="tray-center">
-        <div className={`hand-container ${handCompactStacked ? 'is-stacked has-single-row' : 'has-single-row'}`}>
+        <div className={`hand-container ${handCompactStacked ? 'is-stacked has-single-row has-multiple-rows' : 'has-single-row'}`}>
           {handRows.map((row, rowIdx) => (
             <div key={`${handRowKeyPrefix}-${rowIdx}`} className="hand-row">
               {row.map((tile, idx) => {

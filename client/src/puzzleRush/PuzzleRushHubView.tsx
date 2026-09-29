@@ -177,6 +177,9 @@ export function PuzzleRushHubView({
                 <div className="df-pvf-card-header">
                   <div className="df-pvf-card-eyebrow">TODAY&apos;S DAILY</div>
                   <h2 className="df-pvf-card-name">Rush</h2>
+                  {/* The app hides the hero's feature badges; this carries the
+                      "Beat the clock" one, matching Fritz's one-line hero copy. */}
+                  <p className="df-pvf-card-description rh-app-only">Beat the clock. Bank points.</p>
                 </div>
 
                 <div className="df-pvf-card-badges">

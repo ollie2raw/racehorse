@@ -198,7 +198,7 @@ export default function RacehorseHomeScreen({
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root today-home desk:min-h-screen"
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#0A0E17] text-[var(--rh-text)] home-page-root today-home desk:min-h-screen"
       style={themeVars}
     >
       <div className="home-bg" aria-hidden="true">
@@ -231,7 +231,7 @@ export default function RacehorseHomeScreen({
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex items-center desk:h-[268px]">
                 <div className="home-card-text flex flex-1 flex-col justify-center">
-                  <h2 className="text-[27px] font-bold tracking-[-0.05em] text-[#E7B64A] desk:text-[44px] desk:tracking-[-0.055em]">Daily Fritz</h2>
+                  <h2 className="text-[27px] font-bold tracking-[-0.05em] text-[#F3C464] desk:text-[44px] desk:tracking-[-0.055em]">Daily Fritz</h2>
                   <p className="home-card-description mt-1.5 text-[14px] text-[#C4C1CC] leading-snug desk:mt-3 desk:text-[18px] desk:leading-relaxed">{fritzCompleted ? "Today's result" : 'Best of 3 series. Same deal for everyone.'}</p>
                   {fritzCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Fritz result summary">
@@ -266,7 +266,7 @@ export default function RacehorseHomeScreen({
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex items-center desk:h-[268px]">
                 <div className="home-card-text flex flex-1 flex-col justify-center">
-                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzles</h2>
+                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#5FE0FF]">Daily Puzzles</h2>
                   <p className="home-card-description mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">{puzzleCompleted ? "Today's result" : 'Beat the clock. Solve as many as you can.'}</p>
                   {puzzleCompleted && (
                     <div className="home-daily-result-summary" aria-label="Daily Puzzle result summary">

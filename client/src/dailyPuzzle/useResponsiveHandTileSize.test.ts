@@ -34,6 +34,11 @@ describe('computeResponsiveHandTileSize', () => {
       handCompactStacked: true,
     });
   });
+
+  it('phone landscape: splits past 8 tiles, single row up to 8', () => {
+    expect(computeResponsiveHandTileSize(9, 874, 402).handCompactStacked).toBe(true);
+    expect(computeResponsiveHandTileSize(8, 874, 402).handCompactStacked).toBe(false);
+  });
 });
 
 describe('useResponsiveHandTileSize', () => {

@@ -109,6 +109,13 @@ export function formatDateLabel(dateText: string): string {
   });
 }
 
+/** Compact form ("Sep 28") for tight layouts such as the native app's stat tiles. */
+export function formatDateShortLabel(dateText: string): string {
+  const parsed = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateText;
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function titleCaseTier(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1);
 }

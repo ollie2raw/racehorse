@@ -375,7 +375,9 @@
   align-items: center;
   gap: 8px;
   padding: 12px 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  border: 1px solid rgba(55, 199, 240, 0.28);
+  background: rgba(17, 26, 44, 0.55);
+  border-radius: 12px;
   margin-bottom: 4px;
   flex-shrink: 0;
 }
@@ -639,5 +641,275 @@
   .th-state-card {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* Portrait stacks title/trophy/features above the countdown/registration
+   panel, which is taller than the viewport once stacked. `.th-shell`'s
+   `overflow: hidden` (needed to contain compact landscape) would silently
+   clip that panel entirely below the fold with no way to reach it — the
+   same class of defect the pre-redesign baseline had in landscape. Give the
+   shell its own vertical scroll region in portrait instead of a second,
+   nested scroll inside `.th-panel-body`. */
+@media (orientation: portrait) {
+  .th-shell {
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .th-layout {
+    min-height: 0;
+    height: auto;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .th-panel {
+    height: auto;
+    max-height: none;
+    flex: 0 0 auto;
+  }
+
+  .th-panel-body {
+    overflow-y: visible;
+    flex: 0 0 auto;
+  }
+
+  /* At ~390px width, the desktop 3-column `auto 1fr auto` card grid leaves
+     the middle text column only ~110-120px, which wraps "Be the first to
+     register" one word per line and overlaps the trailing status/action
+     column. Reflow to two rows: time + action on top, full-width
+     count/status text below, so the text column gets the full card width. */
+  .th-card {
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "time actions" "middle middle";
+    row-gap: 8px;
+    column-gap: 10px;
+  }
+
+  .th-card__time { grid-area: time; min-width: 0; }
+  .th-card__middle { grid-area: middle; }
+
+  .th-card__actions {
+    grid-area: actions;
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Phone hub content never shows its own back affordance — the bottom tab
+   bar handles area switching and browser history handles "back". Matches
+   the Solo/Learn precedent; holds in both portrait and landscape. */
+@media (--compact-shell) {
+  .th-back { display: none; }
+}
+
+/* ─── Compact landscape hub (844×390 canonical + required range) ───
+   The width-only `max-width: 1100px` rule above stacks the two-pane layout
+   into a column, which is correct for narrow *portrait* widths but wrong
+   for compact *landscape*: at 844×390 that column stack has nowhere near
+   enough height, so the page clips after the header/trophy (this is the
+   exact "Tournament shows title and the top of trophy artwork" defect
+   recorded in the pre-redesign baseline). Re-assert the two-pane row layout
+   for short-landscape and compress every dimension to fit the shell's
+   ~274px content budget at 844×390. */
+@media (--short-landscape) {
+  .th-shell {
+    padding: 8px 14px 8px;
+  }
+
+  .th-toolbar {
+    margin-bottom: 4px;
+    min-height: 0;
+  }
+
+  .th-layout {
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .th-left {
+    width: 34%;
+    flex: 0 0 34%;
+    gap: 6px;
+  }
+
+  .th-kicker {
+    font-size: 9px;
+    margin-bottom: 2px;
+  }
+
+  .th-title {
+    font-size: clamp(20px, 3vw, 26px);
+    margin-bottom: 2px;
+  }
+
+  .th-desc {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-bottom: 4px;
+    font-size: 11px;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .th-trophy-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 4px 0;
+  }
+
+  .th-trophy-svg {
+    max-width: 96px;
+  }
+
+  .th-confirmation-mark {
+    width: 56px;
+    height: 56px;
+  }
+
+  .th-confirmation-mark span {
+    font-size: 28px;
+  }
+
+  .th-confirmation-copy strong {
+    font-size: 15px;
+  }
+
+  .th-confirmation-copy span {
+    font-size: 10px;
+  }
+
+  .th-features {
+    gap: 6px;
+  }
+
+  .th-feature {
+    padding: 6px 8px;
+    gap: 0;
+  }
+
+  .th-feature__header {
+    font-size: 9px;
+  }
+
+  .th-feature__desc {
+    display: none;
+  }
+
+  .th-panel {
+    padding: 10px 12px 8px;
+  }
+
+  .th-countdown {
+    padding: 4px 0 8px;
+    gap: 2px;
+  }
+
+  .th-countdown__label {
+    font-size: 9px;
+  }
+
+  .th-countdown__time {
+    font-size: 26px;
+  }
+
+  .th-countdown__sub {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 10px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .th-recovery-banner,
+  .th-state-card {
+    padding: 8px 10px;
+    margin-bottom: 6px;
+  }
+
+  .th-card {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+
+  .th-card__time {
+    font-size: 15px;
+    min-width: 52px;
+  }
+
+  .th-card__count {
+    font-size: 11px;
+  }
+
+  .th-card__count-sub {
+    font-size: 10px;
+  }
+
+  .th-card__bar {
+    height: 5px;
+  }
+
+  .th-card__status {
+    font-size: 9px;
+    padding: 2px 8px;
+    margin-top: 2px;
+  }
+
+  .th-cta {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .th-card__registered,
+  .th-card__full,
+  .th-card__soon {
+    font-size: 10px;
+    min-height: 32px;
+  }
+
+  .th-summary-strip {
+    padding: 8px 10px;
+    margin-top: 6px;
+  }
+
+  .th-summary-key {
+    font-size: 8px;
+  }
+
+  .th-summary-value {
+    font-size: 11px;
+  }
+}
+
+/* Below ~700px width, trim further: the 3-up feature grid and summary
+   strip are the most compressible secondary content, so shrink them before
+   touching the two-pane composition, event cards, or actions. */
+@media (--short-landscape) and (max-width: 700px) {
+  .th-features {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .th-feature {
+    padding: 4px 6px;
+  }
+
+  .th-summary-strip {
+    padding: 6px 8px;
+  }
+
+  .th-summary-key {
+    font-size: 7px;
+  }
+
+  .th-summary-value {
+    font-size: 10px;
   }
 }

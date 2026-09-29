@@ -10,8 +10,8 @@ export function BotMatchPreGameDrawHud({ preGameDraw, opponentLabel }: BotMatchP
   const content = buildPreGameDrawHudContent(preGameDraw, opponentLabel);
   if (!content) return null;
   return (
-    <div className="wl-center-status" data-ui="turn-status">
-      <span className={`wl-turn-label ${content.tone}`} role="status" aria-live="polite">
+    <div className="wl-center-status rh-hud-center" data-ui="turn-status">
+      <span className={`wl-turn-label rh-hud-turn ${content.tone}`} role="status" aria-live="polite">
         {content.label}
       </span>
     </div>

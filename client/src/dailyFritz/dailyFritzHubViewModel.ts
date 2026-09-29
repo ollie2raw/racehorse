@@ -3,6 +3,7 @@ import { formatOrdinalPlace } from './format';
 import {
   formatCountdownHms,
   formatDateLabel,
+  formatDateShortLabel,
   resolveTodayNextAction,
   secondsUntilNextPacificMidnight,
   tierDisplayLabel,
@@ -25,7 +26,11 @@ export type DailyFritzHubGameCard = {
 
 export type DailyFritzHubViewModel = {
   dateLabel: string;
+  /** "Sep 28" — the native app's compact stat tile. */
+  dateShortLabel: string;
   tierLabel: string;
+  /** "Elite" — the native app's compact stat tile. */
+  tierShortLabel: string;
   formatLabel: string;
   streakLabel: string;
   winTarget: number;
@@ -125,7 +130,9 @@ export function buildDailyFritzHubViewModel(
   void countdownTick;
 
   const dateLabel = today ? formatDateLabel(today.run_date) : '—';
+  const dateShortLabel = today ? formatDateShortLabel(today.run_date) : '—';
   const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : '—';
+  const tierShortLabel = today ? titleCaseTier(today.fritz_tier) : '—';
   const formatLabel = today ? 'Best of 3' : '—';
   const streakLabel = today ? `${today.streak} day${today.streak === 1 ? '' : 's'}` : '0 days';
   const winTarget = today?.winning_score ?? 60;
@@ -176,7 +183,9 @@ export function buildDailyFritzHubViewModel(
 
   return {
     dateLabel,
+    dateShortLabel,
     tierLabel,
+    tierShortLabel,
     formatLabel,
     streakLabel,
     winTarget,

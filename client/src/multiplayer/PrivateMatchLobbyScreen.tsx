@@ -127,10 +127,13 @@ export default function PrivateMatchLobbyScreen({
                 <div className="pvf-label">MULTIPLAYER</div>
                 <h1 className="pvf-title">Private Match</h1>
                 <p className="pvf-subtitle mp-hub-subtitle">
-                  <span className="mp-hub-subtitle-line">
+                  <span className="mp-hub-subtitle-line rh-app-only" aria-hidden="true">
+                    Invite-only 1v1. Share a code and play.
+                  </span>
+                  <span className="mp-hub-subtitle-line rh-web-only">
                     Invite only 1v1 dominos. Host a room, share code or link, and your guest may join
                   </span>
-                  <span className="mp-hub-subtitle-line">anytime. Start when ready.</span>
+                  <span className="mp-hub-subtitle-line rh-web-only">anytime. Start when ready.</span>
                 </p>
               </div>
 

@@ -22,14 +22,14 @@
   --rh-sb-surface: rgba(10, 16, 28, 0.6);
   --rh-sb-grid: rgba(255, 255, 255, 0.02);
 
-  --rh-sb-accent: var(--tier-elite);
-  --rh-sb-accent-border: rgba(231, 182, 74, 0.42);
-  --rh-sb-accent-dim: rgba(231, 182, 74, 0.14);
-  --rh-sb-accent-row: rgba(231, 182, 74, 0.05);
-  --rh-sb-accent-row-hover: rgba(231, 182, 74, 0.07);
+  --rh-sb-accent: #E4A53B;
+  --rh-sb-accent-border: rgba(228, 165, 59, 0.42);
+  --rh-sb-accent-dim: rgba(228, 165, 59, 0.14);
+  --rh-sb-accent-row: rgba(228, 165, 59, 0.05);
+  --rh-sb-accent-row-hover: rgba(228, 165, 59, 0.07);
 
-  --rh-sb-win: var(--tier-rookie);
-  --rh-sb-loss: #ff4d6d;
+  --rh-sb-win: #3ECB8B;
+  --rh-sb-loss: #EF5A5A;
 
   --rh-sb-ease: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -514,4 +514,40 @@
   .rh-sb-filter { transition: none; }
   .rh-sb-btn:hover,
   .rh-sb-btn:active { transform: none; }
+}
+
+/* ---------------------------------------------------------------------
+   Compact-landscape two-pane layout (design-handoff spec §4 Social).
+   hubViewportPage.css's shared `@media (max-width: 1080px)` collapses
+   .rh-hub-grid to one column by width alone, which also fires at our
+   844x390 compact-landscape target (same class of bug fixed earlier on
+   Solo/Learn/Home: a width-only breakpoint colliding with a short but
+   not narrow viewport). Restore the two-column feed+rail composition
+   there specifically, scoped to Social only via the compound selector.
+   ------------------------------------------------------------------ */
+@media (--short-landscape) {
+  .rh-hub-grid.social-layout-grid {
+    grid-template-columns: minmax(0, 1fr) 230px;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .rh-hub-main.social-main-column,
+  .rh-hub-rail.social-right-rail {
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  /* The design spec's Social left column is title + filter chips + feed —
+     no stat strip. Compress the masthead so the feed (the actual point of
+     the screen) is visible above the fold instead of buried under it. */
+  .rh-sb-page .rh-sb-masthead {
+    padding: 14px 18px 12px;
+  }
+
+  .rh-sb-page .rh-sb-title { font-size: 22px; }
+  .rh-sb-page .rh-sb-tagline { display: none; }
+  .rh-sb-page .rh-sb-meta { display: none; }
 }

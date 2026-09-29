@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components/GlobalNav';
 import { AppBottomTabBar } from '../components/nav/AppBottomTabBar';
+import { MODE_NAV_ACCENT } from '../components/nav/appPrimaryTabs';
 import { RouteChromeOwnedContext, type RouteChromeHints } from './routeChromeContext';
 import { GameplayPresentationContext } from './gameplayPresentation';
 import { SURFACE_BY_MODE } from './surfacePresentation';
@@ -32,7 +33,7 @@ export function AppPresentation({
           currentMode={mode}
           primaryArea={presentation.primaryArea}
           accountPresentation={activePresentation.account}
-          activeColor={routeChromeHints?.activeColor}
+          activeColor={routeChromeHints?.activeColor ?? MODE_NAV_ACCENT[mode]}
           compactChrome={routeChromeHints?.compactChrome}
           solidDarkChrome={routeChromeHints?.solidDarkChrome}
           contextual={activePresentation.chrome === 'contextual'}

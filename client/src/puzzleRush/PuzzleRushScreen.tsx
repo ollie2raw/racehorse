@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { useAuth } from '../auth/useAuth';
 import { fetchPuzzleRushToday, startPuzzleRush } from './api';
 import { PuzzleRushLeaderboardScreen } from './PuzzleRushLeaderboardScreen';
 import { PuzzleRushHubView } from './PuzzleRushHubView';
@@ -37,6 +38,7 @@ const FALLBACK_STAGES: PuzzleRushStage[] = [
 ];
 
 export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) {
+  const { profile } = useAuth();
   const [phase, setPhase] = useState<Phase>('intro');
   const [startResponse, setStartResponse] = useState<PuzzleRushStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) 
       <PuzzleRushLeaderboardScreen
         onBack={() => setPhase('intro')}
         onNavigate={onNavigate}
+        currentUsername={profile?.username ?? null}
       />
     );
   }

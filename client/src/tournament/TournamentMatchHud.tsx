@@ -17,7 +17,7 @@ export default function TournamentMatchHud(props: TournamentMatchHudProps) {
         <span className="hud-pill-label">{stage}</span>
       </div>
       {hasTurnLabel ? (
-        <span className={`wl-turn-label ${props.turnVariant ?? 'your-turn'}`}>{props.turnLabel}</span>
+        <span className={`wl-turn-label rh-hud-turn ${props.turnVariant ?? 'your-turn'}`}>{props.turnLabel}</span>
       ) : null}
     </div>
   );

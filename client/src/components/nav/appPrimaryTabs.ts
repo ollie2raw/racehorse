@@ -61,3 +61,16 @@ export const APP_PRIMARY_TAB_COLORS: Record<string, string> = {
   Tournament: '#F5A524',
   Social: '#0ea5e9',
 };
+
+/**
+ * The nav accent each mode registers once its (lazy) screen mounts — see the
+ * `activeColor` each screen passes to GlobalNav. The shell uses it before
+ * that, so the active tab never flashes the section default (Single Player's
+ * purple) while Daily Fritz / Puzzle Rush load. Keep in sync with the screens.
+ */
+export const MODE_NAV_ACCENT: Partial<Record<AppMode, string>> = {
+  singlePlayerHub: '#9B6CFF',
+  dailyFritz: 'var(--tier-elite)',
+  dailyFritzLeaderboard: 'var(--tier-elite)',
+  puzzleRush: 'var(--tier-standard)',
+};

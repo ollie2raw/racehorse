@@ -6,7 +6,9 @@ export type MobileFixtureStateId =
   | 'solo/empty'
   | 'solo/populated'
   | 'solo/journey-locked'
-  | 'learn/default';
+  | 'learn/default'
+  | 'tournament/open'
+  | 'tournament/registered';
 
 export type MobileApiResponse = { method: 'GET' | 'POST' | 'DELETE'; path: string; status: number; body: unknown };
 

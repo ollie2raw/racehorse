@@ -17,7 +17,7 @@ export function InGameBoardHud({
 }: InGameBoardHudProps) {
   return (
     <div
-      className={`wl-top-rail bot-top-rail${className ? ` ${className}` : ''}`}
+      className={`wl-top-rail bot-top-rail rh-hud-rail${className ? ` ${className}` : ''}`}
       data-ui="hud"
       style={style}
     >

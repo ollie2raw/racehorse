@@ -317,44 +317,32 @@
   content: none;
 }
 
+/* Design-handoff spec (design_handoff_mobile_ui/README.md): default cards
+   get a 1px border only, no ambient shadow/glow — glow is reserved for CTA
+   buttons and active states. Layered inset box-shadows previously here made
+   static cards look busier/less premium than the reference. */
 .daily-fritz-card-container {
-  border: 1px solid rgba(231, 182, 74, 0.26) !important;
-  /* inset top + left pixel highlights simulate caught warm light on the edge */
-  box-shadow:
-    inset 0 1px 0 rgba(231, 182, 74, 0.40),
-    inset 1px 0 0 rgba(231, 182, 74, 0.18),
-    inset 0 -40px 70px rgba(0,0,0,0.32),
-    0 18px 38px rgba(0,0,0,0.30) !important;
-  transition: box-shadow 200ms ease, filter 200ms ease;
+  background-color: #131A2B;
+  border: 1px solid rgba(228, 165, 59, 0.3) !important;
+  box-shadow: none !important;
+  transition: border-color 200ms ease, filter 200ms ease;
 }
 
 .daily-fritz-card-container:hover {
-  filter: brightness(1.04);
-  box-shadow:
-    inset 0 1px 0 rgba(231, 182, 74, 0.58),
-    inset 1px 0 0 rgba(231, 182, 74, 0.26),
-    inset 0 -40px 70px rgba(0,0,0,0.28),
-    0 22px 46px rgba(0,0,0,0.36) !important;
+  filter: brightness(1.05);
+  border-color: rgba(228, 165, 59, 0.5) !important;
 }
 
 .daily-puzzle-card-container {
-  border: 1px solid rgba(88, 166, 255, 0.28) !important;
-  /* inset top + right pixel highlights simulate caught cool light on the edge */
-  box-shadow:
-    inset 0 1px 0 rgba(88, 166, 255, 0.40),
-    inset -1px 0 0 rgba(88, 166, 255, 0.18),
-    inset 0 -40px 70px rgba(0,0,0,0.32),
-    0 18px 38px rgba(0,0,0,0.30) !important;
-  transition: box-shadow 200ms ease, filter 200ms ease;
+  background-color: #111A2C;
+  border: 1px solid rgba(55, 199, 240, 0.3) !important;
+  box-shadow: none !important;
+  transition: border-color 200ms ease, filter 200ms ease;
 }
 
 .daily-puzzle-card-container:hover {
-  filter: brightness(1.04);
-  box-shadow:
-    inset 0 1px 0 rgba(88, 166, 255, 0.58),
-    inset -1px 0 0 rgba(88, 166, 255, 0.26),
-    inset 0 -40px 70px rgba(0,0,0,0.28),
-    0 22px 46px rgba(0,0,0,0.36) !important;
+  filter: brightness(1.05);
+  border-color: rgba(55, 199, 240, 0.5) !important;
 }
 
 .daily-card--completed {
@@ -866,7 +854,6 @@
     min-height: 0;
     padding: 12px 13px 11px;
     border-radius: 16px;
-    background-color: #07101c;
   }
 
   .today-home .home-card-content {
@@ -957,12 +944,27 @@
     font-size: 15px;
   }
 
+  /* Design-handoff spec: Fritz CTA is a solid gold button with dark-ink
+     text and a restrained glow; Puzzle CTA is an outline-cyan button. */
   .today-home .daily-fritz-card-container .home-card-action {
-    background: #21190d;
+    background: #E4A53B;
+    color: #1A1206;
+    box-shadow: 0 6px 20px rgba(228, 165, 59, 0.22);
+  }
+
+  .today-home .daily-fritz-card-container .home-card-action span {
+    color: #1A1206 !important;
   }
 
   .today-home .daily-puzzle-card-container .home-card-action {
-    background: #0b1a2c;
+    background: transparent;
+    border: 1.5px solid #37C7F0;
+    color: #5FE0FF;
+    box-shadow: none;
+  }
+
+  .today-home .daily-puzzle-card-container .home-card-action span {
+    color: #5FE0FF !important;
   }
 
   .today-home .home-card-art {
