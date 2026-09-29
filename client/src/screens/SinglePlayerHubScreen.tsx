@@ -185,7 +185,7 @@ export default function SinglePlayerHubScreen({
       <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
         <GlobalNav
           currentMode="singlePlayerHub"
-          activeColor="#E7B64A"
+          activeColor="#9B6CFF"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
           onSignOut={onSignOut}

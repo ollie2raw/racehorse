@@ -69,7 +69,7 @@ export const APP_PRIMARY_TAB_COLORS: Record<string, string> = {
  * purple) while Daily Fritz / Puzzle Rush load. Keep in sync with the screens.
  */
 export const MODE_NAV_ACCENT: Partial<Record<AppMode, string>> = {
-  singlePlayerHub: '#E7B64A',
+  singlePlayerHub: '#9B6CFF',
   dailyFritz: 'var(--tier-elite)',
   dailyFritzLeaderboard: 'var(--tier-elite)',
   puzzleRush: 'var(--tier-standard)',
