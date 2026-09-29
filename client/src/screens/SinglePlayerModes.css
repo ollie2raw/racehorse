@@ -37,6 +37,16 @@
   font-size: 44px;
 }
 
+/* Desktop: the text column is capped at 55% of a ~457px card, so "Ghost Mode"
+   at 44px wrapped onto two 66px lines and pushed its stats into the CTA
+   (#310 regression). Keep titles on one line with a display line-height. */
+@media (--desk) {
+  .sp-solo-mode-card__title {
+    line-height: 1.05;
+    white-space: nowrap;
+  }
+}
+
 .sp-solo-mode-card__desc {
   font-size: 16px;
 }
