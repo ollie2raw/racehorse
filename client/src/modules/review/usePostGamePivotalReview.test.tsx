@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* eslint-disable max-lines -- one suite per hook; durable-completion cases belong beside the gate tests they extend. */
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
