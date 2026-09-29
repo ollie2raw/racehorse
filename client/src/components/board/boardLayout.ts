@@ -58,9 +58,22 @@ interface HubLookup {
 
 // ─── Layout Engine ───────────────────────────────────────────
 
+export interface BoardLayoutOptions {
+  /**
+   * Bend vertical branch arms sideways after this many tiles (a "corner", as
+   * on a real table). Used where the board viewport is short and wide (phone
+   * landscape) so long arms never outgrow it. Omitted = straight arms
+   * (unchanged desktop/web layout).
+   */
+  maxVerticalArmTiles?: number;
+  /** The tile being placed is a double: arm-end zones stay straight, since a double never turns the corner. */
+  pendingTileIsDouble?: boolean;
+}
+
 export function computeBoardLayout(
   board: BoardState | null,
   validPositions: PlacementPosition[] = [],
+  options: BoardLayoutOptions = {},
 ): BoardLayout {
   const tiles: BoardLayoutTile[] = [];
   const zones: LayoutZone[] = [];
@@ -108,14 +121,14 @@ export function computeBoardLayout(
   }
 
   if (!isRenderableNonNullBoard(board)) {
-    return computeBoardLayout(null, validPositions);
+    return computeBoardLayout(null, validPositions, options);
   }
 
   const { mainLine, hubDoubles } = board;
 
   for (const pt of mainLine) {
     if (!pt?.tile || typeof pt.orientation !== 'string') {
-      return computeBoardLayout(null, validPositions);
+      return computeBoardLayout(null, validPositions, options);
     }
   }
 
@@ -178,6 +191,8 @@ export function computeBoardLayout(
       hubCenters,
       layoutHubBranches,
       laneHorizontal,
+      options.maxVerticalArmTiles,
+      options.pendingTileIsDouble,
     );
   };
 
@@ -326,6 +341,8 @@ function layoutBranches(
     maxY: number;
   },
   laneHorizontal: boolean,
+  maxVerticalArmTiles?: number,
+  pendingTileIsDouble?: boolean,
 ): {
   tiles: BoardLayoutTile[];
   zones: LayoutZone[];
@@ -367,6 +384,19 @@ function layoutBranches(
     let currentX = hubX + (verticalArms ? 0 : direction * (TILE_UNIT + DOUBLE_CROSS_GAP));
     let currentY = hubY + (verticalArms ? direction * (TILE_UNIT + DOUBLE_CROSS_GAP) : 0);
 
+    // Corner: a vertical arm that reaches maxVerticalArmTiles turns sideways,
+    // away from the board's centre so it clears the main line. The corner tile
+    // abuts the side of the last tile's outer half — the pip that is open.
+    const canBend = verticalArms && typeof maxVerticalArmTiles === 'number' && maxVerticalArmTiles > 0;
+    const turnDir = hubX < 0 ? -1 : 1;
+    let bent = false;
+    let rowY = 0;
+    let placedInArm = 0;
+    let lastCenterY = hubY;
+    let lastWasDouble = true;
+    const shouldBendNext = () =>
+      canBend && !bent && placedInArm >= (maxVerticalArmTiles as number) && !lastWasDouble;
+
     if (branchTiles.length > 0) {
       // Layout branch tiles
       for (let i = 0; i < branchTiles.length; i++) {
@@ -374,6 +404,54 @@ function layoutBranches(
         if (!pt?.tile || typeof pt.orientation !== 'string') continue;
 
         const double = isDouble(pt.tile);
+
+        // A double never turns the corner: it sits across the arm like any
+        // other double, and the turn waits for the next regular tile.
+        if (!double && shouldBendNext()) {
+          bent = true;
+          rowY = lastCenterY + direction * (TILE_UNIT / 2);
+          currentX = hubX + turnDir * (TILE_UNIT / 2 + TILE_GAP);
+        }
+
+        if (bent) {
+          // Horizontal run after the corner. Flip follows travel direction, the
+          // same rule every other lane uses (negative travel inverts).
+          const span = double ? TILE_UNIT : TILE_UNIT * 2;
+          const bentFlipped = pt.orientation.endsWith('flipped');
+          const cx = currentX + turnDir * (span / 2);
+          tiles.push({
+            tile: pt.tile,
+            x: cx,
+            y: rowY,
+            rotation: double ? 90 : 0,
+            flipped: turnDir === -1 ? !bentFlipped : bentFlipped,
+            key: `branch-${hubId}-${armIdx}-${i}-${pt.tile.high}-${pt.tile.low}`,
+          });
+          if (double) {
+            const childHubId = hubLookup.byLaneDepth.get(`branch-${hubId}-${armIdx}|${i}`);
+            if (typeof childHubId === 'number') {
+              hubCenters.set(childHubId, { x: cx, y: rowY });
+              const childHub = hubLookup.byId.get(childHubId);
+              if (childHub && childHub.isCrossed) {
+                const nested = layoutHubBranches(childHub, childHubId, cx, rowY, true);
+                tiles.push(...(nested.tiles ?? []));
+                zones.push(...(nested.zones ?? []));
+                minX = Math.min(minX, nested.minX);
+                maxX = Math.max(maxX, nested.maxX);
+                minY = Math.min(minY, nested.minY);
+                maxY = Math.max(maxY, nested.maxY);
+              }
+            }
+          }
+          currentX = cx + turnDir * (span / 2 + TILE_GAP);
+          minX = Math.min(minX, cx - span / 2);
+          maxX = Math.max(maxX, cx + span / 2);
+          minY = Math.min(minY, rowY - (double ? TILE_UNIT : TILE_UNIT / 2));
+          maxY = Math.max(maxY, rowY + (double ? TILE_UNIT : TILE_UNIT / 2));
+          lastWasDouble = double;
+          placedInArm += 1;
+          continue;
+        }
 
         const tileSpan = double ? TILE_UNIT : TILE_UNIT * 2;
         const rotation = verticalArms ? (double ? 0 : 90) : double ? 90 : 0;
@@ -429,6 +507,10 @@ function layoutBranches(
           }
         }
 
+        lastCenterY = centerY;
+        lastWasDouble = double;
+        placedInArm += 1;
+
         if (verticalArms) {
           currentY = centerY + direction * (tileSpan / 2 + TILE_GAP);
         } else {
@@ -442,7 +524,25 @@ function layoutBranches(
 
       // Placement zone at end of branch
       const branchPos: PlacementPosition = `branch-${hubId}-${armIdx}`;
-      if (validPositions.includes(branchPos)) {
+      if (validPositions.includes(branchPos) && (bent || (!pendingTileIsDouble && shouldBendNext()))) {
+        // Around the corner: the zone sits where the next tile will land.
+        const zRowY = bent ? rowY : lastCenterY + direction * (TILE_UNIT / 2);
+        const zStartX = bent ? currentX : hubX + turnDir * (TILE_UNIT / 2 + TILE_GAP);
+        const zoneX = zStartX + turnDir * TILE_UNIT;
+        zones.push({
+          position: branchPos,
+          x: zoneX,
+          y: zRowY,
+          width: TILE_UNIT * 2,
+          height: TILE_UNIT,
+          dirX: turnDir,
+          dirY: 0,
+          lane: 'horizontal',
+          key: `zone-branch-${hubId}-${armIdx}`,
+        });
+        minX = Math.min(minX, zoneX - TILE_UNIT);
+        maxX = Math.max(maxX, zoneX + TILE_UNIT);
+      } else if (validPositions.includes(branchPos)) {
         const zoneX = verticalArms ? currentX : currentX + direction * TILE_UNIT;
         const zoneY = verticalArms ? currentY + direction * TILE_UNIT : currentY;
         zones.push({

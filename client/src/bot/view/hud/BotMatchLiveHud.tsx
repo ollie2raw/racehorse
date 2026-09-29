@@ -31,7 +31,7 @@ export function BotMatchLiveHudLeft({
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <button
         type="button"
-        className={`wl-player-pill wl-player-pill-btn score-card${botTurn ? ' is-active-turn' : ''}`}
+        className={`wl-player-pill wl-player-pill-btn rh-hud-pill score-card${botTurn ? ' is-active-turn' : ''}`}
         ref={opponentPillRef}
         onClick={onOpenScoreTrack}
         aria-label="Open score track"
@@ -41,9 +41,9 @@ export function BotMatchLiveHudLeft({
             {ghostSubLabel ? (
               <span className="wl-player-subtitle">{formatGhostName(ghostSubLabel)}</span>
             ) : null}
-            <span className="wl-player-label">{opponentLabel}</span>
+            <span className="wl-player-label rh-hud-label">{opponentLabel}</span>
           </div>
-          <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
+          <AnimatedScore value={match.players.bot.score} className="wl-player-score rh-hud-score" />
         </div>
       </button>
       {hideTileRack ? null : (
@@ -61,15 +61,15 @@ export function BotMatchLiveHudRight({
   return (
     <button
       type="button"
-      className={`wl-player-pill wl-player-pill-btn score-card is-you${!botTurn ? ' is-active-turn' : ''}`}
+      className={`wl-player-pill wl-player-pill-btn rh-hud-pill score-card is-you${!botTurn ? ' is-active-turn' : ''}`}
       onClick={onOpenScoreTrack}
       aria-label="Open score track"
     >
       <div className="wl-player-card-content">
         <div className="wl-player-card-text">
-          <span className="wl-player-label">You</span>
+          <span className="wl-player-label rh-hud-label">You</span>
         </div>
-        <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+        <AnimatedScore value={match.players.you.score} className="wl-player-score rh-hud-score" />
       </div>
     </button>
   );

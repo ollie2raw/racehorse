@@ -25,6 +25,7 @@ if (import.meta.env.DEV && !import.meta.env.VITE_SENTRY_DSN) {
   );
 }
 
+import { Capacitor } from '@capacitor/core';
 import { StrictMode } from 'react';
 import { track } from './lib/analytics';
 import { createRoot } from 'react-dom/client';
@@ -58,6 +59,11 @@ import './match/gameLayoutLayers.css';
 import './styles/racehorse-background.css';
 import './styles/rh-image-surface.css';
 import './styles/board/index.css';
+import './styles/native-landscape.css';
+
+// Native-shell-only layout rules key off this class, so the web build
+// (including phones in landscape on playracehorse.com) is untouched.
+if (Capacitor.isNativePlatform()) document.documentElement.classList.add('rh-native');
 
 {installGlobalErrorHandlers();}
 

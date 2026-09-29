@@ -1,4 +1,6 @@
+import { Capacitor } from '@capacitor/core';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { capacitorAuthStorage } from './capacitorAuthStorage';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -12,6 +14,10 @@ function makeClient(): SupabaseClient {
       autoRefreshToken: true,
       // Recovery tokens are consumed manually before BrowserRouter starts.
       detectSessionInUrl: false,
+      // Inside the native shell, localStorage's WebView container is not
+      // durable across relaunches — use Capacitor Preferences instead.
+      // The plain web build (playracehorse.com) keeps the default storage.
+      ...(Capacitor.isNativePlatform() ? { storage: capacitorAuthStorage } : {}),
     },
   });
 }

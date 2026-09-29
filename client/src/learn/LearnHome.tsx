@@ -28,7 +28,7 @@ import {
 } from './guidedMatch/guidedMatchCandidateValidation';
 import labScientistArt from '../assets/singlePlayerHub/fritzScientistLab.webp';
 const themeVars = {
-  '--rh-bg': '#050911',
+  '--rh-bg': '#0A0E17',
   '--rh-panel': '#09101A',
   '--rh-panel-2': '#0B121D',
   '--rh-brass': '#D7A64A',
@@ -58,6 +58,8 @@ type LearnModeCard = {
   title: string;
   titleColor: string;
   desc: string;
+  /** One-line version for the native app's compact cards (desc stays for screen readers). */
+  shortDesc?: string;
   badges?: string[];
   variant?: 'tier-elite' | 'tier-standard' | 'tier-master';
   chevronColor?: string;
@@ -72,8 +74,9 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     containerClass: 'learn-rules-card-container',
     sectionRounded: 'rounded-[20px] rounded-tr-[5px]',
     title: 'How to Play',
-    titleColor: '#34D399',
+    titleColor: '#3ECB8B',
     desc: 'Walk through the rules and core instincts before your first coached hand.',
+    shortDesc: 'Learn the rules and core instincts.',
     action: 'howToPlay',
     ctaLabel: 'Start',
   },
@@ -83,10 +86,11 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     containerClass: 'daily-fritz-card-container',
     sectionRounded: 'rounded-[20px] rounded-tl-[5px]',
     title: 'Guided Match',
-    titleColor: '#E7B64A',
+    titleColor: '#E4A53B',
     desc: 'One coached game, every move narrated.',
+    shortDesc: 'A coached game, move by move.',
     variant: 'tier-elite',
-    chevronColor: '#FFD76A',
+    chevronColor: '#F3C464',
     action: 'guided',
     ctaLabel: 'Play',
   },
@@ -96,10 +100,11 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     containerClass: 'sp-lab-mode-card-container learn-lab-card-container',
     sectionRounded: 'rounded-[20px] rounded-br-[5px]',
     title: 'The Lab',
-    titleColor: '#C77DFF',
+    titleColor: '#9B6EF3',
     desc: "Some starting hands win in one turn — all 7 tiles in a single chain. Learn to spot them instantly.",
+    shortDesc: 'Spot the hands that win in one turn.',
     variant: 'tier-master',
-    chevronColor: '#E9D5FF',
+    chevronColor: '#B994FF',
     action: 'noBrainer',
     ctaLabel: 'Play',
   },
@@ -111,6 +116,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     title: 'Lesson Library',
     titleColor: '#34D399',
     desc: 'Short focused lessons on strategy and scoring.',
+    shortDesc: 'Bite-size strategy lessons.',
   },
 ];
 
@@ -450,7 +456,14 @@ export default function LearnHome({
                           >
                             {mode.title}
                           </h2>
-                          <p className={`learn-mode-card__desc ${isLocked ? 'is-muted' : ''}`}>{cardDesc}</p>
+                          <p className={`learn-mode-card__desc ${isLocked ? 'is-muted' : ''}`}>
+                            {mode.shortDesc ? (
+                              <>
+                                <span className="sp-solo-mode-card__desc-full">{cardDesc}</span>
+                                <span className="sp-solo-mode-card__desc-short" aria-hidden="true">{mode.shortDesc}</span>
+                              </>
+                            ) : cardDesc}
+                          </p>
                         </div>
 
                         {cardBadges && cardBadges.length > 0 ? (

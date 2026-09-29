@@ -13,7 +13,9 @@ export function computeResponsiveHandTileSize(
   const tileCount = Math.max(1, handLength);
   const isLandscape = innerWidth > innerHeight;
   const isMobileWidth = innerWidth <= 900;
-  const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
+  // Phone landscape (short viewport): split past 8, like every match hand.
+  const isShortLandscape = isLandscape && innerHeight <= 430;
+  const forceTwoRows = (!isLandscape && isMobileWidth && tileCount > 7) || (isShortLandscape && tileCount > 8);
   const maxTileSize = 56;
   const containerWidth = innerWidth - 40;
   const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;

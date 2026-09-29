@@ -154,7 +154,10 @@ export function DailyFritzHubView({
                     <DfIconCalendar />
                   </div>
                   <div className="df-pvf-overview-body">
-                    <div className="df-pvf-overview-value">{dateLabel}</div>
+                    <div className="df-pvf-overview-value">
+                      <span className="rh-web-only">{dateLabel}</span>
+                      <span className="rh-app-only" aria-hidden="true">{hub.dateShortLabel}</span>
+                    </div>
                     <div className="df-pvf-overview-key">Date</div>
                   </div>
                 </div>
@@ -163,7 +166,10 @@ export function DailyFritzHubView({
                     <DfPvfIconCrown color="var(--tier-elite)" />
                   </div>
                   <div className="df-pvf-overview-body">
-                    <div className="df-pvf-overview-value">{tierLabel}</div>
+                    <div className="df-pvf-overview-value">
+                      <span className="rh-web-only">{tierLabel}</span>
+                      <span className="rh-app-only" aria-hidden="true">{hub.tierShortLabel}</span>
+                    </div>
                     <div className="df-pvf-overview-key">Tier</div>
                   </div>
                 </div>
