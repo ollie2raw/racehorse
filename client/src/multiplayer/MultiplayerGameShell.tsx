@@ -6,7 +6,11 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { isMultiplayerPostGameReviewLocallyEligible, isPositionalCoachingProseEnabled } from '../training/pivotalReview/postGameReviewPolicy';
+import {
+  isMultiplayerPostGameReviewLocallyEligible,
+  isPositionalCoachingProseEnabled,
+  isPostGameReviewAudience,
+} from '../training/pivotalReview/postGameReviewPolicy';
 const GameReviewer = React.lazy(() => import('../analyzer/GameReviewer'));
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
@@ -166,7 +170,9 @@ function MultiplayerGameShellComponent({
   const multiplayerRatingRefreshKeyRef = useRef('');
   const previousMultiplayerGameOverRef = useRef(false);
   const multiplayerReviewPersistedKeyRef = useRef('');
-  const multiplayerReviewCohortEnabled = usePostGameReviewAccess(authUser?.id);
+  const multiplayerReviewCohortEnabled = usePostGameReviewAccess(
+    isPostGameReviewAudience(authUser?.email) ? authUser?.id : null,
+  );
 
   const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => {
     const moveNumber =

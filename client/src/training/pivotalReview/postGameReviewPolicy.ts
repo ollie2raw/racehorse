@@ -1,4 +1,5 @@
 import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
+import { isAdminUser } from '../../auth/isAdminUser';
 
 /**
  * Post-game review eligibility (v1).
@@ -12,6 +13,16 @@ import { POST_GAME_REVIEW_VISIBLE, REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from
  * constant as the visibility switch. Multiplayer review remains cohort gated.
  */
 export const POST_GAME_REVIEW_DEFERRED_DAILY_FRITZ = true;
+
+/**
+ * Post-game review is admin-only for now (Play vs Fritz and multiplayer).
+ * Local dev keeps it on so the review can still be worked on. Every review
+ * surface ANDs this into its existing gate, so widening the audience later is
+ * a one-line change here.
+ */
+export function isPostGameReviewAudience(email: string | null | undefined): boolean {
+  return import.meta.env.DEV || isAdminUser(email);
+}
 
 export function isPostGameReviewEnabled(serverCohortEnabled = false): boolean {
   return Boolean(serverCohortEnabled && POST_GAME_REVIEW_VISIBLE);
