@@ -1666,6 +1666,76 @@
     min-height: 0 !important;
   }
 
+  /* ── Play vs Fritz result ──────────────────────────────────────────
+     Same card as the Daily Fritz result. Left: headline, the two scores,
+     rating, review link. Right: final score + margin, actions right under.
+     Deal and Result are dropped here: the subtitle and headline say them. */
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd {
+    width: min(620px, 100%) !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__stats {
+    grid-row: 1;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__stat:nth-child(n + 3) {
+    display: none !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__standings {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0 !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__standing {
+    padding-block: 7px !important;
+  }
+
+  /* Rating sits under the actions as one line: "RATING  −12 • 1486".
+     The section label repeats the pill's own label, so it is hidden. */
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__meta {
+    grid-column: 2;
+    grid-row: 3;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__meta-label {
+    display: none !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .df-result-meta-pill {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 12px !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .df-result-meta-value {
+    margin: 0 !important;
+  }
+
+  /* Note / review link auto-place under the scores in column 1, so a row
+     only exists when its content does (no gap when signed out). */
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__note {
+    grid-column: 1;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__link {
+    grid-column: 1;
+    justify-self: start;
+    margin: 0 !important;
+  }
+
+  .rh-native .df-result-overlay[aria-label='Play vs Fritz result'] .dfd__actions {
+    grid-row: 2;
+    align-self: start;
+  }
+
   /* ── Daily Fritz loading ("Preparing today's set") ────────────────
      Full-bleed like the hub it opens into (no lighter inset band), the
      lockup centred in the space under the top bar and sized for a phone. */
