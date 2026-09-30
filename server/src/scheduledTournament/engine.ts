@@ -704,6 +704,9 @@ export async function closeRegistrationAndStart(
   return { started: true };
 }
 
+/** status_reason marking the single A6 deadline extension (see below). */
+export const BOTH_JOINED_START_RETRY_REASON = 'all_joined_start_retry';
+
 /**
  * Single-instance first-release reconciliation for expired ready matches.
  *
@@ -739,19 +742,37 @@ export async function reconcileExpiredReadyMatches(
       }
       if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
       if (!match.player1_id || !match.player2_id) continue;
-      if (allHumanPlayersJoined(match) && match.room_code) {
+      const everyoneJoined = allHumanPlayersJoined(match);
+      if (everyoneJoined && match.room_code) {
+        let roomExists = false;
+        let roomStarted = false;
         try {
           const room = persistence.getRoom(match.room_code);
-          if (room.state) {
-            await persistence.updateMatch(match.id, {
-              status: 'in_progress',
-              started_at: match.started_at ?? now.toISOString(),
-              status_reason: null,
-            });
-            continue;
-          }
+          roomExists = true;
+          roomStarted = Boolean(room.state);
         } catch {
-          /* room missing — fall through to no-show resolution */
+          /* room missing — fall through to the rehydrate branch below */
+        }
+        if (roomStarted) {
+          await persistence.updateMatch(match.id, {
+            status: 'in_progress',
+            started_at: match.started_at ?? now.toISOString(),
+            status_reason: null,
+          });
+          continue;
+        }
+        // A6: every player is here but the game never started (a slow or
+        // failed start). That is not a no-show. Extend the deadline once and
+        // re-send match_ready: the clients re-attach, and the attach handler's
+        // normal start path runs again. Only a second expiry resolves.
+        if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
+          await persistence.updateMatch(match.id, {
+            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+            status_reason: BOTH_JOINED_START_RETRY_REASON,
+          });
+          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+          log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
+          continue;
         }
       }
 
@@ -810,7 +831,11 @@ export async function reconcileExpiredReadyMatches(
           winnerSource: 'no_show',
           statusReason: noShowUserId
             ? playerNoShowReason(match, noShowUserId)
-            : 'double_no_show_higher_seed_advanced',
+            : everyoneJoined
+              // Present players whose game would not start even after the one
+              // extension: resolved, but never recorded as a no-show.
+              ? 'start_failed_after_retry_higher_seed_advanced'
+              : 'double_no_show_higher_seed_advanced',
           noShowUserId,
         },
         persistence,
