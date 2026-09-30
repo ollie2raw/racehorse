@@ -82,7 +82,7 @@ export interface EnginePersistence {
   updateTournamentStatus(
     id: string,
     status: ScheduledTournamentRow['status'],
-    extra?: Partial<Pick<ScheduledTournamentRow, 'winner_id'>>,
+    extra?: Partial<Pick<ScheduledTournamentRow, 'winner_id' | 'cancel_reason'>>,
   ): Promise<void>;
   createReservedRoom(code: string, config: Partial<Config>): Room;
   getRoom(code: string): Room;

@@ -76,7 +76,7 @@ export async function fetchTournamentsByStatus(
 export async function updateTournamentStatus(
   id: string,
   status: ScheduledTournamentStatus,
-  extra: Partial<Pick<ScheduledTournamentRow, 'winner_id'>> = {},
+  extra: Partial<Pick<ScheduledTournamentRow, 'winner_id' | 'cancel_reason'>> = {},
 ): Promise<void> {
   await supabaseFetch(
     `/rest/v1/${TABLES.tournaments}?id=eq.${encodeURIComponent(id)}`,

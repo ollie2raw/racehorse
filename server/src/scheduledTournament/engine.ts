@@ -663,8 +663,10 @@ export async function cancelTournament(
   io: Server,
   tournamentId: string,
   persistence: EnginePersistence = defaultEnginePersistence,
+  /** Recorded on the row (cancel_reason) so a cancelled event says why. */
+  reason: string | null = null,
 ): Promise<void> {
-  await persistence.updateTournamentStatus(tournamentId, 'cancelled');
+  await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
   io.emit('tournament:cancelled', { tournamentId });
 }
 
@@ -690,7 +692,7 @@ export async function closeRegistrationAndStart(
   const regs = await persistence.fetchRegistrations(tournamentId);
   const active = regs.filter((r) => r.status === 'registered');
   if (active.length < MIN_HUMANS_TO_START) {
-    await cancelTournament(io, tournamentId, persistence);
+    await cancelTournament(io, tournamentId, persistence, 'not_enough_players');
     return { started: false, reason: 'not_enough_players' };
   }
   const tournament = await persistence.fetchTournamentById(tournamentId);

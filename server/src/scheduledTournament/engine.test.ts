@@ -131,6 +131,7 @@ function makePersistence(
     updateTournamentStatus: async (_id, status, extra) => {
       store.tournament.status = status;
       if (extra?.winner_id !== undefined) store.tournament.winner_id = extra.winner_id;
+      if (extra?.cancel_reason !== undefined) store.tournament.cancel_reason = extra.cancel_reason;
     },
     // Room infrastructure mocks — return shape-only stubs.
     createReservedRoom: vi.fn((_code: string, _config: unknown) => ({} as any)),

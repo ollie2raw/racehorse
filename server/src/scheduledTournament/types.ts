@@ -19,6 +19,8 @@ export type ScheduledTournamentRow = {
   max_players: number;
   winner_id: string | null;
   created_at: string;
+  /** Why the tournament was cancelled (null for any other status). */
+  cancel_reason?: string | null;
 };
 
 export type RegistrationStatus =
