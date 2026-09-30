@@ -2276,6 +2276,152 @@
     zoom: 0.63;
   }
 
+  /* ── Learn: Guided Match ───────────────────────────────────────────
+     Coach column left, game panel right. On desktop the game section is
+     auto-height with a 380px+ board floor, so in a 402px screen the board
+     and hand fell below the fold. Here the game section fills the panel
+     under a slim stats strip; the board takes what is left, hand at the
+     bottom at the match tile size. */
+  /* No floating nav on this screen, so reclaim its reserved top band, and
+     drop the page heading so the coach card gets the full column. */
+  .rh-native .rh-presentation .learn-guided-pvf .pvf-layout.learn-guided-pvf__layout {
+    padding-top: max(var(--rh-safe-top), 12px) !important;
+    padding-bottom: max(var(--rh-safe-bottom), 10px) !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-pvf__header {
+    display: none !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__content {
+    height: 100%;
+    padding: 14px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__header {
+    gap: 6px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__title {
+    font-size: 20px !important;
+    line-height: 1.1 !important;
+    margin: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__divider {
+    margin-block: 8px !important;
+  }
+
+  /* Coaching prose is long-form (3 short paragraphs): smaller type, and if a
+     tip still overruns, it scrolls inside the card, never the page. */
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__body-wrap {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__body {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__paragraph {
+    font-size: 12.5px !important;
+    line-height: 1.4 !important;
+    margin-block: 0 8px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__footer {
+    flex: 0 0 auto !important;
+    padding-top: 8px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-pvf__panel {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-panel-section--state {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-strip {
+    padding: 4px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-item {
+    min-height: 0 !important;
+    padding: 4px 6px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-item :is(span, strong, div) {
+    line-height: 1.1 !important;
+  }
+
+  /* Beats the setup screens' `.pvf-control-panel > *` pin (flex: 0 0 auto):
+     this panel's game section must fill it. */
+  .rh-native .rh-presentation .learn-guided-pvf .learn-guided-pvf__panel > .learn-guided-panel-section--game {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-game-stage {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-live-board-zone {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-game-stage__hand {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-live-hand-deck {
+    padding-block: 4px !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .hand-row .domino-tile {
+    zoom: 0.7;
+  }
+
+  .rh-native .learn-guided-pvf .hand-row {
+    gap: 6px !important;
+  }
+
+  .rh-native .learn-guided-pvf .hand-container {
+    min-height: 0 !important;
+    height: auto !important;
+    gap: 4px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-live-board-zone :is(.rh-board-canvas, .rh-board-frame, .rh-board-stage) {
+    min-height: 0 !important;
+  }
+
   /* ── Puzzle Rush top bar ───────────────────────────────────────────
      Same 36px row as the match pills. The run pill (score | stage) was
      ~58px and grew when the time-bonus chip appeared, so the bar pushed
