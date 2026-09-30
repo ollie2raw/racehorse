@@ -2285,6 +2285,16 @@
     display: none !important;
   }
 
+  /* Full-bleed like the match screens: the lab's own background runs to the
+     screen edges and the safe areas pad its content instead. */
+  .rh-native .rh-presentation-content:has(.practice-lab) {
+    padding: 0 !important;
+  }
+
+  .rh-native .practice-lab .walnut-match-layout {
+    padding: max(var(--rh-safe-top), 10px) calc(var(--rh-safe-right) + 10px) max(var(--rh-safe-bottom), 8px) calc(var(--rh-safe-left) + 10px) !important;
+  }
+
   .rh-native .practice-lab .rh-hud-rail {
     align-items: center !important;
   }
@@ -2299,6 +2309,10 @@
   }
 
   .rh-native .practice-lab .rh-nbl-goal {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1 !important;
     height: 32px !important;
     min-height: 0 !important;
     padding: 0 16px !important;
