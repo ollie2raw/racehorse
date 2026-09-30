@@ -281,4 +281,9 @@
   .rh-settings-head {
     grid-column: 1 / -1;
   }
+
+  /* Second row: Sound, then the danger zone across the other two columns. */
+  .rh-settings-section--danger {
+    grid-column: span 2;
+  }
 }

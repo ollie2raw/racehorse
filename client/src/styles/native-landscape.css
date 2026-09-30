@@ -2389,10 +2389,14 @@
     padding: 8px max(var(--rh-safe-right), 16px) max(var(--rh-safe-bottom), 8px) max(var(--rh-safe-left), 16px) !important;
   }
 
-  /* Bottom row: Preferences and Session have little in them, so their
-     content centres in the row instead of hanging at the top. */
-  .rh-native .rh-settings > .rh-settings-section:nth-last-of-type(-n + 3):not(.rh-settings-section--danger) {
+  /* Bottom row: Sound (centred in its card) and the danger zone across
+     the other two columns, so its copy runs two lines wide. */
+  .rh-native .rh-settings > .rh-settings-section:nth-last-of-type(2) {
     justify-content: center;
+  }
+
+  .rh-native .rh-settings > .rh-settings-section--danger {
+    grid-column: span 2;
   }
 
   /* The nav already says where you are. */
