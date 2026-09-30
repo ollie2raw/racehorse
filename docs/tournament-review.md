@@ -18,6 +18,32 @@ Every claim is tagged with how it was established:
 
 Line numbers refer to the base commit above.
 
+## Status update — Phase 1 ("make events safe"), branch `tournament-health`
+
+**Re-verified 2026-09-29 against `origin/main` = `1ea8e41c`** (the same commit
+this review was written against, so the cited line numbers still hold). Each
+finding below was re-read in the current code; none had changed.
+
+| Finding | Still reproduces on main? | Phase 1 change |
+|---|---|---|
+| **A1** non-atomic bracket creation; `generate_tournament_bracket` never called | Yes. `generateBracket` (`engine.ts:294-374`) still inserts row by row, returns early if any row exists, and sets `in_progress` last; `grep` still finds no caller of the RPC. One addition: the RPC as written (v1) *also* only acts when zero rows exist, so calling it alone would not repair the 4-of-7 state from C4. | Fixed. RPC v2 (`2026-09-29_tournament_bracket_rpc_repair.sql`) is the only bracket path; it locks the tournament row, validates the seed list against live registrations, replaces unplayed partial rows, and is a no-op on retry. The duplicate seeding function is gone: `engine.ts` pairs through `bracket.ts`. |
+| **A2** racy seat cap; no close-time check | Yes. `routes.ts:319-337` and `socketHandlers.ts` still read, count, then insert, and compare status only. | Fixed. `register_for_tournament` RPC checks status, `registration_close_at` (database clock) and the cap under the tournament row lock; stable codes `registration_closed`, `tournament_full`. |
+| **A6** both joined, game not started → treated as double no-show | Yes. `engine.ts:755-808` falls through to the higher-seed branch. | Fixed. Deadline extended once and `match_ready` re-sent; only a second expiry resolves, recorded as `start_failed_after_retry_higher_seed_advanced`, never as a no-show. |
+| **A7** REST withdraw has no state guard | Yes. `routes.ts:343-360` still calls `withdrawRegistration` (a hard `DELETE`) unconditionally. | Fixed. `withdraw_from_tournament` RPC refuses (`withdraw_closed`) once registration has closed and never deletes after that. |
+| **B8** stored seed ≠ bracket seed | Yes (`engine.ts:350-352`). | Fixed as part of A1: the RPC writes the bracket (rating) seed. |
+| **Q9** close-and-start retried forever | Yes (`scheduler.ts:84-86`). | Fixed. After 5 consecutive failed ticks: Sentry alert (`tournament_alert: close_start_failed`), then cancel with `cancel_reason`. One failing event no longer stalls the whole tick. |
+
+Not changed in Phase 1 by decision: **A3** (absent player can be champion) and
+**A4** (no human turn clock). The C2 scenario is kept as a `todo` test until
+the A3 rule is decided.
+
+Appendix scenarios, re-run against the fixed code (`tournamentHealth.test.ts`,
+`scheduler.test.ts`) and, for the database guarantees, against real Postgres 16
+(`scripts/tournament-db-verify.sh`, sections 5–7): C1 is now rejected with no
+rows written and is alerted-then-cancelled instead of looping; C3 stores
+`u3:1 u2:2 u1:3`; C4's partial state is repaired to 7 rows and `in_progress`;
+C5 extends once instead of resolving by seed.
+
 ---
 
 ## Executive summary
