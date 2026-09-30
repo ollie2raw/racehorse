@@ -25,11 +25,44 @@ export const QF_SEED_PAIRS: ReadonlyArray<readonly [number, number]> = [
   [2, 7],
 ];
 
-export type QfSlot = {
+export type QfSlot<T extends SeededPlayer = SeededPlayer> = {
   matchNumber: number;     // 1..4
-  player1: SeededPlayer | null;
-  player2: SeededPlayer | null;
+  player1: T | null;
+  player2: T | null;
 };
+
+/**
+ * Highest rating first. Stable when ratings tie (input order wins, which the
+ * caller sets to registration order). The one rating sort used for seeding.
+ */
+export function sortBySeedRating<T extends SeededPlayer>(players: readonly T[]): T[] {
+  return players
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => b.p.rating - a.p.rating || a.i - b.i)
+    .map(({ p }) => p);
+}
+
+/**
+ * Pair an already-ordered entrant list (index 0 = seed 1) into the four
+ * quarterfinals via QF_SEED_PAIRS, padding missing bottom seeds with byes.
+ * The single pairing implementation: production (engine.ts) and
+ * `seedBracket` both go through here.
+ */
+export function pairSeededEntrants<T extends SeededPlayer>(ordered: readonly T[]): QfSlot<T>[] {
+  if (ordered.length < 4) {
+    throw new Error('Tournament requires at least 4 entrants');
+  }
+  if (ordered.length > 8) {
+    throw new Error('Tournament caps at 8 players');
+  }
+  const padded: Array<T | null> = [...ordered];
+  while (padded.length < 8) padded.push(null);
+  return QF_SEED_PAIRS.map(([s1, s2], i) => ({
+    matchNumber: i + 1,
+    player1: padded[s1 - 1],
+    player2: padded[s2 - 1],
+  }));
+}
 
 /**
  * Take registered players, sort by rating descending (highest = seed 1),
@@ -43,25 +76,7 @@ export function seedBracket(players: SeededPlayer[]): QfSlot[] {
   if (players.length < 4) {
     throw new Error('Tournament requires at least 4 registered players');
   }
-  if (players.length > 8) {
-    throw new Error('Tournament caps at 8 players');
-  }
-
-  // Highest rating = seed 1. Stable sort.
-  const seeded = [...players]
-    .map((p, i) => ({ ...p, _origIdx: i }))
-    .sort((a, b) => b.rating - a.rating || a._origIdx - b._origIdx)
-    .map(({ _origIdx, ...rest }) => rest);
-
-  // Pad with byes (null) at the bottom seeds.
-  const padded: Array<SeededPlayer | null> = [...seeded];
-  while (padded.length < 8) padded.push(null);
-
-  return QF_SEED_PAIRS.map(([s1, s2], i) => ({
-    matchNumber: i + 1,
-    player1: padded[s1 - 1],
-    player2: padded[s2 - 1],
-  }));
+  return pairSeededEntrants(sortBySeedRating(players));
 }
 
 /**

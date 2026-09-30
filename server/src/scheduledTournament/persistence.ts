@@ -8,7 +8,6 @@ import type {
   RegistrationRow,
   ScheduledTournamentRow,
   ScheduledTournamentStatus,
-  MatchStatus,
 } from './types';
 
 const log = childLogger('tournament:persistence');
@@ -205,22 +204,6 @@ export async function withdrawFromTournament(
   });
 }
 
-export async function updateRegistrationStatus(
-  tournamentId: string,
-  userId: string,
-  status: RegistrationRow['status'],
-  seed?: number,
-): Promise<void> {
-  const body: Record<string, unknown> = { status };
-  if (seed !== undefined) body.seed = seed;
-  await supabaseFetch(
-    `/rest/v1/${TABLES.registrations}` +
-      `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
-      `&user_id=eq.${encodeURIComponent(userId)}`,
-    { method: 'PATCH', body: JSON.stringify(body) },
-  );
-}
-
 export async function updateRegistrationPlacement(
   tournamentId: string,
   userId: string,
@@ -268,32 +251,54 @@ export async function fetchMatchByRoomCode(roomCode: string): Promise<MatchRow |
   return rows[0] ?? null;
 }
 
-export async function insertMatch(input: {
+/** One quarterfinal as generate_tournament_bracket takes it. */
+export type BracketQfPair = {
+  match_number: number;
+  player1_id: string | null;
+  player2_id: string | null;
+  bot_tier: MatchRow['bot_tier'];
+};
+
+/** A human entrant's bracket seed (bots have no registration row). */
+export type BracketSeed = { user_id: string; seed: number };
+
+export type GenerateTournamentBracketResult = {
+  created: boolean;
+  repaired: boolean;
+  matches: MatchRow[];
+};
+
+/**
+ * Stable codes raised by generate_tournament_bracket
+ * (supabase/migrations/2026-09-29_tournament_bracket_rpc_repair.sql).
+ * `registrations_changed` means a registration landed or left after the caller
+ * read the field: re-read and call again.
+ */
+export const BRACKET_RPC_ERRORS = new Set([
+  'tournament_not_found',
+  'tournament_not_startable',
+  'registrations_changed',
+  'tournament_full',
+  'bracket_partial_conflict',
+]);
+
+/**
+ * Create (or repair) the whole bracket in one transaction: 7 match rows,
+ * registrations → active with their bracket seed, tournament → in_progress,
+ * bye walkovers. Idempotent: a finished bracket is returned unchanged.
+ */
+export async function generateTournamentBracket(params: {
   tournamentId: string;
-  round: 1 | 2 | 3;
-  matchNumber: number;
-  player1Id: string | null;
-  player2Id: string | null;
-  roomCode: string;
-  status: MatchStatus;
-  botTier?: MatchRow['bot_tier'];
-}): Promise<MatchRow> {
-  const row = {
-    tournament_id: input.tournamentId,
-    round: input.round,
-    match_number: input.matchNumber,
-    player1_id: input.player1Id,
-    player2_id: input.player2Id,
-    room_code: input.roomCode,
-    status: input.status,
-    bot_tier: input.botTier ?? null,
-  };
-  const inserted = await supabaseFetch<MatchRow[]>(`/rest/v1/${TABLES.matches}`, {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(row),
+  qfPairs: BracketQfPair[];
+  seeds: BracketSeed[];
+  actor?: string;
+}): Promise<GenerateTournamentBracketResult> {
+  return callTournamentRpc<GenerateTournamentBracketResult>('generate_tournament_bracket', {
+    p_tournament_id: params.tournamentId,
+    p_qf_pairs: params.qfPairs,
+    p_seeds: params.seeds,
+    p_actor: params.actor ?? null,
   });
-  return inserted[0];
 }
 
 export type MatchPatch = Partial<Pick<

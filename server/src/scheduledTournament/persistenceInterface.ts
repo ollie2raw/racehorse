@@ -9,20 +9,22 @@ import {
   fetchRegistrations,
   fetchRegistrationsWithProfile,
   fetchTournamentById,
-  insertMatch,
+  generateTournamentBracket,
   updateMatch,
   updateRegistrationPlacement,
-  updateRegistrationStatus,
   updateTournamentStatus,
   type MatchPatch,
   type CompleteTournamentMatchParams,
   type CompleteTournamentMatchResult,
   type PromoteTournamentMatchResult,
+  type GenerateTournamentBracketResult,
+  type BracketQfPair,
+  type BracketSeed,
 } from './persistence';
 import { createReservedRoom, getRoom } from '../rooms';
 import type { Config } from '../game/types';
 import type { Room } from '../rooms';
-import type { MatchRow, RegistrationRow, ScheduledTournamentRow, MatchStatus } from './types';
+import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
 
 /**
  * Persistence + room-infrastructure dependencies used by the tournament engine.
@@ -42,16 +44,17 @@ export interface EnginePersistence {
   fetchMatches(tournamentId: string): Promise<MatchRow[]>;
   fetchMatchById(matchId: string): Promise<MatchRow | null>;
   fetchMatchByRoomCode(roomCode: string): Promise<MatchRow | null>;
-  insertMatch(input: {
+  /**
+   * The only way a bracket is created: all 7 rows, registrations → active with
+   * their bracket seed, tournament → in_progress and bye walkovers, in one
+   * Postgres transaction. Idempotent, and repairs a partial pre-RPC bracket.
+   */
+  generateTournamentBracket(params: {
     tournamentId: string;
-    round: 1 | 2 | 3;
-    matchNumber: number;
-    player1Id: string | null;
-    player2Id: string | null;
-    roomCode: string;
-    status: MatchStatus;
-    botTier?: MatchRow['bot_tier'];
-  }): Promise<MatchRow>;
+    qfPairs: BracketQfPair[];
+    seeds: BracketSeed[];
+    actor?: string;
+  }): Promise<GenerateTournamentBracketResult>;
   updateMatch(matchId: string, patch: MatchPatch): Promise<void>;
   /**
    * Atomic completion + validation + advancement + elimination + (round 3)
@@ -71,12 +74,6 @@ export interface EnginePersistence {
       actor?: string;
     },
   ): Promise<PromoteTournamentMatchResult>;
-  updateRegistrationStatus(
-    tournamentId: string,
-    userId: string,
-    status: RegistrationRow['status'],
-    seed?: number,
-  ): Promise<void>;
   updateRegistrationPlacement(
     tournamentId: string,
     userId: string,
@@ -100,11 +97,10 @@ export const defaultEnginePersistence: EnginePersistence = {
   fetchMatches,
   fetchMatchById,
   fetchMatchByRoomCode,
-  insertMatch,
+  generateTournamentBracket,
   updateMatch,
   completeTournamentMatch,
   promoteTournamentMatch,
-  updateRegistrationStatus,
   updateRegistrationPlacement,
   updateTournamentStatus,
   createReservedRoom,
