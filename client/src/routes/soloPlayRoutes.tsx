@@ -340,13 +340,14 @@ export function BotMatchRoute({
               setAppMode('journey');
               return;
             }
-            const shouldReturnHome =
-              isGuidedMode || isAuthoringMode || isAuthoringV2Mode || isGuidedV2Mode;
+            // Guided Match is launched from Learn, so leaving it goes back there.
+            const shouldReturnToLearn = isGuidedMode || isGuidedV2Mode;
+            const shouldReturnHome = isAuthoringMode || isAuthoringV2Mode;
             setIsGuidedMode(false);
             setIsAuthoringMode(false);
             setIsAuthoringV2Mode(false);
             setIsGuidedV2Mode(false);
-            setAppMode(shouldReturnHome ? 'home' : 'singlePlayerHub');
+            setAppMode(shouldReturnToLearn ? 'learn' : shouldReturnHome ? 'home' : 'singlePlayerHub');
           }}
           onNavigate={(mode) => {
             if (journeyChallenge) {
