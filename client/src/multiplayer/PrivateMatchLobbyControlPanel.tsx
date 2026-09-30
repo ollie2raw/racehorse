@@ -301,11 +301,6 @@ export function PrivateMatchLobbyControlPanel({
             </>
           ) : null}
 
-          <div className="pml-invite-leave-row">
-            <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
-              ← Leave Room
-            </button>
-          </div>
         </>
       )}
     </div>
@@ -599,6 +594,11 @@ export function PrivateMatchLobbyControlPanel({
               </Button>
             ) : null}
             {footerHint ? <p className="pml-footer-hint">{footerHint}</p> : null}
+            <div className="pml-invite-leave-row pml-invite-leave-row--footer">
+              <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
+                ← Leave Room
+              </button>
+            </div>
           </>
         ) : null}
       </div>
