@@ -313,7 +313,7 @@ export default function NoBrainerLabScreen({
         }
         hudCenter={
           <div className="wl-center-status" data-ui="turn-status">
-            <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn</span>
+            <span className="wl-turn-label your-turn rh-nbl-goal">Clear all 7 tiles in one turn</span>
           </div>
         }
         hudRight={

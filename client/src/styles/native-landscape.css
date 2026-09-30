@@ -2276,6 +2276,217 @@
     zoom: 0.63;
   }
 
+  /* ── Learn: No Brainer Lab ─────────────────────────────────────────
+     Its own top bar (← Learn · goal · hand count) replaces the app nav.
+     The board was squeezed to ~14px under a desktop-sized hand and a
+     two-row control block: hand drops to the match tile size, the four
+     controls sit in one row, and the board takes what is left. */
+  .rh-native .rh-presentation:has(.practice-lab) > .rh-global-nav {
+    display: none !important;
+  }
+
+  .rh-native .practice-lab .rh-hud-rail {
+    align-items: center !important;
+  }
+
+  .rh-native .practice-lab .rh-hud-rail [data-rh-parent-back] {
+    display: inline-flex !important;
+    align-items: center;
+    height: 32px !important;
+    min-height: 0 !important;
+    padding: 0 12px !important;
+    font-size: 10px !important;
+  }
+
+  .rh-native .practice-lab .rh-nbl-goal {
+    height: 32px !important;
+    min-height: 0 !important;
+    padding: 0 16px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+
+  .rh-native .practice-lab .rh-match-solo-meta {
+    height: 32px !important;
+    min-height: 0 !important;
+    padding: 0 12px !important;
+    font-size: 10px !important;
+    display: inline-flex !important;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .rh-native .practice-lab .rh-live-board-zone {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .practice-lab .rh-live-hand-stack {
+    flex: 0 0 auto !important;
+    gap: 6px !important;
+  }
+
+  .rh-native .practice-lab .nbl-tray {
+    min-height: 0 !important;
+    padding: 6px 8px !important;
+  }
+
+  .rh-native .practice-lab .hand-row {
+    gap: 8px !important;
+  }
+
+  /* Beats the shared match-hand zoom (the lab is also .rh-match-live):
+     size 56 tiles down to the match's 74x37. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live.practice-lab .hand-row .domino-tile {
+    zoom: 0.66;
+  }
+
+  .rh-native .practice-lab .nbl-controls {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 6px 8px !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .practice-lab .nbl-controls__group {
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+
+  .rh-native .practice-lab .nbl-controls__divider {
+    width: 1px !important;
+    height: 22px !important;
+    margin: 0 4px !important;
+  }
+
+  .rh-native .practice-lab .nbl-controls button {
+    height: 30px !important;
+    min-height: 0 !important;
+    padding: 0 14px !important;
+    font-size: 10px !important;
+  }
+
+  /* Solution sequence: floats over the bottom of the board instead of
+     pushing the page past the screen. */
+  .rh-native .practice-lab .nbl-solution {
+    position: fixed !important;
+    left: 50%;
+    top: 70px;
+    translate: -50% 0;
+    z-index: 30;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 6px 12px 8px !important;
+    border-radius: 14px;
+  }
+
+  .rh-native .practice-lab .nbl-solution__title {
+    font-size: 9px !important;
+    margin: 0 0 4px !important;
+  }
+
+  .rh-native .practice-lab .nbl-solution__tiles {
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    zoom: 0.62;
+  }
+
+  /* Intro card: two columns so "Start training" is always on screen; the
+     modal's header row (just the ×) floats in the corner. */
+  .rh-native .rh-modal-panel.nbl-intro-modal-panel {
+    width: min(640px, calc(100vw - var(--rh-safe-left) - var(--rh-safe-right) - 24px)) !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 20px) !important;
+    position: relative;
+    overflow: hidden !important;
+  }
+
+  .rh-native .nbl-intro-modal-panel .rh-modal-header {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal-panel .rh-modal-title {
+    display: none;
+  }
+
+  .rh-native .nbl-intro-modal-panel .rh-modal-body {
+    padding: 18px 20px !important;
+  }
+
+  .rh-native .nbl-intro-modal {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 18px;
+    row-gap: 10px;
+    padding: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal__header {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal__kicker {
+    margin: 0 0 6px !important;
+  }
+
+  .rh-native .nbl-intro-modal__title {
+    font-size: 24px !important;
+    line-height: 1.05 !important;
+    margin: 0 0 6px !important;
+  }
+
+  .rh-native .nbl-intro-modal__lede {
+    margin: 0 !important;
+    font-size: 12px !important;
+  }
+
+  .rh-native .nbl-intro-modal__beats {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    margin: 26px 0 0 !important;
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  .rh-native .nbl-intro-modal__beats li {
+    font-size: 12px !important;
+  }
+
+  .rh-native .nbl-intro-modal__takeaway {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal__takeaway-text {
+    font-size: 13px !important;
+    margin: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal__actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin: 0 !important;
+  }
+
+  .rh-native .nbl-intro-modal__actions button {
+    width: 100%;
+    height: 40px !important;
+    min-height: 0 !important;
+  }
+
   /* ── Learn: How to Play (academy) ─────────────────────────────────
      A focused 5-step lesson with its own Exit/Back/Next, so the app nav is
      hidden. The shell is a column (step rail, lesson card, dock); the
