@@ -2160,6 +2160,24 @@
     bottom: auto !important;
   }
 
+  /* Online HUD: centre items in the bar like Play vs Fritz (a no-op there)… */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail {
+    align-items: center !important;
+  }
+
+  /* …and gave the pills stray margins (8px) that Fritz's don't have. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-pill,
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-turn {
+    margin: 0 !important;
+  }
+
+  /* Online adds a reactions button to the rail (5 visible): start it
+     higher so it still ends inside the board. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root) {
+    top: 74px !important;
+    gap: 2px !important;
+  }
+
   /* A two-row hand leaves a ~190px board: tighten chips + rail to fit. */
   .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
     top: 8px !important;
@@ -2219,6 +2237,14 @@
      layout and the two-row split untouched. */
   .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
     transform: translateY(12px);
+  }
+
+  /* Online hands have no per-tile wrapper (Fritz wraps each tile with room
+     for its underline), so the single row came out 10px shorter and the
+     nudge above pushed it off the bottom. Same row height, same position. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
+    min-height: 47px;
+    align-items: flex-start !important;
   }
 
   /* Tile faces are drawn at fixed px from a size prop (42px halves), so
