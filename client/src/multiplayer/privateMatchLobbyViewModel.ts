@@ -56,9 +56,8 @@ export function buildPrivateLobbyFooterHint(params: {
   if (phase === 'room' && playersCount < 2 && pendingInviteActive && pendingInviteName) {
     return `Waiting for @${pendingInviteName} to accept your challenge…`;
   }
-  if (phase === 'room' && playersCount < 2) {
-    return 'Waiting for opponent to join…';
-  }
+  // No generic "waiting to join" line: the disabled button already says
+  // "Waiting for opponent…".
   if (phase === 'room' && playersCount === 2 && !isRoomHost) {
     return 'Waiting for host to start the match…';
   }
