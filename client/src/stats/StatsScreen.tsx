@@ -1,10 +1,7 @@
-import { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components/GlobalNav';
-import { Button } from '../components/primitives';
-import WeeklyStatsScreen from './WeeklyStatsScreen';
 import { usePlayerIdentityModel } from '../identity/usePlayerIdentityModel';
 import { DailyFritzPerformanceSection } from './components/DailyFritzPerformanceSection';
 import { FritzPerformanceSection } from './components/FritzPerformanceSection';
@@ -45,7 +42,6 @@ export default function StatsScreen({
   onOpenAuth,
   onSignOut,
 }: StatsScreenProps) {
-  const [weeklyRecapOpen, setWeeklyRecapOpen] = useState(false);
   const isUnsupportedPublicTarget = Boolean(targetUserId && targetUserId !== user?.id);
   const identityState = usePlayerIdentityModel({
     subjectUserId: targetUserId ?? user?.id ?? null,
@@ -100,17 +96,6 @@ export default function StatsScreen({
               {model && (
                 <>
                   <StatsIdentityHero username={username} competitive={model.competitive} />
-                  {model.subject.isCurrentUser && (
-                    <div className="rh-stats-actions">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setWeeklyRecapOpen(true)}
-                      >
-                        Weekly Recap
-                      </Button>
-                    </div>
-                  )}
                   <div className="rh-stats-grid">
                     <RankedPerformanceSection competitive={model.competitive} />
                     <FritzPerformanceSection fritz={model.fritz} />
@@ -128,11 +113,6 @@ export default function StatsScreen({
           )}
         </main>
       </div>
-      <WeeklyStatsScreen
-        open={weeklyRecapOpen}
-        onClose={() => setWeeklyRecapOpen(false)}
-        user={user}
-      />
     </div>
   );
 }
