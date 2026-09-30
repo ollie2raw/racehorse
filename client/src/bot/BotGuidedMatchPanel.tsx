@@ -89,7 +89,7 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
               className="pvf-back-btn learn-guided-pvf__exit rh-back-button"
               onClick={() => setShowLeaveConfirm(true)}
             >
-              <span aria-hidden="true">←</span> Exit learn
+              <span aria-hidden="true">←</span> Exit game
             </button>
 
             <div className="pvf-header learn-guided-pvf__header">

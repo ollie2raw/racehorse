@@ -2398,7 +2398,7 @@
     min-height: 0 !important;
   }
 
-  /* No nav here, so the lesson's own "Exit learn" (hidden with the other
+  /* No nav here, so the lesson's own "Exit game" (hidden with the other
      setup-screen back buttons) comes back, bottom-left level with Play Move.
      Show/Hide Preview goes: preview is on by default and hiding it only
      removes the highlight on the tile Play Move will use. */
@@ -2465,12 +2465,29 @@
     overflow: hidden;
   }
 
+  .rh-native .learn-guided-pvf .learn-guided-summary-strip {
+    grid-template-columns: 1fr 1fr 1.35fr 1fr 1fr !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-item {
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-item > * {
+    text-align: center !important;
+  }
+
+  /* "Fritz is thinking" is too long for one line here: wrap to two. */
   .rh-native .learn-guided-pvf .learn-guided-summary-turn {
     max-width: 100%;
-    padding: 5px 8px !important;
-    font-size: 10px !important;
-    letter-spacing: 0.08em !important;
-    white-space: nowrap;
+    padding: 4px 8px !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    letter-spacing: 0.06em !important;
+    white-space: normal !important;
+    text-align: center !important;
     width: auto !important;
     height: auto !important;
     min-width: 0 !important;
