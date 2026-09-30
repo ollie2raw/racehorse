@@ -2253,6 +2253,12 @@
     zoom: 0.82;
   }
 
+  /* Puzzle Rush hands pass a larger tile size (56 vs the match's 45), so the
+     same 0.82 left them ~96px wide and cut off. Scale to the match's 74×37. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live.puzzle-rush-root .hand-row .domino-tile {
+    zoom: 0.63;
+  }
+
   /* ── End-of-hand modal ─────────────────────────────────────────────
      Desktop stacks hero → points → summary → tiles → footer (~660px) in a
      402px-tall screen. Two columns: result on the left (points card beside
