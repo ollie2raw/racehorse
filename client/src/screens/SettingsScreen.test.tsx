@@ -16,13 +16,9 @@ describe('SettingsScreen', () => {
     expect(screen.getByRole('heading', { name: 'Settings', level: 1 })).toBeTruthy();
   });
 
-  it('signs out through the app handler', () => {
-    const onSignOut = vi.fn();
-    render(<SettingsScreen authUser={authUser} onSignOut={onSignOut} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-
-    expect(onSignOut).toHaveBeenCalledTimes(1);
+  it('leaves sign-out to the account menu instead of repeating it on the page', () => {
+    render(<SettingsScreen authUser={authUser} onSignOut={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
   });
 
   it('asks a signed-out visitor to sign in instead of showing account controls', () => {
