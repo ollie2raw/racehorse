@@ -2353,12 +2353,19 @@
      The page wrapper padded these by the safe areas, so each page's own
      background sat in an inset box. The page runs edge to edge and pads its
      own content instead. */
-  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen) {
+  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen, .rh-stats-page) {
     padding: 0 !important;
   }
 
-  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen) > .app {
+  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen, .rh-stats-page) > .app {
     background: var(--bg-obsidian) !important;
+  }
+
+  .rh-native .rh-stats {
+    max-width: none !important;
+    padding-left: max(var(--rh-safe-left), 16px) !important;
+    padding-right: max(var(--rh-safe-right), 16px) !important;
+    padding-bottom: max(var(--rh-safe-bottom), 16px) !important;
   }
 
   .rh-native .rh-pp-screen {
@@ -2376,9 +2383,16 @@
     height: 100%;
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
     gap: 8px !important;
     padding: 8px max(var(--rh-safe-right), 16px) max(var(--rh-safe-bottom), 8px) max(var(--rh-safe-left), 16px) !important;
+  }
+
+  /* Bottom row: Preferences and Session have little in them, so their
+     content centres in the row instead of hanging at the top. */
+  .rh-native .rh-settings > .rh-settings-section:nth-last-of-type(-n + 3):not(.rh-settings-section--danger) {
+    justify-content: center;
   }
 
   /* The nav already says where you are. */
@@ -2424,6 +2438,20 @@
   .rh-native .rh-settings-section > label.rh-settings-field:only-of-type + .rh-btn {
     grid-column: 2;
     align-self: end;
+  }
+
+  /* Top row: the note takes the slack, so inputs + actions sit on one
+     shared bottom line across Handle, Email and Password. */
+  .rh-native .rh-settings-section:has(> label.rh-settings-field:only-of-type) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .rh-native .rh-settings-section:has(> .rh-settings-field + .rh-settings-field) {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+
+  .rh-native .rh-settings-section > .rh-settings-section-note {
+    align-self: start;
   }
 
   .rh-native .rh-settings-field-label {
