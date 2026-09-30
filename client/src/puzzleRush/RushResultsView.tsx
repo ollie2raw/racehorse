@@ -176,28 +176,30 @@ export function RushResultsView({
         </p>
       )}
 
-      <div className="pr-results__section-label">Stages</div>
-      <ul className="pr-results__stages">
-        {stageRows.map(({ stage, done, total }) => {
-          const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-          return (
-            <li key={stage.key} className="pr-results__stage-row" data-stage={stage.key}>
-              <div className="pr-results__stage-top">
-                <span className="pr-results__stage-label">{stage.label}</span>
-                <span className="pr-results__stage-count">
-                  {done}
-                  <span className="pr-results__stage-total">/{total}</span>
-                </span>
-              </div>
-              {/* Same weighted-fill language as the in-run HUD meter, so the
-                  summary reads as the run you just watched. */}
-              <div className="pr-results__stage-meter" role="presentation">
-                <span className="pr-results__stage-fill" style={{ width: `${pct}%` }} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="pr-results__stages-col">
+        <div className="pr-results__section-label">Stages</div>
+        <ul className="pr-results__stages">
+          {stageRows.map(({ stage, done, total }) => {
+            const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+            return (
+              <li key={stage.key} className="pr-results__stage-row" data-stage={stage.key}>
+                <div className="pr-results__stage-top">
+                  <span className="pr-results__stage-label">{stage.label}</span>
+                  <span className="pr-results__stage-count">
+                    {done}
+                    <span className="pr-results__stage-total">/{total}</span>
+                  </span>
+                </div>
+                {/* Same weighted-fill language as the in-run HUD meter, so the
+                    summary reads as the run you just watched. */}
+                <div className="pr-results__stage-meter" role="presentation">
+                  <span className="pr-results__stage-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
       <footer className="pr-results__actions">
         {/* Two ways out, not three. "Home" duplicated "Back to hub" — the hub

@@ -784,3 +784,7 @@
   }
   .pr-board .dfl-finished { grid-area: finished; }
 }
+
+/* Groups the stages label + list so the native app can centre them as one
+   column (native-landscape.css). No box of its own on the web. */
+.pr-results__stages-col { display: contents; }

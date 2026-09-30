@@ -220,7 +220,7 @@ export function PuzzleRushPlayView({
             </div>
           }
           hudCenter={
-            <div className="wl-center-status" data-ui="turn-status">
+            <div className="wl-center-status rh-pr-center" data-ui="turn-status">
               <span
                 className={`pr-clock${lowClock ? ' pr-clock--low' : ''}`}
                 data-ui="rush-clock"
@@ -234,7 +234,7 @@ export function PuzzleRushPlayView({
                   +{lastBonusSeconds}s
                 </span>
               )}
-              <span className="wl-room-code">
+              <span className="wl-room-code rh-pr-puzzle-count">
                 Puzzle {puzzle.ordinal} / {totalPuzzles}
               </span>
             </div>
