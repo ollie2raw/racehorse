@@ -151,26 +151,58 @@ export async function fetchRegistrationsForUser(userId: string): Promise<Registr
   );
 }
 
-export async function insertRegistration(tournamentId: string, userId: string): Promise<void> {
+/**
+ * Stable error codes raised by the registration RPCs
+ * (supabase/migrations/2026-09-29_tournament_registration_rpcs.sql).
+ */
+export const REGISTRATION_RPC_ERRORS = new Set([
+  'tournament_not_found',
+  'registration_closed',
+  'tournament_full',
+  'withdraw_closed',
+  'invalid_user',
+]);
+
+export type RegisterForTournamentResult = {
+  registered: boolean;
+  already_registered: boolean;
+  seats_taken: number;
+};
+
+/**
+ * Register in one transaction: the tournament row is locked, then status,
+ * registration_close_at (database clock) and the seat cap are checked before
+ * the insert. Throws an Error whose message is a code in REGISTRATION_RPC_ERRORS.
+ */
+export async function registerForTournament(
+  tournamentId: string,
+  userId: string,
+): Promise<RegisterForTournamentResult> {
   if (!isValidUuid(userId)) {
     throw new Error('invalid_user');
   }
-  await supabaseFetch(`/rest/v1/${TABLES.registrations}`, {
-    method: 'POST',
-    body: JSON.stringify({ tournament_id: tournamentId, user_id: userId, status: 'registered' }),
+  return callTournamentRpc<RegisterForTournamentResult>('register_for_tournament', {
+    p_tournament_id: tournamentId,
+    p_user_id: userId,
   });
 }
 
-export async function withdrawRegistration(tournamentId: string, userId: string): Promise<void> {
+/**
+ * Withdraw, only while registration is open and before registration_close_at.
+ * Never deletes once the tournament has left registration: throws
+ * `withdraw_closed` instead.
+ */
+export async function withdrawFromTournament(
+  tournamentId: string,
+  userId: string,
+): Promise<{ withdrawn: boolean }> {
   if (!isValidUuid(userId)) {
     throw new Error('invalid_user');
   }
-  await supabaseFetch(
-    `/rest/v1/${TABLES.registrations}` +
-      `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
-      `&user_id=eq.${encodeURIComponent(userId)}`,
-    { method: 'DELETE' },
-  );
+  return callTournamentRpc<{ withdrawn: boolean }>('withdraw_from_tournament', {
+    p_tournament_id: tournamentId,
+    p_user_id: userId,
+  });
 }
 
 export async function updateRegistrationStatus(

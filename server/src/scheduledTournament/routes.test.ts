@@ -14,8 +14,8 @@ const mocks = vi.hoisted(() => ({
   fetchRegistrations: vi.fn(),
   fetchRegistrationsWithProfile: vi.fn(),
   fetchMatches: vi.fn(),
-  insertRegistration: vi.fn(),
-  withdrawRegistration: vi.fn(),
+  registerForTournament: vi.fn(),
+  withdrawFromTournament: vi.fn(),
 }));
 
 vi.mock('../supabaseUtils', () => ({
@@ -45,8 +45,8 @@ vi.mock('./persistence', async () => {
     fetchRegistrations: (...args: unknown[]) => mocks.fetchRegistrations(...args),
     fetchRegistrationsWithProfile: (...args: unknown[]) => mocks.fetchRegistrationsWithProfile(...args),
     fetchMatches: (...args: unknown[]) => mocks.fetchMatches(...args),
-    insertRegistration: (...args: unknown[]) => mocks.insertRegistration(...args),
-    withdrawRegistration: (...args: unknown[]) => mocks.withdrawRegistration(...args),
+    registerForTournament: (...args: unknown[]) => mocks.registerForTournament(...args),
+    withdrawFromTournament: (...args: unknown[]) => mocks.withdrawFromTournament(...args),
   };
 });
 
@@ -455,7 +455,7 @@ describe('scheduled tournament routes auth/user guards', () => {
 
     expect(response).toEqual({ status: 400, body: { ok: false, error: 'invalid_tournament_id' } });
     expect(mocks.fetchTournamentById).not.toHaveBeenCalled();
-    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+    expect(mocks.registerForTournament).not.toHaveBeenCalled();
   });
 
   it('register requires authentication', async () => {
@@ -466,7 +466,7 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response).toEqual({ status: 401, body: { ok: false, error: 'not_authenticated' } });
-    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+    expect(mocks.registerForTournament).not.toHaveBeenCalled();
   });
 
   it('register rejects userId spoofing', async () => {
@@ -481,18 +481,12 @@ describe('scheduled tournament routes auth/user guards', () => {
 
     expect(response.status).toBe(403);
     expect(response.body).toEqual({ ok: false, error: 'user_mismatch' });
-    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+    expect(mocks.registerForTournament).not.toHaveBeenCalled();
   });
 
   it('register uses authenticated user id only', async () => {
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
-    mocks.fetchTournamentById.mockResolvedValue({
-      id: validTournamentId,
-      status: 'registration_open',
-      max_players: 8,
-    });
-    mocks.fetchRegistrations.mockResolvedValue([]);
-    mocks.fetchActiveRegistration.mockResolvedValue(null);
+    mocks.registerForTournament.mockResolvedValue({ registered: true, already_registered: false, seats_taken: 1 });
     const { request } = makeHarness();
     const response = await request('POST', '/api/tournaments/:id/register', {
       params: { id: validTournamentId },
@@ -502,7 +496,7 @@ describe('scheduled tournament routes auth/user guards', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
-    expect(mocks.insertRegistration).toHaveBeenCalledWith(validTournamentId, validUserId);
+    expect(mocks.registerForTournament).toHaveBeenCalledWith(validTournamentId, validUserId);
   });
 
   it('withdraw rejects invalid tournament id before userId checks', async () => {
@@ -513,7 +507,7 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response).toEqual({ status: 400, body: { ok: false, error: 'invalid_tournament_id' } });
-    expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+    expect(mocks.withdrawFromTournament).not.toHaveBeenCalled();
   });
 
   it('withdraw requires authentication', async () => {
@@ -524,7 +518,7 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response).toEqual({ status: 401, body: { ok: false, error: 'not_authenticated' } });
-    expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+    expect(mocks.withdrawFromTournament).not.toHaveBeenCalled();
   });
 
   it('withdraw rejects userId spoofing', async () => {
@@ -539,7 +533,7 @@ describe('scheduled tournament routes auth/user guards', () => {
 
     expect(response.status).toBe(403);
     expect(response.body).toEqual({ ok: false, error: 'user_mismatch' });
-    expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+    expect(mocks.withdrawFromTournament).not.toHaveBeenCalled();
   });
 
   it('withdraw uses authenticated user id only', async () => {
@@ -553,6 +547,50 @@ describe('scheduled tournament routes auth/user guards', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
-    expect(mocks.withdrawRegistration).toHaveBeenCalledWith(validTournamentId, validUserId);
+    expect(mocks.withdrawFromTournament).toHaveBeenCalledWith(validTournamentId, validUserId);
+  });
+
+  // A2 / A7: the registration RPCs raise stable codes; the routes surface them.
+  it.each([
+    ['POST', 'tournament_full', 409, 'tournament_full'],
+    ['POST', 'registration_closed', 409, 'registration_closed'],
+    ['POST', 'tournament_not_found', 404, 'not_found'],
+    ['DELETE', 'withdraw_closed', 409, 'withdraw_closed'],
+    ['DELETE', 'tournament_not_found', 404, 'not_found'],
+  ] as const)('%s surfaces RPC code %s as %i %s', async (method, code, status, error) => {
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    const fn = method === 'POST' ? mocks.registerForTournament : mocks.withdrawFromTournament;
+    fn.mockRejectedValue(new Error(code));
+    const { request } = makeHarness();
+    const response = await request(method, '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: {},
+    });
+    expect(response).toEqual({ status, body: { ok: false, error } });
+  });
+
+  it('register reports an already-live registration as success', async () => {
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    mocks.registerForTournament.mockResolvedValue({ registered: true, already_registered: true, seats_taken: 3 });
+    const { request } = makeHarness();
+    const response = await request('POST', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: {},
+    });
+    expect(response).toEqual({ status: 200, body: { ok: true, alreadyRegistered: true } });
+  });
+
+  it('an unexpected failure is a 500, not a stable code', async () => {
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    mocks.registerForTournament.mockRejectedValue(new Error('connection reset'));
+    const { request } = makeHarness();
+    const response = await request('POST', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: {},
+    });
+    expect(response).toEqual({ status: 500, body: { ok: false, error: 'connection reset' } });
   });
 });
