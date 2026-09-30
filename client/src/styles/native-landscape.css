@@ -2383,6 +2383,59 @@
     font-size: 10px !important;
   }
 
+  /* Solved: the payoff fills the emptied tray (message + Next hand), the
+     banner over the board goes, and Hint / Show solution dim. */
+  .rh-native .practice-lab .nbl-win-banner {
+    display: none !important;
+  }
+
+  .rh-native .practice-lab .tray-center:has(.nbl-tray__won) .hand-container {
+    display: none !important;
+  }
+
+  .rh-native .practice-lab div.nbl-tray__won.rh-app-only {
+    display: flex !important;
+    flex: 1 1 auto;
+    width: 100%;
+    white-space: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 44px;
+  }
+
+  .rh-native .practice-lab .nbl-tray__won-label {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #e9d5ff;
+  }
+
+  .rh-native .practice-lab .nbl-tray__won-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 22px;
+    border: 1px solid rgba(168, 85, 247, 0.7);
+    border-radius: 999px;
+    background: #7c3aed;
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    box-shadow: 0 0 22px rgba(168, 85, 247, 0.35);
+  }
+
+  .rh-native .practice-lab:has(.nbl-tray__won) .nbl-controls__group[aria-label='Training assistance'] button {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
   /* Solution sequence: floats over the bottom of the board instead of
      pushing the page past the screen. */
   .rh-native .practice-lab .nbl-solution {

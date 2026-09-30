@@ -407,6 +407,16 @@ export default function NoBrainerLabScreen({
             <div className="wl-hand-area nbl-tray__hand" data-ui="tray">
               <div className="tray-rail">
                 <div className="tray-center">
+                  {practiceState.status === 'won' ? (
+                    /* App only: the solved payoff fills the emptied tray (the web
+                       keeps its banner over the board). */
+                    <div className="nbl-tray__won rh-app-only">
+                      <span className="nbl-tray__won-label">Cleared — no brainer</span>
+                      <button type="button" className="nbl-tray__won-next" onClick={startHand}>
+                        Next hand <span aria-hidden="true">›</span>
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="hand-container has-single-row">
                     <div className="hand-row">
                       {practiceState.remainingHand.map((tile, idx) => {
