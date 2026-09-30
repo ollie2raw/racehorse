@@ -25,6 +25,14 @@
 #   3. RLS registrations lockdown — the three diagnostics come back clean on
 #      the freshly-migrated schema.
 #   4. assert_security_posture() catches a planted RLS violation.
+#   5. Registration RPCs (tournament review A2, A7): two sessions racing for
+#      the last seat serialize on the tournament row lock and exactly one gets
+#      it; registering after registration_close_at is refused; withdraw works
+#      before close and is refused, with the row kept, after start.
+#   6. generate_tournament_bracket v2 (A1, B8): repairs a partial pre-RPC
+#      bracket into all 7 rows in one transaction, is a no-op on retry, and
+#      refuses stale seed lists and already-played rows.
+#   7. cancel_reason exists (Q9).
 
 set -euo pipefail
 
@@ -93,7 +101,7 @@ fail() { echo "  FAIL  $1" >&2; exit 1; }
 
 # ── 3. shim + curated migration chain (greenfield apply) ────────────────────
 echo
-echo "── 1/4  greenfield apply ─────────────────────────────────────────────"
+echo "── 1/7  greenfield apply ─────────────────────────────────────────────"
 RUN -q -f "$HELPERS/shim.sql" >/dev/null
 pass "Supabase shim (auth schema, roles, auth.uid)"
 
@@ -108,6 +116,9 @@ CHAIN=(
   2026-08-30_tournament_registration_rls_lockdown.sql
   2026-08-31_tournament_match_rpcs.sql
   2026-09-01_assert_security_posture_rpc.sql
+  2026-09-29_tournament_bracket_rpc_repair.sql
+  2026-09-29_tournament_cancel_reason.sql
+  2026-09-29_tournament_registration_rpcs.sql
 )
 for m in "${CHAIN[@]}"; do
   [[ -f "$MIGRATIONS/$m" ]] || fail "migration missing from repo: $m"
@@ -121,7 +132,7 @@ pass "2026-08-30 lockdown self-assertion did not roll back"
 
 # ── 4. two-session FOR UPDATE serialization ─────────────────────────────────
 echo
-echo "── 2/4  FOR UPDATE serialization ─────────────────────────────────────"
+echo "── 2/7  FOR UPDATE serialization ─────────────────────────────────────"
 RUN -q -f "$HELPERS/seed.sql" >/dev/null
 QF1="$(Q "select id from public.scheduled_tournament_matches where tournament_id='11111111-1111-4111-8111-111111111111' and round=1 and match_number=1")"
 [[ -n "$QF1" ]] || fail "seed did not produce QF1"
@@ -170,7 +181,7 @@ pass "bracket consistent: one completion, one advancement, loser eliminated once
 
 # ── 5. RLS registrations lockdown diagnostics ──────────────────────────────
 echo
-echo "── 3/4  RLS registrations lockdown ──────────────────────────────────"
+echo "── 3/7  RLS registrations lockdown ──────────────────────────────────"
 [[ "$(Q "select count(*) from pg_policies where schemaname='public' and tablename='scheduled_tournament_registrations' and cmd in ('INSERT','UPDATE','DELETE','ALL') and roles && array['anon','authenticated','public']::name[]")" == "0" ]] \
   || fail "a client-writable policy survives on scheduled_tournament_registrations"
 [[ "$(Q "select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='scheduled_tournament_registrations' and grantee in ('anon','authenticated','public') and privilege_type in ('INSERT','UPDATE','DELETE')")" == "0" ]] \
@@ -181,7 +192,7 @@ pass "0 client-writable policies, 0 client write grants, RLS on"
 
 # ── 6. assert_security_posture() catches a planted violation ───────────────
 echo
-echo "── 4/4  assert_security_posture() ───────────────────────────────────"
+echo "── 4/7  assert_security_posture() ───────────────────────────────────"
 [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] \
   || fail "assert_security_posture() reports a hard failure on a clean schema"
 pass "clean schema -> hard_fail_count = 0"
@@ -196,6 +207,118 @@ echo "$PLANTED" | grep -q 'rls_disabled' || fail "planted violation not classifi
 pass "planted 'RLS disabled' -> hard_fail_count = 1, names public.scheduled_tournament_matches"
 [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] || fail "re-enable did not clear the violation"
 pass "re-enable -> hard_fail_count = 0"
+
+# ── 7. registration RPCs: cap, close time, withdraw guard ──────────────────
+echo
+echo "── 5/7  registration RPCs (A2, A7) ──────────────────────────────────"
+RUN -q -f "$HELPERS/phase1_seed.sql" >/dev/null
+T_OPEN='22222222-2222-4222-8222-222222222222'      # registration_open, 2 seats, closes in 10 min
+T_CLOSED='33333333-3333-4333-8333-333333333333'    # registration_open, but close time already passed
+T_STARTED='11111111-1111-4111-8111-111111111111'   # the in_progress bracket from section 2
+PA='aaaaaaaa-0000-4000-8000-000000000001'
+PB='aaaaaaaa-0000-4000-8000-000000000002'
+PC='aaaaaaaa-0000-4000-8000-000000000003'
+
+Q "select public.register_for_tournament('$T_OPEN', '$PA')" | grep -q '"already_registered": false' \
+  || fail "first registration did not succeed"
+[[ "$(Q "select count(*) from public.scheduled_tournament_registrations where tournament_id='$T_OPEN' and user_id='$PA' and status='registered'")" == "1" ]] \
+  || fail "first registration reported success but wrote no row"
+pass "first registration takes seat 1 of 2 (row written)"
+
+# Session A takes the last seat and holds its transaction open; session B asks
+# for the same last seat and must wait on the tournament row lock, then see the
+# committed count and be refused.
+"$PGBIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -q >/dev/null 2>&1 <<SQL_LA &
+begin;
+select public.register_for_tournament('$T_OPEN', '$PB');
+select pg_sleep(3);
+commit;
+SQL_LA
+LA_PID=$!
+sleep 1.5
+LB_START="$(now)"
+LB_OUT="$("$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc \
+  "select public.register_for_tournament('$T_OPEN', '$PC')" 2>&1 || true)"
+LB_END="$(now)"
+wait "$LA_PID"
+LB_WAIT="$(python3 -c "print(f'{$LB_END - $LB_START:.2f}')")"
+echo "  session B waited ${LB_WAIT}s for session A's lock"
+python3 -c "import sys; sys.exit(0 if $LB_WAIT >= 1.0 else 1)" \
+  || fail "concurrent last-seat registration did not serialize (waited ${LB_WAIT}s)"
+echo "$LB_OUT" | grep -q 'tournament_full' || fail "second claimant of the last seat was not refused — got: $LB_OUT"
+[[ "$(Q "select count(*) from public.scheduled_tournament_registrations where tournament_id='$T_OPEN' and status='registered'")" == "2" ]] \
+  || fail "seat count is not exactly 2 after the race"
+pass "concurrent last seat: B blocked on A's lock, then got tournament_full; 2 of 2 seats taken"
+
+Q "select public.register_for_tournament('$T_OPEN', '$PA')" | grep -q '"already_registered": true' \
+  || fail "re-registering an existing entrant on a full event did not report already_registered"
+pass "re-register on a full event is idempotent (already_registered)"
+
+OUT="$("$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc \
+  "select public.register_for_tournament('$T_CLOSED', '$PA')" 2>&1 || true)"
+echo "$OUT" | grep -q 'registration_closed' || fail "register after registration_close_at was not refused — got: $OUT"
+[[ "$(Q "select count(*) from public.scheduled_tournament_registrations where tournament_id='$T_CLOSED'")" == "0" ]] \
+  || fail "a row was written despite registration_closed"
+pass "register after close time (status still registration_open) -> registration_closed, nothing written"
+
+Q "select public.withdraw_from_tournament('$T_OPEN', '$PB')" | grep -q '"withdrawn": true' \
+  || fail "withdraw before close did not remove the registration"
+pass "withdraw before close removes the registration"
+
+OUT="$("$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc \
+  "select public.withdraw_from_tournament('$T_STARTED', '00000000-0000-4000-8000-000000000002')" 2>&1 || true)"
+echo "$OUT" | grep -q 'withdraw_closed' || fail "withdraw after start was not refused — got: $OUT"
+[[ "$(Q "select count(*) from public.scheduled_tournament_registrations where tournament_id='$T_STARTED' and user_id='00000000-0000-4000-8000-000000000002'")" == "1" ]] \
+  || fail "withdraw after start deleted the registration"
+pass "withdraw after start -> withdraw_closed, registration row kept"
+
+# ── 8. bracket RPC repair ───────────────────────────────────────────────────
+echo
+echo "── 6/7  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
+T_PARTIAL='44444444-4444-4444-8444-444444444444'   # registration_open, 2 entrants, 4 stale QF rows
+PAIRS="jsonb_build_array(
+  jsonb_build_object('match_number',1,'player1_id','$PB','player2_id','bot:fritz:$T_PARTIAL:8','bot_tier','standard'),
+  jsonb_build_object('match_number',2,'player1_id','bot:fritz:$T_PARTIAL:4','player2_id','bot:fritz:$T_PARTIAL:5'),
+  jsonb_build_object('match_number',3,'player1_id','bot:fritz:$T_PARTIAL:3','player2_id','bot:fritz:$T_PARTIAL:6'),
+  jsonb_build_object('match_number',4,'player1_id','$PA','player2_id','bot:fritz:$T_PARTIAL:7','bot_tier','standard'))"
+SEEDS="jsonb_build_array(jsonb_build_object('user_id','$PB','seed',1), jsonb_build_object('user_id','$PA','seed',2))"
+
+OUT="$("$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc \
+  "select public.generate_tournament_bracket('$T_PARTIAL', $PAIRS, jsonb_build_array(jsonb_build_object('user_id','$PB','seed',1)), 'db-verify')" 2>&1 || true)"
+echo "$OUT" | grep -q 'registrations_changed' || fail "a seed list missing a registrant was accepted — got: $OUT"
+[[ "$(Q "select count(*) from public.scheduled_tournament_matches where tournament_id='$T_PARTIAL'")" == "4" ]] \
+  || fail "a refused call changed the stale rows"
+pass "stale seed list -> registrations_changed, nothing changed"
+
+R1="$(Q "select public.generate_tournament_bracket('$T_PARTIAL', $PAIRS, $SEEDS, 'db-verify')")"
+echo "$R1" | grep -q '"repaired": true' || fail "partial bracket not reported as repaired — got: $R1"
+[[ "$(Q "select count(*) from public.scheduled_tournament_matches where tournament_id='$T_PARTIAL'")" == "7" ]] \
+  || fail "repair did not leave exactly 7 rows"
+[[ "$(Q "select count(*) from public.scheduled_tournament_matches where tournament_id='$T_PARTIAL' and room_code='stale'")" == "0" ]] \
+  || fail "stale pre-RPC rows survived the repair"
+[[ "$(Q "select status from public.scheduled_tournaments where id='$T_PARTIAL'")" == "in_progress" ]] \
+  || fail "repair did not move the tournament to in_progress"
+[[ "$(Q "select string_agg(user_id::text || ':' || status || ':' || seed, ',' order by seed) from public.scheduled_tournament_registrations where tournament_id='$T_PARTIAL'")" == "$PB:active:1,$PA:active:2" ]] \
+  || fail "registrations not active with the bracket seeds"
+pass "4-of-7 partial bracket -> 7 rows, in_progress, registrations active with bracket seeds, one transaction"
+
+R2="$(Q "select public.generate_tournament_bracket('$T_PARTIAL', $PAIRS, $SEEDS, 'db-verify')")"
+echo "$R2" | grep -q '"created": false' && echo "$R2" | grep -q '"repaired": false' || fail "retry was not a no-op — got: $R2"
+[[ "$(Q "select count(*) from public.scheduled_tournament_matches where tournament_id='$T_PARTIAL'")" == "7" ]] || fail "retry changed the row count"
+pass "retry of a finished bracket is a no-op"
+
+T_PLAYED='55555555-5555-4555-8555-555555555555'
+OUT="$("$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc \
+  "select public.generate_tournament_bracket('$T_PLAYED', '[]'::jsonb, jsonb_build_array(jsonb_build_object('user_id','$PC','seed',1)), 'db-verify')" 2>&1 || true)"
+echo "$OUT" | grep -q 'bracket_partial_conflict' || fail "a played row was overwritten — got: $OUT"
+pass "partial state containing a played match -> bracket_partial_conflict"
+
+# ── 9. cancel_reason ─────────────────────────────────────────────────────────
+echo
+echo "── 7/7  cancel_reason (Q9) ──────────────────────────────────────────"
+[[ "$(Q "select count(*) from information_schema.columns where table_schema='public' and table_name='scheduled_tournaments' and column_name='cancel_reason'")" == "1" ]] \
+  || fail "scheduled_tournaments.cancel_reason missing"
+pass "scheduled_tournaments.cancel_reason exists"
 
 echo
 echo "════════════════════════════════════════════════════════════════════════"

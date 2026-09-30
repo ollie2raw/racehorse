@@ -96,6 +96,31 @@ This script **cannot reach production**:
    unit test (`server/src/securityPostureRpc.test.ts`, text-only, no Postgres)
    defers to here.
 
+5. **Registration RPCs** (`2026-09-29_tournament_registration_rpcs.sql`,
+   tournament review A2 / A7), on fixtures from
+   `scripts/tournament-db-verify/phase1_seed.sql`:
+   - Two sessions claim the **last seat** of a 2-seat event. Session A holds
+     its transaction open; session B must block on the tournament row lock
+     (≥ 1s), then see A's committed row and get `tournament_full`. Exactly 2
+     of 2 seats end up taken. Node cannot show this: it needs two real
+     Postgres sessions.
+   - Re-registering an entrant on a full event is idempotent
+     (`already_registered`).
+   - Registering after `registration_close_at`, while the status is still
+     `registration_open` (the scheduler hasn't ticked), gets
+     `registration_closed` from the database clock and writes nothing.
+   - Withdraw before close deletes the row; withdraw on the `in_progress`
+     bracket from §2 gets `withdraw_closed` and the row is kept.
+
+6. **`generate_tournament_bracket` v2** (`2026-09-29_tournament_bracket_rpc_repair.sql`,
+   review A1 / B8): a tournament left with 4 unplayed QF rows by the old
+   insert-by-insert path is repaired to all 7 rows, `in_progress`, and
+   registrations `active` with the bracket seeds, in one call; a retry is a
+   no-op; a seed list missing a registrant gets `registrations_changed`; and
+   partial state containing a played match gets `bracket_partial_conflict`.
+
+7. **`cancel_reason`** exists on `scheduled_tournaments` (review Q9).
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS
