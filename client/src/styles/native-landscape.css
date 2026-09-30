@@ -2398,6 +2398,41 @@
     min-height: 0 !important;
   }
 
+  /* No nav here, so the lesson's own "Exit learn" (hidden with the other
+     setup-screen back buttons) comes back, bottom-left level with Play Move.
+     Show/Hide Preview goes: preview is on by default and hiding it only
+     removes the highlight on the tile Play Move will use. */
+  .rh-native .learn-guided-pvf .learn-guided-pvf__left {
+    position: relative !important;
+  }
+
+  .rh-native .rh-presentation .learn-guided-pvf .pvf-back-btn.learn-guided-pvf__exit {
+    display: inline-flex !important;
+    position: absolute;
+    left: 15px;
+    bottom: 11px;
+    z-index: 2;
+    align-items: center;
+    gap: 6px;
+    height: 30px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 14px !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    color: rgba(243, 238, 225, 0.85) !important;
+    font-family: var(--font-display);
+    font-size: 11px !important;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__action-secondary {
+    display: none !important;
+  }
+
   .rh-native .learn-guided-pvf .learn-guided-pvf__panel {
     display: flex !important;
     flex-direction: column !important;
