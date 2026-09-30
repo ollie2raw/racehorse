@@ -2293,6 +2293,47 @@
     display: none !important;
   }
 
+  /* Coaching tips run up to ~585 characters and must show whole (no paging,
+     no scrolling), so the coach gets about half the width; the board keeps
+     the rest. */
+  .rh-native .rh-presentation .learn-guided-pvf .pvf-layout > .pvf-left-col.learn-guided-pvf__left {
+    flex: 0 0 52% !important;
+    width: 52% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .rh-native .rh-presentation .learn-guided-pvf .pvf-layout > .learn-guided-pvf__panel {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  /* Header: the "Fritz Coach" label goes; the move chip tucks into the
+     card's top-right corner beside the title. */
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__content {
+    position: relative;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__header-meta {
+    display: contents !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__eyebrow {
+    display: none !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__progress-chip {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    padding: 3px 9px !important;
+    min-height: 0 !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__divider {
+    display: none !important;
+  }
+
   .rh-native .learn-guided-pvf .learn-guided-hero-card {
     flex: 1 1 0 !important;
     min-height: 0 !important;
@@ -2301,7 +2342,7 @@
 
   .rh-native .learn-guided-pvf .learn-guided-hero-card__content {
     height: 100%;
-    padding: 14px 16px !important;
+    padding: 12px 14px 10px !important;
     display: flex !important;
     flex-direction: column !important;
     min-height: 0 !important;
@@ -2312,13 +2353,18 @@
   }
 
   .rh-native .learn-guided-pvf .learn-guided-hero-card__title {
-    font-size: 20px !important;
+    font-size: 17px !important;
     line-height: 1.1 !important;
     margin: 0 !important;
+    padding-right: 96px;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__progress-rail {
+    margin-bottom: 8px !important;
   }
 
   .rh-native .learn-guided-pvf .learn-guided-hero-card__divider {
-    margin-block: 8px !important;
+    margin-block: 6px !important;
   }
 
   /* Coaching prose is long-form (3 short paragraphs): smaller type, and if a
@@ -2337,14 +2383,19 @@
   }
 
   .rh-native .learn-guided-pvf .learn-guided-hero-card__paragraph {
-    font-size: 12.5px !important;
-    line-height: 1.4 !important;
-    margin-block: 0 8px !important;
+    font-size: 12px !important;
+    line-height: 1.36 !important;
+    margin-block: 0 5px !important;
   }
 
   .rh-native .learn-guided-pvf .learn-guided-hero-card__footer {
     flex: 0 0 auto !important;
-    padding-top: 8px !important;
+    padding-top: 6px !important;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-hero-card__action-row > button {
+    height: 30px !important;
+    min-height: 0 !important;
   }
 
   .rh-native .learn-guided-pvf .learn-guided-pvf__panel {
@@ -2370,6 +2421,27 @@
 
   .rh-native .learn-guided-pvf .learn-guided-summary-item :is(span, strong, div) {
     line-height: 1.1 !important;
+  }
+
+  /* Narrower panel (coach column is ~half the width): keep the turn pill
+     and labels inside their own cells. */
+  .rh-native .learn-guided-pvf .learn-guided-summary-item {
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .rh-native .learn-guided-pvf .learn-guided-summary-turn {
+    max-width: 100%;
+    padding: 5px 8px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.08em !important;
+    white-space: nowrap;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
+    border-radius: 999px !important;
   }
 
   /* Beats the setup screens' `.pvf-control-panel > *` pin (flex: 0 0 auto):
