@@ -2349,6 +2349,137 @@
     zoom: 0.63;
   }
 
+  /* ── Profile + Settings: full bleed ────────────────────────────────
+     The page wrapper padded these by the safe areas, so each page's own
+     background sat in an inset box. The page runs edge to edge and pads its
+     own content instead. */
+  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen) {
+    padding: 0 !important;
+  }
+
+  .rh-native .rh-presentation-content:has(.rh-settings-page, .rh-pp-screen) > .app {
+    background: var(--bg-obsidian) !important;
+  }
+
+  .rh-native .rh-pp-screen {
+    padding: 0 max(var(--rh-safe-right), 16px) max(var(--rh-safe-bottom), 10px) max(var(--rh-safe-left), 16px) !important;
+    background: var(--bg-obsidian);
+  }
+
+  /* Settings: all six sections on one screen, three per row, compact. */
+  .rh-native .rh-settings-scroll {
+    overflow: hidden !important;
+  }
+
+  .rh-native .rh-settings {
+    max-width: none !important;
+    height: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px !important;
+    padding: 8px max(var(--rh-safe-right), 16px) max(var(--rh-safe-bottom), 8px) max(var(--rh-safe-left), 16px) !important;
+  }
+
+  /* The nav already says where you are. */
+  .rh-native .rh-settings-head {
+    display: none !important;
+  }
+
+  .rh-native .rh-settings-section {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    gap: 5px !important;
+    padding: 8px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  /* The card titles say it; the small eyebrows only cost height here. */
+  .rh-native .rh-settings-section-eyebrow {
+    display: none !important;
+  }
+
+  .rh-native .rh-settings-section > * {
+    flex-shrink: 0;
+  }
+
+  /* One-field cards (handle, email): the action sits beside the input. */
+  .rh-native .rh-settings-section:has(> label.rh-settings-field:only-of-type) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: start;
+    column-gap: 8px;
+  }
+
+  .rh-native .rh-settings-section:has(> label.rh-settings-field:only-of-type) > * {
+    grid-column: 1 / -1;
+  }
+
+  .rh-native .rh-settings-section > label.rh-settings-field:only-of-type {
+    grid-column: 1;
+  }
+
+  .rh-native .rh-settings-section > label.rh-settings-field:only-of-type + .rh-btn {
+    grid-column: 2;
+    align-self: end;
+  }
+
+  .rh-native .rh-settings-field-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rh-native .rh-settings-section-title {
+    font-size: 17px !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+  }
+
+  .rh-native .rh-settings-section-note {
+    margin: 0 !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
+  /* Password: new + confirm side by side so the card fits its cell. */
+  .rh-native .rh-settings-section:has(> .rh-settings-field + .rh-settings-field) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    column-gap: 8px;
+  }
+
+  .rh-native .rh-settings-section:has(> .rh-settings-field + .rh-settings-field) > :not(.rh-settings-field) {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .rh-native .rh-settings-field {
+    gap: 3px !important;
+    width: 100%;
+  }
+
+  .rh-native .rh-settings-field-label {
+    font-size: 9px !important;
+  }
+
+  .rh-native .rh-settings-input {
+    height: 28px !important;
+    min-height: 0 !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+  }
+
+  .rh-native .rh-settings-section .rh-btn {
+    height: 28px !important;
+    min-height: 0 !important;
+    padding: 0 14px !important;
+    font-size: 11px !important;
+  }
+
   /* ── Learn: No Brainer Lab ─────────────────────────────────────────
      Its own top bar (← Learn · goal · hand count) replaces the app nav.
      The board was squeezed to ~14px under a desktop-sized hand and a
