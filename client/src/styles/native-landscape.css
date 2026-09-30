@@ -1094,6 +1094,79 @@
     display: none !important;
   }
 
+  /* ── Private lobby polish (before a room exists) ─────────────────
+     One label instead of "Format / Private 1v1" (the title says it),
+     7 / 14 as real choice cards with a one-line subline, and the duel
+     stage as the left column's centrepiece with a live empty seat. */
+  .rh-native .rh-presentation .pml-format-section:not(:has(.pml-format-lock)) > .fritz-section-label,
+  .rh-native .rh-presentation .pml-format-section:not(:has(.pml-format-lock)) > .pml-section-heading {
+    display: none !important;
+  }
+
+  .rh-native .rh-presentation .pml-format-section div.pml-format-kicker.rh-app-only {
+    margin: 0 0 8px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .rh-native .rh-presentation .pml-format-section:has(.pml-format-lock) div.pml-format-kicker.rh-app-only {
+    display: none !important;
+  }
+
+  .rh-native .rh-presentation .pml-format-section .pml-format-seg {
+    gap: 10px !important;
+  }
+
+  .rh-native .rh-presentation .pml-format-section .pml-format-seg > .pml-format-seg__opt {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px;
+    min-height: 74px !important;
+    padding-block: 12px !important;
+  }
+
+  .rh-native .rh-presentation .pml-format-seg__name {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .rh-native .rh-presentation .pml-format-seg__opt span.pml-format-seg__sub.rh-app-only {
+    display: block !important;
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .rh-native .rh-presentation .pml-format-seg__opt.is-on span.pml-format-seg__sub.rh-app-only {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .rh-native .rh-presentation .pml-duel-card:has(.pml-duel-avatar--invite) {
+    border-style: dashed !important;
+    border-color: color-mix(in srgb, var(--pml-guest, #9b6cff) 60%, transparent) !important;
+    animation: rh-pml-seat-pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes rh-pml-seat-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pml-guest, #9b6cff) 0%, transparent); }
+    50% { box-shadow: 0 0 22px 2px color-mix(in srgb, var(--pml-guest, #9b6cff) 32%, transparent); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rh-native .rh-presentation .pml-duel-card:has(.pml-duel-avatar--invite) {
+      animation: none;
+    }
+  }
+
   /* A flex-column scroller shrinks its children to fit rather than
      overflowing; the Start wrapper was squashed to 18px. */
   .rh-native .rh-presentation .pvf-layout > .pvf-control-panel > * {
@@ -3315,7 +3388,7 @@
   }
 
   .rh-native .hand-over-modal__tiles-block:has(.hand-over-modal__tiles-section--secondary) .hand-over-modal__tile-tableau {
-    zoom: 0.6;
+    zoom: 0.5;
   }
 
   .rh-native .hand-over-modal__tiles-block {

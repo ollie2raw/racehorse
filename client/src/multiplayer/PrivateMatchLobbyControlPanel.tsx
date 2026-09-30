@@ -151,8 +151,11 @@ export function PrivateMatchLobbyControlPanel({
   // Section 1 — Match format. Mirrors Quick Match's eyebrow + heading + body,
   // then a single segmented control for the one real choice (7 vs 14 tiles).
   const formatSection = (
-    <div className="pml-section">
+    <div className="pml-section pml-format-section">
       <div className="fritz-section-label">Format</div>
+      <div className="pml-format-kicker rh-app-only" aria-hidden="true">
+        Tiles per hand
+      </div>
       <h2 className="pml-section-heading">Private 1v1</h2>
       {hasRoom ? (
         <span className="pml-format-lock">{formatLabel} · locked in</span>
@@ -168,7 +171,10 @@ export function PrivateMatchLobbyControlPanel({
               aria-pressed={dealFormat === 7}
               onClick={() => setDealFormat(7)}
             >
-              7 Tiles
+              <span className="pml-format-seg__name">7 Tiles</span>
+              <span className="pml-format-seg__sub rh-app-only" aria-hidden="true">
+                Classic
+              </span>
             </button>
             <button
               type="button"
@@ -176,7 +182,10 @@ export function PrivateMatchLobbyControlPanel({
               aria-pressed={dealFormat === 14}
               onClick={() => setDealFormat(14)}
             >
-              14 Tiles
+              <span className="pml-format-seg__name">14 Tiles</span>
+              <span className="pml-format-seg__sub rh-app-only" aria-hidden="true">
+                Longer game, more depth
+              </span>
             </button>
           </div>
         </>
@@ -554,7 +563,7 @@ export function PrivateMatchLobbyControlPanel({
               {pendingLobbyAction === 'create' ? 'Creating lobby…' : 'Create lobby'}
             </Button>
             <p className="pml-footer-hint pml-footer-hint--create">
-              Waiting for opponent to join…
+              You&apos;ll get a code to share.
             </p>
           </>
         ) : null}
