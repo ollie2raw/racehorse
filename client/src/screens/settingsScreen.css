@@ -259,3 +259,26 @@
     padding: var(--space-lg) var(--space-md) 96px;
   }
 }
+
+/* Wide screens: one page of cards instead of a narrow column to scroll.
+   Handle / Email / Password on the first row, Sound / Session / Delete on
+   the second — the same order as the stack, so nothing moves on phones. */
+@media (min-width: 1000px) {
+  .rh-settings {
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 16px;
+    padding: var(--space-md) var(--space-md) var(--space-md);
+  }
+
+  .rh-settings-section {
+    gap: 10px;
+    padding: 20px 22px;
+  }
+
+  .rh-settings-head {
+    grid-column: 1 / -1;
+  }
+}
