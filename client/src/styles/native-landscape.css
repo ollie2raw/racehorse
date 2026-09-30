@@ -1569,6 +1569,23 @@
     padding-block: 8px !important;
   }
 
+  /* Stages label + list as one column spanning the whole card height,
+     centred, so the right side has no dead space beside the actions. */
+  .rh-native .pr-results__stages-col {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .rh-native .pr-results__stages-col > * {
+    align-self: stretch !important;
+    margin: 0 !important;
+  }
+
   .rh-native .pr-results__actions {
     grid-column: 1;
     grid-row: 4;
@@ -2257,6 +2274,85 @@
      same 0.82 left them ~96px wide and cut off. Scale to the match's 74×37. */
   .rh-native .screen.game-screen.walnut-live.rh-match-live.puzzle-rush-root .hand-row .domino-tile {
     zoom: 0.63;
+  }
+
+  /* ── Puzzle Rush top bar ───────────────────────────────────────────
+     Same 36px row as the match pills. The run pill (score | stage) was
+     ~58px and grew when the time-bonus chip appeared, so the bar pushed
+     into the board. "Puzzle n / 15" repeats the pill's n/15 — hidden. */
+  .rh-native .puzzle-rush-root .pr-hud-run {
+    height: 36px;
+    padding: 0 12px !important;
+    gap: 10px !important;
+    align-items: center;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-run__score {
+    gap: 0 !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-run__score-value {
+    font-size: 17px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-run__score-label {
+    font-size: 8px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-run__divider {
+    align-self: stretch;
+    margin-block: 7px;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage {
+    min-width: 136px !important;
+    gap: 4px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage__name {
+    font-size: 12px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage__count {
+    font-size: 13px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage__count-total {
+    font-size: 10px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage__meter {
+    height: 4px !important;
+  }
+
+  .rh-native .puzzle-rush-root .pr-hud-stage__position,
+  .rh-native .puzzle-rush-root .rh-pr-puzzle-count {
+    display: none !important;
+  }
+
+  .rh-native .puzzle-rush-root .rh-pr-center {
+    position: relative;
+  }
+
+  .rh-native .puzzle-rush-root .pr-clock {
+    font-size: 26px !important;
+  }
+
+  /* The bonus floats beside the clock instead of adding a line. */
+  .rh-native .puzzle-rush-root .pr-clock-bonus {
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 50%;
+    translate: 0 -50%;
+    margin: 0 !important;
+    font-size: 13px !important;
+    white-space: nowrap;
+  }
+
+  .rh-native .puzzle-rush-root .rh-match-solo-action-btn {
+    height: 36px !important;
+    min-height: 0 !important;
+    padding-block: 0 !important;
   }
 
   /* ── End-of-hand modal ─────────────────────────────────────────────
