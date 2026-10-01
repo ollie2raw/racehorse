@@ -215,4 +215,22 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.getByText('Analyzing 20 / 53 decisions')).toBeInTheDocument();
     expect(screen.queryByText('92.5%')).not.toBeInTheDocument();
   });
+
+  it('review unavailable: says so instead of Analyzing forever, and keeps the actions', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewUnavailable
+      />,
+    );
+    const accuracyStat = screen.getByText('Accuracy').closest('.dfd__stat');
+    expect(accuracyStat).toHaveTextContent('Unavailable');
+    expect(screen.getByText('Review unavailable for this game.')).toBeInTheDocument();
+    expect(screen.queryByText('Analyzing game…')).not.toBeInTheDocument();
+    expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review Game' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+  });
 });

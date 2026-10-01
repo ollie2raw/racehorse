@@ -271,6 +271,7 @@ export type ModalOverlayViewModel = {
   botPostGameReviewEligible: boolean;
   postGameAnalysisPending: boolean;
   accuracyModelPending: boolean;
+  reviewUnavailable: boolean;
   decisionLedger: PlayerDecisionLedgerSummary | null;
   isPlayVsFritzGameOver: boolean;
   isGuidedMatchVictoryResult: boolean;

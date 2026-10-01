@@ -290,6 +290,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       botPostGameReviewEligible: review.botPostGameReviewEligible,
       postGameAnalysisPending: review.postGameAnalysisPending,
       accuracyModelPending: review.accuracyModelPending,
+      reviewUnavailable: review.reviewUnavailable,
       decisionLedger: review.decisionLedger,
       isPlayVsFritzGameOver,
       isGuidedMatchVictoryResult: turns.isGuidedMatchVictoryResult,
