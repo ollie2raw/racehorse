@@ -8,6 +8,9 @@ import type {
 } from '@racehorse/review-engine';
 import {
   REVIEW_COMPLETION_LEASE_MS,
+  REVIEW_COMPLETION_MAX_ATTEMPTS,
+  REVIEW_COMPLETION_JOB_BACKOFF_BASE_MS,
+  REVIEW_COMPLETION_JOB_BACKOFF_MAX_MS,
 } from '@racehorse/review-engine';
 import { supabaseFetch } from '../supabaseUtils';
 import { childLogger } from '../logger';
@@ -28,6 +31,9 @@ type JobRow = {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /** 2026-10-01 migration; absent on rows read before it is applied. */
+  attempt_count?: number;
+  failure_reason?: string | null;
 };
 
 function rowToRecord(row: JobRow): ReviewCompletionJobRecord {
@@ -45,6 +51,9 @@ function rowToRecord(row: JobRow): ReviewCompletionJobRecord {
     nextAttemptAt: Date.parse(row.next_attempt_at),
     createdAt: Date.parse(row.created_at),
     updatedAt: Date.parse(row.updated_at),
+    // Columns are the authority; the payload copy may be stale.
+    attemptCount: row.attempt_count ?? 0,
+    failureReason: row.failure_reason ?? null,
   };
 }
 
@@ -140,8 +149,10 @@ export class SupabaseCheckpointStore implements CheckpointStore {
     leaseMs = REVIEW_COMPLETION_LEASE_MS,
   ): Promise<ReviewCompletionJobRecord | null> {
     try {
+      // v2 re-checks due-ness on the locked row and enforces the attempt cap
+      // (2026-10-01_review_completion_worker_isolation.sql).
       const rows = await supabaseFetch<JobRow[]>(
-        '/rest/v1/rpc/claim_review_completion_job',
+        '/rest/v1/rpc/claim_review_completion_job_v2',
         {
           method: 'POST',
           headers: { Prefer: 'return=representation' },
@@ -149,6 +160,9 @@ export class SupabaseCheckpointStore implements CheckpointStore {
             p_job_id: jobId,
             p_claim_token: claimToken,
             p_lease_ms: leaseMs,
+            p_max_attempts: REVIEW_COMPLETION_MAX_ATTEMPTS,
+            p_backoff_base_ms: REVIEW_COMPLETION_JOB_BACKOFF_BASE_MS,
+            p_backoff_max_ms: REVIEW_COMPLETION_JOB_BACKOFF_MAX_MS,
           }),
         },
       );
@@ -160,6 +174,27 @@ export class SupabaseCheckpointStore implements CheckpointStore {
       log.warn({ err: error, jobId }, 'claim RPC failed');
       throw error;
     }
+  }
+
+  async renewLease(
+    jobId: string,
+    claimToken: string,
+    claimGeneration: number,
+    leaseMs = REVIEW_COMPLETION_LEASE_MS,
+  ): Promise<boolean> {
+    const renewed = await supabaseFetch<boolean>(
+      '/rest/v1/rpc/renew_review_completion_lease',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_job_id: jobId,
+          p_claim_token: claimToken,
+          p_claim_generation: claimGeneration,
+          p_lease_ms: leaseMs,
+        }),
+      },
+    );
+    return renewed === true;
   }
 
   async checkpoint(
