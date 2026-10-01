@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node';
 import { config } from './config';
 import { sentryBeforeSend } from './sentryScrubbers';
+import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -944,4 +945,12 @@ server.listen(PORT, () => {
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
   scheduleReviewCompletionSweep();
+  startEventLoopLagMonitor({
+    sentry: {
+      dsn: config.sentryDsn || undefined,
+      enabled: config.isProd && Boolean(config.sentryDsn),
+      environment: config.nodeEnv,
+      release: config.renderGitCommit ?? config.packageVersion,
+    },
+  });
 });
