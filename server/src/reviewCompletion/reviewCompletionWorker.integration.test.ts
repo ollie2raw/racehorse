@@ -24,6 +24,7 @@ describe('deployed review completion HTTP flow', () => {
   const store = new InMemoryCheckpointStore();
 
   beforeAll(async () => {
+    vi.stubEnv('REVIEW_SWEEP_ENABLED', 'true');
     setReviewCompletionStoreForTests(store);
     const app = express();
     app.use(express.json({ limit: '2mb' }));
@@ -36,6 +37,7 @@ describe('deployed review completion HTTP flow', () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
 

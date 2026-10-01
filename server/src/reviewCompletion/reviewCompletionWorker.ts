@@ -90,9 +90,12 @@ export async function enqueueReviewCompletionJob(input: {
   if (!confirmed) {
     throw new Error('Failed to durably persist review completion job');
   }
-  void sweepReviewCompletionJobs().catch((error) => {
-    log.warn({ err: error, jobId: job.jobId }, 'kick failed');
-  });
+  // The job stays queued when the sweep is off; it runs once the sweep is back on.
+  if (isReviewSweepEnabled()) {
+    void sweepReviewCompletionJobs().catch((error) => {
+      log.warn({ err: error, jobId: job.jobId }, 'kick failed');
+    });
+  }
   return confirmed;
 }
 
@@ -138,7 +141,22 @@ export async function sweepReviewCompletionJobs(limit = 4): Promise<{
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Kill switch: review passes run on the web server's event loop, and a stuck
+ * job can pin it (2026-09-30 / 10-01 outages). Off unless REVIEW_SWEEP_ENABLED
+ * is exactly "true". Off means no periodic sweep and no kick on enqueue; jobs
+ * are still accepted and stay queued until the sweep is turned back on.
+ */
+export function isReviewSweepEnabled(): boolean {
+  return process.env.REVIEW_SWEEP_ENABLED === 'true';
+}
+
 export function scheduleReviewCompletionSweep(): void {
+  if (!isReviewSweepEnabled()) {
+    log.warn('review completion sweep DISABLED (REVIEW_SWEEP_ENABLED is not "true"); jobs stay queued');
+    return;
+  }
+  log.info('review completion sweep ENABLED (REVIEW_SWEEP_ENABLED=true)');
   if (sweepTimer) return;
   sweepTimer = setInterval(() => {
     void sweepReviewCompletionJobs().catch((error) => {
@@ -146,6 +164,12 @@ export function scheduleReviewCompletionSweep(): void {
     });
   }, REVIEW_COMPLETION_SWEEP_INTERVAL_MS);
   if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+}
+
+/** Test seam: clear the periodic sweep timer. */
+export function stopReviewCompletionSweepForTests(): void {
+  if (sweepTimer) clearInterval(sweepTimer);
+  sweepTimer = null;
 }
 
 export function registerReviewCompletionJobsRoute(app: Application): void {
