@@ -92,4 +92,38 @@ describe('deployed review completion HTTP flow', () => {
     expect(jobAuthoritativeComplete(persisted!)).toBe(true);
     expect(persisted!.decisions[0]?.attemptCount).toBeGreaterThanOrEqual(0);
   });
+
+  it('reports unavailable while the sweep is switched off, so the client stops polling', async () => {
+    vi.stubEnv('REVIEW_SWEEP_ENABLED', 'false');
+    try {
+      const snapshot = REVIEW_FIXTURE_CORPUS[0]!.snapshot;
+      const createResponse = await fetch(`${apiBase}/api/review-completion-jobs`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer integration-session', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameDigest: `http-unavailable-${Date.now()}`,
+          sourceMatchId: 'safe-unavailable-match',
+          snapshots: [snapshot],
+          expectedDecisionIds: [snapshot.identifiers.decisionId],
+        }),
+      });
+      expect(createResponse.status).toBe(202);
+      const created = await createResponse.json() as { jobId: string };
+      const status = await fetch(`${apiBase}/api/review-completion-jobs/${encodeURIComponent(created.jobId)}`, {
+        headers: { Authorization: 'Bearer integration-session' },
+      });
+      const body = await status.json() as { status: string; complete: boolean; unavailable: boolean };
+      expect(body.status).toBe('pending');
+      expect(body.complete).toBe(false);
+      expect(body.unavailable).toBe(true);
+
+      vi.stubEnv('REVIEW_SWEEP_ENABLED', 'true');
+      const again = await fetch(`${apiBase}/api/review-completion-jobs/${encodeURIComponent(created.jobId)}`, {
+        headers: { Authorization: 'Bearer integration-session' },
+      });
+      expect((await again.json() as { unavailable: boolean }).unavailable).toBe(false);
+    } finally {
+      vi.stubEnv('REVIEW_SWEEP_ENABLED', 'true');
+    }
+  });
 });

@@ -246,10 +246,14 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
     }
     const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
     const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;
+    const complete = jobAuthoritativeComplete(job);
     res.status(200).json({
       jobId: job.jobId,
       status: job.status,
-      complete: jobAuthoritativeComplete(job),
+      complete,
+      // Terminal for the client: the job failed, or the sweep is switched off
+      // so nothing will advance it. The client stops polling and says so.
+      unavailable: !complete && (job.status === 'failed_fatal' || !isReviewSweepEnabled()),
       progress: {
         total: job.expectedDecisionIds.length,
         forced,

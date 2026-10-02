@@ -69,6 +69,8 @@ export async function pollServerReviewCompletion(input: {
 }): Promise<{
   readonly complete: boolean;
   readonly status: string;
+  /** Server will not finish this job (failed, or review sweep switched off). */
+  readonly unavailable?: boolean;
   readonly progress: EnqueueReviewCompletionResponse['progress'];
   readonly evaluations?: ReviewEvaluationV1[];
   readonly decisions: readonly { decisionId: string; lifecycle: string; positionHash: string }[];
@@ -84,6 +86,7 @@ export async function pollServerReviewCompletion(input: {
     return (await res.json()) as {
       complete: boolean;
       status: string;
+      unavailable?: boolean;
       progress: EnqueueReviewCompletionResponse['progress'];
       evaluations?: ReviewEvaluationV1[];
       decisions: { decisionId: string; lifecycle: string; positionHash: string }[];

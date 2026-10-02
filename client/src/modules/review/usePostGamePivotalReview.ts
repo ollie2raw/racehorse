@@ -289,6 +289,8 @@ export function usePostGamePivotalReview({
       });
       if (cancelled) return;
       if (result) setServerCompletion(result);
+      // Unavailable is terminal: nothing on the server will advance the job.
+      if (result?.unavailable && !result.complete) return;
       timer = setTimeout(() => { void poll(); }, result?.complete ? 5_000 : 1_000);
     };
     void poll();
@@ -403,6 +405,9 @@ export function usePostGamePivotalReview({
   // Still short-circuits to `false` immediately for zero snapshots (no
   // worker spawned, nothing will ever resolve) -- unchanged from before.
   const [accuracyModelPending, setAccuracyModelPending] = useState(false);
+  const reviewUnavailable = reviewPersistenceEnabled
+    && serverCompletion?.unavailable === true
+    && serverCompletion.complete !== true;
   const [accuracyModel, setAccuracyModel] = useState<GameAccuracyModelResult | undefined>(undefined);
   // Derived alongside accuracyModel, from the same resolved data, so
   // GameReviewer's evidence banner stops being permanently pinned to
@@ -758,6 +763,7 @@ export function usePostGamePivotalReview({
     postGameAnalysis: exposedPostGameAnalysis,
     postGameAnalysisPending,
     accuracyModelPending,
+    reviewUnavailable,
     decisionLedger,
     reviewWorkerBatch: exposedReviewWorkerBatch,
     decisionIdByMoveNumber,

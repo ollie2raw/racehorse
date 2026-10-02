@@ -20,6 +20,8 @@ export type PostGameReviewPromptProps = {
   opponentLabel: string;
   analysis: GameAnalysis;
   accuracyModelPending: boolean;
+  /** The server will not finish this review; show that instead of Analyzing. */
+  reviewUnavailable?: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
   onReviewGame: () => void;
   onSkip: () => void;
@@ -33,12 +35,21 @@ export type PostGameReviewPromptProps = {
 function resolveAccuracyStatValues({
   analysis,
   accuracyModelPending,
+  reviewUnavailable,
   decisionLedger,
 }: {
   analysis: GameAnalysis;
   accuracyModelPending: boolean;
+  reviewUnavailable: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
 }): { accuracyText: string; gradeText: string; coverageText: string | null } {
+  if (reviewUnavailable) {
+    return {
+      accuracyText: 'Unavailable',
+      gradeText: '—',
+      coverageText: 'Review unavailable for this game.',
+    };
+  }
   const ledger = decisionLedger;
   const totalNonForced = ledger ? ledger.totalDecisions - ledger.forcedCount : null;
   const fullyResolved = Boolean(ledger
@@ -80,6 +91,7 @@ export function PostGameReviewPrompt({
   opponentLabel,
   analysis,
   accuracyModelPending,
+  reviewUnavailable = false,
   decisionLedger = null,
   onReviewGame,
   onSkip,
@@ -92,6 +104,7 @@ export function PostGameReviewPrompt({
   const { accuracyText, gradeText, coverageText } = resolveAccuracyStatValues({
     analysis,
     accuracyModelPending,
+    reviewUnavailable,
     decisionLedger,
   });
 

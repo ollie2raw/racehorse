@@ -270,6 +270,80 @@ describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
   });
 });
 
+describe('usePostGamePivotalReview — review unavailable', () => {
+  it('stops polling and reports reviewUnavailable when the server will not finish the job', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('unavailable-1')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-unavailable-job', status: 'pending',
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+    });
+    pollServerReviewCompletionMock.mockResolvedValue({
+      complete: false,
+      status: 'pending',
+      unavailable: true,
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+      decisions: [{ decisionId: 'unavailable-1', lifecycle: 'PENDING', positionHash: 'position-1' }],
+      evaluations: [],
+    });
+
+    vi.useFakeTimers();
+    const { result, unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      }
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      expect(result.current.reviewUnavailable).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps polling a pending job the server is still working on', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('working-1')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-working-job', status: 'pending',
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+    });
+    pollServerReviewCompletionMock.mockResolvedValue({
+      complete: false,
+      status: 'running',
+      unavailable: false,
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+      decisions: [{ decisionId: 'working-1', lifecycle: 'PENDING', positionHash: 'position-1' }],
+      evaluations: [],
+    });
+
+    vi.useFakeTimers();
+    const { result, unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      }
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
+      expect(pollServerReviewCompletionMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(result.current.reviewUnavailable).toBe(false);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('usePostGamePivotalReview — A6 persistence gate (found during Phase-A live verification)', () => {
   it('persists captured snapshots at game-over even when the review UI is not eligible (non-admin), as long as capture was enabled for this session', async () => {
     const snapshots = [{ identifiers: { decisionId: 'fake-1' } }] as unknown as ReviewPositionSnapshotV2[];
