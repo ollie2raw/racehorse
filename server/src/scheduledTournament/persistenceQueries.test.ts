@@ -39,3 +39,18 @@ describe('fetchMatches', () => {
     expect(TOURNAMENT_MATCH_PAGE_LIMIT).toBeGreaterThanOrEqual(64);
   });
 });
+
+describe('fetchDueLifecycleTournaments', () => {
+  it('asks only for opened-upcoming and registration_open rows, four columns, bounded', async () => {
+    const { fetchDueLifecycleTournaments } = await import('./persistence');
+    supabaseFetchMock.mockClear();
+
+    await fetchDueLifecycleTournaments(new Date('2026-10-03T02:00:00.000Z'));
+
+    const path = decodeURIComponent(supabaseFetchMock.mock.calls[0]![0] as string);
+    expect(path).toContain('select=id,status,registration_open_at,registration_close_at');
+    expect(path).toContain('or=(and(status.eq.upcoming,registration_open_at.lte.2026-10-03T02:00:00.000Z),status.eq.registration_open)');
+    expect(path).not.toContain('select=*');
+    expect(path).toContain('limit=50');
+  });
+});

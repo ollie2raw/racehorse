@@ -73,6 +73,29 @@ export async function fetchTournamentsByStatus(
   );
 }
 
+export type DueLifecycleTournament = Pick<
+  ScheduledTournamentRow,
+  'id' | 'status' | 'registration_open_at' | 'registration_close_at'
+>;
+
+/**
+ * The scheduler tick's lifecycle candidates: `upcoming` events whose
+ * registration has opened, and every `registration_open` event. The tick acts
+ * on nothing else, but it used to read every upcoming row (`select=*`, the
+ * 200-row cap of a 30-day seed window, ~71 KB) every 30 s. Same decisions,
+ * usually 0-1 rows, four columns.
+ */
+export async function fetchDueLifecycleTournaments(now: Date): Promise<DueLifecycleTournament[]> {
+  const nowIso = encodeURIComponent(now.toISOString());
+  return supabaseFetch<DueLifecycleTournament[]>(
+    `/rest/v1/${TABLES.tournaments}` +
+      `?select=id,status,registration_open_at,registration_close_at` +
+      `&or=(and(status.eq.upcoming,registration_open_at.lte.${nowIso}),status.eq.registration_open)` +
+      `&order=scheduled_start.asc` +
+      `&limit=50`,
+  );
+}
+
 export async function updateTournamentStatus(
   id: string,
   status: ScheduledTournamentStatus,

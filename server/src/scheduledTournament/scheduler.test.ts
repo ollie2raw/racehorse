@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fetchTournamentsByStatus: vi.fn(),
+  fetchDueLifecycleTournaments: vi.fn(),
   openRegistration: vi.fn(),
   closeRegistrationAndStart: vi.fn(),
   dispatchScheduledStartMatches: vi.fn(),
@@ -17,6 +18,12 @@ vi.mock('@sentry/node', () => ({
 
 vi.mock('./persistence', () => ({
   fetchTournamentsByStatus: (...args: unknown[]) => mocks.fetchTournamentsByStatus(...args),
+  // The tick now reads only due lifecycle candidates; serve them from the same
+  // status-keyed mock so every scenario below keeps its fixtures.
+  fetchDueLifecycleTournaments: (...args: unknown[]) => {
+    mocks.fetchDueLifecycleTournaments(...args);
+    return mocks.fetchTournamentsByStatus(['upcoming', 'registration_open']);
+  },
 }));
 
 vi.mock('./engine', () => ({
