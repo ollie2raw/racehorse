@@ -4,6 +4,7 @@
  */
 import type {
   CheckpointStore,
+  ClaimableReviewJob,
   ReviewCompletionJobRecord,
 } from '@racehorse/review-engine';
 import {
@@ -57,6 +58,45 @@ function rowToRecord(row: JobRow): ReviewCompletionJobRecord {
   };
 }
 
+/** Columns the worker reads back from a checkpoint (the payload it already has). */
+const CHECKPOINT_RETURN_COLUMNS =
+  'id,status,claim_token,claim_generation,lease_expires_at,next_attempt_at,updated_at,completed_at,attempt_count,failure_reason';
+
+/** Everything the status poll needs: the row minus the payload's snapshots. */
+const SUMMARY_COLUMNS = [
+  'id', 'user_id', 'game_digest', 'source_match_id', 'status', 'claim_token', 'claim_generation',
+  'lease_expires_at', 'next_attempt_at', 'created_at', 'updated_at', 'completed_at',
+  'attempt_count', 'failure_reason',
+  'decisions:job_payload->decisions',
+  'expectedDecisionIds:job_payload->expectedDecisionIds',
+  'accuracyModelResult:job_payload->accuracyModelResult',
+  'captureFailures:job_payload->captureFailures',
+  'jobVersion:job_payload->jobVersion',
+].join(',');
+
+type SummaryRow = Omit<JobRow, 'job_payload'> & {
+  decisions: ReviewCompletionJobRecord['decisions'] | null;
+  expectedDecisionIds: ReviewCompletionJobRecord['expectedDecisionIds'] | null;
+  accuracyModelResult: ReviewCompletionJobRecord['accuracyModelResult'] | null;
+  captureFailures: ReviewCompletionJobRecord['captureFailures'] | null;
+  jobVersion: ReviewCompletionJobRecord['jobVersion'] | null;
+};
+
+function summaryRowToRecord(row: SummaryRow): ReviewCompletionJobRecord {
+  const { decisions, expectedDecisionIds, accuracyModelResult, captureFailures, jobVersion, ...columns } = row;
+  return rowToRecord({
+    ...columns,
+    job_payload: {
+      jobVersion,
+      decisions: decisions ?? [],
+      expectedDecisionIds: expectedDecisionIds ?? [],
+      accuracyModelResult: accuracyModelResult ?? undefined,
+      captureFailures: captureFailures ?? [],
+      snapshots: [],
+    } as unknown as ReviewCompletionJobRecord,
+  });
+}
+
 function recordToPayload(job: ReviewCompletionJobRecord): ReviewCompletionJobRecord {
   // Persist full semantic job; table columns mirror identity/status/lease.
   return {
@@ -77,6 +117,15 @@ export class SupabaseCheckpointStore implements CheckpointStore {
     );
     const row = rows?.[0];
     return row ? rowToRecord(row) : null;
+  }
+
+  async getSummary(jobId: string): Promise<ReviewCompletionJobRecord | null> {
+    const rows = await supabaseFetch<SummaryRow[]>(
+      `/rest/v1/review_completion_jobs?id=eq.${encodeURIComponent(jobId)}&select=${SUMMARY_COLUMNS}`,
+      { method: 'GET' },
+    );
+    const row = rows?.[0];
+    return row ? summaryRowToRecord(row) : null;
   }
 
   async getByGameDigest(
@@ -204,7 +253,9 @@ export class SupabaseCheckpointStore implements CheckpointStore {
     leaseMs = REVIEW_COMPLETION_LEASE_MS,
   ): Promise<ReviewCompletionJobRecord | null> {
     const rows = await supabaseFetch<JobRow[]>(
-      '/rest/v1/rpc/checkpoint_review_completion_job',
+      // Only the columns: the payload is what we just sent (it was ~40 KB
+      // per checkpoint, one checkpoint per position).
+      `/rest/v1/rpc/checkpoint_review_completion_job?select=${CHECKPOINT_RETURN_COLUMNS}`,
       {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
@@ -221,19 +272,25 @@ export class SupabaseCheckpointStore implements CheckpointStore {
     );
     const row = Array.isArray(rows) ? rows[0] : (rows as unknown as JobRow | null);
     if (!row || !row.id) return null;
-    return rowToRecord(row);
+    return rowToRecord({ ...row, job_payload: recordToPayload(job) });
   }
 
-  async listClaimable(_now: number, limit = 8): Promise<readonly ReviewCompletionJobRecord[]> {
-    const rows = await supabaseFetch<JobRow[]>(
-      '/rest/v1/rpc/list_claimable_review_completion_jobs',
+  async listClaimable(_now: number, limit = 8): Promise<readonly ClaimableReviewJob[]> {
+    // The sweep only needs ids and lease state; the claim reads the full row.
+    const rows = await supabaseFetch<Array<Pick<JobRow, 'id' | 'claim_token' | 'lease_expires_at' | 'next_attempt_at'>>>(
+      '/rest/v1/rpc/list_claimable_review_completion_jobs?select=id,claim_token,lease_expires_at,next_attempt_at',
       {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({ p_limit: limit }),
       },
     );
-    const list = Array.isArray(rows) ? rows : rows ? [rows as unknown as JobRow] : [];
-    return list.filter((r) => r?.id).map(rowToRecord);
+    const list = Array.isArray(rows) ? rows : [];
+    return list.filter((r) => r?.id).map((r) => ({
+      jobId: r.id,
+      claimToken: r.claim_token,
+      leaseExpiresAt: r.lease_expires_at ? Date.parse(r.lease_expires_at) : null,
+      nextAttemptAt: Date.parse(r.next_attempt_at),
+    }));
   }
 }
