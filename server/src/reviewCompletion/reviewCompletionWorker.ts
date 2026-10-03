@@ -70,6 +70,30 @@ export function resetReviewCompletionRecoveryCount(): void {
   recoveryCount = 0;
 }
 
+/**
+ * Review funnel counters for cost decisions (on-demand start): eligible and
+ * opened come from the client, started is a newly created job. In memory,
+ * logged and reset hourly; a restart loses at most the current hour.
+ */
+const reviewFunnel = { eligible: 0, started: 0, opened: 0 };
+let reviewFunnelTimer: ReturnType<typeof setInterval> | null = null;
+
+export function takeReviewFunnel(): { eligible: number; started: number; opened: number } {
+  const snapshot = { ...reviewFunnel };
+  reviewFunnel.eligible = 0;
+  reviewFunnel.started = 0;
+  reviewFunnel.opened = 0;
+  return snapshot;
+}
+
+function startReviewFunnelLog(): void {
+  if (reviewFunnelTimer) return;
+  reviewFunnelTimer = setInterval(() => {
+    log.info({ ...takeReviewFunnel(), windowMs: 3_600_000 }, 'review funnel');
+  }, 3_600_000);
+  reviewFunnelTimer.unref?.();
+}
+
 export async function enqueueReviewCompletionJob(input: {
   readonly userId: string;
   readonly gameDigest: string;
@@ -94,6 +118,7 @@ export async function enqueueReviewCompletionJob(input: {
   });
   // Durable before acknowledgment.
   await store.put(job);
+  reviewFunnel.started += 1;
   const confirmed = await store.get(job.jobId);
   if (!confirmed) {
     throw new Error('Failed to durably persist review completion job');
@@ -300,6 +325,23 @@ export function stopReviewCompletionSweepForTests(): void {
 }
 
 export function registerReviewCompletionJobsRoute(app: Application): void {
+  startReviewFunnelLog();
+
+  app.post('/api/review-completion-jobs/events', async (req: Request, res: Response) => {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const event = (req.body as { event?: unknown } | undefined)?.event;
+    if (event !== 'eligible' && event !== 'opened') {
+      res.status(400).json({ error: 'event must be eligible or opened.' });
+      return;
+    }
+    reviewFunnel[event] += 1;
+    res.status(204).end();
+  });
+
   app.post('/api/review-completion-jobs', async (req: Request, res: Response) => {
     const authenticatedUserId = await getAuthenticatedUserId(req);
     if (!authenticatedUserId) {
