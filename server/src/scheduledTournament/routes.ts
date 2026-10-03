@@ -10,7 +10,8 @@ import {
   fetchActiveAssignedMatchForUser,
   fetchRegistrationsForUser,
   fetchRegistrations,
-  fetchMatches,
+  fetchMatchesForTournaments,
+  fetchTournamentsByIds,
   isValidUuid,
   registerForTournament,
   REGISTRATION_RPC_ERRORS,
@@ -109,16 +110,12 @@ export function registerTournamentRoutes(app: Express): void {
     try {
       const regs = await fetchRegistrationsForUser(userId);
       const tournamentIds = [...new Set(regs.map((reg) => reg.tournament_id))];
-      const tournamentsById = new Map(
-        (await Promise.all(tournamentIds.map((id) => fetchTournamentById(id))))
-          .filter((t): t is NonNullable<typeof t> => Boolean(t))
-          .map((t) => [t.id, t] as const),
-      );
-      const matchesByTournamentId = new Map(
-        await Promise.all(
-          tournamentIds.map(async (id) => [id, await fetchMatches(id)] as const),
-        ),
-      );
+      // Two batched reads instead of two per registration (up to 100).
+      const [tournamentRows, matchesByTournamentId] = await Promise.all([
+        fetchTournamentsByIds(tournamentIds),
+        fetchMatchesForTournaments(tournamentIds),
+      ]);
+      const tournamentsById = new Map(tournamentRows.map((t) => [t.id, t] as const));
       const opponentIds = new Set<string>();
       for (const matches of matchesByTournamentId.values()) {
         for (const match of matches) {

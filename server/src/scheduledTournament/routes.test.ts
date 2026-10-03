@@ -45,6 +45,12 @@ vi.mock('./persistence', async () => {
     fetchRegistrations: (...args: unknown[]) => mocks.fetchRegistrations(...args),
     fetchRegistrationsWithProfile: (...args: unknown[]) => mocks.fetchRegistrationsWithProfile(...args),
     fetchMatches: (...args: unknown[]) => mocks.fetchMatches(...args),
+    // /me batches its reads; serve the batches from the per-id mocks so the
+    // fixtures below stay the source of truth.
+    fetchTournamentsByIds: async (ids: string[]) =>
+      (await Promise.all(ids.map((id) => mocks.fetchTournamentById(id)))).filter(Boolean),
+    fetchMatchesForTournaments: async (ids: string[]) =>
+      new Map(await Promise.all(ids.map(async (id) => [id, (await mocks.fetchMatches(id)) ?? []] as const))),
     registerForTournament: (...args: unknown[]) => mocks.registerForTournament(...args),
     withdrawFromTournament: (...args: unknown[]) => mocks.withdrawFromTournament(...args),
   };

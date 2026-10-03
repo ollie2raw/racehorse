@@ -54,3 +54,35 @@ describe('fetchDueLifecycleTournaments', () => {
     expect(path).toContain('limit=50');
   });
 });
+
+describe('/me batch readers', () => {
+  it('fetchMatchesForTournaments reads all tournaments in one request and groups rows', async () => {
+    const { fetchMatchesForTournaments } = await import('./persistence');
+    supabaseFetchMock.mockClear();
+    supabaseFetchMock.mockResolvedValueOnce([
+      { id: 'm1', tournament_id: 't1' },
+      { id: 'm2', tournament_id: 't2' },
+      { id: 'm3', tournament_id: 't1' },
+    ] as never);
+
+    const grouped = await fetchMatchesForTournaments(['t1', 't2', 't3']);
+
+    expect(supabaseFetchMock).toHaveBeenCalledTimes(1);
+    const path = decodeURIComponent(supabaseFetchMock.mock.calls[0]![0] as string);
+    expect(path).toContain('tournament_id=in.("t1","t2","t3")');
+    expect(path).toContain('order=round.asc,match_number.asc');
+    expect(grouped.get('t1')!.map((m) => m.id)).toEqual(['m1', 'm3']);
+    expect(grouped.get('t2')!.map((m) => m.id)).toEqual(['m2']);
+    expect(grouped.get('t3')).toEqual([]);
+  });
+
+  it('fetchTournamentsByIds is one request and skips the call for no ids', async () => {
+    const { fetchTournamentsByIds } = await import('./persistence');
+    supabaseFetchMock.mockClear();
+    expect(await fetchTournamentsByIds([])).toEqual([]);
+    expect(supabaseFetchMock).not.toHaveBeenCalled();
+    await fetchTournamentsByIds(['t1', 't2']);
+    expect(supabaseFetchMock).toHaveBeenCalledTimes(1);
+    expect(decodeURIComponent(supabaseFetchMock.mock.calls[0]![0] as string)).toContain('id=in.("t1","t2")');
+  });
+});
