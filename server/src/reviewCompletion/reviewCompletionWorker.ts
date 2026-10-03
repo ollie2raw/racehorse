@@ -244,6 +244,26 @@ async function runJobPass(jobId: string, claimToken: string) {
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
+ * Idle backoff for the periodic sweep. Each sweep is a Supabase round trip
+ * (5,760 a day at 15 s) and almost always finds nothing. After a sweep that
+ * ran no job, the timer skips ticks until REVIEW_SWEEP_IDLE_INTERVAL_MS has
+ * passed. New jobs are unaffected (enqueue kicks a sweep directly); a job
+ * waiting out its retry backoff (>= 30 s) can start up to this much later.
+ */
+export const REVIEW_SWEEP_IDLE_INTERVAL_MS = 120_000;
+let lastPeriodicSweepAt = 0;
+let lastPeriodicSweepIdle = false;
+
+export function shouldRunPeriodicSweep(now: number): boolean {
+  return !lastPeriodicSweepIdle || now - lastPeriodicSweepAt >= REVIEW_SWEEP_IDLE_INTERVAL_MS;
+}
+
+export function notePeriodicSweep(now: number, ran: number): void {
+  lastPeriodicSweepAt = now;
+  lastPeriodicSweepIdle = ran === 0;
+}
+
+/**
  * Kill switch (#318, kept by the worker-isolation fix). Off unless
  * REVIEW_SWEEP_ENABLED is exactly "true". Off means no periodic sweep and no
  * kick on enqueue; jobs are still accepted and stay queued until the sweep is
@@ -261,17 +281,22 @@ export function scheduleReviewCompletionSweep(): void {
   log.info('review completion sweep ENABLED (REVIEW_SWEEP_ENABLED=true)');
   if (sweepTimer) return;
   sweepTimer = setInterval(() => {
-    void sweepReviewCompletionJobs().catch((error) => {
-      log.warn({ err: error }, 'periodic sweep failed');
-    });
+    if (!shouldRunPeriodicSweep(Date.now())) return;
+    void sweepReviewCompletionJobs()
+      .then((result) => notePeriodicSweep(Date.now(), result.ran))
+      .catch((error) => {
+        log.warn({ err: error }, 'periodic sweep failed');
+      });
   }, REVIEW_COMPLETION_SWEEP_INTERVAL_MS);
   if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
 }
 
-/** Test seam: clear the periodic sweep timer. */
+/** Test seam: clear the periodic sweep timer and its idle state. */
 export function stopReviewCompletionSweepForTests(): void {
   if (sweepTimer) clearInterval(sweepTimer);
   sweepTimer = null;
+  lastPeriodicSweepAt = 0;
+  lastPeriodicSweepIdle = false;
 }
 
 export function registerReviewCompletionJobsRoute(app: Application): void {

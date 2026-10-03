@@ -55,4 +55,15 @@ describe('REVIEW_SWEEP_ENABLED kill switch', () => {
     expect(persisted?.status).toBe('pending');
     expect(persisted?.claimToken ?? null).toBeNull();
   });
+
+  it('periodic sweep backs off to the idle interval after a sweep that ran nothing', async () => {
+    const { shouldRunPeriodicSweep, notePeriodicSweep, REVIEW_SWEEP_IDLE_INTERVAL_MS } = await import('./reviewCompletionWorker');
+    expect(shouldRunPeriodicSweep(1_000)).toBe(true);
+    notePeriodicSweep(1_000, 0);
+    expect(shouldRunPeriodicSweep(1_000 + 15_000)).toBe(false);
+    expect(shouldRunPeriodicSweep(1_000 + REVIEW_SWEEP_IDLE_INTERVAL_MS - 1)).toBe(false);
+    expect(shouldRunPeriodicSweep(1_000 + REVIEW_SWEEP_IDLE_INTERVAL_MS)).toBe(true);
+    notePeriodicSweep(200_000, 1);
+    expect(shouldRunPeriodicSweep(200_000 + 15_000)).toBe(true);
+  });
 });

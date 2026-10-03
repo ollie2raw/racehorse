@@ -113,6 +113,39 @@ async function runWithSpan<T>(
 }
 
 // ---------------------------------------------------------------------------
+// Usage counters (read hourly by platform/health/resourceUsageLog)
+// ---------------------------------------------------------------------------
+
+export type SupabaseUsageEntry = { requests: number; bodyBytes: number; wireBytes: number };
+
+let supabaseUsage = new Map<string, SupabaseUsageEntry>();
+
+/** `GET scheduled_tournaments`, `POST rpc/claim_review_completion_job_v2`, … */
+export function supabaseUsageCaller(method: string, path: string): string {
+  const resource = path.replace(/^\/rest\/v1\//, '').split('?')[0] ?? path;
+  return `${method} ${resource}`;
+}
+
+function recordSupabaseUsage(method: string, path: string, bodyChars: number, contentLength: string | null): void {
+  const key = supabaseUsageCaller(method, path);
+  const entry = supabaseUsage.get(key) ?? { requests: 0, bodyBytes: 0, wireBytes: 0 };
+  entry.requests += 1;
+  entry.bodyBytes += bodyChars;
+  // content-length is the compressed size when the response is gzipped; it
+  // is absent on chunked responses, so wireBytes undercounts those.
+  const wire = contentLength ? Number(contentLength) : NaN;
+  if (Number.isFinite(wire)) entry.wireBytes += wire;
+  supabaseUsage.set(key, entry);
+}
+
+/** Return the counters since the last call and start a new window. */
+export function takeSupabaseUsage(): Map<string, SupabaseUsageEntry> {
+  const snapshot = supabaseUsage;
+  supabaseUsage = new Map();
+  return snapshot;
+}
+
+// ---------------------------------------------------------------------------
 // Core fetch
 // ---------------------------------------------------------------------------
 
@@ -160,6 +193,12 @@ export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions
     }
 
     const text = await response.text();
+    // Accounting must never affect the request it measures.
+    try {
+      recordSupabaseUsage(method, path, text.length, response.headers?.get?.('content-length') ?? null);
+    } catch {
+      // ignore
+    }
     if (!text.trim()) {
       return undefined as T;
     }
