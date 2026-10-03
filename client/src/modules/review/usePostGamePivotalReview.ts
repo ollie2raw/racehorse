@@ -50,7 +50,12 @@ import {
 import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector.ts';
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { logger } from '../../utils/logger.ts';
-import { enqueueServerReviewCompletion, pollServerReviewCompletion } from './reviewCompletionClient.ts';
+import {
+  enqueueServerReviewCompletion,
+  nextReviewPollDelayMs,
+  pollServerReviewCompletion,
+  REVIEW_POLL_INITIAL_MS,
+} from './reviewCompletionClient.ts';
 import { resolveGameServerUrl } from '../../lib/gameServerUrl.ts';
 
 export type UsePostGamePivotalReviewParams = {
@@ -281,6 +286,8 @@ export function usePostGamePivotalReview({
     if (!serverJobId || !accessToken || !reviewPersistenceEnabled) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let delayMs = REVIEW_POLL_INITIAL_MS;
+    let lastProgressKey = '';
     const poll = async () => {
       const result = await pollServerReviewCompletion({
         apiBase: resolveGameServerUrl(),
@@ -289,9 +296,12 @@ export function usePostGamePivotalReview({
       });
       if (cancelled) return;
       if (result) setServerCompletion(result);
-      // Unavailable is terminal: nothing on the server will advance the job.
-      if (result?.unavailable && !result.complete) return;
-      timer = setTimeout(() => { void poll(); }, result?.complete ? 5_000 : 1_000);
+      // Complete and unavailable are terminal: nothing more will change.
+      if (result?.complete || result?.unavailable) return;
+      const progressKey = result ? `${result.progress.scored}:${result.progress.forced}:${result.status}` : '';
+      delayMs = nextReviewPollDelayMs(delayMs, progressKey !== lastProgressKey);
+      lastProgressKey = progressKey;
+      timer = setTimeout(() => { void poll(); }, delayMs);
     };
     void poll();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
