@@ -24,6 +24,7 @@ import {
   requireAuthUserId,
   sendAuthError,
 } from './tournamentAuth';
+import { respondIfTournamentsDisabled } from './tournamentsFeature';
 
 const log = childLogger('tournament:routes');
 
@@ -61,6 +62,7 @@ function requireTournamentId(req: Request, res: Response): string | null {
 export function registerTournamentRoutes(app: Express): void {
   // Static paths must be registered before /:id so "me", "upcoming", etc. are not captured.
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'upcoming')) return;
     const startedAt = Date.now();
     try {
       const tournaments = await fetchUpcomingTournaments(5);
@@ -83,6 +85,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/my', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'my')) return;
     const userId = await requireAuth(req, res);
     if (!userId) return;
     try {
@@ -94,6 +97,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/me', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'me')) return;
     const userId = await requireAuth(req, res, { allowAnonymous: true });
     if (!userId) {
       res.json({
@@ -215,6 +219,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/history', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'history')) return;
     const userId = await requireAuth(req, res);
     if (!userId) return;
     try {
@@ -255,6 +260,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id/bracket', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
     try {
@@ -267,6 +273,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
     try {
@@ -279,6 +286,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id/result', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
     try {
@@ -318,6 +326,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.post('/api/tournaments/:id/register', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
     const userId = await requireAuthUserId(req, res);
@@ -342,6 +351,7 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.delete('/api/tournaments/:id/register', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
     const userId = await requireAuthUserId(req, res);

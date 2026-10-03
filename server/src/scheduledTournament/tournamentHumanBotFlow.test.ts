@@ -2,7 +2,7 @@
  * End-to-end log sequence for one human + Fritz bot QF match (dispatch → attach).
  * Run: npm run test --prefix server -- src/scheduledTournament/tournamentHumanBotFlow.test.ts
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import { createReservedRoom, getRoom } from '../rooms';
 import type { EnginePersistence } from './persistenceInterface';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
@@ -46,6 +46,10 @@ vi.mock('../scheduledTournament/persistence', async (importOriginal) => {
 import { initRoomSession } from '../multiplayer/roomSession';
 import { registerRoomSessionHandlers } from '../multiplayer/registerRoomSessionHandlers';
 import { dispatchTournamentMatch } from './matchDispatch';
+
+// These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
+beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 function captureTournamentLogs() {
   capturedLogs.length = 0;

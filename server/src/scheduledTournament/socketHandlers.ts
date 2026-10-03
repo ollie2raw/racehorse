@@ -10,6 +10,7 @@ import {
   getSocketUserId,
   rejectMismatchedPayloadUserId,
 } from './tournamentAuth';
+import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
 
 type Ack = (resp: unknown) => void;
 
@@ -28,6 +29,10 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
     payload: { tournamentId?: string; userId?: string },
     ack?: Ack,
   ) => {
+    if (!isTournamentsEnabled()) {
+      ack?.(TOURNAMENTS_DISABLED);
+      return;
+    }
     try {
       const authenticatedUserId = getSocketUserId(socket);
       if (!authenticatedUserId) {
@@ -58,6 +63,10 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
     payload: { tournamentId?: string; userId?: string },
     ack?: Ack,
   ) => {
+    if (!isTournamentsEnabled()) {
+      ack?.(TOURNAMENTS_DISABLED);
+      return;
+    }
     try {
       const authenticatedUserId = getSocketUserId(socket);
       if (!authenticatedUserId) {
@@ -85,6 +94,10 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
     payload: { tournamentId?: string },
     ack?: Ack,
   ) => {
+    if (!isTournamentsEnabled()) {
+      ack?.(TOURNAMENTS_DISABLED);
+      return;
+    }
     try {
       if (!payload?.tournamentId) { ack?.({ ok: false, error: 'missing_args' }); return; }
       const view = await fetchBracketView(payload.tournamentId);
