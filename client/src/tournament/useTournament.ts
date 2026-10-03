@@ -11,8 +11,13 @@ import type {
   TournamentMeResponse,
 } from './types';
 import { logger } from '../utils/logger';
+import { isTournamentsEnabled } from '../config/tournamentsFeature';
 
-type Args = { userId: string | null };
+type Args = {
+  userId: string | null;
+  /** Live tournaments switched on (default: the client flag). Off: no requests. */
+  enabled?: boolean;
+};
 
 function sameScheduledTournament(a: ScheduledTournament, b: ScheduledTournament): boolean {
   return (
@@ -151,7 +156,7 @@ function samePendingMatch(prev: MatchReadyEvent | null, next: MatchReadyEvent | 
   );
 }
 
-export function useTournament({ userId }: Args) {
+export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args) {
   const [upcoming, setUpcoming] = useState<ScheduledTournament[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [activeBracket, setActiveBracket] = useState<BracketView | null>(null);
@@ -222,6 +227,13 @@ export function useTournament({ userId }: Args) {
   }, [applyActiveBracket]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
+    // Switched off: stay empty and never call the server.
+    if (!enabled) {
+      hasLoadedRef.current = true;
+      setIsLoading(false);
+      setHasLoaded(true);
+      return true;
+    }
     const cleanUserId = userId?.trim() || null;
     // Capture once at entry: the success path flips the ref before `finally` runs,
     // and both the spinner-on and spinner-off decisions must see the same value.
@@ -276,6 +288,7 @@ export function useTournament({ userId }: Args) {
       }
     }
   }, [
+    enabled,
     userId,
     applyUpcoming,
     applyRegistrations,

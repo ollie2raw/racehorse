@@ -61,7 +61,16 @@ test.describe('browser routing', () => {
     await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
   });
 
+  test('tournament deep links show the coming-back screen while tournaments are off', async ({ page }) => {
+    // Live tournaments are switched off by default (VITE_ENABLE_TOURNAMENTS).
+    test.skip(process.env.VITE_ENABLE_TOURNAMENTS === 'true', 'tournaments switched on');
+    await page.goto('/tournament/route-smoke');
+    await expect(page.getByRole('heading', { name: 'Tournaments are coming back soon' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Back to Home/ })).toBeVisible();
+  });
+
   test('a bad tournament id shows a real error and a way back, not a spinner', async ({ page }) => {
+    test.skip(process.env.VITE_ENABLE_TOURNAMENTS !== 'true', 'tournaments switched off');
     // `route-smoke` is not a UUID → the bracket fetch 400s `invalid_tournament_id`.
     // Before P1-1/P1-2 this was a permanent "Loading bracket…" with 6 uncaught
     // promise rejections and no message.

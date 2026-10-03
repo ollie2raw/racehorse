@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { tournamentErrorCopy } from '../tournament/tournamentErrorCopy';
+import { isTournamentsEnabled } from '../config/tournamentsFeature';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
@@ -10,6 +11,7 @@ import type {
 } from '../appRouteTypes';
 
 const TournamentHubScreen = React.lazy(() => import('../tournament/TournamentHubScreen'));
+const TournamentsComingSoonScreen = React.lazy(() => import('../tournament/TournamentsComingSoonScreen'));
 const TournamentBracketScreen = React.lazy(() => import('../tournament/TournamentBracketScreen'));
 const TournamentResultScreen = React.lazy(() => import('../tournament/TournamentResultScreen'));
 
@@ -45,6 +47,20 @@ export function TournamentRoute({
     enterTournamentLobby,
     attachAssignedTournamentMatch,
   } = tournamentProps;
+
+  // Switched off: every tournament route and deep link lands here.
+  if (!isTournamentsEnabled()) {
+    return withAuthModals(
+      <Suspense fallback={<ScreenLoader label="Loading…" />}>
+        <TournamentsComingSoonScreen
+          onNavigate={setAppMode}
+          onOpenAuth={handleOpenAuthModal}
+          onSignOut={handleSignOut}
+          onBackHome={() => setAppMode('home')}
+        />
+      </Suspense>,
+    );
+  }
 
   const tIdentity = authUser?.id
     ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }

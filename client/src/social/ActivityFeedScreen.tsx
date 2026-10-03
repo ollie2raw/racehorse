@@ -27,6 +27,7 @@ import { fetchGlobalLeaderboard } from './socialApi';
 import './hub/hubShared.css';
 import './activityFeedScreen.css';
 import './socialBoard.css';
+import { isTournamentsEnabled } from '../config/tournamentsFeature';
 
 interface ActivityFeedScreenProps {
   user: User | null;
@@ -535,6 +536,7 @@ export default function ActivityFeedScreen({
               </SideRailCard>
 
 
+              {isTournamentsEnabled() ? (
               <section className="rh-sf-widget rh-social-card rh-sf-widget--tournaments social-right-card recent-tournaments">
                 <h2 className="rh-sf-widget-title rh-sf-widget-title--solo">Recent Tournament Winners</h2>
                 <div className="rh-sf-widget-list">
@@ -564,6 +566,7 @@ export default function ActivityFeedScreen({
                   <span aria-hidden="true">›</span>
                 </button>
               </section>
+              ) : null}
 
               <section className="rh-hub-panel rh-hub-rail-card rh-sf-widget suggested-rivals">
                 <h2 className="rh-hub-rail-title">Suggested Rivals</h2>

@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { installMobileFixture } from './fixtures/mobile/loader';
 
-const tabOrder = ['Multi', 'Solo', 'Tourny', 'Social', 'Learn'];
+// Tourny appears only while live tournaments are switched on (VITE_ENABLE_TOURNAMENTS).
+const tournamentsOn = process.env.VITE_ENABLE_TOURNAMENTS === 'true';
+const tabOrder = tournamentsOn ? ['Multi', 'Solo', 'Tourny', 'Social', 'Learn'] : ['Multi', 'Solo', 'Social', 'Learn'];
 const visibleTabs = (page: import('@playwright/test').Page) => page.locator('.rh-bottom-tab-bar:visible .rh-bottom-tab');
 
 for (const [route, area] of [
-  ['/',''], ['/multiplayer','Multi'], ['/solo','Solo'], ['/tournament','Tourny'],
+  ['/',''], ['/multiplayer','Multi'], ['/solo','Solo'],
+  ...(tournamentsOn ? [['/tournament','Tourny'] as const] : []),
   ['/social','Social'], ['/learn','Learn'],
 ] as const) {
   test(`phone Hub chrome ${route}`, async ({ page }) => {
@@ -13,7 +16,7 @@ for (const [route, area] of [
     if (route === '/solo') await installMobileFixture(page, 'solo/populated');
     await page.goto(route);
     await expect(page.locator('[data-surface-shell="hub"]')).toBeVisible();
-    await expect(visibleTabs(page)).toHaveCount(5);
+    await expect(visibleTabs(page)).toHaveCount(tabOrder.length);
     expect(await visibleTabs(page).allTextContents()).toEqual(tabOrder);
     const selected = page.locator('.rh-bottom-tab-bar [aria-current="page"]');
     if (area) await expect(selected).toHaveText(area);

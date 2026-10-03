@@ -7,6 +7,7 @@ import { getHomeDailyCardState, getHomeDailyResultCopy } from '../home/homeDaily
 import { HomeStreakStrip } from '../home/components/HomeStreakStrip';
 import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
+import { isTournamentsEnabled } from '../config/tournamentsFeature.ts';
 // One AppMode, defined in ../types. A local copy here drifted the moment a
 // mode was added elsewhere — which is what `settings` did.
 import type { AppMode } from '../types';
@@ -28,10 +29,11 @@ const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' 
   { label: 'Learn', color: TOKEN.accentTeal, icon: 'cap', mode: 'learn' },
 ];
 
-export function getHomeTabs(spectatorEnabled = isSpectatorModeEnabled()) {
+export function getHomeTabs(spectatorEnabled = isSpectatorModeEnabled(), tournamentsEnabled = isTournamentsEnabled()) {
+  const tabs = tournamentsEnabled ? coreTabs : coreTabs.filter((tab) => tab.mode !== 'tournament');
   return spectatorEnabled
-    ? [{ label: 'Live Now', color: TOKEN.accentBlue, icon: 'users' as const, mode: 'live' as const }, ...coreTabs]
-    : coreTabs;
+    ? [{ label: 'Live Now', color: TOKEN.accentBlue, icon: 'users' as const, mode: 'live' as const }, ...tabs]
+    : tabs;
 }
 
 const tabs = getHomeTabs();
