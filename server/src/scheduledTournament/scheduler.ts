@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { config } from '../config';
@@ -16,6 +17,57 @@ const TICK_INTERVAL_MS = 30_000;
 const log = childLogger('tournament:scheduler');
 
 const SEED_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+/**
+ * Q9: a tournament whose close-and-start keeps failing (bracket generation
+ * throws) used to be retried every tick forever, silently, stuck in
+ * registration_open. After this many consecutive failed ticks (2.5 min at the
+ * 30 s cadence) it is alerted and cancelled with a recorded reason instead.
+ */
+export const CLOSE_START_MAX_CONSECUTIVE_FAILURES = 5;
+
+/** Consecutive close-and-start failures per tournament id (this process only). */
+const closeStartFailures = new Map<string, number>();
+
+/**
+ * Close registration and start the bracket, escalating repeated failure.
+ * Never throws for a close-and-start failure: it counts it, and on the Nth
+ * consecutive failure alerts (Sentry, one issue per tournament) and cancels
+ * the tournament with `bracket_generation_failed:<code>`. A success clears the
+ * count. Exported for tests; `failures` defaults to the scheduler's own map.
+ */
+export async function closeRegistrationWithEscalation(
+  io: Server,
+  tournamentId: string,
+  failures: Map<string, number> = closeStartFailures,
+): Promise<{ started: boolean; reason?: string; cancelled?: boolean }> {
+  try {
+    const result = await closeRegistrationAndStart(io, tournamentId);
+    failures.delete(tournamentId);
+    return result;
+  } catch (err) {
+    const code = err instanceof Error ? err.message : String(err);
+    const attempts = (failures.get(tournamentId) ?? 0) + 1;
+    failures.set(tournamentId, attempts);
+    log.warn({ err, tournamentId, attempts }, 'close-and-start failed');
+    if (attempts < CLOSE_START_MAX_CONSECUTIVE_FAILURES) {
+      return { started: false, reason: 'close_start_failed' };
+    }
+    Sentry.captureMessage('[tournament] bracket could not be created — cancelling', {
+      level: 'error',
+      fingerprint: ['tournament-close-start-failed', tournamentId],
+      tags: {
+        tournament_alert: 'close_start_failed',
+        tournament_id: tournamentId,
+        error_code: code,
+      },
+      extra: { tournamentId, attempts, error: code },
+    });
+    await cancelTournament(io, tournamentId, undefined, `bracket_generation_failed:${code}`);
+    failures.delete(tournamentId);
+    return { started: false, reason: 'cancelled_after_failures', cancelled: true };
+  }
+}
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let seedTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,17 +113,23 @@ export function startTournamentScheduler(io: Server): void {
       for (const t of tournaments) {
         const openAt = Date.parse(t.registration_open_at);
         const closeAt = Date.parse(t.registration_close_at);
-        if (t.status === 'upcoming' && now >= openAt) {
-          await openRegistration(io, t.id);
-        } else if (t.status === 'registration_open' && now >= closeAt) {
-          await closeRegistrationAndStart(io, t.id);
+        // Per tournament: one event that cannot open or start must not stall
+        // every other event in the same tick.
+        try {
+          if (t.status === 'upcoming' && now >= openAt) {
+            await openRegistration(io, t.id);
+          } else if (t.status === 'registration_open' && now >= closeAt) {
+            await closeRegistrationWithEscalation(io, t.id);
+          }
+        } catch (err) {
+          log.warn({ err, tournamentId: t.id }, 'tournament lifecycle step failed');
         }
       }
       const inProgress = await fetchTournamentsByStatus(['in_progress']);
       for (const t of inProgress) {
         if (isTournamentPastActiveWindow(t, now)) {
           log.info({ tournamentId: t.id, scheduledStart: t.scheduled_start, ageMs: now - Date.parse(t.scheduled_start) }, 'cancelling expired tournament');
-          await cancelTournament(io, t.id);
+          await cancelTournament(io, t.id, undefined, 'active_window_expired');
           continue;
         }
         const startAt = Date.parse(t.scheduled_start);

@@ -366,13 +366,18 @@ export function makeInMemoryMatchRpc(
 /**
  * Convenience adapter for the common test store shape
  * `{ tournament: ScheduledTournamentRow; matches: MatchRow[]; regs: RegistrationRow[] }`.
+ *
+ * Also ports generate_tournament_bracket v2
+ * (supabase/migrations/2026-09-29_tournament_bracket_rpc_repair.sql): same
+ * checks in the same order, same error codes, same repair rules. Keep in step
+ * with that file.
  */
 export function inMemoryMatchRpcForArrayStore(store: {
-  tournament: { id: string; win_target: number; status: string; winner_id: string | null };
+  tournament: { id: string; win_target: number; status: string; winner_id: string | null; max_players?: number };
   matches: MatchRow[];
   regs: RegistrationRow[];
-}): Pick<EnginePersistence, 'completeTournamentMatch' | 'promoteTournamentMatch'> {
-  return makeInMemoryMatchRpc({
+}): Pick<EnginePersistence, 'completeTournamentMatch' | 'promoteTournamentMatch' | 'generateTournamentBracket'> {
+  const rpc = makeInMemoryMatchRpc({
     listMatches: () => store.matches,
     getMatch: (id) => store.matches.find((m) => m.id === id),
     patchMatch: (id, patch) => {
@@ -391,4 +396,102 @@ export function inMemoryMatchRpcForArrayStore(store: {
       if (patch.winner_id !== undefined) store.tournament.winner_id = patch.winner_id;
     },
   });
+
+  let nextMatchSeq = store.matches.length + 1;
+  const newMatch = (tournamentId: string, round: number, matchNumber: number, p1: string | null, p2: string | null, status: MatchRow['status'], botTier: MatchRow['bot_tier']): MatchRow => ({
+    id: `m-${nextMatchSeq++}`,
+    tournament_id: tournamentId,
+    round: round as MatchRow['round'],
+    match_number: matchNumber,
+    player1_id: p1,
+    player2_id: p2,
+    winner_id: null,
+    room_code: '',
+    status,
+    ready_at: null,
+    ready_deadline_at: null,
+    started_at: null,
+    completed_at: null,
+    player1_joined_at: null,
+    player2_joined_at: null,
+    winner_source: null,
+    status_reason: null,
+    forfeit_user_id: null,
+    no_show_user_id: null,
+    bot_tier: botTier ?? null,
+    player1_score: null,
+    player2_score: null,
+  });
+  const matchesOf = (tid: string) => store.matches.filter((m) => m.tournament_id === tid);
+  const hasSlot = (tid: string, round: number, matchNumber: number) =>
+    store.matches.some((m) => m.tournament_id === tid && m.round === round && m.match_number === matchNumber);
+
+  return {
+    ...rpc,
+    async generateTournamentBracket({ tournamentId, qfPairs, seeds }) {
+      const t = store.tournament;
+      if (t.id !== tournamentId) throw new Error('tournament_not_found');
+      if (t.status === 'cancelled' || t.status === 'completed') throw new Error('tournament_not_startable');
+      const existing = matchesOf(tournamentId).length;
+      const sorted = () =>
+        matchesOf(tournamentId)
+          .slice()
+          .sort((a, b) => a.round - b.round || a.match_number - b.match_number)
+          .map((m) => ({ ...m }));
+
+      if (t.status === 'in_progress' && existing >= 7) {
+        return { created: false, repaired: false, matches: sorted() };
+      }
+
+      let created = false;
+      let repaired = false;
+      if (t.status === 'upcoming' || t.status === 'registration_open') {
+        const registered = new Set(store.regs.filter((r) => r.status === 'registered').map((r) => r.user_id));
+        const seeded = new Set(seeds.map((x) => x.user_id));
+        const same = registered.size === seeded.size && [...registered].every((id) => seeded.has(id));
+        if (!same) throw new Error('registrations_changed');
+        if (seeds.length > (t.max_players ?? 8)) throw new Error('tournament_full');
+        if (existing > 0) {
+          const played = matchesOf(tournamentId).some(
+            (m) => (m.status !== 'waiting' && m.status !== 'bye') || m.winner_id != null,
+          );
+          if (played) throw new Error('bracket_partial_conflict');
+          for (let i = store.matches.length - 1; i >= 0; i -= 1) {
+            if (store.matches[i].tournament_id === tournamentId) store.matches.splice(i, 1);
+          }
+          repaired = true;
+        }
+        created = true;
+      } else {
+        repaired = true;
+      }
+
+      for (const pair of qfPairs) {
+        if (hasSlot(tournamentId, 1, pair.match_number)) continue;
+        const status = pair.player1_id == null || pair.player2_id == null ? 'bye' : 'waiting';
+        store.matches.push(newMatch(tournamentId, 1, pair.match_number, pair.player1_id, pair.player2_id, status, pair.bot_tier));
+      }
+      for (const [round, matchNumber] of [[2, 1], [2, 2], [3, 1]] as const) {
+        if (!hasSlot(tournamentId, round, matchNumber)) {
+          store.matches.push(newMatch(tournamentId, round, matchNumber, null, null, 'waiting', null));
+        }
+      }
+      for (const { user_id, seed } of seeds) {
+        const reg = store.regs.find((r) => r.user_id === user_id && r.status === 'registered');
+        if (reg) {
+          reg.status = 'active';
+          reg.seed = seed;
+        }
+      }
+      if (t.status !== 'in_progress') t.status = 'in_progress';
+
+      for (const qf of matchesOf(tournamentId).filter((m) => m.round === 1 && m.status === 'bye')) {
+        const winnerId = qf.player1_id ?? qf.player2_id;
+        if (winnerId) {
+          await rpc.completeTournamentMatch({ matchId: qf.id, winnerId, winnerSource: null, byeWalkover: true });
+        }
+      }
+      return { created, repaired, matches: sorted() };
+    },
+  };
 }

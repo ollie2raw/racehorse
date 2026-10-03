@@ -49,11 +49,7 @@ function makeGameOverPersistence(match: MatchRow): EnginePersistence {
       if (row) Object.assign(row, patch);
     },
     ...inMemoryMatchRpcForArrayStore(store),
-    updateRegistrationStatus: async () => {},
     updateTournamentStatus: async () => {},
-    insertMatch: async () => {
-      throw new Error('not expected');
-    },
     fetchRegistrations: async () => store.regs,
     fetchRegistrationsWithProfile: async () => [],
     getRoom: () => {

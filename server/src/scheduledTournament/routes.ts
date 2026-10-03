@@ -9,12 +9,12 @@ import {
   fetchBracketView,
   fetchActiveAssignedMatchForUser,
   fetchRegistrationsForUser,
-  fetchActiveRegistration,
   fetchRegistrations,
   fetchMatches,
-  insertRegistration,
   isValidUuid,
-  withdrawRegistration,
+  registerForTournament,
+  REGISTRATION_RPC_ERRORS,
+  withdrawFromTournament,
 } from './persistence';
 import { humanJoinedAt, isBotUserId } from './matchDispatch';
 import { buildTournamentMeState } from './meState';
@@ -32,6 +32,20 @@ async function requireAuth(
   opts: { allowAnonymous?: boolean } = {},
 ): Promise<string | null> {
   return requireAuthUserId(req, res, opts);
+}
+
+/**
+ * Registration / withdrawal RPC failures carry a stable code (see
+ * REGISTRATION_RPC_ERRORS). Map it to an HTTP status; anything else is a 500.
+ */
+function sendRegistrationRpcError(res: Response, err: unknown): void {
+  const code = err instanceof Error ? err.message : 'internal';
+  if (!REGISTRATION_RPC_ERRORS.has(code)) {
+    res.status(500).json({ ok: false, error: code });
+    return;
+  }
+  const status = code === 'tournament_not_found' ? 404 : code === 'invalid_user' ? 400 : 409;
+  res.status(status).json({ ok: false, error: code === 'tournament_not_found' ? 'not_found' : code });
 }
 
 function requireTournamentId(req: Request, res: Response): string | null {
@@ -317,26 +331,16 @@ export function registerTournamentRoutes(app: Express): void {
       return;
     }
     try {
-      const t = await fetchTournamentById(tournamentId);
-      if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
-      if (t.status !== 'registration_open') {
-        res.status(409).json({ ok: false, error: 'registration_closed' });
-        return;
-      }
-      const regs = await fetchRegistrations(t.id);
-      if (regs.filter((r) => r.status === 'registered').length >= t.max_players) {
-        res.status(409).json({ ok: false, error: 'full' });
-        return;
-      }
-      const existing = await fetchActiveRegistration(t.id, userId);
-      if (existing && existing.status === 'registered') {
+      // Status, close time (database clock) and the seat cap are all checked
+      // inside one locked transaction; see register_for_tournament.
+      const result = await registerForTournament(tournamentId, userId);
+      if (result.already_registered) {
         res.json({ ok: true, alreadyRegistered: true });
         return;
       }
-      await insertRegistration(t.id, userId);
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendRegistrationRpcError(res, err);
     }
   });
 
@@ -351,10 +355,12 @@ export function registerTournamentRoutes(app: Express): void {
       return;
     }
     try {
-      await withdrawRegistration(tournamentId, userId);
+      // Rejected with withdraw_closed once registration has closed; a
+      // registration is never deleted after the bracket exists.
+      await withdrawFromTournament(tournamentId, userId);
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendRegistrationRpcError(res, err);
     }
   });
 }

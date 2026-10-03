@@ -8,7 +8,6 @@ import type {
   RegistrationRow,
   ScheduledTournamentRow,
   ScheduledTournamentStatus,
-  MatchStatus,
 } from './types';
 
 const log = childLogger('tournament:persistence');
@@ -77,7 +76,7 @@ export async function fetchTournamentsByStatus(
 export async function updateTournamentStatus(
   id: string,
   status: ScheduledTournamentStatus,
-  extra: Partial<Pick<ScheduledTournamentRow, 'winner_id'>> = {},
+  extra: Partial<Pick<ScheduledTournamentRow, 'winner_id' | 'cancel_reason'>> = {},
 ): Promise<void> {
   await supabaseFetch(
     `/rest/v1/${TABLES.tournaments}?id=eq.${encodeURIComponent(id)}`,
@@ -151,42 +150,58 @@ export async function fetchRegistrationsForUser(userId: string): Promise<Registr
   );
 }
 
-export async function insertRegistration(tournamentId: string, userId: string): Promise<void> {
+/**
+ * Stable error codes raised by the registration RPCs
+ * (supabase/migrations/2026-09-29_tournament_registration_rpcs.sql).
+ */
+export const REGISTRATION_RPC_ERRORS = new Set([
+  'tournament_not_found',
+  'registration_closed',
+  'tournament_full',
+  'withdraw_closed',
+  'invalid_user',
+]);
+
+export type RegisterForTournamentResult = {
+  registered: boolean;
+  already_registered: boolean;
+  seats_taken: number;
+};
+
+/**
+ * Register in one transaction: the tournament row is locked, then status,
+ * registration_close_at (database clock) and the seat cap are checked before
+ * the insert. Throws an Error whose message is a code in REGISTRATION_RPC_ERRORS.
+ */
+export async function registerForTournament(
+  tournamentId: string,
+  userId: string,
+): Promise<RegisterForTournamentResult> {
   if (!isValidUuid(userId)) {
     throw new Error('invalid_user');
   }
-  await supabaseFetch(`/rest/v1/${TABLES.registrations}`, {
-    method: 'POST',
-    body: JSON.stringify({ tournament_id: tournamentId, user_id: userId, status: 'registered' }),
+  return callTournamentRpc<RegisterForTournamentResult>('register_for_tournament', {
+    p_tournament_id: tournamentId,
+    p_user_id: userId,
   });
 }
 
-export async function withdrawRegistration(tournamentId: string, userId: string): Promise<void> {
+/**
+ * Withdraw, only while registration is open and before registration_close_at.
+ * Never deletes once the tournament has left registration: throws
+ * `withdraw_closed` instead.
+ */
+export async function withdrawFromTournament(
+  tournamentId: string,
+  userId: string,
+): Promise<{ withdrawn: boolean }> {
   if (!isValidUuid(userId)) {
     throw new Error('invalid_user');
   }
-  await supabaseFetch(
-    `/rest/v1/${TABLES.registrations}` +
-      `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
-      `&user_id=eq.${encodeURIComponent(userId)}`,
-    { method: 'DELETE' },
-  );
-}
-
-export async function updateRegistrationStatus(
-  tournamentId: string,
-  userId: string,
-  status: RegistrationRow['status'],
-  seed?: number,
-): Promise<void> {
-  const body: Record<string, unknown> = { status };
-  if (seed !== undefined) body.seed = seed;
-  await supabaseFetch(
-    `/rest/v1/${TABLES.registrations}` +
-      `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
-      `&user_id=eq.${encodeURIComponent(userId)}`,
-    { method: 'PATCH', body: JSON.stringify(body) },
-  );
+  return callTournamentRpc<{ withdrawn: boolean }>('withdraw_from_tournament', {
+    p_tournament_id: tournamentId,
+    p_user_id: userId,
+  });
 }
 
 export async function updateRegistrationPlacement(
@@ -236,32 +251,54 @@ export async function fetchMatchByRoomCode(roomCode: string): Promise<MatchRow |
   return rows[0] ?? null;
 }
 
-export async function insertMatch(input: {
+/** One quarterfinal as generate_tournament_bracket takes it. */
+export type BracketQfPair = {
+  match_number: number;
+  player1_id: string | null;
+  player2_id: string | null;
+  bot_tier: MatchRow['bot_tier'];
+};
+
+/** A human entrant's bracket seed (bots have no registration row). */
+export type BracketSeed = { user_id: string; seed: number };
+
+export type GenerateTournamentBracketResult = {
+  created: boolean;
+  repaired: boolean;
+  matches: MatchRow[];
+};
+
+/**
+ * Stable codes raised by generate_tournament_bracket
+ * (supabase/migrations/2026-09-29_tournament_bracket_rpc_repair.sql).
+ * `registrations_changed` means a registration landed or left after the caller
+ * read the field: re-read and call again.
+ */
+export const BRACKET_RPC_ERRORS = new Set([
+  'tournament_not_found',
+  'tournament_not_startable',
+  'registrations_changed',
+  'tournament_full',
+  'bracket_partial_conflict',
+]);
+
+/**
+ * Create (or repair) the whole bracket in one transaction: 7 match rows,
+ * registrations → active with their bracket seed, tournament → in_progress,
+ * bye walkovers. Idempotent: a finished bracket is returned unchanged.
+ */
+export async function generateTournamentBracket(params: {
   tournamentId: string;
-  round: 1 | 2 | 3;
-  matchNumber: number;
-  player1Id: string | null;
-  player2Id: string | null;
-  roomCode: string;
-  status: MatchStatus;
-  botTier?: MatchRow['bot_tier'];
-}): Promise<MatchRow> {
-  const row = {
-    tournament_id: input.tournamentId,
-    round: input.round,
-    match_number: input.matchNumber,
-    player1_id: input.player1Id,
-    player2_id: input.player2Id,
-    room_code: input.roomCode,
-    status: input.status,
-    bot_tier: input.botTier ?? null,
-  };
-  const inserted = await supabaseFetch<MatchRow[]>(`/rest/v1/${TABLES.matches}`, {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(row),
+  qfPairs: BracketQfPair[];
+  seeds: BracketSeed[];
+  actor?: string;
+}): Promise<GenerateTournamentBracketResult> {
+  return callTournamentRpc<GenerateTournamentBracketResult>('generate_tournament_bracket', {
+    p_tournament_id: params.tournamentId,
+    p_qf_pairs: params.qfPairs,
+    p_seeds: params.seeds,
+    p_actor: params.actor ?? null,
   });
-  return inserted[0];
 }
 
 export type MatchPatch = Partial<Pick<

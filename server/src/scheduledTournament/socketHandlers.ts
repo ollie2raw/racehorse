@@ -1,11 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  fetchActiveRegistration,
   fetchBracketView,
-  fetchTournamentById,
-  insertRegistration,
-  withdrawRegistration,
-  fetchRegistrations,
+  registerForTournament,
+  REGISTRATION_RPC_ERRORS,
+  withdrawFromTournament,
 } from './persistence';
 import { TOURNAMENT_CONFIG } from './engine';
 import {
@@ -14,6 +12,12 @@ import {
 } from './tournamentAuth';
 
 type Ack = (resp: unknown) => void;
+
+/** The RPC's stable code, or 'internal' for anything unexpected. */
+function registrationErrorCode(err: unknown): string {
+  const message = err instanceof Error ? err.message : '';
+  return REGISTRATION_RPC_ERRORS.has(message) ? message : 'internal';
+}
 
 function authErrorAck(ack: Ack | undefined, error: string): void {
   ack?.({ ok: false, error });
@@ -37,27 +41,16 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       }
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
-      const t = await fetchTournamentById(tournamentId);
-      if (!t) { authErrorAck(ack, 'tournament_not_found'); return; }
-      if (t.status !== 'registration_open') {
-        authErrorAck(ack, 'registration_closed');
-        return;
-      }
-      const regs = await fetchRegistrations(tournamentId);
-      if (regs.filter((r) => r.status === 'registered').length >= t.max_players) {
-        authErrorAck(ack, 'full');
-        return;
-      }
-      const existing = await fetchActiveRegistration(tournamentId, authenticatedUserId);
-      if (existing && existing.status === 'registered') {
+      // One locked transaction checks status, close time and the seat cap.
+      const result = await registerForTournament(tournamentId, authenticatedUserId);
+      if (result.already_registered) {
         ack?.({ ok: true, alreadyRegistered: true });
         return;
       }
-      await insertRegistration(tournamentId, authenticatedUserId);
       io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
     } catch (err) {
-      ack?.({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      ack?.({ ok: false, error: registrationErrorCode(err) });
     }
   });
 
@@ -78,17 +71,13 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       }
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
-      const t = await fetchTournamentById(tournamentId);
-      if (!t) { authErrorAck(ack, 'tournament_not_found'); return; }
-      if (t.status !== 'registration_open' && t.status !== 'upcoming') {
-        authErrorAck(ack, 'cannot_withdraw_after_start');
-        return;
-      }
-      await withdrawRegistration(tournamentId, authenticatedUserId);
+      await withdrawFromTournament(tournamentId, authenticatedUserId);
       io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
     } catch (err) {
-      ack?.({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      const code = registrationErrorCode(err);
+      // Keep this handler's historical code for the closed-window case.
+      ack?.({ ok: false, error: code === 'withdraw_closed' ? 'cannot_withdraw_after_start' : code });
     }
   });
 

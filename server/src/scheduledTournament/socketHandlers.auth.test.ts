@@ -3,22 +3,16 @@ import type { Socket } from 'socket.io';
 import { registerTournamentSocketHandlers } from './socketHandlers';
 
 const mocks = vi.hoisted(() => ({
-  fetchTournamentById: vi.fn(),
-  fetchRegistrations: vi.fn(),
-  fetchActiveRegistration: vi.fn(),
-  insertRegistration: vi.fn(),
-  withdrawRegistration: vi.fn(),
+  registerForTournament: vi.fn(),
+  withdrawFromTournament: vi.fn(),
 }));
 
 vi.mock('./persistence', async () => {
   const actual = await vi.importActual<typeof import('./persistence')>('./persistence');
   return {
     ...actual,
-    fetchTournamentById: (...args: unknown[]) => mocks.fetchTournamentById(...args),
-    fetchRegistrations: (...args: unknown[]) => mocks.fetchRegistrations(...args),
-    fetchActiveRegistration: (...args: unknown[]) => mocks.fetchActiveRegistration(...args),
-    insertRegistration: (...args: unknown[]) => mocks.insertRegistration(...args),
-    withdrawRegistration: (...args: unknown[]) => mocks.withdrawRegistration(...args),
+    registerForTournament: (...args: unknown[]) => mocks.registerForTournament(...args),
+    withdrawFromTournament: (...args: unknown[]) => mocks.withdrawFromTournament(...args),
     fetchBracketView: vi.fn(),
   };
 });
@@ -46,15 +40,8 @@ function makeSocket(userId?: string): Socket {
 describe('tournament socket auth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.fetchTournamentById.mockResolvedValue({
-      id: tournamentId,
-      status: 'registration_open',
-      max_players: 8,
-    });
-    mocks.fetchRegistrations.mockResolvedValue([]);
-    mocks.fetchActiveRegistration.mockResolvedValue(null);
-    mocks.insertRegistration.mockResolvedValue(undefined);
-    mocks.withdrawRegistration.mockResolvedValue(undefined);
+    mocks.registerForTournament.mockResolvedValue({ registered: true, already_registered: false, seats_taken: 1 });
+    mocks.withdrawFromTournament.mockResolvedValue({ withdrawn: true });
   });
 
   it('tournament:register rejects when socket is not identified', async () => {
@@ -64,7 +51,7 @@ describe('tournament socket auth', () => {
     const ack = vi.fn();
     await (socket as any)._emit('tournament:register', { tournamentId, userId: validUserId }, ack);
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'not_authenticated' });
-    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+    expect(mocks.registerForTournament).not.toHaveBeenCalled();
   });
 
   it('tournament:register rejects userId spoofing', async () => {
@@ -74,7 +61,7 @@ describe('tournament socket auth', () => {
     const ack = vi.fn();
     await (socket as any)._emit('tournament:register', { tournamentId, userId: otherUserId }, ack);
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'user_mismatch' });
-    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+    expect(mocks.registerForTournament).not.toHaveBeenCalled();
   });
 
   it('tournament:register uses socket identity only', async () => {
@@ -84,21 +71,39 @@ describe('tournament socket auth', () => {
     const ack = vi.fn();
     await (socket as any)._emit('tournament:register', { tournamentId }, ack);
     expect(ack).toHaveBeenCalledWith({ ok: true });
-    expect(mocks.insertRegistration).toHaveBeenCalledWith(tournamentId, validUserId);
+    expect(mocks.registerForTournament).toHaveBeenCalledWith(tournamentId, validUserId);
   });
 
   it('tournament:withdraw rejects userId spoofing', async () => {
-    mocks.fetchTournamentById.mockResolvedValue({
-      id: tournamentId,
-      status: 'registration_open',
-      max_players: 8,
-    });
     const io = { emit: vi.fn() } as unknown as import('socket.io').Server;
     const socket = makeSocket(validUserId);
     registerTournamentSocketHandlers(io, socket);
     const ack = vi.fn();
     await (socket as any)._emit('tournament:withdraw', { tournamentId, userId: otherUserId }, ack);
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'user_mismatch' });
-    expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+    expect(mocks.withdrawFromTournament).not.toHaveBeenCalled();
+  });
+
+  it('tournament:register passes the RPC code through (full / closed)', async () => {
+    const io = { emit: vi.fn() } as unknown as import('socket.io').Server;
+    const socket = makeSocket(validUserId);
+    registerTournamentSocketHandlers(io, socket);
+    for (const code of ['tournament_full', 'registration_closed']) {
+      mocks.registerForTournament.mockRejectedValueOnce(new Error(code));
+      const ack = vi.fn();
+      await (socket as any)._emit('tournament:register', { tournamentId }, ack);
+      expect(ack).toHaveBeenCalledWith({ ok: false, error: code });
+    }
+    expect(io.emit).not.toHaveBeenCalled();
+  });
+
+  it('tournament:withdraw keeps its historical code once registration has closed', async () => {
+    mocks.withdrawFromTournament.mockRejectedValueOnce(new Error('withdraw_closed'));
+    const io = { emit: vi.fn() } as unknown as import('socket.io').Server;
+    const socket = makeSocket(validUserId);
+    registerTournamentSocketHandlers(io, socket);
+    const ack = vi.fn();
+    await (socket as any)._emit('tournament:withdraw', { tournamentId }, ack);
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'cannot_withdraw_after_start' });
   });
 });

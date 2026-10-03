@@ -113,7 +113,7 @@ function makeHumanVsBotPersistence(): {
     fetchMatchById: async (id) => (id === store.match.id ? { ...store.match } : null),
     fetchMatchByRoomCode: async (roomCode) =>
       store.match.room_code === roomCode ? { ...store.match } : null,
-    insertMatch: vi.fn(),
+    generateTournamentBracket: vi.fn(),
     updateMatch: async (id, patch) => {
       if (id === store.match.id) Object.assign(store.match, patch);
     },
@@ -126,7 +126,6 @@ function makeHumanVsBotPersistence(): {
       throw new Error('promoteTournamentMatch not exercised by tournamentHumanBotFlow.test');
     },
     updateRegistrationPlacement: vi.fn(),
-    updateRegistrationStatus: vi.fn(),
     updateTournamentStatus: vi.fn(),
     createReservedRoom: (code: string, opts?: { winningScore?: number }) => {
       const room = createReservedRoom(code, opts ?? { winningScore: 30 });

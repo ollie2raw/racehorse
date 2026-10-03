@@ -3,9 +3,10 @@ import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
-import { QF_SEED_PAIRS } from './bracket';
+import { pairSeededEntrants, sortBySeedRating } from './bracket';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { ScheduledTournamentRow } from './types';
+import type { BracketQfPair, BracketSeed } from './persistence';
 import {
   TOURNAMENT_MATCH_READY_WINDOW_MS,
   allHumanPlayersJoined,
@@ -81,37 +82,49 @@ function buildBotEntrants(tournamentId: string, count: number): TournamentEntran
   }));
 }
 
+/**
+ * Bracket order: humans by rating (highest = seed 1, ties by registration
+ * order), then Fritz bots in the remaining bottom seeds. Index + 1 is the seed.
+ */
 function buildOrderedEntrants(
   tournamentId: string,
   maxPlayers: number,
   registrations: Array<{ user_id: string; username: string | null; rating: number | null }>,
 ): TournamentEntrant[] {
-  const humans = registrations
-    .map((r, idx) => ({
+  const humans = sortBySeedRating(
+    registrations.map((r) => ({
       userId: r.user_id,
       username: r.username ?? r.user_id.slice(0, 6),
       rating: r.rating ?? DEFAULT_RATING,
-      _origIdx: idx,
-    }))
-    .sort((a, b) => b.rating - a.rating || a._origIdx - b._origIdx)
-    .map(({ _origIdx, ...entry }) => entry);
+    })),
+  );
   return [...humans, ...buildBotEntrants(tournamentId, Math.max(0, maxPlayers - humans.length))];
 }
 
-function seedBracketFromOrderedEntrants(entrants: TournamentEntrant[]) {
-  if (entrants.length < 4) {
-    throw new Error('Tournament requires at least 4 entrants');
-  }
-  if (entrants.length > 8) {
-    throw new Error('Tournament caps at 8 players');
-  }
-  const padded: Array<TournamentEntrant | null> = [...entrants];
-  while (padded.length < 8) padded.push(null);
-  return QF_SEED_PAIRS.map(([s1, s2], i) => ({
-    matchNumber: i + 1,
-    player1: padded[s1 - 1],
-    player2: padded[s2 - 1],
-  }));
+/**
+ * The generate_tournament_bracket input, built from one ordered entrant list:
+ * the quarterfinal pairs (via the shared QF_SEED_PAIRS pairing) and each
+ * human's seed = their bracket position, so the stored seed is the seed the
+ * bracket was built from (review B8).
+ */
+function buildBracketRpcInput(entrants: TournamentEntrant[]): {
+  qfPairs: BracketQfPair[];
+  seeds: BracketSeed[];
+} {
+  const qfPairs = pairSeededEntrants(entrants).map((slot) => {
+    const player1Id = slot.player1?.userId ?? null;
+    const player2Id = slot.player2?.userId ?? null;
+    return {
+      match_number: slot.matchNumber,
+      player1_id: player1Id,
+      player2_id: player2Id,
+      bot_tier: matchBotTier(1, player1Id, player2Id),
+    };
+  });
+  const seeds = entrants
+    .map((entrant, idx) => ({ user_id: entrant.userId, seed: idx + 1 }))
+    .filter((seed) => !isBotUserId(seed.user_id));
+  return { qfPairs, seeds };
 }
 
 export function placementLabelForRank(placement: number | null): string | null {
@@ -300,77 +313,49 @@ export async function generateBracket(
   const tournament = await persistence.fetchTournamentById(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
 
-  const existingMatches = await persistence.fetchMatches(tournamentId);
-  if (existingMatches.length > 0) {
-    return existingMatches;
+  if (tournament.status === 'in_progress') {
+    const existing = await persistence.fetchMatches(tournamentId);
+    if (existing.length >= 7) return existing;
   }
 
-  const registrations = await persistence.fetchRegistrationsWithProfile(tournamentId);
-  const eligible = registrations.filter((r) => r.status === 'registered');
-  if (eligible.length < MIN_HUMANS_TO_START) {
-    throw new Error('Not enough players to start');
+  // A registration can land or leave between our read and the RPC's lock; the
+  // RPC then raises registrations_changed and we re-read once. A second change
+  // in the same breath is left to the next scheduler tick.
+  for (let attempt = 1; ; attempt += 1) {
+    const registrations = await persistence.fetchRegistrationsWithProfile(tournamentId);
+    const eligible = registrations.filter((r) =>
+      tournament.status === 'in_progress'
+        ? r.status === 'registered' || r.status === 'active'
+        : r.status === 'registered',
+    );
+    if (eligible.length < MIN_HUMANS_TO_START) {
+      throw new Error('Not enough players to start');
+    }
+    const entrants = attempt === 1 && providedEntrants
+      ? providedEntrants
+      : buildOrderedEntrants(tournamentId, tournament.max_players, eligible);
+    const { qfPairs, seeds } = buildBracketRpcInput(entrants);
+    try {
+      const result = await persistence.generateTournamentBracket({
+        tournamentId,
+        qfPairs,
+        seeds,
+        actor: 'scheduler',
+      });
+      if (result.repaired) {
+        log.warn({ tournamentId, created: result.created }, 'repaired a partial bracket');
+      }
+      if (result.created || result.repaired) {
+        // Broadcast — rooms dispatch at scheduled_start (humans) or immediately for bot-only pairs.
+        io.emit('tournament:bracket_generated', { tournamentId });
+      }
+      return result.matches;
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'registrations_changed' && attempt === 1) continue;
+      throw err;
+    }
   }
-
-  const seedInput = providedEntrants ?? buildOrderedEntrants(tournamentId, tournament.max_players, eligible);
-  const qfSlots = seedBracketFromOrderedEntrants(seedInput);
-
-  // Pre-create all 7 match rows so the bracket is consistent from t=0.
-  const insertedQf: MatchRow[] = [];
-  for (const slot of qfSlots) {
-    const initialStatus =
-      slot.player1 === null || slot.player2 === null ? 'bye' : 'waiting';
-    const row = await persistence.insertMatch({
-      tournamentId,
-      round: 1,
-      matchNumber: slot.matchNumber,
-      player1Id: slot.player1?.userId ?? null,
-      player2Id: slot.player2?.userId ?? null,
-      roomCode: '',
-      status: initialStatus,
-      botTier: matchBotTier(1, slot.player1?.userId ?? null, slot.player2?.userId ?? null),
-    });
-    insertedQf.push(row);
-  }
-
-  // Empty SF and Final rows (slots fill as winners advance).
-  for (let m = 1; m <= 2; m++) {
-    await persistence.insertMatch({
-      tournamentId, round: 2, matchNumber: m,
-      player1Id: null, player2Id: null, roomCode: '', status: 'waiting', botTier: null,
-    });
-  }
-  {
-    await persistence.insertMatch({
-      tournamentId, round: 3, matchNumber: 1,
-      player1Id: null, player2Id: null, roomCode: '', status: 'waiting', botTier: null,
-    });
-  }
-
-  // Mark all registered players "active".
-  for (const [idx, reg] of eligible.entries()) {
-    await persistence.updateRegistrationStatus(tournamentId, reg.user_id, 'active', idx + 1);
-  }
-
-  await persistence.updateTournamentStatus(tournamentId, 'in_progress');
-
-  // Auto-walkover any bye QFs (player vs null).
-  for (const qf of insertedQf) {
-    if (qf.status !== 'bye') continue;
-    const winnerId = qf.player1_id ?? qf.player2_id;
-    if (!winnerId) continue;
-    await applyMatchResult(io, {
-      matchId: qf.id,
-      winnerId,
-      player1Score: qf.player1_id === winnerId ? tournament.win_target : 0,
-      player2Score: qf.player2_id === winnerId ? tournament.win_target : 0,
-      byeWalkover: true,
-    }, persistence);
-  }
-
-  // Broadcast — rooms dispatch at scheduled_start (humans) or immediately for bot-only pairs.
-  io.emit('tournament:bracket_generated', { tournamentId });
-
-  return persistence.fetchMatches(tournamentId);
 }
 
 /**
@@ -678,8 +663,10 @@ export async function cancelTournament(
   io: Server,
   tournamentId: string,
   persistence: EnginePersistence = defaultEnginePersistence,
+  /** Recorded on the row (cancel_reason) so a cancelled event says why. */
+  reason: string | null = null,
 ): Promise<void> {
-  await persistence.updateTournamentStatus(tournamentId, 'cancelled');
+  await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
   io.emit('tournament:cancelled', { tournamentId });
 }
 
@@ -705,7 +692,7 @@ export async function closeRegistrationAndStart(
   const regs = await persistence.fetchRegistrations(tournamentId);
   const active = regs.filter((r) => r.status === 'registered');
   if (active.length < MIN_HUMANS_TO_START) {
-    await cancelTournament(io, tournamentId, persistence);
+    await cancelTournament(io, tournamentId, persistence, 'not_enough_players');
     return { started: false, reason: 'not_enough_players' };
   }
   const tournament = await persistence.fetchTournamentById(tournamentId);
@@ -716,6 +703,9 @@ export async function closeRegistrationAndStart(
   await generateBracket(io, tournamentId, persistence, entrants);
   return { started: true };
 }
+
+/** status_reason marking the single A6 deadline extension (see below). */
+export const BOTH_JOINED_START_RETRY_REASON = 'all_joined_start_retry';
 
 /**
  * Single-instance first-release reconciliation for expired ready matches.
@@ -752,19 +742,37 @@ export async function reconcileExpiredReadyMatches(
       }
       if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
       if (!match.player1_id || !match.player2_id) continue;
-      if (allHumanPlayersJoined(match) && match.room_code) {
+      const everyoneJoined = allHumanPlayersJoined(match);
+      if (everyoneJoined && match.room_code) {
+        let roomExists = false;
+        let roomStarted = false;
         try {
           const room = persistence.getRoom(match.room_code);
-          if (room.state) {
-            await persistence.updateMatch(match.id, {
-              status: 'in_progress',
-              started_at: match.started_at ?? now.toISOString(),
-              status_reason: null,
-            });
-            continue;
-          }
+          roomExists = true;
+          roomStarted = Boolean(room.state);
         } catch {
-          /* room missing — fall through to no-show resolution */
+          /* room missing — fall through to the rehydrate branch below */
+        }
+        if (roomStarted) {
+          await persistence.updateMatch(match.id, {
+            status: 'in_progress',
+            started_at: match.started_at ?? now.toISOString(),
+            status_reason: null,
+          });
+          continue;
+        }
+        // A6: every player is here but the game never started (a slow or
+        // failed start). That is not a no-show. Extend the deadline once and
+        // re-send match_ready: the clients re-attach, and the attach handler's
+        // normal start path runs again. Only a second expiry resolves.
+        if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
+          await persistence.updateMatch(match.id, {
+            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+            status_reason: BOTH_JOINED_START_RETRY_REASON,
+          });
+          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+          log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
+          continue;
         }
       }
 
@@ -823,7 +831,11 @@ export async function reconcileExpiredReadyMatches(
           winnerSource: 'no_show',
           statusReason: noShowUserId
             ? playerNoShowReason(match, noShowUserId)
-            : 'double_no_show_higher_seed_advanced',
+            : everyoneJoined
+              // Present players whose game would not start even after the one
+              // extension: resolved, but never recorded as a no-show.
+              ? 'start_failed_after_retry_higher_seed_advanced'
+              : 'double_no_show_higher_seed_advanced',
           noShowUserId,
         },
         persistence,

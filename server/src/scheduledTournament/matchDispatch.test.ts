@@ -81,7 +81,7 @@ function makePersistence(match: MatchRow): { persistence: EnginePersistence; sto
     fetchMatchById: async (id) => (id === store.match.id ? { ...store.match } : null),
     fetchMatchByRoomCode: async (roomCode) =>
       store.match.room_code === roomCode ? { ...store.match } : null,
-    insertMatch: vi.fn(async () => ({ ...store.match })),
+    generateTournamentBracket: vi.fn(),
     updateMatch: async (id, patch) => {
       if (id !== store.match.id) return;
       Object.assign(store.match, patch);
@@ -93,7 +93,6 @@ function makePersistence(match: MatchRow): { persistence: EnginePersistence; sto
       throw new Error('promoteTournamentMatch not exercised by matchDispatch.test');
     },
     updateRegistrationPlacement: vi.fn(),
-    updateRegistrationStatus: vi.fn(),
     updateTournamentStatus: vi.fn(),
     createReservedRoom: vi.fn((code: string) => {
       const room = store.rooms.get(code) ?? { code, players: [] };

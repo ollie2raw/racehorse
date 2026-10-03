@@ -88,7 +88,6 @@ function makePersistence(
     regs: initialRegs.map((r) => ({ ...r })),
     matches: [] as MatchRow[],
   };
-  let nextMatchSeq = 1;
 
   const persistence: EnginePersistence = {
     fetchTournamentById: async (id) =>
@@ -118,46 +117,12 @@ function makePersistence(
       const m = store.matches.find((x) => x.room_code === code);
       return m ? { ...m } : null;
     },
-    insertMatch: async (input) => {
-      const row: MatchRow = {
-        id: `m-${nextMatchSeq++}`,
-        tournament_id: input.tournamentId,
-        round: input.round,
-        match_number: input.matchNumber,
-        player1_id: input.player1Id,
-        player2_id: input.player2Id,
-        winner_id: null,
-        room_code: input.roomCode,
-        status: input.status,
-        ready_at: null,
-        ready_deadline_at: null,
-        started_at: null,
-        completed_at: null,
-        player1_joined_at: null,
-        player2_joined_at: null,
-        winner_source: null,
-        status_reason: null,
-        forfeit_user_id: null,
-        no_show_user_id: null,
-        bot_tier: input.botTier ?? null,
-        player1_score: null,
-        player2_score: null,
-      };
-      store.matches.push(row);
-      return { ...row };
-    },
     updateMatch: async (id, patch) => {
       const m = store.matches.find((x) => x.id === id);
       if (!m) return;
       Object.assign(m, patch);
     },
     ...inMemoryMatchRpcForArrayStore(store),
-    updateRegistrationStatus: async (_tid, userId, status, seed) => {
-      const r = store.regs.find((x) => x.user_id === userId);
-      if (!r) return;
-      r.status = status;
-      if (seed !== undefined) r.seed = seed;
-    },
     updateRegistrationPlacement: async (_tid, userId, placement) => {
       const r = store.regs.find((x) => x.user_id === userId);
       if (!r) return;
@@ -166,6 +131,7 @@ function makePersistence(
     updateTournamentStatus: async (_id, status, extra) => {
       store.tournament.status = status;
       if (extra?.winner_id !== undefined) store.tournament.winner_id = extra.winner_id;
+      if (extra?.cancel_reason !== undefined) store.tournament.cancel_reason = extra.cancel_reason;
     },
     // Room infrastructure mocks — return shape-only stubs.
     createReservedRoom: vi.fn((_code: string, _config: unknown) => ({} as any)),
