@@ -40,7 +40,9 @@ vi.mock('./postGameReviewWrite.ts', () => ({
 }));
 const enqueueServerReviewCompletionMock = vi.fn();
 const pollServerReviewCompletionMock = vi.fn();
-vi.mock('./reviewCompletionClient.ts', () => ({
+vi.mock('./reviewCompletionClient.ts', async (importOriginal) => ({
+  // Real poll cadence helpers; only the network calls are mocked.
+  ...(await importOriginal<typeof import('./reviewCompletionClient.ts')>()),
   enqueueServerReviewCompletion: (...args: unknown[]) => enqueueServerReviewCompletionMock(...args),
   pollServerReviewCompletion: (...args: unknown[]) => pollServerReviewCompletionMock(...args),
 }));
@@ -334,9 +336,50 @@ describe('usePostGamePivotalReview — review unavailable', () => {
         await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       }
       expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
-      await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
-      expect(pollServerReviewCompletionMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+      // 3 s, then back off to 4.5 s while nothing changes: polls at 0, 3, 7.5 s.
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_900); });
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_500); });
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(3);
       expect(result.current.reviewUnavailable).toBe(false);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('usePostGamePivotalReview — review poll stops when complete', () => {
+  it('polls a complete job once and never again', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('done-1')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-done-job', status: 'running',
+      progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+    });
+    pollServerReviewCompletionMock.mockResolvedValue({
+      complete: true,
+      status: 'complete',
+      progress: { total: 1, forced: 0, scored: 1, remaining: 0 },
+      decisions: [{ decisionId: 'done-1', lifecycle: 'SCORED', positionHash: 'position-1' }],
+      evaluations: [],
+    });
+
+    vi.useFakeTimers();
+    const { unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+    });
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      }
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(pollServerReviewCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
       unmount();
       vi.useRealTimers();

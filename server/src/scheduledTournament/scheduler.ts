@@ -3,7 +3,7 @@ import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { config } from '../config';
 import { isTournamentPastActiveWindow } from './activeWindow';
-import { fetchTournamentsByStatus } from './persistence';
+import { fetchDueLifecycleTournaments, fetchTournamentsByStatus } from './persistence';
 import {
   openRegistration,
   closeRegistrationAndStart,
@@ -109,7 +109,7 @@ export function startTournamentScheduler(io: Server): void {
   const tick = async () => {
     try {
       const now = Date.now();
-      const tournaments = await fetchTournamentsByStatus(['upcoming', 'registration_open']);
+      const tournaments = await fetchDueLifecycleTournaments(new Date(now));
       for (const t of tournaments) {
         const openAt = Date.parse(t.registration_open_at);
         const closeAt = Date.parse(t.registration_close_at);

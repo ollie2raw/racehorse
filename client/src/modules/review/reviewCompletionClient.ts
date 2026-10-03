@@ -62,6 +62,21 @@ export async function enqueueServerReviewCompletion(input: {
   }
 }
 
+/**
+ * Review-job poll cadence. Each poll makes the server read the job row from
+ * Supabase (~13-40 KB gzip with the move snapshots), so the old 1 s cadence
+ * was the largest per-player egress source. Start at 3 s, back off to 5 s
+ * while nothing changes, drop back to 3 s when progress moves; stop entirely
+ * once the job is complete or unavailable (both terminal for this screen).
+ */
+export const REVIEW_POLL_INITIAL_MS = 3_000;
+export const REVIEW_POLL_MAX_MS = 5_000;
+
+export function nextReviewPollDelayMs(previousDelayMs: number, progressed: boolean): number {
+  if (progressed) return REVIEW_POLL_INITIAL_MS;
+  return Math.min(REVIEW_POLL_MAX_MS, Math.round(previousDelayMs * 1.5));
+}
+
 export async function pollServerReviewCompletion(input: {
   readonly apiBase: string;
   readonly authHeader: string | null;

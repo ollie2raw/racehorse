@@ -64,12 +64,44 @@ export async function fetchTournamentById(id: string): Promise<ScheduledTourname
   return rows[0] ?? null;
 }
 
+/** Several tournaments by id in one request (missing ids are simply absent). */
+export async function fetchTournamentsByIds(ids: readonly string[]): Promise<ScheduledTournamentRow[]> {
+  if (ids.length === 0) return [];
+  const inClause = ids.map((id) => `"${id}"`).join(',');
+  return supabaseFetch<ScheduledTournamentRow[]>(
+    `/rest/v1/${TABLES.tournaments}?select=*&id=in.(${encodeURIComponent(inClause)})&limit=${ids.length}`,
+  );
+}
+
 export async function fetchTournamentsByStatus(
   statuses: ScheduledTournamentStatus[],
 ): Promise<ScheduledTournamentRow[]> {
   const inClause = statuses.map((s) => `"${s}"`).join(',');
   return supabaseFetch<ScheduledTournamentRow[]>(
     `/rest/v1/${TABLES.tournaments}?select=*&status=in.(${inClause})&order=scheduled_start.asc&limit=200`,
+  );
+}
+
+export type DueLifecycleTournament = Pick<
+  ScheduledTournamentRow,
+  'id' | 'status' | 'registration_open_at' | 'registration_close_at'
+>;
+
+/**
+ * The scheduler tick's lifecycle candidates: `upcoming` events whose
+ * registration has opened, and every `registration_open` event. The tick acts
+ * on nothing else, but it used to read every upcoming row (`select=*`, the
+ * 200-row cap of a 30-day seed window, ~71 KB) every 30 s. Same decisions,
+ * usually 0-1 rows, four columns.
+ */
+export async function fetchDueLifecycleTournaments(now: Date): Promise<DueLifecycleTournament[]> {
+  const nowIso = encodeURIComponent(now.toISOString());
+  return supabaseFetch<DueLifecycleTournament[]>(
+    `/rest/v1/${TABLES.tournaments}` +
+      `?select=id,status,registration_open_at,registration_close_at` +
+      `&or=(and(status.eq.upcoming,registration_open_at.lte.${nowIso}),status.eq.registration_open)` +
+      `&order=scheduled_start.asc` +
+      `&limit=50`,
   );
 }
 
@@ -235,6 +267,28 @@ export async function fetchMatches(tournamentId: string): Promise<MatchRow[]> {
       `&order=round.asc,match_number.asc` +
       `&limit=${TOURNAMENT_MATCH_PAGE_LIMIT}`,
   );
+}
+
+/**
+ * Matches for several tournaments in one request, grouped by tournament.
+ * `/api/tournaments/me` used to call fetchMatches once per registration
+ * (up to 50); this is the same rows in one round trip.
+ */
+export async function fetchMatchesForTournaments(
+  tournamentIds: readonly string[],
+): Promise<Map<string, MatchRow[]>> {
+  const byTournament = new Map<string, MatchRow[]>(tournamentIds.map((id) => [id, []]));
+  if (tournamentIds.length === 0) return byTournament;
+  const inClause = tournamentIds.map((id) => `"${id}"`).join(',');
+  const rows = await supabaseFetch<MatchRow[]>(
+    `/rest/v1/${TABLES.matches}` +
+      `?select=*` +
+      `&tournament_id=in.(${encodeURIComponent(inClause)})` +
+      `&order=round.asc,match_number.asc` +
+      `&limit=${TOURNAMENT_MATCH_PAGE_LIMIT * tournamentIds.length}`,
+  );
+  for (const row of rows) byTournament.get(row.tournament_id)?.push(row);
+  return byTournament;
 }
 
 export async function fetchMatchById(matchId: string): Promise<MatchRow | null> {
