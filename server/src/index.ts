@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 import { config } from './config';
 import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
+import { startResourceUsageLog } from './platform/health/resourceUsageLog';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -945,6 +946,7 @@ server.listen(PORT, () => {
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
   scheduleReviewCompletionSweep();
+  startResourceUsageLog();
   startEventLoopLagMonitor({
     sentry: {
       dsn: config.sentryDsn || undefined,
