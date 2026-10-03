@@ -4,16 +4,21 @@ import {
   InMemoryCheckpointStore,
   jobAuthoritativeComplete,
   runReviewCompletionPass,
+  reviewCompletionJobBackoffMs,
   REVIEW_COMPLETION_LEASE_MS,
   REVIEW_COMPLETION_SWEEP_INTERVAL_MS,
   REVIEW_COMPLETION_DECISION_CONCURRENCY,
+  REVIEW_COMPLETION_HEARTBEAT_MS,
+  REVIEW_COMPLETION_MAX_ATTEMPTS,
   type CheckpointStore,
   type ReviewCompletionJobRecord,
+  type RunCompletionPassOptions,
 } from '@racehorse/review-engine';
 import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { childLogger } from '../logger';
 import { getAuthenticatedUserId } from '../platform/auth/supabaseAuth';
 import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
+import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
 
 const log = childLogger('review-completion');
@@ -37,7 +42,10 @@ function createProductionStore(): CheckpointStore {
       );
     }
     log.warn('Supabase not configured — review completion falling back to memory store (non-production)');
-    return new InMemoryCheckpointStore();
+    return new InMemoryCheckpointStore({
+      maxAttempts: REVIEW_COMPLETION_MAX_ATTEMPTS,
+      backoffMs: reviewCompletionJobBackoffMs,
+    });
   }
   return new SupabaseCheckpointStore();
 }
@@ -99,34 +107,84 @@ export async function enqueueReviewCompletionJob(input: {
   return confirmed;
 }
 
-export async function sweepReviewCompletionJobs(limit = 4): Promise<{
-  ran: number;
-  completed: number;
-  recovered: number;
-}> {
+type SweepResult = { ran: number; completed: number; recovered: number };
+type EvaluatePosition = NonNullable<RunCompletionPassOptions['evaluatePosition']>;
+
+let searchRunner: ReviewSearchRunner | null = null;
+let evaluatorOverride: EvaluatePosition | null = null;
+
+/** Search runs in a worker thread, never on this process's event loop. */
+function evaluatePositionOffThread(): EvaluatePosition {
+  if (evaluatorOverride) return evaluatorOverride;
+  searchRunner ??= new ReviewSearchRunner();
+  const runner = searchRunner;
+  return (snapshot, options) => runner.evaluate(snapshot, options);
+}
+
+/** Test seam: replace the worker-thread evaluator (null restores it). */
+export function setReviewPositionEvaluatorForTests(next: EvaluatePosition | null): void {
+  evaluatorOverride = next;
+}
+
+/** Test seam / shutdown: stop the search worker thread. */
+export async function closeReviewSearchRunner(): Promise<void> {
+  const runner = searchRunner;
+  searchRunner = null;
+  if (runner) await runner.close();
+}
+
+let sweepInFlight: Promise<SweepResult> | null = null;
+let sweepRequestedAgain = false;
+
+/**
+ * Single flight: at most one sweep runs in this process. A tick or enqueue
+ * kick that arrives while one is running asks it to go round once more
+ * instead of starting a second pass over the same jobs. Across processes the
+ * claim RPC decides, from the locked row, whether a job is due.
+ */
+export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
+  if (sweepInFlight) {
+    sweepRequestedAgain = true;
+    return Promise.resolve({ ran: 0, completed: 0, recovered: 0 });
+  }
+  const run = (async () => {
+    const total: SweepResult = { ran: 0, completed: 0, recovered: 0 };
+    do {
+      sweepRequestedAgain = false;
+      const round = await sweepOnce(limit);
+      total.ran += round.ran;
+      total.completed += round.completed;
+      total.recovered += round.recovered;
+    } while (sweepRequestedAgain);
+    return total;
+  })();
+  sweepInFlight = run;
+  void run.finally(() => {
+    if (sweepInFlight === run) sweepInFlight = null;
+  }).catch(() => undefined);
+  return run;
+}
+
+async function sweepOnce(limit: number): Promise<SweepResult> {
   let ran = 0;
   let completed = 0;
   let recovered = 0;
-  const now = Date.now();
+  const listedAt = Date.now();
+  // The list is only a hint: claim_review_completion_job_v2 re-checks each
+  // job on its locked row when the claim lands.
   const claimable = store.listClaimable
-    ? await store.listClaimable(now, limit)
+    ? await store.listClaimable(listedAt, limit)
     : [];
 
+  // One job at a time: there is one search worker thread.
   for (const job of claimable) {
     const hadForeignClaim =
       job.claimToken != null
       && job.leaseExpiresAt != null
-      && job.leaseExpiresAt <= now;
+      && job.leaseExpiresAt <= listedAt;
     ran += 1;
     try {
-      const result = await runReviewCompletionPass({
-        store,
-        jobId: job.jobId,
-        claimToken: `sweep-${process.pid}-${Date.now()}-${ran}`,
-        leaseMs: REVIEW_COMPLETION_LEASE_MS,
-        concurrency: REVIEW_COMPLETION_DECISION_CONCURRENCY,
-        now,
-      });
+      const result = await runJobPass(job.jobId, `sweep-${process.pid}-${Date.now()}-${ran}`);
       if (hadForeignClaim && !result.claimLost) {
         recovered += 1;
         recoveryCount += 1;
@@ -139,13 +197,57 @@ export async function sweepReviewCompletionJobs(limit = 4): Promise<{
   return { ran, completed, recovered };
 }
 
+/**
+ * One pass with a lease heartbeat. The heartbeat renews the lease, fenced on
+ * token + generation, every REVIEW_COMPLETION_HEARTBEAT_MS; if the claim is
+ * gone the pass stops at the next position and the search in flight is
+ * killed, so a superseded pass neither keeps computing nor writes.
+ */
+async function runJobPass(jobId: string, claimToken: string) {
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  let leaseLost = false;
+  try {
+    return await runReviewCompletionPass({
+      store,
+      jobId,
+      claimToken,
+      leaseMs: REVIEW_COMPLETION_LEASE_MS,
+      concurrency: REVIEW_COMPLETION_DECISION_CONCURRENCY,
+      nowFn: Date.now,
+      jobBackoffMs: reviewCompletionJobBackoffMs,
+      evaluatePosition: evaluatePositionOffThread(),
+      shouldAbort: () => leaseLost,
+      onClaimed: (claimed) => {
+        if (!store.renewLease) return;
+        const generation = claimed.claimGeneration ?? 1;
+        heartbeat = setInterval(() => {
+          void store.renewLease!(jobId, claimToken, generation, REVIEW_COMPLETION_LEASE_MS)
+            .then((renewed) => {
+              if (renewed || leaseLost) return;
+              leaseLost = true;
+              log.warn({ jobId, generation }, 'review lease lost; stopping pass');
+              searchRunner?.abort('review lease lost');
+            })
+            .catch((error) => {
+              // Transient: the lease has 3 heartbeats of slack before it lapses.
+              log.warn({ err: error, jobId }, 'review lease renewal failed');
+            });
+        }, REVIEW_COMPLETION_HEARTBEAT_MS);
+        heartbeat.unref?.();
+      },
+    });
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
+}
+
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Kill switch: review passes run on the web server's event loop, and a stuck
- * job can pin it (2026-09-30 / 10-01 outages). Off unless REVIEW_SWEEP_ENABLED
- * is exactly "true". Off means no periodic sweep and no kick on enqueue; jobs
- * are still accepted and stay queued until the sweep is turned back on.
+ * Kill switch (#318, kept by the worker-isolation fix). Off unless
+ * REVIEW_SWEEP_ENABLED is exactly "true". Off means no periodic sweep and no
+ * kick on enqueue; jobs are still accepted and stay queued until the sweep is
+ * turned back on.
  */
 export function isReviewSweepEnabled(): boolean {
   return process.env.REVIEW_SWEEP_ENABLED === 'true';

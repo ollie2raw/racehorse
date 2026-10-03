@@ -56,6 +56,18 @@ export type ReviewCompletionJobRecord = {
   /** CAS generation from durable claim RPC / in-memory store. */
   readonly claimGeneration?: number;
   readonly leaseExpiresAt?: number | null;
+  /** Job-level claim attempts (each claim is one attempt). */
+  readonly attemptCount?: number;
+  /** Why the job was given up on (status failed_fatal), e.g. max_attempts_exceeded. */
+  readonly failureReason?: string | null;
+};
+
+/** Job-level retry policy: bounded claims with exponential backoff between them. */
+export type ReviewCompletionAttemptPolicy = {
+  /** Claims allowed before the job is failed with max_attempts_exceeded. */
+  readonly maxAttempts: number;
+  /** Delay after the Nth claim (1-based) before the job may be claimed again. */
+  readonly backoffMs: (attempt: number) => number;
 };
 
 export type CheckpointStore = {
@@ -85,6 +97,17 @@ export type CheckpointStore = {
   ): Promise<ReviewCompletionJobRecord | null>;
   /** Sweep: jobs whose lease expired or that are pending. */
   listClaimable?(now: number, limit?: number): Promise<readonly ReviewCompletionJobRecord[]>;
+  /**
+   * Heartbeat: extend the lease of a pass that is still working. Fenced like
+   * checkpoint — false once the claim token or generation no longer matches
+   * (the lease was lost), and the pass must stop.
+   */
+  renewLease?(
+    jobId: string,
+    claimToken: string,
+    claimGeneration: number,
+    leaseMs?: number,
+  ): Promise<boolean>;
 };
 
 /** Optional claim generation stamped on records for CAS stores. */
@@ -93,6 +116,16 @@ export type ReviewCompletionJobRecordWithGeneration = ReviewCompletionJobRecord 
 };
 
 export class InMemoryCheckpointStore implements CheckpointStore {
+  /**
+   * Optional job-level attempt policy, mirroring claim_review_completion_job_v2.
+   * Unset keeps the original unbounded behavior.
+   */
+  private readonly attemptPolicy: ReviewCompletionAttemptPolicy | undefined;
+
+  constructor(attemptPolicy?: ReviewCompletionAttemptPolicy) {
+    this.attemptPolicy = attemptPolicy;
+  }
+
   private readonly jobs = new Map<string, ReviewCompletionJobRecord>();
   private readonly byDigest = new Map<string, string>();
   /** Simulated transient failures for Part B-E tests. */
@@ -138,6 +171,12 @@ export class InMemoryCheckpointStore implements CheckpointStore {
     const job = this.jobs.get(jobId);
     if (!job) return null;
     if (job.status === 'complete' || job.status === 'failed_fatal') return null;
+    if (this.attemptPolicy) {
+      // claim_review_completion_job_v2: due-ness is decided from the current
+      // row at the moment of claiming, never from an earlier listing.
+      const due = job.nextAttemptAt <= now && (job.leaseExpiresAt == null || job.leaseExpiresAt <= now);
+      if (!due) return null;
+    }
     const leaseExpired =
       job.leaseExpiresAt == null || job.leaseExpiresAt <= now || job.nextAttemptAt <= now;
     if (
@@ -147,17 +186,52 @@ export class InMemoryCheckpointStore implements CheckpointStore {
     ) {
       return null;
     }
+    const priorAttempts = job.attemptCount ?? 0;
+    if (this.attemptPolicy && priorAttempts >= this.attemptPolicy.maxAttempts) {
+      this.jobs.set(jobId, {
+        ...job,
+        status: 'failed_fatal',
+        failureReason: 'max_attempts_exceeded',
+        claimToken: null,
+        leaseExpiresAt: null,
+        updatedAt: now,
+      });
+      return null;
+    }
+    const attemptCount = priorAttempts + 1;
     const claimed: ReviewCompletionJobRecord = {
       ...job,
       status: 'running',
       claimToken,
       claimGeneration: (job.claimGeneration ?? 0) + 1,
+      attemptCount,
       updatedAt: now,
-      nextAttemptAt: now + leaseMs,
+      // With a policy, a pass that dies without releasing cannot be retried
+      // before its lease plus the attempt's backoff.
+      nextAttemptAt: now + leaseMs + (this.attemptPolicy?.backoffMs(attemptCount) ?? 0),
       leaseExpiresAt: now + leaseMs,
     };
     this.jobs.set(jobId, claimed);
     return claimed;
+  }
+
+  async renewLease(
+    jobId: string,
+    claimToken: string,
+    claimGeneration: number,
+    leaseMs = 60_000,
+  ): Promise<boolean> {
+    const current = this.jobs.get(jobId);
+    if (!current) return false;
+    if (current.claimToken !== claimToken || (current.claimGeneration ?? 0) !== claimGeneration) return false;
+    if (current.status !== 'running' && current.status !== 'pending') return false;
+    const now = Date.now();
+    this.jobs.set(jobId, {
+      ...current,
+      leaseExpiresAt: now + leaseMs,
+      nextAttemptAt: Math.max(current.nextAttemptAt, now + leaseMs),
+    });
+    return true;
   }
 
   async checkpoint(
@@ -350,7 +424,40 @@ export type RunCompletionPassOptions = {
    * durable checkpoint — arrival order never affects the artifact.
    */
   readonly concurrency?: number;
+  /**
+   * Evaluate one position. Defaults to calling adaptiveEvaluateReviewPosition
+   * synchronously (tests, devtools). The server passes an off-main-thread
+   * evaluator so search never runs on the web process's event loop. A thrown
+   * or rejected evaluation leaves the decision FAILED_RETRYABLE — never
+   * FAILED_FATAL, which is reserved for corrupt capture input.
+   */
+  readonly evaluatePosition?: (
+    snapshot: ReviewPositionSnapshotV2,
+    options: Parameters<typeof adaptiveEvaluateReviewPosition>[1],
+  ) => ReturnType<typeof adaptiveEvaluateReviewPosition> | Promise<ReturnType<typeof adaptiveEvaluateReviewPosition>>;
+  /** Called once the claim succeeds (e.g. to start a lease heartbeat). */
+  readonly onClaimed?: (job: ReviewCompletionJobRecord) => void;
+  /**
+   * Clock for lease / next-attempt times written at each checkpoint. Defaults
+   * to `now` when given (deterministic tests), else the live clock. It used to
+   * be read once at pass start, so a pass longer than the lease wrote leases
+   * that had already expired.
+   */
+  readonly nowFn?: () => number;
+  /**
+   * Job-level backoff after the Nth attempt (1-based). A pass that ends with
+   * work still to do is not retried sooner than this.
+   */
+  readonly jobBackoffMs?: (attempt: number) => number;
 };
+
+/** Thrown by an evaluatePosition that ran out of its per-position budget. */
+export class ReviewPositionBudgetExceeded extends Error {
+  constructor(message = 'review position exceeded its time budget') {
+    super(message);
+    this.name = 'ReviewPositionBudgetExceeded';
+  }
+}
 
 export type RunCompletionPassResult = {
   readonly job: ReviewCompletionJobRecord;
@@ -384,7 +491,8 @@ async function persistCheckpoint(
 export async function runReviewCompletionPass(
   options: RunCompletionPassOptions,
 ): Promise<RunCompletionPassResult> {
-  const clock = options.now ?? Date.now();
+  const nowFn = options.nowFn ?? (options.now !== undefined ? () => options.now as number : () => Date.now());
+  const clock = nowFn();
   const leaseMs = options.leaseMs ?? 60_000;
   const concurrency = Math.max(1, Math.min(options.concurrency ?? 1, 4));
   const claimed = await options.store.claim(options.jobId, options.claimToken, clock, leaseMs);
@@ -394,6 +502,8 @@ export async function runReviewCompletionPass(
     return { job: current, newlyCompleted: 0, interrupted: false, claimLost: true };
   }
   const claimGeneration = claimed.claimGeneration ?? 1;
+  options.onClaimed?.(claimed);
+  const evaluatePosition = options.evaluatePosition ?? adaptiveEvaluateReviewPosition;
 
   let newlyCompleted = 0;
   let interrupted = false;
@@ -433,7 +543,7 @@ export async function runReviewCompletionPass(
               // missing snapshot is not an evaluation and cannot be terminal.
               lifecycle: 'PENDING' as const,
               tierReached: row.tierReached,
-              updatedAt: clock,
+              updatedAt: nowFn(),
               attemptCount: row.attemptCount + 1,
               evaluation: row.evaluation
                 ? {
@@ -455,14 +565,44 @@ export async function runReviewCompletionPass(
             ? transitionLifecycle('FAILED_RETRYABLE', 'PENDING')
             : row.lifecycle;
         const searching = transitionLifecycle(from === 'PENDING' ? 'PENDING' : from, 'SEARCHING');
-        const result = adaptiveEvaluateReviewPosition(snapshot, {
-          startTier: (row.tierReached ?? 1) as 1 | 2 | 3 | 4,
-          maxTier: options.maxTier ?? 4,
-          phase: 'completion',
-          allowProgressiveBeyondTier: true,
-          shouldAbort: options.shouldAbort,
-          progressiveSampleOffset: row.attemptCount * 10_000,
-        });
+        let result: ReturnType<typeof adaptiveEvaluateReviewPosition>;
+        try {
+          result = await evaluatePosition(snapshot, {
+            startTier: (row.tierReached ?? 1) as 1 | 2 | 3 | 4,
+            maxTier: options.maxTier ?? 4,
+            phase: 'completion',
+            allowProgressiveBeyondTier: true,
+            shouldAbort: options.shouldAbort,
+            progressiveSampleOffset: row.attemptCount * 10_000,
+          });
+        } catch (error) {
+          // Budget overrun or evaluator crash: retryable, attempt recorded.
+          const failureReason = error instanceof ReviewPositionBudgetExceeded
+            ? 'wall-clock-exhausted' as const
+            : 'evaluation-error' as const;
+          return {
+            index: i,
+            checkpoint: {
+              decisionId: row.decisionId,
+              positionHash: row.positionHash,
+              lifecycle: transitionLifecycle(searching, 'FAILED_RETRYABLE'),
+              tierReached: row.tierReached,
+              updatedAt: nowFn(),
+              attemptCount: row.attemptCount + 1,
+              evaluation: row.evaluation
+                ? {
+                    ...row.evaluation,
+                    evaluationProvenance: {
+                      phase: 'completion',
+                      lifecycle: 'FAILED_RETRYABLE',
+                      failureReason,
+                      positionHash: row.positionHash,
+                    },
+                  }
+                : null,
+            } satisfies ReviewCompletionDecisionCheckpoint,
+          };
+        }
         const nextLife = transitionLifecycle(
           searching,
           result.lifecycle === 'FAILED_RETRYABLE' ? 'FAILED_RETRYABLE' : result.lifecycle,
@@ -475,7 +615,7 @@ export async function runReviewCompletionPass(
             lifecycle: nextLife,
             tierReached: result.tier,
             evaluation: result.evaluation,
-            updatedAt: clock,
+            updatedAt: nowFn(),
             attemptCount: row.attemptCount + 1,
           },
         };
@@ -492,15 +632,18 @@ export async function runReviewCompletionPass(
       worked += 1;
     }
 
+    const writeAt = nowFn();
     const checkpoint: ReviewCompletionJobRecord = {
       ...claimed,
       status: 'running',
-      updatedAt: clock,
+      updatedAt: writeAt,
       decisions: [...decisions],
       claimToken: options.claimToken,
       claimGeneration,
-      nextAttemptAt: clock + leaseMs,
-      leaseExpiresAt: clock + leaseMs,
+      // Never earlier than the claim set it: a pass that dies after this
+      // checkpoint must still wait out the attempt's backoff.
+      nextAttemptAt: Math.max(claimed.nextAttemptAt, writeAt + leaseMs),
+      leaseExpiresAt: writeAt + leaseMs,
     };
     const persisted = await persistCheckpoint(
       options.store,
@@ -555,6 +698,7 @@ export async function runReviewCompletionPass(
   );
   const maxAttempt = Math.max(0, ...finalDecisions.map((d) => d.attemptCount));
 
+  const finishedAt = nowFn();
   const finished: ReviewCompletionJobRecord = {
     ...claimed,
     status: allDone
@@ -564,18 +708,21 @@ export async function runReviewCompletionPass(
         : interrupted || pendingRetry
           ? 'pending'
           : 'running',
-    updatedAt: clock,
+    updatedAt: finishedAt,
     decisions: finalDecisions,
     accuracyModelResult,
     claimToken: allDone || (anyFatal && !pendingRetry) || interrupted || pendingRetry
       ? null
       : options.claimToken,
     claimGeneration,
-    leaseExpiresAt: allDone || (anyFatal && !pendingRetry) ? null : clock + leaseMs,
+    leaseExpiresAt: allDone || (anyFatal && !pendingRetry) ? null : finishedAt + leaseMs,
     nextAttemptAt:
       allDone || (anyFatal && !pendingRetry)
-        ? clock
-        : clock + backoffMs(maxAttempt),
+        ? finishedAt
+        : finishedAt + Math.max(
+          backoffMs(maxAttempt),
+          options.jobBackoffMs?.(claimed.attemptCount ?? 1) ?? 0,
+        ),
   };
   const persistedFinal = await persistCheckpoint(
     options.store,

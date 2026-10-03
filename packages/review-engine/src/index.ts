@@ -59,6 +59,7 @@ export {
   jobAuthoritativeComplete,
   finalArtifactFromJob,
   reviewCompletionJobId,
+  ReviewPositionBudgetExceeded,
 } from './durableReviewCompletionRuntime';
 export { SqlSemanticsCheckpointStore } from './durableSqlSemanticsCheckpointStore';
 export type {
@@ -67,6 +68,7 @@ export type {
   ReviewCompletionDecisionCheckpoint,
   RunCompletionPassOptions,
   RunCompletionPassResult,
+  ReviewCompletionAttemptPolicy,
 } from './durableReviewCompletionRuntime';
 export {
   CERTIFIED_PRODUCTION_COMPLETION_CONFIG,
@@ -75,6 +77,12 @@ export {
   REVIEW_COMPLETION_BACKOFF_BASE_MS,
   REVIEW_COMPLETION_BACKOFF_CAP_MS,
   REVIEW_COMPLETION_DECISION_CONCURRENCY,
+  REVIEW_COMPLETION_MAX_ATTEMPTS,
+  REVIEW_COMPLETION_JOB_BACKOFF_BASE_MS,
+  REVIEW_COMPLETION_JOB_BACKOFF_MAX_MS,
+  REVIEW_COMPLETION_POSITION_TIMEOUT_MS,
+  REVIEW_COMPLETION_HEARTBEAT_MS,
+  reviewCompletionJobBackoffMs,
 } from './productionCompletionConfig';
 export type { CertifiedProductionCompletionConfig } from './productionCompletionConfig';
 export {
