@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   isDurablePvfReviewEnabled,
   isBotPostGameReviewEligible,
+  isPostGameReviewAudience,
   isPositionalCoachingProseEnabled,
   isReviewCaptureEnabled,
 } from '../../training/pivotalReview/postGameReviewPolicy.ts';
@@ -44,7 +45,8 @@ export function useReviewRuntime({
   } = bootstrap;
 
   const { user: authUser, accessToken, loading: authLoading } = useAuth();
-  const authenticatedReviewEnabled = !authLoading && (Boolean(authUser?.id) || import.meta.env.DEV);
+  const authenticatedReviewEnabled =
+    !authLoading && (Boolean(authUser?.id) || import.meta.env.DEV) && isPostGameReviewAudience(authUser?.email);
   const durableReviewEnabled = isDurablePvfReviewEnabled({
     production: import.meta.env.PROD,
     authenticated: Boolean(accessToken),

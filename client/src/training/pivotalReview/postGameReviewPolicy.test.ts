@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { REVIEW_POSITIONAL_EXPLANATIONS_ENABLED } from '../../appRouteTypes';
 import {
   isBotPostGameReviewEligible,
@@ -6,6 +6,7 @@ import {
   isMultiplayerPostGameReviewEligible,
   isPlayVsFritzResultOverlayMode,
   isPositionalCoachingProseEnabled,
+  isPostGameReviewAudience,
   isPostGameReviewEnabled,
   isDurablePvfReviewEnabled,
   isReviewCaptureEnabled,
@@ -64,5 +65,23 @@ describe('post-game review beta gate', () => {
     expect(REVIEW_POSITIONAL_EXPLANATIONS_ENABLED).toBe(true);
     expect(isPositionalCoachingProseEnabled(true)).toBe(true);
     expect(isPositionalCoachingProseEnabled(false)).toBe(false);
+  });
+});
+
+describe('isPostGameReviewAudience (admin-only rollout)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('limits review to the admin outside local dev', () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_E2E_ADMIN_BYPASS', '');
+    vi.stubEnv('VITE_ADMIN_EMAIL', 'admin@example.com');
+    expect(isPostGameReviewAudience('Admin@Example.com')).toBe(true);
+    expect(isPostGameReviewAudience('player@example.com')).toBe(false);
+    expect(isPostGameReviewAudience(null)).toBe(false);
+  });
+
+  it('stays on in local dev', () => {
+    vi.stubEnv('DEV', true);
+    expect(isPostGameReviewAudience('player@example.com')).toBe(true);
   });
 });
