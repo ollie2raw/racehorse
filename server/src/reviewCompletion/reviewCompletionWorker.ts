@@ -341,7 +341,9 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    const job = await store.get(String(req.params.jobId));
+    // Polled every few seconds: read the job without its snapshots.
+    const jobId = String(req.params.jobId);
+    const job = store.getSummary ? await store.getSummary(jobId) : await store.get(jobId);
     if (!job || job.userId !== authenticatedUserId) {
       res.status(404).json({ error: 'Job not found.' });
       return;

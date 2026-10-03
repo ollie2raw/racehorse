@@ -70,8 +70,21 @@ export type ReviewCompletionAttemptPolicy = {
   readonly backoffMs: (attempt: number) => number;
 };
 
+/** What the sweep needs from a claimable job; the claim reads the full row. */
+export type ClaimableReviewJob = Pick<
+  ReviewCompletionJobRecord,
+  'jobId' | 'claimToken' | 'leaseExpiresAt' | 'nextAttemptAt'
+>;
+
 export type CheckpointStore = {
   get(jobId: string): Promise<ReviewCompletionJobRecord | null>;
+  /**
+   * The job without its position snapshots (`snapshots: []`), for status
+   * polling. Snapshots are most of a running job's row and only the worker
+   * needs them. Stores without a cheaper read can omit this; callers fall back
+   * to get().
+   */
+  getSummary?(jobId: string): Promise<ReviewCompletionJobRecord | null>;
   getByGameDigest(gameDigest: string, userId?: string | null): Promise<ReviewCompletionJobRecord | null>;
   /** Durable insert/upsert before acknowledgment. Idempotent on jobId. */
   put(job: ReviewCompletionJobRecord): Promise<void>;
@@ -96,7 +109,7 @@ export type CheckpointStore = {
     leaseMs?: number,
   ): Promise<ReviewCompletionJobRecord | null>;
   /** Sweep: jobs whose lease expired or that are pending. */
-  listClaimable?(now: number, limit?: number): Promise<readonly ReviewCompletionJobRecord[]>;
+  listClaimable?(now: number, limit?: number): Promise<readonly ClaimableReviewJob[]>;
   /**
    * Heartbeat: extend the lease of a pass that is still working. Fenced like
    * checkpoint — false once the claim token or generation no longer matches

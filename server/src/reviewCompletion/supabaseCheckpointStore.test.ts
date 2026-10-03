@@ -73,4 +73,63 @@ describe('SupabaseCheckpointStore — worker isolation RPCs', () => {
     expect(job?.status).toBe('failed_fatal');
     expect(job?.failureReason).toBe('pre_isolation_outage');
   });
+
+  it('checkpoint asks only for columns back and keeps the payload it sent', async () => {
+    supabaseFetchMock.mockResolvedValueOnce({
+      id: 'rcv2:u:g', status: 'running', claim_token: 'tok', claim_generation: 3,
+      lease_expires_at: '2026-10-01T18:01:00.000Z', next_attempt_at: '2026-10-01T18:01:00.000Z',
+      updated_at: '2026-10-01T18:00:00.000Z', completed_at: null, attempt_count: 2, failure_reason: null,
+    });
+    const sent = {
+      jobId: 'rcv2:u:g', userId: 'u', gameDigest: 'g', sourceMatchId: 'm', status: 'running',
+      decisions: [{ decisionId: 'd1', lifecycle: 'SCORED' }], expectedDecisionIds: ['d1'],
+      snapshots: [{ big: true }], captureFailures: [], claimToken: 'tok', claimGeneration: 3,
+      nextAttemptAt: 0, leaseExpiresAt: 0, createdAt: Date.parse('2026-10-01T17:00:00.000Z'), updatedAt: 0,
+    } as never;
+    const saved = await new SupabaseCheckpointStore().checkpoint(sent, 'tok', 3, 60_000);
+    const [path] = supabaseFetchMock.mock.calls[0] as [string];
+    expect(path).toContain('/rest/v1/rpc/checkpoint_review_completion_job?select=');
+    expect(path).not.toContain('job_payload');
+    expect(saved?.decisions).toEqual([{ decisionId: 'd1', lifecycle: 'SCORED' }]);
+    expect(saved?.claimGeneration).toBe(3);
+    expect(saved?.attemptCount).toBe(2);
+    expect(saved?.status).toBe('running');
+  });
+
+  it('checkpoint still reports a lost claim as null', async () => {
+    supabaseFetchMock.mockResolvedValueOnce({ id: null });
+    const sent = { jobId: 'j', decisions: [], snapshots: [], status: 'running', nextAttemptAt: 0, updatedAt: 0 } as never;
+    expect(await new SupabaseCheckpointStore().checkpoint(sent, 'tok', 3, 60_000)).toBeNull();
+  });
+
+  it('listClaimable reads ids and lease state only', async () => {
+    supabaseFetchMock.mockResolvedValueOnce([
+      { id: 'j1', claim_token: null, lease_expires_at: null, next_attempt_at: '2026-10-01T18:00:00.000Z' },
+    ]);
+    const jobs = await new SupabaseCheckpointStore().listClaimable(Date.now(), 4);
+    const [path] = supabaseFetchMock.mock.calls[0] as [string];
+    expect(path).toBe('/rest/v1/rpc/list_claimable_review_completion_jobs?select=id,claim_token,lease_expires_at,next_attempt_at');
+    expect(jobs).toEqual([{ jobId: 'j1', claimToken: null, leaseExpiresAt: null, nextAttemptAt: Date.parse('2026-10-01T18:00:00.000Z') }]);
+  });
+
+  it('getSummary selects the payload parts the poll needs and no snapshots', async () => {
+    const { job_payload: _payload, ...columns } = row();
+    supabaseFetchMock.mockResolvedValueOnce([{
+      ...columns,
+      decisions: [{ decisionId: 'd1', lifecycle: 'PENDING' }],
+      expectedDecisionIds: ['d1'],
+      accuracyModelResult: null,
+      captureFailures: [],
+      jobVersion: 2,
+    }]);
+    const job = await new SupabaseCheckpointStore().getSummary('rcv2:u:g');
+    const [path] = supabaseFetchMock.mock.calls[0] as [string];
+    expect(path).toContain('decisions:job_payload->decisions');
+    expect(path).not.toContain('select=*');
+    expect(path).not.toContain('snapshots');
+    expect(job?.snapshots).toEqual([]);
+    expect(job?.decisions).toEqual([{ decisionId: 'd1', lifecycle: 'PENDING' }]);
+    expect(job?.expectedDecisionIds).toEqual(['d1']);
+    expect(job?.attemptCount).toBe(2);
+  });
 });

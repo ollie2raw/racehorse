@@ -64,6 +64,7 @@ export {
 export { SqlSemanticsCheckpointStore } from './durableSqlSemanticsCheckpointStore';
 export type {
   CheckpointStore,
+  ClaimableReviewJob,
   ReviewCompletionJobRecord,
   ReviewCompletionDecisionCheckpoint,
   RunCompletionPassOptions,
