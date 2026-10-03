@@ -129,6 +129,15 @@ function estimateStateSpace(snapshot: ReviewPositionSnapshotV2): number {
  * pass). Interrupt via `shouldAbort` → FAILED_RETRYABLE for durable resume.
  * Budget exhaustion alone never yields FAILED_FATAL.
  */
+/** Minimal budget for a forced position: enough to build the evaluation shape. */
+export const FORCED_DECISION_FAST_PATH_BUDGET: ReviewDispatchBudget = {
+  maxNodes: 2_000,
+  maxHiddenStateSamples: 1,
+  maxPlyDepth: 1,
+  seed: 'racehorse-review-forced',
+  maxWallClockMs: 250,
+};
+
 export function adaptiveEvaluateReviewPosition(
   snapshot: ReviewPositionSnapshotV2,
   options?: {
@@ -142,6 +151,8 @@ export function adaptiveEvaluateReviewPosition(
     readonly progressiveChunks?: number;
     readonly shouldAbort?: () => boolean;
     readonly progressiveSampleOffset?: number;
+    /** Skip the search for a forced position (default true); false only for comparisons. */
+    readonly forcedFastPath?: boolean;
   },
 ): AdaptiveEvaluateResult {
   const evaluate = options?.evaluate ?? evaluateReviewPosition;
@@ -178,6 +189,36 @@ export function adaptiveEvaluateReviewPosition(
       feasible: false,
       estimatedStateSpace,
     };
+  }
+
+  // Forced position (one distinct legal action): the verdict needs no search,
+  // and nothing downstream reads a forced decision's search values (accuracy,
+  // grade, hand accuracy, labels and pivotal turns all exclude forced; its
+  // loss is 0 by construction). The full path below used to search it
+  // anyway, up to the exact-enumeration budget (one took 39 s). A minimal
+  // evaluation still produces the standard shape; if it somehow disagrees
+  // that the position is forced, fall through to the normal search.
+  if ((options?.forcedFastPath ?? true)
+    && isForcedDecision(snapshot.legalActions.map((action) => ({ action })))) {
+    const raw = evaluate(snapshot, FORCED_DECISION_FAST_PATH_BUDGET, coverageThreshold);
+    if (isForcedDecision(raw.candidates)) {
+      return {
+        evaluation: withProvenance(raw, {
+          lifecycle: 'FORCED',
+          phase,
+          positionHash,
+          tier: 1,
+          detail: 'forced: single legal action, search skipped',
+        }),
+        lifecycle: 'FORCED',
+        tier: 1,
+        positionHash,
+        evidencePolicy: evidence.policy,
+        feasible: true,
+        estimatedStateSpace,
+        convergenceReason: 'forced',
+      };
+    }
   }
 
   // Tractable state space: prefer exact-style large sample/enumeration budget.
