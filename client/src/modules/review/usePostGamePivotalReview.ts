@@ -56,6 +56,8 @@ import {
   pollServerReviewCompletion,
   REVIEW_POLL_INITIAL_MS,
 } from './reviewCompletionClient.ts';
+import { REVIEW_START_DELAY_MS, useReviewStartTrigger } from './useReviewStartTrigger.ts';
+import { sendReviewFunnelEvent, type ReviewFunnelEvent } from './reviewFunnelClient.ts';
 import { resolveGameServerUrl } from '../../lib/gameServerUrl.ts';
 
 export type UsePostGamePivotalReviewParams = {
@@ -74,6 +76,8 @@ export type UsePostGamePivotalReviewParams = {
   fritzTier: FritzTier;
   winningScore: number;
   showPostGameOverlays: boolean;
+  /** On-demand start: ms on the post-game screen before the review job is requested. */
+  reviewStartDelayMs?: number;
   /**
    * A5: read at game-over time to feed analyzeMoveLogDeferred's
    * reviewSnapshots option. Optional so callers that don't yet have a
@@ -111,6 +115,7 @@ export function usePostGamePivotalReview({
   fritzTier,
   winningScore,
   showPostGameOverlays,
+  reviewStartDelayMs = REVIEW_START_DELAY_MS,
   reviewSnapshotRecorder,
   reviewCaptureEnabled,
   sourceMatchId,
@@ -136,6 +141,17 @@ export function usePostGamePivotalReview({
   const [enqueueRetry, setEnqueueRetry] = useState(0);
   const enqueueKeyRef = useRef<string | null>(null);
   const loggedCaptureFailureIdsRef = useRef(new Set<string>());
+  const { started: reviewStartRequested, requestStart: requestReviewStart } = useReviewStartTrigger({
+    active: match.gameOver && showPostGameOverlays && reviewPersistenceEnabled && reviewCaptureEnabled,
+    delayMs: reviewStartDelayMs,
+  });
+  const funnelSentRef = useRef(new Set<string>());
+  const sendFunnelOnce = useCallback((event: ReviewFunnelEvent) => {
+    const key = `${event}:${sourceMatchId}`;
+    if (funnelSentRef.current.has(key) || !reviewPersistenceEnabled || !accessToken) return;
+    funnelSentRef.current.add(key);
+    sendReviewFunnelEvent({ apiBase: resolveGameServerUrl(), authHeader: `Bearer ${accessToken}`, event, sourceMatchId });
+  }, [sourceMatchId, reviewPersistenceEnabled, accessToken]);
   const enqueueRetryDelayMs = Math.min(2_000 * 2 ** Math.min(enqueueRetry, 4), 30_000);
 
   useEffect(() => {
@@ -246,6 +262,9 @@ export function usePostGamePivotalReview({
       .filter((failure) => failure.actorId === 'you')
       .map(({ decisionId, handId, sequence, reason }) => ({ decisionId, handId, sequence, reason }));
     if (playerSnapshots.length === 0 && failures.length === 0) return;
+    sendFunnelOnce('eligible');
+    // On demand: wait for a review to be opened or the post-game delay.
+    if (!reviewStartRequested) return;
     const expectedDecisionIds = [
       ...playerSnapshots.map((snapshot) => ({
         decisionId: snapshot.identifiers.decisionId,
@@ -280,7 +299,7 @@ export function usePostGamePivotalReview({
       setServerJobId(job.jobId);
     });
     return () => { if (retryTimer) clearTimeout(retryTimer); };
-  }, [match.gameOver, reviewPersistenceEnabled, reviewCaptureEnabled, reviewWorkerSnapshots, accessToken, sourceMatchId, reviewSnapshotRecorder, enqueueRetry, enqueueRetryDelayMs]);
+  }, [match.gameOver, reviewPersistenceEnabled, reviewCaptureEnabled, reviewWorkerSnapshots, accessToken, sourceMatchId, reviewSnapshotRecorder, enqueueRetry, enqueueRetryDelayMs, reviewStartRequested, sendFunnelOnce]);
 
   useEffect(() => {
     if (!serverJobId || !accessToken || !reviewPersistenceEnabled) return;
@@ -662,8 +681,9 @@ export function usePostGamePivotalReview({
   }, []);
 
   const reopenPostGameReview = useCallback(() => {
+    requestReviewStart();
     setPostGameReviewDismissed(false);
-  }, []);
+  }, [requestReviewStart]);
 
   // accuracyModel/evidence are merged onto the analysis exposed to the
   // post-game prompt. Opening GameReviewer MUST use that same merged
@@ -673,21 +693,25 @@ export function usePostGamePivotalReview({
   const openHandScopedReview = useCallback(
     (handNumber: number) => {
       if (!exposedPostGameAnalysis) return;
+      requestReviewStart();
+      sendFunnelOnce('opened');
       setReviewerScopeHandNumber(handNumber);
       setCurrentAnalysis(exposedPostGameAnalysis);
       setAnalyzerOpen(true);
     },
-    [exposedPostGameAnalysis],
+    [exposedPostGameAnalysis, requestReviewStart, sendFunnelOnce],
   );
 
   const openReviewGameFromPrompt = useCallback(() => {
     if (!exposedPostGameAnalysis) return;
+    requestReviewStart();
+    sendFunnelOnce('opened');
     setPostGameReviewDismissed(true);
     setReviewerScopeHandNumber(null);
     setReviewerInitialMoveIndex(1);
     setCurrentAnalysis(exposedPostGameAnalysis);
     setAnalyzerOpen(true);
-  }, [exposedPostGameAnalysis]);
+  }, [exposedPostGameAnalysis, requestReviewStart, sendFunnelOnce]);
 
   const completePivotalTurnReview = useCallback(
     (reflections: PivotalTurnReflection[]) => {

@@ -46,6 +46,10 @@ vi.mock('./reviewCompletionClient.ts', async (importOriginal) => ({
   enqueueServerReviewCompletion: (...args: unknown[]) => enqueueServerReviewCompletionMock(...args),
   pollServerReviewCompletion: (...args: unknown[]) => pollServerReviewCompletionMock(...args),
 }));
+const sendReviewFunnelEventMock = vi.fn();
+vi.mock('./reviewFunnelClient.ts', () => ({
+  sendReviewFunnelEvent: (...args: unknown[]) => sendReviewFunnelEventMock(...args),
+}));
 vi.mock('../../lib/gameServerUrl.ts', () => ({ resolveGameServerUrl: () => 'https://server.test' }));
 
 // Real Worker construction isn't available in jsdom -- mocked the same way
@@ -99,6 +103,8 @@ const defaultParams: UsePostGamePivotalReviewParams = {
   showPostGameOverlays: true,
   reviewCaptureEnabled: true,
   sourceMatchId: 'match-uuid-1',
+  // Existing tests cover enqueue behaviour itself; on-demand timing has its own tests.
+  reviewStartDelayMs: 0,
 };
 
 const render = (overrides: Partial<UsePostGamePivotalReviewParams> = {}) =>
@@ -384,6 +390,69 @@ describe('usePostGamePivotalReview — review poll stops when complete', () => {
       unmount();
       vi.useRealTimers();
     }
+  });
+});
+
+describe('usePostGamePivotalReview — on-demand review start', () => {
+  const pendingJob = {
+    jobId: 'durable-on-demand-job', status: 'pending',
+    progress: { total: 1, forced: 0, scored: 0, remaining: 1 },
+  };
+
+  it('waits the post-game delay before requesting the job, and counts eligible once', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('od-1')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValue(pendingJob);
+    pollServerReviewCompletionMock.mockResolvedValue(null);
+    sendReviewFunnelEventMock.mockClear();
+
+    vi.useFakeTimers();
+    const { unmount } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+      reviewStartDelayMs: 5_000,
+    });
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      }
+      expect(enqueueServerReviewCompletionMock).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
+      expect(enqueueServerReviewCompletionMock).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(1);
+      const events = sendReviewFunnelEventMock.mock.calls.map((call) => (call[0] as { event: string }).event);
+      expect(events).toEqual(['eligible']);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('requests the job immediately when Review Game is opened, and counts opened once', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('od-2')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValue(pendingJob);
+    pollServerReviewCompletionMock.mockResolvedValue(null);
+    sendReviewFunnelEventMock.mockClear();
+
+    const { result } = render({
+      reviewPersistenceEnabled: true,
+      accessToken: 'session-token',
+      reviewSnapshotRecorder: recorder,
+      reviewStartDelayMs: 60_000,
+    });
+    await waitFor(() => expect(result.current.postGameAnalysis).not.toBeNull());
+    expect(enqueueServerReviewCompletionMock).not.toHaveBeenCalled();
+
+    act(() => result.current.openReviewGameFromPrompt());
+    act(() => result.current.openReviewGameFromPrompt());
+
+    await waitFor(() => expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(1));
+    const events = sendReviewFunnelEventMock.mock.calls.map((call) => (call[0] as { event: string }).event);
+    expect(events.filter((event) => event === 'opened')).toHaveLength(1);
+    expect(events.filter((event) => event === 'eligible')).toHaveLength(1);
   });
 });
 
