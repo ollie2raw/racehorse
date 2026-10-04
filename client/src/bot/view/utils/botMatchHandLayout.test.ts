@@ -39,4 +39,16 @@ describe('computeNormalHandRows', () => {
     expect(rows[0]).toHaveLength(3);
     expect(rows[1]).toHaveLength(3);
   });
+
+  it('splits from 9 tiles on a short landscape viewport (phone sideways), keeps 8 on one row', () => {
+    const opts = { isLessonLayoutMode: false, lessonHandRowCount: 1, isMobileViewport: false, isShortLandscape: true };
+    expect(computeNormalHandRows(tiles(8), opts)).toHaveLength(1);
+    const rows = computeNormalHandRows(tiles(9), opts);
+    expect(rows.map((r) => r.length)).toEqual([5, 4]);
+  });
+
+  it('keeps 9 tiles on one row on a normal viewport', () => {
+    const opts = { isLessonLayoutMode: false, lessonHandRowCount: 1, isMobileViewport: false };
+    expect(computeNormalHandRows(tiles(9), opts)).toHaveLength(1);
+  });
 });

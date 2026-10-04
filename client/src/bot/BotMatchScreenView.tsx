@@ -52,10 +52,15 @@ export function BotMatchScreenView({
   }
 
   const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 600;
+  const isShortLandscape =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia &&
+    window.matchMedia('(orientation: landscape) and (max-height: 430px)').matches;
   const normalHandRows = computeNormalHandRows(match.players.you.hand, {
     isLessonLayoutMode: layout.isLessonLayoutMode,
     lessonHandRowCount: hand.lessonHandRowCount,
     isMobileViewport,
+    isShortLandscape,
   });
   const handCompactStacked = normalHandRows.length > 1;
 

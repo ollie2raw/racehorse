@@ -47,6 +47,18 @@ function formatDelta(delta: number): string {
   return `${rounded > 0 ? '+' : ''}${rounded}`;
 }
 
+/**
+ * Y-axis bounds from the confidence band (rating ± RD), padded by 20.
+ * recharts' 'dataMin' also counts the stacked band's 0 base, which pinned the
+ * axis at -20 and squashed every rating into the top of the chart.
+ */
+export function ratingAxisDomain(points: ReadonlyArray<Pick<HistoryPoint, 'lower' | 'band'>>): [number, number] {
+  if (points.length === 0) return [0, 0];
+  const lows = points.map((point) => point.lower);
+  const highs = points.map((point) => point.lower + point.band);
+  return [Math.floor(Math.min(...lows) - 20), Math.ceil(Math.max(...highs) + 20)];
+}
+
 function buildChartData(history: RatingHistoryResponse | null): HistoryPoint[] {
   if (!history) return [];
   return history.games.map((game, index) => {
@@ -96,6 +108,7 @@ export default function RatingHistoryPage({
   const displayError = userId ? error : 'Sign in to view your rating history.';
 
   const chartData = useMemo(() => buildChartData(displayHistory), [displayHistory]);
+  const yDomain = useMemo(() => ratingAxisDomain(chartData), [chartData]);
 
   const stats = useMemo(() => {
     const games = displayHistory?.games ?? [];
@@ -134,6 +147,7 @@ export default function RatingHistoryPage({
       contentClassName="screen-shell rating-history-content"
     >
       <div
+        className="rating-history-body"
         style={{
           width: '100%',
           display: 'grid',
@@ -141,6 +155,7 @@ export default function RatingHistoryPage({
         }}
       >
         <div
+          className="rating-history-chart-card"
           style={{
             borderRadius: 18,
             border: '1px solid rgba(236,252,245,0.12)',
@@ -176,7 +191,7 @@ export default function RatingHistoryPage({
           )}
 
           {!displayLoading && !displayError && chartData.length > 0 && (
-            <div style={{ width: '100%', height: 290 }}>
+            <div className="rating-history-chart" style={{ width: '100%', height: 290 }}>
               <ResponsiveContainer>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
                   <defs>
@@ -191,13 +206,14 @@ export default function RatingHistoryPage({
                     tick={{ fill: 'rgba(191,213,223,0.72)', fontSize: 12 }}
                     axisLine={{ stroke: 'rgba(148,163,184,0.2)' }}
                     tickLine={false}
-                    label={{ value: 'Game', position: 'insideBottom', offset: -4, fill: 'rgba(191,213,223,0.72)' }}
+                    label={{ value: 'Game', position: 'insideBottom', offset: -4, fill: 'rgba(191,213,223,0.72)', className: 'rating-history-x-label' }}
                   />
                   <YAxis
                     tick={{ fill: 'rgba(191,213,223,0.72)', fontSize: 12 }}
                     axisLine={{ stroke: 'rgba(148,163,184,0.2)' }}
                     tickLine={false}
-                    domain={['dataMin - 20', 'dataMax + 20']}
+                    domain={yDomain}
+                    allowDataOverflow
                     label={{ value: 'Rating', angle: -90, position: 'insideLeft', fill: 'rgba(191,213,223,0.72)' }}
                   />
                   <Tooltip
@@ -260,6 +276,7 @@ export default function RatingHistoryPage({
         </div>
 
         <div
+          className="rating-history-stats"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -320,6 +337,7 @@ export default function RatingHistoryPage({
         </div>
 
         <div
+          className="rating-history-leaderboard"
           style={{
             borderRadius: 18,
             border: '1px solid rgba(236,252,245,0.12)',
@@ -363,7 +381,7 @@ export default function RatingHistoryPage({
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+        <div className="rating-history-back" style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onBack}>
             ← Back to Home
           </button>

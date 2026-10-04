@@ -14,6 +14,8 @@ const overlays = [
   './states/solo-populated.v1.json',
   './states/solo-journey-locked.v1.json',
   './states/learn-default.v1.json',
+  './states/tournament-open.v1.json',
+  './states/tournament-registered.v1.json',
 ].map((path) => readFixture<MobileFixtureOverlay>(path));
 
 function responseKey(response: MobileApiResponse): string {

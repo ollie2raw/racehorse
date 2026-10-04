@@ -390,12 +390,6 @@ export function SettingsScreen({
 
             <PreferencesSection />
 
-            <SettingsSection eyebrow="Device" title="Session" accent="green">
-              <Button variant="outline" onClick={() => onSignOut?.()}>
-                Sign out
-              </Button>
-            </SettingsSection>
-
             <DangerZoneSection
               username={authProfile?.username ?? ''}
               onDeleteAccount={onDeleteAccount}

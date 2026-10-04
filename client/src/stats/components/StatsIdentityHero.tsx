@@ -34,7 +34,7 @@ export function StatsIdentityHero({ username, competitive }: Props) {
             {competitive.rating == null ? (
               DASH
             ) : (
-              <AnimatedScore value={competitive.rating} from={0} format={(n) => n.toLocaleString()} />
+              <AnimatedScore value={competitive.rating} from={0} format={(n) => Math.round(n).toLocaleString()} />
             )}
           </span>
           <span className="rh-stats-figure-label">Rating</span>
@@ -50,7 +50,7 @@ export function StatsIdentityHero({ username, competitive }: Props) {
           </div>
           <div>
             <dt>Peak</dt>
-            <dd>{competitive.peakRating == null ? DASH : competitive.peakRating.toLocaleString()}</dd>
+            <dd>{competitive.peakRating == null ? DASH : Math.round(competitive.peakRating).toLocaleString()}</dd>
           </div>
           <div>
             <dt>Ranked games</dt>

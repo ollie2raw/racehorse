@@ -15,7 +15,11 @@ import {
   traceCameraDebug,
   traceDailyFritzBoardEvent,
 } from '../boardDiagnostics';
-import { computeBoardLayout, type BoardLayout } from './boardLayout';
+import { computeBoardLayout, type BoardLayout, type BoardLayoutOptions } from './boardLayout';
+import { useShortBoardViewport } from './useShortBoardViewport';
+
+/** Vertical arms bend after this many tiles on a short (phone-landscape) board. */
+const SHORT_BOARD_MAX_VERTICAL_ARM_TILES = 2;
 
 export interface UseBoardRenderLayoutParams {
   board: BoardState | null;
@@ -55,6 +59,13 @@ export function useBoardRenderLayout({
   profileDailyFritz,
   cameraScale,
 }: UseBoardRenderLayoutParams): UseBoardRenderLayoutResult {
+  // Static views (lessons, diagrams, review snapshots) keep their authored
+  // straight-arm geometry; only the live board bends on a short viewport.
+  const shortViewport = useShortBoardViewport();
+  const layoutOptions: BoardLayoutOptions = useMemo(
+    () => (shortViewport && !staticView ? { maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES } : {}),
+    [shortViewport, staticView],
+  );
   const boardTileCount = board
     ? board.mainLine.length +
       board.hubDoubles.reduce(
@@ -136,7 +147,7 @@ export function useBoardRenderLayout({
       validPositions,
       selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
     });
-    const nextLayout = computeBoardLayout(isResettingBoard ? null : board, cameraFitPositions);
+    const nextLayout = computeBoardLayout(isResettingBoard ? null : board, cameraFitPositions, layoutOptions);
     traceCameraDebug('[camera-debug] computeLayout output', {
       minX: Number(nextLayout.minX.toFixed(2)),
       maxX: Number(nextLayout.maxX.toFixed(2)),
@@ -152,12 +163,15 @@ export function useBoardRenderLayout({
     }
     return nextLayout;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the layout memo keys on the inputs that change its geometry; boardTileCount/cameraScale are derived from those and would only add churn
-  }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions, isResettingBoard]);
+  }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions, isResettingBoard, layoutOptions]);
 
   const placementZones = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const zones = computeBoardLayout(isResettingBoard ? null : board, validPositions).zones;
+    const zones = computeBoardLayout(isResettingBoard ? null : board, validPositions, {
+      ...layoutOptions,
+      pendingTileIsDouble: Boolean(selectedTile && selectedTile.low === selectedTile.high),
+    }).zones;
     if (profileDailyFritz) {
       // eslint-disable-next-line react-hooks/purity -- performance.now() timing probe — instrumentation
       const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -168,7 +182,7 @@ export function useBoardRenderLayout({
       });
     }
     return zones;
-  }, [board, validPositions, profileDailyFritz, selectedTile, isResettingBoard]);
+  }, [board, validPositions, profileDailyFritz, selectedTile, isResettingBoard, layoutOptions]);
 
   useEffect(() => {
     if (!profileDailyFritz) return;
@@ -180,8 +194,8 @@ export function useBoardRenderLayout({
 
   const glowLayout = useMemo(() => {
     if (!showOpenEndGlow) return null;
-    return computeBoardLayout(isResettingBoard ? null : board, openEndPositions);
-  }, [showOpenEndGlow, board, openEndPositions, isResettingBoard]);
+    return computeBoardLayout(isResettingBoard ? null : board, openEndPositions, layoutOptions);
+  }, [showOpenEndGlow, board, openEndPositions, isResettingBoard, layoutOptions]);
 
   const resetSignature = useMemo(
     () => `${handNumber}:${gameOver}:${isResettingBoard}`,

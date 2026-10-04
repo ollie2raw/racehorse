@@ -27,7 +27,7 @@ export function BotMatchBoardControlsTray({
 }: BotMatchBoardControlsTrayProps) {
   return (
     <div
-      className="wl-controls-tray control-pill"
+      className="wl-controls-tray control-pill rh-board-controls"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
@@ -40,7 +40,7 @@ export function BotMatchBoardControlsTray({
     >
       <button
         type="button"
-        className="wl-control-btn"
+        className="wl-control-btn rh-board-control-btn"
         title="Zoom out"
         aria-label="Zoom out"
         onClick={(e) => {
@@ -53,7 +53,7 @@ export function BotMatchBoardControlsTray({
       </button>
       <button
         type="button"
-        className="wl-control-btn"
+        className="wl-control-btn rh-board-control-btn"
         title="Zoom in"
         aria-label="Zoom in"
         onClick={(e) => {
@@ -66,7 +66,7 @@ export function BotMatchBoardControlsTray({
       </button>
       <button
         type="button"
-        className="wl-control-btn"
+        className="wl-control-btn rh-board-control-btn"
         onClick={() => setIsMuted((prev) => !prev)}
         title={isMuted ? 'Unmute' : 'Mute'}
         aria-label={isMuted ? 'Unmute' : 'Mute'}
@@ -75,7 +75,7 @@ export function BotMatchBoardControlsTray({
       </button>
       <button
         type="button"
-        className="wl-control-btn"
+        className="wl-control-btn rh-board-control-btn"
         onClick={toggleFullscreen}
         title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
@@ -84,7 +84,7 @@ export function BotMatchBoardControlsTray({
       </button>
       <button
         type="button"
-        className="wl-control-btn"
+        className="wl-control-btn rh-board-control-btn"
         onClick={onRequestLeave}
         title="Leave game"
         aria-label="Leave game"

@@ -989,13 +989,12 @@
   justify-content: center;
 }
 
-.learn-academy__scoring-chain-art {
-  display: block;
-  width: min(100%, 720px);
-  max-height: min(52vh, 300px);
-  height: auto;
-  object-fit: contain;
-  object-position: center;
+.learn-academy__scoring-chain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
   user-select: none;
   pointer-events: none;
 }

@@ -53,6 +53,10 @@
     "size-check": "node scripts/check-bundle-size.mjs"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/preferences": "^8.0.1",
     "@racehorse/game-core": "*",
     "@racehorse/match-protocol": "*",
     "@racehorse/review-engine": "*",

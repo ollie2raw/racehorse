@@ -16,6 +16,7 @@ import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardD
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
+import { useShortBoardViewport } from './board/useShortBoardViewport';
 
 // ─── Board Component ─────────────────────────────────────────
 
@@ -87,7 +88,10 @@ function BoardComponent(
 ) {
   const resolvedFitMode = staticView ? 'guided' : fitMode;
   const resolvedShowZoomTray = staticView ? false : showZoomTray;
-  const minCameraScale = containFullBoard ? 0.08 : 0.22;
+  // A phone held sideways gives the board ~240px of height: let the fit zoom
+  // out further there so a crowded board still fits whole (no dragging).
+  const shortViewport = useShortBoardViewport();
+  const minCameraScale = containFullBoard ? 0.08 : shortViewport && !staticView ? 0.14 : 0.22;
   useRenderProfiler('Board');
   if (profileDailyFritz) {
     recordDailyFritzBoardMetric('boardRenderCount', 1);

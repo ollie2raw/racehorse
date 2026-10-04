@@ -3,6 +3,7 @@ import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import HandOverModal from '../components/handOver/HandOverModal';
 import {
   buildHandOverReasonCopy,
+  resolveBotHandDisplayWinner,
   buildNextHandDealingHint,
   loserDisplayLabel,
   resolveWinnerSide,
@@ -57,7 +58,8 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
 }) => {
   if (!handReveal || gameOver) return null;
 
-  const winnerSide = resolveWinnerSide(handReveal.winner);
+  const displayWinner = resolveBotHandDisplayWinner(handReveal);
+  const winnerSide = resolveWinnerSide(displayWinner);
 
   return (
     <GameOverlayPortal>
@@ -69,8 +71,8 @@ export const BotHandOverModal: React.FC<BotHandOverModalProps> = ({
         loserLabel={loserDisplayLabel(winnerSide, opponentLabel)}
         loserPips={handReveal.loserPips}
         reasonCopy={buildHandOverReasonCopy({
-          youWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'you',
-          opponentWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'bot',
+          youWentOut: handReveal.reason !== 'blocked' && displayWinner === 'you',
+          opponentWentOut: handReveal.reason !== 'blocked' && displayWinner === 'bot',
           isBlocked: handReveal.reason === 'blocked',
           opponentName: opponentLabel,
           pointsAwarded: handReveal.pointsAwarded,

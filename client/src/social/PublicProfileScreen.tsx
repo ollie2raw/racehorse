@@ -77,21 +77,31 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
         <button type="button" className="rh-pp-back" data-rh-parent-back onClick={onClose} aria-label="Back"><span aria-hidden="true">←</span></button>
         <span className="rh-pp-breadcrumb">Player Profile</span>
       </div>
+      {/* The rh-pp-col / rh-pp-detail wrappers are layout-neutral on the web
+          (display: contents) and form the two-column native landscape page. */}
       <main className="rh-pp-content">
-        <PlayerIdentityHeader
-          subject={model.subject}
-          competitive={model.competitive}
-          canInteract={Boolean(user)}
-          addingFriend={addingFriend}
-          onAddFriend={handleAddFriend}
-          onChallenge={onChallenge}
-          onSpectate={onSpectate}
-        />
-        <PlayerIdentityHighlights signals={model.identitySignals.featured} isCurrentUser={model.subject.isCurrentUser} />
-        <PlayerCompetitiveSummary competitive={model.competitive} />
-        <PlayerModeSummary model={model} />
-        <PlayerRecentForm competitive={model.competitive} />
-        <PlayerMilestoneShelf milestones={remainingMilestones} />
+        <div className="rh-pp-col rh-pp-col--identity">
+          <PlayerIdentityHeader
+            subject={model.subject}
+            competitive={model.competitive}
+            canInteract={Boolean(user)}
+            addingFriend={addingFriend}
+            onAddFriend={handleAddFriend}
+            onChallenge={onChallenge}
+            onSpectate={onSpectate}
+          />
+          <PlayerIdentityHighlights signals={model.identitySignals.featured} isCurrentUser={model.subject.isCurrentUser} />
+        </div>
+        <div className="rh-pp-col rh-pp-col--stats">
+          <PlayerCompetitiveSummary competitive={model.competitive} />
+          <div className="rh-pp-detail">
+            <div className="rh-pp-detail__stack">
+              <PlayerModeSummary model={model} />
+              <PlayerMilestoneShelf milestones={remainingMilestones} />
+            </div>
+            <PlayerRecentForm competitive={model.competitive} />
+          </div>
+        </div>
         <PlayerRelationshipCard subject={model.subject} rivalry={model.rivalry} featuredRelationship={featuredRelationship} />
       </main>
     </div>

@@ -259,9 +259,14 @@ export default function GhostSetupScreen({
             <div className="pvf-label">SINGLE PLAYER</div>
             <h1 className="pvf-title">Ghost Mode</h1>
             <p className="pvf-subtitle">
-              {userId
-                ? 'Train a rolling model of how you play from Fritz matches, then spar against your ghost—or a friend’s.'
-                : 'Ghost Mode is tied to your account and training progress. Sign in to build and play your ghost.'}
+              <span className="rh-web-only">
+                {userId
+                  ? 'Train a rolling model of how you play from Fritz matches, then spar against your ghost—or a friend’s.'
+                  : 'Ghost Mode is tied to your account and training progress. Sign in to build and play your ghost.'}
+              </span>
+              <span className="rh-app-only" aria-hidden="true">
+                {userId ? 'Race a model of how you play—or a friend’s.' : 'Sign in to build and play your ghost.'}
+              </span>
             </p>
           </div>
 
@@ -281,8 +286,11 @@ export default function GhostSetupScreen({
                 <div className="pvf-card-eyebrow">YOUR GHOST</div>
                 <h2 className="pvf-card-name">Ghost</h2>
                 <p className="pvf-card-description">
-                  Your ghost learns how you play from Fritz matches. Unlock it in five games, then sharpen it as you keep
-                  playing.
+                  <span className="rh-web-only">
+                    Your ghost learns how you play from Fritz matches. Unlock it in five games, then sharpen it as you keep
+                    playing.
+                  </span>
+                  <span className="rh-app-only" aria-hidden="true">Learns from your Fritz matches.</span>
                 </p>
               </div>
 

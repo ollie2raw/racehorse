@@ -290,10 +290,13 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 <div className="pvf-label">MULTIPLAYER</div>
                 <h1 className="pvf-title">Quick Match</h1>
                 <p className="pvf-subtitle mp-hub-subtitle">
-                  <span className="mp-hub-subtitle-line">
+                  <span className="mp-hub-subtitle-line rh-app-only" aria-hidden="true">
+                    Ranked 1v1, matched near your rating.
+                  </span>
+                  <span className="mp-hub-subtitle-line rh-web-only">
                     Skill-based 1v1 dominos. We pair you with a player near your rating and expand the
                   </span>
-                  <span className="mp-hub-subtitle-line">search every 30 seconds.</span>
+                  <span className="mp-hub-subtitle-line rh-web-only">search every 30 seconds.</span>
                 </p>
               </div>
 

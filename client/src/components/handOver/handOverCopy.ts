@@ -36,6 +36,11 @@ export function buildHandOverReasonCopy(opts: {
   const { youWentOut, opponentWentOut, isBlocked, opponentName, pointsAwarded } = opts;
   const pointsLabel = handOverPointsLabel(pointsAwarded);
 
+  if (pointsAwarded === 0 && (youWentOut || opponentWentOut)) {
+    const who = youWentOut ? 'You' : opponentName;
+    const leftover = youWentOut ? `${opponentName}'s` : 'Your';
+    return `${who} went out — ${leftover} leftover pips round to 0 points.`;
+  }
   if (youWentOut) {
     return `You emptied your hand and collected ${pointsLabel}.`;
   }
@@ -64,6 +69,23 @@ export function buildRemainingTilesEvidenceNote(reveal: HandOverTileReveal): str
   return `${reveal.ownerLabel} left these tiles.`;
 }
 
+/**
+ * The winner to *show* for a finished hand. Engine `winner` comes from the
+ * score deltas, so going out against a hand whose pips round down to 0 comes
+ * back as null — but the player who emptied their hand still won it.
+ */
+export function resolveBotHandDisplayWinner(handReveal: {
+  winner: 'you' | 'bot' | null;
+  reason: 'domino' | 'blocked';
+  yourRemainingTiles: Tile[];
+  botRemainingTiles: Tile[];
+}): 'you' | 'bot' | null {
+  if (handReveal.winner || handReveal.reason === 'blocked') return handReveal.winner;
+  if (handReveal.yourRemainingTiles.length === 0) return 'you';
+  if (handReveal.botRemainingTiles.length === 0) return 'bot';
+  return null;
+}
+
 export function buildBotHandOverReveals(
   handReveal: {
     winner: 'you' | 'bot' | null;
@@ -74,6 +96,7 @@ export function buildBotHandOverReveals(
   opponentLabel: string,
 ): HandOverTileReveal[] {
   const isBlocked = handReveal.reason === 'blocked';
+  const winner = resolveBotHandDisplayWinner(handReveal);
   const yourTiles = handReveal.yourRemainingTiles;
   const oppTiles = handReveal.botRemainingTiles;
 
@@ -94,7 +117,7 @@ export function buildBotHandOverReveals(
     ];
   }
 
-  if (handReveal.winner === 'you') {
+  if (winner === 'you') {
     return [
       {
         ownerLabel: 'You',
@@ -111,7 +134,7 @@ export function buildBotHandOverReveals(
     ];
   }
 
-  if (handReveal.winner === 'bot') {
+  if (winner === 'bot') {
     return [
       {
         ownerLabel: opponentLabel,

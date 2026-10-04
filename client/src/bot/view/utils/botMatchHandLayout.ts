@@ -6,15 +6,17 @@ export function computeNormalHandRows(
     isLessonLayoutMode: boolean;
     lessonHandRowCount: number;
     isMobileViewport: boolean;
+    /** Short, wide viewport (phone landscape): 9 tiles at full size overflow, so split from 9. */
+    isShortLandscape?: boolean;
   },
 ): Tile[][] {
-  const { isLessonLayoutMode, lessonHandRowCount, isMobileViewport } = options;
+  const { isLessonLayoutMode, lessonHandRowCount, isMobileViewport, isShortLandscape = false } = options;
   if (isLessonLayoutMode) {
     if (lessonHandRowCount <= 1 || tiles.length <= 1) return [tiles];
     const midpoint = Math.ceil(tiles.length / 2);
     return [tiles.slice(0, midpoint), tiles.slice(midpoint)];
   }
-  if (tiles.length > 9) {
+  if (tiles.length > (isShortLandscape ? 8 : 9)) {
     if (isMobileViewport && tiles.length === 7) {
       return [tiles.slice(0, 4), tiles.slice(4)];
     }
