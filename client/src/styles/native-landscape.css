@@ -4419,6 +4419,8 @@
   .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-rating {
     grid-area: rating;
     font-size: 20px;
+  }
+
   /* ── Post-game review prompt ("Analyzing" / "Review unavailable") ─
      Rides the match-result card above; one fixed width so the card does
      not jump as the accuracy text changes, accuracy/grade sized so
