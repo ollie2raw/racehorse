@@ -5163,4 +5163,21 @@
     grid-column: 3;
     text-align: right;
   }
+
+  /* Ghost's Play button when it can't start (signed out / no ghost yet): it
+     keeps its dark label but loses the blue fill, so it read as blank. Show it
+     as a muted outline instead; the inline opacity is what we override. */
+  .rh-native .ghost-pvf-start-btn:disabled,
+  .rh-native .ghost-pvf-signout-cta .pvf-start-btn:disabled {
+    opacity: 1 !important;
+    background: transparent !important;
+    border: 1px solid var(--border-subtle) !important;
+    box-shadow: none !important;
+    color: var(--text-muted) !important;
+  }
+
+  .rh-native .ghost-pvf-start-btn:disabled > span,
+  .rh-native .ghost-pvf-signout-cta .pvf-start-btn:disabled > span {
+    color: var(--text-muted) !important;
+  }
 }
