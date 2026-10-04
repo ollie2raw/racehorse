@@ -47,6 +47,13 @@
   gap: 18px;
 }
 
+/* Column wrappers exist for the native landscape layout; on the web they
+   are transparent, and the records shelf / relationship card keep their
+   place after the recent-form list. */
+.rh-pp-col, .rh-pp-detail, .rh-pp-detail__stack { display: contents; }
+.rh-pp-content [aria-labelledby="identity-records-title"] { order: 1; }
+.rh-pp-content > .identity-relationship { order: 2; }
+
 .rh-pp-loading, .rh-pp-error-state { display: grid; place-items: center; min-height: 240px; color: var(--text-dim); }
 .rh-pp-error-state { gap: 20px; text-align: center; padding: 0 24px; }
 .rh-pp-error-state__message { margin: 0; color: var(--text-secondary); font-size: 15px; max-width: 360px; }
