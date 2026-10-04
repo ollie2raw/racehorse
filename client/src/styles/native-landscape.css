@@ -4126,4 +4126,20 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  /* Home tiles are too narrow for "Tournament" plus an inline Soon pill, so
+     the pill rides the label's top-right corner, as on the phone tab bar. */
+  .rh-native .today-home .home-mode-tabs .rh-soon-pill {
+    position: absolute;
+    top: -11px;
+    right: -18px;
+    margin: 0;
+    padding: 1px 4px;
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  .rh-native .today-home .home-mode-tabs button > span:last-of-type {
+    white-space: nowrap;
+  }
 }
