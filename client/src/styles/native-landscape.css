@@ -4142,4 +4142,237 @@
   .rh-native .today-home .home-mode-tabs button > span:last-of-type {
     white-space: nowrap;
   }
+
+  /* ── Global leaderboard (Social → View Leaderboard) ────────────────
+     Same board as the Daily Fritz / Puzzle Rush leaderboards: one compact
+     header card (back, title, tabs), the ranked list as one record table
+     scrolling inside itself, and "Your position" as a right rail. Without
+     a position (signed out, or unranked) the list takes the full width. */
+  .rh-native .rh-presentation:has(.rh-lb-screen) > .rh-global-nav {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+  }
+
+  .rh-native .rh-presentation-content:has(.rh-lb-screen) {
+    padding: 0 !important;
+  }
+
+  .rh-native .rh-lb-screen {
+    --rh-lb-line: rgba(255, 255, 255, 0.08);
+    --rh-lb-line-soft: rgba(255, 255, 255, 0.05);
+    --rh-lb-label: rgba(255, 255, 255, 0.42);
+    --rh-lb-surface: rgba(255, 255, 255, 0.015);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 8px;
+    box-sizing: border-box;
+    min-height: 0;
+    padding: calc(var(--rh-native-nav-h) + 8px) max(var(--rh-safe-right), 16px) max(var(--rh-safe-bottom), 10px) max(var(--rh-safe-left), 16px);
+  }
+
+  .rh-native .rh-lb-screen:has(.rh-lb-self-pin) {
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--rh-lb-line);
+    border-radius: var(--radius-record);
+    background-color: rgba(255, 255, 255, 0.012);
+  }
+
+  /* Two levels deep (Social → Leaderboard): keep the in-page back, as the
+     Daily Fritz board does (App.css hides parent-back controls). */
+  .rh-native .rh-lb-screen .rh-lb-back {
+    display: flex !important;
+    width: 32px;
+    height: 32px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-title {
+    font-size: 24px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-tabs {
+    width: auto;
+    margin-left: auto;
+    gap: 6px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-tab,
+  .rh-native .rh-lb-screen .rh-lb-mode-btn {
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-mode-bar {
+    grid-column: 1;
+    grid-row: 2;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-content {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 0;
+    border: 1px solid var(--rh-lb-line);
+    border-radius: var(--radius-record);
+    background: var(--rh-lb-surface);
+    overscroll-behavior: contain;
+  }
+
+  /* The By Mode pills sit above the list only when they exist. */
+  .rh-native .rh-lb-screen:not(:has(.rh-lb-mode-bar)) .rh-lb-content {
+    grid-row: 2 / 4;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-state {
+    height: 100%;
+    min-height: 120px;
+    padding: 0 16px;
+    text-align: center;
+  }
+
+  /* Rows become one table: hairline dividers instead of separate cards. A
+     soft fade at the bottom edge says "there's more". */
+  .rh-native .rh-lb-screen .rh-lb-list {
+    gap: 0;
+    padding-bottom: 18px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-content:has(.rh-lb-list) {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-row {
+    grid-template-columns: 40px 24px minmax(0, 1fr) 72px 60px 96px;
+    gap: 10px;
+    min-height: 44px;
+    padding: 4px 12px 4px 9px;
+    border: 0;
+    border-bottom: 1px solid var(--rh-lb-line-soft);
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-row:hover {
+    transform: none;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-row--self {
+    background: rgba(59, 130, 246, 0.08);
+    border-left-color: var(--tier-standard);
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-rank,
+  .rh-native .rh-lb-screen .rh-lb-rating {
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-username {
+    font-size: 14px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-tier {
+    font-size: 11px;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-games,
+  .rh-native .rh-lb-screen .rh-lb-winrate,
+  .rh-native .rh-lb-screen .rh-lb-trend {
+    white-space: nowrap;
+  }
+
+  /* "Your position" rail: the pinned self row restacked as a card. */
+  .rh-native .rh-lb-screen .rh-lb-self-pin {
+    grid-column: 2;
+    grid-row: 2 / 4;
+    align-self: start;
+    padding: 0;
+    border: 1px solid var(--rh-lb-line);
+    border-radius: var(--radius-record);
+    background: var(--rh-lb-surface);
+    overflow: hidden;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin::before {
+    content: 'Your position';
+    display: block;
+    padding: 9px 12px 8px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.08);
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--tier-standard);
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'rank rank rank'
+      'avatar name name'
+      'tier tier rating';
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-rank {
+    grid-area: rank;
+    font-size: 32px;
+    line-height: 1;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-avatar {
+    grid-area: avatar;
+    display: flex !important;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-username {
+    grid-area: name;
+  }
+
+  /* The card's heading already says it's you. */
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner .rh-lb-you {
+    display: none;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-tier {
+    grid-area: tier;
+    display: block !important;
+    align-self: center;
+    text-align: left;
+  }
+
+  .rh-native .rh-lb-screen .rh-lb-self-pin-inner > .rh-lb-rating {
+    grid-area: rating;
+    font-size: 20px;
+  }
 }
