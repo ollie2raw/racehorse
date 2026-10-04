@@ -4080,4 +4080,50 @@
   .rh-native .friends-page-topbar {
     display: none;
   }
+
+  /* Quick Match status under Find Match: the panel doesn't scroll and only
+     ~28px sit below the button, so the connecting hint becomes one line with
+     Retry inline, and an error replaces it (two lines at most). */
+  .rh-native .rh-presentation .pvf-control-panel .mm-connect-hint {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    margin: 6px 0 0 !important;
+    padding: 0 !important;
+  }
+
+  .rh-native .rh-presentation .pvf-control-panel .mm-connect-hint__title {
+    font-size: 12px !important;
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+
+  .rh-native .rh-presentation .pvf-control-panel .mm-connect-retry {
+    min-height: 0 !important;
+    height: 24px !important;
+    padding: 0 10px !important;
+    margin: 0 !important;
+    font-size: 11px !important;
+  }
+
+  /* While a status line shows, the headings that restate their section
+     labels give up their rows so the line stays inside the panel. */
+  .rh-native .rh-presentation .pvf-control-panel:has(.mm-connect-hint, .mm-error) .mm-section-heading {
+    display: none !important;
+  }
+
+  .rh-native .rh-presentation .pvf-control-panel :has(> .mm-error) > .mm-connect-hint {
+    display: none !important;
+  }
+
+  .rh-native .rh-presentation .pvf-control-panel .mm-error {
+    margin: 6px 0 0 !important;
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
