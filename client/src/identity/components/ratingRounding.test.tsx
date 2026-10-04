@@ -16,8 +16,11 @@ describe('profile rating displays round fractional ratings', () => {
     vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
     const base = createEmptyPlayerIdentityModel(100);
     render(<PlayerCompetitiveSummary competitive={{ ...base.competitive, rating: 1779.968, peakRating: 1812.4 }} />);
-    await waitFor(() => expect(screen.getByText('1,780')).toBeTruthy());
-    expect(screen.getByText('1,812')).toBeTruthy();
+    // Rating and peak animate independently; wait for both to land.
+    await waitFor(() => {
+      expect(screen.getByText('1,780')).toBeTruthy();
+      expect(screen.getByText('1,812')).toBeTruthy();
+    });
     expect(screen.queryByText(/1,779\.968/)).toBeNull();
   });
 
