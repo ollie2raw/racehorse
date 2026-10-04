@@ -8,6 +8,8 @@ export type AppPrimaryTab = {
   mode: AppMode;
   area: PrimaryArea;
   activeModes: AppMode[];
+  /** Shown with a "Soon" pill; the tab still opens its (coming-soon) screen. */
+  comingSoon?: boolean;
 };
 
 const ALL_PRIMARY_TABS: AppPrimaryTab[] = [
@@ -55,9 +57,11 @@ const ALL_PRIMARY_TABS: AppPrimaryTab[] = [
   },
 ];
 
-/** The Tournament tab only while live tournaments are switched on. */
+/** The Tournament tab stays; while live tournaments are off it is marked coming soon. */
 export function getAppPrimaryTabs(tournamentsEnabled = isTournamentsEnabled()): AppPrimaryTab[] {
-  return tournamentsEnabled ? ALL_PRIMARY_TABS : ALL_PRIMARY_TABS.filter((tab) => tab.mode !== 'tournament');
+  return tournamentsEnabled
+    ? ALL_PRIMARY_TABS
+    : ALL_PRIMARY_TABS.map((tab) => (tab.mode === 'tournament' ? { ...tab, comingSoon: true } : tab));
 }
 
 export const APP_PRIMARY_TABS: AppPrimaryTab[] = getAppPrimaryTabs();

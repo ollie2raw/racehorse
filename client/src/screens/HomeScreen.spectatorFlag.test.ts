@@ -8,8 +8,11 @@ describe('Home Spectator Mode visibility', () => {
     expect(tabs.map((tab) => tab.label)).toEqual(['Multiplayer', 'Single Player', 'Tournament', 'Social', 'Learn']);
   });
 
-  it('omits Tournament while live tournaments are switched off (the default)', () => {
-    expect(getHomeTabs(false).map((tab) => tab.label)).toEqual(['Multiplayer', 'Single Player', 'Social', 'Learn']);
+  it('keeps Tournament, marked coming soon, while live tournaments are switched off (the default)', () => {
+    const tabs = getHomeTabs(false);
+    expect(tabs.map((tab) => tab.label)).toEqual(['Multiplayer', 'Single Player', 'Tournament', 'Social', 'Learn']);
+    expect(tabs.filter((tab) => tab.comingSoon).map((tab) => tab.label)).toEqual(['Tournament']);
+    expect(getHomeTabs(false, true).some((tab) => tab.comingSoon)).toBe(false);
   });
 
   it('restores Live Now only for an explicitly enabled configuration', () => {

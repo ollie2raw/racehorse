@@ -314,6 +314,7 @@ function GlobalNavChrome({
                     key={tab.label}
                     onClick={() => onNavigate?.(tab.mode)}
                     aria-current={isActive ? 'page' : undefined}
+                    aria-label={tab.comingSoon ? `${tab.label}, soon` : undefined}
                     className="rh-nav-tab relative py-2 transition-all"
                     style={{
                       // font-size lives in rh-mobile-chrome.css (.rh-nav-tab):
@@ -326,6 +327,7 @@ function GlobalNavChrome({
                     }}
                   >
                     {tab.label}
+                    {tab.comingSoon && <span className="rh-soon-pill rh-soon-pill--inline" aria-hidden="true" />}
                     {isActive && (
                       <div
                         className={`rh-glow-underline rh-glow-underline--global-nav${compactChrome ? ' is-compact' : ''}`}

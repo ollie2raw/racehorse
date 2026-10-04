@@ -1,0 +1,42 @@
+/*
+ * "Soon" pill for a primary tab whose section is switched off (e.g. live
+ * tournaments). The word is drawn by CSS so the tab's text content stays its
+ * label; the button's aria-label ("Tournament, soon") carries it for assistive tech.
+ */
+.rh-soon-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 45%, transparent);
+  border-radius: 999px;
+  background: var(--bg-obsidian, #04070c);
+  color: var(--accent-amber);
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rh-soon-pill::before {
+  content: 'Soon';
+}
+
+/* Inline after a text label (desktop nav, Home tiles). */
+.rh-soon-pill--inline {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Pinned beside the top of the compact bottom-tab icon (.rh-bottom-tab is relative). */
+.rh-soon-pill--corner {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 6px);
+  padding: 1px 4px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}

@@ -21,7 +21,7 @@ const TOKEN = {
   accentTeal:   'var(--accent-teal)',
 } as const;
 
-const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
+const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode; comingSoon?: boolean }[] = [
   { label: 'Multiplayer', color: TOKEN.accentBlue, icon: 'users', mode: 'multiplayer' },
   { label: 'Single Player', color: TOKEN.tierMaster, icon: 'robot', mode: 'singlePlayerHub' },
   { label: 'Tournament', color: TOKEN.accentAmber, icon: 'trophy', mode: 'tournament' },
@@ -30,7 +30,9 @@ const coreTabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' 
 ];
 
 export function getHomeTabs(spectatorEnabled = isSpectatorModeEnabled(), tournamentsEnabled = isTournamentsEnabled()) {
-  const tabs = tournamentsEnabled ? coreTabs : coreTabs.filter((tab) => tab.mode !== 'tournament');
+  const tabs = tournamentsEnabled
+    ? coreTabs
+    : coreTabs.map((tab) => (tab.mode === 'tournament' ? { ...tab, comingSoon: true } : tab));
   return spectatorEnabled
     ? [{ label: 'Live Now', color: TOKEN.accentBlue, icon: 'users' as const, mode: 'live' as const }, ...tabs]
     : tabs;
@@ -311,6 +313,7 @@ export default function RacehorseHomeScreen({
                   onClick={() => navigate(tab.mode)}
                   className="group relative flex h-[76px] flex-1 items-center justify-center gap-[13px] border-r border-white/[0.05] last:border-r-0 cursor-pointer transition-all hover:bg-white/[0.025] active:bg-white/[0.04]"
                   type="button"
+                  aria-label={tab.comingSoon ? `${tab.label}, soon` : undefined}
                   style={{ ['--tab-color' as string]: tab.color } as CSSProperties}
                 >
                   {/* subtle top-to-bottom sheen on each cell */}
@@ -323,6 +326,7 @@ export default function RacehorseHomeScreen({
                     style={{ color: tab.color }}
                   >
                     {tab.label}
+                    {tab.comingSoon && <span className="rh-soon-pill rh-soon-pill--inline" aria-hidden="true" />}
                   </span>
                   <div
                     className="rh-glow-underline rh-glow-underline--home-tab transition-all duration-200 group-hover:opacity-100"

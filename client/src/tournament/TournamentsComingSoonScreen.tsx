@@ -15,7 +15,7 @@ export function TournamentsComingSoonScreen(props: {
   return (
     <div className="th-page" data-testid="tournaments-coming-soon">
       <GlobalNav
-        currentMode={'home' as AppMode}
+        currentMode={'tournament' as AppMode}
         onNavigate={props.onNavigate}
         onOpenAuth={props.onOpenAuth}
         onSignOut={props.onSignOut}
