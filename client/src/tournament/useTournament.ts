@@ -339,6 +339,8 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
   }, [countdown?.kind, countdown?.at, hasLoaded, refresh]);
 
   const recover = useCallback(async () => {
+    // Switched off: same as refresh, never call the server.
+    if (!enabled) return;
     const cleanUserId = userId?.trim() || null;
     if (!cleanUserId) {
       applyRegistrations([]);
@@ -372,7 +374,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     applyAssignedMatch(me.assignedMatch);
     applyCountdown(me.countdown);
     setHasLoaded((prev) => (prev ? prev : true));
-  }, [userId, applyRegistrations, applyRecoveryMatch, applyAssignedMatch, applyCountdown]);
+  }, [enabled, userId, applyRegistrations, applyRecoveryMatch, applyAssignedMatch, applyCountdown]);
 
   useEffect(() => {
     const activeBracketTournamentId = activeBracket?.tournament.id ?? null;
