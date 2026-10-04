@@ -100,7 +100,7 @@ export function buildDailyFritzHubGameCards(
     } else {
       statusSub = n === 3 ? 'Decider' : 'Locked';
       unlockHint =
-        n === 2 ? 'Defeat Fritz in Game 1 to unlock' : n === 3 ? 'Decider if needed' : null;
+        n === 2 ? 'Win Game 1 first' : n === 3 ? 'Only if needed' : null;
     }
 
     const scoreLine = res ? `${res.playerScore}–${res.fritzScore}` : null;
