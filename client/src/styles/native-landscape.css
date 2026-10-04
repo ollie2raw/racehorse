@@ -3578,27 +3578,41 @@
      ~120pt, and the app's web view doesn't scroll. So the modal sits at the
      top and the fields sit side by side high up, where they stay visible
      while typing. */
-  /* Centred at rest; while a field has focus the card rises to the top so
-     the keyboard can't cover the inputs. */
-  .rh-native .auth-modal-overlay:has(.auth-modal-input:focus) {
-    align-items: flex-start !important;
-  }
-
+  /* Always pinned to the top. It used to centre at rest and jump to the top
+     only while a field had focus, but tapping Sign in / Create account blurs
+     the field first: the card moved ~60px between press and release and the
+     tap never reached the button. A fixed position can't swallow taps. */
   .rh-native .auth-modal-overlay {
+    display: flex !important;
+    flex-direction: column;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-start !important;
     padding: max(var(--rh-safe-top), 8px) max(var(--rh-safe-right), 16px) 8px max(var(--rh-safe-left), 16px) !important;
     overflow: hidden !important;
   }
 
+  /* Height-capped to the overlay and scrollable inside, so with the keyboard
+     up (or a long error) the lower fields and the submit button stay
+     reachable instead of being clipped. */
   .rh-native .auth-modal-card {
     position: relative;
+    flex: 0 1 auto;
     width: min(640px, 100%) !important;
     max-width: none !important;
-    max-height: calc(100vh - 16px);
+    min-height: 0;
+    max-height: 100%;
     margin: 0 auto !important;
     padding: 12px 18px 14px !important;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* The card is a flex column: without this its rows shrink to fit the cap
+     (Save squashed to a sliver) instead of overflowing into the scroll. */
+  .rh-native .auth-modal-card > * {
+    flex-shrink: 0;
   }
 
   .rh-native .auth-modal-head {
@@ -3672,6 +3686,37 @@
   .rh-native .auth-modal-toggle {
     margin-top: 6px !important;
     font-size: 12px !important;
+  }
+
+  /* Set-new-password (recovery) puts its title inside the head row; the
+     head is only pinned top-right for the close / "Not now" button, so here
+     it stays in flow or the title lands on top of the second field. */
+  .rh-native .auth-modal-head:has(.auth-modal-title) {
+    position: static;
+  }
+
+  /* Choose-your-handle: its hint reuses the subtitle class but explains why
+     Save is disabled, so it stays visible. Save and Sign out sit directly in
+     the card (no form gap), so they get their own spacing. */
+  .rh-native .auth-modal-field + .auth-modal-subtitle {
+    display: block !important;
+    max-width: none;
+    margin: 6px 0 0 !important;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .rh-native .auth-modal-card > .auth-modal-submit {
+    margin-top: 10px !important;
+  }
+
+  .rh-native .auth-modal-signout-row {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .rh-native .auth-modal-signout-btn {
+    height: 36px;
   }
 
   /* ── Home body ─────────────────────────────────────────────────── */
