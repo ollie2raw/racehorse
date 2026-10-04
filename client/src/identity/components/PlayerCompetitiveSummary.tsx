@@ -3,8 +3,9 @@ import { AnimatedScore } from '../../components/AnimatedScore';
 
 type Props = { competitive: PlayerIdentityModel['competitive'] };
 
+// Glicko ratings are fractional (e.g. 1779.968); show whole points.
 const value = (number: number | null) =>
-  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => n.toLocaleString()} />;
+  number == null ? '—' : <AnimatedScore value={number} from={0} format={(n) => Math.round(n).toLocaleString()} />;
 
 export function PlayerCompetitiveSummary({ competitive }: Props) {
   return (
