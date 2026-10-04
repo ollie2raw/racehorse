@@ -4142,4 +4142,322 @@
   .rh-native .today-home .home-mode-tabs button > span:last-of-type {
     white-space: nowrap;
   }
+
+  /* ── Post-game review prompt ("Analyzing" / "Review unavailable") ─
+     Rides the match-result card above; one fixed width so the card does
+     not jump as the accuracy text changes, accuracy/grade sized so
+     "Analyzing game…" stays on one line, coverage note under the
+     headline instead of floating centred. */
+  .rh-native .df-result-overlay.pgr-prompt-overlay .dfd {
+    /* 100% would resolve against the content-sized grid track here. */
+    width: min(660px, 100vw - max(var(--rh-safe-left), 16px) - max(var(--rh-safe-right), 16px)) !important;
+  }
+
+  .rh-native .pgr-prompt-overlay .dfd__stat dd.is-accent {
+    font-size: 18px !important;
+    white-space: nowrap;
+  }
+
+  .rh-native .pgr-prompt-overlay .pgr-coverage-note {
+    grid-column: 1;
+    align-self: start;
+    margin: 0;
+    text-align: left;
+    font-size: 12px;
+  }
+
+  /* ── Game Review: one full-bleed landscape screen ──────────────────
+     Left: title row, board with the principal-variation column beside it,
+     then your hand + move stepper. Right: hand pills (one scrolling row),
+     the move list and the explanation, each scrolling inside itself. */
+  /* Flex, not the overlay's centring grid: its auto track sizes to the
+     content, so a 100% width came out short of the screen on sparse data. */
+  .rh-native .gr-overlay.game-over-overlay.df-result-overlay {
+    display: flex !important;
+    align-items: stretch !important;
+    padding: 0 !important;
+  }
+
+  .rh-native .gr-overlay.df-result-overlay .gr-shell.dfd {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 34%, 330px);
+  }
+
+  .rh-native .gr-overlay .gr-main {
+    grid-template-columns: minmax(0, 1fr) clamp(150px, 30%, 200px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'head head'
+      'board pv'
+      'hand nav';
+    gap: 8px 10px;
+    padding: 10px 12px max(var(--rh-safe-bottom), 8px) max(var(--rh-safe-left), 14px);
+  }
+
+  .rh-native .gr-overlay .gr-header {
+    grid-area: head;
+    align-items: center;
+  }
+
+  .rh-native .gr-overlay .gr-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+  }
+
+  .rh-native .gr-overlay .gr-heading .dfd__eyebrow {
+    display: none;
+  }
+
+  .rh-native .gr-overlay .gr-title.dfd__headline {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .rh-native .gr-overlay .gr-evidence-label {
+    font-size: 9px;
+  }
+
+  .rh-native .gr-overlay :is(.gr-progress-note, .gr-legacy-notice) {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .rh-native .gr-overlay :is(.gr-close-btn, .gr-nav-btn) {
+    height: 32px;
+    min-width: 32px;
+    padding: 0 10px;
+  }
+
+  .rh-native .gr-overlay .gr-close-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .rh-native .gr-overlay .gr-board-cell {
+    grid-area: board;
+    padding: 0;
+  }
+
+  .rh-native .gr-overlay .gr-board-layer .board-zoom-tray.control-pill {
+    bottom: 8px;
+    left: 8px;
+    gap: 4px;
+    padding: 3px 6px;
+  }
+
+  .rh-native .gr-overlay .gr-board-layer .board-zoom-btn {
+    min-width: 30px;
+    min-height: 30px;
+    padding: 4px;
+  }
+
+  .rh-native .gr-overlay .gr-ghost-tile {
+    right: 8px;
+    bottom: 8px;
+    gap: 3px;
+  }
+
+  .rh-native .gr-overlay .gr-ghost-tile .domino-tile {
+    zoom: 0.7;
+  }
+
+  .rh-native .gr-overlay .gr-ghost-label {
+    font-size: 9px;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand {
+    grid-area: hand;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 0;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand-label {
+    font-size: 9px;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand-tiles {
+    justify-content: flex-start;
+    gap: 4px 6px;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand-tile {
+    gap: 2px;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand-domino {
+    zoom: 0.5;
+  }
+
+  .rh-native .gr-overlay .gr-your-hand-tile-badge {
+    font-size: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  .rh-native .gr-overlay .gr-move-nav {
+    grid-area: nav;
+    align-self: end;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .rh-native .gr-overlay .gr-move-nav-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .rh-native .gr-overlay .gr-pv-panel {
+    grid-area: pv;
+    min-height: 0;
+    align-content: start;
+    gap: 6px;
+    margin: 0;
+    padding: 0 0 0 10px;
+    border-top: 0;
+    border-left: 1px solid var(--dfd-line);
+    overflow: hidden;
+  }
+
+  .rh-native .gr-overlay .gr-pv-panel:has(.gr-pv-board) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    align-content: stretch;
+  }
+
+  /* No recorded line (the common case): the panel folds to one row under
+     the board and the board takes the full width. */
+  .rh-native .gr-overlay .gr-main:not(:has(.gr-pv-board)) {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'head head'
+      'board board'
+      'pv pv'
+      'hand nav';
+  }
+
+  .rh-native .gr-overlay .gr-main:not(:has(.gr-pv-board)) .gr-pv-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    border-left: 0;
+  }
+
+  .rh-native .gr-overlay .gr-main:not(:has(.gr-pv-board)) .gr-pv-header {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+
+  .rh-native .gr-overlay .gr-pv-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .rh-native .gr-overlay .gr-pv-title {
+    font-size: 9px;
+  }
+
+  .rh-native .gr-overlay .gr-pv-toggle-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .rh-native .gr-overlay .gr-pv-board {
+    height: auto;
+    min-height: 0;
+  }
+
+  /* The small line board keeps no zoom pill of its own; it would cover
+     most of it. The main board above keeps one. */
+  .rh-native .gr-overlay .gr-pv-board .board-zoom-tray {
+    display: none;
+  }
+
+  .rh-native .gr-overlay .gr-pv-steps {
+    gap: 4px;
+  }
+
+  .rh-native .gr-overlay .gr-pv-step-label {
+    font-size: 10px;
+    line-height: 1.25;
+  }
+
+  .rh-native .gr-overlay .gr-pv-empty {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .rh-native .gr-overlay .gr-sidebar {
+    padding: 0 var(--rh-safe-right) var(--rh-safe-bottom) 0;
+  }
+
+  .rh-native .gr-overlay .gr-hand-strip {
+    flex-wrap: nowrap;
+    gap: 5px;
+    padding: 10px 10px 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .rh-native .gr-overlay .gr-hand-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rh-native .gr-overlay .gr-hand-pill {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .rh-native .gr-overlay .gr-move-list {
+    min-height: 84px;
+    padding: 0 8px;
+  }
+
+  .rh-native .gr-overlay .gr-move-row {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .rh-native .gr-overlay .gr-move-row-num {
+    min-width: 28px;
+  }
+
+  .rh-native .gr-overlay .gr-move-row-played {
+    font-size: 12px;
+  }
+
+  .rh-native .gr-overlay .gr-coaching {
+    max-height: 52%;
+  }
+
+  .rh-native .gr-overlay .gr-coaching-body {
+    gap: 8px;
+    padding: 10px 12px 12px;
+  }
+
+  .rh-native .gr-overlay :is(.gr-advice-copy, .gr-coaching-muted, .gr-empty) {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .rh-native .gr-overlay .gr-coaching.is-prominent .gr-advice-section:last-child {
+    margin-top: 0;
+    padding-top: 8px;
+  }
 }
