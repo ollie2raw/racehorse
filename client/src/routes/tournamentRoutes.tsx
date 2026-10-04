@@ -11,7 +11,6 @@ import type {
 } from '../appRouteTypes';
 
 const TournamentHubScreen = React.lazy(() => import('../tournament/TournamentHubScreen'));
-const TournamentsComingSoonScreen = React.lazy(() => import('../tournament/TournamentsComingSoonScreen'));
 const TournamentBracketScreen = React.lazy(() => import('../tournament/TournamentBracketScreen'));
 const TournamentResultScreen = React.lazy(() => import('../tournament/TournamentResultScreen'));
 
@@ -48,15 +47,29 @@ export function TournamentRoute({
     attachAssignedTournamentMatch,
   } = tournamentProps;
 
-  // Switched off: every tournament route and deep link lands here.
+  // Switched off: every tournament route and deep link lands on the hub with
+  // nothing scheduled ("No upcoming tournaments"). No fetch, no socket.
   if (!isTournamentsEnabled()) {
+    const noop = () => undefined;
     return withAuthModals(
-      <Suspense fallback={<ScreenLoader label="Loading…" />}>
-        <TournamentsComingSoonScreen
+      <Suspense fallback={<ScreenLoader label="Loading Tournament Hub…" />}>
+        <TournamentHubScreen
+          identity={null}
+          upcoming={[]}
+          registrations={[]}
+          recoveryMatch={null}
+          error={null}
+          isLoading={false}
+          hasLoaded
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
           onSignOut={handleSignOut}
           onBackHome={() => setAppMode('home')}
+          onOpenBracket={noop}
+          onRegister={noop}
+          onWithdraw={noop}
+          onRetry={noop}
+          onAttachAssignedMatch={noop}
         />
       </Suspense>,
     );
