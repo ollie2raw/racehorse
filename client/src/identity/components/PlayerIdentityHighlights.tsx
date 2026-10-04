@@ -9,7 +9,7 @@ function renderSignal(signal: PlayerIdentitySignal, isCurrentUser: boolean): Hig
   switch (signal.type) {
     case 'competitive_at_peak': {
       if (signal.details.kind !== 'rating') return null;
-      return { heading: isCurrentUser ? 'AT YOUR PEAK' : 'AT PEAK RATING', value: `${signal.details.current.toLocaleString()} rating`, evidence: signal.evidence };
+      return { heading: isCurrentUser ? 'AT YOUR PEAK' : 'AT PEAK RATING', value: `${Math.round(signal.details.current).toLocaleString()} rating`, evidence: signal.evidence };
     }
     case 'competitive_ranked_games':
       return signal.details.kind === 'count' ? { heading: 'RANKED GAMES', value: `${signal.details.count.toLocaleString()} games`, evidence: signal.evidence } : null;
