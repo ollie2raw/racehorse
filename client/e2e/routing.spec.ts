@@ -61,15 +61,22 @@ test.describe('browser routing', () => {
     await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
   });
 
-  test('tournament deep links show the coming-back screen while tournaments are off', async ({ page }) => {
+  test('tournament deep links show an empty hub, without asking the server, while tournaments are off', async ({ page }) => {
     // Live tournaments are switched off by default (VITE_ENABLE_TOURNAMENTS).
     test.skip(process.env.VITE_ENABLE_TOURNAMENTS === 'true', 'tournaments switched on');
+    const tournamentRequests: string[] = [];
+    page.on('request', (request) => {
+      if (/\/api\/(scheduled-)?tournaments?\b/.test(request.url())) tournamentRequests.push(request.url());
+    });
     await page.goto('/tournament/route-smoke');
-    await expect(page.getByRole('heading', { name: 'Tournaments are coming back soon' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Compete' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No upcoming tournaments. Check back soon.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Back to Home/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /register/i })).toHaveCount(0);
+    expect(tournamentRequests).toEqual([]);
   });
 
-  test('the Tournament tile stays on Home, marked Soon, and opens the coming-back screen while tournaments are off', async ({ page }) => {
+  test('the Tournament tile stays on Home, marked Soon, and opens the empty hub while tournaments are off', async ({ page }) => {
     test.skip(process.env.VITE_ENABLE_TOURNAMENTS === 'true', 'tournaments switched on');
     await page.goto('/');
     const tile = page.getByRole('button', { name: 'Tournament, soon' });
@@ -77,7 +84,7 @@ test.describe('browser routing', () => {
     await expect(tile.locator('.rh-soon-pill')).toBeVisible();
     await tile.click();
     await expect(page).toHaveURL(/\/tournament$/);
-    await expect(page.getByRole('heading', { name: 'Tournaments are coming back soon' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No upcoming tournaments. Check back soon.')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveAccessibleName('Tournament, soon');
   });
 
