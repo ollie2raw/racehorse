@@ -37,6 +37,20 @@ describe('StatsIdentityHero', () => {
     expect(screen.getByText('2,318')).toBeTruthy();
   });
 
+  it('shows Glicko ratings as whole numbers', () => {
+    // Real ratings are fractional (e.g. 1779.968); the page showed the decimals.
+    vi.useFakeTimers();
+    render(<StatsIdentityHero username="oliver" competitive={competitive({ rating: 1779.968, peakRating: 2172.893 })} />);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    vi.useRealTimers();
+
+    expect(screen.getByText('1,780')).toBeTruthy();
+    expect(screen.getByText('2,173')).toBeTruthy();
+    expect(screen.queryByText(/\d\.\d/)).toBeNull();
+  });
+
   it('draws one square per recent result, newest last', () => {
     render(<StatsIdentityHero username="oliver" competitive={competitive()} />);
 
