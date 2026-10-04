@@ -147,6 +147,7 @@ export default function RatingHistoryPage({
       contentClassName="screen-shell rating-history-content"
     >
       <div
+        className="rating-history-body"
         style={{
           width: '100%',
           display: 'grid',
@@ -154,6 +155,7 @@ export default function RatingHistoryPage({
         }}
       >
         <div
+          className="rating-history-chart-card"
           style={{
             borderRadius: 18,
             border: '1px solid rgba(236,252,245,0.12)',
@@ -189,7 +191,7 @@ export default function RatingHistoryPage({
           )}
 
           {!displayLoading && !displayError && chartData.length > 0 && (
-            <div style={{ width: '100%', height: 290 }}>
+            <div className="rating-history-chart" style={{ width: '100%', height: 290 }}>
               <ResponsiveContainer>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
                   <defs>
@@ -274,6 +276,7 @@ export default function RatingHistoryPage({
         </div>
 
         <div
+          className="rating-history-stats"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -334,6 +337,7 @@ export default function RatingHistoryPage({
         </div>
 
         <div
+          className="rating-history-leaderboard"
           style={{
             borderRadius: 18,
             border: '1px solid rgba(236,252,245,0.12)',
@@ -377,7 +381,7 @@ export default function RatingHistoryPage({
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+        <div className="rating-history-back" style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onBack}>
             ← Back to Home
           </button>
