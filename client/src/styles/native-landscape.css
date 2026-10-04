@@ -4074,4 +4074,10 @@
     grid-column: 2;
     grid-row: 3;
   }
+
+  /* Friends: its own "RACEHORSE" strip duplicated the app header (its back
+     button is already hidden under the shell), so drop the strip. */
+  .rh-native .friends-page-topbar {
+    display: none;
+  }
 }
