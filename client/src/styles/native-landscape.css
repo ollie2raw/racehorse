@@ -4064,6 +4064,12 @@
     line-height: 1.2;
   }
 
+  /* The x-axis "Game" label sat under the legend at this height; the axis
+     ticks already read as game numbers. */
+  .rh-native .rating-history-chart .rating-history-x-label {
+    display: none;
+  }
+
   .rh-native .rating-history-chart .recharts-legend-item {
     margin-right: 6px !important;
   }

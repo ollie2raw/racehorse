@@ -206,7 +206,7 @@ export default function RatingHistoryPage({
                     tick={{ fill: 'rgba(191,213,223,0.72)', fontSize: 12 }}
                     axisLine={{ stroke: 'rgba(148,163,184,0.2)' }}
                     tickLine={false}
-                    label={{ value: 'Game', position: 'insideBottom', offset: -4, fill: 'rgba(191,213,223,0.72)' }}
+                    label={{ value: 'Game', position: 'insideBottom', offset: -4, fill: 'rgba(191,213,223,0.72)', className: 'rating-history-x-label' }}
                   />
                   <YAxis
                     tick={{ fill: 'rgba(191,213,223,0.72)', fontSize: 12 }}
