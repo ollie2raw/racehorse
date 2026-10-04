@@ -641,3 +641,28 @@
     align-items: stretch;
   }
 }
+
+/* Tournaments switched off: centered notice inside the same shell. */
+.th-soon-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.th-soon-cta {
+  margin-top: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-color: var(--th-accent);
+}
+
+@media (max-width: 640px) {
+  .th-shell.th-soon { padding: 12px 16px 16px; }
+}

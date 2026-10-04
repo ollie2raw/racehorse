@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import { resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests } from './roomSession';
 import { registerTournamentAttachHandlers } from './registerTournamentAttachHandlers';
+
+// These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
+beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 function makeSocket(userId?: string) {
   const handlers = new Map<string, (...args: unknown[]) => void>();

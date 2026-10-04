@@ -157,7 +157,8 @@ afterEach(() => {
 describe('cold home load request budget', () => {
   it('issues exactly one request per endpoint and eight in total', async () => {
     const { unmount } = renderHook(() => {
-      const tournament = useTournament({ userId: TEST_USER.id });
+      // Tournaments switched on: the budget includes its two endpoints.
+      const tournament = useTournament({ userId: TEST_USER.id, enabled: true });
       // The hook takes exactly what useTournament returns, as App.tsx passes it.
       useHomeCommandCenter(tournament as unknown as Parameters<typeof useHomeCommandCenter>[0]);
       return null;
@@ -174,6 +175,21 @@ describe('cold home load request budget', () => {
     );
     expect(calls.length).toBe(8);
 
+    unmount();
+  });
+
+  it('makes no tournament requests while live tournaments are switched off', async () => {
+    const { unmount } = renderHook(() => {
+      const tournament = useTournament({ userId: TEST_USER.id, enabled: false });
+      useHomeCommandCenter(tournament as unknown as Parameters<typeof useHomeCommandCenter>[0]);
+      return null;
+    });
+    // Social loaders may be served from the module cache the previous test
+    // warmed, so count only what this test is about: no tournament endpoint.
+    await waitForRequestsToSettle();
+    await new Promise((resolve) => { setTimeout(resolve, 500); });
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.filter((call) => call.includes('/api/tournaments'))).toEqual([]);
     unmount();
   });
 });

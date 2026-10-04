@@ -1,5 +1,6 @@
 import type { AppMode } from '../../types';
 import type { PrimaryArea } from '../../presentation/surfacePresentation';
+import { isTournamentsEnabled } from '../../config/tournamentsFeature';
 
 export type AppPrimaryTab = {
   label: string;
@@ -9,7 +10,7 @@ export type AppPrimaryTab = {
   activeModes: AppMode[];
 };
 
-export const APP_PRIMARY_TABS: AppPrimaryTab[] = [
+const ALL_PRIMARY_TABS: AppPrimaryTab[] = [
   {
     label: 'Multiplayer',
     area: 'multiplayer',
@@ -53,6 +54,13 @@ export const APP_PRIMARY_TABS: AppPrimaryTab[] = [
     activeModes: ['learn', 'noBrainer', 'guidedMatchRecorder', 'guidedMatchAnnotator'],
   },
 ];
+
+/** The Tournament tab only while live tournaments are switched on. */
+export function getAppPrimaryTabs(tournamentsEnabled = isTournamentsEnabled()): AppPrimaryTab[] {
+  return tournamentsEnabled ? ALL_PRIMARY_TABS : ALL_PRIMARY_TABS.filter((tab) => tab.mode !== 'tournament');
+}
+
+export const APP_PRIMARY_TABS: AppPrimaryTab[] = getAppPrimaryTabs();
 
 export const APP_PRIMARY_TAB_COLORS: Record<string, string> = {
   'Single Player': '#9B6CFF',

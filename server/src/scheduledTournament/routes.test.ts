@@ -1,5 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import { registerTournamentRoutes } from './routes';
+
+// These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
+beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 const validUserId = '11111111-1111-4111-8111-111111111111';
 

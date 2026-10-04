@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { Socket } from 'socket.io';
 import { registerTournamentSocketHandlers } from './socketHandlers';
+
+// These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
+beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 const mocks = vi.hoisted(() => ({
   registerForTournament: vi.fn(),

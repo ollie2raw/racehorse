@@ -1,6 +1,7 @@
 import { Button, Modal } from './primitives';
 import type { AppMode } from '../types';
 import './WelcomeModal.css';
+import { isTournamentsEnabled } from '../config/tournamentsFeature';
 
 interface WelcomeModalProps {
   open: boolean;
@@ -49,12 +50,14 @@ export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps)
           <span className="rh-welcome-mode-name">Multiplayer</span>
           <span className="rh-welcome-mode-desc">Invite a friend with a room code, 1v1 live.</span>
         </li>
-        <li>
-          <span className="rh-welcome-mode-name">Tournament</span>
-          <span className="rh-welcome-mode-desc">
-            8-player bracket, first to 30 wins, a new champion every 30 minutes.
-          </span>
-        </li>
+        {isTournamentsEnabled() ? (
+          <li>
+            <span className="rh-welcome-mode-name">Tournament</span>
+            <span className="rh-welcome-mode-desc">
+              8-player bracket, first to 30 wins, a new champion every 30 minutes.
+            </span>
+          </li>
+        ) : null}
         <li>
           <span className="rh-welcome-mode-name">Play vs Fritz</span>
           <span className="rh-welcome-mode-desc">Pick a tier and format, practice offline anytime.</span>

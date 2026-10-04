@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import {
   createReservedRoom,
   resetLiveRoomPersistHookForTests,
@@ -7,6 +7,10 @@ import {
 import { initRoomSession } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
 import { resetLiveRoomPersistenceForTests } from './roomLivePersistence';
+
+// These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
+beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 const {
   fetchMatchByIdMock,

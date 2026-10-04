@@ -19,7 +19,6 @@ describe('WelcomeModal', () => {
     for (const mode of [
       'Puzzle Rush',
       'Multiplayer',
-      'Tournament',
       'Play vs Fritz',
       'Journey',
       'Ghost',
@@ -28,6 +27,19 @@ describe('WelcomeModal', () => {
       'Social',
     ]) {
       expect(screen.getByText(mode)).toBeInTheDocument();
+    }
+  });
+
+  it('lists Tournament only while live tournaments are switched on', () => {
+    const { unmount } = render(<WelcomeModal open onDismiss={noop} onNavigate={noop} />);
+    expect(screen.queryByText('Tournament')).toBeNull();
+    unmount();
+    vi.stubEnv('VITE_ENABLE_TOURNAMENTS', 'true');
+    try {
+      render(<WelcomeModal open onDismiss={noop} onNavigate={noop} />);
+      expect(screen.getByText('Tournament')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

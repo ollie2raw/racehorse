@@ -18,6 +18,72 @@ Every claim is tagged with how it was established:
 
 Line numbers refer to the base commit above.
 
+## Status update — tournaments paused (2026-10-03)
+
+**Live tournaments are switched off** until there is real demand. In the 30
+days before the pause, 1,440 of 1,440 events were cancelled; only 2 accounts
+ever registered in that window, and no event has completed since 2026-07-09.
+Phase 2/3/4 work is not being built. All code stays in place.
+
+**Switches** (both off unless set to exactly `true`; turn them on together):
+
+| Where | Variable | Off means |
+|---|---|---|
+| Server (Render) | `TOURNAMENTS_ENABLED` | no scheduler tick, no event seeding at boot or every 6 h, no boot recovery; register/withdraw/bracket/result refuse with `tournaments_disabled`; `/upcoming`, `/me`, `/my`, `/history` answer an empty state; no Supabase traffic |
+| Client (Vercel build) | `VITE_ENABLE_TOURNAMENTS` | no Tournament tab, home tile, Welcome line or feed panel; no tournament requests; every tournament route shows "Tournaments are coming back soon" |
+
+`TOURNAMENT_SCHEDULER_ENABLED` keeps its own meaning (which instance runs the
+scheduler); the scheduler runs only if it and `TOURNAMENTS_ENABLED` are on.
+
+### Found during the Phase 0 preflight (blocks re-enabling)
+
+`2026-08-31_tournament_match_rpcs.sql` was **never applied to production**:
+`complete_tournament_match`, `promote_tournament_match` and the
+`_tournament_*` helpers do not exist (PostgREST "not found in schema cache";
+`pg_proc` returned 0 rows, 2026-10-02). The server calls the first two to
+record every result and advance the bracket, so no tournament with a human
+could finish. This, not only low demand, is why nothing completed after
+2026-07-09. The `generate_tournament_bracket` that does exist is the 09-29 v2
+(applied 2026-10-02), and it calls `complete_tournament_match` for byes.
+
+### Required before re-enabling tournaments
+
+1. **Finish the schema drift audit** from the catalog-query output (every
+   migration in `supabase/migrations` vs production: tables, columns,
+   constraints, policies, functions), and fix anything missing.
+2. **Apply the 08-31 functions** as clipboard-ready pieces with
+   `generate_tournament_bracket` **removed** (applying the file as written
+   would replace the 09-29 v2 with v1); re-apply the 09-29 bracket function
+   only if the audit shows it was overwritten. Verify each piece and run
+   `select * from public.assert_security_posture();`.
+3. **Retire stale rows** left by the pause, or the first scheduler ticks will
+   open and cancel every past-due event 50 at a time. One statement, run just
+   before turning the server switch on:
+   ```sql
+   update public.scheduled_tournaments
+      set status = 'cancelled', cancel_reason = 'paused'
+    where status in ('upcoming', 'registration_open')
+      and registration_close_at < now();
+   ```
+   Optional tidy-up (cosmetic for cancelled events, but required before A8's
+   one-active-registration rule, which would otherwise count them):
+   8 match rows still `ready`/`in_progress` and 19 registrations still
+   `registered`/`active`, all in already-cancelled events.
+4. **pg_cron:** check whether the optional `seed-tournaments-daily` job
+   exists (`select jobname, schedule, active from cron.job;`, only if
+   `select 1 from pg_extension where extname = 'pg_cron';` returns a row).
+   While paused it can be deactivated reversibly with
+   `update cron.job set active = false where jobname = 'seed-tournaments-daily';`
+   (it only inserts future `upcoming` rows in the database; it causes no app
+   traffic). Re-activate with `active = true`.
+5. **Decide the Phase 2 rules** already specified (A3 absent player forfeits;
+   A4 45 s turn clock; A8 one active registration) and the re-enable rule in
+   `docs/tournament-format-proposal.md` (minimum registered humans).
+6. **Verify end to end** on production with a real account: register, play
+   the event through, and check the match, registration and tournament rows.
+
+---
+
 ## Status update — Phase 1 ("make events safe"), branch `tournament-health`
 
 **Re-verified 2026-09-29 against `origin/main` = `1ea8e41c`** (the same commit

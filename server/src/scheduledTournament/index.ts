@@ -5,6 +5,7 @@ import { registerTournamentSocketHandlers } from './socketHandlers';
 import { registerTournamentRoutes } from './routes';
 import { startTournamentScheduler } from './scheduler';
 import { recoverTournamentMatches } from './recovery';
+import { isTournamentsEnabled } from './tournamentsFeature';
 
 export {
   applyMatchResult,
@@ -26,7 +27,14 @@ let infrastructureInitialized = false;
 export function bootstrapScheduledTournamentInfrastructure(io: Server, app: Express): void {
   if (infrastructureInitialized) return;
   infrastructureInitialized = true;
+  // Routes always exist so old clients get a clean answer; with the feature
+  // off they answer without touching Supabase.
   registerTournamentRoutes(app);
+  if (!isTournamentsEnabled()) {
+    log.warn('tournaments DISABLED (TOURNAMENTS_ENABLED is not "true"): no scheduler, no seeding, no recovery');
+    return;
+  }
+  log.info('tournaments ENABLED (TOURNAMENTS_ENABLED=true)');
   startTournamentScheduler(io);
   setTimeout(() => {
     void recoverTournamentMatches(io).catch((error) => {

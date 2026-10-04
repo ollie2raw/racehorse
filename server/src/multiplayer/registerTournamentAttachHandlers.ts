@@ -25,6 +25,7 @@ import {
   type RoomSessionHandlerDeps,
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
+import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from '../scheduledTournament/tournamentsFeature';
 
 const log = childLogger('multiplayer:tournament-attach');
 
@@ -41,6 +42,10 @@ export function registerTournamentAttachHandlers(
   const { handlerDeps, attachSocketToTrackedRoom } = params;
 
   socket.on('tournament:attach_assigned_match', async (payload: unknown, cb?: AckFn) => {
+    if (!isTournamentsEnabled()) {
+      cb?.(TOURNAMENTS_DISABLED);
+      return;
+    }
     let acked = false;
     const ackOnce: AckFn = (response) => {
       if (acked) return;
