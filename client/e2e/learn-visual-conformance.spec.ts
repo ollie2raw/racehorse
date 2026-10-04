@@ -3,8 +3,6 @@ import { installMobileFixture } from './fixtures/mobile/loader';
 import { MOBILE_LANDSCAPE_VIEWPORTS, MOBILE_PORTRAIT_VIEWPORT, expectNoHorizontalOverflow, mobileScreenshotName, waitForMobileVisualStability } from './fixtures/mobile/visualHarness';
 
 const diagnosticDir = process.env.LEARN_DIAGNOSTIC_DIR;
-// The Tourny tab appears only while live tournaments are switched on (VITE_ENABLE_TOURNAMENTS).
-const primaryTabCount = process.env.VITE_ENABLE_TOURNAMENTS === 'true' ? 5 : 4;
 
 async function openLearn(page: Page) {
   await installMobileFixture(page, 'learn/default');
@@ -19,7 +17,7 @@ async function assertReachable(page: Page, viewport: { width: number; height: nu
   const compact = viewport.width < 769 || viewport.height < 600;
   if (compact) {
     await expect(nav).toBeVisible();
-    await expect(nav.locator('button')).toHaveCount(primaryTabCount);
+    await expect(nav.locator('button')).toHaveCount(5);
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     await expect(page.locator('.learn-hub-main .rh-back-button')).toBeHidden();
   }

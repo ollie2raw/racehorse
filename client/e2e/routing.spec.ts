@@ -69,6 +69,18 @@ test.describe('browser routing', () => {
     await expect(page.getByRole('button', { name: /Back to Home/ })).toBeVisible();
   });
 
+  test('the Tournament tile stays on Home, marked Soon, and opens the coming-back screen while tournaments are off', async ({ page }) => {
+    test.skip(process.env.VITE_ENABLE_TOURNAMENTS === 'true', 'tournaments switched on');
+    await page.goto('/');
+    const tile = page.getByRole('button', { name: 'Tournament, soon' });
+    await expect(tile).toBeVisible({ timeout: 15_000 });
+    await expect(tile.locator('.rh-soon-pill')).toBeVisible();
+    await tile.click();
+    await expect(page).toHaveURL(/\/tournament$/);
+    await expect(page.getByRole('heading', { name: 'Tournaments are coming back soon' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveAccessibleName('Tournament, soon');
+  });
+
   test('a bad tournament id shows a real error and a way back, not a spinner', async ({ page }) => {
     test.skip(process.env.VITE_ENABLE_TOURNAMENTS !== 'true', 'tournaments switched off');
     // `route-smoke` is not a UUID → the bracket fetch 400s `invalid_tournament_id`.

@@ -9,8 +9,13 @@ describe('tournaments feature flag', () => {
     expect(isTournamentsEnabled(undefined)).toBe(false);
   });
 
-  it('removes the Tournament tab when off and keeps it when on', () => {
-    expect(getAppPrimaryTabs(false).map((t) => t.label)).not.toContain('Tournament');
-    expect(getAppPrimaryTabs(true).map((t) => t.label)).toContain('Tournament');
+  it('keeps the Tournament tab in place, marked coming soon only while off', () => {
+    const labels = ['Multiplayer', 'Single Player', 'Tournament', 'Social', 'Learn'];
+    const off = getAppPrimaryTabs(false);
+    const on = getAppPrimaryTabs(true);
+    expect(off.map((t) => t.label)).toEqual(labels);
+    expect(on.map((t) => t.label)).toEqual(labels);
+    expect(off.filter((t) => t.comingSoon).map((t) => t.label)).toEqual(['Tournament']);
+    expect(on.some((t) => t.comingSoon)).toBe(false);
   });
 });

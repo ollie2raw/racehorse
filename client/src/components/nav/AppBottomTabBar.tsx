@@ -73,12 +73,14 @@ export function AppBottomTabBar({
               type="button"
               className={`rh-bottom-tab${isActive ? ' is-active' : ''}`}
               aria-current={isActive ? 'page' : undefined}
+              aria-label={tab.comingSoon ? `${tab.label}, soon` : undefined}
               onClick={() => onNavigate?.(tab.mode)}
               style={{ '--rh-tab-color': accent } as CSSProperties}
             >
               <span className="rh-bottom-tab__icon">
                 <TabIcon label={tab.label} color={color} />
               </span>
+              {tab.comingSoon && <span className="rh-soon-pill rh-soon-pill--corner" aria-hidden="true" />}
               <span className="rh-bottom-tab__label" style={{ color }}>
                 {tab.shortLabel}
               </span>
