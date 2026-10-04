@@ -47,6 +47,18 @@ function formatDelta(delta: number): string {
   return `${rounded > 0 ? '+' : ''}${rounded}`;
 }
 
+/**
+ * Y-axis bounds from the confidence band (rating ± RD), padded by 20.
+ * recharts' 'dataMin' also counts the stacked band's 0 base, which pinned the
+ * axis at -20 and squashed every rating into the top of the chart.
+ */
+export function ratingAxisDomain(points: ReadonlyArray<Pick<HistoryPoint, 'lower' | 'band'>>): [number, number] {
+  if (points.length === 0) return [0, 0];
+  const lows = points.map((point) => point.lower);
+  const highs = points.map((point) => point.lower + point.band);
+  return [Math.floor(Math.min(...lows) - 20), Math.ceil(Math.max(...highs) + 20)];
+}
+
 function buildChartData(history: RatingHistoryResponse | null): HistoryPoint[] {
   if (!history) return [];
   return history.games.map((game, index) => {
@@ -96,6 +108,7 @@ export default function RatingHistoryPage({
   const displayError = userId ? error : 'Sign in to view your rating history.';
 
   const chartData = useMemo(() => buildChartData(displayHistory), [displayHistory]);
+  const yDomain = useMemo(() => ratingAxisDomain(chartData), [chartData]);
 
   const stats = useMemo(() => {
     const games = displayHistory?.games ?? [];
@@ -197,7 +210,8 @@ export default function RatingHistoryPage({
                     tick={{ fill: 'rgba(191,213,223,0.72)', fontSize: 12 }}
                     axisLine={{ stroke: 'rgba(148,163,184,0.2)' }}
                     tickLine={false}
-                    domain={['dataMin - 20', 'dataMax + 20']}
+                    domain={yDomain}
+                    allowDataOverflow
                     label={{ value: 'Rating', angle: -90, position: 'insideLeft', fill: 'rgba(191,213,223,0.72)' }}
                   />
                   <Tooltip
