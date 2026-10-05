@@ -3,6 +3,7 @@ import { config } from './config';
 import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
+import { scheduleRoomRetention } from './multiplayer/roomRetentionReaper';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -945,6 +946,7 @@ server.listen(PORT, () => {
   scheduleDailyFritzWarmup();
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
+  scheduleRoomRetention();
   scheduleReviewCompletionSweep();
   startResourceUsageLog();
   startEventLoopLagMonitor({

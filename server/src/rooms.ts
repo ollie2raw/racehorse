@@ -575,6 +575,11 @@ export function getRoomRuntimeStats(): { roomCount: number; gamesInProgress: num
   return { roomCount: rooms.size, gamesInProgress };
 }
 
+/** Codes of every room this process holds in memory. */
+export function listRoomCodes(): string[] {
+  return [...rooms.keys()];
+}
+
 export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
