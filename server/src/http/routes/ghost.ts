@@ -4,6 +4,7 @@ import {
   completeGhostGame as completeGhostGameDefault,
   getGhostProfileSummary,
   getGhostProfileSummaryByUsername,
+  type GhostCompositeLog,
   type GhostMoveLogEntry,
 } from '../../ghost/service';
 import {
@@ -57,7 +58,24 @@ export type GhostRouteDeps = {
   formatFritzActivityOpponentLabel: (rawTier: string) => string;
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   completeGhostGame?: typeof completeGhostGameDefault;
+  getGhostProfileSummary?: typeof getGhostProfileSummary;
 };
+
+/**
+ * A completion's stored result exists only so a retried request gets the same
+ * response back (the replay branch below). `compositeLog` is nearly all of it
+ * (one ghost completion stored 144+ full game states, up to 2.8 MB) and the
+ * live copy is `ghost_profiles.composite_log`, so it is not stored; a replay
+ * rebuilds it from the profile summary instead.
+ */
+export function completionResultForStorage(result: Record<string, unknown>): Record<string, unknown> {
+  const { compositeLog: _notStored, ...stored } = result;
+  return stored;
+}
+
+function emptyCompositeLog(): GhostCompositeLog {
+  return { generatedAt: new Date().toISOString(), sourceGameIds: [], states: [], recentGameStyles: [] };
+}
 
 export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): void {
   const {
@@ -72,7 +90,22 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
     formatFritzActivityOpponentLabel,
     supabaseFetch,
     completeGhostGame = completeGhostGameDefault,
+    getGhostProfileSummary: getProfileSummaryForReplay = getGhostProfileSummary,
   } = deps;
+
+  async function withReplayCompositeLog(
+    userId: string,
+    stored: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    // Rows stored before compositeLog stopped being stored still carry it.
+    if ('compositeLog' in stored) return stored;
+    try {
+      const summary = await getProfileSummaryForReplay(userId);
+      return { ...stored, compositeLog: summary.compositeLog ?? emptyCompositeLog() };
+    } catch {
+      return { ...stored, compositeLog: emptyCompositeLog() };
+    }
+  }
 
   app.get('/api/ghost/profile/:userId', async (req, res) => {
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
@@ -294,7 +327,11 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       });
       if (verifiedMatch.status === 'completed') {
         if (verifiedMatch.completionHash === completionHash && verifiedMatch.completionResult) {
-          res.json({ ok: true, result: verifiedMatch.completionResult, replayed: true });
+          res.json({
+            ok: true,
+            result: await withReplayCompositeLog(userId, verifiedMatch.completionResult),
+            replayed: true,
+          });
           return;
         }
         res.status(409).json({ error: 'Match result already finalized.' });
@@ -328,7 +365,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       verifiedMatch.status = 'completed';
       verifiedMatch.completedAt = new Date().toISOString();
       verifiedMatch.completionHash = completionHash;
-      verifiedMatch.completionResult = result;
+      verifiedMatch.completionResult = completionResultForStorage(result);
       await persistVerifiedSinglePlayerMatch(verifiedMatch);
       if (isFritzMatch && localMatchId) {
         const roomCode = `local:${localMatchId}`;
