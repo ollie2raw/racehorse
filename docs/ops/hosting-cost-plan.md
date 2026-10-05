@@ -24,25 +24,26 @@ Extends `docs/tournament-v2-capacity.md` (the game-server tier runbook).
 Nothing here costs money until group C. Groups A and B can happen in any order
 now; group C is a plan change plus config on the day marketing starts.
 
-### A. Free code work (me, $0; each needs your approval first)
+### A. Free code work (me, $0; each needs your approval)
 
 | # | Item | Why | Owner | Cost |
 |---|---|---|---|---|
-| A1 | **PR S1**: stop re-uploading the whole room event log on every move (§7) | ≈ 95% of the server's outbound bytes per match; ~11 MB per match into the database | me | $0 |
-| A2 | **PR S2**: stop storing a copy of the ghost `compositeLog` in `verified_single_player_matches.completion_result`, plus a compaction script for existing rows (§7) | The single largest use of database space (≈ 550 MB of raw JSON, 80%+ of the total) | me | $0 |
-| A3 | **PR S3**: reaper for dead `room_live_sessions` rows, and retention for abandoned guest match logs (§7) | 6,200+ stuck rows; ~360 more a week | me | $0 |
-| A4 | **PR S4**: PostHog sampling, env-driven (§8) | Keeps a launch spike inside the free 1M events | me | $0 |
-| A5 | **PR S5**: config-driven limits (§7), so each paid upgrade is a dashboard plan change plus env values, with no code | Upgrade day without a deploy of new code | me | $0 |
+| A1 | **PR S1** (approved; third): stop re-uploading the whole room event log on every move (§7) | ≈ 95% of the server's outbound bytes per match; ~11 MB per match into the database | me | $0 |
+| A2 | **PR S2** (approved; second): stop storing a copy of the ghost `compositeLog` in `verified_single_player_matches.completion_result`, plus a compaction script for existing rows (§7) | 33 MB on disk today, ≈ 260 KB of JSON per ghost completion going forward | me | $0 |
+| A3 | **PR S3** (approved; first): reaper for dead `room_live_sessions` rows, and retention for abandoned guest match logs (§7) | The fastest-growing table (≈ 15 MB/month); 6,200+ stuck rows | me | $0 |
+| A4 | **PR S4** (waits for your go): PostHog sampling, env-driven (§8) | Keeps a launch spike inside the free 1M events | me | $0 |
+| A5 | **PR S5** (waits for your go): config-driven limits (§7), so each paid upgrade is a dashboard plan change plus env values, with no code | Upgrade day without a deploy of new code | me | $0 |
 | A6 | Tournament v2 Phases 1–3 (separate PRs, flags stay off) | — | me | $0 |
+| A7 | Repo guards so dev servers and test scripts refuse production keys (`docs/ops/dev-supabase-project.md` §7) | Stops test data reaching production by accident | me | $0 |
 
 ### B. Free config and account work (you, $0)
 
 | # | Item | Why | Owner | Cost |
 |---|---|---|---|---|
-| B1 | **Run the size check** (§6) and send me the result | Database size is the one free limit that can bite before launch | you | $0 |
-| B2 | **Tell me which of accounts #1–#18 (§4.2) are yours or agents'** | Decides which cleanup applies | you | $0 |
-| B3 | Run the cleanup (§5), starting with C1 (compaction, no data loss) | Frees most of the database | you | $0 |
-| B4 | **Point local dev, agents and e2e runs at a second free Supabase project** (Free allows 2 active projects [Provider]) | Today they write into production: two dev/agent accounts hold ~540 MB, and ~360 guest rooms a week are created from dev/test runs | you (I can write the steps) | $0 |
+| B1 | ~~Run the size check (§6)~~ **Done 2026-10-04: 158 MB of 500 MB.** Repeat monthly | Monitor | you | $0 |
+| B2 | Tell me which of accounts #1–#18 (§4.2) are yours or agents' (optional; no cleanup depends on it now) | Housekeeping | you | $0 |
+| B3 | Cleanup (§5): **not needed now.** C2 is optional; S3 makes it automatic | — | you | $0 |
+| B4 | **Point local dev, agents and e2e runs at a second free Supabase project** (Free allows 2 active projects [Provider]); steps in `docs/ops/dev-supabase-project.md` | Today they write into production: most of the growth in §1 is dev and agent activity | you (dashboard) + me (steps) | $0 |
 | B5 | Check whether Supabase email confirmation is on; if real sign-ups need confirmation or password resets, add custom SMTP on a free sender (e.g. Resend Free: 3,000/month, 100/day [Provider]) | Supabase's built-in sender allows 2 emails an hour, to your team's addresses only [Provider] | you | $0 |
 | B6 | Set the free alerts in §10 | Warning before a limit | you | $0 |
 | B7 | Keep the UptimeRobot `/ping` monitor (free; commercial use allowed [Provider]) | Keeps Render awake | you | $0 |
@@ -63,7 +64,7 @@ now; group C is a plan change plus config on the day marketing starts.
 
 | Service | Free limit | Real usage now | Headroom |
 |---|---|---|---|
-| Supabase database | **500 MB, then read-only** [Provider] | **Unknown on disk** (run §6). Raw JSON ≈ 700 MB before compression; ≈ 550 MB of it is ghost `compositeLog` copies [Read] | **The one to watch** |
+| Supabase database | **500 MB, then read-only** [Provider] | **158 MB on disk (32%)**, measured 2026-10-04 with §6. Growing ≈ 40 MB/month [Estimate, §4.3] | **Monitor monthly; comfortable.** ≈ 8–9 months of runway at today's growth, ≈ 17 after S3 |
 | Supabase egress | 5 GB/month [Provider] | Unknown (dashboard). **This research itself used ≈ 0.75 GB**: one uncompressed read of `completion_result` (~553 MB) before I switched to gzip, then ~100 MB compressed | Probably fine at 3 daily players |
 | Supabase MAU | 50,000 [Provider] | ≤ 641 auth users, 5 signed in during the last 30 days [Read] | Huge |
 | Supabase auth email | 2/hour, team addresses only [Provider] | Unknown whether confirmation is on | Bites on the first real sign-up wave |
@@ -79,17 +80,18 @@ now; group C is a plan change plus config on the day marketing starts.
 
 ## 2. Which free limits could bite before marketing
 
-1. **Supabase database size (500 MB, read-only above it).** Most likely, and
-   possibly close already. When it hits, every write fails: games, sign-ups,
-   ratings, tournaments. Growth today comes almost entirely from dev and agent
-   play (§4), not real players. Mitigation: B1 → B3 (cleanup), B4 (separate
-   dev project), A2 (stop the copies).
-2. **Supabase auth email (2 an hour, team only).** Only if email confirmation
-   or password reset is used by real players. Mitigation: B5.
+1. **Supabase auth email (2 an hour, team only).** The most likely to bite,
+   and only if real players need email confirmation or password resets.
+   Mitigation: B5.
+2. **Supabase database size (500 MB, read-only above it).** Not at risk: 158 MB
+   (32%), ≈ 8–9 months of runway at today's ≈ 40 MB/month, most of it dev and
+   agent activity (§4.3). Check monthly with §6. S3 roughly halves the growth;
+   B4 removes most of the rest.
 3. **Render bandwidth (5 GB).** Unlikely before marketing: it would take
    ≈ 430 live matches in a month. A1 would raise that roughly 20×.
 4. **Supabase egress (5 GB).** Unlikely at 3 daily players. Large read-only
-   investigations (like this one) are the main risk; use gzip.
+   investigations are the main risk: gzip and small samples only, and anything
+   over ~50 MB of egress gets flagged to you first.
 
 Everything else is far from its limit.
 
@@ -98,7 +100,7 @@ Everything else is far from its limit.
 - No card on Render, no paid plans, no purchases.
 - Keep production for real players only: dev, agents and e2e on a second free
   Supabase project (B4).
-- Clean up once (§5), then keep growth near zero with A2 and A3.
+- No cleanup needed now (§5). A3 and A2 keep growth down.
 - Check database size monthly (§6); act at the thresholds in §6.
 - Tournament playtests on the free tier are fine. One event is ≈ 7 matches,
   ≈ 80 MB of Render bandwidth today (≈ 5 MB after A1), and under 1.5 MB of
@@ -109,9 +111,13 @@ Everything else is far from its limit.
 
 ## 4. Where the database space comes from
 
-Read-only scan, 2026-10-04, gzip responses (≈ 100 MB of egress). Sizes are
-JSON text as returned by the API, **before** Postgres compression; §6's query
-gives the true on-disk numbers.
+**On disk (your §6 run, 2026-10-04): 158 MB total.** Largest tables:
+`verified_single_player_matches` 37 MB (of which the `compositeLog` copies are
+33 MB stored), `room_live_sessions` 26 MB, `daily_fritz_attempt_operations`
+13 MB, `daily_fritz_events` 13 MB, `room_match_logs` 8.9 MB. Postgres
+compresses the large JSON values heavily (≈ 550 MB of `compositeLog` text is
+33 MB on disk), so the raw-JSON figures in §4.1 are useful only for **who owns
+what**, not for size.
 
 ### 4.1 By account class
 
@@ -119,7 +125,7 @@ Test accounts = email at `racehorse-test.invalid` (618), `qa.invalid` (4) or
 `example.com` (1): **623 of 641**. "Other" = the remaining 18, which include
 yours and any agent accounts on real domains.
 
-| Table | Rows | Raw JSON | Test accounts | "Other" accounts | No user (guest rooms) |
+| Table | Rows | Raw JSON (ownership share only) | Test accounts | "Other" accounts | No user (guest rooms) |
 |---|---|---|---|---|---|
 | `verified_single_player_matches` | 1,248 | **553.8 MB** | 46 rows, 0.1 MB | 1,202 rows, **553.7 MB** | — |
 | `room_live_sessions` | 6,643 | 43.3 MB | 1 row, 0.3 MB | 14 rows, 0.2 MB | **6,611 rows, 41.4 MB** (+17 rows / 1.4 MB of deleted users) |
@@ -132,10 +138,10 @@ yours and any agent accounts on real domains.
 | `ghost_profiles` | 55 | 1.9 MB | 41 rows, 0.3 MB | 14 rows, 1.6 MB | — |
 | Everything else (48 tables) | — | ≈ 35 MB (sampled) | | | |
 
-**Conclusion:** the 623 test accounts hold only **≈ 3 MB**. The space is in:
+**Conclusion:** the 623 test accounts own well under 1% of the data. The rest is:
 
 - **Ghost `compositeLog` copies** inside `verified_single_player_matches.completion_result`:
-  ≈ 550 MB, owned almost entirely by two accounts (below). Each stored
+  33 MB on disk, owned almost entirely by two accounts (below). Each stored
   completion carries 144+ full game states (≈ 260 KB since the cap; up to
   2.8 MB before it). The only reader is the idempotent replay of the same
   completion request (`server/src/http/routes/ghost.ts:296`), which happens
@@ -169,9 +175,34 @@ production's database. Only you can say which accounts are yours, agents' or
 real players' (B2). **The cleanup below doesn't depend on that answer**: C1
 loses no game data for anyone.
 
+### 4.3 Growth and runway
+
+From count-only reads (no rows downloaded) of rows created in the last 30
+days, applied to each table's on-disk size:
+
+| Table | On disk | New rows, last 30 days | ≈ Growth / month |
+|---|---|---|---|
+| `room_live_sessions` | 26 MB | 3,993 of 6,643 | **≈ 15.6 MB** (fastest; mostly dead guest rooms) |
+| `daily_fritz_events` | 13 MB | 7,175 of 13,220 | ≈ 7.1 MB |
+| `daily_fritz_attempt_operations` | 13 MB | 1,550 of 3,626 | ≈ 5.6 MB |
+| `room_match_logs` | 8.9 MB | 1,722 of 3,020 | ≈ 5.1 MB |
+| `verified_single_player_matches` | 37 MB | 161 of 1,248 | ≈ 4.8 MB (an upper bound; newer rows are smaller since the cap) |
+| everything else | ≈ 60 MB | — | ≈ 2–3 MB [Estimate] |
+| **Total** | **158 MB** | | **≈ 40 MB/month** |
+
+**Runway to 500 MB: (500 − 158) / 40 ≈ 8–9 months** (around June 2027) at
+today's growth, which is mostly dev and agent activity. After S3 (removes
+most of the `room_live_sessions` growth and old guest logs): ≈ 20 MB/month,
+≈ 17 months. After B4 as well, real players alone grow it by a few MB a month.
+
 ---
 
 ## 5. Proposed cleanup (not run)
+
+**Status after the 158 MB result: none of this is needed now.** C1, C4 and C6
+are **not needed now**; C2 is **optional** (S3 does it automatically once
+merged); C3 and C5 are housekeeping. Kept here for when the §6 thresholds say
+otherwise.
 
 Run in the SQL editor, one block at a time, ideally at a quiet hour. Each
 block previews first. Row updates and deletes only make space *reusable*;
@@ -179,18 +210,14 @@ the database-size number drops after `VACUUM FULL` on that table (C6), which
 locks it briefly, so run that when nobody is playing. `VACUUM` must be run
 **on its own**, not pasted together with other statements.
 
-| Step | What | Frees (raw JSON) | Data lost |
-|---|---|---|---|
-| C1 | Remove the stored `compositeLog` copy from completions older than 1 day | **≈ 550 MB** | None that anything reads (replays happen within seconds) |
-| C2 | Delete `room_live_sessions` rows idle > 7 days in `lobby` / `playing` / `hand_over` | ≈ 40 MB | Dead rooms only |
-| C3 | Delete abandoned guest match logs (no participant users) older than 30 days | ≈ 16 MB | Guest abandoned-game logs (no player sees them) |
-| C4 | Delete the 623 test-domain accounts (cascades) | ≈ 3 MB + cleaner leaderboards | Test accounts |
-| C5 | Delete the 1,403 unstarted v1 tournament slots (`E2` in the tournament preflight) | ≈ 0.5 MB | Empty slots |
-| C6 | `VACUUM FULL` the tables touched | Returns the space to the database-size number | — |
-
-On disk the savings are smaller than the raw JSON (Postgres compresses large
-values). §6's query shows exactly how much C1 would free on disk (its
-`compositeLog` row).
+| Step | What | Frees on disk | Data lost | Status |
+|---|---|---|---|---|
+| C1 | Remove the stored `compositeLog` copy from completions older than 1 day | ≈ 33 MB (measured) | None that anything reads (replays happen within seconds) | **Not needed now** (S2 ships it as a script) |
+| C2 | Delete `room_live_sessions` rows idle > 7 days in `lobby` / `playing` / `hand_over` | most of 26 MB [Estimate] | Dead rooms only | **Optional** (S3 automates it) |
+| C3 | Delete abandoned guest match logs (no participant users) older than 30 days | a few MB of 8.9 MB [Estimate] | Guest abandoned-game logs (no player sees them) | Housekeeping (S3 automates it) |
+| C4 | Delete the 623 test-domain accounts (cascades) | < 1 MB + cleaner leaderboards | Test accounts | **Not needed now** |
+| C5 | Delete the 1,403 unstarted v1 tournament slots (`E2` in the tournament preflight) | < 1 MB | Empty slots | Housekeeping (tournament preflight) |
+| C6 | `VACUUM FULL` the tables touched | Returns the space to the database-size number | — | **Not needed now** |
 
 **C1 compaction** (repeat until it reports `UPDATE 0`; 100 rows per run keeps
 each transaction short):
@@ -282,8 +309,8 @@ vacuum full public.room_live_sessions;
 vacuum full public.room_match_logs;
 ```
 
-If accounts #1–#3 turn out to be agents, deleting them would free ≈ 30 MB
-more after C1. Not worth it unless you want them gone anyway.
+Deleting accounts #1–#3 if they turn out to be agents would free only a few
+MB more. Not worth it unless you want them gone anyway.
 
 ---
 
@@ -308,14 +335,12 @@ order by ord, bytes desc;
 
 | DATABASE TOTAL | Meaning | Action |
 |---|---|---|
-| under 250 MB | Comfortable | Monthly check |
+| under 250 MB | Comfortable (**158 MB on 2026-10-04**) | Monthly check |
 | 250–400 MB | Plan the cleanup | Run C1–C3 within a few weeks; do B4 |
-| **over 400 MB** | **Worry**: 80% of the limit, and dev runs add tens of MB a week | Run C1 + C6 now |
-| over 475 MB | One busy dev week from read-only | Run C1–C3 + C6 today |
+| **over 400 MB** | **Worry**: 80% of the limit | Run C1 + C6 now |
+| over 475 MB | Close to read-only | Run C1–C3 + C6 today |
 
-The second row shows how much C1 frees on disk (the compositeLog copies are
-most of the `completion_result` values that hold them). Send me the output and
-I'll update §1 and §4 with real numbers.
+The second row shows how much C1 frees on disk (33 MB on 2026-10-04).
 
 ---
 
@@ -394,7 +419,7 @@ Vercel seat, Supabase Pro base, Sentry Team, Apple, domain.
 | Render Free CPU | ≈ 4 concurrent live matches [Measured] |
 | Render Hobby bandwidth | ≈ 430 live matches/month today; ≈ 5,000 after S1 [Estimate] |
 | Render Starter / Standard | ≈ 64 / ≥ 128 concurrent matches [Measured] |
-| Supabase Free DB | Now or soon at dev-run growth; after cleanup + S2 + S3 + B4, years at real-player volumes [Estimate] |
+| Supabase Free DB | ≈ 8–9 months at today's ≈ 40 MB/month; ≈ 17 after S3; years after B4 at real-player volumes [Estimate, §4.3] |
 | Supabase auth email | First real sign-up wave without custom SMTP |
 | PostHog free | ≈ 1,500–2,500 DAU unsampled [Estimate] |
 | Sentry Developer | 5k errors/month or a second teammate |
@@ -403,7 +428,7 @@ Vercel seat, Supabase Pro base, Sentry Team, Apple, domain.
 
 | Service | Alert at | How |
 |---|---|---|
-| Supabase DB size | **400 MB** | Monthly §6 check; dashboard usage page |
+| Supabase DB size | **400 MB** (and growth > 60 MB in a month) | Monthly §6 check; dashboard usage page |
 | Supabase egress | 4 GB/month | Dashboard usage |
 | Render bandwidth | 4 GB/month | Render usage page (check weekly once tournaments run) |
 | Render memory | RSS > 400 MB | Existing hourly `resource usage` log + Render metrics |
@@ -416,7 +441,7 @@ Vercel seat, Supabase Pro base, Sentry Team, Apple, domain.
 
 ## 11. What I couldn't read
 
-Database size on disk (needs §6), Render bandwidth, Supabase egress and plan
+Render bandwidth, Supabase egress and plan
 (no management token), Vercel usage (API is Pro-only), PostHog usage, whether
 Supabase email confirmation or custom SMTP is on, Apple enrollment.
 
