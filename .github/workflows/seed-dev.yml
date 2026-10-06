@@ -1,0 +1,63 @@
+name: Seed Dev Project
+
+# Keeps the DEV Supabase project (org racehorse-dev) stocked with the
+# reference data local dev and e2e use, and gives it daily activity so the
+# free project isn't paused after 7 idle days. Never touches production.
+#
+#   - daily_puzzles: yesterday + 30 days (gen-puzzles.sh seeds only missing dates)
+#   - puzzle_pool:   backfilled from daily_puzzles (Puzzle Rush reads it)
+#   Daily Fritz needs no seed: the server creates the day's run and published
+#   challenge on the first request.
+
+on:
+  schedule:
+    - cron: '17 7 * * *'   # daily, 07:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seed-dev
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Refuse anything but the dev project
+        run: |
+          case "$SUPABASE_URL" in
+            https://*.supabase.co) ;;
+            *) echo "DEV_SUPABASE_URL is not set"; exit 1 ;;
+          esac
+          case "$SUPABASE_URL" in
+            *fisfadjqllojdzibcdfx*) echo "refusing: production project"; exit 1 ;;
+          esac
+
+      - name: Seed Daily Puzzle ladders (missing dates only)
+        run: |
+          export TZ=America/Los_Angeles
+          FROM=$(date -d "-1 day" +%Y-%m-%d)
+          bash scripts/gen-puzzles.sh --from "$FROM" --days 31
+
+      - name: Backfill the Puzzle Rush pool
+        run: npx tsx server/src/seedPuzzlePool.ts

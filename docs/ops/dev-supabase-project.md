@@ -186,15 +186,16 @@ anon key ships in the client bundle and is public by design.
 
    Deny rules are a speed bump, not a vault: §5.1–5.3 are the real protection.
 
-## 6. CI after the switch (you)
+## 6. CI after the switch
 
-| Workflow | Keeps production? | Note |
+| Workflow | Supabase project | Note |
 |---|---|---|
-| `gen-puzzles.yml` | Yes | Production job by design; via the `production` environment |
-| `security-posture.yml` | Yes | Read-only posture check; via the `production` environment |
-| `daily-fritz-authority-soak.yml` | Manual only | Targets the deployed server; creates throwaway users in production. Run it only deliberately, or point `base_url` at a dev-backed server |
-| `ci.yml` (Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak) | **Yes, today** | Corrected 2026-10-05: all three jobs start a local server with production's key (below, for the e2e job). The e2e job runs a local server with production's `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` on every PR that needs e2e, so it writes rooms, sessions and games to production. B4 opts all three in explicitly (`RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1`); move them to dev secrets (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`) and drop the opt-in |
-| `ci.yml` (other jobs), `smoke-test.yml` | No | Unchanged |
+| `gen-puzzles.yml` | Production | Production job by design |
+| `security-posture.yml` | Production | Read-only posture check |
+| `ci.yml`: Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak | **Dev** | Moved off production 2026-10-05 (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`). Checked locally against an empty dev project: same pass/skip set as on production, no seed data needed |
+| `daily-fritz-authority-soak.yml` (manual) | **Dev** | Starts its own server against dev instead of targeting the deployed server |
+| `seed-dev.yml` (daily + manual) | **Dev** | 31 days of Daily Puzzle ladders and the Puzzle Rush pool; its daily run also keeps the free project from pausing |
+| `ci.yml` (other jobs), `smoke-test.yml` | None | Unchanged |
 
 ## 7. Repo-side guards (me, $0, needs your approval)
 
