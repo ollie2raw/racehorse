@@ -193,7 +193,7 @@ anon key ships in the client bundle and is public by design.
 | `gen-puzzles.yml` | Yes | Production job by design; via the `production` environment |
 | `security-posture.yml` | Yes | Read-only posture check; via the `production` environment |
 | `daily-fritz-authority-soak.yml` | Manual only | Targets the deployed server; creates throwaway users in production. Run it only deliberately, or point `base_url` at a dev-backed server |
-| `ci.yml` (Playwright E2E job) | **Yes, today** | Corrected 2026-10-05: the e2e job runs a local server with production's `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` on every PR that needs e2e, so it writes rooms, sessions and games to production. B4 opts it in explicitly (`RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1`); move it to dev secrets (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`) and drop the opt-in |
+| `ci.yml` (Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak) | **Yes, today** | Corrected 2026-10-05: all three jobs start a local server with production's key (below, for the e2e job). The e2e job runs a local server with production's `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` on every PR that needs e2e, so it writes rooms, sessions and games to production. B4 opts all three in explicitly (`RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1`); move them to dev secrets (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`) and drop the opt-in |
 | `ci.yml` (other jobs), `smoke-test.yml` | No | Unchanged |
 
 ## 7. Repo-side guards (me, $0, needs your approval)
