@@ -193,11 +193,18 @@ anon key ships in the client bundle and is public by design.
 | `gen-puzzles.yml` | Yes | Production job by design; via the `production` environment |
 | `security-posture.yml` | Yes | Read-only posture check; via the `production` environment |
 | `daily-fritz-authority-soak.yml` | Manual only | Targets the deployed server; creates throwaway users in production. Run it only deliberately, or point `base_url` at a dev-backed server |
-| `ci.yml`, `smoke-test.yml` | No production keys today | Unchanged |
+| `ci.yml` (Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak) | **Yes, today** | Corrected 2026-10-05: all three jobs start a local server with production's key (below, for the e2e job). The e2e job runs a local server with production's `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` on every PR that needs e2e, so it writes rooms, sessions and games to production. B4 opts all three in explicitly (`RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1`); move them to dev secrets (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`) and drop the opt-in |
+| `ci.yml` (other jobs), `smoke-test.yml` | No | Unchanged |
 
 ## 7. Repo-side guards (me, $0, needs your approval)
 
-Proposed as one small PR after the dashboard steps:
+Built 2026-10-05 (PR `ops/b4-production-guards`). What shipped differs from the proposal below: the production ref is listed in code
+(`server/src/platform/env/productionSupabaseGuard.ts`; it isn't secret), keys are checked by their JWT `ref` as well as URLs, and
+the opt-in is `--allow-production` or `RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1`. Guarded: the server outside hosting
+(`NODE_ENV=production`, `RENDER` or `VERCEL` skip it), the server vitest suite, the Vite dev server / preview / vitest,
+and the scripts that create auth users (chaos, journey, Daily Fritz soak, access-boundary check, ranked row probe).
+
+Original proposal:
 
 - The server refuses to start with `NODE_ENV !== 'production'` when
   `SUPABASE_URL` contains the production project ref (an env

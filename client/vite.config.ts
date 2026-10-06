@@ -50,6 +50,47 @@ function configFingerprintPlugin(): Plugin {
   };
 }
 
+// B4 (docs/ops/dev-supabase-project.md §7): the dev server, `vite preview`
+// and vitest refuse a production Supabase URL or anon key, so local work runs
+// on the dev project. Production builds (`vite build`) are unaffected. Same
+// ref list as server/src/platform/env/productionSupabaseGuard.ts. A deliberate
+// production run sets RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1.
+const PRODUCTION_SUPABASE_REFS = ['fisfadjqllojdzibcdfx'];
+
+function supabaseRef(value: string | undefined): string | null {
+  if (!value) return null;
+  const host = /^https?:\/\/([^./]+)\.supabase\.co/.exec(value.trim());
+  if (host) return host[1];
+  try {
+    const claims = JSON.parse(Buffer.from(value.split('.')[1] ?? '', 'base64url').toString('utf8')) as { ref?: unknown };
+    return typeof claims.ref === 'string' ? claims.ref : null;
+  } catch {
+    return null;
+  }
+}
+
+function refuseProductionSupabasePlugin(): Plugin {
+  return {
+    name: 'refuse-production-supabase',
+    apply: 'serve',
+    configResolved(config) {
+      const allow = process.env.RACEHORSE_ALLOW_PRODUCTION_SUPABASE?.trim().toLowerCase();
+      if (allow === '1' || allow === 'true') return;
+      const hits = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'].filter((name) => {
+        const ref = supabaseRef(config.env[name] ?? process.env[name]);
+        return ref !== null && PRODUCTION_SUPABASE_REFS.includes(ref);
+      });
+      if (hits.length > 0) {
+        throw new Error(
+          `[client] refusing to serve against the PRODUCTION Supabase project (${hits.join(', ')}). ` +
+            'Point client/.env at the dev project (docs/ops/dev-supabase-project.md), ' +
+            'or set RACEHORSE_ALLOW_PRODUCTION_SUPABASE=1 if this is deliberate.',
+        );
+      }
+    },
+  };
+}
+
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const LOCAL_API = 'http://127.0.0.1:3001';
@@ -93,6 +134,7 @@ export default defineConfig({
     }),
     preloadHeroImagePlugin(),
     configFingerprintPlugin(),
+    refuseProductionSupabasePlugin(),
   ],
   // Baked in rather than read from the environment at runtime: Vite only
   // exposes VITE_-prefixed variables, so Vercel's VERCEL_GIT_COMMIT_SHA could

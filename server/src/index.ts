@@ -1,3 +1,4 @@
+import './platform/env/refuseProductionSupabaseInDev'; // B4: must stay the first import
 import * as Sentry from '@sentry/node';
 import { config } from './config';
 import { sentryBeforeSend } from './sentryScrubbers';

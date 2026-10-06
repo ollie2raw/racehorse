@@ -23,6 +23,7 @@ export default defineConfig({
   test: {
     exclude: ['**/node_modules/**', '**/dist/**'],
     include: ['src/**/*.test.ts'],
+    setupFiles: ['src/platform/env/refuseProductionSupabaseInTests.ts'],
     // The server suite imports several large route/game graphs. Multiple fork
     // heaps exceed GitHub's runner memory near the end of an otherwise green
     // run. One isolated worker is faster than CI retries.

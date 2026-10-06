@@ -65,4 +65,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # B4: the soak refuses production unless opted in; this manual job
+          # targets the deployed server by design.
+          RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1'
         run: npm run soak:daily-fritz-authority --prefix server

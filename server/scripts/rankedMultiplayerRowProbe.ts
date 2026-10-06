@@ -17,6 +17,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { randomUUID } from 'node:crypto';
 import '../src/loadEnv';
+import { assertNotProductionSupabase } from '../src/platform/env/productionSupabaseGuard';
 
 type Ack = Record<string, unknown> & { ok?: boolean; error?: string };
 type Tile = { high: number; low: number };
@@ -230,6 +231,7 @@ async function playToGameOver(
 }
 
 async function main(): Promise<void> {
+  assertNotProductionSupabase('rankedMultiplayerRowProbe');
   const host = await createEphemeralUser('mp-rk8-host');
   const guest = await createEphemeralUser('mp-rk8-guest');
   const userIds = [host.id, guest.id];
