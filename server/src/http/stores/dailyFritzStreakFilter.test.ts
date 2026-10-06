@@ -55,9 +55,9 @@ describe('getDailyFritzStreak applies the streak filter (DF-G2)', () => {
 
   it('breaks the streak at a rejected day even though the row is status=completed', async () => {
     vi.mocked(supabaseFetch).mockResolvedValue([
-      { run_date: TODAY, status: 'completed', result: { verification_status: 'verified' } },
-      { run_date: YESTERDAY, status: 'completed', result: { verification_status: 'rejected' } },
-      { run_date: TWO_DAYS_AGO, status: 'completed', result: { verification_status: 'verified' } },
+      { run_date: TODAY, status: 'completed', verification_status: 'verified', unverified_hands: null },
+      { run_date: YESTERDAY, status: 'completed', verification_status: 'rejected', unverified_hands: null },
+      { run_date: TWO_DAYS_AGO, status: 'completed', verification_status: 'verified', unverified_hands: null },
     ]);
     // Today counts; yesterday is rejected -> the run of consecutive eligible days ends at today.
     expect(await getDailyFritzStreak('user-1', TODAY)).toBe(1);
@@ -65,17 +65,30 @@ describe('getDailyFritzStreak applies the streak filter (DF-G2)', () => {
 
   it('counts consecutive verified + legacy days', async () => {
     vi.mocked(supabaseFetch).mockResolvedValue([
-      { run_date: TODAY, status: 'completed', result: { verification_status: 'verified' } },
-      { run_date: YESTERDAY, status: 'completed', result: null },
-      { run_date: TWO_DAYS_AGO, status: 'completed', result: { verification_status: 'in_progress' } },
+      { run_date: TODAY, status: 'completed', verification_status: 'verified', unverified_hands: null },
+      { run_date: YESTERDAY, status: 'completed', verification_status: null, unverified_hands: null },
+      { run_date: TWO_DAYS_AGO, status: 'completed', verification_status: 'in_progress', unverified_hands: null },
     ]);
     expect(await getDailyFritzStreak('user-1', TODAY)).toBe(3);
   });
 
-  it('selects the result column so the filter can run', async () => {
+  it('breaks the streak at a day with unverified hands (projected field)', async () => {
+    vi.mocked(supabaseFetch).mockResolvedValue([
+      { run_date: TODAY, status: 'completed', verification_status: 'verified', unverified_hands: null },
+      { run_date: YESTERDAY, status: 'completed', verification_status: 'in_progress', unverified_hands: [{ game_number: 1, hand_index: 3 }] },
+      { run_date: TWO_DAYS_AGO, status: 'completed', verification_status: 'verified', unverified_hands: [] },
+    ]);
+    expect(await getDailyFritzStreak('user-1', TODAY)).toBe(1);
+  });
+
+  it('reads only the two result fields the filter needs, never the whole result column (E3)', async () => {
     vi.mocked(supabaseFetch).mockResolvedValue([]);
     await getDailyFritzStreak('user-1', TODAY);
     const [path] = vi.mocked(supabaseFetch).mock.calls[0]!;
-    expect(String(path)).toContain('select=run_date,status,result');
+    const select = new URLSearchParams(String(path).split('?')[1]).get('select');
+    expect(select).toBe(
+      'run_date,status,verification_status:result->verification_status,unverified_hands:result->unverified_hands',
+    );
+    expect(select?.split(',')).not.toContain('result');
   });
 });
