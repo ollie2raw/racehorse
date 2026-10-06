@@ -9,9 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       users:
-        description: Number of ephemeral authenticated players
+        # Every player hits the in-job server from one IP, and /today + /start
+        # share a 20-per-minute-per-IP limit (~5-7 calls per player), so more
+        # than ~4 players trips 429s. 3 leaves headroom.
+        description: Number of ephemeral authenticated players (max ~4, one IP)
         required: true
-        default: '5'
+        default: '3'
         type: string
       concurrency:
         description: Concurrent player wave size
