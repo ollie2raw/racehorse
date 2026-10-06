@@ -835,19 +835,41 @@ export function isDailyFritzAttemptStreakEligible(
  */
 const DAILY_FRITZ_STREAK_SCAN_LIMIT = 90;
 
+/**
+ * E3: the streak needs two fields of `result` (see
+ * isDailyFritzAttemptStreakEligible), not the whole column (~9 KB a row, so
+ * ~800 KB for 90 rows on every /today). Postgres extracts them server-side.
+ */
+export const DAILY_FRITZ_STREAK_SELECT =
+  'run_date,status,verification_status:result->verification_status,unverified_hands:result->unverified_hands';
+
+type DailyFritzStreakRow = {
+  run_date: string;
+  status: DailyFritzAttemptStatus;
+  verification_status?: unknown;
+  unverified_hands?: unknown;
+};
+
 export async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   if (isDailyFritzMemoryStoreEnabled()) return 0;
   // A streak is a run of consecutive days ending today, so only the most recent
   // rows can ever contribute — the first gap terminates the count. 365 rows were
   // fetched per /today request to compute one integer.
-  const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus; result: Record<string, unknown> | null }>>(
-    `/rest/v1/daily_fritz_attempts?select=run_date,status,result&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=${DAILY_FRITZ_STREAK_SCAN_LIMIT}`,
+  const rows = await supabaseFetch<DailyFritzStreakRow[]>(
+    `/rest/v1/daily_fritz_attempts?select=${DAILY_FRITZ_STREAK_SELECT}&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=${DAILY_FRITZ_STREAK_SCAN_LIMIT}`,
     { method: 'GET' },
   );
   const dates = Array.from(
     new Set(
       rows
-        .filter((row) => isDailyFritzAttemptStreakEligible({ status: row.status, result: row.result ?? null }))
+        .filter((row) =>
+          isDailyFritzAttemptStreakEligible({
+            status: row.status,
+            // A null `result` projects both fields to null, which the check
+            // treats exactly like a null `result` (legacy_unverified, no hands).
+            result: { verification_status: row.verification_status, unverified_hands: row.unverified_hands },
+          }),
+        )
         .map((row) => row.run_date)
         .filter((value): value is string => typeof value === 'string' && value.length > 0),
     ),
