@@ -28,9 +28,10 @@ now; group C is a plan change plus config on the day marketing starts.
 
 | # | Item | Why | Owner | Cost |
 |---|---|---|---|---|
-| A1 | **PR S1** (approved; third): stop re-uploading the whole room event log on every move (§7) | ≈ 95% of the server's outbound bytes per match; ~11 MB per match into the database | me | $0 |
-| A2 | **PR S2** (approved; second): stop storing a copy of the ghost `compositeLog` in `verified_single_player_matches.completion_result`, plus a compaction script for existing rows (§7) | 33 MB on disk today, ≈ 260 KB of JSON per ghost completion going forward | me | $0 |
-| A3 | **PR S3** (approved; first): reaper for dead `room_live_sessions` rows, and retention for abandoned guest match logs (§7) | The fastest-growing table (≈ 15 MB/month); 6,200+ stuck rows | me | $0 |
+| A1 | **PR S1** (#335, **draft**; waits for the restart chaos run on the dev project): incremental live-session writes behind `LIVE_SESSION_LOG_ENTRIES` (§7) | Measured 9.1 MB → 1.3 MB uploaded per match | me | $0 |
+| A2 | **PR S2** (#334, **merged** 2026-10-05): stop storing a copy of the ghost `compositeLog` in `verified_single_player_matches.completion_result`, plus a compaction script for existing rows (§7) | 33 MB on disk today, ≈ 260 KB of JSON per ghost completion going forward | me | $0 |
+| A3 | **PR S3** (#333, **merged** 2026-10-05): reaper for dead `room_live_sessions` rows, and retention for abandoned guest match logs (§7) | The fastest-growing table (≈ 15 MB/month); 6,200+ stuck rows | me | $0 |
+| A8 | **Egress fixes** (§13.5): **E2** ghost summary, **E3** Daily Fritz streak, **E1** puzzle job are approved, in that order, as separate PRs. E4–E7 wait | Supabase egress is the free limit closest to biting (§13) | me | $0 |
 | A4 | **PR S4** (waits for your go): PostHog sampling, env-driven (§8) | Keeps a launch spike inside the free 1M events | me | $0 |
 | A5 | **PR S5** (waits for your go): config-driven limits (§7), so each paid upgrade is a dashboard plan change plus env values, with no code | Upgrade day without a deploy of new code | me | $0 |
 | A6 | Tournament v2 Phases 1–3 (separate PRs, flags stay off) | — | me | $0 |
@@ -43,7 +44,7 @@ now; group C is a plan change plus config on the day marketing starts.
 | B1 | ~~Run the size check (§6)~~ **Done 2026-10-04: 158 MB of 500 MB.** Repeat monthly | Monitor | you | $0 |
 | B2 | Tell me which of accounts #1–#18 (§4.2) are yours or agents' (optional; no cleanup depends on it now) | Housekeeping | you | $0 |
 | B3 | Cleanup (§5): **not needed now.** C2 is optional; S3 makes it automatic | — | you | $0 |
-| B4 | **Point local dev, agents and e2e runs at a second free Supabase project** (Free allows 2 active projects [Provider]); steps in `docs/ops/dev-supabase-project.md` | Today they write into production: most of the growth in §1 is dev and agent activity | you (dashboard) + me (steps) | $0 |
+| B4 | **Point local dev, agents and e2e runs at a second free Supabase project, in a new free organization** (`racehorse-dev`; quotas are per organization [Provider]); steps in `docs/ops/dev-supabase-project.md` | Today they read and write production: most database growth (§4.3) and a large share of egress (§13) is dev and agent activity | you (dashboard) + me (steps) | $0 |
 | B5 | Check whether Supabase email confirmation is on; if real sign-ups need confirmation or password resets, add custom SMTP on a free sender (e.g. Resend Free: 3,000/month, 100/day [Provider]) | Supabase's built-in sender allows 2 emails an hour, to your team's addresses only [Provider] | you | $0 |
 | B6 | Set the free alerts in §10 | Warning before a limit | you | $0 |
 | B7 | Keep the UptimeRobot `/ping` monitor (free; commercial use allowed [Provider]) | Keeps Render awake | you | $0 |
@@ -65,7 +66,8 @@ now; group C is a plan change plus config on the day marketing starts.
 | Service | Free limit | Real usage now | Headroom |
 |---|---|---|---|
 | Supabase database | **500 MB, then read-only** [Provider] | **158 MB on disk (32%)**, measured 2026-10-04 with §6. Growing ≈ 40 MB/month [Estimate, §4.3] | **Monitor monthly; comfortable.** ≈ 8–9 months of runway at today's growth, ≈ 17 after S3 |
-| Supabase egress | 5 GB/month [Provider] | Unknown (dashboard). **This research itself used ≈ 0.75 GB**: one uncompressed read of `completion_result` (~553 MB) before I switched to gzip, then ~100 MB compressed | Probably fine at 3 daily players |
+| Supabase egress | 5 GB/month [Provider] | **2.27 GB this cycle** (dashboard, 2026-10-05), including a ~780 MB spike from this research's reads; background ~100–150 MB/day. **The previous cycle went over 5 GB**; the grace period ends 2026-10-16 (§13) | **The limit closest to biting.** ≈ 1 GB of headroom to the 2026-10-19 cycle end at 125 MB/day |
+| Supabase log ingestion | 1 GB included [Provider] | **2.79 GB** (dashboard, 2026-10-05), trending down; billing shown as starting in 2027 | Over the included amount; driven by request count (§13.6) |
 | Supabase MAU | 50,000 [Provider] | ≤ 641 auth users, 5 signed in during the last 30 days [Read] | Huge |
 | Supabase auth email | 2/hour, team addresses only [Provider] | Unknown whether confirmation is on | Bites on the first real sign-up wave |
 | Supabase pausing | after 1 week inactive [Provider] | Server traffic keeps it active | Fine while the server runs |
@@ -80,7 +82,7 @@ now; group C is a plan change plus config on the day marketing starts.
 
 ## 2. Which free limits could bite before marketing
 
-1. **Supabase auth email (2 an hour, team only).** The most likely to bite,
+1. **Supabase auth email (2 an hour, team only).** Likely to bite,
    and only if real players need email confirmation or password resets.
    Mitigation: B5.
 2. **Supabase database size (500 MB, read-only above it).** Not at risk: 158 MB
@@ -89,9 +91,10 @@ now; group C is a plan change plus config on the day marketing starts.
    B4 removes most of the rest.
 3. **Render bandwidth (5 GB).** Unlikely before marketing: it would take
    ≈ 430 live matches in a month. A1 would raise that roughly 20×.
-4. **Supabase egress (5 GB).** Unlikely at 3 daily players. Large read-only
-   investigations are the main risk: gzip and small samples only, and anything
-   over ~50 MB of egress gets flagged to you first.
+4. **Supabase egress (5 GB).** **Already a real risk**, not a hypothetical:
+   the previous cycle went over, and this cycle has ≈ 1 GB of headroom to
+   2026-10-19 (§13.4). Mitigation: E2, E3, E1 (§13.5), B4, and no large
+   research reads (gzip, small samples, anything over ~50 MB flagged first).
 
 Everything else is far from its limit.
 
@@ -348,7 +351,7 @@ The second row shows how much C1 frees on disk (33 MB on 2026-10-04).
 
 | PR | Change | Effect | Risk / test |
 |---|---|---|---|
-| **S1** live-session writes | `buildLiveSessionRow` (`server/src/multiplayer/roomLivePersistence.ts`) stops sending `structuredClone(room.events)` on every move: persist the game state plus only the events hydration needs (or a capped tail), full log once at game end | Per match ≈ 11 MB → ≈ 1 MB out of Render [Estimate]; less CPU per move (capacity doc §5.1) | Multiplayer runtime: needs the restart chaos script (`npm run chaos:multiplayer-restart`) and the hydration tests; its own PR, not tournament work |
+| **S1** live-session writes (**as built**, draft #335) | With `LIVE_SESSION_LOG_ENTRIES=true`, each write sends the snapshot without the event log and per-seat move logs, plus only the entries added since the last confirmed write, to a new `room_live_session_entries` table through one RPC (one transaction). Hydration rebuilds the logs, truncated to the snapshot's counts. Off by default | Measured 9.1 MB → 1.3 MB uploaded per match; −9% CPU per move | Restart chaos script against the **dev** project (never production) before merging |
 | **S2** completion copies | Store `completion_result` without `compositeLog` going forward; on a replay, rebuild it from `ghost_profiles.composite_log`. Ship the C1 statement as a committed script for you to run | Stops ≈ 260 KB per ghost completion | Ghost completion replay test: same response shape |
 | **S3** dead-row retention | A daily, cheap reaper: delete `room_live_sessions` idle > 7 days (excluding live rooms), and abandoned guest `room_match_logs` > 30 days. Runs only when the server is up; one indexed delete a day | Stops the ≈ 360 rows a week | Must never touch a live room: `updated_at` guard + test |
 | **S5** config-driven limits | Env-configurable values that change with the hosting tier: Sentry `tracesSampleRate` (hard-coded 0.2 today), PostHog sample rate (S4), a soft cap on concurrent live rooms with a friendly "busy, try again" message (tier-sized: ≈ 4 on Free, 60 on Starter, 120 on Standard [Measured]), tournament `TOURNAMENT_MAX_PLAYERS` (design §5.1). Rate limits are already env-driven | Upgrade = plan change + env values; the cap protects a free instance from a spike | Defaults equal today's behaviour |
@@ -429,7 +432,9 @@ Vercel seat, Supabase Pro base, Sentry Team, Apple, domain.
 | Service | Alert at | How |
 |---|---|---|
 | Supabase DB size | **400 MB** (and growth > 60 MB in a month) | Monthly §6 check; dashboard usage page |
-| Supabase egress | 4 GB/month | Dashboard usage |
+| Supabase egress | 4 GB/month, and any day over 200 MB | Dashboard usage (no per-day history for past cycles: check it weekly) |
+| Supabase log ingestion | 0.8 GB/month | Dashboard usage |
+| Top Supabase callers | Any caller over 20 MB in an hour | Render logs, hourly `resource usage` line (§13.7) |
 | Render bandwidth | 4 GB/month | Render usage page (check weekly once tournaments run) |
 | Render memory | RSS > 400 MB | Existing hourly `resource usage` log + Render metrics |
 | Event-loop lag | > 10 warnings an hour, any watchdog stall | Already in Sentry |
@@ -441,8 +446,8 @@ Vercel seat, Supabase Pro base, Sentry Team, Apple, domain.
 
 ## 11. What I couldn't read
 
-Render bandwidth, Supabase egress and plan
-(no management token), Vercel usage (API is Pro-only), PostHog usage, whether
+Render bandwidth, Supabase egress per caller and plan
+(no management token; §13.7 gives the free way to measure callers), Vercel usage (API is Pro-only), PostHog usage, whether
 Supabase email confirmation or custom SMTP is on, Apple enrollment.
 
 ## 12. Sources (fetched 2026-10-04)
@@ -459,3 +464,129 @@ resend.com/pricing.
 
 Not loaded: render.com/pricing (body didn't render), namecheap.com (403),
 PostHog tiers above 2M events and free-org overage behaviour.
+
+---
+
+## 13. Supabase egress and log ingestion (added 2026-10-05)
+
+From code, git history, workflow logs and Supabase's docs; **no production
+queries**. Byte figures are estimates.
+
+**Two assumptions are unconfirmed** and colour every figure below:
+
+1. **Compressed bytes are what's billed.** Supabase returns gzipped responses
+   (#321's commit measured ~71 KB raw → ~7 KB gzip for one call), but its
+   egress page doesn't say whether egress is metered compressed or
+   uncompressed ([manage-your-usage/egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)).
+2. **Uploads aren't billed as egress.** The egress page defines egress as
+   "data transmitted out of the system to a connected client" and doesn't say
+   whether request bodies sent *to* Supabase count.
+
+**S1, S2 and S3 do not reduce Supabase egress.** S1 reduces what the server
+*uploads* (Render bandwidth, and Supabase ingress if assumption 2 is wrong). S2
+shrinks stored rows and only slightly shrinks reads of completed matches. S3
+only deletes. The egress fixes are E1–E7 (§13.5) and B4.
+
+### 13.1 Where production egress comes from, ranked
+
+| # | Source | Per call | Calls | Likely share |
+|---|---|---|---|---|
+| 1 | **Local dev servers, agents and e2e runs pointed at production** (local env files hold the production keys; each local server runs every timer below) | varies | unknown | **High** |
+| 2 | **Ghost profile summary** (`GET /api/ghost/profile`: every signed-in app load, the Single Player hub, the ghost screen): reads the last 20 `ghost_games` rows *with* `move_log` (~49 KB each, ~1 MB raw) plus the profile; each ghost/Fritz completion repeats the 20-game read | ~100–200 KB | per app load / completion | **High** |
+| 3 | **Daily Fritz streak** (`/api/daily-fritz/today`): 90 attempts including `result` (~9 KB each, ~800 KB raw) to compute one integer | ~80–150 KB | per Daily Fritz visit | Medium |
+| 4 | **Puzzle job** (`gen-puzzles.yml`, every 6 h): re-checks all 365 already-ready dates, ~2 reads each (confirmed in run 37234804020: 366 "already ready, skipping" lines) | ~1–2 KB | **~2,900 requests/day** | Low egress, **high log volume** |
+| 5 | Daily Fritz stranded-attempt scan (every 15 min, up to 100 attempt rows) | unknown | 96/day | Unknown |
+| 6 | Ranking catch-up (every 15 min, `player_id` only); boot warmups | small | ~100/day | Low |
+| 7 | Browser direct reads (`profiles`), auth token refreshes | small | per session | Low |
+| 8 | Smoke test on push to `main` (`/healthz`, `/ready`, `/today`); weekly security checks | small | a few | Negligible |
+
+No Supabase traffic: `/ping` (UptimeRobot, server self-ping), CI tests including
+the multiplayer soak (CI has no production keys), the Daily Fritz soak workflow
+(never run).
+
+### 13.2 The previous cycle (about 2026-08-19 → 09-19)
+
+Supabase gives no per-day view for past cycles; this comes from git history.
+
+- **Prime cause: the ghost-profile fetch loop.** Until #61 (2026-08-27), an idle
+  signed-in tab called `GET /api/ghost/profile` "hundreds of calls a minute"
+  (token refreshes re-fired the effect). Until #74 (2026-08-29) each call
+  returned up to 2.6 MB uncompressed, and the server re-read the profile and
+  ghost games from Supabase each time. One tab left open could burn gigabytes
+  in hours.
+- **Also in that window:** the tournament scheduler's 30 s tick (2,880 reads a
+  day, ~20 MB/day by #321's numbers, until 2026-10-02) and the hardening
+  sessions in which agents probed production (late Aug – early Sep).
+- Review polling every second (~140 MB/hour per open post-game screen) started
+  2026-09-24, so it falls in **this** cycle (fixed by #321 on 10-02).
+
+### 13.3 Fair use: previous cycle or current?
+
+The [billing FAQ, "Fair Use Policy"](https://supabase.com/docs/guides/platform/billing-faq)
+says restrictions may apply if you "**continually** exceed the Free Plan
+quota"; you "receive a grace period before fair use policy applies";
+restrictions can include "responding with a 402 status code for all API
+requests"; they lift "once your quota refills at the start of the next billing
+cycle". **The page doesn't say whether "continually" refers to the previous
+cycle's overage or the current cycle's, and gives no grace length.** The
+dashboard's notice (grace ends 2026-10-16) is the authoritative statement for
+this organization. Safe reading: stay under 5 GB this cycle; ask Supabase
+support for certainty.
+
+### 13.4 Headroom to 2026-10-19
+
+5 GB − 2.27 GB = 2.73 GB left. At 125 MB/day for 14 days ≈ 1.75 GB more, so
+**≈ 4.0 GB used by 10-19, ≈ 1 GB of headroom.** At 150 MB/day: ≈ 0.6 GB. One
+more research-sized spike would use most of it.
+
+### 13.5 Fixes (separate small PRs)
+
+| PR | Change | Saves | Status |
+|---|---|---|---|
+| **E2** | Ghost summary reads the capped `composite_log` already stored in `ghost_profiles` instead of rebuilding it from 20 `move_log`s on every load; rebuild stays on completion. Response shape unchanged | ~100–200 KB per app load | **Approved, 1st** |
+| **E3** | Daily Fritz streak: read only what the eligibility check needs, fewer rows | most of ~800 KB raw per call | **Approved, 2nd** |
+| **E1** | Puzzle job: find not-ready dates in a short window with one query; generate only those | ~2,900 requests/day; the biggest log cut | **Approved, 3rd** |
+| E4 | Drop `completion_result` from the default verified-match read (only the replay needs it) | small, steady | Waits |
+| E5 | Stranded-attempt scan: narrower columns; cheap "anything started?" check first | unknown | Waits |
+| E6 | Stop calling the three tables missing from production (`matchmaking_matches`, `player_presence`, `rivals`) | error log lines | Waits |
+| E7 | Daily Fritz soak workflow: no default production target (with the B4 guards) | prevents spikes | Waits |
+
+### 13.6 Log ingestion (2.79 of 1 GB)
+
+Supabase counts "the total GB of log data Supabase ingests across all your
+project's services (Postgres, API gateway, Auth, …)"
+([manage-your-usage/logs](https://supabase.com/docs/guides/platform/manage-your-usage/logs)).
+The API gateway logs one entry per request, so volume follows **request
+count**, not response size. Drivers this and last cycle: the tournament tick
+(2,880/day plus per-event requests, until the pause on 10-03), the review sweep
+(5,760/day until #323 on 10-03), review polling every second (until 10-02),
+the puzzle job (~2,900/day), live play (3.2 requests per move), dev and agent
+traffic, and error lines from calls to the three missing tables. That explains
+the downward trend. Further cuts: E1, B4, folding the per-move
+`mp_authority_events` and `room_command_receipts` writes into S1's single call
+(3.2 → 1 request per move), E6. Pricing lists Free as "1 GB included" and
+doesn't say what happens on Free above it.
+
+### 13.7 Measuring instead of estimating: Render's hourly log line
+
+The server writes one line an hour (`server/src/platform/health/resourceUsageLog.ts`):
+message `resource usage`, with `supabase.total` (`requests`, `bodyBytes`,
+`wireBytes`) and `supabase.top`, the 15 heaviest callers as
+`{ caller: "GET ghost_games", requests, bodyBytes, wireBytes }`. `bodyBytes` is
+the decoded response size; `wireBytes` is the compressed size when Supabase
+sends `content-length` (it undercounts chunked responses). Calls made by local
+dev servers or CI don't appear here; only the Render server's.
+
+1. Render dashboard → the `racehorse` web service → **Logs**.
+2. Search box: `resource usage`. Set the time range to the last 24 hours (free
+   instances keep a limited log history; read it daily while measuring).
+3. Open each line (one per hour). Note `supabase.total.wireBytes` and the
+   `caller` / `wireBytes` pairs in `supabase.top`.
+4. Add up `wireBytes` per caller across the 24 lines. That's the server's
+   egress by caller for the day, compressed. Compare the day's total with the
+   dashboard's daily egress: the difference is everything that isn't the Render
+   server (local dev servers, agents, CI, the browser's direct reads).
+5. Optional, from a terminal with the Render CLI (`brew install render`,
+   `render login`): `render logs --resources <service-id> --text "resource usage" --limit 48 -o json`
+   prints the same lines for copying into a spreadsheet. [Unverified: CLI flags
+   not checked against Render's docs in this session.]
