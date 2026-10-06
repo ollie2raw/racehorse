@@ -78,6 +78,58 @@ export async function listPublishedLadderSlotRows(date: string): Promise<DailyPu
   return Array.isArray(rows) ? rows : [];
 }
 
+/** PostgREST returns at most this many rows per request (Supabase default). */
+export const LADDER_RANGE_PAGE_SIZE = 1000;
+
+/**
+ * Every published ladder slot with puzzle_date in [fromDate, toDate], in one
+ * paged query (E1). The scheduled job used to ask once per date: ~730
+ * requests a run, four runs a day, to confirm dates that were already ready.
+ * Throws on a failed page so the caller can fall back to the per-date path.
+ */
+export async function listPublishedLadderSlotRowsInRange(
+  fromDate: string,
+  toDate: string,
+): Promise<DailyPuzzleSlotRow[]> {
+  const rows: DailyPuzzleSlotRow[] = [];
+  for (let offset = 0; ; offset += LADDER_RANGE_PAGE_SIZE) {
+    const response = await postgrestFetch(
+      `/rest/v1/daily_puzzles?select=${LADDER_SLOT_SELECT}&published=eq.true` +
+        `&puzzle_date=gte.${encodeURIComponent(fromDate)}&puzzle_date=lte.${encodeURIComponent(toDate)}` +
+        `&order=puzzle_date.asc,set_version.asc,slot_index.asc,id.asc` +
+        `&limit=${LADDER_RANGE_PAGE_SIZE}&offset=${offset}`,
+      undefined,
+      30_000,
+    );
+    if (!response.ok) throw new Error(`daily_puzzles range read failed: ${response.status}`);
+    const page = (await response.json()) as DailyPuzzleSlotRow[];
+    if (!Array.isArray(page)) throw new Error('daily_puzzles range read returned a non-array');
+    rows.push(...page);
+    if (page.length < LADDER_RANGE_PAGE_SIZE) return rows;
+  }
+}
+
+/**
+ * The dates in `dates` whose published slots do not form a ready ladder,
+ * judged by the same rule as isLadderReadyFromDatabase, date by date.
+ */
+export function findDatesWithoutReadyLadder(
+  dates: readonly string[],
+  rows: readonly DailyPuzzleSlotRow[],
+  isReady: (rowsForDate: DailyPuzzleSlotRow[]) => boolean = (rowsForDate) =>
+    isDailyPuzzleLadderReady(normalizePublishedSlotRows(rowsForDate)),
+): string[] {
+  const byDate = new Map<string, DailyPuzzleSlotRow[]>();
+  for (const row of rows) {
+    const date = (row as { puzzle_date?: unknown }).puzzle_date;
+    if (typeof date !== 'string') continue;
+    const list = byDate.get(date) ?? [];
+    list.push(row);
+    byDate.set(date, list);
+  }
+  return dates.filter((date) => !isReady(byDate.get(date) ?? []));
+}
+
 export async function isLadderReadyFromDatabase(date: string): Promise<boolean> {
   try {
     const rawRows = await listPublishedLadderSlotRows(date);

@@ -76,9 +76,42 @@ if [[ "$OVERWRITE_EXISTING" == true ]]; then
   echo "Existing slots will be upserted by date/slot/set_version."
 fi
 
+run_list_missing() {
+  if command -v tsx >/dev/null 2>&1; then
+    tsx server/src/listMissingDailyPuzzleLadderDates.ts --from "$FROM" --days "$DAYS"
+    return
+  fi
+  if command -v npx >/dev/null 2>&1; then
+    npx tsx server/src/listMissingDailyPuzzleLadderDates.ts --from "$FROM" --days "$DAYS"
+    return
+  fi
+  node server/dist/listMissingDailyPuzzleLadderDates.js --from "$FROM" --days "$DAYS"
+}
+
+# One range query finds the dates that still need a ladder; only those start
+# the seed script (each start used to cost two reads even for a ready date).
+# --overwrite-existing regenerates every date, so it keeps the full loop.
+DATES_TO_SEED=()
+if [[ "$OVERWRITE_EXISTING" == true ]]; then
+  for (( offset = 0; offset < DAYS; offset += 1 )); do
+    DATES_TO_SEED+=("$(date_add_days "$FROM" "$offset")")
+  done
+else
+  MISSING_OUTPUT="$(run_list_missing)" || {
+    echo "WARNING: could not list missing dates; checking every date instead." >&2
+    MISSING_OUTPUT=""
+    for (( offset = 0; offset < DAYS; offset += 1 )); do
+      MISSING_OUTPUT+="$(date_add_days "$FROM" "$offset")"$'\n'
+    done
+  }
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && DATES_TO_SEED+=("$line")
+  done <<< "$MISSING_OUTPUT"
+  echo "${#DATES_TO_SEED[@]} of $DAYS date(s) need a ladder."
+fi
+
 FAILED_DATES=()
-for (( offset = 0; offset < DAYS; offset += 1 )); do
-  DATE_KEY="$(date_add_days "$FROM" "$offset")"
+for DATE_KEY in "${DATES_TO_SEED[@]+"${DATES_TO_SEED[@]}"}"; do
   echo "==> $DATE_KEY"
   if run_ladder_seed "$DATE_KEY"; then
     :
