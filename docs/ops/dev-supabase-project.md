@@ -2,7 +2,10 @@
 
 Goal: production's database holds real players only, and nothing that runs
 on a laptop, in a worktree or in an agent session can reach production keys.
-Cost: $0 (Supabase Free allows 2 active projects).
+Cost: $0. The dev project goes in a **new, separate free organization**
+(`racehorse-dev`), because Supabase's free quotas (egress, database size, log
+ingestion) are per organization: a dev project inside production's
+organization would spend production's 5 GB of egress.
 
 Who does what: **you** do the dashboard and key handling (steps 1, 2, 5, 6);
 **I** can do the repo-side work you approve (step 7). Nothing in this doc has
@@ -32,11 +35,21 @@ is manual and targets the deployed server by design.
 
 ## 1. Create the dev project (you, dashboard)
 
-1. Supabase dashboard → your organization → **New project**.
-   - Name `racehorse-dev`, plan **Free**, same region as production.
+1. Supabase dashboard → organization menu → **New organization**, named
+   `racehorse-dev`, plan **Free**. Then, inside **that** organization →
+   **New project**.
+   - Name `racehorse-dev`, same region as production.
    - Save the database password in your password manager.
-   - If the org already has a second active free project, pause it first:
-     Free allows 2 active projects.
+   - **Do not create it inside production's organization.** Supabase's
+     billing docs: "The quota is applied to your entire organization,
+     independent of how many projects you launch within that organization",
+     and "Each organization has its own subscription"
+     ([billing-on-supabase](https://supabase.com/docs/guides/platform/billing-on-supabase),
+     read 2026-10-05). A separate organization gets its own free quota.
+   - You may have two active free projects in total, as "two Free Plan
+     organizations with one project each, or one Free Plan organization with
+     two projects" (same page). Production plus this one is two. If another
+     free project of yours is active anywhere, pause it first.
 2. **Authentication → Providers → Email:** turn **off** "Confirm email" (dev
    accounts have no inboxes; this also avoids the 2-emails-an-hour limit).
 3. **Authentication → URL Configuration:** Site URL `http://localhost:5173`,
@@ -199,6 +212,8 @@ Proposed as one small PR after the dashboard steps:
   data). Reference data (puzzles, Daily Fritz challenges) comes over in §2.
 - The dev project pauses after a week without traffic. Resume it from the
   dashboard (free).
+- Its egress, database size and log ingestion count against the
+  `racehorse-dev` organization's own free quota, not production's.
 - The restart chaos script for storage fix S1 runs against **dev**, never
   production. It creates and deletes throwaway users wherever `SUPABASE_URL`
   points.
