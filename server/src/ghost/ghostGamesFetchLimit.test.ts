@@ -101,10 +101,12 @@ describe('ghost_games fetch limit', () => {
     expect(gamesQuery()).not.toContain('limit=30');
   });
 
-  it('makes exactly two Supabase reads per call', async () => {
+  it('makes three Supabase reads per call when it has to rebuild', async () => {
+    // Profile projection, the latest games' ids and scores (E2's freshness
+    // check), then the games with move logs for the rebuild.
     stubSupabase(Array.from({ length: 30 }, (_, i) => game(i)));
     await getGhostProfileSummary(USER);
-    expect(requestedPaths).toHaveLength(2);
+    expect(requestedPaths).toHaveLength(3);
   });
 
   it('produces identical output to the 30-game fetch when every game is analyzable', async () => {

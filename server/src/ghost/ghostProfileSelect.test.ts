@@ -146,10 +146,12 @@ describe('ghost profile select narrowing', () => {
     expect(profileQuery()).not.toMatch(/select=[^&]*[,=]composite_log(?![-%])/);
   });
 
-  it('still issues exactly two Supabase reads', async () => {
+  it('issues three Supabase reads when it has to rebuild (no version-stamped log)', async () => {
+    // Profile projection, the latest games' ids and scores (E2's freshness
+    // check), then the games with move logs for the rebuild.
     stubSupabase({ recentGameStyles: STORED_STYLES });
     await getGhostProfileSummary(USER);
-    expect(requestedPaths).toHaveLength(2);
+    expect(requestedPaths).toHaveLength(3);
   });
 
   it('rebuilds byte-identical states from the sub-field as from the whole column', () => {

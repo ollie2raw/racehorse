@@ -162,6 +162,10 @@ type GhostProfileStyleRow = {
   ghost_rating: number;
   games_played: number;
   recentGameStyles: GhostGameStyleSnapshot[] | null;
+  /** `composite_log->builderVersion`; absent on logs stored before E2. */
+  compositeBuilderVersion?: number | null;
+  /** `composite_log->sourceGameIds`: the games the stored log was built from. */
+  compositeSourceGameIds?: string[] | null;
 };
 
 /**
@@ -260,7 +264,48 @@ async function insertGhostGameRow(params: {
  * the full column against 6,453 for this projection.
  */
 const GHOST_PROFILE_STYLE_SELECT =
-  'user_id,ghost_rating,games_played,recentGameStyles:composite_log->recentGameStyles';
+  'user_id,ghost_rating,games_played,recentGameStyles:composite_log->recentGameStyles,' +
+  'compositeBuilderVersion:composite_log->builderVersion,compositeSourceGameIds:composite_log->sourceGameIds';
+
+/**
+ * Version of `buildCompositeLog` + `capCompositeLogStates` that wrote a stored
+ * `composite_log`. **Bump it whenever either function's output changes**: the
+ * summary serves a stored log only if it was written at this version from
+ * exactly the player's latest games, and rebuilds otherwise (E2).
+ */
+export const GHOST_COMPOSITE_BUILDER_VERSION = 1;
+
+/** The capped log as stored in ghost_profiles, stamped with the builder version. */
+export function compositeLogForStorage(log: GhostCompositeLog): GhostCompositeLog & { builderVersion: number } {
+  return { ...(capCompositeLogStates(log) as GhostCompositeLog), builderVersion: GHOST_COMPOSITE_BUILDER_VERSION };
+}
+
+/** Never send the storage stamp to clients: the response shape is unchanged. */
+function withoutBuilderVersion(log: GhostCompositeLog & { builderVersion?: unknown }): GhostCompositeLog {
+  const { builderVersion: _stamp, ...rest } = log;
+  return rest;
+}
+
+async function fetchStoredCompositeLog(userId: string): Promise<GhostCompositeLog | null> {
+  const rows = await supabaseFetch<Array<{ composite_log: (GhostCompositeLog & { builderVersion?: unknown }) | null }>>(
+    `/rest/v1/ghost_profiles?select=composite_log&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  const log = rows[0]?.composite_log;
+  return log ? withoutBuilderVersion(log) : null;
+}
+
+type GhostGameScoreRow = Pick<GhostGameRow, 'id' | 'played_at' | 'final_score'>;
+
+/** The latest games without their move logs: ids and scores only. */
+async function fetchRecentGhostGameScores(userId: string, limit: number): Promise<GhostGameScoreRow[]> {
+  return await supabaseFetch<GhostGameScoreRow[]>(
+    `/rest/v1/ghost_games?select=id,played_at,final_score` +
+      `&user_id=eq.${encodeURIComponent(userId)}` +
+      `&order=played_at.desc&limit=${Math.max(1, Math.floor(limit))}`,
+    { method: 'GET' },
+  );
+}
 
 async function fetchGhostProfileStyleSource(
   userId: string,
@@ -896,8 +941,47 @@ export function capCompositeLogStates(
   return { ...log, states: kept };
 }
 
+function sameGameIds(a: readonly string[] | null | undefined, b: readonly string[]): boolean {
+  return Array.isArray(a) && a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+/**
+ * E2: on an app load the summary used to rebuild the composite log from the
+ * last 20 games' `move_log`s (median 86 KB each, ~1.7 MB per call). The
+ * completion path already stores that exact log, capped, in ghost_profiles.
+ * It is served when it was written by the current builder from exactly the
+ * player's latest games, which is the same input a rebuild would use, so the
+ * result is the same. Anything else (a log from before the version stamp, a
+ * builder change, games it didn't see) falls back to the rebuild.
+ */
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfileStyleSource(userId);
+  const latest = await fetchRecentGhostGameScores(userId, GHOST_COMPOSITE_GAME_WINDOW);
+  if (
+    latest.length > 0 &&
+    profile.compositeBuilderVersion === GHOST_COMPOSITE_BUILDER_VERSION &&
+    sameGameIds(profile.compositeSourceGameIds, latest.map((game) => game.id))
+  ) {
+    const stored = await fetchStoredCompositeLog(userId);
+    if (stored) {
+      return {
+        ghostRating: Number(profile.ghost_rating ?? 800),
+        gamesPlayed: Number(profile.games_played ?? latest.length ?? 0),
+        avgScore: computeAverageScore(latest as GhostGameRow[]),
+        recentScores: latest.map((game) => Number(game.final_score ?? 0)).reverse(),
+        paddingGames: Math.max(0, 5 - latest.length),
+        compositeLog: capCompositeLogStates(stored),
+        styleProfile: buildStyleProfileFromSnapshots(stored.recentGameStyles),
+      };
+    }
+  }
+  return rebuildGhostProfileSummary(profile, userId);
+}
+
+async function rebuildGhostProfileSummary(
+  profile: GhostProfileStyleRow,
+  userId: string,
+): Promise<GhostProfileSummary> {
   const styleGames = await fetchRecentGhostGames(userId, GHOST_COMPOSITE_GAME_WINDOW);
   const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
@@ -977,10 +1061,10 @@ async function persistFritzGhostTrainingProfile(params: {
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    // Stored capped: the summary path rebuilds `states` from move logs anyway,
-    // so the stored copy is a cache, not a source of truth. Capping here stops
-    // the row growing into the multi-megabyte blob every later read pays for.
-    composite_log: capCompositeLogStates(compositeLog),
+    // Stored capped and version-stamped. The summary serves this copy when it
+    // was built by the current builder from the player's latest games (E2),
+    // and rebuilds from move logs otherwise.
+    composite_log: compositeLogForStorage(compositeLog),
     style_profile: styleProfile,
     games_played:
       isNewGame && isRatingEligible
@@ -1102,7 +1186,9 @@ export async function completeGhostGame(params: {
       // Same cap as the profile fetch: the client writes this straight into the
       // ghostProfile the bot reads, so an uncapped value here would leave that
       // object flipping between capped and uncapped after every match.
-      compositeLog: capCompositeLogStates(profile.composite_log) ?? {
+      compositeLog: capCompositeLogStates(
+        profile.composite_log ? withoutBuilderVersion(profile.composite_log) : null,
+      ) ?? {
         generatedAt: new Date().toISOString(),
         sourceGameIds: [],
         states: [],
@@ -1158,10 +1244,10 @@ export async function completeGhostGame(params: {
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    // Stored capped: the summary path rebuilds `states` from move logs anyway,
-    // so the stored copy is a cache, not a source of truth. Capping here stops
-    // the row growing into the multi-megabyte blob every later read pays for.
-    composite_log: capCompositeLogStates(compositeLog),
+    // Stored capped and version-stamped. The summary serves this copy when it
+    // was built by the current builder from the player's latest games (E2),
+    // and rebuilds from move logs otherwise.
+    composite_log: compositeLogForStorage(compositeLog),
     style_profile: styleProfile,
     games_played:
       isNewGame && ratingEligibleAndVerified
