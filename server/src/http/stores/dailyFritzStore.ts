@@ -509,6 +509,47 @@ export async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<
   return saved;
 }
 
+/**
+ * Saves a generated run only if the date has none yet, and returns the row
+ * that is actually stored. Concurrent first-of-day requests each generate the
+ * run; a merge-duplicates upsert let every one of them overwrite
+ * `generated_at`, which feeds the run fingerprint in the start command's
+ * request digest, so one player's simultaneous starts could disagree and get
+ * 409 operation_id_reused. The first saved run now wins and every caller sees
+ * it. Admin regeneration keeps `upsertDailyFritzRun`, which overwrites on
+ * purpose.
+ */
+export async function insertDailyFritzRunIfAbsent(record: DailyFritzRunRecord): Promise<DailyFritzRunRecord> {
+  if (isDailyFritzMemoryStoreEnabled()) {
+    const existing = memoryGetRun(record.runDate);
+    if (existing) {
+      dailyFritzRunCache.set(existing.runDate, existing);
+      return existing;
+    }
+    return upsertDailyFritzRun(record);
+  }
+  const rows = await supabaseFetch<DailyFritzRunRow[]>(
+    '/rest/v1/daily_fritz_runs?on_conflict=run_date',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation,resolution=ignore-duplicates',
+      },
+      body: JSON.stringify([toDailyFritzRunRow(record)]),
+    },
+  );
+  const inserted = rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
+  if (inserted) {
+    dailyFritzRunCache.set(inserted.runDate, inserted);
+    return inserted;
+  }
+  // Another request saved the date first: return its row, not ours.
+  dailyFritzRunCache.delete(record.runDate);
+  const stored = await getDailyFritzRun(record.runDate);
+  if (!stored) throw new Error('Failed to persist daily Fritz run.');
+  return stored;
+}
+
 export async function ensureDailyFritzRunForDate(
   runDate: string,
   options?: { fritzTier?: DailyFritzTier; dealSize?: 7 | 14; winningScore?: number },
@@ -543,7 +584,7 @@ export async function ensureDailyFritzRunForDate(
     });
 
     const upsertStartedAt = Date.now();
-    const saved = await upsertDailyFritzRun({
+    const saved = await insertDailyFritzRunIfAbsent({
       runDate: generated.runDate,
       seed: generated.seed,
       fritzTier: generated.fritzTier,
