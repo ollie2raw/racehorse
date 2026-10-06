@@ -75,6 +75,14 @@ export type PersistedRoomShell = {
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
   /** Durable game:action receipts for restart-safe idempotency replay. */
   actionReceipts?: PersistedGameActionReceipt[];
+  /**
+   * 'entries': `events` and `ghostMoveLogs` are not in this row; they live in
+   * room_live_session_entries, and these counts say how many entries of each
+   * belong to this snapshot (S1, LIVE_SESSION_LOG_ENTRIES).
+   */
+  logStorage?: 'entries';
+  eventCount?: number;
+  ghostMoveLogCounts?: Record<string, number>;
 };
 
 export type RoomLiveSessionRow = {
@@ -244,7 +252,10 @@ export function isTerminalLiveSessionStatus(status: RoomLiveSessionStatus): bool
   return status === 'game_over' || status === 'abandoned';
 }
 
-export function serializeRoomShell(room: Room): PersistedRoomShell {
+export function serializeRoomShell(
+  room: Room,
+  options: { omitGhostMoveLogs?: boolean } = {},
+): PersistedRoomShell {
   const actionReceipts = snapshotGameActionReceiptsForRoom(room.code);
   return {
     config: room.config,
@@ -256,7 +267,7 @@ export function serializeRoomShell(room: Room): PersistedRoomShell {
     lastHandEndedNotifiedHand: room.lastHandEndedNotifiedHand,
     lastHandEndedAtMs: room.lastHandEndedAtMs,
     lastBroadcastScores: { ...room.lastBroadcastScores },
-    ghostMoveLogs: structuredClone(room.ghostMoveLogs),
+    ghostMoveLogs: options.omitGhostMoveLogs ? {} : structuredClone(room.ghostMoveLogs),
     ghostTurnIndex: room.ghostTurnIndex,
     matchLogged: room.matchLogged,
     leadTracker: room.leadTracker ? { ...room.leadTracker } : null,
@@ -325,6 +336,11 @@ export function parseRoomShell(raw: unknown): PersistedRoomShell {
     ...(Array.isArray(shell.actionReceipts)
       ? { actionReceipts: shell.actionReceipts as PersistedGameActionReceipt[] }
       : {}),
+    ...(shell.logStorage === 'entries' ? { logStorage: 'entries' as const } : {}),
+    ...(typeof shell.eventCount === 'number' ? { eventCount: shell.eventCount } : {}),
+    ...(shell.ghostMoveLogCounts && typeof shell.ghostMoveLogCounts === 'object'
+      ? { ghostMoveLogCounts: { ...(shell.ghostMoveLogCounts as Record<string, number>) } }
+      : {}),
   };
 }
 
@@ -347,6 +363,7 @@ export function buildLiveSessionRow(
   room: Room,
   roster: LiveRosterEntry[],
   commitFence: RoomDurabilityFence = captureRoomDurabilityFence(room),
+  options: { omitLogs?: boolean } = {},
 ): RoomLiveSessionRow {
   const status = inferLiveSessionStatus(room);
   const gameState = room.state ? cloneGameState(room.state) : null;
@@ -369,14 +386,14 @@ export function buildLiveSessionRow(
     game_state: gameState,
     game_state_sequence: gameState?.sequence ?? 0,
     room_shell: {
-      ...serializeRoomShell(room),
+      ...serializeRoomShell(room, { omitGhostMoveLogs: options.omitLogs }),
       durabilityCommit: { ...commitFence },
     },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
     event_log_version: room.eventLogVersion,
     last_event_sequence: room.eventSequence,
-    events: structuredClone(room.events),
+    events: options.omitLogs ? [] : structuredClone(room.events),
     participant_user_ids: participantUserIds,
     matchmaking_match_id: room.matchmakingMatchId ?? null,
     scheduled_tournament_id: room.scheduledTournamentId ?? null,
@@ -641,6 +658,192 @@ async function persistLiveSessionRowNow(
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Incremental logs (S1): LIVE_SESSION_LOG_ENTRIES=true
+// ---------------------------------------------------------------------------
+
+/**
+ * Off unless LIVE_SESSION_LOG_ENTRIES is exactly "true". Read per write.
+ * Hydration reads entries-mode rows whatever the flag says, so turning it off
+ * again never strands a room written while it was on.
+ */
+export function isLiveSessionLogEntriesEnabled(): boolean {
+  return process.env.LIVE_SESSION_LOG_ENTRIES === 'true';
+}
+
+export const LIVE_SESSION_EVENTS_STREAM = 'events';
+const GHOST_STREAM_PREFIX = 'ghost:';
+/** After the RPC is found missing, use full rows for this long, then try again. */
+export const LOG_ENTRIES_UNAVAILABLE_RETRY_MS = 10 * 60_000;
+
+/**
+ * What this process last confirmed in the database for one log: its length,
+ * and the in-memory entry object at length - 1. Appends keep earlier entry
+ * objects (`events.push`, `[...log, entry]`); a rematch reset or a rollback
+ * replaces them, so a different object at that index means the log was
+ * rewritten and is sent again from index 0.
+ */
+export type ConfirmedLogStream = { length: number; last: unknown };
+export type ConfirmedLogs = { events: ConfirmedLogStream; ghost: Record<string, ConfirmedLogStream> };
+export type LiveSessionLogEntry = { stream: string; idx: number; entry: unknown };
+
+const persistedLogLengthsByRoomCode = new Map<string, ConfirmedLogs>();
+
+function confirmedStream(log: readonly unknown[]): ConfirmedLogStream {
+  return { length: log.length, last: log.length > 0 ? log[log.length - 1] : undefined };
+}
+
+export function confirmedLogsForRoom(room: Room): ConfirmedLogs {
+  return {
+    events: confirmedStream(room.events),
+    ghost: Object.fromEntries(
+      Object.entries(room.ghostMoveLogs).map(([seatId, log]) => [seatId, confirmedStream(log)]),
+    ),
+  };
+}
+
+function resumeIndex(log: readonly unknown[], confirmed: ConfirmedLogStream | undefined): number {
+  if (!confirmed || confirmed.length === 0) return 0;
+  if (confirmed.length > log.length) return 0;
+  return log[confirmed.length - 1] === confirmed.last ? confirmed.length : 0;
+}
+let logEntriesUnavailableUntilMs = 0;
+
+/**
+ * Entries this write must send (everything after the last confirmed entry, or
+ * the whole log if it was rewritten), plus what the write confirms. Hydration
+ * reads only below the snapshot's counts, so entries a shorter log leaves
+ * behind in the table are never read, and the next write at that index
+ * overwrites them.
+ */
+export function buildLogEntriesSince(
+  room: Room,
+  since: ConfirmedLogs | undefined,
+): { entries: LiveSessionLogEntry[]; confirmed: ConfirmedLogs } {
+  const entries: LiveSessionLogEntry[] = [];
+  for (let idx = resumeIndex(room.events, since?.events); idx < room.events.length; idx += 1) {
+    entries.push({ stream: LIVE_SESSION_EVENTS_STREAM, idx, entry: structuredClone(room.events[idx]) });
+  }
+  for (const [seatId, log] of Object.entries(room.ghostMoveLogs)) {
+    for (let idx = resumeIndex(log, since?.ghost[seatId]); idx < log.length; idx += 1) {
+      entries.push({ stream: `${GHOST_STREAM_PREFIX}${seatId}`, idx, entry: structuredClone(log[idx]) });
+    }
+  }
+  return { entries, confirmed: confirmedLogsForRoom(room) };
+}
+
+function isMissingPersistFunction(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('PGRST202') || message.includes('persist_room_live_session');
+}
+
+async function persistLiveSessionEntriesNow(
+  row: RoomLiveSessionRow,
+  entries: LiveSessionLogEntry[],
+): Promise<PersistLiveSessionAttemptResult | 'function_missing'> {
+  const payload = toUpsertPayload(row);
+  assertJsonSerializable(payload.game_state, 'game_state');
+  assertJsonSerializable(payload.room_shell, 'room_shell');
+  assertJsonSerializable(entries, 'entries');
+  try {
+    await supabaseFetch('/rest/v1/rpc/persist_room_live_session', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ p_session: payload, p_entries: entries }),
+    });
+    liveSessionsTableAvailable = true;
+    return { ok: true };
+  } catch (error) {
+    if (isMissingPersistFunction(error)) return 'function_missing';
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log.warn({ roomCode: row.room_code, error: errorMessage }, 'room_live_sessions entries persist failed');
+    return { ok: false, status: 'degraded', error: errorMessage };
+  }
+}
+
+/** One durable write for `room` at `commitFence`, in whichever mode is on. */
+async function persistLiveSessionForRoom(
+  room: Room,
+  roster: LiveRosterEntry[],
+  commitFence: RoomDurabilityFence,
+): Promise<PersistLiveSessionAttemptResult> {
+  const roomCode = room.code.trim().toUpperCase();
+  if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
+    persistedLogLengthsByRoomCode.delete(roomCode);
+    return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+  }
+  const { entries, confirmed } = buildLogEntriesSince(room, persistedLogLengthsByRoomCode.get(roomCode));
+  const row = buildLiveSessionRow(room, roster, commitFence, { omitLogs: true });
+  row.room_shell = {
+    ...row.room_shell,
+    logStorage: 'entries',
+    eventCount: confirmed.events.length,
+    ghostMoveLogCounts: Object.fromEntries(
+      Object.entries(confirmed.ghost).map(([seatId, stream]) => [seatId, stream.length]),
+    ),
+  };
+  const result = await persistLiveSessionEntriesNow(row, entries);
+  if (result === 'function_missing') {
+    logEntriesUnavailableUntilMs = Date.now() + LOG_ENTRIES_UNAVAILABLE_RETRY_MS;
+    log.error(
+      { roomCode, retryInMs: LOG_ENTRIES_UNAVAILABLE_RETRY_MS },
+      'LIVE_SESSION_LOG_ENTRIES is on but persist_room_live_session is missing; writing full rows (apply 2026-10-05_room_live_session_entries.sql)',
+    );
+    persistedLogLengthsByRoomCode.delete(roomCode);
+    return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+  }
+  if (result.ok) persistedLogLengthsByRoomCode.set(roomCode, confirmed);
+  return result;
+}
+
+type LoadedLogEntryRow = { stream: string; idx: number; entry: unknown };
+
+/**
+ * Rebuild `events` and `ghostMoveLogs` for an entries-mode row from
+ * room_live_session_entries. Only indexes below the snapshot's counts are
+ * used; a missing one makes the snapshot invalid rather than silently short.
+ */
+async function attachLogEntries(row: RoomLiveSessionRow): Promise<{ ok: true } | { ok: false; error: string }> {
+  const shell = row.room_shell;
+  const eventCount = shell.eventCount ?? 0;
+  const ghostCounts = shell.ghostMoveLogCounts ?? {};
+  const loaded = await supabaseFetch<LoadedLogEntryRow[]>(
+    `/rest/v1/room_live_session_entries?select=stream,idx,entry&room_code=eq.${encodeURIComponent(row.room_code)}&order=stream.asc,idx.asc`,
+    { method: 'GET', headers: { Prefer: 'return=representation' } },
+  );
+  const byStream = new Map<string, Map<number, unknown>>();
+  for (const item of loaded ?? []) {
+    if (!item || typeof item.stream !== 'string' || typeof item.idx !== 'number') continue;
+    let stream = byStream.get(item.stream);
+    if (!stream) {
+      stream = new Map();
+      byStream.set(item.stream, stream);
+    }
+    stream.set(item.idx, item.entry);
+  }
+  const take = (stream: string, count: number): unknown[] | null => {
+    const entries = byStream.get(stream);
+    const out: unknown[] = [];
+    for (let idx = 0; idx < count; idx += 1) {
+      if (!entries?.has(idx)) return null;
+      out.push(entries.get(idx));
+    }
+    return out;
+  };
+  const events = take(LIVE_SESSION_EVENTS_STREAM, eventCount);
+  if (!events) return { ok: false, error: 'snapshot_log_entries_missing' };
+  const ghostMoveLogs: Record<string, GhostMoveLogEntry[]> = {};
+  for (const [seatId, count] of Object.entries(ghostCounts)) {
+    const entries = take(`${GHOST_STREAM_PREFIX}${seatId}`, count);
+    if (!entries) return { ok: false, error: 'snapshot_log_entries_missing' };
+    ghostMoveLogs[seatId] = entries as GhostMoveLogEntry[];
+  }
+  row.events = events as RoomMatchEvent[];
+  row.room_shell = { ...shell, ghostMoveLogs };
+  return { ok: true };
+}
+
 export async function persistLiveRoomSessionNow(
   room: Room,
   roster: LiveRosterEntry[],
@@ -652,7 +855,7 @@ export async function persistLiveRoomSessionNow(
   const persistPromise = (async () => {
     while (true) {
       const commitFence = captureRoomDurabilityFence(room, room.durability.targetFence.commitId);
-      const result = await persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+      const result = await persistLiveSessionForRoom(room, roster, commitFence);
       if (result.ok) {
         if (markRoomDurabilityPersistSuccess(room, commitFence)) return true;
         // The room changed while this write was in flight. Persist the newer
@@ -897,6 +1100,10 @@ export async function loadLiveRoomSession(roomCode: string): Promise<LoadLiveRoo
     if (!parsed) {
       return { kind: 'snapshot_invalid', error: 'snapshot_parse_failed' };
     }
+    if (parsed.room_shell.logStorage === 'entries') {
+      const attached = await attachLogEntries(parsed);
+      if (!attached.ok) return { kind: 'snapshot_invalid', error: attached.error };
+    }
     return { kind: 'found', row: parsed };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
@@ -919,6 +1126,8 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
   if (liveSessionsTableAvailable === false) return;
 
   const code = roomCode.trim().toUpperCase();
+  // Entries go with the row (on delete cascade).
+  persistedLogLengthsByRoomCode.delete(code);
   try {
     await supabaseFetch(
       `/rest/v1/room_live_sessions?room_code=eq.${encodeURIComponent(code)}`,
@@ -1010,6 +1219,10 @@ async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationRe
     if (!applied) {
       return { kind: 'snapshot_invalid', error: 'snapshot_apply_failed' };
     }
+    if (loaded.row.room_shell.logStorage === 'entries') {
+      // The database already holds exactly these entries; write only new ones.
+      persistedLogLengthsByRoomCode.set(code, confirmedLogsForRoom(applied.room));
+    }
 
     try {
       // Supplement shell-embedded receipts with dedicated table rows (if migrated).
@@ -1052,4 +1265,6 @@ export function resetLiveRoomPersistenceForTests(): void {
   persistenceShuttingDown = false;
   liveSessionsTableAvailable = null;
   rosterResolver = null;
+  persistedLogLengthsByRoomCode.clear();
+  logEntriesUnavailableUntilMs = 0;
 }

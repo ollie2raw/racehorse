@@ -67,6 +67,10 @@
         }
       ]
     },
+    "room_live_session_entries": {
+      "_source": "2026-10-05_room_live_session_entries.sql (storage fix S1). RLS enabled with no policies at all: server-only (service_role), the same deny-by-default posture as room_live_sessions. The empty list means no policy may exist, which holds both before and after the migration is applied.",
+      "policies": []
+    },
     "room_live_sessions": {
       "_source": "D-8 (HARDENING_PLAN.md decisions log) — human ran `select policyname, cmd, roles, qual, with_check from pg_policies where tablename in ('room_live_sessions','room_match_logs')` on 2026-09-01 and confirmed the exact rows below live. No SELECT policy exists on this table at all — that absence is itself load-bearing (deny-by-default for reads), not an omission from this manifest. with_check corrected 2026-09-04: the canonical DDL (`supabase/room_live_sessions.sql`) explicitly declares `with check (false)`, not just `using (false)` — the manifest's prior `with_check: null` was a seeding mistake (read the intent, not the full pg_policies row), not a reflection of an unresolved live question.",
       "policies": [
