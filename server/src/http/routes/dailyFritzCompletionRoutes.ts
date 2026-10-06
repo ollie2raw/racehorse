@@ -11,6 +11,7 @@ import { startDailyFritzRequestDiagnostics } from './dailyFritzRequestDiagnostic
 import { incrementDailyFritzMetric } from './dailyFritzMetrics';
 import {
   buildDailyFritzLeaderboard,
+  invalidateDailyFritzLeaderboard,
   getDailyFritzAttemptById,
   getDailyFritzRun,
   upsertDailyFritzAttempt,
@@ -157,6 +158,10 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
         return;
       }
       attempt.revision = command.committedRevision ?? attempt.revision + 1;
+      // upsertDailyFritzAttempt clears the cached leaderboard; the
+      // transactional commit bypasses it, so clear it here or the player is
+      // missing from the board (and /today's rank is null) for up to 30 s.
+      invalidateDailyFritzLeaderboard(runDate);
     } else {
       await upsertDailyFritzAttempt(attempt);
     }
@@ -284,6 +289,7 @@ export function registerDailyFritzCompletionRoutes(app: Application): void {
         return;
       }
       attempt.revision = command.committedRevision ?? attempt.revision + 1;
+      invalidateDailyFritzLeaderboard(runDate);
     } else {
       await upsertDailyFritzAttempt(attempt);
     }
