@@ -1,13 +1,13 @@
 name: Daily Fritz Authority Soak
 
+# Runs the Game 1 authority soak against a server started inside this job,
+# backed by the DEV Supabase project (org racehorse-dev). It never targets
+# production: the soak creates and deletes auth users wherever SUPABASE_URL
+# points. See docs/ops/dev-supabase-project.md §6.
+
 on:
   workflow_dispatch:
     inputs:
-      base_url:
-        description: Deployed server origin to exercise
-        required: true
-        default: https://racehorse.onrender.com
-        type: string
       users:
         description: Number of ephemeral authenticated players
         required: true
@@ -36,7 +36,10 @@ jobs:
     name: Game 1 authority and recovery soak
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production-soak
+    env:
+      SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -56,16 +59,37 @@ jobs:
       - name: Typecheck authority harness
         run: npm run typecheck:scripts --prefix server
 
+      - name: Build server
+        run: npm run build --prefix server
+
+      - name: Start server (dev Supabase, transactional Daily Fritz)
+        env:
+          DAILY_FRITZ_TRANSACTIONAL_COMMANDS: 'true'
+          PORT: '3001'
+        run: |
+          node server/dist/index.js > /tmp/df-soak-server.log 2>&1 &
+          echo $! > /tmp/df-soak-server.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3001/ping >/dev/null; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server failed to become ready"
+          tail -n 200 /tmp/df-soak-server.log || true
+          exit 1
+
       - name: Run authority soak
         env:
-          DAILY_FRITZ_SOAK_BASE_URL: ${{ inputs.base_url }}
+          DAILY_FRITZ_SOAK_BASE_URL: http://127.0.0.1:3001
           DAILY_FRITZ_SOAK_USERS: ${{ inputs.users }}
           DAILY_FRITZ_SOAK_CONCURRENCY: ${{ inputs.concurrency }}
           DAILY_FRITZ_SOAK_RUN_DATE: ${{ inputs.run_date }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # B4: the soak refuses production unless opted in; this manual job
-          # targets the deployed server by design.
-          RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1'
         run: npm run soak:daily-fritz-authority --prefix server
+
+      - name: Stop server
+        if: always()
+        run: |
+          kill "$(cat /tmp/df-soak-server.pid)" || true
+          tail -n 100 /tmp/df-soak-server.log || true

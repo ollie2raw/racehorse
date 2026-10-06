@@ -227,12 +227,11 @@ jobs:
 
       - name: Playwright E2E tests
         env:
-          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # The dev Supabase project (org racehorse-dev), never production:
+          # docs/ops/dev-supabase-project.md §6.
+          SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
           MP_PRIVATE_CERT_MODE: '1'
-          # B4: the local server refuses production unless opted in. Remove
-          # once this job uses dev-project secrets (docs/ops/dev-supabase-project.md §6).
-          RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1'
         run: |
           npx playwright install chromium --with-deps
           npm run e2e --prefix client
@@ -271,11 +270,10 @@ jobs:
 
       - name: Mobile reachability gate (tap targets + h-overflow, 20 routes × 3 viewports)
         env:
-          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          # B4: Playwright starts a local server, which refuses production unless
-          # opted in. Remove once this job uses dev-project secrets.
-          RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1'
+          # The dev Supabase project (org racehorse-dev), never production:
+          # docs/ops/dev-supabase-project.md §6.
+          SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
         run: |
           npx playwright install chromium --with-deps
           npm run e2e:reachability --prefix client
@@ -369,12 +367,11 @@ jobs:
       - name: Start server (cert mode)
         env:
           MP_PRIVATE_CERT_MODE: '1'
-          # Same live Supabase as Playwright — fake URLs mark rooms persistence-failed and block start.
-          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          # B4: the local server refuses production unless opted in. Remove once
-          # this job uses dev-project secrets.
-          RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1'
+          # Real persistence is required — fake URLs mark rooms persistence-failed and block start.
+          # The dev Supabase project (org racehorse-dev), never production:
+          # docs/ops/dev-supabase-project.md §6.
+          SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
         run: |
           node server/dist/index.js > /tmp/mp-soak-server.log 2>&1 &
           echo $! > /tmp/mp-soak-server.pid
