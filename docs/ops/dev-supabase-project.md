@@ -192,7 +192,7 @@ anon key ships in the client bundle and is public by design.
 |---|---|---|
 | `gen-puzzles.yml` | Production | Production job by design |
 | `security-posture.yml` | Production | Read-only posture check |
-| `ci.yml`: Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak | **Dev** | Moved off production 2026-10-05 (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`). Checked locally against an empty dev project: same pass/skip set as on production, no seed data needed |
+| `ci.yml`: Playwright E2E, Mobile Reachability Gate, MP Private Authority Soak | **Dev** | Moved off production in #342, merged 2026-10-06 (`DEV_SUPABASE_URL` / `DEV_SUPABASE_SERVICE_KEY`). Checked locally against an empty dev project: same pass/skip set as on production, no seed data needed |
 | `daily-fritz-authority-soak.yml` (manual) | **Dev** | Starts its own server against dev instead of targeting the deployed server |
 | `seed-dev.yml` (daily + manual) | **Dev** | 31 days of Daily Puzzle ladders and the Puzzle Rush pool; its daily run also keeps the free project from pausing |
 | `ci.yml` (other jobs), `smoke-test.yml` | None | Unchanged |
