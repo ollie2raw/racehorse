@@ -155,6 +155,29 @@ const startBody = {
   ...(runDateOverride ? { debug_date: runDateOverride } : {}),
 };
 
+/**
+ * The score/count fields the real client sends with its terminal transcript
+ * (client/src/dailyFritz/api.ts recordDailyFritzGame). Without them the server
+ * takes the transcript-only path, which requires /next-hand to have already
+ * persisted the terminal hand and 409s "game is not complete" otherwise.
+ */
+function recordedGameFields(
+  terminal: { players: Record<string, { score?: number }> },
+  handsPlayed: number,
+  movesUsed: number,
+): Json {
+  return {
+    player_score: terminal.players.player?.score ?? 0,
+    fritz_score: terminal.players.fritz?.score ?? 0,
+    moves_used: movesUsed,
+    hands_played: handsPlayed,
+  };
+}
+
+function playerMoves(transcript: DailyFritzTranscript): number {
+  return transcript.actions.filter((action) => action.actor === 'player' && action.kind === 'play').length;
+}
+
 function handCommand(
   pkg: StartPackage,
   gameNumber: 1 | 2 | 3,
@@ -253,6 +276,8 @@ async function playRemainingVerifiedGame(params: {
   let hand = resumed.first_hand;
   let scores = resumed.current_game_scores;
   let terminalTranscript: DailyFritzTranscript | null = null;
+  let terminalState: { players: Record<string, { score?: number }> } | null = null;
+  let movesUsed = 0;
   let handCount = 0;
   while (handCount < 64) {
     const driven = buildHonestDailyFritzHandTranscript({
@@ -270,6 +295,8 @@ async function playRemainingVerifiedGame(params: {
       fritzPolicyVersion: resumed.fritz_policy_version,
     });
     terminalTranscript = driven.transcript;
+    terminalState = driven.terminalState;
+    movesUsed += playerMoves(driven.transcript);
     handCount += 1;
     if (driven.terminalState.gameOver) break;
 
@@ -290,6 +317,7 @@ async function playRemainingVerifiedGame(params: {
     run_date: resumed.run_date,
     game_number: params.gameNumber,
     transcript: terminalTranscript,
+    ...recordedGameFields(terminalState!, handCount, movesUsed),
   };
   const records = await Promise.all([
     api(params.user.accessToken, '/api/daily-fritz/record-game', recordBody),
@@ -323,6 +351,8 @@ async function runOne(index: number): Promise<Json> {
     let scores = pkg.current_game_scores;
     let handCount = 0;
     let lastTranscript: DailyFritzTranscript | null = null;
+    let lastState: { players: Record<string, { score?: number }> } | null = null;
+    let movesUsed = 0;
 
     while (handCount < 64) {
       const driven = buildHonestDailyFritzHandTranscript({
@@ -340,6 +370,8 @@ async function runOne(index: number): Promise<Json> {
         fritzPolicyVersion: pkg.fritz_policy_version,
       });
       lastTranscript = driven.transcript;
+      lastState = driven.terminalState;
+      movesUsed += playerMoves(driven.transcript);
       handCount += 1;
       if (driven.terminalState.gameOver) break;
 
@@ -415,6 +447,7 @@ async function runOne(index: number): Promise<Json> {
       run_date: pkg.run_date,
       game_number: 1,
       transcript: lastTranscript,
+      ...recordedGameFields(lastState!, handCount, movesUsed),
     };
     const gameResults = await Promise.all([
       api(user.accessToken, '/api/daily-fritz/record-game', recordBody),
