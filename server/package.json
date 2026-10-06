@@ -19,6 +19,7 @@
     "check:cascade-delete": "tsx scripts/checkCascadeDeleteCompleteness.ts",
     "check:published-freshness": "tsx scripts/checkPublishedArtifactFreshness.ts",
     "chaos:multiplayer-restart": "tsx scripts/multiplayerProcessRestartChaos.ts",
+    "chaos:ranked-restart": "tsx scripts/rankedRestartChaos.ts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
     "seed:daily-ladder": "node dist/seedDailyPuzzleLadder.js",
