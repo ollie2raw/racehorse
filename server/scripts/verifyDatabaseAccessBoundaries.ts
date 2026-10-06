@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import '../src/loadEnv';
+import { assertNotProductionSupabase } from '../src/platform/env/productionSupabaseGuard';
 
 type Json = Record<string, unknown>;
 
@@ -54,6 +55,7 @@ function serviceHeaders(prefer?: string): Record<string, string> {
 }
 
 async function main(): Promise<void> {
+  assertNotProductionSupabase('verifyDatabaseAccessBoundaries');
   const suffix = randomUUID();
   const email = `db-boundary-${suffix}@racehorse-test.invalid`;
   const password = `Rh-${randomUUID()}-Aa9!`;

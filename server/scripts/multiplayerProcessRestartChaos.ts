@@ -32,6 +32,7 @@ import net from 'node:net';
 import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import '../src/loadEnv';
+import { assertNotProductionSupabase } from '../src/platform/env/productionSupabaseGuard';
 
 type Ack = Record<string, unknown> & { ok?: boolean; error?: string };
 type Tile = { high: number; low: number };
@@ -251,6 +252,7 @@ function boardKey(s: GState | undefined) {
 }
 
 async function main() {
+  assertNotProductionSupabase('chaos:multiplayer-restart');
   const host = await createUser('mp-chaos-host');
   const guest = await createUser('mp-chaos-guest');
   const userIds = [host.id, guest.id];

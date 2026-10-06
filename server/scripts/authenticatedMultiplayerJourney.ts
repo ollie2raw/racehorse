@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { randomUUID } from 'node:crypto';
 import '../src/loadEnv';
+import { assertNotProductionSupabase } from '../src/platform/env/productionSupabaseGuard';
 
 type Ack = Record<string, unknown> & { ok?: boolean; error?: string };
 
@@ -73,6 +74,7 @@ function connect(): Promise<Socket> {
 }
 
 async function main(): Promise<void> {
+  assertNotProductionSupabase('authenticatedMultiplayerJourney');
   const host = await createEphemeralUser({ ...userInput, prefix: 'mp-journey-host' });
   const guest = await createEphemeralUser({ ...userInput, prefix: 'mp-journey-guest' });
   let hostSocket: Socket | null = null;
