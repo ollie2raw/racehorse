@@ -21,6 +21,7 @@ import {
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
 import { configureDisconnectGraceSeatResolver, clearDisconnectGrace } from './disconnectGrace';
+import { disarmTournamentTurnClock, syncTournamentTurnClock } from './tournamentTurnClock';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
@@ -167,7 +168,7 @@ export function resetRoomSessionStoresForTests(): void {
   roomCleanupTimersByCode.clear();
 }
 
-function requireIo(): Server {
+export function requireIo(): Server {
   if (!ioRef) {
     throw new Error('roomSession: initRoomSession must be called before use');
   }
@@ -275,6 +276,7 @@ export function clearRoomMetadata(roomCode: string): void {
   reconnectSeatsByCode.delete(roomCode);
   clearGameActionIdempotencyForRoom(roomCode);
   clearDisconnectGrace(roomCode);
+  disarmTournamentTurnClock(roomCode);
 }
 
 export function cancelRoomCleanup(roomCode: string): void {
@@ -547,6 +549,31 @@ function buildSyntheticBotAction(roomCode: string, botSeatId: string): ActionPay
   };
 }
 
+/**
+ * Play one action for a seat on the server's behalf, through the same
+ * authoritative path a player's action takes (`act()` → state broadcast), plus
+ * the forced-draw broadcast and tournament finalize hook. Used for Fritz turns
+ * and for a timed-out tournament turn (tournamentTurnClock).
+ */
+export async function performAutomaticSeatAction(
+  roomCode: string,
+  seatId: string,
+  action: ActionPayload,
+): Promise<void> {
+  const result = await act(roomCode, seatId, action, requireIo(), (code) => broadcastStateUpdate(code));
+  result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
+    ? {
+        playerId: result.forcedDrawAnimation.playerId,
+        count: result.forcedDrawAnimation.steps.length,
+      }
+    : undefined;
+  broadcastStateUpdate(result.room.code);
+  if (result.forcedDrawAnimation) {
+    emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
+  }
+  setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
+}
+
 export function scheduleBotTurn(roomCode: string): void {
   if (botTurnTimersByRoom.has(roomCode)) return;
 
@@ -582,24 +609,11 @@ export function scheduleBotTurn(roomCode: string): void {
         return;
       }
 
-      const result = await act(
+      await performAutomaticSeatAction(
         roomCode,
         latestBotSeatId,
         buildSyntheticBotAction(roomCode, latestBotSeatId),
-        requireIo(),
-        (code) => broadcastStateUpdate(code),
       );
-      result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
-        ? {
-            playerId: result.forcedDrawAnimation.playerId,
-            count: result.forcedDrawAnimation.steps.length,
-          }
-        : undefined;
-      broadcastStateUpdate(result.room.code);
-      if (result.forcedDrawAnimation) {
-        emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
-      }
-      setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
     } catch (error) {
       log.warn({ err: error }, '[bot] turn failed');
     }
@@ -951,6 +965,7 @@ export function broadcastStateUpdate(roomCode: string): void {
   }
 
   scheduleBotTurn(room.code);
+  syncTournamentTurnClock(room.code);
 
   if (room.state.gameOver) {
     const finRoom = room;

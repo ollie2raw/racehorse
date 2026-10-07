@@ -790,7 +790,7 @@ describe('ready-match reconciliation', () => {
     expect(store.matches[0].status_reason).toBe('double_no_show_higher_seed_advanced');
   });
 
-  it('advances the human by default when neither side joins a human-vs-bot match', async () => {
+  it('advances Fritz when the human never joins a human-vs-bot match', async () => {
     const tournament = makeTournament({ status: 'in_progress' });
     const regs = [makeReg('u1')];
     regs[0].status = 'active';
@@ -828,9 +828,10 @@ describe('ready-match reconciliation', () => {
 
     expect(resolved).toBe(1);
     expect(store.matches[0].status).toBe('completed');
-    expect(store.matches[0].winner_id).toBe('u1');
+    expect(store.matches[0].winner_id).toBe('bot:fritz:tour-1:1');
     expect(store.matches[0].winner_source).toBe('no_show');
-    expect(store.matches[0].no_show_user_id).toBeNull();
+    expect(store.matches[0].no_show_user_id).toBe('u1');
+    expect(store.matches[0].status_reason).toBe('player1_no_show');
   });
 
   it('extends the deadline instead of no-showing a human when the ready room is missing', async () => {

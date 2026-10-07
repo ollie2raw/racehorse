@@ -11,7 +11,7 @@ import {
   dispatchScheduledStartMatches,
   cancelTournament,
 } from './engine';
-import { alertTournamentStepFailed, clearTournamentStepAlert } from './tournamentAlerts';
+import { alertTournamentStepFailed, clearTournamentStepAlert, type TournamentStep } from './tournamentAlerts';
 import { supabaseFetch } from '../supabaseUtils';
 
 const TICK_INTERVAL_MS = 30_000;
@@ -130,8 +130,10 @@ export function startTournamentScheduler(io: Server): void {
       for (const t of inProgress) {
         // One tournament must not stop the others, or this tick's reconcile below.
         let tournamentFailed = false;
+        let step: TournamentStep = 'start_dispatch';
         try {
           if (isTournamentPastActiveWindow(t, now)) {
+            step = 'event_expiry';
             log.info({ tournamentId: t.id, scheduledStart: t.scheduled_start, ageMs: now - Date.parse(t.scheduled_start) }, 'cancelling expired tournament');
             await cancelTournament(io, t.id, undefined, 'active_window_expired');
             continue;
@@ -142,9 +144,9 @@ export function startTournamentScheduler(io: Server): void {
           }
         } catch (err) {
           tournamentFailed = true;
-          alertTournamentStepFailed('start_dispatch', t.id, err);
+          alertTournamentStepFailed(step, t.id, err);
         } finally {
-          if (!tournamentFailed) clearTournamentStepAlert('start_dispatch', t.id);
+          if (!tournamentFailed) clearTournamentStepAlert(step, t.id);
         }
       }
       // Hand over the set just read rather than making the engine fetch it again.

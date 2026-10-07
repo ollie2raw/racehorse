@@ -11,6 +11,10 @@ import {
   clearTournamentStepAlert,
 } from './tournamentAlerts';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
+import { tournamentMatchCapMs } from './tournamentTimeouts';
+import type { Room } from '../rooms';
+import { getRoomRoster } from '../multiplayer/roomSession';
+import { disarmTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
 import type { ScheduledTournamentRow } from './types';
 import type { BracketQfPair, BracketSeed } from './persistence';
 import {
@@ -723,6 +727,89 @@ export async function closeRegistrationAndStart(
 export const BOTH_JOINED_START_RETRY_REASON = 'all_joined_start_retry';
 
 /**
+ * Per-match hard cap. A match in progress for longer than
+ * TOURNAMENT_MATCH_CAP_MS since its persisted `started_at` is decided from the
+ * live score: higher score wins, a tie goes to the higher seed (`status_reason`
+ * match_cap_higher_score / match_cap_higher_seed, winner_source game_over). It
+ * is recorded through applyMatchResult like any result (locked, idempotent,
+ * advances the bracket, final writes placements), and the room is then closed
+ * to further play. `started_at` is in the database, so a restart cannot reset
+ * the cap; a room lost to a restart is restored first so the live score counts.
+ * True when this call recorded the result.
+ */
+async function enforceTournamentMatchCap(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+  now: Date,
+): Promise<boolean> {
+  const startedMs = Date.parse(match.started_at ?? '');
+  if (!Number.isFinite(startedMs) || now.getTime() - startedMs < tournamentMatchCapMs()) return false;
+  if (!match.player1_id || !match.player2_id || !match.room_code) return false;
+
+  let room = peekTournamentRoom(persistence, match.room_code);
+  if (!room) {
+    await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
+    room = peekTournamentRoom(persistence, match.room_code);
+  }
+  // A game that already ended is being recorded by its own game-over path.
+  if (room?.state?.gameOver) return false;
+
+  let player1Score = 0;
+  let player2Score = 0;
+  if (room?.state) {
+    const state = room.state;
+    const roster = getRoomRoster(room.code);
+    const oriented = orientSeatScoresToMatch(
+      match,
+      state.playerIds.map((seatId) => ({
+        playerId: roster.find((p) => p.id === seatId)?.userId ?? (isBotUserId(seatId) ? seatId : null),
+        score: state.players[seatId]?.score ?? 0,
+      })),
+    );
+    if (!oriented) {
+      log.warn({ matchId: match.id, roomCode: room.code, seats: state.playerIds }, 'match cap: room seats do not match the tournament match players');
+      throw new Error('tournament_seat_mismatch');
+    }
+    ({ player1Score, player2Score } = oriented);
+  }
+
+  const byScore = player1Score !== player2Score;
+  const winnerId = byScore
+    ? (player1Score > player2Score ? match.player1_id : match.player2_id)
+    : await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+  const statusReason = byScore ? 'match_cap_higher_score' : 'match_cap_higher_seed';
+  log.info({ matchId: match.id, winnerId, player1Score, player2Score, statusReason }, 'match cap reached; deciding the match');
+
+  await applyMatchResult(io, {
+    matchId: match.id,
+    winnerId,
+    player1Score,
+    player2Score,
+    winnerSource: 'game_over',
+    statusReason,
+  }, persistence);
+
+  if (room) {
+    // Recorded: no further play in this room (the same latch a forfeit uses).
+    if (!room.abandonedAt) {
+      room.abandonedAt = now.toISOString();
+      room.abandonedReason = 'abandon';
+    }
+    disarmTournamentTurnClock(room.code);
+  }
+  return true;
+}
+
+function peekTournamentRoom(persistence: EnginePersistence, roomCode: string): Room | null {
+  try {
+    return persistence.getRoom(roomCode);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Single-instance first-release reconciliation for expired ready matches.
  *
  * This uses DB-persisted `ready_deadline_at` values and polling instead of
@@ -753,6 +840,10 @@ export async function reconcileExpiredReadyMatches(
       for (const match of matches) {
         let matchFailed = false;
         try {
+          if (match.status === 'in_progress') {
+            if (await enforceTournamentMatchCap(io, match, persistence, now)) resolvedCount += 1;
+            continue;
+          }
           if (match.status !== 'ready' || !match.ready_deadline_at) continue;
           if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
           if (await resolveBotOnlyMatch(io, match, persistence, now)) {
@@ -822,10 +913,17 @@ export async function reconcileExpiredReadyMatches(
             winnerId = match.player2_id;
             noShowUserId = match.player1_id;
           } else if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
-            winnerId = match.player2_id;
-          } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
+            // The human never joined. An absent human never beats a present
+            // opponent, Fritz included: Fritz advances, the human is a no-show.
             winnerId = match.player1_id;
+            noShowUserId = match.player2_id;
+          } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
+            winnerId = match.player2_id;
+            noShowUserId = match.player1_id;
           } else {
+            // Both humans absent (or both present but the game never started):
+            // the higher seed advances administratively, recorded below as
+            // double_no_show_higher_seed_advanced / start_failed_after_retry_….
             winnerId = await selectHigherSeedWinner(
               match.tournament_id,
               match.player1_id,

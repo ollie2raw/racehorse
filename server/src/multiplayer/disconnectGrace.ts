@@ -16,6 +16,7 @@ import {
   isLiveRoomDurablyRecoverable,
 } from './roomLivePersistence';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { roomKind } from './roomKind';
 
 const log = childLogger('disconnect-grace');
 
@@ -239,6 +240,10 @@ export function onActivePlayerSocketDisconnect(
     playerId: playerSeatId,
     graceMs: DISCONNECT_GRACE_MS,
   });
+
+  // Tournament rooms: the tournament turn clock times this seat's turns whether
+  // or not it is connected; a second auto-actor here could resolve the same turn.
+  if (roomKind(room) === 'scheduled_tournament') return;
 
   scheduleDisconnectGraceTimer(roomCode, playerSeatId, io, broadcast, DISCONNECT_GRACE_MS, 0);
 }

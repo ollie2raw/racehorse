@@ -3,6 +3,7 @@ import type { Config } from '../game/types';
 import { createReservedRoom, deleteRoom, peekRoom, type Room } from '../rooms';
 import { ensureRoomHydrated } from '../multiplayer/roomLivePersistence';
 import { setRoomRoster } from '../multiplayer/roomSession';
+import { syncTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
 
 const log = childLogger('tournament:room-restore');
 
@@ -71,6 +72,8 @@ async function restoreOrCreate(code: string, matchId: string, config: Partial<Co
         );
       }
       log.info({ roomCode: code, matchId, handNumber: hydrated.room.state?.handNumber ?? null }, 'restored tournament room from its live session');
+      // The turn in progress gets a fresh full timeout: the remaining time is not persisted.
+      syncTournamentTurnClock(code);
       return hydrated.room;
     }
     case 'not_found':

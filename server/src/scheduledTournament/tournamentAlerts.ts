@@ -46,7 +46,7 @@ export function resetAlertThrottleForTests(): void {
   entries.clear();
 }
 
-export type TournamentStep = 'recovery' | 'reconcile' | 'start_dispatch';
+export type TournamentStep = 'recovery' | 'reconcile' | 'start_dispatch' | 'event_expiry';
 
 const matchStepAlertKey = (step: TournamentStep, matchId: string) => `match-step:${step}:${matchId}`;
 const tournamentStepAlertKey = (step: TournamentStep, tournamentId: string) => `tournament-step:${step}:${tournamentId}`;
