@@ -130,6 +130,39 @@ const pendingPersistByRoomCode = new Map<
 >();
 const inFlightHydrationByRoomCode = new Map<string, Promise<ActiveRoomHydrationResult>>();
 
+/**
+ * The last live-session row this process knows is stored for each room code:
+ * read by hydration, or written by this process. Cleared by an explicit delete.
+ * Backs the overwrite guard below.
+ */
+const knownPersistedSessionByRoomCode = new Map<string, { matchId: string; status: RoomLiveSessionStatus }>();
+
+function rememberPersistedSession(row: Pick<RoomLiveSessionRow, 'room_code' | 'match_id' | 'status'>): void {
+  knownPersistedSessionByRoomCode.set(row.room_code.trim().toUpperCase(), {
+    matchId: row.match_id,
+    status: row.status,
+  });
+}
+
+/**
+ * Overwrite guard (tournament rooms): a room must not replace, or finalize and
+ * delete, a stored session holding a game in progress ('playing' / 'hand_over')
+ * for a different match. That is what an empty room created over an unrestored
+ * game does after a restart. An explicit `deleteLiveRoomSession` lifts it.
+ */
+function refusesLiveSessionOverwrite(room: Room): boolean {
+  if (inferLiveSessionSourceType(room) !== 'tournament') return false;
+  const code = room.code.trim().toUpperCase();
+  const known = knownPersistedSessionByRoomCode.get(code);
+  if (!known || known.matchId === room.matchId) return false;
+  if (known.status !== 'playing' && known.status !== 'hand_over') return false;
+  log.error(
+    { roomCode: code, storedMatchId: known.matchId, storedStatus: known.status, roomMatchId: room.matchId },
+    'refused to overwrite a stored in-progress tournament session with a different match',
+  );
+  return true;
+}
+
 let liveSessionsTableAvailable: boolean | null = null;
 
 let rosterResolver: ((roomCode: string) => LiveRosterEntry[]) | null = null;
@@ -637,6 +670,7 @@ async function persistLiveSessionRowNow(
       },
     );
     liveSessionsTableAvailable = true;
+    rememberPersistedSession(row);
     return { ok: true };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
@@ -769,6 +803,9 @@ async function persistLiveSessionForRoom(
   commitFence: RoomDurabilityFence,
 ): Promise<PersistLiveSessionAttemptResult> {
   const roomCode = room.code.trim().toUpperCase();
+  if (refusesLiveSessionOverwrite(room)) {
+    return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
+  }
   if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
@@ -793,7 +830,10 @@ async function persistLiveSessionForRoom(
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
   }
-  if (result.ok) persistedLogLengthsByRoomCode.set(roomCode, confirmed);
+  if (result.ok) {
+    persistedLogLengthsByRoomCode.set(roomCode, confirmed);
+    rememberPersistedSession(row);
+  }
   return result;
 }
 
@@ -943,6 +983,7 @@ export async function finalizeAndDeleteLiveRoomSession(
   if (liveSessionsTableAvailable === false) return;
 
   cancelScheduledLiveRoomPersistence(room.code);
+  if (refusesLiveSessionOverwrite(room)) return;
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
@@ -1100,6 +1141,7 @@ export async function loadLiveRoomSession(roomCode: string): Promise<LoadLiveRoo
     if (!parsed) {
       return { kind: 'snapshot_invalid', error: 'snapshot_parse_failed' };
     }
+    rememberPersistedSession(parsed);
     if (parsed.room_shell.logStorage === 'entries') {
       const attached = await attachLogEntries(parsed);
       if (!attached.ok) return { kind: 'snapshot_invalid', error: attached.error };
@@ -1128,6 +1170,7 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
   const code = roomCode.trim().toUpperCase();
   // Entries go with the row (on delete cascade).
   persistedLogLengthsByRoomCode.delete(code);
+  knownPersistedSessionByRoomCode.delete(code);
   try {
     await supabaseFetch(
       `/rest/v1/room_live_sessions?room_code=eq.${encodeURIComponent(code)}`,
@@ -1266,5 +1309,6 @@ export function resetLiveRoomPersistenceForTests(): void {
   liveSessionsTableAvailable = null;
   rosterResolver = null;
   persistedLogLengthsByRoomCode.clear();
+  knownPersistedSessionByRoomCode.clear();
   logEntriesUnavailableUntilMs = 0;
 }

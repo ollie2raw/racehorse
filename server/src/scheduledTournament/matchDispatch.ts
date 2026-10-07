@@ -136,7 +136,11 @@ export async function dispatchTournamentMatch(
     room = persistence.getRoom(roomCode);
   } catch {
     reusedExistingRoom = false;
-    room = persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
+    // Not in memory (first dispatch, or after a restart): a stored game in
+    // progress must be restored, never covered by an empty room.
+    room = persistence.restoreOrCreateRoom
+      ? await persistence.restoreOrCreateRoom(roomCode, match.id, { winningScore: tournament.win_target })
+      : persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
   }
   room.scheduledTournamentMatchId = match.id;
   room.scheduledTournamentId = tournament.id;

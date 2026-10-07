@@ -22,6 +22,7 @@ import {
   type BracketSeed,
 } from './persistence';
 import { createReservedRoom, getRoom } from '../rooms';
+import { restoreOrCreateTournamentRoom } from './tournamentRoomRestore';
 import type { Config } from '../game/types';
 import type { Room } from '../rooms';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
@@ -86,6 +87,12 @@ export interface EnginePersistence {
   ): Promise<void>;
   createReservedRoom(code: string, config: Partial<Config>): Room;
   getRoom(code: string): Room;
+  /**
+   * The match's room when it is not in memory: restored from its live session
+   * if a game is stored, otherwise created. Without it, dispatch creates an
+   * empty reserved room (in-memory test persistences).
+   */
+  restoreOrCreateRoom?(code: string, matchId: string, config: Partial<Config>): Promise<Room>;
 }
 
 /** Real Supabase + in-memory rooms implementation used in production. */
@@ -105,6 +112,7 @@ export const defaultEnginePersistence: EnginePersistence = {
   updateTournamentStatus,
   createReservedRoom,
   getRoom,
+  restoreOrCreateRoom: restoreOrCreateTournamentRoom,
 };
 
 /** Convenience: io is also a dependency, but it's stable and easy to mock per-test. */
