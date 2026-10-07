@@ -14,8 +14,10 @@ import type { GhostMoveLogEntry } from '../ghost/service';
 import type { Room, LeadTracker } from '../rooms';
 import { deleteRoom, peekRoom } from '../rooms';
 import type { RoomMatchEvent } from '../roomEvents';
+import * as Sentry from '@sentry/node';
 import { supabaseFetch } from '../supabaseUtils';
 import { childLogger } from '../logger';
+import { clearAlert, shouldSendAlert } from '../scheduledTournament/tournamentAlerts';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
 import { roomKind } from './roomKind';
 
@@ -144,6 +146,14 @@ function rememberPersistedSession(row: Pick<RoomLiveSessionRow, 'room_code' | 'm
   });
 }
 
+const overwriteRefusalAlertKey = (roomCode: string) => `live-session-overwrite-refused:${roomCode}`;
+
+/** A save for this room code went through: a later refusal alerts immediately again. */
+function rememberWrittenSession(row: Pick<RoomLiveSessionRow, 'room_code' | 'match_id' | 'status'>): void {
+  rememberPersistedSession(row);
+  clearAlert(overwriteRefusalAlertKey(row.room_code.trim().toUpperCase()));
+}
+
 /**
  * Overwrite guard (tournament rooms): a room must not replace, or finalize and
  * delete, a stored session holding a game in progress ('playing' / 'hand_over')
@@ -160,6 +170,20 @@ function refusesLiveSessionOverwrite(room: Room): boolean {
     { roomCode: code, storedMatchId: known.matchId, storedStatus: known.status, roomMatchId: room.matchId },
     'refused to overwrite a stored in-progress tournament session with a different match',
   );
+  // Logged every time; Sentry gets the first and then at most one per 10 min per room code.
+  if (shouldSendAlert(overwriteRefusalAlertKey(code))) {
+    Sentry.captureMessage('[tournament] refused to overwrite a stored in-progress live session', {
+      level: 'error',
+      fingerprint: ['tournament-live-session-overwrite-refused', code],
+      tags: {
+        tournament_alert: 'live_session_overwrite_refused',
+        room_code: code,
+        tournament_id: room.scheduledTournamentId ?? undefined,
+        match_id: room.scheduledTournamentMatchId ?? undefined,
+      },
+      extra: { roomCode: code, storedMatchId: known.matchId, storedStatus: known.status, roomMatchId: room.matchId },
+    });
+  }
   return true;
 }
 
@@ -670,7 +694,7 @@ async function persistLiveSessionRowNow(
       },
     );
     liveSessionsTableAvailable = true;
-    rememberPersistedSession(row);
+    rememberWrittenSession(row);
     return { ok: true };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
@@ -832,7 +856,7 @@ async function persistLiveSessionForRoom(
   }
   if (result.ok) {
     persistedLogLengthsByRoomCode.set(roomCode, confirmed);
-    rememberPersistedSession(row);
+    rememberWrittenSession(row);
   }
   return result;
 }
@@ -1171,6 +1195,7 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
   // Entries go with the row (on delete cascade).
   persistedLogLengthsByRoomCode.delete(code);
   knownPersistedSessionByRoomCode.delete(code);
+  clearAlert(overwriteRefusalAlertKey(code));
   try {
     await supabaseFetch(
       `/rest/v1/room_live_sessions?room_code=eq.${encodeURIComponent(code)}`,
