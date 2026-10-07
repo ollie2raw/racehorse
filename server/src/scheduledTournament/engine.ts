@@ -883,9 +883,31 @@ export function isTournamentBracketLobbyPhase(input: {
   return input.nowMs >= closeMs && input.nowMs < startMs;
 }
 
+/** A room seat's tournament identity (user id, or the bot's seat id) and its final score. */
+export type TournamentSeatScore = { playerId: string | null; score: number };
+
+/**
+ * Put seat scores into the match row's player1/player2 order. Room seats are
+ * in join order (Fritz is seated at dispatch, before the human attaches), which
+ * need not match the row. Null unless the two seats are exactly the row's two
+ * players.
+ */
+function orientSeatScoresToMatch(
+  match: Pick<MatchRow, 'player1_id' | 'player2_id'>,
+  seats: ReadonlyArray<TournamentSeatScore>,
+): { player1Score: number; player2Score: number } | null {
+  if (seats.length !== 2 || !match.player1_id || !match.player2_id) return null;
+  const p1 = seats.find((seat) => seat.playerId === match.player1_id);
+  const p2 = seats.find((seat) => seat.playerId === match.player2_id);
+  if (!p1 || !p2 || p1 === p2) return null;
+  return { player1Score: p1.score, player2Score: p2.score };
+}
+
 /**
  * Apply tournament match result after multiplayer game-over.
  * Uses in-memory match id when present; otherwise resolves by room code in DB.
+ * With `seatScores`, the scores are oriented to the match row's player order;
+ * without it, player1Score/player2Score are taken as already in row order.
  */
 export async function applyTournamentGameOverFromRoom(
   io: Server,
@@ -894,6 +916,7 @@ export async function applyTournamentGameOverFromRoom(
     winnerUserId: string;
     player1Score: number;
     player2Score: number;
+    seatScores?: ReadonlyArray<TournamentSeatScore>;
   },
   persistence: EnginePersistence = defaultEnginePersistence,
   lookupMatchByRoom: (code: string) => Promise<MatchRow | null> = findTournamentMatchByRoom,
@@ -917,20 +940,37 @@ export async function applyTournamentGameOverFromRoom(
     }, 'no tournament match for room');
     return false;
   }
+  let { player1Score, player2Score } = params;
+  if (params.seatScores) {
+    const match = await persistence.fetchMatchById(matchId);
+    if (!match) throw new Error('Match not found');
+    const oriented = orientSeatScoresToMatch(match, params.seatScores);
+    if (!oriented) {
+      log.warn({
+        roomCode: room.code,
+        matchId,
+        seatPlayerIds: params.seatScores.map((seat) => seat.playerId),
+        player1Id: match.player1_id,
+        player2Id: match.player2_id,
+      }, 'room seats do not match the tournament match players');
+      throw new Error('tournament_seat_mismatch');
+    }
+    ({ player1Score, player2Score } = oriented);
+  }
   log.info({
     roomCode: room.code,
     matchId,
     tournamentId: room.scheduledTournamentId ?? null,
     winnerId: params.winnerUserId,
-    scores: { player1: params.player1Score, player2: params.player2Score },
+    scores: { player1: player1Score, player2: player2Score },
   }, 'applying result');
   await applyMatchResult(
     io,
     {
       matchId,
       winnerId: params.winnerUserId,
-      player1Score: params.player1Score,
-      player2Score: params.player2Score,
+      player1Score,
+      player2Score,
     },
     persistence,
   );
