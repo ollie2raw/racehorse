@@ -54,6 +54,31 @@ function alertTournamentInvariantViolation(
   });
 }
 
+/**
+ * One match failed in a per-match loop (boot recovery, no-show reconcile).
+ * The loop carries on with the other matches; this makes the failure visible.
+ * Fingerprinted per match and step, like the invariant alerts above.
+ */
+export function alertTournamentMatchStepFailed(
+  step: 'recovery' | 'reconcile',
+  match: { id: string; tournament_id: string; room_code: string | null },
+  err: unknown,
+): void {
+  const code = err instanceof Error ? err.message : String(err);
+  log.error({ step, matchId: match.id, tournamentId: match.tournament_id, roomCode: match.room_code, err }, `tournament ${step} failed for one match`);
+  Sentry.captureMessage(`[tournament] ${step} failed for a match`, {
+    level: 'error',
+    fingerprint: ['tournament-match-step-failed', step, match.id],
+    tags: {
+      tournament_alert: `${step}_failed`,
+      tournament_id: match.tournament_id,
+      match_id: match.id,
+      error_code: code,
+    },
+    extra: { matchId: match.id, tournamentId: match.tournament_id, roomCode: match.room_code, error: code },
+  });
+}
+
 const MIN_HUMANS_TO_START = 1;
 const BOT_ID_PREFIX = 'bot:fritz:';
 type BotTier = NonNullable<MatchRow['bot_tier']>;
@@ -734,113 +759,118 @@ export async function reconcileExpiredReadyMatches(
   for (const tournament of tournaments) {
     const matches = await persistence.fetchMatches(tournament.id);
     for (const match of matches) {
-      if (match.status !== 'ready' || !match.ready_deadline_at) continue;
-      if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
-      if (await resolveBotOnlyMatch(io, match, persistence, now)) {
-        resolvedCount += 1;
-        continue;
-      }
-      if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
-      if (!match.player1_id || !match.player2_id) continue;
-      const everyoneJoined = allHumanPlayersJoined(match);
-      if (everyoneJoined && match.room_code) {
-        let roomExists = false;
-        let roomStarted = false;
-        try {
-          const room = persistence.getRoom(match.room_code);
-          roomExists = true;
-          roomStarted = Boolean(room.state);
-        } catch {
-          /* room missing — fall through to the rehydrate branch below */
-        }
-        if (roomStarted) {
-          await persistence.updateMatch(match.id, {
-            status: 'in_progress',
-            started_at: match.started_at ?? now.toISOString(),
-            status_reason: null,
-          });
+      try {
+        if (match.status !== 'ready' || !match.ready_deadline_at) continue;
+        if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
+        if (await resolveBotOnlyMatch(io, match, persistence, now)) {
+          resolvedCount += 1;
           continue;
         }
-        // A6: every player is here but the game never started (a slow or
-        // failed start). That is not a no-show. Extend the deadline once and
-        // re-send match_ready: the clients re-attach, and the attach handler's
-        // normal start path runs again. Only a second expiry resolves.
-        if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
-          await persistence.updateMatch(match.id, {
-            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
-            status_reason: BOTH_JOINED_START_RETRY_REASON,
-          });
-          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
-          log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
-          continue;
+        if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
+        if (!match.player1_id || !match.player2_id) continue;
+        const everyoneJoined = allHumanPlayersJoined(match);
+        if (everyoneJoined && match.room_code) {
+          let roomExists = false;
+          let roomStarted = false;
+          try {
+            const room = persistence.getRoom(match.room_code);
+            roomExists = true;
+            roomStarted = Boolean(room.state);
+          } catch {
+            /* room missing — fall through to the rehydrate branch below */
+          }
+          if (roomStarted) {
+            await persistence.updateMatch(match.id, {
+              status: 'in_progress',
+              started_at: match.started_at ?? now.toISOString(),
+              status_reason: null,
+            });
+            continue;
+          }
+          // A6: every player is here but the game never started (a slow or
+          // failed start). That is not a no-show. Extend the deadline once and
+          // re-send match_ready: the clients re-attach, and the attach handler's
+          // normal start path runs again. Only a second expiry resolves.
+          if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
+            await persistence.updateMatch(match.id, {
+              ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+              status_reason: BOTH_JOINED_START_RETRY_REASON,
+            });
+            await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+            log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
+            continue;
+          }
         }
-      }
 
-      const hasHumanPlayer = !isBotOnlyMatch(match);
-      if (hasHumanPlayer && match.room_code) {
-        try {
-          persistence.getRoom(match.room_code);
-        } catch {
-          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
-          await persistence.updateMatch(match.id, {
-            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
-            status_reason: 'room_rehydrated_deadline_extended',
-          });
-          log.info({
+        const hasHumanPlayer = !isBotOnlyMatch(match);
+        if (hasHumanPlayer && match.room_code) {
+          try {
+            persistence.getRoom(match.room_code);
+          } catch {
+            await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+            await persistence.updateMatch(match.id, {
+              ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+              status_reason: 'room_rehydrated_deadline_extended',
+            });
+            log.info({
+              matchId: match.id,
+              roomCode: match.room_code,
+            }, 'ready room missing; rehydrated before no-show');
+            continue;
+          }
+        }
+
+        let winnerId: string;
+        let noShowUserId: string | null = null;
+        if (match.player1_joined_at && !match.player2_joined_at) {
+          winnerId = match.player1_id;
+          noShowUserId = match.player2_id;
+        } else if (match.player2_joined_at && !match.player1_joined_at) {
+          winnerId = match.player2_id;
+          noShowUserId = match.player1_id;
+        } else if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
+          winnerId = match.player2_id;
+        } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
+          winnerId = match.player1_id;
+        } else {
+          winnerId = await selectHigherSeedWinner(
+            match.tournament_id,
+            match.player1_id,
+            match.player2_id,
+            persistence,
+          );
+        }
+
+        log.info({
+          matchId: match.id,
+          userId: noShowUserId,
+          reason: playerNoShowReason(match, noShowUserId),
+        }, 'marking loss');
+
+        await applyMatchResult(
+          io,
+          {
             matchId: match.id,
-            roomCode: match.room_code,
-          }, 'ready room missing; rehydrated before no-show');
-          continue;
-        }
-      }
-
-      let winnerId: string;
-      let noShowUserId: string | null = null;
-      if (match.player1_joined_at && !match.player2_joined_at) {
-        winnerId = match.player1_id;
-        noShowUserId = match.player2_id;
-      } else if (match.player2_joined_at && !match.player1_joined_at) {
-        winnerId = match.player2_id;
-        noShowUserId = match.player1_id;
-      } else if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
-        winnerId = match.player2_id;
-      } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
-        winnerId = match.player1_id;
-      } else {
-        winnerId = await selectHigherSeedWinner(
-          match.tournament_id,
-          match.player1_id,
-          match.player2_id,
+            winnerId,
+            player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
+            player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
+            winnerSource: 'no_show',
+            statusReason: noShowUserId
+              ? playerNoShowReason(match, noShowUserId)
+              : everyoneJoined
+                // Present players whose game would not start even after the one
+                // extension: resolved, but never recorded as a no-show.
+                ? 'start_failed_after_retry_higher_seed_advanced'
+                : 'double_no_show_higher_seed_advanced',
+            noShowUserId,
+          },
           persistence,
         );
+        resolvedCount += 1;
+      } catch (err) {
+        // One match must not stop the rest of the tick; the next tick retries it.
+        alertTournamentMatchStepFailed('reconcile', match, err);
       }
-
-      log.info({
-        matchId: match.id,
-        userId: noShowUserId,
-        reason: playerNoShowReason(match, noShowUserId),
-      }, 'marking loss');
-
-      await applyMatchResult(
-        io,
-        {
-          matchId: match.id,
-          winnerId,
-          player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
-          player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
-          winnerSource: 'no_show',
-          statusReason: noShowUserId
-            ? playerNoShowReason(match, noShowUserId)
-            : everyoneJoined
-              // Present players whose game would not start even after the one
-              // extension: resolved, but never recorded as a no-show.
-              ? 'start_failed_after_retry_higher_seed_advanced'
-              : 'double_no_show_higher_seed_advanced',
-          noShowUserId,
-        },
-        persistence,
-      );
-      resolvedCount += 1;
     }
   }
   return resolvedCount;
