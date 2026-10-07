@@ -1115,6 +1115,52 @@ export async function act(
   );
 }
 
+/** The room's game position, read inside the gameplay lock right after an action. */
+export type ActStateAfter = {
+  sequence: number;
+  handNumber: number;
+  currentSeatId: string | null;
+  consecutivePasses: number;
+  handOver: boolean;
+  gameOver: boolean;
+};
+
+/**
+ * act(), but the action is decided inside the room's gameplay lock: `decide`
+ * sees the room exactly as the action will, and returning null skips the action
+ * (the decision it was made for is no longer current). Returns null when
+ * skipped, otherwise the act() result plus the position right after it, read
+ * before the lock is released. With a `decide` that always returns its action
+ * it behaves exactly like act().
+ */
+export async function actIfCurrent(
+  code: string,
+  playerSeatId: string,
+  io: Server,
+  onStateReady: (roomCode: string) => void,
+  decide: (room: Room) => ActionPayload | null,
+): Promise<{ result: ActResult; action: ActionPayload; after: ActStateAfter } | null> {
+  return withRoomGameplayLock(code, async () => {
+    // A missing room throws exactly as act() does.
+    const action = decide(getRoom(code));
+    if (!action) return null;
+    const result = await actUnlocked(code, playerSeatId, action, io, onStateReady);
+    const state = result.room.state;
+    return {
+      result,
+      action,
+      after: {
+        sequence: state?.sequence ?? -1,
+        handNumber: state?.handNumber ?? -1,
+        currentSeatId: state ? state.playerIds[state.currentPlayerIndex] ?? null : null,
+        consecutivePasses: state?.consecutivePasses ?? 0,
+        handOver: Boolean(state?.handOver),
+        gameOver: Boolean(state?.gameOver),
+      },
+    };
+  });
+}
+
 async function actUnlocked(
   code: string,
   playerSeatId: string,

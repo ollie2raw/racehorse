@@ -65,17 +65,19 @@ describe('startTournamentScheduler stale cleanup', () => {
     mocks.supabaseFetch.mockResolvedValue(undefined);
   });
 
-  it('cancels stale in-progress tournaments instead of dispatching them', async () => {
+  it('finishes stale in-progress tournaments through the backstop instead of cancelling or dispatching them', async () => {
+    const resolveExpiredTournament = vi.fn().mockResolvedValue({ kind: 'completed', resolved: 0 });
+    vi.doMock('./eventBackstop', () => ({ resolveExpiredTournament }));
     const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
     const io = { emit: vi.fn() } as any;
 
     startTournamentScheduler(io);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(resolveExpiredTournament).toHaveBeenCalledWith(io, 'tour-stale', undefined, expect.any(Date), expect.objectContaining({ id: 'tour-stale' })));
 
-    expect(mocks.cancelTournament).toHaveBeenCalledWith(io, 'tour-stale', undefined, 'active_window_expired');
+    expect(mocks.cancelTournament).not.toHaveBeenCalled();
     expect(mocks.dispatchScheduledStartMatches).not.toHaveBeenCalled();
     stopTournamentScheduler();
+    vi.doUnmock('./eventBackstop');
   });
 
   it('does not tick when TOURNAMENT_SCHEDULER_ENABLED=false (D-7 singleton gate)', async () => {

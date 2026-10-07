@@ -105,3 +105,29 @@ export function clearTournamentMatchStepAlert(step: TournamentStep, matchId: str
 export function clearTournamentStepAlert(step: TournamentStep, tournamentId: string): void {
   clearAlert(tournamentStepAlertKey(step, tournamentId));
 }
+
+/**
+ * A tournament anomaly that is not a failed step: the state is wrong, not the
+ * attempt (e.g. an in-progress match whose live game is missing, an automatic
+ * turn that made no progress). Logged every time; Sentry gets the first and then
+ * at most one per 10 minutes per (kind, match or room).
+ */
+export function alertTournamentAnomaly(
+  kind: string,
+  subject: { tournamentId?: string | null; matchId?: string | null; roomCode?: string | null },
+  extra: Record<string, unknown> = {},
+): void {
+  log.error({ kind, ...subject, ...extra }, `tournament anomaly: ${kind}`);
+  if (!shouldSendAlert(`anomaly:${kind}:${subject.matchId ?? subject.roomCode ?? subject.tournamentId ?? ''}`)) return;
+  Sentry.captureMessage(`[tournament] ${kind}`, {
+    level: 'error',
+    fingerprint: ['tournament-anomaly', kind, subject.matchId ?? subject.roomCode ?? subject.tournamentId ?? 'unknown'],
+    tags: {
+      tournament_alert: kind,
+      tournament_id: subject.tournamentId ?? undefined,
+      match_id: subject.matchId ?? undefined,
+      room_code: subject.roomCode ?? undefined,
+    },
+    extra: { ...subject, ...extra },
+  });
+}

@@ -83,7 +83,7 @@ let seedTimer: ReturnType<typeof setInterval> | null = null;
  * tick or a restart won't double-fire.
  *
  * SINGLETON (D-7 / HARDENING_PLAN.md §1.4.6): this whole tick — registration
- * open/close, scheduled-start dispatch, expired-tournament cancel, AND the
+ * open/close, scheduled-start dispatch, the expired-tournament backstop, AND the
  * no-show reconciler (`reconcileExpiredReadyMatches`) — must run on exactly one
  * process. The per-match RPC row lock (D-2) makes each `complete_tournament_match`
  * call safe, but it does NOT stop two instances from each *scheduling* a call
@@ -134,8 +134,12 @@ export function startTournamentScheduler(io: Server): void {
         try {
           if (isTournamentPastActiveWindow(t, now)) {
             step = 'event_expiry';
-            log.info({ tournamentId: t.id, scheduledStart: t.scheduled_start, ageMs: now - Date.parse(t.scheduled_start) }, 'cancelling expired tournament');
-            await cancelTournament(io, t.id, undefined, 'active_window_expired');
+            log.info({ tournamentId: t.id, scheduledStart: t.scheduled_start, ageMs: now - Date.parse(t.scheduled_start) }, 'finishing expired tournament through the result path');
+            // Finishes the event round by round; cancels only if its rows are
+            // unrecoverable (see eventBackstop.ts). No next-match dispatch.
+            // Loaded on use: it pulls in room dispatch, which this module does not need otherwise.
+            const { resolveExpiredTournament } = await import('./eventBackstop');
+            await resolveExpiredTournament(io, t.id, undefined, new Date(now), t);
             continue;
           }
           const startAt = Date.parse(t.scheduled_start);

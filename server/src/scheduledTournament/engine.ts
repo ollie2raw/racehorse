@@ -5,6 +5,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
 import { pairSeededEntrants, sortBySeedRating } from './bracket';
 import {
+  alertTournamentAnomaly,
   alertTournamentMatchStepFailed,
   alertTournamentStepFailed,
   clearTournamentMatchStepAlert,
@@ -483,6 +484,12 @@ export async function applyMatchResult(
     statusReason?: string | null;
     noShowUserId?: string | null;
     forfeitUserId?: string | null;
+    /**
+     * Default true: a next-round match this result makes ready is dispatched
+     * (room + match_ready) and bot-only pairs resolved. The event backstop
+     * passes false: it resolves the rest of the bracket itself.
+     */
+    dispatchAdvanced?: boolean;
   },
   persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<void> {
@@ -640,7 +647,7 @@ export async function applyMatchResult(
       tournamentId: match.tournament_id,
       matchId: result.advanced_to_match_id,
     });
-    if (result.advanced_to_status === 'ready') {
+    if (result.advanced_to_status === 'ready' && params.dispatchAdvanced !== false) {
       await dispatchTournamentMatch(
         io,
         result.advanced_to_match_id,
@@ -726,25 +733,48 @@ export async function closeRegistrationAndStart(
 /** status_reason marking the single A6 deadline extension (see below). */
 export const BOTH_JOINED_START_RETRY_REASON = 'all_joined_start_retry';
 
+/** status_reason labels for an in-progress match decided without a finished game. */
+export type InProgressResolutionLabels = {
+  /** Decided by the live score. */
+  higherScore: string;
+  /** Live score tied: the higher seed advances. */
+  higherSeed: string;
+  /** No live game could be found or restored: the higher seed advances. */
+  missingSessionHigherSeed: string;
+  /** The game never got past the pre-game draw: the higher seed advances. */
+  pregameHigherSeed: string;
+};
+
+export const MATCH_CAP_LABELS: InProgressResolutionLabels = {
+  higherScore: 'match_cap_higher_score',
+  higherSeed: 'match_cap_higher_seed',
+  missingSessionHigherSeed: 'match_cap_missing_session_higher_seed',
+  pregameHigherSeed: 'match_cap_pregame_higher_seed',
+};
+
 /**
- * Per-match hard cap. A match in progress for longer than
- * TOURNAMENT_MATCH_CAP_MS since its persisted `started_at` is decided from the
- * live score: higher score wins, a tie goes to the higher seed (`status_reason`
- * match_cap_higher_score / match_cap_higher_seed, winner_source game_over). It
- * is recorded through applyMatchResult like any result (locked, idempotent,
- * advances the bracket, final writes placements), and the room is then closed
- * to further play. `started_at` is in the database, so a restart cannot reset
- * the cap; a room lost to a restart is restored first so the live score counts.
- * True when this call recorded the result.
+ * Decide an in-progress match that has no finished game, from its live room:
+ * higher score wins, a tie goes to the higher seed. A room lost to a restart is
+ * restored first (dispatch with reason `repair` restores before it creates), so
+ * the live score counts. If there is still no live game after that, the live
+ * session is gone: that is reported as an anomaly and recorded under its own
+ * status_reason (`missingSessionHigherSeed`), never passed off as a tied score.
+ * A room still in the pre-game draw gets `pregameHigherSeed` likewise.
+ *
+ * Recorded through applyMatchResult like any result (locked, idempotent,
+ * advances the bracket, the final writes placements); the room is then closed
+ * to further play. Returns false (records nothing) if the game already ended:
+ * its own game-over path records it. Throws tournament_seat_mismatch if the
+ * room's seats are not the match's players.
  */
-async function enforceTournamentMatchCap(
+export async function resolveInProgressMatchFromRoom(
   io: Server,
   match: MatchRow,
   persistence: EnginePersistence,
   now: Date,
+  labels: InProgressResolutionLabels,
+  options: { dispatchAdvanced?: boolean } = {},
 ): Promise<boolean> {
-  const startedMs = Date.parse(match.started_at ?? '');
-  if (!Number.isFinite(startedMs) || now.getTime() - startedMs < tournamentMatchCapMs()) return false;
   if (!match.player1_id || !match.player2_id || !match.room_code) return false;
 
   let room = peekTournamentRoom(persistence, match.room_code);
@@ -757,7 +787,27 @@ async function enforceTournamentMatchCap(
 
   let player1Score = 0;
   let player2Score = 0;
-  if (room?.state) {
+  let statusReason: string;
+  let winnerId: string;
+  if (!room?.state) {
+    // In progress in the database, but no live game here even after a restore
+    // attempt: the session was lost. Do not hide it.
+    alertTournamentAnomaly(
+      'missing_live_session',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { roomFound: Boolean(room), resolution: labels.missingSessionHigherSeed },
+    );
+    statusReason = labels.missingSessionHigherSeed;
+    winnerId = await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+  } else if (room.preGameDraw) {
+    alertTournamentAnomaly(
+      'pregame_never_completed',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { resolution: labels.pregameHigherSeed },
+    );
+    statusReason = labels.pregameHigherSeed;
+    winnerId = await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+  } else {
     const state = room.state;
     const roster = getRoomRoster(room.code);
     const oriented = orientSeatScoresToMatch(
@@ -768,18 +818,17 @@ async function enforceTournamentMatchCap(
       })),
     );
     if (!oriented) {
-      log.warn({ matchId: match.id, roomCode: room.code, seats: state.playerIds }, 'match cap: room seats do not match the tournament match players');
+      log.warn({ matchId: match.id, roomCode: room.code, seats: state.playerIds }, 'in-progress resolution: room seats do not match the tournament match players');
       throw new Error('tournament_seat_mismatch');
     }
     ({ player1Score, player2Score } = oriented);
+    const byScore = player1Score !== player2Score;
+    winnerId = byScore
+      ? (player1Score > player2Score ? match.player1_id : match.player2_id)
+      : await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+    statusReason = byScore ? labels.higherScore : labels.higherSeed;
   }
-
-  const byScore = player1Score !== player2Score;
-  const winnerId = byScore
-    ? (player1Score > player2Score ? match.player1_id : match.player2_id)
-    : await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
-  const statusReason = byScore ? 'match_cap_higher_score' : 'match_cap_higher_seed';
-  log.info({ matchId: match.id, winnerId, player1Score, player2Score, statusReason }, 'match cap reached; deciding the match');
+  log.info({ matchId: match.id, winnerId, player1Score, player2Score, statusReason }, 'deciding an in-progress match without a finished game');
 
   await applyMatchResult(io, {
     matchId: match.id,
@@ -788,26 +837,84 @@ async function enforceTournamentMatchCap(
     player2Score,
     winnerSource: 'game_over',
     statusReason,
+    dispatchAdvanced: options.dispatchAdvanced,
   }, persistence);
 
-  if (room) {
-    // Recorded: no further play in this room (the same latch a forfeit uses).
-    if (!room.abandonedAt) {
-      room.abandonedAt = now.toISOString();
-      room.abandonedReason = 'abandon';
-    }
-    disarmTournamentTurnClock(room.code);
-  }
+  if (room) closeTournamentRoom(room, now);
   return true;
 }
 
-function peekTournamentRoom(persistence: EnginePersistence, roomCode: string): Room | null {
+/** No further play in a decided match's room (the same latch a forfeit uses). */
+export function closeTournamentRoom(room: Room, now: Date): void {
+  if (!room.abandonedAt) {
+    room.abandonedAt = now.toISOString();
+    room.abandonedReason = 'abandon';
+  }
+  disarmTournamentTurnClock(room.code);
+}
+
+/**
+ * Per-match hard cap. A match in progress for longer than
+ * TOURNAMENT_MATCH_CAP_MS since its persisted `started_at` is decided from the
+ * live room (resolveInProgressMatchFromRoom, MATCH_CAP_LABELS). `started_at`
+ * is in the database, so a restart cannot reset the cap.
+ * True when this call recorded the result.
+ */
+async function enforceTournamentMatchCap(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+  now: Date,
+): Promise<boolean> {
+  const startedMs = Date.parse(match.started_at ?? '');
+  if (!Number.isFinite(startedMs) || now.getTime() - startedMs < tournamentMatchCapMs()) return false;
+  return resolveInProgressMatchFromRoom(io, match, persistence, now, MATCH_CAP_LABELS);
+}
+
+export function peekTournamentRoom(persistence: EnginePersistence, roomCode: string): Room | null {
   try {
     return persistence.getRoom(roomCode);
   } catch {
     return null;
   }
 }
+
+/**
+ * Who advances from a match whose game never started, by attendance: the one
+ * player who joined beats the one who did not; an absent human never beats
+ * Fritz (Fritz advances, the human is the no-show); otherwise (both humans
+ * absent, or both present but the game never started) the higher seed advances
+ * administratively with no no-show recorded.
+ */
+export async function decideUnstartedMatchByAttendance(
+  match: MatchRow,
+  persistence: EnginePersistence,
+): Promise<{ winnerId: string; noShowUserId: string | null }> {
+  if (!match.player1_id || !match.player2_id) throw new Error('match_players_missing');
+  if (match.player1_joined_at && !match.player2_joined_at) {
+    return { winnerId: match.player1_id, noShowUserId: match.player2_id };
+  }
+  if (match.player2_joined_at && !match.player1_joined_at) {
+    return { winnerId: match.player2_id, noShowUserId: match.player1_id };
+  }
+  if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
+    return { winnerId: match.player1_id, noShowUserId: match.player2_id };
+  }
+  if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
+    return { winnerId: match.player2_id, noShowUserId: match.player1_id };
+  }
+  return {
+    winnerId: await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence),
+    noShowUserId: null,
+  };
+}
+
+/** The status_reason a no-show records (player1_no_show / player2_no_show). */
+export function noShowStatusReason(match: MatchRow, noShowUserId: string): string {
+  return playerNoShowReason(match, noShowUserId);
+}
+
+export { selectHigherSeedWinner };
 
 /**
  * Single-instance first-release reconciliation for expired ready matches.
@@ -904,56 +1011,29 @@ export async function reconcileExpiredReadyMatches(
             }
           }
 
-          let winnerId: string;
-          let noShowUserId: string | null = null;
-          if (match.player1_joined_at && !match.player2_joined_at) {
-            winnerId = match.player1_id;
-            noShowUserId = match.player2_id;
-          } else if (match.player2_joined_at && !match.player1_joined_at) {
-            winnerId = match.player2_id;
-            noShowUserId = match.player1_id;
-          } else if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
-            // The human never joined. An absent human never beats a present
-            // opponent, Fritz included: Fritz advances, the human is a no-show.
-            winnerId = match.player1_id;
-            noShowUserId = match.player2_id;
-          } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
-            winnerId = match.player2_id;
-            noShowUserId = match.player1_id;
-          } else {
-            // Both humans absent (or both present but the game never started):
-            // the higher seed advances administratively, recorded below as
-            // double_no_show_higher_seed_advanced / start_failed_after_retry_….
-            winnerId = await selectHigherSeedWinner(
-              match.tournament_id,
-              match.player1_id,
-              match.player2_id,
-              persistence,
-            );
-          }
-
+          const decided = await decideUnstartedMatchByAttendance(match, persistence);
           log.info({
             matchId: match.id,
-            userId: noShowUserId,
-            reason: playerNoShowReason(match, noShowUserId),
+            userId: decided.noShowUserId,
+            reason: playerNoShowReason(match, decided.noShowUserId),
           }, 'marking loss');
 
           await applyMatchResult(
             io,
             {
               matchId: match.id,
-              winnerId,
-              player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
-              player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
+              winnerId: decided.winnerId,
+              player1Score: match.player1_id === decided.winnerId ? tournament.win_target : 0,
+              player2Score: match.player2_id === decided.winnerId ? tournament.win_target : 0,
               winnerSource: 'no_show',
-              statusReason: noShowUserId
-                ? playerNoShowReason(match, noShowUserId)
+              statusReason: decided.noShowUserId
+                ? playerNoShowReason(match, decided.noShowUserId)
                 : everyoneJoined
                   // Present players whose game would not start even after the one
                   // extension: resolved, but never recorded as a no-show.
                   ? 'start_failed_after_retry_higher_seed_advanced'
                   : 'double_no_show_higher_seed_advanced',
-              noShowUserId,
+              noShowUserId: decided.noShowUserId,
             },
             persistence,
           );

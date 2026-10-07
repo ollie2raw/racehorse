@@ -5,7 +5,7 @@ import type { Server, Socket } from 'socket.io';
 import { assertValidGameState } from '../game/invariants';
 import type { BranchArm, GameState } from '../game/types';
 import {
-  act,
+  actIfCurrent,
   deleteRoom,
   getRoom,
   getRoomCanDraw,
@@ -14,6 +14,7 @@ import {
   readyForNextHand,
   registerLiveRoomPersistHook,
   type ActionPayload,
+  type ActStateAfter,
   type DrawAnimationStep,
   type Room,
   type RoomConfig,
@@ -554,13 +555,22 @@ function buildSyntheticBotAction(roomCode: string, botSeatId: string): ActionPay
  * authoritative path a player's action takes (`act()` → state broadcast), plus
  * the forced-draw broadcast and tournament finalize hook. Used for Fritz turns
  * and for a timed-out tournament turn (tournamentTurnClock).
+ *
+ * With `decide`, the action is chosen inside the room's gameplay lock and may
+ * be skipped (null) if the decision it was meant for is no longer current;
+ * the result is then null. Otherwise it is the position right after the action.
  */
 export async function performAutomaticSeatAction(
   roomCode: string,
   seatId: string,
-  action: ActionPayload,
-): Promise<void> {
-  const result = await act(roomCode, seatId, action, requireIo(), (code) => broadcastStateUpdate(code));
+  actionOrDecide: ActionPayload | ((room: Room) => ActionPayload | null),
+): Promise<ActStateAfter | null> {
+  const io = requireIo();
+  const onStateReady = (code: string) => broadcastStateUpdate(code);
+  const decide = typeof actionOrDecide === 'function' ? actionOrDecide : () => actionOrDecide;
+  const outcome = await actIfCurrent(roomCode, seatId, io, onStateReady, decide);
+  if (!outcome) return null;
+  const { result } = outcome;
   result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
     ? {
         playerId: result.forcedDrawAnimation.playerId,
@@ -572,6 +582,7 @@ export async function performAutomaticSeatAction(
     emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
   }
   setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
+  return outcome.after;
 }
 
 export function scheduleBotTurn(roomCode: string): void {
