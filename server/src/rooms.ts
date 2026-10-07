@@ -700,8 +700,10 @@ function resolveForcedDrawAtomically(
     drawerHandCount: Math.max(0, handBeforePlay - 1) + (index + 1),
   }));
 
-  const playable = getLegalMoves(stateAfterMove, playerId).some((move) => move.type === 'play');
   const stillTheirTurn = stateAfterMove.playerIds[stateAfterMove.currentPlayerIndex] === playerId;
+  // The chain can end in a locked-boneyard pass that hands the turn on; legal
+  // moves only exist (and getLegalMoves only answers) for the player to move.
+  const playable = stillTheirTurn && getLegalMoves(stateAfterMove, playerId).some((move) => move.type === 'play');
   const stoppedReason: ResolveForcedDrawResult['stoppedReason'] = playable
     ? 'playable'
     : stillTheirTurn

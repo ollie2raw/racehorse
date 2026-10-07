@@ -239,7 +239,7 @@ describe('event backstop', () => {
     expect(row(store, 'qf1')).toMatchObject({ winner_id: U1, status_reason: 'event_backstop_higher_seed' });
   });
 
-  it('unstarted matches use attendance: an absent human loses to Fritz as a no-show, also in a later round', async () => {
+  it('a dispatched match whose join window expired uses attendance; an undispatched later round is never a no-show', async () => {
     const store = await seedStaleEvent({ qf1Scores: { human: 25, fritz: 10 } });
 
     await resolveExpiredTournament(makeIo(), T, makePersistence(store));
@@ -247,9 +247,10 @@ describe('event backstop', () => {
     expect(row(store, 'qf3')).toMatchObject({
       winner_id: bot(6), winner_source: 'no_show', no_show_user_id: U2, status_reason: 'event_backstop_player1_no_show',
     });
-    // U1 won QF1 on the clock; the semi was never dispatched, so U1 never joined it.
+    // U1 won QF1 on the clock; the semi was never dispatched, so U1 could not
+    // have missed it (Phase 1.2 D3): U1 advances administratively.
     expect(row(store, 'sf1')).toMatchObject({
-      player1_id: U1, winner_id: bot(4), winner_source: 'no_show', no_show_user_id: U1, status_reason: 'event_backstop_player1_no_show',
+      player1_id: U1, winner_id: U1, no_show_user_id: null, status_reason: 'event_backstop_undispatched_human_advanced',
     });
     expect(row(store, 'qf4')).toMatchObject({ winner_id: bot(2), status_reason: 'bot_simulated' });
   });

@@ -27,7 +27,10 @@ const log = childLogger('tournament:turn-clock');
  *    else pass, continuing only while the same turn continues (after a draw,
  *    or after a play that earns an extra turn). That is one missed turn; the
  *    TOURNAMENT_MAX_MISSED_TURNS-th consecutive one forfeits the match through
- *    `applyActiveMatchForfeit` (reason `missed_turns`) instead.
+ *    `applyActiveMatchForfeit` (reason `missed_turns`) instead. A logical turn
+ *    counts at most once: if the server cannot complete it (every action
+ *    rejected, no progress, action bound), it alerts and retries on a fresh
+ *    timer without counting again.
  *  - `next_hand`: a hand is over and a human has not readied for the next. On
  *    timeout the missing humans are readied through `readyForNextHand`, as
  *    Fritz is. Not a missed turn.
@@ -55,6 +58,13 @@ type ClockEntry = Decision & {
 
 const entriesByRoom = new Map<string, ClockEntry>();
 const missedTurnsByRoom = new Map<string, Map<string, number>>();
+/**
+ * The logical turn that last added a missed turn, per room. A logical turn is
+ * one seat's uninterrupted run of decisions in a hand (its sequence changes as
+ * the clock draws or takes an extra turn). It counts once, however many times
+ * the server has to retry it.
+ */
+const countedTurnByRoom = new Map<string, { seatId: string; handNumber: number; sequence: number }>();
 /** Rooms whose clock is currently playing a timed-out turn. */
 const autoActingRooms = new Set<string>();
 /** Timeout handlers still running (test seam: settleTournamentTurnClockForTests). */
@@ -95,6 +105,24 @@ function resetMissedTurns(roomCode: string, seatId: string): void {
   missedTurnsByRoom.get(roomCode)?.delete(seatId);
 }
 
+function forgetMissedTurns(roomCode: string): void {
+  missedTurnsByRoom.delete(roomCode);
+  countedTurnByRoom.delete(roomCode);
+}
+
+/**
+ * Has this seat's current turn already added a missed turn? Yes if it is the
+ * same seat and hand and either nothing has happened since (same sequence) or
+ * only the seat's own continuation has (no pass since). Any other seat's turn in
+ * between clears the record (syncTournamentTurnClock), so a later turn counts.
+ */
+function isCountedTurn(roomCode: string, room: Room, seatId: string): boolean {
+  const counted = countedTurnByRoom.get(roomCode);
+  const state = room.state;
+  if (!counted || !state || counted.seatId !== seatId || counted.handNumber !== state.handNumber) return false;
+  return state.sequence === counted.sequence || state.consecutivePasses === 0;
+}
+
 /** The decision this room's clock is currently timing, if any (tests, diagnostics). */
 export function getArmedTournamentTurn(roomCode: string): { seatId: string; turnKey: string; kind: DecisionKind } | null {
   const entry = entriesByRoom.get(roomCode.trim().toUpperCase());
@@ -115,6 +143,11 @@ export function syncTournamentTurnClock(roomCode: string): void {
   const code = roomCode.trim().toUpperCase();
   const room = peekRoom(code);
   const awaited = awaitedDecision(room);
+  const counted = countedTurnByRoom.get(code);
+  if (counted && (awaited?.kind !== 'turn' || awaited.seatId !== counted.seatId || !isCountedTurn(code, room!, counted.seatId))) {
+    // Someone else's turn (or a hand break) came in between: that turn is over.
+    countedTurnByRoom.delete(code);
+  }
   const existing = entriesByRoom.get(code);
   if (existing && awaited && existing.turnKey === awaited.turnKey) return;
   if (existing) {
@@ -125,7 +158,7 @@ export function syncTournamentTurnClock(roomCode: string): void {
     }
   }
   if (!awaited) {
-    if (!room || room.state?.gameOver || room.abandonedAt) missedTurnsByRoom.delete(code);
+    if (!room || room.state?.gameOver || room.abandonedAt) forgetMissedTurns(code);
     return;
   }
   const token = nextToken++;
@@ -150,7 +183,7 @@ export function disarmTournamentTurnClock(roomCode: string): void {
   const code = roomCode.trim().toUpperCase();
   const existing = entriesByRoom.get(code);
   if (existing) clearEntry(code, existing);
-  missedTurnsByRoom.delete(code);
+  forgetMissedTurns(code);
 }
 
 /**
@@ -211,15 +244,21 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
   const performAutomaticSeatAction =
     automaticSeatActionOverride ?? (await import('./roomSession')).performAutomaticSeatAction;
   const seatId = entry.seatId;
-  const missed = getTournamentMissedTurns(roomCode, seatId) + 1;
+  // A retry of a turn that already counted (the server could not complete it
+  // last time) adds nothing and cannot forfeit.
+  const counts = !isCountedTurn(roomCode, room, seatId);
+  const missed = getTournamentMissedTurns(roomCode, seatId) + (counts ? 1 : 0);
+  /** Called inside the gameplay lock, immediately before the first automatic action. */
   const commitMiss = () => {
     entry.fired = true;
+    if (isCountedTurn(roomCode, room, seatId)) return;
     const seatCounts = missedTurnsByRoom.get(roomCode) ?? new Map<string, number>();
     missedTurnsByRoom.set(roomCode, seatCounts);
-    seatCounts.set(seatId, missed);
+    seatCounts.set(seatId, (seatCounts.get(seatId) ?? 0) + 1);
+    countedTurnByRoom.set(roomCode, { seatId, handNumber: room.state!.handNumber, sequence: room.state!.sequence });
   };
 
-  if (missed >= tournamentMaxMissedTurns()) {
+  if (counts && missed >= tournamentMaxMissedTurns()) {
     await forfeitIfStillAwaiting(roomCode, room, entry, commitMiss);
     return;
   }
@@ -232,12 +271,15 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
   let expectedKey = entry.turnKey;
   let lastSequence = startState.sequence;
   let first = true;
+  /** The server could not complete the turn: alerted; the turn gets a fresh timer (a retry, not a new miss). */
+  let failed = false;
   autoActingRooms.add(roomCode);
   try {
     for (let i = 0; ; i += 1) {
       if (i >= maxActions) {
         alertTournamentAnomaly('turn_clock_action_bound_exceeded', { tournamentId: room.scheduledTournamentId, matchId: room.scheduledTournamentMatchId, roomCode }, { seatId, maxActions });
-        throw new Error('turn_clock_action_bound_exceeded');
+        failed = true;
+        break;
       }
       const keyForThisStep = expectedKey;
       const checkToken = first ? entry.token : null;
@@ -264,11 +306,10 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
       }
       if (!outcome || !action) {
         if (rejected > 0 && stillAwaiting(roomCode, room, keyForThisStep, null)) {
-          // Every candidate was refused: leave the turn to a fresh timer (the
-          // next miss) rather than strand it, and say so loudly.
+          // Every candidate was refused: say so loudly and retry on a fresh timer
+          // rather than strand the turn.
           alertTournamentAnomaly('turn_clock_action_failed', { tournamentId: room.scheduledTournamentId, matchId: room.scheduledTournamentMatchId, roomCode }, { seatId, rejected });
-          const current = entriesByRoom.get(roomCode);
-          if (current) clearEntry(roomCode, current);
+          failed = true;
         } else if (first) {
           log.info({ roomCode, seatId }, 'turn timeout superseded before it acted; no action');
         }
@@ -278,7 +319,8 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
       first = false;
       if (outcome.sequence <= lastSequence) {
         alertTournamentAnomaly('turn_clock_no_progress', { tournamentId: room.scheduledTournamentId, matchId: room.scheduledTournamentMatchId, roomCode }, { seatId, sequence: outcome.sequence });
-        throw new Error('turn_clock_no_progress');
+        failed = true;
+        break;
       }
       lastSequence = outcome.sequence;
       if (!turnContinues(applied, outcome, seatId, handNumber)) break;
@@ -287,7 +329,14 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
   } finally {
     autoActingRooms.delete(roomCode);
   }
-  if (!first) log.info({ roomCode, seatId, missed }, 'tournament turn timed out; played it automatically');
+  if (failed) {
+    // Still this seat's (already counted) turn: drop the spent timer so the
+    // sync below arms a fresh one. The match cap bounds the retries.
+    const current = entriesByRoom.get(roomCode);
+    if (current && current.kind === 'turn' && current.seatId === seatId) clearEntry(roomCode, current);
+  } else if (!first) {
+    log.info({ roomCode, seatId, missed: getTournamentMissedTurns(roomCode, seatId) }, 'tournament turn timed out; played it automatically');
+  }
   syncTournamentTurnClock(roomCode);
 }
 
@@ -324,7 +373,7 @@ async function forfeitIfStillAwaiting(
   }
   log.info({ roomCode, seatId: entry.seatId }, 'tournament turn timeouts reached the limit; forfeited');
   await forfeit;
-  missedTurnsByRoom.delete(roomCode);
+  forgetMissedTurns(roomCode);
   if (peekRoom(roomCode)?.state) broadcastStateUpdate(roomCode);
 }
 
@@ -360,6 +409,7 @@ export function resetTournamentTurnClockForTests(): void {
   for (const entry of entriesByRoom.values()) clearTimeout(entry.timer);
   entriesByRoom.clear();
   missedTurnsByRoom.clear();
+  countedTurnByRoom.clear();
   autoActingRooms.clear();
   inFlightTimeouts.clear();
   automaticSeatActionOverride = null;

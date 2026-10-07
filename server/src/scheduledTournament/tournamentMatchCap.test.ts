@@ -270,6 +270,8 @@ describe('per-match hard cap', () => {
   it('a game that already ended in the room is left to its own game-over path', async () => {
     const { store, roomCode, matchId, persistence } = await seed({ scores: { [U1]: 31, [U2]: 10 } });
     getRoom(roomCode).state = { ...getRoom(roomCode).state!, gameOver: true };
+    // Its game-over persist is in flight (Phase 1.2: an idle or failed one is recovered instead).
+    getRoom(roomCode).gameOverPersistStatus = 'pending';
 
     expect(await tick(persistence, store)).toBe(0);
 

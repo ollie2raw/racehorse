@@ -537,6 +537,12 @@ describe('tournament turn clock: one timed-out turn, bounded (§2)', () => {
       expect(anomalyAlerts('turn_clock_action_failed')).toHaveLength(0);
     } else {
       expect(anomalyAlerts('turn_clock_action_failed')).toHaveLength(1);
+      // The turn is still open on a fresh timer; the retry (calls > 1: the real
+      // action now) plays it without counting it again (Phase 1.2 D5).
+      await timeOut();
+      await settleTournamentTurnClockForTests();
+      expect(state(roomCode).sequence).toBeGreaterThan(before);
+      expect(getTournamentMissedTurns(roomCode, seat)).toBe(1);
     }
 
     // Now every candidate is refused on the next timed turn.

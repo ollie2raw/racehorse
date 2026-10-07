@@ -14,8 +14,10 @@ import {
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import { tournamentMatchCapMs } from './tournamentTimeouts';
 import type { Room } from '../rooms';
+import type { GameState } from '../game/types';
 import { getRoomRoster } from '../multiplayer/roomSession';
 import { disarmTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
+import { markGameOverPersistSucceeded } from '../multiplayer/gameOverPersistPolicy';
 import type { ScheduledTournamentRow } from './types';
 import type { BracketQfPair, BracketSeed } from './persistence';
 import {
@@ -743,6 +745,8 @@ export type InProgressResolutionLabels = {
   missingSessionHigherSeed: string;
   /** The game never got past the pre-game draw: the higher seed advances. */
   pregameHigherSeed: string;
+  /** The room's game finished but its result is internally inconsistent: the higher seed advances. */
+  unrecoverableResultHigherSeed: string;
 };
 
 export const MATCH_CAP_LABELS: InProgressResolutionLabels = {
@@ -750,7 +754,144 @@ export const MATCH_CAP_LABELS: InProgressResolutionLabels = {
   higherSeed: 'match_cap_higher_seed',
   missingSessionHigherSeed: 'match_cap_missing_session_higher_seed',
   pregameHigherSeed: 'match_cap_pregame_higher_seed',
+  unrecoverableResultHigherSeed: 'match_cap_unrecoverable_result_higher_seed',
 };
+
+/**
+ * Errors that mean a finished room game cannot be this match's result (the
+ * room is not this match's game, or its outcome is inconsistent): retrying
+ * cannot help.
+ */
+const TERMINAL_RESULT_CORRUPT_ERRORS = new Set([
+  'tournament_seat_mismatch',
+  'tournament_room_match_mismatch',
+  'tournament_game_over_without_winner',
+  'winner_not_participant',
+  'score_inconsistent',
+]);
+
+/** A finished game: from the live room, or from its stored terminal session after a restart. */
+type FinishedGame = {
+  roomCode: string;
+  /** The tournament match the room says it belongs to, if it says. */
+  roomMatchId: string | null;
+  state: GameState;
+  /** Seat id → tournament user id (null for Fritz seats: their seat id is their id). */
+  rosterUserIdOf: (seatId: string) => string | null | undefined;
+  /** The live room, if any (its game-over persist status is honoured and updated). */
+  room: Room | null;
+};
+
+/**
+ * Record a finished game whose tournament result never reached the database
+ * (the game-over persist gave up, or the process restarted before it ran),
+ * through the same finalizer the game-over path uses
+ * (applyTournamentGameOverFromRoom: seat orientation, identity check, locked
+ * idempotent RPC, bracket advancement, placements). The winner is the engine's
+ * `state.winnerId`, mapped to its tournament id exactly as the game-over path
+ * maps it. Returns false (nothing done) while the room's own game-over persist
+ * is still in flight. Transient failures throw (the next tick retries); a
+ * result that is internally corrupt is alerted and the higher seed advances
+ * under `unrecoverableResultHigherSeed`, so it is never retried forever.
+ */
+async function recordFinishedGame(
+  io: Server,
+  match: MatchRow,
+  game: FinishedGame,
+  persistence: EnginePersistence,
+  labels: InProgressResolutionLabels,
+  options: { dispatchAdvanced?: boolean },
+): Promise<boolean> {
+  if (game.room?.gameOverPersistStatus === 'pending') return false;
+  const { state } = game;
+  try {
+    if (game.roomMatchId && game.roomMatchId !== match.id) throw new Error('tournament_room_match_mismatch');
+    if (!state.winnerId) throw new Error('tournament_game_over_without_winner');
+    const tournamentIdOf = (seatId: string): string | null =>
+      game.rosterUserIdOf(seatId) ?? (isBotUserId(seatId) ? seatId : null);
+    const winnerUserId = tournamentIdOf(state.winnerId);
+    if (!winnerUserId) throw new Error('tournament_seat_mismatch');
+    log.info({ matchId: match.id, roomCode: game.roomCode, winnerUserId, fromStoredSession: !game.room }, 'recording a finished game whose tournament result was never recorded');
+    await applyTournamentGameOverFromRoom(io, { code: game.roomCode, scheduledTournamentMatchId: match.id, scheduledTournamentId: match.tournament_id }, {
+      winnerUserId,
+      player1Score: 0,
+      player2Score: 0,
+      seatScores: state.playerIds.map((seatId) => ({ playerId: tournamentIdOf(seatId), score: state.players[seatId]?.score ?? 0 })),
+      dispatchAdvanced: options.dispatchAdvanced,
+    }, persistence);
+  } catch (err) {
+    const code = err instanceof Error ? err.message : String(err);
+    if (!TERMINAL_RESULT_CORRUPT_ERRORS.has(code) || !match.player1_id || !match.player2_id) throw err;
+    alertTournamentAnomaly(
+      'terminal_result_unrecoverable',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: game.roomCode },
+      { error: code, resolution: labels.unrecoverableResultHigherSeed },
+    );
+    await applyMatchResult(io, {
+      matchId: match.id,
+      winnerId: await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence),
+      player1Score: 0,
+      player2Score: 0,
+      winnerSource: 'game_over',
+      statusReason: labels.unrecoverableResultHigherSeed,
+      dispatchAdvanced: options.dispatchAdvanced,
+    }, persistence);
+  }
+  if (game.room) markGameOverPersistSucceeded(game.room);
+  return true;
+}
+
+function finishedGameFromRoom(room: Room): FinishedGame {
+  const roster = getRoomRoster(room.code);
+  return {
+    roomCode: room.code,
+    roomMatchId: room.scheduledTournamentMatchId ?? null,
+    state: room.state!,
+    rosterUserIdOf: (seatId) => roster.find((p) => p.id === seatId)?.userId,
+    room,
+  };
+}
+
+const TERMINAL_SESSION_ERRORS = new Set(['snapshot_terminal', 'snapshot_terminal_state']);
+
+/**
+ * After a restart a finished game cannot be restored (its stored session is
+ * terminal), but the stored session still holds the final state and roster:
+ * read it so the result can be recorded. Null if it is not a finished game.
+ */
+async function finishedGameFromStoredSession(roomCode: string): Promise<FinishedGame | null> {
+  const { loadLiveRoomSession } = await import('../multiplayer/roomLivePersistence');
+  const loaded = await loadLiveRoomSession(roomCode);
+  if (loaded.kind !== 'found') {
+    if (loaded.kind === 'persistence_unavailable') throw new Error('room_persistence_unavailable');
+    return null;
+  }
+  const { row } = loaded;
+  if (!row.game_state?.gameOver) return null;
+  return {
+    roomCode: row.room_code,
+    roomMatchId: row.scheduled_tournament_match_id,
+    state: row.game_state,
+    rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
+    room: null,
+  };
+}
+
+/**
+ * An in-progress match whose live room (in memory, not restored here) has a
+ * finished game: record it now rather than waiting for the cap. True when this
+ * call recorded the result.
+ */
+async function recordFinishedRoomGameIfAny(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+): Promise<boolean> {
+  if (!match.room_code || !match.player1_id || !match.player2_id) return false;
+  const room = peekTournamentRoom(persistence, match.room_code);
+  if (!room?.state?.gameOver) return false;
+  return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, MATCH_CAP_LABELS, {});
+}
 
 /**
  * Decide an in-progress match that has no finished game, from its live room:
@@ -763,9 +904,10 @@ export const MATCH_CAP_LABELS: InProgressResolutionLabels = {
  *
  * Recorded through applyMatchResult like any result (locked, idempotent,
  * advances the bracket, the final writes placements); the room is then closed
- * to further play. Returns false (records nothing) if the game already ended:
- * its own game-over path records it. Throws tournament_seat_mismatch if the
- * room's seats are not the match's players.
+ * to further play. A game that already ended is recorded from its own result
+ * (recordFinishedGame), also after a restart from its stored session; false only while its game-over persist is still in
+ * flight. Throws tournament_seat_mismatch if a live room's seats are not the
+ * match's players.
  */
 export async function resolveInProgressMatchFromRoom(
   io: Server,
@@ -779,11 +921,21 @@ export async function resolveInProgressMatchFromRoom(
 
   let room = peekTournamentRoom(persistence, match.room_code);
   if (!room) {
-    await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
+    try {
+      await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : String(err);
+      if (!TERMINAL_SESSION_ERRORS.has(code)) throw err;
+      // The game finished before a restart: record it from its stored session.
+      const finished = await finishedGameFromStoredSession(match.room_code);
+      if (!finished) throw err;
+      return recordFinishedGame(io, match, finished, persistence, labels, options);
+    }
     room = peekTournamentRoom(persistence, match.room_code);
   }
-  // A game that already ended is being recorded by its own game-over path.
-  if (room?.state?.gameOver) return false;
+  // A game that already ended is recorded from its own result (the game-over
+  // finalizer), never decided again by score or seed.
+  if (room?.state?.gameOver) return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
 
   let player1Score = 0;
   let player2Score = 0;
@@ -948,6 +1100,10 @@ export async function reconcileExpiredReadyMatches(
         let matchFailed = false;
         try {
           if (match.status === 'in_progress') {
+            if (await recordFinishedRoomGameIfAny(io, match, persistence)) {
+              resolvedCount += 1;
+              continue;
+            }
             if (await enforceTournamentMatchCap(io, match, persistence, now)) resolvedCount += 1;
             continue;
           }
@@ -1128,6 +1284,8 @@ export async function applyTournamentGameOverFromRoom(
     player1Score: number;
     player2Score: number;
     seatScores?: ReadonlyArray<TournamentSeatScore>;
+    /** Passed to applyMatchResult (the event backstop passes false). */
+    dispatchAdvanced?: boolean;
   },
   persistence: EnginePersistence = defaultEnginePersistence,
   lookupMatchByRoom: (code: string) => Promise<MatchRow | null> = findTournamentMatchByRoom,
@@ -1182,6 +1340,7 @@ export async function applyTournamentGameOverFromRoom(
       winnerId: params.winnerUserId,
       player1Score,
       player2Score,
+      dispatchAdvanced: params.dispatchAdvanced,
     },
     persistence,
   );
