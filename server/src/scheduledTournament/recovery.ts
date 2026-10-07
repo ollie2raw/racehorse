@@ -7,6 +7,7 @@ import {
   clearTournamentMatchStepAlert,
   clearTournamentStepAlert,
 } from './tournamentAlerts';
+import { recordFinishedGameIfAny } from './engine';
 import { dispatchTournamentMatch } from './matchDispatch';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 
@@ -67,6 +68,16 @@ export async function recoverTournamentMatches(
             try {
               persistence.getRoom(match.room_code);
             } catch {
+              // A game that finished before the restart is recorded from its
+              // persisted final state now; a finished room is never restored.
+              if (await recordFinishedGameIfAny(io, match, persistence)) {
+                log.info({
+                  tournamentId: tournament.id,
+                  matchId: match.id,
+                  roomCode: match.room_code,
+                }, 'finished game recorded');
+                continue;
+              }
               await dispatchTournamentMatch(io, match.id, { reason: 'recovery', emitIfAlreadyReady: true }, persistence);
               inProgressRecovered += 1;
               log.info({

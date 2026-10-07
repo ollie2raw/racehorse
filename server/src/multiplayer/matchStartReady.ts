@@ -2,6 +2,7 @@ import type { Server } from 'socket.io';
 import * as rooms from '../rooms';
 import type { Room } from '../rooms';
 import { withRoomGameplayLock } from './roomGameplayLock';
+import { tournamentStartingSeatId } from '../scheduledTournament/tournamentStarter';
 import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './mpAuthorityTelemetry';
 
 export type MatchStartDeps = {
@@ -46,7 +47,9 @@ export async function tryStartMatchIfReady(
       return { started: false, waitingFor: missing };
     }
 
-    const startedRoom = await rooms.initiatePregameDrawOrStartUnlocked(roomCode, io);
+    // A tournament room has no pre-game draw; its starter is fixed by the match.
+    const startingPlayerId = tournamentStartingSeatId(room);
+    const startedRoom = await rooms.initiatePregameDrawOrStartUnlocked(roomCode, io, startingPlayerId ? { startingPlayerId } : {});
     room.matchStartReady.clear();
     deps.broadcastStateUpdate(startedRoom.code);
     emitMpAuthorityFunnel('private_match_started', {

@@ -6,6 +6,7 @@ import type { MatchRow } from './types';
 import { isTournamentRoomCode, makeTournamentRoomCode } from './tournamentRoomCode';
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
+import { tournamentStarterUserId } from './tournamentStarter';
 
 const log = childLogger('tournament:dispatch');
 
@@ -139,12 +140,16 @@ export async function dispatchTournamentMatch(
     // Not in memory (first dispatch, or after a restart): a stored game in
     // progress must be restored, never covered by an empty room.
     room = persistence.restoreOrCreateRoom
-      ? await persistence.restoreOrCreateRoom(roomCode, match.id, { winningScore: tournament.win_target })
-      : persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
+      ? await persistence.restoreOrCreateRoom(roomCode, match.id, { winningScore: tournament.win_target, skipPregameDraw: true })
+      : persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target, skipPregameDraw: true });
   }
   room.scheduledTournamentMatchId = match.id;
   room.scheduledTournamentId = tournament.id;
   room.scheduledTournamentBotTier = match.bot_tier ?? undefined;
+  // No interactive pre-game draw in tournaments: the server picks the starter
+  // (same answer on every dispatch). A started game is never touched.
+  room.scheduledTournamentStarterUserId = tournamentStarterUserId(match) ?? undefined;
+  if (!room.state) room.config = { ...room.config, skipPregameDraw: true };
 
   if (isBotUserId(match.player1_id)) {
     seatSyntheticBotInRoom(roomCode, match.player1_id, botLabel(match.bot_tier));

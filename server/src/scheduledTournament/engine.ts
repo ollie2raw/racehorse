@@ -766,13 +766,21 @@ const TERMINAL_RESULT_CORRUPT_ERRORS = new Set([
   'tournament_seat_mismatch',
   'tournament_room_match_mismatch',
   'tournament_game_over_without_winner',
+  'tournament_terminal_state_inconsistent',
   'winner_not_participant',
   'score_inconsistent',
 ]);
 
-/** A finished game: from the live room, or from its stored terminal session after a restart. */
+/**
+ * A finished game: from the live room, or (no room in memory: after a restart,
+ * or after room cleanup) from its stored terminal live session or its
+ * room_match_logs archive.
+ */
 type FinishedGame = {
   roomCode: string;
+  source: 'room' | 'live_session' | 'archive';
+  /** Set when the stored copy says the game ended but is not a readable finished game. */
+  corrupt?: string;
   /** The tournament match the room says it belongs to, if it says. */
   roomMatchId: string | null;
   state: GameState;
@@ -805,13 +813,17 @@ async function recordFinishedGame(
   if (game.room?.gameOverPersistStatus === 'pending') return false;
   const { state } = game;
   try {
+    if (game.corrupt) throw new Error(game.corrupt);
     if (game.roomMatchId && game.roomMatchId !== match.id) throw new Error('tournament_room_match_mismatch');
     if (!state.winnerId) throw new Error('tournament_game_over_without_winner');
+    if (state.playerIds.length !== 2 || !state.playerIds.includes(state.winnerId) || state.playerIds.some((id) => !state.players[id])) {
+      throw new Error('tournament_terminal_state_inconsistent');
+    }
     const tournamentIdOf = (seatId: string): string | null =>
       game.rosterUserIdOf(seatId) ?? (isBotUserId(seatId) ? seatId : null);
     const winnerUserId = tournamentIdOf(state.winnerId);
     if (!winnerUserId) throw new Error('tournament_seat_mismatch');
-    log.info({ matchId: match.id, roomCode: game.roomCode, winnerUserId, fromStoredSession: !game.room }, 'recording a finished game whose tournament result was never recorded');
+    log.info({ matchId: match.id, roomCode: game.roomCode, winnerUserId, source: game.source }, 'recording a finished game whose tournament result was never recorded');
     await applyTournamentGameOverFromRoom(io, { code: game.roomCode, scheduledTournamentMatchId: match.id, scheduledTournamentId: match.tournament_id }, {
       winnerUserId,
       player1Score: 0,
@@ -825,7 +837,7 @@ async function recordFinishedGame(
     alertTournamentAnomaly(
       'terminal_result_unrecoverable',
       { tournamentId: match.tournament_id, matchId: match.id, roomCode: game.roomCode },
-      { error: code, resolution: labels.unrecoverableResultHigherSeed },
+      { error: code, source: game.source, resolution: labels.unrecoverableResultHigherSeed },
     );
     await applyMatchResult(io, {
       matchId: match.id,
@@ -845,6 +857,7 @@ function finishedGameFromRoom(room: Room): FinishedGame {
   const roster = getRoomRoster(room.code);
   return {
     roomCode: room.code,
+    source: 'room',
     roomMatchId: room.scheduledTournamentMatchId ?? null,
     state: room.state!,
     rosterUserIdOf: (seatId) => roster.find((p) => p.id === seatId)?.userId,
@@ -855,42 +868,85 @@ function finishedGameFromRoom(room: Room): FinishedGame {
 const TERMINAL_SESSION_ERRORS = new Set(['snapshot_terminal', 'snapshot_terminal_state']);
 
 /**
- * After a restart a finished game cannot be restored (its stored session is
- * terminal), but the stored session still holds the final state and roster:
- * read it so the result can be recorded. Null if it is not a finished game.
+ * The finished game of a match whose room is not in memory, from what was
+ * persisted. A finished game is never restored into a room (restore refuses
+ * terminal sessions); its final state and roster are read instead:
+ *
+ *  1. the live session (room_live_sessions), which the game-over commit writes
+ *     with status `game_over`;
+ *  2. once room cleanup has run, the room_match_logs archive: cleanup writes it
+ *     (with the final state, winnerId and every seat's id and user id) before
+ *     it deletes the live session, whether or not the tournament result was
+ *     recorded, and completed archives are never deleted.
+ *
+ * The archive is keyed by room code, and a room code names a bracket slot (it
+ * recurs across tournaments), so an archive is used only if it is a completed
+ * game whose two players are exactly this match's players, archived after the
+ * match started. Null when there is no finished game (a game in progress, or
+ * nothing stored); throws when persistence cannot be read (retried later).
  */
-async function finishedGameFromStoredSession(roomCode: string): Promise<FinishedGame | null> {
+async function finishedGameFromPersistence(match: MatchRow): Promise<FinishedGame | null> {
+  const roomCode = match.room_code!.trim().toUpperCase();
   const { loadLiveRoomSession } = await import('../multiplayer/roomLivePersistence');
   const loaded = await loadLiveRoomSession(roomCode);
-  if (loaded.kind !== 'found') {
-    if (loaded.kind === 'persistence_unavailable') throw new Error('room_persistence_unavailable');
-    return null;
+  if (loaded.kind === 'persistence_unavailable') throw new Error('room_persistence_unavailable');
+  if (loaded.kind === 'found') {
+    const { row } = loaded;
+    const ended = row.status === 'game_over' || Boolean(row.game_state?.gameOver);
+    if (!ended) return null;
+    const consistent = row.status === 'game_over' && row.game_state?.gameOver === true;
+    return {
+      roomCode: row.room_code,
+      source: 'live_session',
+      corrupt: consistent ? undefined : 'tournament_terminal_state_inconsistent',
+      roomMatchId: row.scheduled_tournament_match_id,
+      state: row.game_state ?? ({ playerIds: [], players: {}, winnerId: null } as unknown as GameState),
+      rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
+      room: null,
+    };
   }
-  const { row } = loaded;
-  if (!row.game_state?.gameOver) return null;
+  // not_found (cleanup deleted it after archiving) or an unreadable live row.
+  const { queryLatestPersistedRoomMatchLogByRoomCode } = await import('../multiplayer/roomMatchLogPersistence');
+  const archived = await queryLatestPersistedRoomMatchLogByRoomCode(roomCode);
+  const state = archived?.state_snapshot as GameState | null | undefined;
+  if (!archived || archived.status !== 'completed' || !state?.gameOver) return null;
+  const players = archived.participants.map((p) => p.userId ?? (isBotUserId(p.id) ? p.id : null));
+  const isThisMatch = players.length === 2 &&
+    players.includes(match.player1_id) && players.includes(match.player2_id) && match.player1_id !== match.player2_id;
+  const startedMs = Date.parse(match.started_at ?? '');
+  if (!isThisMatch || (Number.isFinite(startedMs) && Date.parse(archived.archived_at) < startedMs)) return null;
   return {
-    roomCode: row.room_code,
-    roomMatchId: row.scheduled_tournament_match_id,
-    state: row.game_state,
-    rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
+    roomCode,
+    source: 'archive',
+    roomMatchId: null,
+    state,
+    rosterUserIdOf: (seatId) => archived.participants.find((p) => p.id === seatId)?.userId,
     room: null,
   };
 }
 
 /**
- * An in-progress match whose live room (in memory, not restored here) has a
- * finished game: record it now rather than waiting for the cap. True when this
- * call recorded the result.
+ * An in-progress match whose game has finished: record it now (each reconcile
+ * tick, and boot recovery) rather than waiting for the cap. The live room if
+ * the process holds it; otherwise the persisted finished game, never a
+ * restored room. True when this call recorded the result.
  */
-async function recordFinishedRoomGameIfAny(
+export async function recordFinishedGameIfAny(
   io: Server,
   match: MatchRow,
   persistence: EnginePersistence,
+  labels: InProgressResolutionLabels = MATCH_CAP_LABELS,
+  options: { dispatchAdvanced?: boolean } = {},
 ): Promise<boolean> {
-  if (!match.room_code || !match.player1_id || !match.player2_id) return false;
+  if (match.status !== 'in_progress' || !match.room_code || !match.player1_id || !match.player2_id) return false;
   const room = peekTournamentRoom(persistence, match.room_code);
-  if (!room?.state?.gameOver) return false;
-  return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, MATCH_CAP_LABELS, {});
+  if (room) {
+    if (!room.state?.gameOver) return false;
+    return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
+  }
+  const finished = await finishedGameFromPersistence(match);
+  if (!finished) return false;
+  return recordFinishedGame(io, match, finished, persistence, labels, options);
 }
 
 /**
@@ -921,15 +977,19 @@ export async function resolveInProgressMatchFromRoom(
 
   let room = peekTournamentRoom(persistence, match.room_code);
   if (!room) {
+    // A game that finished before a restart (or before room cleanup) is
+    // recorded from what was persisted, not restored and never re-decided.
+    const finished = await finishedGameFromPersistence(match);
+    if (finished) return recordFinishedGame(io, match, finished, persistence, labels, options);
     try {
       await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
     } catch (err) {
       const code = err instanceof Error ? err.message : String(err);
       if (!TERMINAL_SESSION_ERRORS.has(code)) throw err;
-      // The game finished before a restart: record it from its stored session.
-      const finished = await finishedGameFromStoredSession(match.room_code);
-      if (!finished) throw err;
-      return recordFinishedGame(io, match, finished, persistence, labels, options);
+      // The stored session became terminal meanwhile: record it.
+      const stored = await finishedGameFromPersistence(match);
+      if (!stored) throw err;
+      return recordFinishedGame(io, match, stored, persistence, labels, options);
     }
     room = peekTournamentRoom(persistence, match.room_code);
   }
@@ -1100,7 +1160,7 @@ export async function reconcileExpiredReadyMatches(
         let matchFailed = false;
         try {
           if (match.status === 'in_progress') {
-            if (await recordFinishedRoomGameIfAny(io, match, persistence)) {
+            if (await recordFinishedGameIfAny(io, match, persistence)) {
               resolvedCount += 1;
               continue;
             }

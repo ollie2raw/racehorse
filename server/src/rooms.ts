@@ -105,6 +105,8 @@ export type Room = {
   scheduledTournamentId?: string;
   /** Fritz strength tier for synthetic scheduled-tournament bot seats. */
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
+  /** Tournament id (user id or Fritz id) of the player who starts hand 1 (tournamentStarter.ts). */
+  scheduledTournamentStarterUserId?: string;
   /** Terminal intentional leave marker; abandoned rooms are not recoverable. */
   abandonedAt?: string;
   abandonedByUserId?: string | null;
@@ -730,7 +732,8 @@ export function createPreGameDrawShellMatch(players: string[], config?: Partial<
 export async function initiatePregameDrawOrStartUnlocked(
   code: string,
   io: Server,
-  options: { allowRestart?: boolean } = {},
+  /** `startingPlayerId` applies only when the room skips the pre-game draw. */
+  options: { allowRestart?: boolean; startingPlayerId?: string } = {},
 ): Promise<Room> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'match_start');
