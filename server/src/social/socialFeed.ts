@@ -3,6 +3,55 @@ import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds, requireAuth } from './socialAuth';
 
 export function registerSocialFeedRoutes(socialRouter: Router): void {
+  socialRouter.get('/feed/global', async (_req, res) => {
+    try {
+      const rows = await supabaseFetch<Array<{
+        id: string; user_id: string; type: string;
+        metadata: Record<string, unknown>; created_at: string;
+      }>>(
+        '/rest/v1/activity_feed?order=created_at.desc&limit=50' +
+        '&select=id,user_id,type,metadata,created_at',
+      );
+
+      const userIds = [...new Set(rows.map((row) => row.user_id))];
+      const profileFilter = userIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
+      const profiles = profileFilter
+        ? await supabaseFetch<Array<{ id: string; username: string }>>(
+            `/rest/v1/profiles?or=(${profileFilter})&select=id,username`,
+          )
+        : [];
+      const usernames = new Map(profiles.map((profile) => [profile.id, profile.username]));
+
+      // The public response includes only fields used to describe the result.
+      // In particular, internal match IDs and future metadata stay private.
+      const publicMetadataKeys = [
+        'opponent_username', 'mode', 'score', 'opponent_score', 'fritz_tier',
+        'skunk', 'skunk_by', 'forfeit', 'streak', 'source', 'result',
+        'game_number', 'player_score', 'fritz_score', 'placement',
+        'tournament_name', 'player_count', 'players', 'rating_change',
+        'tiles', 'hand_size', 'tile_count',
+      ];
+      res.setHeader('Cache-Control', 'public, max-age=15');
+      res.json({
+        ok: true,
+        feed: rows.map((row) => ({
+          id: row.id,
+          user_id: row.user_id,
+          type: row.type,
+          created_at: row.created_at,
+          username: usernames.get(row.user_id) ?? 'player',
+          metadata: Object.fromEntries(
+            publicMetadataKeys
+              .filter((key) => Object.prototype.hasOwnProperty.call(row.metadata ?? {}, key))
+              .map((key) => [key, row.metadata[key]]),
+          ),
+        })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Feed unavailable.' });
+    }
+  });
+
   socialRouter.get('/feed', async (req, res) => {
     const userId = await requireAuth(req, res);
     if (!userId) return;

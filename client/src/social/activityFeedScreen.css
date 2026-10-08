@@ -945,7 +945,7 @@
 
   .rh-sf-layout-grid,
   .social-layout-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     height: auto;
     max-height: none;
     gap: 24px;
@@ -964,6 +964,16 @@
     max-height: none;
   }
 
+  .social-main-column {
+    min-width: 0;
+  }
+
+  .rh-sb-page .social-main-column > .rh-sb-table {
+    flex: 0 0 auto;
+    height: min(480px, 55dvh);
+    min-height: 260px;
+  }
+
   .rh-sf-widget--friends,
   .rh-sf-widget--trending,
   .rh-sf-widget--tournaments,
@@ -980,6 +990,26 @@
   .rh-sf-page-inner,
   .social-page-inner {
     padding: 16px 14px 20px;
+  }
+
+  .rh-sb-page .rh-sb-masthead > div:first-child {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .rh-sb-page .rh-sb-tagline {
+    white-space: normal;
+  }
+
+  .rh-sb-page .rh-sb-masthead__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .rh-sb-page .rh-sb-masthead__actions .rh-sb-btn {
+    width: 100%;
+    min-width: 0;
   }
 
   .rh-sf-friend {
