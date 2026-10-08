@@ -25,26 +25,38 @@ export function tournamentStarterUserId(
   return bit === 0 ? match.player1_id : match.player2_id;
 }
 
+/** Thrown when a tournament room's starter cannot be resolved to one of its seats. */
+export const TOURNAMENT_STARTER_UNRESOLVED = 'tournament_starter_unresolved';
+
 /**
  * The engine seat id of the room's tournament starter, for startGame's
  * `startingPlayerId`. A Fritz seat's id is its tournament id; a human seat is
- * found by its roster user id. Undefined for a non-tournament room. A
- * tournament room whose seats do not include the starter is corrupt (its
- * result could not be recorded either): alerted, and the engine default is
- * left to start the game rather than stalling it.
+ * found by its roster user id. Undefined for a non-tournament room (its own
+ * start rules apply).
+ *
+ * Fails closed for a tournament room (`scheduledTournamentMatchId` set): if
+ * the starter is missing (dispatch sets it on every unstarted room, so this
+ * should not happen) or names no current seat, it alerts and throws
+ * TOURNAMENT_STARTER_UNRESOLVED, so no game is dealt. It never falls back to
+ * seat 0 or picks another player: the match stays ready, and the normal
+ * start-retry lifecycle (redispatch re-derives the starter; then
+ * `start_failed_after_retry_higher_seed_advanced`) decides it.
  */
 export function tournamentStartingSeatId(room: Room): string | undefined {
+  if (!room.scheduledTournamentMatchId) return undefined;
   const starter = room.scheduledTournamentStarterUserId;
-  if (!starter) return undefined;
-  const seatId = room.players.includes(starter)
-    ? starter
-    : getRoomRoster(room.code).find((p) => p.userId === starter && room.players.includes(p.id))?.id;
+  const seatId = !starter
+    ? undefined
+    : room.players.includes(starter)
+      ? starter
+      : getRoomRoster(room.code).find((p) => p.userId === starter && room.players.includes(p.id))?.id;
   if (!seatId) {
     alertTournamentAnomaly(
-      'tournament_starter_unresolved',
+      TOURNAMENT_STARTER_UNRESOLVED,
       { tournamentId: room.scheduledTournamentId, matchId: room.scheduledTournamentMatchId, roomCode: room.code },
-      { starter, seats: [...room.players] },
+      { reason: starter ? 'starter_not_seated' : 'starter_missing', seatCount: room.players.length },
     );
+    throw new Error(TOURNAMENT_STARTER_UNRESOLVED);
   }
   return seatId;
 }

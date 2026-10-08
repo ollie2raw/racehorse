@@ -349,7 +349,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     // Same ACL as the matchmaking one above, for scheduled-tournament rooms.
     // Their seats belong to exactly the two players the bracket assigned, and
     // the codes are derivable from the public bracket API
-    // (makeTournamentRoomCode is a pure function of tournament id + round +
+    // (makeTournamentRoomCode is a pure function of the match id + round +
     // match number), so an unassigned client can reach this room by guessing.
     // tournament:attach_assigned_match enforces assignment before calling us;
     // room:join does not, and without this check a stranger takes the empty

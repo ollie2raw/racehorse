@@ -60,7 +60,7 @@ vi.mock('../supabaseUtils', () => ({
       return h.matchLogs
         .filter((r) => r.room_code === code)
         .sort((a, b) => Date.parse(b.archived_at) - Date.parse(a.archived_at))
-        .slice(0, 1)
+        .slice(0, Number(/limit=(\d+)/.exec(path)?.[1] ?? 1))
         .map((r) => structuredClone(r));
     }
     return [];
@@ -339,9 +339,11 @@ describe('a finished tournament game is recovered exactly, across crashes', () =
   it('case 2: an archive that is not this match\'s game (same slot code, other players) is never used; at the cap the loss is alerted and decided by seed', async () => {
     const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
     await cleanup(s.roomCode);
-    // The only archive under this room code is another tournament's game between other players.
+    // The only archive under this room code is another tournament's game between other players
+    // (a legacy archive, written before archives recorded their tournament match id).
     h.matchLogs = h.matchLogs.map((r) => ({
       ...r,
+      summary: { ...r.summary, scheduledTournamentMatchId: undefined },
       participants: r.participants.map((p: Row) => (p.userId === U2 ? { ...p, userId: U3 } : p)),
       participant_user_ids: [U1, U3],
     }));
@@ -446,5 +448,185 @@ describe('a finished tournament game is recovered exactly, across crashes', () =
     const restored = peekRoom(s.roomCode)!;
     expect(restored.state).toEqual(before);
     expect(s.persistence.applied()).toBe(0);
+  });
+});
+
+describe('archive identity: the exact tournament match id is authoritative (Phase 2A)', () => {
+  const archiveOf = (roomCode: string) => h.matchLogs.find((r) => r.room_code === roomCode)!;
+  const capTick = async (s: Seeded) => {
+    matchOf(s).started_at = new Date(Date.now() - CAP - 60_000).toISOString();
+    return tick(s);
+  };
+
+  it('a new archive records the exact tournament match id', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1 });
+    await cleanup(s.roomCode);
+    expect(archiveOf(s.roomCode).summary).toMatchObject({ scheduledTournamentMatchId: s.matchId });
+  });
+
+  it('an archive naming this match recovers it', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
+    await cleanup(s.roomCode);
+    restart();
+
+    expect(await tick(s)).toBe(1);
+    expect(matchOf(s)).toMatchObject({ status: 'completed', winner_id: U1, status_reason: null, player1_score: 30, player2_score: 25 });
+  });
+
+  it('an archive naming another match is ignored; with nothing else, the cap takes the missing-session path (never "corrupt")', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
+    await cleanup(s.roomCode);
+    archiveOf(s.roomCode).summary.scheduledTournamentMatchId = 'some-other-match';
+    archiveOf(s.roomCode).participants = archiveOf(s.roomCode).participants.map((p: Row) => (p.userId === U2 ? { ...p, userId: U3 } : p));
+    restart();
+
+    expect(await tick(s)).toBe(0);
+    expect(await capTick(s)).toBe(1);
+    expect(matchOf(s)).toMatchObject({ status: 'completed', winner_id: U2, status_reason: 'match_cap_missing_session_higher_seed' });
+    expect(anomalyAlerts('terminal_result_unrecoverable')).toBe(0);
+  });
+
+  it('same players, same room code, archived after the start, but another explicit match id: still ignored', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
+    await cleanup(s.roomCode);
+    archiveOf(s.roomCode).summary.scheduledTournamentMatchId = 'some-other-match';
+    restart();
+
+    expect(await tick(s)).toBe(0);
+    expect(matchOf(s).status).toBe('in_progress');
+    expect(s.persistence.applied()).toBe(0);
+  });
+
+  it('a newer foreign archive under the same code does not hide this match\'s own archive', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1 });
+    await cleanup(s.roomCode);
+    const own = archiveOf(s.roomCode);
+    h.matchLogs.push({
+      ...structuredClone(own), match_id: 'foreign-room-match', archived_at: new Date(Date.now() + 1_000).toISOString(),
+      summary: { ...own.summary, scheduledTournamentMatchId: 'some-other-match' },
+      state_snapshot: { ...own.state_snapshot, winnerId: seatIdOf(U2) },
+    });
+    restart();
+
+    expect(await tick(s)).toBe(1);
+    expect(matchOf(s)).toMatchObject({ winner_id: U1, player1_score: 30, player2_score: 25 });
+  });
+
+  it('a legacy archive (no match id) still recovers through the compatibility identity checks', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1 });
+    await cleanup(s.roomCode);
+    delete archiveOf(s.roomCode).summary.scheduledTournamentMatchId;
+    restart();
+
+    expect(await tick(s)).toBe(1);
+    expect(matchOf(s)).toMatchObject({ status: 'completed', winner_id: U1, status_reason: null });
+  });
+
+  it('reversed seating recovers with row-ordered scores from an id-bearing archive', async () => {
+    const s = await seed({ joinOrder: [U2, U1], scores: { [U1]: 12, [U2]: 31 }, winner: U2 });
+    await cleanup(s.roomCode);
+    restart();
+
+    await tick(s);
+    expect(matchOf(s)).toMatchObject({ winner_id: U2, player1_score: 12, player2_score: 31 });
+  });
+
+  it('a Fritz win recovers from an id-bearing archive', async () => {
+    const s = await seed({ p2: BOT, joinOrder: [BOT, U1], scores: { [U1]: 20, [BOT]: 32 }, winner: BOT });
+    await cleanup(s.roomCode);
+    restart();
+
+    await tick(s);
+    expect(matchOf(s)).toMatchObject({ winner_id: BOT, winner_source: 'game_over', player1_score: 20, player2_score: 32 });
+  });
+});
+
+describe('a foreign live session under the room code (Phase 2A)', () => {
+  const FOREIGN = 'foreign-tournament-match';
+  /** Put another match's in-progress live session under this room code. */
+  function plantForeignLiveSession(roomCode: string, template: Record<string, unknown>) {
+    const foreign = structuredClone(template) as Row;
+    foreign.scheduled_tournament_match_id = FOREIGN;
+    foreign.match_id = '3e000000-0000-4000-8000-00000000f00d';
+    foreign.status = 'playing';
+    foreign.game_state = { ...foreign.game_state, gameOver: false, handOver: false, winnerId: null };
+    h.liveSessions.set(roomCode, foreign);
+    return structuredClone(foreign);
+  }
+  const foreignAlerts = () => anomalyAlerts('tournament_foreign_live_session');
+
+  it('foreign live row + this match\'s archive: the archive wins', async () => {
+    const s = await seed({ scores: { [U1]: 30, [U2]: 25 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
+    const template = structuredClone(h.liveSessions.get(s.roomCode)!);
+    await cleanup(s.roomCode);
+    plantForeignLiveSession(s.roomCode, template);
+    restart();
+
+    expect(await tick(s)).toBe(1);
+
+    expect(matchOf(s)).toMatchObject({ status: 'completed', winner_id: U1, status_reason: null, player1_score: 30, player2_score: 25 });
+    expect(foreignAlerts()).toBe(1);
+  });
+
+  it('foreign live row + no archive: not recorded under the cap; at the cap the missing-session path, never seeded as corrupt', async () => {
+    const s = await seed({ scores: { [U1]: 20, [U2]: 10 }, seeds: { [U1]: 2, [U2]: 1 } });
+    const planted = plantForeignLiveSession(s.roomCode, h.liveSessions.get(s.roomCode)!);
+    restart();
+
+    expect(await tick(s)).toBe(0);
+    expect(matchOf(s).status).toBe('in_progress');
+
+    matchOf(s).started_at = new Date(Date.now() - CAP - 60_000).toISOString();
+    expect(await tick(s)).toBe(1);
+
+    expect(matchOf(s)).toMatchObject({ status: 'completed', winner_id: U2, status_reason: 'match_cap_missing_session_higher_seed' });
+    expect(anomalyAlerts('missing_live_session')).toBe(1);
+    expect(anomalyAlerts('terminal_result_unrecoverable')).toBe(0);
+    // Never hydrated into this match, never overwritten.
+    expect(peekRoom(s.roomCode)).toBeUndefined();
+    expect(h.liveSessions.get(s.roomCode)).toEqual(planted);
+  });
+
+  it('a foreign terminal live row is never recorded as this match\'s result', async () => {
+    const s = await seed({ scores: { [U1]: 31, [U2]: 12 }, winner: U1, seeds: { [U1]: 2, [U2]: 1 } });
+    const stored = h.liveSessions.get(s.roomCode)! as Row;
+    stored.scheduled_tournament_match_id = FOREIGN; // a finished game of another match
+    const before = structuredClone(stored);
+    restart();
+
+    await boot(s);
+    expect(await tick(s)).toBe(0);
+
+    expect(matchOf(s)).toMatchObject({ status: 'in_progress', winner_id: null });
+    expect(s.persistence.applied()).toBe(0);
+    expect(h.liveSessions.get(s.roomCode)).toEqual(before);
+    expect(peekRoom(s.roomCode)?.state ?? null).toBeNull();
+  });
+
+  it('the anomaly is logged on every look but sent once per match (rate-limited), with the foreign match id', async () => {
+    const s = await seed({ scores: { [U1]: 20, [U2]: 10 } });
+    plantForeignLiveSession(s.roomCode, h.liveSessions.get(s.roomCode)!);
+    restart();
+
+    await tick(s);
+    await tick(s);
+    await tick(s);
+
+    expect(foreignAlerts()).toBe(1);
+    const [, context] = vi.mocked(Sentry.captureMessage).mock.calls.find(([m]) => m === '[tournament] tournament_foreign_live_session')!;
+    expect((context as any).tags).toMatchObject({ match_id: s.matchId, room_code: s.roomCode });
+    expect((context as any).extra).toMatchObject({ foreignMatchId: FOREIGN });
+  });
+
+  it('a live row that is this match\'s own still restores normally', async () => {
+    const s = await seed({ scores: { [U1]: 20, [U2]: 10 } });
+    const before = structuredClone(getRoom(s.roomCode).state!);
+    restart();
+
+    await boot(s);
+
+    expect(peekRoom(s.roomCode)!.state).toEqual(before);
+    expect(foreignAlerts()).toBe(0);
+    expect(matchOf(s).status).toBe('in_progress');
   });
 });

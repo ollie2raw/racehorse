@@ -867,62 +867,104 @@ function finishedGameFromRoom(room: Room): FinishedGame {
 
 const TERMINAL_SESSION_ERRORS = new Set(['snapshot_terminal', 'snapshot_terminal_state']);
 
+/** What the persisted copies of a match's room hold. */
+type PersistedGame = {
+  /** This match's finished game, if a trustworthy persisted copy has one. */
+  finished: FinishedGame | null;
+  /** The live session under the room code belongs to another tournament match. */
+  foreignLiveSession: boolean;
+};
+
+/** How many archives under one room code are considered (newest first). */
+const ARCHIVE_CANDIDATES = 5;
+
 /**
  * The finished game of a match whose room is not in memory, from what was
  * persisted. A finished game is never restored into a room (restore refuses
- * terminal sessions); its final state and roster are read instead:
+ * terminal sessions); its final state and roster are read instead. Most
+ * trusted first:
  *
- *  1. the live session (room_live_sessions), which the game-over commit writes
- *     with status `game_over`;
- *  2. once room cleanup has run, the room_match_logs archive: cleanup writes it
- *     (with the final state, winnerId and every seat's id and user id) before
- *     it deletes the live session, whether or not the tournament result was
- *     recorded, and completed archives are never deleted.
+ *  1. the live session (room_live_sessions) when it names this match
+ *     (`scheduled_tournament_match_id`), written `game_over` by the game-over
+ *     commit. One that names another match is foreign (a room-code collision):
+ *     alerted, never used, and the archive is consulted instead;
+ *  2. an archive (room_match_logs, written by room cleanup before it deletes
+ *     the live session; completed archives are never deleted) whose
+ *     `summary.scheduledTournamentMatchId` is this match. An archive that names
+ *     another match is never used, whatever its players;
+ *  3. only for archives written before that field existed: same room code,
+ *     completed, exactly this match's two players, archived after the match
+ *     started.
  *
- * The archive is keyed by room code, and a room code names a bracket slot (it
- * recurs across tournaments), so an archive is used only if it is a completed
- * game whose two players are exactly this match's players, archived after the
- * match started. Null when there is no finished game (a game in progress, or
- * nothing stored); throws when persistence cannot be read (retried later).
+ * `finished` is null when no trustworthy copy holds a finished game for this
+ * match (a game in progress, nothing stored, or only foreign copies). Throws
+ * when persistence cannot be read (retried later).
  */
-async function finishedGameFromPersistence(match: MatchRow): Promise<FinishedGame | null> {
+async function persistedGameFor(match: MatchRow): Promise<PersistedGame> {
   const roomCode = match.room_code!.trim().toUpperCase();
   const { loadLiveRoomSession } = await import('../multiplayer/roomLivePersistence');
   const loaded = await loadLiveRoomSession(roomCode);
   if (loaded.kind === 'persistence_unavailable') throw new Error('room_persistence_unavailable');
+  let foreignLiveSession = false;
   if (loaded.kind === 'found') {
     const { row } = loaded;
-    const ended = row.status === 'game_over' || Boolean(row.game_state?.gameOver);
-    if (!ended) return null;
-    const consistent = row.status === 'game_over' && row.game_state?.gameOver === true;
+    if (row.scheduled_tournament_match_id && row.scheduled_tournament_match_id !== match.id) {
+      foreignLiveSession = true;
+      alertTournamentAnomaly(
+        'tournament_foreign_live_session',
+        { tournamentId: match.tournament_id, matchId: match.id, roomCode },
+        { foreignMatchId: row.scheduled_tournament_match_id, foreignStatus: row.status },
+      );
+    } else {
+      const ended = row.status === 'game_over' || Boolean(row.game_state?.gameOver);
+      if (!ended) return { finished: null, foreignLiveSession };
+      const consistent = row.status === 'game_over' && row.game_state?.gameOver === true;
+      return {
+        foreignLiveSession,
+        finished: {
+          roomCode: row.room_code,
+          source: 'live_session',
+          corrupt: consistent ? undefined : 'tournament_terminal_state_inconsistent',
+          roomMatchId: row.scheduled_tournament_match_id,
+          state: row.game_state ?? ({ playerIds: [], players: {}, winnerId: null } as unknown as GameState),
+          rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
+          room: null,
+        },
+      };
+    }
+  }
+  // No live session of this match (cleanup deleted it after archiving), an
+  // unreadable one, or a foreign one.
+  const { queryRecentPersistedRoomMatchLogsByRoomCode } = await import('../multiplayer/roomMatchLogPersistence');
+  const archives = await queryRecentPersistedRoomMatchLogsByRoomCode(roomCode, ARCHIVE_CANDIDATES);
+  const startedMs = Date.parse(match.started_at ?? '');
+  for (const archived of archives) {
+    const state = archived.state_snapshot as GameState | null | undefined;
+    if (archived.status !== 'completed' || !state?.gameOver) continue;
+    const archivedMatchId = archived.summary?.scheduledTournamentMatchId;
+    if (typeof archivedMatchId === 'string') {
+      // Exact identity is authoritative: another match's archive is never used.
+      if (archivedMatchId !== match.id) continue;
+    } else {
+      // Archived before the match id was recorded: compatibility identity.
+      const players = archived.participants.map((p) => p.userId ?? (isBotUserId(p.id) ? p.id : null));
+      const isThisMatch = players.length === 2 &&
+        players.includes(match.player1_id) && players.includes(match.player2_id) && match.player1_id !== match.player2_id;
+      if (!isThisMatch || (Number.isFinite(startedMs) && Date.parse(archived.archived_at) < startedMs)) continue;
+    }
     return {
-      roomCode: row.room_code,
-      source: 'live_session',
-      corrupt: consistent ? undefined : 'tournament_terminal_state_inconsistent',
-      roomMatchId: row.scheduled_tournament_match_id,
-      state: row.game_state ?? ({ playerIds: [], players: {}, winnerId: null } as unknown as GameState),
-      rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
-      room: null,
+      foreignLiveSession,
+      finished: {
+        roomCode,
+        source: 'archive',
+        roomMatchId: typeof archivedMatchId === 'string' ? archivedMatchId : null,
+        state,
+        rosterUserIdOf: (seatId) => archived.participants.find((p) => p.id === seatId)?.userId,
+        room: null,
+      },
     };
   }
-  // not_found (cleanup deleted it after archiving) or an unreadable live row.
-  const { queryLatestPersistedRoomMatchLogByRoomCode } = await import('../multiplayer/roomMatchLogPersistence');
-  const archived = await queryLatestPersistedRoomMatchLogByRoomCode(roomCode);
-  const state = archived?.state_snapshot as GameState | null | undefined;
-  if (!archived || archived.status !== 'completed' || !state?.gameOver) return null;
-  const players = archived.participants.map((p) => p.userId ?? (isBotUserId(p.id) ? p.id : null));
-  const isThisMatch = players.length === 2 &&
-    players.includes(match.player1_id) && players.includes(match.player2_id) && match.player1_id !== match.player2_id;
-  const startedMs = Date.parse(match.started_at ?? '');
-  if (!isThisMatch || (Number.isFinite(startedMs) && Date.parse(archived.archived_at) < startedMs)) return null;
-  return {
-    roomCode,
-    source: 'archive',
-    roomMatchId: null,
-    state,
-    rosterUserIdOf: (seatId) => archived.participants.find((p) => p.id === seatId)?.userId,
-    room: null,
-  };
+  return { finished: null, foreignLiveSession };
 }
 
 /**
@@ -944,7 +986,7 @@ export async function recordFinishedGameIfAny(
     if (!room.state?.gameOver) return false;
     return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
   }
-  const finished = await finishedGameFromPersistence(match);
+  const { finished } = await persistedGameFor(match);
   if (!finished) return false;
   return recordFinishedGame(io, match, finished, persistence, labels, options);
 }
@@ -979,17 +1021,22 @@ export async function resolveInProgressMatchFromRoom(
   if (!room) {
     // A game that finished before a restart (or before room cleanup) is
     // recorded from what was persisted, not restored and never re-decided.
-    const finished = await finishedGameFromPersistence(match);
-    if (finished) return recordFinishedGame(io, match, finished, persistence, labels, options);
-    try {
-      await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
-    } catch (err) {
-      const code = err instanceof Error ? err.message : String(err);
-      if (!TERMINAL_SESSION_ERRORS.has(code)) throw err;
-      // The stored session became terminal meanwhile: record it.
-      const stored = await finishedGameFromPersistence(match);
-      if (!stored) throw err;
-      return recordFinishedGame(io, match, stored, persistence, labels, options);
+    const persisted = await persistedGameFor(match);
+    if (persisted.finished) return recordFinishedGame(io, match, persisted.finished, persistence, labels, options);
+    // A foreign live session under this room code is not this match's game:
+    // it is never restored or overwritten here; with no exact copy of this
+    // match's game, the session is lost (the missing-session path below).
+    if (!persisted.foreignLiveSession) {
+      try {
+        await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
+      } catch (err) {
+        const code = err instanceof Error ? err.message : String(err);
+        if (!TERMINAL_SESSION_ERRORS.has(code) && code !== 'tournament_room_session_mismatch') throw err;
+        // The stored session became terminal, or foreign, meanwhile.
+        const stored = await persistedGameFor(match);
+        if (stored.finished) return recordFinishedGame(io, match, stored.finished, persistence, labels, options);
+        if (!stored.foreignLiveSession) throw err;
+      }
     }
     room = peekTournamentRoom(persistence, match.room_code);
   }
