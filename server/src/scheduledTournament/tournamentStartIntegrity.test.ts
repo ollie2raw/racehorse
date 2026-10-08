@@ -80,6 +80,13 @@ vi.mock('./persistence', async (importOriginal) => {
       const row = db.matches.get(id);
       if (row) Object.assign(row, patch);
     },
+    // The conditional match write (updateMatchIf), over this fake's rows.
+    updateMatchIf: async (id: string, expected: Record<string, unknown>, patch: Record<string, unknown>) => {
+      const row = db.matches.get(id);
+      if (!row || Object.entries(expected).some(([k, v]) => (row[k] ?? null) !== (v ?? null))) return false;
+      Object.assign(row, patch);
+      return true;
+    },
     completeTournamentMatch: (params: Parameters<typeof actual.completeTournamentMatch>[0]) => rpc().completeTournamentMatch(params),
     promoteTournamentMatch: (...args: Parameters<typeof actual.promoteTournamentMatch>) => rpc().promoteTournamentMatch(...args),
   };

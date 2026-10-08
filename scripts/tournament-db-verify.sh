@@ -113,7 +113,7 @@ fail() { echo "  FAIL  $1" >&2; exit 1; }
 
 # ── 3. shim + curated migration chain (greenfield apply) ────────────────────
 echo
-echo "── 1/9  greenfield apply ─────────────────────────────────────────────"
+echo "── 1/10  greenfield apply ─────────────────────────────────────────────"
 RUN -q -f "$HELPERS/shim.sql" >/dev/null
 pass "Supabase shim (auth schema, roles, auth.uid)"
 
@@ -132,6 +132,7 @@ CHAIN=(
   2026-09-29_tournament_cancel_reason.sql
   2026-09-29_tournament_registration_rpcs.sql
   2026-10-07_tournament_kind_fritz_cup.sql
+  2026-10-08_tournament_orchestrator_cas.sql
 )
 for m in "${CHAIN[@]}"; do
   [[ -f "$MIGRATIONS/$m" ]] || fail "migration missing from repo: $m"
@@ -145,7 +146,7 @@ pass "2026-08-30 lockdown self-assertion did not roll back"
 
 # ── 4. two-session FOR UPDATE serialization ─────────────────────────────────
 echo
-echo "── 2/9  FOR UPDATE serialization ─────────────────────────────────────"
+echo "── 2/10  FOR UPDATE serialization ─────────────────────────────────────"
 RUN -q -f "$HELPERS/seed.sql" >/dev/null
 QF1="$(Q "select id from public.scheduled_tournament_matches where tournament_id='11111111-1111-4111-8111-111111111111' and round=1 and match_number=1")"
 [[ -n "$QF1" ]] || fail "seed did not produce QF1"
@@ -194,7 +195,7 @@ pass "bracket consistent: one completion, one advancement, loser eliminated once
 
 # ── 5. RLS registrations lockdown diagnostics ──────────────────────────────
 echo
-echo "── 3/9  RLS registrations lockdown ──────────────────────────────────"
+echo "── 3/10  RLS registrations lockdown ──────────────────────────────────"
 [[ "$(Q "select count(*) from pg_policies where schemaname='public' and tablename='scheduled_tournament_registrations' and cmd in ('INSERT','UPDATE','DELETE','ALL') and roles && array['anon','authenticated','public']::name[]")" == "0" ]] \
   || fail "a client-writable policy survives on scheduled_tournament_registrations"
 [[ "$(Q "select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='scheduled_tournament_registrations' and grantee in ('anon','authenticated','public') and privilege_type in ('INSERT','UPDATE','DELETE')")" == "0" ]] \
@@ -205,7 +206,7 @@ pass "0 client-writable policies, 0 client write grants, RLS on"
 
 # ── 6. assert_security_posture() catches a planted violation ───────────────
 echo
-echo "── 4/9  assert_security_posture() ───────────────────────────────────"
+echo "── 4/10  assert_security_posture() ───────────────────────────────────"
 [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] \
   || fail "assert_security_posture() reports a hard failure on a clean schema"
 pass "clean schema -> hard_fail_count = 0"
@@ -223,7 +224,7 @@ pass "re-enable -> hard_fail_count = 0"
 
 # ── 7. registration RPCs: cap, close time, withdraw guard ──────────────────
 echo
-echo "── 5/9  registration RPCs (A2, A7) ──────────────────────────────────"
+echo "── 5/10  registration RPCs (A2, A7) ──────────────────────────────────"
 RUN -q -f "$HELPERS/phase1_seed.sql" >/dev/null
 T_OPEN='22222222-2222-4222-8222-222222222222'      # registration_open, 2 seats, closes in 10 min
 T_CLOSED='33333333-3333-4333-8333-333333333333'    # registration_open, but close time already passed
@@ -287,7 +288,7 @@ pass "withdraw after start -> withdraw_closed, registration row kept"
 
 # ── 8. bracket RPC repair ───────────────────────────────────────────────────
 echo
-echo "── 6/9  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
+echo "── 6/10  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
 T_PARTIAL='44444444-4444-4444-8444-444444444444'   # registration_open, 2 entrants, 4 stale QF rows
 PD='aaaaaaaa-0000-4000-8000-000000000004'           # its entrants (own users: see phase1_seed.sql)
 PE='aaaaaaaa-0000-4000-8000-000000000005'
@@ -331,7 +332,7 @@ pass "partial state containing a played match -> bracket_partial_conflict"
 
 # ── 9. cancel_reason ─────────────────────────────────────────────────────────
 echo
-echo "── 7/9  cancel_reason (Q9) ──────────────────────────────────────────"
+echo "── 7/10  cancel_reason (Q9) ──────────────────────────────────────────"
 [[ "$(Q "select count(*) from information_schema.columns where table_schema='public' and table_name='scheduled_tournaments' and column_name='cancel_reason'")" == "1" ]] \
   || fail "scheduled_tournaments.cancel_reason missing"
 pass "scheduled_tournaments.cancel_reason exists"
@@ -339,7 +340,7 @@ pass "scheduled_tournaments.cancel_reason exists"
 
 # ── 10. M1: tournament kind, Fritz Cup, per-user overlap lock ────────────────
 echo
-echo "── 8/9  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
+echo "── 8/10  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
 RUN -q -f "$HELPERS/m1_seed.sql" >/dev/null
 U() { printf 'cccccccc-0000-4000-8000-0000000000%02d' "$1"; }
 QE() { "$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc "$1" 2>&1 || true; }
@@ -576,7 +577,7 @@ pass "generate_tournament_bracket starts a cup unchanged: in_progress, 7 rows, o
 
 # ── 11. pre-start cancellation vs start (Phase 2B.1) ────────────────────────
 echo
-echo "── 9/9  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
+echo "── 9/10  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
 # The exact statement PostgREST runs for the server's cancelTournamentBeforeStart PATCH.
 CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' and status in ('upcoming','registration_open') returning id"; }
 OLD_CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' returning id"; }
@@ -678,6 +679,145 @@ Q "update public.scheduled_tournaments set status='in_progress' where id='$CUP27
 Q "select public.start_fritz_cup('$(U 28)')" >/dev/null
 [[ -n "$(Q "$(CANCEL_SQL "$(cup_of "$(U 28)")")")" ]] || fail "an unstarted cup could not be cancelled"
 pass "Fritz Cups follow the same rule: started -> untouched, still registration_open -> cancelled"
+
+
+# ── 12. orchestrator late writes (Phase 2C) ──────────────────────────────────
+echo
+echo "── 10/10  orchestrator late writes (Phase 2C) ─────────────────────────"
+# race HOLDER_SQL STALE_SQL: HOLDER commits its write after ~3 s; STALE starts at ~1.5 s.
+# Prints "<wait seconds>|<stale output>".
+race() {
+  "$PGBIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -q >/dev/null 2>&1 <<SQL_HOLD &
+begin;
+$1;
+select pg_sleep(3);
+commit;
+SQL_HOLD
+  local hp=$!
+  sleep 1.5
+  local t0; t0="$(now)"
+  local out; out="$(QE "$2")"
+  local t1; t1="$(now)"
+  wait "$hp"
+  echo "$(python3 -c "print(f'{$t1 - $t0:.2f}')")|$out"
+}
+waited() { python3 -c "import sys; sys.exit(0 if float('$1') >= 1.0 else 1)"; }
+H1='dddddddd-0000-4000-8000-0000000000a1'; H2='dddddddd-0000-4000-8000-0000000000a2'
+Q "insert into auth.users (id) values ('$H1'), ('$H2') on conflict do nothing" >/dev/null
+lw_tournament() {  # id, status
+  Q "insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status)
+     values ('$1', date_trunc('minute', now()) + interval '6 days' + (random()*100000)::int * interval '1 second' + interval '23 ms', now() - interval '3 hours', now() - interval '2 hours', '$2')" >/dev/null
+}
+lw_match() {  # tournament, round, number, status, extra-columns sql, extra-values sql
+  Q "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, player1_id, player2_id, room_code, status $5)
+     values ('$1', $2, $3, '$H1', '$H2', '', '$4' $6) returning id"
+}
+mstate() { Q "select status||'|'||coalesce(room_code,'-')||'|'||coalesce(ready_deadline_at::text,'-')||'|'||coalesce(status_reason,'-')||'|'||coalesce(winner_id,'-')||'|'||coalesce(no_show_user_id,'-') from public.scheduled_tournament_matches where id='$1'"; }
+
+for ROUND in 1 2 3; do
+  # open registration: B moved the tournament on; A's stale open (status=eq.upcoming & due) waits, then 0 rows.
+  TO="$(printf 'dddddddd-1000-4000-8000-%012d' "$ROUND")"; lw_tournament "$TO" upcoming
+  R="$(race "update public.scheduled_tournaments set status='cancelled', cancel_reason='moved_on' where id='$TO'" \
+            "update public.scheduled_tournaments set status='registration_open' where id='$TO' and status='upcoming' and registration_open_at <= now() returning id")"
+  waited "${R%%|*}" && [[ -z "${R#*|}" ]] || fail "round $ROUND open: stale open was not refused after waiting ($R)"
+  [[ "$(Q "select status||'|'||cancel_reason from public.scheduled_tournaments where id='$TO'")" == "cancelled|moved_on" ]] || fail "round $ROUND open: B's state lost"
+  pass "round $ROUND open-registration: stale open waited ${R%%|*}s, then 0 rows; B's state intact"
+
+  # dispatch: two dispatchers from the same snapshot, either order — exactly the first one's room/deadline survive.
+  TD="$(printf 'dddddddd-2000-4000-8000-%012d' "$ROUND")"; lw_tournament "$TD" in_progress
+  MD="$(lw_match "$TD" 1 1 waiting "" "")"
+  CAS_D() { echo "update public.scheduled_tournament_matches set status='ready', room_code='$2', ready_at=now(), ready_deadline_at=now() + interval '$3 seconds', status_reason=null
+            where id='$1' and status='waiting' and room_code='' and ready_at is null and ready_deadline_at is null and status_reason is null returning id"; }
+  R="$(race "$(CAS_D "$MD" TROOMB 120)" "$(CAS_D "$MD" TROOMA 999)")"
+  waited "${R%%|*}" && [[ -z "${R#*|}" ]] || fail "round $ROUND dispatch: stale dispatch was not refused ($R)"
+  [[ "$(Q "select room_code||'|'||(ready_deadline_at < now() + interval '200 seconds')::text from public.scheduled_tournament_matches where id='$MD'")" == "TROOMB|true" ]] || fail "round $ROUND dispatch: newer dispatch replaced: $(mstate "$MD")"
+  # B then starts it; a third stale dispatch from the original snapshot still cannot move it back.
+  Q "update public.scheduled_tournament_matches set status='in_progress', started_at=now() where id='$MD'" >/dev/null
+  [[ -z "$(Q "$(CAS_D "$MD" TROOMC 120)")" ]] && [[ "$(Q "select status||'|'||room_code from public.scheduled_tournament_matches where id='$MD'")" == "in_progress|TROOMB" ]] \
+    || fail "round $ROUND dispatch: stale dispatch moved a started match"
+  pass "round $ROUND dispatch: stale dispatcher waited ${R%%|*}s, 0 rows; newer room/deadline kept; a started match is never moved back"
+
+  # ready -> in_progress: B completes the match; A's stale transition (status=eq.ready) waits, 0 rows.
+  MR="$(lw_match "$TD" 1 2 ready ", ready_at, ready_deadline_at" ", now() - interval '10 min', now() - interval '1 min'")"
+  R="$(race "select public.complete_tournament_match('$MR', '$H1', 'no_show', 'player2_no_show', 30, 0, '$H2', null, false, 'B')" \
+            "update public.scheduled_tournament_matches set status='in_progress', started_at=now(), status_reason=null where id='$MR' and status='ready' returning id")"
+  waited "${R%%|*}" && [[ -z "${R#*|}" ]] || fail "round $ROUND ready->in_progress: not refused ($R)"
+  [[ "$(Q "select status||'|'||winner_id||'|'||status_reason from public.scheduled_tournament_matches where id='$MR'")" == "completed|$H1|player2_no_show" ]] || fail "round $ROUND ready->in_progress: completed match moved"
+  pass "round $ROUND ready->in_progress: stale transition waited ${R%%|*}s, 0 rows; completed match intact"
+
+  # deadline extension: A decided from deadline T0; B extends first; A's stale extension waits, 0 rows; B's deadline + reason survive.
+  ME="$(lw_match "$TD" 1 3 ready ", ready_at, ready_deadline_at" ", now() - interval '10 min', now() - interval '1 min'")"
+  T0="$(Q "select ready_deadline_at from public.scheduled_tournament_matches where id='$ME'")"
+  EXT() { echo "update public.scheduled_tournament_matches set ready_deadline_at=now() + interval '$2 seconds', status_reason='$3'
+          where id='$1' and status='ready' and ready_deadline_at='$T0' and status_reason is null returning id"; }
+  R="$(race "$(EXT "$ME" 300 room_rehydrated_deadline_extended)" "$(EXT "$ME" 120 all_joined_start_retry)")"
+  waited "${R%%|*}" && [[ -z "${R#*|}" ]] || fail "round $ROUND deadline: stale extension not refused ($R)"
+  [[ "$(Q "select status_reason||'|'||(ready_deadline_at > now() + interval '200 seconds')::text from public.scheduled_tournament_matches where id='$ME'")" == "room_rehydrated_deadline_extended|true" ]] \
+    || fail "round $ROUND deadline: B's newer deadline/reason lost: $(mstate "$ME")"
+  pass "round $ROUND deadline: stale extension waited ${R%%|*}s, 0 rows; B's later deadline and reason kept"
+
+  # no-show attendance: B (the player) joins first; A's no-show (decided while absent) waits, then attendance_changed.
+  MN="$(lw_match "$TD" 2 1 ready ", ready_at, ready_deadline_at, player1_joined_at" ", now() - interval '10 min', now() - interval '1 min', now() - interval '5 min'")"
+  R="$(race "update public.scheduled_tournament_matches set player2_joined_at=now() where id='$MN'" \
+            "select public.complete_tournament_match_if_unchanged('$MN', '$H1', 'no_show', 'player2_no_show', 30, 0, '$H2', 'ready', array['$H2'], 'A')")"
+  waited "${R%%|*}" && echo "${R#*|}" | grep -q 'attendance_changed' || fail "round $ROUND no-show: not refused ($R)"
+  [[ "$(Q "select status||'|'||coalesce(no_show_user_id,'-')||'|'||(player2_joined_at is not null)::text from public.scheduled_tournament_matches where id='$MN'")" == "ready|-|true" ]] \
+    || fail "round $ROUND no-show: joined player recorded absent: $(mstate "$MN")"
+  # reverse: the no-show commits first; the late join lands on a completed match (the decision was right when made).
+  MN2="$(lw_match "$TD" 2 2 ready ", ready_at, ready_deadline_at, player1_joined_at" ", now() - interval '10 min', now() - interval '1 min', now() - interval '5 min'")"
+  R="$(race "select public.complete_tournament_match_if_unchanged('$MN2', '$H1', 'no_show', 'player2_no_show', 30, 0, '$H2', 'ready', array['$H2'], 'A')" \
+            "update public.scheduled_tournament_matches set player2_joined_at=now() where id='$MN2' returning id")"
+  waited "${R%%|*}" || fail "round $ROUND no-show reverse: join did not wait"
+  [[ "$(Q "select status||'|'||no_show_user_id from public.scheduled_tournament_matches where id='$MN2'")" == "completed|$H2" ]] || fail "round $ROUND no-show reverse: wrong state"
+  pass "round $ROUND no-show: join first -> stale no-show waited ${R%%|*}s, attendance_changed, match ready; no-show first -> recorded, late join waits"
+
+  # started meanwhile: B starts the game; A's "never played" decision (expected 'ready') waits, then match_state_changed.
+  MS="$(lw_match "$TD" 2 3 ready ", ready_at, ready_deadline_at, player1_joined_at, player2_joined_at" ", now() - interval '10 min', now() - interval '1 min', now() - interval '5 min', now() - interval '5 min'")"
+  R="$(race "update public.scheduled_tournament_matches set status='in_progress', started_at=now() where id='$MS'" \
+            "select public.complete_tournament_match_if_unchanged('$MS', '$H1', 'no_show', 'event_backstop_window_open_higher_seed', 30, 0, null, 'ready', '{}', 'A')")"
+  waited "${R%%|*}" && echo "${R#*|}" | grep -q 'match_state_changed' || fail "round $ROUND started: stale administrative result not refused ($R)"
+  [[ "$(Q "select status||'|'||coalesce(winner_id,'-') from public.scheduled_tournament_matches where id='$MS'")" == "in_progress|-" ]] || fail "round $ROUND started: live game decided"
+  pass "round $ROUND started meanwhile: stale 'never played' result waited ${R%%|*}s, then match_state_changed; the live game is untouched"
+
+  # not_enough_players: a last-moment registration (still open by the DB clock) commits first; the cancel waits, then 0.
+  TN="$(printf 'dddddddd-4000-4000-8000-%012d' "$ROUND")"
+  HN="dddddddd-0000-4000-8000-0000000000b$ROUND"; Q "insert into auth.users (id) values ('$HN') on conflict do nothing" >/dev/null
+  # Open (by the DB clock) when the registration runs at ~0 s; closed when the cancel runs at ~1.5 s.
+  Q "insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status)
+     values ('$TN', date_trunc('minute', now()) + interval '7 days' + interval '$ROUND seconds' + interval '41 ms', now() - interval '1 hour', now() + interval '1 second', 'registration_open')" >/dev/null
+  R="$(race "select public.register_for_tournament('$TN', '$HN')" "select public.cancel_tournament_if_no_entrants('$TN', 'not_enough_players')")"
+  [[ "$(Q "select count(*) from public.scheduled_tournament_registrations where tournament_id='$TN' and status='registered'")" == "1" ]] || fail "round $ROUND entrants: the registration itself did not land"
+  waited "${R%%|*}" && echo "${R#*|}" | grep -q '"cancelled": false' || fail "round $ROUND entrants: cancel not refused ($R)"
+  [[ "$(Q "select status from public.scheduled_tournaments where id='$TN'")" == "registration_open" ]] || fail "round $ROUND entrants: event with a registrant cancelled"
+  pass "round $ROUND no entrants: a last-moment registration committed first; the cancel waited ${R%%|*}s on the row lock, then did not cancel"
+  # once the database clock has closed registration and nobody is registered, it cancels — and a later registration is refused.
+  TN2="$(printf 'dddddddd-5000-4000-8000-%012d' "$ROUND")"
+  Q "insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status)
+     values ('$TN2', date_trunc('minute', now()) + interval '8 days' + interval '$ROUND seconds' + interval '43 ms', now() - interval '1 hour', now() - interval '1 second', 'registration_open')" >/dev/null
+  Q "select public.cancel_tournament_if_no_entrants('$TN2', 'not_enough_players')" | grep -q '"cancelled": true' || fail "round $ROUND entrants: empty closed event not cancelled"
+  QE "select public.register_for_tournament('$TN2', '$H2')" | grep -q 'registration_closed' || fail "round $ROUND entrants: registration into a cancelled event"
+  pass "round $ROUND no entrants: an empty event closed by the DB clock is cancelled; a later registration gets registration_closed"
+
+  # backstop cancel: B completes a match after the snapshot; A's cancel locks the bracket, waits, then refuses.
+  TB="$(printf 'dddddddd-3000-4000-8000-%012d' "$ROUND")"; lw_tournament "$TB" in_progress
+  MB="$(lw_match "$TB" 1 1 in_progress "" "")"
+  lw_match "$TB" 2 1 waiting "" "" >/dev/null
+  SNAP="$(Q "select jsonb_agg(jsonb_build_object('id',id,'status',status,'winner_id',winner_id,'player1_id',player1_id,'player2_id',player2_id,'room_code',room_code,'status_reason',status_reason,'started_at',started_at,'completed_at',completed_at,'ready_deadline_at',ready_deadline_at,'player1_joined_at',player1_joined_at,'player2_joined_at',player2_joined_at)) from public.scheduled_tournament_matches where tournament_id='$TB'")"
+  R="$(race "select public.complete_tournament_match('$MB', '$H1', 'game_over', null, 30, 10, null, null, false, 'B')" \
+            "select public.cancel_tournament_if_bracket_unchanged('$TB', '$SNAP'::jsonb, 'active_window_unrecoverable:race')")"
+  waited "${R%%|*}" && echo "${R#*|}" | grep -q '"cancelled": false' && echo "${R#*|}" | grep -q 'bracket_changed' || fail "round $ROUND backstop: stale cancel not refused ($R)"
+  [[ "$(Q "select status||'|'||coalesce(cancel_reason,'-') from public.scheduled_tournaments where id='$TB'")" == "in_progress|-" ]] || fail "round $ROUND backstop: progressing tournament cancelled"
+  [[ "$(Q "select status||'|'||winner_id from public.scheduled_tournament_matches where id='$MB'")" == "completed|$H1" ]] || fail "round $ROUND backstop: B's result lost"
+  pass "round $ROUND backstop: stale cancel waited ${R%%|*}s on the bracket locks, then bracket_changed; tournament in_progress, B's result kept"
+  # status unchanged, other field changed (repair): still refused.
+  SNAP2="$(Q "select jsonb_agg(jsonb_build_object('id',id,'status',status,'winner_id',winner_id,'player1_id',player1_id,'player2_id',player2_id,'room_code',room_code,'status_reason',status_reason,'started_at',started_at,'completed_at',completed_at,'ready_deadline_at',ready_deadline_at,'player1_joined_at',player1_joined_at,'player2_joined_at',player2_joined_at)) from public.scheduled_tournament_matches where tournament_id='$TB'")"
+  Q "update public.scheduled_tournament_matches set room_code='TREPAIRED' where tournament_id='$TB' and round=2" >/dev/null
+  Q "select public.cancel_tournament_if_bracket_unchanged('$TB', '$SNAP2'::jsonb, 'x')" | grep -q '"cancelled": false' || fail "round $ROUND backstop: a repair with unchanged statuses did not block the cancel"
+  # control: unchanged snapshot -> cancelled.
+  SNAP3="$(Q "select jsonb_agg(jsonb_build_object('id',id,'status',status,'winner_id',winner_id,'player1_id',player1_id,'player2_id',player2_id,'room_code',room_code,'status_reason',status_reason,'started_at',started_at,'completed_at',completed_at,'ready_deadline_at',ready_deadline_at,'player1_joined_at',player1_joined_at,'player2_joined_at',player2_joined_at)) from public.scheduled_tournament_matches where tournament_id='$TB'")"
+  Q "select public.cancel_tournament_if_bracket_unchanged('$TB', '$SNAP3'::jsonb, 'active_window_unrecoverable:test')" | grep -q '"cancelled": true' || fail "round $ROUND backstop: unchanged bracket not cancelled"
+  pass "round $ROUND backstop: a repair with statuses unchanged also blocks; an unchanged bracket is cancelled"
+done
 
 echo
 echo "════════════════════════════════════════════════════════════════════════"

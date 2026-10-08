@@ -2,13 +2,15 @@ import type { Server } from 'socket.io';
 import { childLogger } from '../logger';
 import {
   applyMatchResult,
-  cancelTournament,
+  isConcurrentMatchChange,
+  cancelTournamentIfBracketUnchanged,
   closeTournamentRoom,
   decideUnstartedMatchByAttendance,
   noShowStatusReason,
   peekMatchRoom,
   resolveInProgressMatchFromRoom,
   selectHigherSeedWinner,
+  unjoinedHumans,
   type InProgressResolutionLabels,
 } from './engine';
 import { isBotOnlyMatch, isBotUserId } from './matchDispatch';
@@ -53,7 +55,9 @@ const MAX_BACKSTOP_STEPS = 16;
 export type ExpiredTournamentOutcome =
   | { kind: 'completed'; resolved: number }
   | { kind: 'not_in_progress' }
-  | { kind: 'cancelled_unrecoverable'; reason: string; resolved: number };
+  | { kind: 'cancelled_unrecoverable'; reason: string; resolved: number }
+  /** Judged unrecoverable, but the bracket changed before the cancel: nothing written. */
+  | { kind: 'deferred_bracket_changed'; resolved: number };
 
 function isDone(match: MatchRow): boolean {
   return match.status === 'completed' || match.status === 'bye';
@@ -107,27 +111,46 @@ export async function resolveExpiredTournament(
 
   let resolved = 0;
   let current: MatchRow | null = null;
+  // The bracket as read for the step that failed: the state the
+  // "unrecoverable" conclusion was drawn from.
+  let seen: MatchRow[] = [];
   try {
     for (let step = 0; ; step += 1) {
       const matches = await persistence.fetchMatches(tournamentId);
+      seen = matches;
       const final = matches.find((m) => m.round === 3);
       if (final && isDone(final)) break;
       if (step >= MAX_BACKSTOP_STEPS) throw new Error('backstop_step_limit');
       current = nextResolvableMatch(matches);
       if (!current) throw new Error('backstop_no_resolvable_match');
-      await resolveOne(io, current, tournament.win_target, persistence, now);
+      try {
+        await resolveOne(io, current, tournament.win_target, persistence, now);
+      } catch (err) {
+        // The match changed after it was decided (a player joined, or it
+        // started): decide again from fresh state.
+        if (isConcurrentMatchChange(err)) continue;
+        throw err;
+      }
       resolved += 1;
     }
   } catch (err) {
     const code = err instanceof Error ? err.message : String(err);
     if (!UNRECOVERABLE_ERRORS.has(code)) throw err;
     const reason = `active_window_unrecoverable:${code}`;
+    // Some of these refusals are exactly what a concurrent change produces (a
+    // match started, decided or repaired by another process). Cancel only if
+    // the whole bracket is still as seen — atomically at the database — and
+    // otherwise leave the tournament to the next tick's fresh determination.
+    const cancelled = await cancelTournamentIfBracketUnchanged(io, tournamentId, seen, reason, persistence);
+    if (!cancelled) {
+      log.warn({ tournamentId, matchId: current?.id, code }, 'backstop judged the bracket unrecoverable, but it changed since: not cancelled, re-deciding next tick');
+      return { kind: 'deferred_bracket_changed', resolved };
+    }
     alertTournamentAnomaly(
       'event_backstop_unrecoverable',
       { tournamentId, matchId: current?.id, roomCode: current?.room_code ?? undefined },
       { reason, resolvedBeforeFailure: resolved },
     );
-    await cancelTournament(io, tournamentId, persistence, reason);
     return { kind: 'cancelled_unrecoverable', reason, resolved };
   }
   log.info({ tournamentId, resolved }, 'expired tournament finished through the result path');
@@ -229,11 +252,14 @@ async function resolveOne(
       matchId: match.id,
       ...(await administrativeAdvance(match, winTarget, persistence, match.ready_deadline_at ? 'window_open' : 'undispatched')),
       noShowUserId: null,
+      // Decided as a match nobody played: it must still be unplayed when it commits.
+      expectStatus: 'ready',
       dispatchAdvanced: false,
     }, persistence);
   } else {
     const decided = await decideUnstartedMatchByAttendance(match, persistence);
     const bothJoined = Boolean(match.player1_joined_at && match.player2_joined_at);
+    // The absentees this was decided from must still be absent when it commits.
     const base = decided.noShowUserId
       ? noShowStatusReason(match, decided.noShowUserId)
       : bothJoined
@@ -247,6 +273,8 @@ async function resolveOne(
       winnerSource: 'no_show',
       statusReason: `event_backstop_${base}`,
       noShowUserId: decided.noShowUserId,
+      expectStatus: 'ready',
+      requireUnjoined: bothJoined ? [] : unjoinedHumans(match),
       dispatchAdvanced: false,
     }, persistence);
   }

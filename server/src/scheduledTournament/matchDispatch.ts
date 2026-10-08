@@ -7,6 +7,7 @@ import { isTournamentRoomCode, makeTournamentRoomCode } from './tournamentRoomCo
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
 import { tournamentStarterUserId } from './tournamentStarter';
+import { updateMatchIfUnchanged } from './casWrites';
 import { alertTournamentAnomaly } from './tournamentAlerts';
 
 const log = childLogger('tournament:dispatch');
@@ -26,6 +27,8 @@ export type DispatchTournamentMatchResult = {
   recipients: string[];
   reusedExistingRoom: boolean;
   emittedReady: boolean;
+  /** Another process changed the match before this dispatch's write: nothing was written. */
+  superseded?: boolean;
 };
 
 export type DispatchTournamentMatchOptions = {
@@ -71,11 +74,17 @@ export async function promoteScheduledMatchToInProgress(
   const match = await persistence.fetchMatchById(matchId);
   if (!match || match.status === 'completed' || match.status === 'bye') return;
   if (match.status === 'in_progress') return;
-  await persistence.updateMatch(matchId, {
+  // The write is the waiting/ready → in_progress transition itself: only from
+  // the status read, never onto a match decided or completed meanwhile.
+  const promoted = await updateMatchIfUnchanged(persistence, matchId, { status: match.status }, {
     status: 'in_progress',
     started_at: match.started_at ?? startedAt,
     status_reason: null,
   });
+  if (!promoted) {
+    log.info({ matchId, roomCode: match.room_code }, 'promote skipped: the match changed since it was read');
+    return;
+  }
   log.info({ matchId, roomCode: match.room_code, humanUserId: humanUserId ?? null }, 'promoted in_progress after human attach');
 }
 
@@ -121,8 +130,8 @@ export async function dispatchTournamentMatch(
   if (match.status === 'completed' || match.status === 'bye') throw new Error('match_invalid_state');
 
   const now = opts.now ?? new Date();
-  const readyAt = match.ready_at ?? now.toISOString();
-  const readyDeadlineAt = match.ready_deadline_at ?? new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString();
+  let readyAt = match.ready_at ?? now.toISOString();
+  let readyDeadlineAt = match.ready_deadline_at ?? new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString();
   const roomCode = match.room_code && match.room_code.trim()
     ? match.room_code.trim().toUpperCase()
     : makeTournamentRoomCode(match);
@@ -170,21 +179,57 @@ export async function dispatchTournamentMatch(
     seatSyntheticBotInRoom(roomCode, match.player2_id, botLabel(match.bot_tier));
   }
 
+  let dispatchedNow = false;
+  let effectiveStatus: MatchRow['status'] = match.status;
   if (!alreadyReady) {
-    await persistence.updateMatch(match.id, {
+    // Compare-and-set on every field this write fills or clears, as read: a
+    // dispatch decided from an older read never replaces a newer room,
+    // deadline or reason, nor moves a match that has since started, been
+    // decided or completed.
+    dispatchedNow = await updateMatchIfUnchanged(persistence, match.id, {
+      status: match.status,
+      room_code: match.room_code ?? null,
+      ready_at: match.ready_at,
+      ready_deadline_at: match.ready_deadline_at,
+      status_reason: match.status_reason,
+    }, {
       room_code: roomCode,
       status: match.status === 'in_progress' ? 'in_progress' : 'ready',
       ready_at: readyAt,
       ready_deadline_at: readyDeadlineAt,
       status_reason: null,
     });
-    const humanUserIds = [match.player1_id, match.player2_id].filter(
-      (id): id is string => Boolean(id && !isBotUserId(id)),
-    );
-    log.info({ matchId: match.id, roomCode, humanUserIds }, 'match ready');
+    if (dispatchedNow) {
+      const humanUserIds = [match.player1_id, match.player2_id].filter(
+        (id): id is string => Boolean(id && !isBotUserId(id)),
+      );
+      log.info({ matchId: match.id, roomCode, humanUserIds }, 'match ready');
+    } else {
+      // Another process changed the match first: report its current state.
+      const current = await persistence.fetchMatchById(match.id);
+      log.info({ matchId: match.id, roomCode, currentStatus: current?.status ?? null }, 'dispatch write skipped: the match changed since it was read');
+      if (!current || (current.status !== 'ready' && current.status !== 'in_progress')) {
+        return {
+          ok: true,
+          matchId: match.id,
+          tournamentId: match.tournament_id,
+          roomCode: current?.room_code || roomCode,
+          status: current?.status === 'in_progress' ? 'in_progress' : 'ready',
+          readyAt: current?.ready_at ?? readyAt,
+          readyDeadlineAt: current?.ready_deadline_at ?? readyDeadlineAt,
+          recipients: [],
+          reusedExistingRoom,
+          emittedReady: false,
+          superseded: true,
+        };
+      }
+      effectiveStatus = current.status;
+      readyAt = current.ready_at ?? readyAt;
+      readyDeadlineAt = current.ready_deadline_at ?? readyDeadlineAt;
+    }
   }
 
-  const shouldEmit = !alreadyReady || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
+  const shouldEmit = dispatchedNow || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
   const recipients: string[] = [];
   const recipientSockets = shouldEmit
     ? Array.from(io.sockets.sockets.values()).filter((sock) => {
@@ -212,7 +257,7 @@ export async function dispatchTournamentMatch(
         round: match.round,
         matchNumber: match.match_number,
         roomCode,
-        matchStatus: match.status === 'in_progress' ? 'in_progress' as const : 'ready' as const,
+        matchStatus: effectiveStatus === 'in_progress' ? 'in_progress' as const : 'ready' as const,
         readyAt,
         readyDeadlineAt,
         opponentId,
@@ -234,7 +279,7 @@ export async function dispatchTournamentMatch(
     matchId: match.id,
     tournamentId: match.tournament_id,
     roomCode,
-    status: match.status === 'in_progress' ? 'in_progress' : 'ready',
+    status: effectiveStatus === 'in_progress' ? 'in_progress' : 'ready',
     readyAt,
     readyDeadlineAt,
     recipients,

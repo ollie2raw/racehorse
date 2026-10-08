@@ -12,6 +12,7 @@ import {
   clearTournamentStepAlert,
 } from './tournamentAlerts';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
+import { updateMatchIfUnchanged } from './casWrites';
 import { archiveBelongsToMatch } from './archiveIdentity';
 import { tournamentMatchCapMs } from './tournamentTimeouts';
 import type { Room } from '../rooms';
@@ -20,7 +21,7 @@ import { getRoomRoster } from '../multiplayer/roomSession';
 import { disarmTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
 import { markGameOverPersistSucceeded } from '../multiplayer/gameOverPersistPolicy';
 import type { ScheduledTournamentRow } from './types';
-import type { BracketQfPair, BracketSeed } from './persistence';
+import { bracketSnapshot, type BracketQfPair, type BracketSeed } from './persistence';
 import {
   TOURNAMENT_MATCH_READY_WINDOW_MS,
   allHumanPlayersJoined,
@@ -488,6 +489,17 @@ export async function applyMatchResult(
     noShowUserId?: string | null;
     forfeitUserId?: string | null;
     /**
+     * A decision made from an earlier read of a not-yet-played match: it must
+     * still have this status when the result commits (else MATCH_STATE_CHANGED).
+     */
+    expectStatus?: MatchRow['status'];
+    /**
+     * Users who must still be un-joined when the result commits (a no-show
+     * decided from attendance read earlier); otherwise ATTENDANCE_CHANGED is
+     * thrown and nothing is written.
+     */
+    requireUnjoined?: string[];
+    /**
      * Default true: a next-round match this result makes ready is dispatched
      * (room + match_ready) and bot-only pairs resolved. The event backstop
      * passes false: it resolves the rest of the bracket itself.
@@ -512,6 +524,8 @@ export async function applyMatchResult(
       forfeitUserId: params.forfeitUserId ?? null,
       byeWalkover: params.byeWalkover ?? false,
       actor: params.winnerSource ?? (params.byeWalkover ? 'bye_walkover' : 'game_over'),
+      expectStatus: params.expectStatus ?? null,
+      requireUnjoined: params.requireUnjoined && params.requireUnjoined.length > 0 ? params.requireUnjoined : null,
     });
   } catch (err) {
     const code = err instanceof Error ? err.message : String(err);
@@ -725,15 +739,65 @@ export async function cancelTournamentBeforeStart(
   return cancelled;
 }
 
-/** Helper for the scheduler: open registration on a tournament. */
+/**
+ * Cancel an in-progress tournament judged unrecoverable — only if every match
+ * is still exactly as in `seen` (the bracket the judgement was made from),
+ * atomically at the database (cancel_tournament_if_bracket_unchanged). False
+ * when the bracket moved on, or the tournament is no longer in progress:
+ * nothing is written. True when cancelled (and `tournament:cancelled` sent).
+ */
+export async function cancelTournamentIfBracketUnchanged(
+  io: Server,
+  tournamentId: string,
+  seen: MatchRow[],
+  reason: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+): Promise<boolean> {
+  const expected = bracketSnapshot(seen);
+  let cancelled: boolean;
+  if (persistence.cancelTournamentIfBracketUnchanged) {
+    cancelled = await persistence.cancelTournamentIfBracketUnchanged(tournamentId, expected, reason);
+  } else {
+    // Test doubles without the transactional RPC only.
+    const [tournament, matches] = await Promise.all([
+      persistence.fetchTournamentById(tournamentId),
+      persistence.fetchMatches(tournamentId),
+    ]);
+    const key = (rows: ReturnType<typeof bracketSnapshot>) =>
+      JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id)));
+    cancelled = tournament?.status === 'in_progress' && key(bracketSnapshot(matches)) === key(expected);
+    if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
+  }
+  if (cancelled) io.emit('tournament:cancelled', { tournamentId });
+  return cancelled;
+}
+
+/**
+ * Helper for the scheduler: open registration on a tournament — only if it is
+ * still `upcoming` and its registration_open_at has passed, in one
+ * conditional update, so a stale tick never sends a tournament that has moved
+ * on (started, cancelled, completed, or re-timed) back to registration. True
+ * when this call opened it.
+ */
 export async function openRegistration(
   io: Server,
   tournamentId: string,
   persistence: EnginePersistence = defaultEnginePersistence,
-): Promise<void> {
-  await persistence.updateTournamentStatus(tournamentId, 'registration_open');
-  io.emit('tournament:registration_open', { tournamentId });
+  now: Date = new Date(),
+): Promise<boolean> {
+  let opened: boolean;
+  if (persistence.openRegistrationIfDue) {
+    opened = await persistence.openRegistrationIfDue(tournamentId, now);
+  } else {
+    // Test doubles without the conditional write only.
+    const current = await persistence.fetchTournamentById(tournamentId);
+    opened = Boolean(current && current.status === 'upcoming' && Date.parse(current.registration_open_at) <= now.getTime());
+    if (opened) await persistence.updateTournamentStatus(tournamentId, 'registration_open');
+  }
+  if (opened) io.emit('tournament:registration_open', { tournamentId });
+  return opened;
 }
+
 
 /**
  * Helper for the scheduler: close registration and either start the bracket
@@ -752,10 +816,20 @@ export async function closeRegistrationAndStart(
     // (the Fritz Cup route, or a second tick) may have just done that, so the
     // cancellation is conditional on the tournament still being in
     // registration, atomically at the database.
-    if (await cancelTournamentBeforeStart(io, tournamentId, persistence, 'not_enough_players')) {
+    // Only while nobody is registered (re-checked under the tournament row
+    // lock registration takes, after the database clock closed registration).
+    const cancelled = persistence.cancelTournamentIfNoEntrants
+      ? await persistence.cancelTournamentIfNoEntrants(tournamentId, 'not_enough_players')
+      : await cancelTournamentBeforeStart(io, tournamentId, persistence, 'not_enough_players');
+    if (cancelled) {
+      if (persistence.cancelTournamentIfNoEntrants) io.emit('tournament:cancelled', { tournamentId });
       return { started: false, reason: 'not_enough_players' };
     }
     const current = await persistence.fetchTournamentById(tournamentId);
+    if (current && (current.status === 'upcoming' || current.status === 'registration_open')) {
+      // Still in registration: someone registered after the count was read.
+      return { started: false, reason: 'entrants_arrived' };
+    }
     return { started: current?.status === 'in_progress', reason: 'already_left_registration' };
   }
   const tournament = await persistence.fetchTournamentById(tournamentId);
@@ -1217,6 +1291,27 @@ export async function decideUnstartedMatchByAttendance(
   };
 }
 
+export { updateMatchIfUnchanged };
+
+/** A no-show result refused because a player it named as absent has since joined. */
+export const ATTENDANCE_CHANGED = 'attendance_changed';
+/** A result for a not-yet-played match refused because the match has since moved on. */
+export const MATCH_STATE_CHANGED = 'match_state_changed';
+
+/** The result refusals that mean another process changed the match first: re-decide, not an error. */
+export function isConcurrentMatchChange(err: unknown): boolean {
+  const code = err instanceof Error ? err.message : '';
+  return code === ATTENDANCE_CHANGED || code === MATCH_STATE_CHANGED;
+}
+
+/** The human players of a match who have not joined it (as read). */
+export function unjoinedHumans(match: MatchRow): string[] {
+  return [
+    !isBotUserId(match.player1_id) && match.player1_id && !match.player1_joined_at ? match.player1_id : null,
+    !isBotUserId(match.player2_id) && match.player2_id && !match.player2_joined_at ? match.player2_id : null,
+  ].filter((id): id is string => Boolean(id));
+}
+
 /** The status_reason a no-show records (player1_no_show / player2_no_show). */
 export function noShowStatusReason(match: MatchRow, noShowUserId: string): string {
   return playerNoShowReason(match, noShowUserId);
@@ -1283,7 +1378,10 @@ export async function reconcileExpiredReadyMatches(
               /* room missing — fall through to the rehydrate branch below */
             }
             if (roomStarted) {
-              await persistence.updateMatch(match.id, {
+              // The write is the ready → in_progress transition itself: it
+              // lands only on a match still 'ready' (never on one another
+              // process has started, decided or completed meanwhile).
+              await updateMatchIfUnchanged(persistence, match.id, { status: 'ready' }, {
                 status: 'in_progress',
                 started_at: match.started_at ?? now.toISOString(),
                 status_reason: null,
@@ -1295,10 +1393,20 @@ export async function reconcileExpiredReadyMatches(
             // re-send match_ready: the clients re-attach, and the attach handler's
             // normal start path runs again. Only a second expiry resolves.
             if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
-              await persistence.updateMatch(match.id, {
+              // Conditional on the deadline and reason this decision was made
+              // from: another process's newer extension or reason survives.
+              const extended = await updateMatchIfUnchanged(persistence, match.id, {
+                status: 'ready',
+                ready_deadline_at: match.ready_deadline_at,
+                status_reason: match.status_reason,
+              }, {
                 ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
                 status_reason: BOTH_JOINED_START_RETRY_REASON,
               });
+              if (!extended) {
+                log.info({ matchId: match.id }, 'start-retry extension skipped: the match changed since it was read');
+                continue;
+              }
               await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
               log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
               continue;
@@ -1311,10 +1419,23 @@ export async function reconcileExpiredReadyMatches(
               persistence.getRoom(match.room_code);
             } catch {
               await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
-              await persistence.updateMatch(match.id, {
-                ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
-                status_reason: 'room_rehydrated_deadline_extended',
-              });
+              // Re-read after the repair dispatch, and extend only from the
+              // deadline this decision was made from: a newer extension,
+              // reason or start by another process survives.
+              const fresh = await persistence.fetchMatchById(match.id);
+              const extended = Boolean(fresh && fresh.status === 'ready' && fresh.ready_deadline_at === match.ready_deadline_at) &&
+                await updateMatchIfUnchanged(persistence, match.id, {
+                  status: 'ready',
+                  ready_deadline_at: fresh!.ready_deadline_at,
+                  status_reason: fresh!.status_reason,
+                }, {
+                  ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+                  status_reason: 'room_rehydrated_deadline_extended',
+                });
+              if (!extended) {
+                log.info({ matchId: match.id }, 'rehydration extension skipped: the match changed since it was read');
+                continue;
+              }
               log.info({
                 matchId: match.id,
                 roomCode: match.room_code,
@@ -1330,25 +1451,37 @@ export async function reconcileExpiredReadyMatches(
             reason: playerNoShowReason(match, decided.noShowUserId),
           }, 'marking loss');
 
-          await applyMatchResult(
-            io,
-            {
-              matchId: match.id,
-              winnerId: decided.winnerId,
-              player1Score: match.player1_id === decided.winnerId ? tournament.win_target : 0,
-              player2Score: match.player2_id === decided.winnerId ? tournament.win_target : 0,
-              winnerSource: 'no_show',
-              statusReason: decided.noShowUserId
-                ? playerNoShowReason(match, decided.noShowUserId)
-                : everyoneJoined
-                  // Present players whose game would not start even after the one
-                  // extension: resolved, but never recorded as a no-show.
-                  ? 'start_failed_after_retry_higher_seed_advanced'
-                  : 'double_no_show_higher_seed_advanced',
-              noShowUserId: decided.noShowUserId,
-            },
-            persistence,
-          );
+          try {
+            await applyMatchResult(
+              io,
+              {
+                matchId: match.id,
+                winnerId: decided.winnerId,
+                player1Score: match.player1_id === decided.winnerId ? tournament.win_target : 0,
+                player2Score: match.player2_id === decided.winnerId ? tournament.win_target : 0,
+                winnerSource: 'no_show',
+                statusReason: decided.noShowUserId
+                  ? playerNoShowReason(match, decided.noShowUserId)
+                  : everyoneJoined
+                    // Present players whose game would not start even after the one
+                    // extension: resolved, but never recorded as a no-show.
+                    ? 'start_failed_after_retry_higher_seed_advanced'
+                    : 'double_no_show_higher_seed_advanced',
+                noShowUserId: decided.noShowUserId,
+                // Decided from this read: the match must still be 'ready', and the
+                // absentees still absent, when it commits.
+                expectStatus: 'ready',
+                requireUnjoined: everyoneJoined ? [] : unjoinedHumans(match),
+              },
+              persistence,
+            );
+          } catch (err) {
+            if (isConcurrentMatchChange(err)) {
+              log.info({ matchId: match.id, change: (err as Error).message }, 'no-show not recorded: the match changed after it was decided');
+              continue;
+            }
+            throw err;
+          }
           resolvedCount += 1;
         } catch (err) {
           // One match must not stop the rest of the tick; the next tick retries it.

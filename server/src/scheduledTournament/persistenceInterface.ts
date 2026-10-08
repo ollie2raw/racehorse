@@ -14,7 +14,13 @@ import {
   updateRegistrationPlacement,
   updateTournamentStatus,
   cancelTournamentBeforeStart,
+  updateMatchIf,
+  openRegistrationIfDue,
+  cancelTournamentIfBracketUnchanged,
+  cancelTournamentIfNoEntrants,
   type MatchPatch,
+  type MatchExpectation,
+  type BracketSnapshotEntry,
   type CompleteTournamentMatchParams,
   type CompleteTournamentMatchResult,
   type PromoteTournamentMatchResult,
@@ -93,6 +99,18 @@ export interface EnginePersistence {
    * read-then-write fallback (see engine.cancelTournamentBeforeStart).
    */
   cancelTournamentBeforeStart?(id: string, reason: string): Promise<boolean>;
+  /**
+   * Compare-and-set match update (true when applied). Production always
+   * provides it; a test double without it gets a read-compare-write fallback
+   * (engine.updateMatchIfUnchanged).
+   */
+  updateMatchIf?(matchId: string, expected: MatchExpectation, patch: MatchPatch): Promise<boolean>;
+  /** upcoming → registration_open if still upcoming and due (true when opened). */
+  openRegistrationIfDue?(id: string, now: Date): Promise<boolean>;
+  /** Cancel for lack of entrants, only if still nobody is registered and registration has closed (true when cancelled). */
+  cancelTournamentIfNoEntrants?(id: string, reason: string): Promise<boolean>;
+  /** Cancel an in-progress tournament only if its bracket is exactly `expected` (true when cancelled). */
+  cancelTournamentIfBracketUnchanged?(id: string, expected: BracketSnapshotEntry[], reason: string): Promise<boolean>;
   createReservedRoom(code: string, config: Partial<Config>): Room;
   getRoom(code: string): Room;
   /**
@@ -119,6 +137,10 @@ export const defaultEnginePersistence: EnginePersistence = {
   updateRegistrationPlacement,
   updateTournamentStatus,
   cancelTournamentBeforeStart,
+  updateMatchIf,
+  openRegistrationIfDue,
+  cancelTournamentIfBracketUnchanged,
+  cancelTournamentIfNoEntrants,
   createReservedRoom,
   getRoom,
   restoreOrCreateRoom: restoreOrCreateTournamentRoom,

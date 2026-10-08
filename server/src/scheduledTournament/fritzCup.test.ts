@@ -128,8 +128,21 @@ vi.mock('./persistence', async (importOriginal) => {
       return { match: structuredClone(match), tournament: structuredClone(h.tournaments.get(match.tournament_id)), opponentUsername: null };
     },
     updateMatch: async (id: string, patch: Row) => { Object.assign(allMatches().find((m) => m.id === id) ?? {}, patch); },
+    // The conditional match write (updateMatchIf), over this fake's rows.
+    updateMatchIf: async (id: string, expected: Record<string, unknown>, patch: Record<string, unknown>) => {
+      const row = allMatches().find((m) => m.id === id);
+      if (!row || Object.entries(expected).some(([k, v]) => (row[k] ?? null) !== (v ?? null))) return false;
+      Object.assign(row, patch);
+      return true;
+    },
     updateTournamentStatus: async (id: string, status: string, extra: Row = {}) => { Object.assign(h.tournaments.get(id) ?? {}, { status, ...extra }); },
     updateRegistrationPlacement: async () => {},
+    openRegistrationIfDue: async (id: string, now: Date) => {
+      const t = h.tournaments.get(id);
+      if (!t || t.status !== 'upcoming' || Date.parse(t.registration_open_at) > now.getTime()) return false;
+      t.status = 'registration_open';
+      return true;
+    },
     // The conditional PATCH: only a tournament still before its start is cancelled.
     cancelTournamentBeforeStart: async (id: string, reason: string) => {
       const t = h.tournaments.get(id);

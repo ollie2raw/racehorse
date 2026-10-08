@@ -33,6 +33,10 @@ vi.mock('../supabaseUtils', () => ({
   isSupabaseTimeoutError: () => false,
   supabaseFetch: vi.fn(async (path: string, init?: { method?: string }) => {
     const method = (init?.method ?? 'GET').toUpperCase();
+    // The backstop's cancel (cancel_tournament_if_bracket_unchanged since Phase 2C).
+    if (path.includes('/rpc/cancel_tournament_if_bracket_unchanged') && h.failTournamentPatch) {
+      throw new Error('tournament_update_failed');
+    }
     if (path.startsWith('/rest/v1/scheduled_tournaments?')) {
       if (method === 'PATCH') {
         if (h.failTournamentPatch) throw new Error('tournament_update_failed');
