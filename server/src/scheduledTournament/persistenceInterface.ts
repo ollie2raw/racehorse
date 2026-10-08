@@ -13,6 +13,7 @@ import {
   updateMatch,
   updateRegistrationPlacement,
   updateTournamentStatus,
+  cancelTournamentBeforeStart,
   type MatchPatch,
   type CompleteTournamentMatchParams,
   type CompleteTournamentMatchResult,
@@ -85,6 +86,13 @@ export interface EnginePersistence {
     status: ScheduledTournamentRow['status'],
     extra?: Partial<Pick<ScheduledTournamentRow, 'winner_id' | 'cancel_reason'>>,
   ): Promise<void>;
+  /**
+   * Cancel only if the tournament is still before its start
+   * (upcoming / registration_open), atomically; true when it was cancelled.
+   * Production always provides it; a test double without it gets a
+   * read-then-write fallback (see engine.cancelTournamentBeforeStart).
+   */
+  cancelTournamentBeforeStart?(id: string, reason: string): Promise<boolean>;
   createReservedRoom(code: string, config: Partial<Config>): Room;
   getRoom(code: string): Room;
   /**
@@ -110,6 +118,7 @@ export const defaultEnginePersistence: EnginePersistence = {
   promoteTournamentMatch,
   updateRegistrationPlacement,
   updateTournamentStatus,
+  cancelTournamentBeforeStart,
   createReservedRoom,
   getRoom,
   restoreOrCreateRoom: restoreOrCreateTournamentRoom,

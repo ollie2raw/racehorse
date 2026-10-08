@@ -130,6 +130,13 @@ vi.mock('./persistence', async (importOriginal) => {
     updateMatch: async (id: string, patch: Row) => { Object.assign(allMatches().find((m) => m.id === id) ?? {}, patch); },
     updateTournamentStatus: async (id: string, status: string, extra: Row = {}) => { Object.assign(h.tournaments.get(id) ?? {}, { status, ...extra }); },
     updateRegistrationPlacement: async () => {},
+    // The conditional PATCH: only a tournament still before its start is cancelled.
+    cancelTournamentBeforeStart: async (id: string, reason: string) => {
+      const t = h.tournaments.get(id);
+      if (!t || (t.status !== 'upcoming' && t.status !== 'registration_open')) return false;
+      Object.assign(t, { status: 'cancelled', cancel_reason: reason });
+      return true;
+    },
     completeTournamentMatch: async (params: any) => (await rpcFor(tidOfMatch(params.matchId))).completeTournamentMatch(params),
     promoteTournamentMatch: async (matchId: string, ...rest: any[]) => ((await rpcFor(tidOfMatch(matchId))).promoteTournamentMatch as any)(matchId, ...rest),
     generateTournamentBracket: async (params: any) => {

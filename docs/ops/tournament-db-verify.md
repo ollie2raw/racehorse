@@ -145,6 +145,21 @@ This script **cannot reach production**:
    The fixtures for §6 use their own users, since one user can no longer hold
    two tournaments starting minutes apart.
 
+9. **Pre-start cancellation vs start** (Phase 2B.1). The server cancels a
+   tournament before its start (`not_enough_players`, or the five-strike
+   `bracket_generation_failed:*`) with one conditional PATCH, which PostgREST
+   runs as `UPDATE … WHERE id = … AND status IN ('upcoming','registration_open')
+   RETURNING id`. Run three times in both orders against
+   `generate_tournament_bracket`:
+   - start first: the cancel blocks on the bracket's row lock, then updates 0
+     rows; the tournament stays `in_progress` with its 7 matches;
+   - cancel first: the bracket call blocks on the row lock, then raises
+     `tournament_not_startable`; the tournament stays cancelled, no matches.
+   A contrast run shows the pre-2B.1 unconditional update overwriting a
+   started tournament. Empty `registration_open` / `upcoming` events are still
+   cancelled; `in_progress`, `completed` and already-cancelled rows are
+   untouched; Fritz Cups follow the same rule.
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

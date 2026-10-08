@@ -9,7 +9,7 @@ import {
   closeRegistrationAndStart,
   reconcileExpiredReadyMatches,
   dispatchScheduledStartMatches,
-  cancelTournament,
+  cancelTournamentBeforeStart,
 } from './engine';
 import { alertTournamentStepFailed, clearTournamentStepAlert, type TournamentStep } from './tournamentAlerts';
 import { supabaseFetch } from '../supabaseUtils';
@@ -54,7 +54,15 @@ export async function closeRegistrationWithEscalation(
     if (attempts < CLOSE_START_MAX_CONSECUTIVE_FAILURES) {
       return { started: false, reason: 'close_start_failed' };
     }
-    Sentry.captureMessage('[tournament] bracket could not be created — cancelling', {
+    failures.delete(tournamentId);
+    // Only a tournament still in registration is cancelled: another starter
+    // (e.g. the Fritz Cup route) may have started it despite these failures.
+    const cancelled = await cancelTournamentBeforeStart(io, tournamentId, undefined, `bracket_generation_failed:${code}`);
+    if (!cancelled) {
+      log.warn({ tournamentId, attempts }, 'close-and-start kept failing, but the tournament already left registration: not cancelled');
+      return { started: false, reason: 'already_left_registration' };
+    }
+    Sentry.captureMessage('[tournament] bracket could not be created — cancelled', {
       level: 'error',
       fingerprint: ['tournament-close-start-failed', tournamentId],
       tags: {
@@ -64,8 +72,6 @@ export async function closeRegistrationWithEscalation(
       },
       extra: { tournamentId, attempts, error: code },
     });
-    await cancelTournament(io, tournamentId, undefined, `bracket_generation_failed:${code}`);
-    failures.delete(tournamentId);
     return { started: false, reason: 'cancelled_after_failures', cancelled: true };
   }
 }

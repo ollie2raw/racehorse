@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   dispatchScheduledStartMatches: vi.fn(),
   reconcileExpiredReadyMatches: vi.fn(),
   cancelTournament: vi.fn(),
+  cancelTournamentBeforeStart: vi.fn(),
   supabaseFetch: vi.fn(),
   captureMessage: vi.fn(),
 }));
@@ -32,6 +33,7 @@ vi.mock('./engine', () => ({
   reconcileExpiredReadyMatches: (...args: unknown[]) => mocks.reconcileExpiredReadyMatches(...args),
   dispatchScheduledStartMatches: (...args: unknown[]) => mocks.dispatchScheduledStartMatches(...args),
   cancelTournament: (...args: unknown[]) => mocks.cancelTournament(...args),
+  cancelTournamentBeforeStart: (...args: unknown[]) => mocks.cancelTournamentBeforeStart(...args),
 }));
 
 vi.mock('../supabaseUtils', () => ({
@@ -108,6 +110,7 @@ describe('closeRegistrationWithEscalation', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.cancelTournamentBeforeStart.mockResolvedValue(true);
   });
 
   it('retries quietly below the threshold, then alerts once and cancels with a reason', async () => {
@@ -121,7 +124,7 @@ describe('closeRegistrationWithEscalation', () => {
       expect(result).toEqual({ started: false, reason: 'close_start_failed' });
     }
     expect(mocks.captureMessage).not.toHaveBeenCalled();
-    expect(mocks.cancelTournament).not.toHaveBeenCalled();
+    expect(mocks.cancelTournamentBeforeStart).not.toHaveBeenCalled();
 
     const final = await closeRegistrationWithEscalation(io, 'tour-stuck', failures);
     expect(final).toEqual({ started: false, reason: 'cancelled_after_failures', cancelled: true });
@@ -131,10 +134,28 @@ describe('closeRegistrationWithEscalation', () => {
       fingerprint: ['tournament-close-start-failed', 'tour-stuck'],
       tags: { tournament_alert: 'close_start_failed', error_code: 'Tournament caps at 8 players' },
     });
-    expect(mocks.cancelTournament).toHaveBeenCalledWith(
+    expect(mocks.cancelTournamentBeforeStart).toHaveBeenCalledWith(
       io, 'tour-stuck', undefined, 'bracket_generation_failed:Tournament caps at 8 players',
     );
     expect(failures.has('tour-stuck')).toBe(false);
+  });
+
+  it('a tournament another starter already moved out of registration is not cancelled, and no alert is sent', async () => {
+    const { closeRegistrationWithEscalation, CLOSE_START_MAX_CONSECUTIVE_FAILURES } = await import('./scheduler');
+    const io = { emit: vi.fn() } as any;
+    const failures = new Map<string, number>();
+    mocks.closeRegistrationAndStart.mockRejectedValue(new Error('fetch failed'));
+    mocks.cancelTournamentBeforeStart.mockResolvedValue(false);
+
+    let final: unknown;
+    for (let i = 0; i < CLOSE_START_MAX_CONSECUTIVE_FAILURES; i += 1) {
+      final = await closeRegistrationWithEscalation(io, 'tour-started-elsewhere', failures);
+    }
+
+    expect(final).toEqual({ started: false, reason: 'already_left_registration' });
+    expect(mocks.cancelTournamentBeforeStart).toHaveBeenCalledTimes(1);
+    expect(mocks.captureMessage).not.toHaveBeenCalled();
+    expect(failures.has('tour-started-elsewhere')).toBe(false);
   });
 
   it('a success resets the count, so only consecutive failures escalate', async () => {
@@ -151,7 +172,7 @@ describe('closeRegistrationWithEscalation', () => {
 
     mocks.closeRegistrationAndStart.mockRejectedValueOnce(new Error('transient'));
     await closeRegistrationWithEscalation(io, 'tour-flaky', failures);
-    expect(mocks.cancelTournament).not.toHaveBeenCalled();
+    expect(mocks.cancelTournamentBeforeStart).not.toHaveBeenCalled();
     expect(mocks.captureMessage).not.toHaveBeenCalled();
   });
 

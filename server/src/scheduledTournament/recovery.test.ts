@@ -19,6 +19,14 @@ vi.mock('./matchDispatch', () => ({
   })),
 }));
 
+// Boot recovery first checks persistence for a finished game of an in-progress
+// match with no room (engine.recordFinishedGameIfAny, Phase 1.3). That check
+// reads room_live_sessions / room_match_logs, which this test does not fake:
+// here there is never one, so recovery goes on to re-create the room.
+vi.mock('./engine', () => ({
+  recordFinishedGameIfAny: vi.fn(async () => false),
+}));
+
 function makeTournament(overrides: Partial<ScheduledTournamentRow> = {}): ScheduledTournamentRow {
   return {
     id: 'tour-1',

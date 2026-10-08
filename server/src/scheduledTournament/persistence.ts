@@ -28,8 +28,19 @@ export function isValidUuid(value: string | null | undefined): value is string {
 
 // ── Tournaments ──────────────────────────────────────────────────────────
 
+/**
+ * Extra rows /upcoming reads beyond its limit. Fritz Cups are filtered out in
+ * Node (the query cannot name `kind` while the server must also run before M1),
+ * and a cup can briefly pass `scheduled_start >= now` — its start is the
+ * database clock at creation, and this server's clock may lag that by a little
+ * — so a few extra rows keep such cups from displacing Live Events. Once M1 is
+ * guaranteed, a `kind=eq.live` predicate in the query can replace this.
+ */
+const UPCOMING_KIND_FILTER_HEADROOM = 20;
+
 export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTournamentRow[]> {
   const nowIso = new Date().toISOString();
+  const readLimit = limit + UPCOMING_KIND_FILTER_HEADROOM;
   const [preStart, bracketLobby] = await Promise.all([
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
@@ -37,7 +48,7 @@ export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTour
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=in.(upcoming,registration_open)` +
         `&order=scheduled_start.asc` +
-        `&limit=${limit}`,
+        `&limit=${readLimit}`,
     ),
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
@@ -45,14 +56,13 @@ export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTour
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=eq.in_progress` +
         `&order=scheduled_start.asc` +
-        `&limit=${limit}`,
+        `&limit=${readLimit}`,
     ),
   ]);
   const byId = new Map<string, ScheduledTournamentRow>();
   for (const row of [...preStart, ...bracketLobby]) {
-    // The communal feed is Live Events only. A Fritz Cup starts when it is
-    // created, so `scheduled_start >= now` already excludes it; filtering on
-    // the row (not in the query) keeps this read valid before M1 is applied.
+    // The communal feed is Live Events only (filtered here, not in the query,
+    // so this read is valid before M1; see UPCOMING_KIND_FILTER_HEADROOM).
     if ((row.kind ?? 'live') !== 'live') continue;
     byId.set(row.id, row);
   }
@@ -107,6 +117,27 @@ export async function fetchDueLifecycleTournaments(now: Date): Promise<DueLifecy
       `&order=scheduled_start.asc` +
       `&limit=50`,
   );
+}
+
+/**
+ * Cancel a tournament that has not started, atomically: one conditional
+ * UPDATE (PostgREST PATCH filtered on `status=in.(upcoming,registration_open)`).
+ * Postgres re-checks the condition after waiting on any concurrent writer of
+ * the row (generate_tournament_bracket holds it FOR UPDATE until it commits
+ * `in_progress`), so a tournament another process has just started is never
+ * cancelled. True when this call cancelled it; false when it had already left
+ * registration (started, completed, or already cancelled) — not an error.
+ */
+export async function cancelTournamentBeforeStart(id: string, reason: string): Promise<boolean> {
+  const rows = await supabaseFetch<Array<{ id: string }> | undefined>(
+    `/rest/v1/${TABLES.tournaments}?id=eq.${encodeURIComponent(id)}&status=in.(upcoming,registration_open)&select=id`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ status: 'cancelled', cancel_reason: reason }),
+    },
+  );
+  return Array.isArray(rows) && rows.length > 0;
 }
 
 export async function updateTournamentStatus(

@@ -699,6 +699,32 @@ export async function cancelTournament(
   io.emit('tournament:cancelled', { tournamentId });
 }
 
+/**
+ * Cancel a tournament that has not started yet (not enough players, or a
+ * start that kept failing), only if it is still upcoming / registration_open
+ * — one atomic conditional update, so a tournament another process has just
+ * started is never overwritten. False when it had already left registration:
+ * not an error; the caller continues from its current state.
+ */
+export async function cancelTournamentBeforeStart(
+  io: Server,
+  tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+  reason: string,
+): Promise<boolean> {
+  let cancelled: boolean;
+  if (persistence.cancelTournamentBeforeStart) {
+    cancelled = await persistence.cancelTournamentBeforeStart(tournamentId, reason);
+  } else {
+    // Test doubles without the conditional write only.
+    const current = await persistence.fetchTournamentById(tournamentId);
+    cancelled = Boolean(current && (current.status === 'upcoming' || current.status === 'registration_open'));
+    if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
+  }
+  if (cancelled) io.emit('tournament:cancelled', { tournamentId });
+  return cancelled;
+}
+
 /** Helper for the scheduler: open registration on a tournament. */
 export async function openRegistration(
   io: Server,
@@ -723,14 +749,14 @@ export async function closeRegistrationAndStart(
   if (active.length < MIN_HUMANS_TO_START) {
     // Registrations leave 'registered' when the bracket is generated (one
     // transaction also moves the tournament to in_progress). Another starter
-    // (the Fritz Cup route, or a second tick) may have just done that: only a
-    // tournament still in registration is cancelled for lack of players.
-    const current = await persistence.fetchTournamentById(tournamentId);
-    if (current && current.status !== 'upcoming' && current.status !== 'registration_open') {
-      return { started: current.status === 'in_progress', reason: 'already_left_registration' };
+    // (the Fritz Cup route, or a second tick) may have just done that, so the
+    // cancellation is conditional on the tournament still being in
+    // registration, atomically at the database.
+    if (await cancelTournamentBeforeStart(io, tournamentId, persistence, 'not_enough_players')) {
+      return { started: false, reason: 'not_enough_players' };
     }
-    await cancelTournament(io, tournamentId, persistence, 'not_enough_players');
-    return { started: false, reason: 'not_enough_players' };
+    const current = await persistence.fetchTournamentById(tournamentId);
+    return { started: current?.status === 'in_progress', reason: 'already_left_registration' };
   }
   const tournament = await persistence.fetchTournamentById(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
