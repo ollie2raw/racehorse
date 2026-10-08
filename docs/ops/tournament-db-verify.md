@@ -160,6 +160,40 @@ This script **cannot reach production**:
    cancelled; `in_progress`, `completed` and already-cancelled rows are
    untouched; Fritz Cups follow the same rule.
 
+10. **Orchestrator late writes** (`2026-10-08_tournament_orchestrator_cas.sql`,
+    Phase 2C). Each guard is raced three times: a holder session commits a
+    newer write after ~3 s, and a stale session issues the guarded write at
+    ~1.5 s, built from the state read before the holder's change. Every time
+    the stale write blocks on the row lock, then updates 0 rows / is refused,
+    and the holder's state survives field for field:
+    - open registration (`status = 'upcoming'` and due);
+    - dispatch (compare-and-set on status, room_code, ready_at,
+      ready_deadline_at, status_reason) — and a started match is never moved
+      back;
+    - ready → in_progress (`status = 'ready'`) vs a recorded result;
+    - deadline extension (`status`, `ready_deadline_at`, `status_reason`);
+    - `complete_tournament_match_if_unchanged`: `attendance_changed` when the
+      named absentee joined first, `match_state_changed` when the game started
+      first (and, reversed, the no-show commits and the late join waits);
+    - `cancel_tournament_if_no_entrants`: a last-moment registration that
+      commits first prevents the cancel; once the database clock has closed
+      registration an empty event is cancelled and later registration refused;
+    - `cancel_tournament_if_bracket_unchanged`: a match completed after the
+      backstop's snapshot blocks the cancel (`bracket_changed`); so does a
+      repair that leaves every status unchanged; an unchanged bracket cancels.
+
+11. **M3 orchestrator lease** (`2026-10-08_tournament_orchestrator_lease.sql`,
+    Phase 2C): acquire on an absent key mints a token; a second owner cannot
+    acquire a valid lease (no token leaked) and the holder must renew, not
+    re-acquire; renew needs owner + token; `leased_until` is the database
+    clock + TTL; after a real 5 s expiry the old owner cannot renew and a new
+    owner acquires with a new token; the stale owner cannot release or renew
+    it; the owner's release makes the key immediately acquirable; TTL is
+    accepted only in 5..600 s; the table and RPCs are not client-reachable and
+    `assert_security_posture()` stays clean. Eight sessions released behind a
+    barrier acquire concurrently, five rounds (absent key, then an expired
+    lease taken over): exactly one owner every round.
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

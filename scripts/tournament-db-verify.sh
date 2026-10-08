@@ -113,7 +113,7 @@ fail() { echo "  FAIL  $1" >&2; exit 1; }
 
 # ── 3. shim + curated migration chain (greenfield apply) ────────────────────
 echo
-echo "── 1/10  greenfield apply ─────────────────────────────────────────────"
+echo "── 1/11  greenfield apply ─────────────────────────────────────────────"
 RUN -q -f "$HELPERS/shim.sql" >/dev/null
 pass "Supabase shim (auth schema, roles, auth.uid)"
 
@@ -133,6 +133,7 @@ CHAIN=(
   2026-09-29_tournament_registration_rpcs.sql
   2026-10-07_tournament_kind_fritz_cup.sql
   2026-10-08_tournament_orchestrator_cas.sql
+  2026-10-08_tournament_orchestrator_lease.sql
 )
 for m in "${CHAIN[@]}"; do
   [[ -f "$MIGRATIONS/$m" ]] || fail "migration missing from repo: $m"
@@ -146,7 +147,7 @@ pass "2026-08-30 lockdown self-assertion did not roll back"
 
 # ── 4. two-session FOR UPDATE serialization ─────────────────────────────────
 echo
-echo "── 2/10  FOR UPDATE serialization ─────────────────────────────────────"
+echo "── 2/11  FOR UPDATE serialization ─────────────────────────────────────"
 RUN -q -f "$HELPERS/seed.sql" >/dev/null
 QF1="$(Q "select id from public.scheduled_tournament_matches where tournament_id='11111111-1111-4111-8111-111111111111' and round=1 and match_number=1")"
 [[ -n "$QF1" ]] || fail "seed did not produce QF1"
@@ -195,7 +196,7 @@ pass "bracket consistent: one completion, one advancement, loser eliminated once
 
 # ── 5. RLS registrations lockdown diagnostics ──────────────────────────────
 echo
-echo "── 3/10  RLS registrations lockdown ──────────────────────────────────"
+echo "── 3/11  RLS registrations lockdown ──────────────────────────────────"
 [[ "$(Q "select count(*) from pg_policies where schemaname='public' and tablename='scheduled_tournament_registrations' and cmd in ('INSERT','UPDATE','DELETE','ALL') and roles && array['anon','authenticated','public']::name[]")" == "0" ]] \
   || fail "a client-writable policy survives on scheduled_tournament_registrations"
 [[ "$(Q "select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='scheduled_tournament_registrations' and grantee in ('anon','authenticated','public') and privilege_type in ('INSERT','UPDATE','DELETE')")" == "0" ]] \
@@ -206,7 +207,7 @@ pass "0 client-writable policies, 0 client write grants, RLS on"
 
 # ── 6. assert_security_posture() catches a planted violation ───────────────
 echo
-echo "── 4/10  assert_security_posture() ───────────────────────────────────"
+echo "── 4/11  assert_security_posture() ───────────────────────────────────"
 [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] \
   || fail "assert_security_posture() reports a hard failure on a clean schema"
 pass "clean schema -> hard_fail_count = 0"
@@ -224,7 +225,7 @@ pass "re-enable -> hard_fail_count = 0"
 
 # ── 7. registration RPCs: cap, close time, withdraw guard ──────────────────
 echo
-echo "── 5/10  registration RPCs (A2, A7) ──────────────────────────────────"
+echo "── 5/11  registration RPCs (A2, A7) ──────────────────────────────────"
 RUN -q -f "$HELPERS/phase1_seed.sql" >/dev/null
 T_OPEN='22222222-2222-4222-8222-222222222222'      # registration_open, 2 seats, closes in 10 min
 T_CLOSED='33333333-3333-4333-8333-333333333333'    # registration_open, but close time already passed
@@ -288,7 +289,7 @@ pass "withdraw after start -> withdraw_closed, registration row kept"
 
 # ── 8. bracket RPC repair ───────────────────────────────────────────────────
 echo
-echo "── 6/10  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
+echo "── 6/11  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
 T_PARTIAL='44444444-4444-4444-8444-444444444444'   # registration_open, 2 entrants, 4 stale QF rows
 PD='aaaaaaaa-0000-4000-8000-000000000004'           # its entrants (own users: see phase1_seed.sql)
 PE='aaaaaaaa-0000-4000-8000-000000000005'
@@ -332,7 +333,7 @@ pass "partial state containing a played match -> bracket_partial_conflict"
 
 # ── 9. cancel_reason ─────────────────────────────────────────────────────────
 echo
-echo "── 7/10  cancel_reason (Q9) ──────────────────────────────────────────"
+echo "── 7/11  cancel_reason (Q9) ──────────────────────────────────────────"
 [[ "$(Q "select count(*) from information_schema.columns where table_schema='public' and table_name='scheduled_tournaments' and column_name='cancel_reason'")" == "1" ]] \
   || fail "scheduled_tournaments.cancel_reason missing"
 pass "scheduled_tournaments.cancel_reason exists"
@@ -340,7 +341,7 @@ pass "scheduled_tournaments.cancel_reason exists"
 
 # ── 10. M1: tournament kind, Fritz Cup, per-user overlap lock ────────────────
 echo
-echo "── 8/10  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
+echo "── 8/11  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
 RUN -q -f "$HELPERS/m1_seed.sql" >/dev/null
 U() { printf 'cccccccc-0000-4000-8000-0000000000%02d' "$1"; }
 QE() { "$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc "$1" 2>&1 || true; }
@@ -577,7 +578,7 @@ pass "generate_tournament_bracket starts a cup unchanged: in_progress, 7 rows, o
 
 # ── 11. pre-start cancellation vs start (Phase 2B.1) ────────────────────────
 echo
-echo "── 9/10  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
+echo "── 9/11  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
 # The exact statement PostgREST runs for the server's cancelTournamentBeforeStart PATCH.
 CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' and status in ('upcoming','registration_open') returning id"; }
 OLD_CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' returning id"; }
@@ -683,7 +684,7 @@ pass "Fritz Cups follow the same rule: started -> untouched, still registration_
 
 # ── 12. orchestrator late writes (Phase 2C) ──────────────────────────────────
 echo
-echo "── 10/10  orchestrator late writes (Phase 2C) ─────────────────────────"
+echo "── 10/11  orchestrator late writes (Phase 2C) ─────────────────────────"
 # race HOLDER_SQL STALE_SQL: HOLDER commits its write after ~3 s; STALE starts at ~1.5 s.
 # Prints "<wait seconds>|<stale output>".
 race() {
@@ -817,6 +818,89 @@ for ROUND in 1 2 3; do
   SNAP3="$(Q "select jsonb_agg(jsonb_build_object('id',id,'status',status,'winner_id',winner_id,'player1_id',player1_id,'player2_id',player2_id,'room_code',room_code,'status_reason',status_reason,'started_at',started_at,'completed_at',completed_at,'ready_deadline_at',ready_deadline_at,'player1_joined_at',player1_joined_at,'player2_joined_at',player2_joined_at)) from public.scheduled_tournament_matches where tournament_id='$TB'")"
   Q "select public.cancel_tournament_if_bracket_unchanged('$TB', '$SNAP3'::jsonb, 'active_window_unrecoverable:test')" | grep -q '"cancelled": true' || fail "round $ROUND backstop: unchanged bracket not cancelled"
   pass "round $ROUND backstop: a repair with statuses unchanged also blocks; an unchanged bracket is cancelled"
+done
+
+
+# ── 13. M3 orchestrator lease (Phase 2C) ─────────────────────────────────────
+echo
+echo "── 11/11  M3 orchestrator lease (Phase 2C) ─────────────────────────────"
+ACQ() { QE "select public.acquire_tournament_orchestrator_lease('$1', '$2', $3)"; }
+REN() { QE "select public.renew_tournament_orchestrator_lease('$1', '$2', '$3', $4)"; }
+REL() { QE "select public.release_tournament_orchestrator_lease('$1', '$2', '$3')"; }
+tok() { echo "$1" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('lease_token') or '')"; }
+K=tournament_orchestrator
+R="$(ACQ $K owner-a 120)"; echo "$R" | grep -q '"acquired": true' || fail "A could not acquire an absent lease ($R)"; TA="$(tok "$R")"
+[[ -n "$TA" ]] || fail "acquire returned no token"
+pass "A acquires the absent lease; token minted"
+R="$(ACQ $K owner-b 120)"; echo "$R" | grep -q '"acquired": false' && echo "$R" | grep -q '"owner": "owner-a"' && [[ -z "$(tok "$R")" ]] || fail "B acquired a valid lease ($R)"
+R="$(ACQ $K owner-a 120)"; echo "$R" | grep -q '"acquired": false' || fail "A re-acquired instead of renewing ($R)"
+pass "B cannot acquire while A's lease is valid (no token leaked); A itself must renew, not re-acquire"
+U0="$(Q "select leased_until from public.tournament_orchestrator_leases where lease_key='$K'")"
+REN $K owner-a "$TA" 120 | grep -q '"renewed": true' || fail "A could not renew with its token"
+[[ "$(Q "select (leased_until > '$U0')::text from public.tournament_orchestrator_leases where lease_key='$K'")" == "true" ]] || fail "renew did not extend"
+REN $K owner-b "$TA" 120 | grep -q '"renewed": false' || fail "wrong owner renewed"
+REN $K owner-a "$(Q "select gen_random_uuid()")" 120 | grep -q '"renewed": false' || fail "wrong token renewed"
+pass "A renews with owner+token (extended); wrong owner or wrong token cannot renew"
+[[ "$(Q "select (abs(extract(epoch from (leased_until - (clock_timestamp() + interval '120 seconds')))) < 2)::text from public.tournament_orchestrator_leases where lease_key='$K'")" == "true" ]] \
+  || fail "leased_until is not the database clock + TTL"
+pass "leased_until = database clock + TTL (no caller-supplied time anywhere)"
+# Real expiry on the database clock: a 5 s lease, then 5.5 s.
+K2=lease-expiry; R="$(ACQ $K2 owner-a 5)"; TA2="$(tok "$R")"
+Q "select pg_sleep(5.5)" >/dev/null
+REN $K2 owner-a "$TA2" 5 | grep -q '"renewed": false' || fail "an expired lease was renewed by its old owner"
+R="$(ACQ $K2 owner-b 120)"; TB2="$(tok "$R")"
+echo "$R" | grep -q '"acquired": true' && [[ -n "$TB2" && "$TB2" != "$TA2" ]] || fail "B could not take over the expired lease with a new token ($R)"
+pass "after real expiry (DB clock): the old owner cannot renew; B acquires with a NEW token"
+REL $K2 owner-a "$TA2" | grep -q '"released": false' || fail "stale A released B's lease"
+[[ "$(Q "select owner_id||'|'||(lease_token='$TB2')::text||'|'||(leased_until > clock_timestamp())::text from public.tournament_orchestrator_leases where lease_key='$K2'")" == "owner-b|true|true" ]] || fail "B's lease damaged by the stale release"
+REN $K2 owner-a "$TA2" 120 | grep -q '"renewed": false' || fail "stale A renewed B's lease"
+pass "stale A (old token) cannot release or renew B's lease; B's lease intact"
+REL $K2 owner-b "$TB2" | grep -q '"released": true' || fail "B could not release its own lease"
+R="$(ACQ $K2 owner-c 120)"; echo "$R" | grep -q '"acquired": true' || fail "a released lease was not immediately acquirable ($R)"
+REL $K2 owner-b "$TB2" | grep -q '"released": false' || fail "a second release by B touched C's lease"
+pass "B releases its own lease; it is immediately acquirable (C); B's repeat release is a no-op"
+for bad in 0 4 601 -1 null; do
+  ACQ "lease-ttl-$RANDOM" owner-x "$bad" | grep -q 'invalid_lease_ttl' || fail "TTL $bad accepted"
+done
+REN $K owner-a "$TA" 3600 | grep -q 'invalid_lease_ttl' || fail "renew accepted TTL 3600"
+for ok in 5 600; do ACQ "lease-ttl-ok-$ok" owner-x $ok | grep -q '"acquired": true' || fail "TTL $ok refused"; done
+pass "TTL accepted only in 5..600 s (0, 4, 601, -1, null, 3600 refused: invalid_lease_ttl)"
+# client roles cannot touch the table or the RPCs
+[[ "$(Q "select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='tournament_orchestrator_leases' and grantee in ('anon','authenticated','public')")" == "0" ]] \
+  && [[ "$(Q "select relrowsecurity::text from pg_class where oid='public.tournament_orchestrator_leases'::regclass")" == "true" ]] \
+  && [[ "$(Q "select has_function_privilege('authenticated', 'public.acquire_tournament_orchestrator_lease(text,text,integer)', 'execute')::text")" == "false" ]] \
+  && [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] || fail "lease table/RPCs reachable by clients or posture broken"
+pass "no client grants, RLS on, RPCs service_role only; assert_security_posture() still clean"
+# Concurrent acquisition: 8 sessions released together, 5 rounds -> exactly one owner each round.
+for ROUND in 1 2 3 4 5; do
+  KR="lease-race-$ROUND"
+  KIND=absent
+  if [[ $ROUND -ge 3 ]]; then  # rounds 3-5: the key exists with an expired lease (the takeover path)
+    KIND=expired
+    Q "insert into public.tournament_orchestrator_leases values ('$KR', 'crashed-owner', gen_random_uuid(), clock_timestamp() - interval '1 second', clock_timestamp() - interval '3 minutes', clock_timestamp() - interval '2 minutes')" >/dev/null
+  fi
+  "$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -q >/dev/null 2>&1 <<SQL_BARRIER &
+select pg_advisory_lock(777000 + $ROUND);
+select pg_sleep(1.5);
+select pg_advisory_unlock(777000 + $ROUND);
+SQL_BARRIER
+  BP=$!
+  sleep 0.4
+  PIDS=()
+  for n in 1 2 3 4 5 6 7 8; do
+    "$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAq >"$WORK/lease_${ROUND}_$n" 2>&1 <<SQL_ACQ &
+select pg_advisory_lock_shared(777000 + $ROUND);
+select pg_advisory_unlock_shared(777000 + $ROUND);
+select public.acquire_tournament_orchestrator_lease('$KR', 'racer-$n', 120);
+SQL_ACQ
+    PIDS+=($!)
+  done
+  wait "$BP"; for pid in "${PIDS[@]}"; do wait "$pid"; done
+  WINNERS="$(cat "$WORK"/lease_${ROUND}_* | grep -c '"acquired": true' || true)"
+  OWNER="$(Q "select owner_id from public.tournament_orchestrator_leases where lease_key='$KR'")"
+  WON="$(grep -l '"acquired": true' "$WORK"/lease_${ROUND}_* | sed 's/.*_//')"
+  [[ "$WINNERS" == "1" && "$OWNER" == "racer-$WON" ]] || fail "round $ROUND: $WINNERS winners (owner $OWNER)"
+  pass "round $ROUND ($KIND lease): 8 concurrent acquirers -> exactly one owner (racer-$WON), the rest acquired=false"
 done
 
 echo
