@@ -7,6 +7,7 @@ import { isTournamentRoomCode, makeTournamentRoomCode } from './tournamentRoomCo
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
 import { tournamentStarterUserId } from './tournamentStarter';
+import { alertTournamentAnomaly } from './tournamentAlerts';
 
 const log = childLogger('tournament:dispatch');
 
@@ -135,7 +136,18 @@ export async function dispatchTournamentMatch(
   let reusedExistingRoom = Boolean(match.room_code);
   try {
     room = persistence.getRoom(roomCode);
-  } catch {
+    // A room in memory under this code that belongs to another match (a legacy
+    // room-code collision) is never taken over.
+    if (room.scheduledTournamentMatchId && room.scheduledTournamentMatchId !== match.id) {
+      alertTournamentAnomaly(
+        'tournament_foreign_live_session',
+        { tournamentId: match.tournament_id, matchId: match.id, roomCode },
+        { foreignMatchId: room.scheduledTournamentMatchId, stage: 'dispatch' },
+      );
+      throw new Error('tournament_room_session_mismatch');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'tournament_room_session_mismatch') throw err;
     reusedExistingRoom = false;
     // Not in memory (first dispatch, or after a restart): a stored game in
     // progress must be restored, never covered by an empty room.

@@ -123,7 +123,23 @@ export type ActiveRoomHydrationResult =
   | { kind: 'snapshot_freshness_unknown'; error: string }
   | { kind: 'snapshot_stale'; error: string }
   | { kind: 'snapshot_invalid'; error: string }
-  | { kind: 'persistence_unavailable'; error: string };
+  | { kind: 'persistence_unavailable'; error: string }
+  /**
+   * The stored session belongs to another scheduled-tournament match than the
+   * one being restored (only with `expectedTournamentMatchId`). Nothing is
+   * published or written.
+   */
+  | { kind: 'foreign_tournament_session'; error: 'tournament_room_session_mismatch'; storedMatchId: string };
+
+export type EnsureRoomHydratedOptions = {
+  /**
+   * Restore for this scheduled-tournament match only: a stored session that
+   * names a different `scheduled_tournament_match_id` is refused before any
+   * room is created, so it is never visible in the room map. A session that
+   * names no match is validated as before (the caller checks the room).
+   */
+  expectedTournamentMatchId?: string;
+};
 
 const flushTimersByRoomCode = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingPersistByRoomCode = new Map<
@@ -1219,8 +1235,14 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
  * Returns explicit outcomes so callers can distinguish durable gameplay restore,
  * shell-only state, absence, stale/invalid snapshot, and persistence outage.
  */
-export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHydrationResult> {
+export async function ensureRoomHydrated(
+  roomCode: string,
+  options: EnsureRoomHydratedOptions = {},
+): Promise<ActiveRoomHydrationResult> {
   const code = roomCode.trim().toUpperCase();
+  const expectedMatchId = options.expectedTournamentMatchId;
+  // Concurrent hydrations share one attempt only when they expect the same thing.
+  const inFlightKey = expectedMatchId ? `${code}|${expectedMatchId}` : code;
   const existing = peekRoom(code);
   if (existing) {
     return {
@@ -1231,24 +1253,24 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
     };
   }
 
-  const inFlight = inFlightHydrationByRoomCode.get(code);
+  const inFlight = inFlightHydrationByRoomCode.get(inFlightKey);
   if (inFlight) return inFlight;
 
   const hydrationPromise = (async (): Promise<ActiveRoomHydrationResult> => {
-    const result = await runLiveRoomHydration(code);
+    const result = await runLiveRoomHydration(code, expectedMatchId);
     emitMpAuthorityHydrationResult(code, result);
     return result;
   })().finally(() => {
-    if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
-      inFlightHydrationByRoomCode.delete(code);
+    if (inFlightHydrationByRoomCode.get(inFlightKey) === hydrationPromise) {
+      inFlightHydrationByRoomCode.delete(inFlightKey);
     }
   });
 
-  inFlightHydrationByRoomCode.set(code, hydrationPromise);
+  inFlightHydrationByRoomCode.set(inFlightKey, hydrationPromise);
   return hydrationPromise;
 }
 
-async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationResult> {
+async function runLiveRoomHydration(code: string, expectedMatchId?: string): Promise<ActiveRoomHydrationResult> {
     const loaded = await loadLiveRoomSession(code);
     if (loaded.kind === 'not_found') {
       return { kind: 'not_found' };
@@ -1264,6 +1286,13 @@ async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationRe
         kind: 'snapshot_invalid',
         error: loaded.error,
       };
+    }
+
+    // Identity before publication: another tournament match's session is
+    // refused here, before applyLiveSessionRow creates (publishes) a room.
+    const storedMatchId = loaded.row.scheduled_tournament_match_id;
+    if (expectedMatchId && storedMatchId && storedMatchId !== expectedMatchId) {
+      return { kind: 'foreign_tournament_session', error: 'tournament_room_session_mismatch', storedMatchId };
     }
 
     const validation = validateLiveRoomHydrationRow(code, loaded.row);

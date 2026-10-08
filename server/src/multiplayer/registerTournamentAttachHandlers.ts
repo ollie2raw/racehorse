@@ -110,7 +110,7 @@ export function registerTournamentAttachHandlers(
         ackOnce({ ok: false, error: 'room_unavailable' });
         return;
       }
-      if (peekRoom(match.room_code)) {
+      if (peekRoom(match.room_code)?.scheduledTournamentMatchId === match.id) {
         log.info({
           matchId: match.id,
           roomCode: match.room_code,
@@ -151,6 +151,7 @@ export function registerTournamentAttachHandlers(
         userId: participantUserId,
         via: 'tournament:attach_assigned_match',
         hydrateMatchmakingRoom: false,
+        tournamentMatchId: match.id,
       });
       const nowIso = new Date().toISOString();
       if (!humanJoinedAt(match, participantUserId)) {

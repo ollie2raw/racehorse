@@ -64,6 +64,8 @@ export type AttachSocketToTrackedRoomFn = (params: {
   userId: string | null;
   via: 'room:join' | 'tournament:attach_assigned_match';
   hydrateMatchmakingRoom: boolean;
+  /** The tournament match being attached: another match's room or session under this code is refused. */
+  tournamentMatchId?: string;
 }) => Promise<{
   room: Room;
   joinedPlayerSeatId: string;
@@ -235,13 +237,22 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
   };
 
   const attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn = async (params) => {
-    const { roomCode, username, userId, via, hydrateMatchmakingRoom } = params;
+    const { roomCode, username, userId, via, hydrateMatchmakingRoom, tournamentMatchId } = params;
+    // Tournament attaches pass their match so another match's session, room
+    // or archive under this code is never used; other calls are unchanged.
+    const resolveTerminalJoin = () =>
+      tournamentMatchId ? resolveArchivedTerminalJoin(roomCode, { tournamentMatchId }) : resolveArchivedTerminalJoin(roomCode);
     clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
     // Re-attaching to the room this socket already occupies is a reconnect —
     // leaving it first would forfeit the very match being rejoined.
     await leaveExistingSocketRooms({ exceptRoomCode: roomCode });
 
-    const hydrated = await ensureRoomHydrated(roomCode);
+    const hydrated = tournamentMatchId
+      ? await ensureRoomHydrated(roomCode, { expectedTournamentMatchId: tournamentMatchId })
+      : await ensureRoomHydrated(roomCode);
+    if (hydrated.kind === 'foreign_tournament_session') {
+      throw new Error(hydrated.error);
+    }
     if (hydrated.kind === 'hydrated' && hydrated.restoredRoster.length > 0) {
       setRoomRoster(
         roomCode,
@@ -262,7 +273,11 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     }
     if (hydrated.kind === 'snapshot_invalid' || hydrated.kind === 'snapshot_stale') {
       if (isTerminalHydrationError(hydrated.error)) {
-        await throwArchivedTerminalJoinOrError(roomCode, hydrated.error);
+        if (tournamentMatchId) {
+          await throwArchivedTerminalJoinOrError(roomCode, hydrated.error, { tournamentMatchId });
+        } else {
+          await throwArchivedTerminalJoinOrError(roomCode, hydrated.error);
+        }
       }
       throw new Error(hydrated.error);
     }
@@ -294,7 +309,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
 
     const existingRoom = peekRoom(roomCode);
     if (!existingRoom) {
-      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      const archivedTerminal = await resolveTerminalJoin();
       if (archivedTerminal) {
         log.info(
           { roomCode, matchId: archivedTerminal.terminal.matchId, via },
@@ -308,8 +323,16 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       );
       throw new Error(message);
     }
+    if (
+      tournamentMatchId &&
+      existingRoom.scheduledTournamentMatchId &&
+      existingRoom.scheduledTournamentMatchId !== tournamentMatchId
+    ) {
+      // Another match's room under this code (a legacy room-code collision).
+      throw new Error('tournament_room_session_mismatch');
+    }
     if (existingRoom.abandonedAt) {
-      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      const archivedTerminal = await resolveTerminalJoin();
       if (archivedTerminal) throw archivedTerminal;
       throw new Error('match_abandoned');
     }
@@ -335,7 +358,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       throw new Error('tournament_forfeit_failed');
     }
     if (existingRoom.state?.gameOver) {
-      const archivedTerminal = await resolveArchivedTerminalJoin(roomCode);
+      const archivedTerminal = await resolveTerminalJoin();
       if (archivedTerminal) {
         log.info(
           { roomCode, matchId: archivedTerminal.terminal.matchId, via },

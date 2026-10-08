@@ -6,7 +6,7 @@ import {
   closeTournamentRoom,
   decideUnstartedMatchByAttendance,
   noShowStatusReason,
-  peekTournamentRoom,
+  peekMatchRoom,
   resolveInProgressMatchFromRoom,
   selectHigherSeedWinner,
   type InProgressResolutionLabels,
@@ -251,6 +251,6 @@ async function resolveOne(
     }, persistence);
   }
   // A room may exist (players waiting in it, or in the pre-game draw): close it.
-  const room = match.room_code ? peekTournamentRoom(persistence, match.room_code) : null;
+  const room = peekMatchRoom(persistence, match);
   if (room) closeTournamentRoom(room, now);
 }

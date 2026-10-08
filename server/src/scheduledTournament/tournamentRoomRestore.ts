@@ -4,8 +4,19 @@ import { createReservedRoom, deleteRoom, peekRoom, type Room } from '../rooms';
 import { ensureRoomHydrated } from '../multiplayer/roomLivePersistence';
 import { setRoomRoster } from '../multiplayer/roomSession';
 import { syncTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
+import { alertTournamentAnomaly } from './tournamentAlerts';
 
 const log = childLogger('tournament:room-restore');
+
+/** Another match's session under this room code (a legacy room-code collision): alert and refuse. */
+function refuseForeignSession(code: string, matchId: string, storedMatchId: string): never {
+  alertTournamentAnomaly(
+    'tournament_foreign_live_session',
+    { matchId, roomCode: code },
+    { foreignMatchId: storedMatchId, stage: 'restore' },
+  );
+  throw new Error('tournament_room_session_mismatch');
+}
 
 /** One restore-or-create per room code at a time (see restoreOrCreateTournamentRoom). */
 const inFlightByRoomCode = new Map<string, Promise<Room>>();
@@ -47,16 +58,32 @@ export function restoreOrCreateTournamentRoom(
 }
 
 async function restoreOrCreate(code: string, matchId: string, config: Partial<Config>): Promise<Room> {
-  const hydrated = await ensureRoomHydrated(code);
+  const hydrated = await ensureRoomHydrated(code, { expectedTournamentMatchId: matchId });
   switch (hydrated.kind) {
     case 'already_in_memory':
+      // Another path (a room:join) may have restored this code's session; if
+      // it is another match's room it is not this match's to take over.
+      if (hydrated.room.scheduledTournamentMatchId && hydrated.room.scheduledTournamentMatchId !== matchId) {
+        refuseForeignSession(code, matchId, hydrated.room.scheduledTournamentMatchId);
+      }
       return hydrated.room;
+    case 'foreign_tournament_session':
+      // Refused before any room was created: nothing to clean up.
+      refuseForeignSession(code, matchId, hydrated.storedMatchId);
+      break;
     case 'hydrated': {
+      // A session naming another match never gets here (refused before
+      // publication) unless another path created the room meanwhile: refuse
+      // it, and leave that room alone.
+      if (hydrated.room.scheduledTournamentMatchId && hydrated.room.scheduledTournamentMatchId !== matchId) {
+        refuseForeignSession(code, matchId, hydrated.room.scheduledTournamentMatchId);
+      }
       if (hydrated.room.scheduledTournamentMatchId !== matchId) {
+        // A legacy session naming no match: not provably this match's game.
         deleteRoom(code);
         log.error(
           { roomCode: code, matchId, storedMatchId: hydrated.room.scheduledTournamentMatchId ?? null },
-          'stored live session belongs to another match; not restored',
+          'stored live session names no tournament match; not restored',
         );
         throw new Error('tournament_room_session_mismatch');
       }

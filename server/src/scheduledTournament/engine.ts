@@ -12,6 +12,7 @@ import {
   clearTournamentStepAlert,
 } from './tournamentAlerts';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
+import { archiveBelongsToMatch } from './archiveIdentity';
 import { tournamentMatchCapMs } from './tournamentTimeouts';
 import type { Room } from '../rooms';
 import type { GameState } from '../game/types';
@@ -937,21 +938,12 @@ async function persistedGameFor(match: MatchRow): Promise<PersistedGame> {
   // unreadable one, or a foreign one.
   const { queryRecentPersistedRoomMatchLogsByRoomCode } = await import('../multiplayer/roomMatchLogPersistence');
   const archives = await queryRecentPersistedRoomMatchLogsByRoomCode(roomCode, ARCHIVE_CANDIDATES);
-  const startedMs = Date.parse(match.started_at ?? '');
   for (const archived of archives) {
     const state = archived.state_snapshot as GameState | null | undefined;
     if (archived.status !== 'completed' || !state?.gameOver) continue;
+    // Exact match id when the archive records one; legacy identity otherwise.
+    if (!archiveBelongsToMatch(archived, match)) continue;
     const archivedMatchId = archived.summary?.scheduledTournamentMatchId;
-    if (typeof archivedMatchId === 'string') {
-      // Exact identity is authoritative: another match's archive is never used.
-      if (archivedMatchId !== match.id) continue;
-    } else {
-      // Archived before the match id was recorded: compatibility identity.
-      const players = archived.participants.map((p) => p.userId ?? (isBotUserId(p.id) ? p.id : null));
-      const isThisMatch = players.length === 2 &&
-        players.includes(match.player1_id) && players.includes(match.player2_id) && match.player1_id !== match.player2_id;
-      if (!isThisMatch || (Number.isFinite(startedMs) && Date.parse(archived.archived_at) < startedMs)) continue;
-    }
     return {
       foreignLiveSession,
       finished: {
@@ -981,7 +973,7 @@ export async function recordFinishedGameIfAny(
   options: { dispatchAdvanced?: boolean } = {},
 ): Promise<boolean> {
   if (match.status !== 'in_progress' || !match.room_code || !match.player1_id || !match.player2_id) return false;
-  const room = peekTournamentRoom(persistence, match.room_code);
+  const room = peekMatchRoom(persistence, match);
   if (room) {
     if (!room.state?.gameOver) return false;
     return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
@@ -1017,7 +1009,7 @@ export async function resolveInProgressMatchFromRoom(
 ): Promise<boolean> {
   if (!match.player1_id || !match.player2_id || !match.room_code) return false;
 
-  let room = peekTournamentRoom(persistence, match.room_code);
+  let room = peekMatchRoom(persistence, match);
   if (!room) {
     // A game that finished before a restart (or before room cleanup) is
     // recorded from what was persisted, not restored and never re-decided.
@@ -1035,10 +1027,11 @@ export async function resolveInProgressMatchFromRoom(
         // The stored session became terminal, or foreign, meanwhile.
         const stored = await persistedGameFor(match);
         if (stored.finished) return recordFinishedGame(io, match, stored.finished, persistence, labels, options);
-        if (!stored.foreignLiveSession) throw err;
+        // Refused as another match's session or room: this match's is lost.
+        if (!stored.foreignLiveSession && code !== 'tournament_room_session_mismatch') throw err;
       }
     }
-    room = peekTournamentRoom(persistence, match.room_code);
+    room = peekMatchRoom(persistence, match);
   }
   // A game that already ended is recorded from its own result (the game-over
   // finalizer), never decided again by score or seed.
@@ -1128,6 +1121,28 @@ async function enforceTournamentMatchCap(
   const startedMs = Date.parse(match.started_at ?? '');
   if (!Number.isFinite(startedMs) || now.getTime() - startedMs < tournamentMatchCapMs()) return false;
   return resolveInProgressMatchFromRoom(io, match, persistence, now, MATCH_CAP_LABELS);
+}
+
+/**
+ * The in-memory room of this match: the room under its code, unless that room
+ * belongs to another match (a legacy room-code collision), which is never
+ * read, recorded or closed as this match's room. Alerted.
+ */
+export function peekMatchRoom(
+  persistence: EnginePersistence,
+  match: Pick<MatchRow, 'id' | 'tournament_id' | 'room_code'>,
+): Room | null {
+  if (!match.room_code) return null;
+  const room = peekTournamentRoom(persistence, match.room_code);
+  if (room?.scheduledTournamentMatchId && room.scheduledTournamentMatchId !== match.id) {
+    alertTournamentAnomaly(
+      'tournament_foreign_live_session',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { foreignMatchId: room.scheduledTournamentMatchId, stage: 'in_memory_room' },
+    );
+    return null;
+  }
+  return room;
 }
 
 export function peekTournamentRoom(persistence: EnginePersistence, roomCode: string): Room | null {
