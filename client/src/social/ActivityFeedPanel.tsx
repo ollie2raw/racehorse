@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { fetchActivityFeed, type FeedItem } from './socialApi';
+import { fetchActivityFeed, fetchGlobalActivityFeed, type FeedItem } from './socialApi';
 import {
   buildFeedRowViewModel,
   type FeedRowViewModel,
@@ -101,12 +101,13 @@ function boardRow(item: FeedItem, vm: FeedRowViewModel): {
 interface ActivityFeedFilterTabsProps {
   filter: ActivityFeedFilterTab;
   onFilterChange: (filter: ActivityFeedFilterTab) => void;
+  signedIn: boolean;
 }
 
-export function ActivityFeedFilterTabs({ filter, onFilterChange }: ActivityFeedFilterTabsProps) {
+export function ActivityFeedFilterTabs({ filter, onFilterChange, signedIn }: ActivityFeedFilterTabsProps) {
   return (
     <nav className="rh-sb-filters" role="tablist" aria-label="Activity filters">
-      {FILTER_TABS.map((tab) => (
+      {FILTER_TABS.filter((tab) => signedIn || (tab.id !== 'friends' && tab.id !== 'mentions')).map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -130,6 +131,7 @@ interface ActivityFeedPanelProps {
    *  matches gets the gold left bar. */
   selfUserId?: string;
   onViewProfile: (username: string) => void;
+  onOpenAuth?: () => void;
   emptyAction?: React.ReactNode;
   onFeedChange?: (feed: FeedItem[]) => void;
 }
@@ -172,21 +174,34 @@ export default function ActivityFeedPanel({
   friendUsernames = new Set(),
   selfUserId,
   onViewProfile,
+  onOpenAuth,
   emptyAction,
   onFeedChange,
 }: ActivityFeedPanelProps) {
   const [visibleCount, setVisibleCount] = useState(10);
 
-  const hasUser = Boolean(user);
-  const { data, loading, error, refetch } = useAsyncData<FeedItem[]>(
+  const { data: globalData, loading: globalLoading, error: globalError, refetch: refetchGlobal } = useAsyncData<FeedItem[]>(
+    async () => {
+      const result = await fetchGlobalActivityFeed();
+      if (result.error) throw new Error(result.error);
+      return result.feed;
+    },
+    [],
+  );
+  const isFriendsFilter = filter === 'friends' && Boolean(user);
+  const { data: friendsData, loading: friendsLoading, error: friendsError, refetch: refetchFriends } = useAsyncData<FeedItem[]>(
     async () => {
       const result = await fetchActivityFeed();
       if (result.error) throw new Error(result.error);
       return result.feed;
     },
     [user?.id],
-    { enabled: hasUser },
+    { enabled: isFriendsFilter },
   );
+  const data = isFriendsFilter ? friendsData : globalData;
+  const loading = isFriendsFilter ? friendsLoading : globalLoading;
+  const error = isFriendsFilter ? friendsError : globalError;
+  const refetch = isFriendsFilter ? refetchFriends : refetchGlobal;
 
   const feed = useMemo(() => data ?? [], [data]);
 
@@ -200,16 +215,16 @@ export default function ActivityFeedPanel({
   // Bridge the fetched feed up to the parent + reset pagination on a fresh load.
   // Fires only when the fetched data / error / signed-in state actually changes.
   useEffect(() => {
-    if (!hasUser || error) {
+    if (globalError) {
       onFeedChangeRef.current?.([]);
       return;
     }
-    if (data) {
-      onFeedChangeRef.current?.(data);
+    if (globalData) {
+      onFeedChangeRef.current?.(globalData);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate pagination reset when a new feed lands (matches the pre-hook load())
       setVisibleCount(10);
     }
-  }, [data, error, hasUser]);
+  }, [globalData, globalError]);
 
   const filtered = useMemo(
     () => filterItems(feed, filter, friendUsernames),
@@ -223,8 +238,8 @@ export default function ActivityFeedPanel({
       <section className="rh-sb-table" aria-label="Activity feed">
         <div className="rh-sb-feed-state" aria-live="polite">
           <span className="rh-sb-feed-state__kicker">Loading</span>
-          <strong>Building your social feed…</strong>
-          <p>Recent wins, rival updates, and tournament results will appear here.</p>
+          <strong>Building the community feed…</strong>
+          <p>Recent wins, streaks, and tournament results will appear here.</p>
         </div>
       </section>
     );
@@ -252,7 +267,7 @@ export default function ActivityFeedPanel({
           <strong>
             {filter === 'mentions'
               ? 'Mentions will show up here when rivals tag you.'
-              : 'Play a match or follow rivals to start your feed.'}
+              : 'Community results will appear here as players finish games.'}
           </strong>
           <p>
             {filter === 'mentions'
@@ -286,7 +301,11 @@ export default function ActivityFeedPanel({
             type="button"
             key={item.id}
             className={`rh-sb-row rh-sb-row-grid${isSelf ? ' rh-sb-row--self' : ''}`}
-            onClick={() => onViewProfile(item.username)}
+            onClick={() => {
+              if (user) onViewProfile(item.username);
+              else onOpenAuth?.();
+            }}
+            title={user ? `View ${item.username}'s profile` : 'Sign in to view profiles'}
           >
             <span className="rh-sb-who">
               <span
