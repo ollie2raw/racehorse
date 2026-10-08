@@ -50,6 +50,10 @@ export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTour
   ]);
   const byId = new Map<string, ScheduledTournamentRow>();
   for (const row of [...preStart, ...bracketLobby]) {
+    // The communal feed is Live Events only. A Fritz Cup starts when it is
+    // created, so `scheduled_start >= now` already excludes it; filtering on
+    // the row (not in the query) keeps this read valid before M1 is applied.
+    if ((row.kind ?? 'live') !== 'live') continue;
     byId.set(row.id, row);
   }
   return [...byId.values()]
@@ -192,6 +196,7 @@ export const REGISTRATION_RPC_ERRORS = new Set([
   'tournament_full',
   'withdraw_closed',
   'invalid_user',
+  'overlapping_tournament',
 ]);
 
 export type RegisterForTournamentResult = {
@@ -433,8 +438,66 @@ async function callTournamentRpc<T>(fn: string, body: Record<string, unknown>): 
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     const m = raw.match(/"message":\s*"([^"]+)"/);
-    throw new Error(m ? m[1] : raw);
+    throw new TournamentRpcError(m ? m[1] : raw, rpcErrorDetails(raw));
   }
+}
+
+/**
+ * An RPC failure: `message` is the stable code; `details` is the JSON object an
+ * RPC put in the exception DETAIL (overlapping_tournament's conflict,
+ * fritz_cup_cooldown's retry_after_ms), when there is one.
+ */
+export class TournamentRpcError extends Error {
+  constructor(code: string, readonly details: Record<string, unknown> | null = null) {
+    super(code);
+    this.name = 'TournamentRpcError';
+  }
+}
+
+/** The PostgREST error body's `details`, parsed when it is a JSON object. */
+function rpcErrorDetails(raw: string): Record<string, unknown> | null {
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  try {
+    const body = JSON.parse(raw.slice(start)) as { details?: unknown };
+    if (typeof body.details !== 'string') return null;
+    const details = JSON.parse(body.details) as unknown;
+    return details && typeof details === 'object' && !Array.isArray(details) ? details as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The tournament an overlapping_tournament refusal names (from the RPC's
+ * exception detail), for the client to explain the refusal.
+ */
+export function overlapConflictPayload(err: unknown): { tournamentId: string | null; kind: string | null; scheduledStart: string | null } {
+  const details = err instanceof TournamentRpcError ? err.details : null;
+  const scheduledStart = typeof details?.scheduled_start === 'string' ? Date.parse(details.scheduled_start) : Number.NaN;
+  return {
+    tournamentId: typeof details?.tournament_id === 'string' ? details.tournament_id : null,
+    kind: typeof details?.kind === 'string' ? details.kind : null,
+    scheduledStart: Number.isFinite(scheduledStart) ? new Date(scheduledStart).toISOString() : null,
+  };
+}
+
+export type StartFritzCupResult = {
+  existing: boolean;
+  tournament: ScheduledTournamentRow;
+};
+
+/**
+ * The database half of an on-demand Fritz Cup (start_fritz_cup): the user's
+ * active cup, or a new one with its owner registration, in one transaction
+ * under the per-user tournament lock. Throws TournamentRpcError
+ * overlapping_tournament / fritz_cup_cooldown / invalid_user.
+ */
+export async function startFritzCup(userId: string): Promise<StartFritzCupResult> {
+  if (!isValidUuid(userId)) {
+    throw new Error('invalid_user');
+  }
+  return callTournamentRpc<StartFritzCupResult>('start_fritz_cup', { p_user_id: userId });
 }
 
 export async function completeTournamentMatch(

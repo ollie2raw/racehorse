@@ -29,7 +29,7 @@ export function bootstrapScheduledTournamentInfrastructure(io: Server, app: Expr
   infrastructureInitialized = true;
   // Routes always exist so old clients get a clean answer; with the feature
   // off they answer without touching Supabase.
-  registerTournamentRoutes(app);
+  registerTournamentRoutes(app, io);
   if (!isTournamentsEnabled()) {
     log.warn('tournaments DISABLED (TOURNAMENTS_ENABLED is not "true"): no scheduler, no seeding, no recovery');
     return;

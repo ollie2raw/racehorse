@@ -121,6 +121,30 @@ This script **cannot reach production**:
 
 7. **`cancel_reason`** exists on `scheduled_tournaments` (review Q9).
 
+8. **M1: tournament kind, Fritz Cup, per-user overlap lock**
+   (`2026-10-07_tournament_kind_fritz_cup.sql`, Phase 2B), on fixtures from
+   `scripts/tournament-db-verify/m1_seed.sql`:
+   - Every existing and newly seeded row is `kind='live'` with no owner; a
+     Fritz Cup without an owner, a Live Event with one, and an unknown kind are
+     rejected; the existing RPC signatures are unchanged.
+   - `start_fritz_cup` creates one `fritz_cup` row (`registration_open`, due
+     now, never a whole-second start) and only the owner's registration;
+     a retry returns the same cup (`existing: true`).
+   - Two sessions creating a cup for the same user: B blocks on the per-user
+     advisory lock, then gets A's cup. A deterministic `scheduled_start`
+     collision steps forward 1 µs; 12 users released behind a barrier all get
+     cups with unique starts.
+   - Overlap in both directions (`overlapping_tournament` with the conflicting
+     tournament), including two-session races; the same event re-registered is
+     still `already_registered`; eliminated / cancelled / completed holds no
+     longer block; Fritz Cups refuse the public registration RPC.
+   - The 60 s cooldown and the 20-per-24 h limit (`fritz_cup_cooldown`), and an
+     active cup still returned at the limit; the bracket RPC starts a cup
+     unchanged.
+
+   The fixtures for §6 use their own users, since one user can no longer hold
+   two tournaments starting minutes apart.
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

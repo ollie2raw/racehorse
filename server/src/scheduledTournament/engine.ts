@@ -721,6 +721,14 @@ export async function closeRegistrationAndStart(
   const regs = await persistence.fetchRegistrations(tournamentId);
   const active = regs.filter((r) => r.status === 'registered');
   if (active.length < MIN_HUMANS_TO_START) {
+    // Registrations leave 'registered' when the bracket is generated (one
+    // transaction also moves the tournament to in_progress). Another starter
+    // (the Fritz Cup route, or a second tick) may have just done that: only a
+    // tournament still in registration is cancelled for lack of players.
+    const current = await persistence.fetchTournamentById(tournamentId);
+    if (current && current.status !== 'upcoming' && current.status !== 'registration_open') {
+      return { started: current.status === 'in_progress', reason: 'already_left_registration' };
+    }
     await cancelTournament(io, tournamentId, persistence, 'not_enough_players');
     return { started: false, reason: 'not_enough_players' };
   }

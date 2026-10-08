@@ -18,6 +18,15 @@ export function isTournamentsEnabled(): boolean {
   return process.env.TOURNAMENTS_ENABLED === 'true';
 }
 
+/**
+ * FRITZ_CUP_ENABLED (default off) gates the creation of NEW Fritz Cups only.
+ * Existing cups keep running either way: the scheduler, recovery, matches,
+ * results and completion treat them like any tournament.
+ */
+export function isFritzCupEnabled(): boolean {
+  return process.env.FRITZ_CUP_ENABLED === 'true';
+}
+
 export const TOURNAMENTS_DISABLED = {
   ok: false,
   error: 'tournaments_disabled',

@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   fetchBracketView,
   registerForTournament,
+  overlapConflictPayload,
   REGISTRATION_RPC_ERRORS,
   withdrawFromTournament,
 } from './persistence';
@@ -55,7 +56,8 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
     } catch (err) {
-      ack?.({ ok: false, error: registrationErrorCode(err) });
+      const error = registrationErrorCode(err);
+      ack?.({ ok: false, error, ...(error === 'overlapping_tournament' ? { conflict: overlapConflictPayload(err) } : {}) });
     }
   });
 

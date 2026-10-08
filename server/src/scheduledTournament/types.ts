@@ -8,8 +8,15 @@ export type ScheduledTournamentStatus =
   | 'completed'
   | 'cancelled';
 
+/** 'live': a scheduled communal event. 'fritz_cup': one user's on-demand cup against Fritz. */
+export type TournamentKind = 'live' | 'fritz_cup';
+
 export type ScheduledTournamentRow = {
   id: string;
+  /** Absent only before the M1 migration (every row is then a Live Event). */
+  kind?: TournamentKind;
+  /** The Fritz Cup's owner (null for a Live Event). Not exposed by public responses. */
+  owner_user_id?: string | null;
   scheduled_start: string;
   registration_open_at: string;
   registration_close_at: string;

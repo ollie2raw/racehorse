@@ -1,5 +1,7 @@
 import { childLogger } from '../logger';
 import type { Express, Request, Response } from 'express';
+import type { Server } from 'socket.io';
+import { createRateLimitMiddleware, InMemoryRateLimiter } from '../rateLimit';
 import { isSupabaseTimeoutError, supabaseFetch } from '../supabaseUtils';
 import { placementLabelForRank } from './engine';
 import {
@@ -15,8 +17,12 @@ import {
   isValidUuid,
   registerForTournament,
   REGISTRATION_RPC_ERRORS,
+  overlapConflictPayload,
+  TournamentRpcError,
   withdrawFromTournament,
 } from './persistence';
+import { startOrResumeFritzCup } from './fritzCup';
+import type { ScheduledTournamentRow } from './types';
 import { humanJoinedAt, isBotUserId } from './matchDispatch';
 import { buildTournamentMeState } from './meState';
 import {
@@ -24,7 +30,7 @@ import {
   requireAuthUserId,
   sendAuthError,
 } from './tournamentAuth';
-import { respondIfTournamentsDisabled } from './tournamentsFeature';
+import { isFritzCupEnabled, respondIfTournamentsDisabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
 
 const log = childLogger('tournament:routes');
 
@@ -47,7 +53,94 @@ function sendRegistrationRpcError(res: Response, err: unknown): void {
     return;
   }
   const status = code === 'tournament_not_found' ? 404 : code === 'invalid_user' ? 400 : 409;
-  res.status(status).json({ ok: false, error: code === 'tournament_not_found' ? 'not_found' : code });
+  res.status(status).json({
+    ok: false,
+    error: code === 'tournament_not_found' ? 'not_found' : code,
+    ...(code === 'overlapping_tournament' ? { conflict: overlapConflictPayload(err) } : {}),
+  });
+}
+
+/** A tournament row as public responses show it: the Fritz Cup owner id stays server-side. */
+function publicTournament<T extends Partial<ScheduledTournamentRow>>(tournament: T): Omit<T, 'owner_user_id'> & { kind: string } {
+  const { owner_user_id: _owner, ...rest } = tournament;
+  return { ...rest, kind: tournament.kind ?? 'live' };
+}
+
+/** POST /api/tournaments/fritz-cup: 10 requests per 10 minutes per IP (the database limits are authoritative). */
+const FRITZ_CUP_RATE_RULE = { windowMs: 10 * 60_000, max: 10 };
+const fritzCupRateLimit = createRateLimitMiddleware(
+  new InMemoryRateLimiter(FRITZ_CUP_RATE_RULE),
+  FRITZ_CUP_RATE_RULE,
+  'rest:fritz-cup',
+);
+
+/** The start_fritz_cup refusals as HTTP; anything unexpected is a plain 500 `internal`. */
+function sendFritzCupError(res: Response, err: unknown): void {
+  const code = err instanceof Error ? err.message : '';
+  if (code === 'overlapping_tournament') {
+    res.status(409).json({ ok: false, error: code, conflict: overlapConflictPayload(err) });
+    return;
+  }
+  if (code === 'fritz_cup_cooldown') {
+    const details = err instanceof TournamentRpcError ? err.details : null;
+    const retryAfterMs = Number(details?.retry_after_ms);
+    res.status(429).json({
+      ok: false,
+      error: code,
+      retryAfterMs: Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? Math.ceil(retryAfterMs) : 60_000,
+      reason: details?.reason === 'daily_limit' ? 'daily_limit' : 'cooldown',
+    });
+    return;
+  }
+  if (code === 'invalid_user') {
+    res.status(400).json({ ok: false, error: code });
+    return;
+  }
+  log.error({ err }, 'fritz cup request failed');
+  res.status(500).json({ ok: false, error: 'internal' });
+}
+
+/** The user's playable assigned match, as /me reports it (null if none is playable now). */
+function assignedMatchPayload(
+  userId: string,
+  active: Awaited<ReturnType<typeof fetchActiveAssignedMatchForUser>>,
+) {
+  if (!active) return null;
+  const { match, tournament, opponentUsername } = active;
+  if (
+    tournament.status !== 'in_progress' ||
+    (match.status !== 'ready' && match.status !== 'in_progress') ||
+    match.completed_at ||
+    match.winner_id
+  ) {
+    return null;
+  }
+  if (Date.parse(tournament.scheduled_start) > Date.now()) {
+    return null;
+  }
+  const humanAttached = Boolean(humanJoinedAt(match, userId));
+  const matchStatus =
+    match.status === 'in_progress' && !humanAttached
+      ? 'ready'
+      : match.status === 'ready' || match.status === 'in_progress'
+        ? match.status
+        : 'ready';
+  const opponentId =
+    match.player1_id === userId ? match.player2_id : match.player1_id;
+  return {
+    matchId: match.id,
+    tournamentId: tournament.id,
+    round: match.round,
+    matchNumber: match.match_number,
+    roomCode: match.room_code,
+    opponentId,
+    opponentUsername:
+      opponentId && isBotUserId(opponentId)
+        ? opponentUsername ?? 'Fritz'
+        : opponentUsername,
+    matchStatus,
+    readyDeadlineAt: match.ready_deadline_at,
+  };
 }
 
 function requireTournamentId(req: Request, res: Response): string | null {
@@ -59,7 +152,7 @@ function requireTournamentId(req: Request, res: Response): string | null {
   return id;
 }
 
-export function registerTournamentRoutes(app: Express): void {
+export function registerTournamentRoutes(app: Express, io?: Server): void {
   // Static paths must be registered before /:id so "me", "upcoming", etc. are not captured.
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
     if (respondIfTournamentsDisabled(res, 'upcoming')) return;
@@ -73,7 +166,7 @@ export function registerTournamentRoutes(app: Express): void {
           return { ...t, registered_count: registeredCount };
         }),
       );
-      res.json({ ok: true, tournaments: enriched });
+      res.json({ ok: true, tournaments: enriched.map(publicTournament) });
     } catch (err) {
       if (isSupabaseTimeoutError(err)) {
         log.warn({ ms: Date.now() - startedAt, err }, 'upstream timeout');
@@ -81,6 +174,40 @@ export function registerTournamentRoutes(app: Express): void {
         return;
       }
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+    }
+  });
+
+  // An on-demand Fritz Cup for the authenticated user (no ids in the body):
+  // their active cup, or a new one, started at once (see fritzCup.ts).
+  app.post('/api/tournaments/fritz-cup', async (req: Request, res: Response) => {
+    if (respondIfTournamentsDisabled(res, 'refuse')) return;
+    if (!isFritzCupEnabled()) {
+      res.status(403).json(TOURNAMENTS_DISABLED);
+      return;
+    }
+    let withinLimit = false;
+    fritzCupRateLimit(req, res, () => { withinLimit = true; });
+    if (!withinLimit) return;
+    const userId = await requireAuthUserId(req, res);
+    if (!userId) return;
+    if (!io) {
+      log.error('fritz cup route registered without a socket server');
+      res.status(500).json({ ok: false, error: 'internal' });
+      return;
+    }
+    try {
+      const started = await startOrResumeFritzCup(io, userId);
+      const active = await fetchActiveAssignedMatchForUser(userId).catch(() => null);
+      const assigned = assignedMatchPayload(userId, active);
+      res.json({
+        ok: true,
+        existing: started.existing,
+        kind: 'fritz_cup',
+        tournament: publicTournament(started.tournament),
+        activeAssignedMatch: assigned?.tournamentId === started.tournament.id ? assigned : null,
+      });
+    } catch (err) {
+      sendFritzCupError(res, err);
     }
   });
 
@@ -147,46 +274,7 @@ export function registerTournamentRoutes(app: Express): void {
         opponentUsernameByUserId,
       });
 
-      const activeAssignedMatch = await fetchActiveAssignedMatchForUser(userId);
-      const activeAssignedPayload = activeAssignedMatch
-        ? (() => {
-            const { match, tournament, opponentUsername } = activeAssignedMatch;
-            if (
-              tournament.status !== 'in_progress' ||
-              (match.status !== 'ready' && match.status !== 'in_progress') ||
-              match.completed_at ||
-              match.winner_id
-            ) {
-              return null;
-            }
-            if (Date.parse(tournament.scheduled_start) > Date.now()) {
-              return null;
-            }
-            const humanAttached = Boolean(humanJoinedAt(match, userId));
-            const matchStatus =
-              match.status === 'in_progress' && !humanAttached
-                ? 'ready'
-                : match.status === 'ready' || match.status === 'in_progress'
-                  ? match.status
-                  : 'ready';
-            const opponentId =
-              match.player1_id === userId ? match.player2_id : match.player1_id;
-            return {
-              matchId: match.id,
-              tournamentId: tournament.id,
-              round: match.round,
-              matchNumber: match.match_number,
-              roomCode: match.room_code,
-              opponentId,
-              opponentUsername:
-                opponentId && isBotUserId(opponentId)
-                  ? opponentUsername ?? 'Fritz'
-                  : opponentUsername,
-              matchStatus,
-              readyDeadlineAt: match.ready_deadline_at,
-            };
-          })()
-        : null;
+      const activeAssignedPayload = assignedMatchPayload(userId, await fetchActiveAssignedMatchForUser(userId));
 
       if (activeAssignedPayload) {
         log.info({ userId, matchId: activeAssignedPayload.matchId, status: activeAssignedPayload.matchStatus, round: activeAssignedPayload.round }, 'recovery activeAssignedMatch');
@@ -235,6 +323,7 @@ export function registerTournamentRoutes(app: Express): void {
           const champion = withProfiles.find((entry) => entry.user_id === tournament.winner_id) ?? null;
           return {
             tournamentId: tournament.id,
+            kind: tournament.kind ?? 'live',
             scheduledStart: tournament.scheduled_start,
             format: tournament.format,
             winTarget: tournament.win_target,
@@ -266,7 +355,7 @@ export function registerTournamentRoutes(app: Express): void {
     try {
       const view = await fetchBracketView(tournamentId);
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
-      res.json({ ok: true, view });
+      res.json({ ok: true, view: { ...view, tournament: publicTournament(view.tournament) } });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
     }
@@ -279,7 +368,7 @@ export function registerTournamentRoutes(app: Express): void {
     try {
       const t = await fetchTournamentById(tournamentId);
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
-      res.json({ ok: true, tournament: t });
+      res.json({ ok: true, tournament: publicTournament(t) });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
     }
@@ -301,6 +390,7 @@ export function registerTournamentRoutes(app: Express): void {
         ok: true,
         result: {
           tournamentId: view.tournament.id,
+          kind: view.tournament.kind ?? 'live',
           scheduledStart: view.tournament.scheduled_start,
           format: view.tournament.format,
           winTarget: view.tournament.win_target,
