@@ -6,7 +6,12 @@
 insert into auth.users (id) values
   ('aaaaaaaa-0000-4000-8000-000000000001'),
   ('aaaaaaaa-0000-4000-8000-000000000002'),
-  ('aaaaaaaa-0000-4000-8000-000000000003');
+  ('aaaaaaaa-0000-4000-8000-000000000003'),
+  -- The bracket-repair fixtures get their own users: since M1 one user cannot
+  -- hold two tournaments starting within 2 hours of each other.
+  ('aaaaaaaa-0000-4000-8000-000000000004'),
+  ('aaaaaaaa-0000-4000-8000-000000000005'),
+  ('aaaaaaaa-0000-4000-8000-000000000006');
 
 -- Open, 2 seats, closes in 10 minutes.
 insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status, max_players)
@@ -22,16 +27,16 @@ values ('33333333-3333-4333-8333-333333333333', now() + interval '1 min', now() 
 insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status)
 values ('44444444-4444-4444-8444-444444444444', now() + interval '1 min', now() - interval '29 min', now() - interval '1 min', 'registration_open');
 insert into public.scheduled_tournament_registrations (tournament_id, user_id) values
-  ('44444444-4444-4444-8444-444444444444', 'aaaaaaaa-0000-4000-8000-000000000001'),
-  ('44444444-4444-4444-8444-444444444444', 'aaaaaaaa-0000-4000-8000-000000000002');
+  ('44444444-4444-4444-8444-444444444444', 'aaaaaaaa-0000-4000-8000-000000000004'),
+  ('44444444-4444-4444-8444-444444444444', 'aaaaaaaa-0000-4000-8000-000000000005');
 insert into public.scheduled_tournament_matches (tournament_id, round, match_number, player1_id, player2_id, room_code, status)
-select '44444444-4444-4444-8444-444444444444', 1, g, 'aaaaaaaa-0000-4000-8000-000000000001', 'bot:fritz:stale:' || g, 'stale', 'waiting'
+select '44444444-4444-4444-8444-444444444444', 1, g, 'aaaaaaaa-0000-4000-8000-000000000004', 'bot:fritz:stale:' || g, 'stale', 'waiting'
 from generate_series(1, 4) g;
 
 -- Partial state that includes a completed match: must never be overwritten.
 insert into public.scheduled_tournaments (id, scheduled_start, registration_open_at, registration_close_at, status)
 values ('55555555-5555-4555-8555-555555555555', now() + interval '1 min', now() - interval '29 min', now() - interval '1 min', 'registration_open');
 insert into public.scheduled_tournament_registrations (tournament_id, user_id)
-values ('55555555-5555-4555-8555-555555555555', 'aaaaaaaa-0000-4000-8000-000000000003');
+values ('55555555-5555-4555-8555-555555555555', 'aaaaaaaa-0000-4000-8000-000000000006');
 insert into public.scheduled_tournament_matches (tournament_id, round, match_number, player1_id, player2_id, winner_id, room_code, status)
-values ('55555555-5555-4555-8555-555555555555', 1, 1, 'aaaaaaaa-0000-4000-8000-000000000003', 'bot:fritz:played:1', 'aaaaaaaa-0000-4000-8000-000000000003', 'played', 'completed');
+values ('55555555-5555-4555-8555-555555555555', 1, 1, 'aaaaaaaa-0000-4000-8000-000000000006', 'bot:fritz:played:1', 'aaaaaaaa-0000-4000-8000-000000000006', 'played', 'completed');
