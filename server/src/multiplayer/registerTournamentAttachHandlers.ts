@@ -1,4 +1,5 @@
 import { childLogger } from '../logger';
+import { getTournamentClockState } from './tournamentTurnClock';
 import { ackWithServerNow } from '../scheduledTournament/serverNow';
 import type { Server, Socket } from 'socket.io';
 import {
@@ -247,6 +248,8 @@ export function registerTournamentAttachHandlers(
         eventMeta: getRoomMatchEventMeta(room.code),
         tournamentMatch: attached.tournamentMatchMeta,
         matchStarted: Boolean(room.state),
+        // The clock already running for this state (attach after it armed); serverNow is on every ack.
+        tournamentClock: getTournamentClockState(room.code),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'attach_failed';

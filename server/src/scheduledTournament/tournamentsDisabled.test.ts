@@ -58,11 +58,11 @@ describe('tournaments switched off (default)', () => {
   it('answers every route without touching Supabase; refuses register/withdraw', async () => {
     vi.stubEnv('TOURNAMENTS_ENABLED', undefined);
     const request = harness();
-    expect(await request('GET', '/api/tournaments/upcoming')).toEqual({ status: 200, body: { ok: true, disabled: true, tournaments: [] } });
+    expect(await request('GET', '/api/tournaments/upcoming')).toEqual({ status: 200, body: { ok: true, disabled: true, tournaments: [], features: { tournaments: false, fritzCup: false } } });
     const me = await request('GET', '/api/tournaments/me');
     expect(me.status).toBe(200);
     expect(me.body).toMatchObject({ ok: true, disabled: true, registrations: [], activeAssignedMatch: null, countdown: null });
-    expect((await request('GET', '/api/tournaments/my')).body).toMatchObject({ ok: true, registrations: [] });
+    expect((await request('GET', '/api/tournaments/my')).body).toEqual({ ok: true, disabled: true, registrations: [], tournaments: [], activeAssignedMatch: null, features: { tournaments: false, fritzCup: false } });
     expect((await request('GET', '/api/tournaments/history')).body).toMatchObject({ ok: true, history: [] });
     for (const [method, path] of [
       ['GET', '/api/tournaments/:id/bracket'],

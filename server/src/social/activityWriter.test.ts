@@ -244,7 +244,13 @@ describe('writeTournamentActivity', () => {
     expect(body.type).toBe('tournament');
     expect(body.metadata.placement).toBe('Champion');
     expect(body.metadata.tournament_id).toBe('t-123');
-    expect(body.metadata.tournament_name).toBe('Scheduled Tournament');
+    expect(body.metadata.tournament_name).toBe('Live Event');
+  });
+
+  it('names a Fritz Cup when told', async () => {
+    await writeTournamentActivity({ userId: 'u1', placement: 'Champion', tournamentId: 't-9', tournamentName: 'Fritz Cup' });
+    const body = JSON.parse((mockFetch.mock.calls.at(-1)![1] as { body: string }).body);
+    expect(body.metadata.tournament_name).toBe('Fritz Cup');
   });
 });
 

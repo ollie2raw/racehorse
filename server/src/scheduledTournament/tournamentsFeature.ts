@@ -27,6 +27,16 @@ export function isFritzCupEnabled(): boolean {
   return process.env.FRITZ_CUP_ENABLED === 'true';
 }
 
+/**
+ * What tournament clients may offer right now (on /upcoming and /my), so a
+ * client never probes a refused request to find out. `fritzCup` means new
+ * Fritz Cups can be started; it is never true while tournaments are off.
+ */
+export function tournamentFeatures(): { tournaments: boolean; fritzCup: boolean } {
+  const tournaments = isTournamentsEnabled();
+  return { tournaments, fritzCup: tournaments && isFritzCupEnabled() };
+}
+
 export const TOURNAMENTS_DISABLED = {
   ok: false,
   error: 'tournaments_disabled',
@@ -56,13 +66,13 @@ export function respondIfTournamentsDisabled(res: Response, kind: DisabledRouteK
   if (isTournamentsEnabled()) return false;
   switch (kind) {
     case 'upcoming':
-      res.json({ ok: true, disabled: true, tournaments: [] });
+      res.json({ ok: true, disabled: true, tournaments: [], features: tournamentFeatures() });
       return true;
     case 'me':
       res.json(EMPTY_ME);
       return true;
     case 'my':
-      res.json({ ok: true, disabled: true, registrations: [] });
+      res.json({ ok: true, disabled: true, registrations: [], tournaments: [], activeAssignedMatch: null, features: tournamentFeatures() });
       return true;
     case 'history':
       res.json({ ok: true, disabled: true, history: [] });

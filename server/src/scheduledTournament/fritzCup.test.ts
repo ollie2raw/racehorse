@@ -118,6 +118,15 @@ vi.mock('./persistence', async (importOriginal) => {
         .filter((t) => t.status === 'registration_open' || (t.status === 'upcoming' && Date.parse(t.registration_open_at) <= now.getTime()))
         .map((t) => structuredClone(t)),
     fetchMatches: async (tid: string) => structuredClone(matchesOf(tid)),
+    fetchBracketView: async (tid: string) => {
+      const t = h.tournaments.get(tid);
+      if (!t) return null;
+      return {
+        tournament: structuredClone(t),
+        registrations: structuredClone(h.regs.filter((r) => r.tournament_id === tid).map((r) => ({ ...r, username: `user-${String(r.user_id).slice(-2)}`, rating: 800 }))),
+        matches: structuredClone(matchesOf(tid)),
+      };
+    },
     fetchMatchesForTournaments: async (ids: string[]) => new Map(ids.map((id) => [id, structuredClone(matchesOf(id))] as const)),
     fetchMatchById: async (id: string) => structuredClone(allMatches().find((m) => m.id === id) ?? null),
     fetchMatchByRoomCode: async (code: string) => structuredClone(allMatches().find((m) => m.room_code === code) ?? null),
@@ -228,6 +237,7 @@ import { resetTournamentTurnClockForTests } from '../multiplayer/tournamentTurnC
 import { registerTournamentRoutes } from './routes';
 import { cancelTournament, closeRegistrationAndStart } from './engine';
 import { SERVER_NOW_ISO } from './serverNow.testkit';
+import { writeTournamentActivity } from '../social/activityWriter';
 import { closeRegistrationWithEscalation, CLOSE_START_MAX_CONSECUTIVE_FAILURES, startTournamentScheduler, stopTournamentScheduler } from './scheduler';
 import { recoverTournamentMatches } from './recovery';
 import { recordMatchResultForTest } from './inMemoryMatchRpc.testkit';
@@ -765,5 +775,116 @@ describe('socket events are scoped (Phase 3B.1)', () => {
     expect(new Set(readyFor(s3))).toEqual(new Set([humanMatch(LIVE, U3, 1)!.id]));
     expect(humanMatch(LIVE, U2, 1)!.id).not.toBe(humanMatch(LIVE, U3, 1)!.id);
     expect(readyFor(s1)).toEqual([]);
+  });
+});
+
+describe('Phase 3B.2 contracts: /my, /result, /bracket, /history, activity', () => {
+  it('/my shows an active Fritz Cup and a later Live registration together, with features and the playable match', async () => {
+    seedLiveEvent(LIVE_FAR, 5 * 60 * 60_000);
+    const request = makeApp();
+    expect((await request('POST', '/api/tournaments/:id/register', { as: U1, params: { id: LIVE_FAR } })).body).toMatchObject({ ok: true });
+    const cupId = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+
+    const my = (await request('GET', '/api/tournaments/my', { as: U1 })).body;
+    expect(my.features).toEqual({ tournaments: true, fritzCup: true });
+    expect(my.tournaments.map((t: Row) => [t.id, t.kind, t.status])).toEqual([
+      [cupId, 'fritz_cup', 'in_progress'],
+      [LIVE_FAR, 'live', 'registration_open'],
+    ]);
+    const [cup, live] = my.tournaments;
+    expect(cup).not.toHaveProperty('owner_user_id');
+    expect(live).not.toHaveProperty('owner_user_id');
+    expect(cup).toMatchObject({ registered_count: null, myRegistration: { status: 'active', placement: null }, myLastMatch: null });
+    expect(live).toMatchObject({ registered_count: 1, myRegistration: { status: 'registered' }, myLastMatch: null });
+    expect(live).toHaveProperty('registration_open_at');
+    expect(live).toHaveProperty('registration_close_at');
+    // The cup's quarterfinal against Fritz is the one playable match: not yet joined, so `ready`.
+    expect(my.activeAssignedMatch).toMatchObject({ tournamentId: cupId, round: 1, matchStatus: 'ready', opponentUsername: 'Fritz' });
+    expect(JSON.stringify(my)).not.toContain('owner_user_id');
+
+    // Another user's /my knows nothing of U1's cup.
+    expect(JSON.stringify((await request('GET', '/api/tournaments/my', { as: U2 })).body)).not.toContain(cupId);
+  });
+
+  it('/my: eliminated (with the exit match), champion, cancelled, and finished tournaments age out', async () => {
+    const request = makeApp();
+    const lostCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+    await playHumanMatch(lostCup, U1, 1, false);
+    let my = (await request('GET', '/api/tournaments/my', { as: U1 })).body;
+    expect(my.tournaments.find((t: Row) => t.id === lostCup)).toMatchObject({
+      status: 'completed',
+      myRegistration: { status: 'eliminated', placement: 5, placementLabel: 'Quarterfinalist' },
+      myLastMatch: { round: 1, won: false, outcomeKind: 'played', opponentBotTier: 'standard' },
+    });
+    expect(my.activeAssignedMatch).toBeNull();
+
+    const wonCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U2 })).body.tournament.id;
+    for (const round of [1, 2, 3]) await playHumanMatch(wonCup, U2, round, true);
+    my = (await request('GET', '/api/tournaments/my', { as: U2 })).body;
+    expect(my.tournaments.find((t: Row) => t.id === wonCup)).toMatchObject({
+      status: 'completed',
+      myRegistration: { status: 'winner', placement: 1 },
+      myLastMatch: { round: 3, won: true, outcomeKind: 'played', opponentBotTier: 'master' },
+    });
+
+    const { tournament: cancelledCup } = await persistence.startFritzCup(U3);
+    await cancelTournament(io(), cancelledCup.id, defaultEnginePersistence, 'test');
+    my = (await request('GET', '/api/tournaments/my', { as: U3 })).body;
+    expect(my.tournaments.find((t: Row) => t.id === cancelledCup.id)).toMatchObject({ status: 'cancelled', myRegistration: { status: 'registered' } });
+
+    // Finished more than MY_RECENT_TERMINAL_MS (4 h) after its start: no longer in /my.
+    h.tournaments.get(lostCup)!.scheduled_start = new Date(Date.now() - 4 * 60 * 60_000 - 60_000).toISOString();
+    expect((await request('GET', '/api/tournaments/my', { as: U1 })).body.tournaments.map((t: Row) => t.id)).not.toContain(lostCup);
+    // …but it is still in /history.
+    expect((await request('GET', '/api/tournaments/history', { as: U1 })).body.history.map((e: Row) => e.tournamentId)).toContain(lostCup);
+  });
+
+  it('/result: a Fritz champion is named by its tier, never "—" or its id; a human champion by username', async () => {
+    const request = makeApp();
+    const lostCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+    await playHumanMatch(lostCup, U1, 1, false);
+    const fritzWon = (await request('GET', '/api/tournaments/:id/result', { params: { id: lostCup } })).body.result;
+    expect(fritzWon).toMatchObject({
+      kind: 'fritz_cup', championName: 'Master Fritz', championIsFritz: true, championFritzTier: 'master', finalOutcomeKind: 'bot_simulated',
+    });
+    expect(fritzWon.championId).toMatch(/^bot:fritz:/);
+    expect(fritzWon.championName).not.toContain('bot:');
+
+    const wonCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U2 })).body.tournament.id;
+    for (const round of [1, 2, 3]) await playHumanMatch(wonCup, U2, round, true);
+    const humanWon = (await request('GET', '/api/tournaments/:id/result', { params: { id: wonCup } })).body.result;
+    expect(humanWon).toMatchObject({ championId: U2, championName: `user-${U2.slice(-2)}`, championIsFritz: false, championFritzTier: null, finalOutcomeKind: 'played' });
+  });
+
+  it('/bracket carries outcomeKind per match; /history the user\'s own last match', async () => {
+    const request = makeApp();
+    const cupId = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+    await playHumanMatch(cupId, U1, 1, true);
+    const view = (await request('GET', '/api/tournaments/:id/bracket', { params: { id: cupId } })).body.view;
+    const qf = view.matches.filter((m: Row) => m.round === 1);
+    expect(qf.find((m: Row) => m.player1_id === U1 || m.player2_id === U1).outcomeKind).toBe('played');
+    expect(qf.filter((m: Row) => m.player1_id !== U1 && m.player2_id !== U1).map((m: Row) => m.outcomeKind)).toEqual(['bot_simulated', 'bot_simulated', 'bot_simulated']);
+    expect(view.matches.find((m: Row) => m.round === 3).outcomeKind).toBeNull();
+    expect(view.tournament).not.toHaveProperty('owner_user_id');
+
+    await playHumanMatch(cupId, U1, 2, false);
+    const [entry] = (await request('GET', '/api/tournaments/history', { as: U1 })).body.history;
+    // The user's semifinal exit, not the tournament's final.
+    expect(entry).toMatchObject({ tournamentId: cupId, kind: 'fritz_cup', myLastMatch: { round: 2, won: false, outcomeKind: 'played', opponentBotTier: 'elite' } });
+    expect(entry).toMatchObject({ championIsFritz: true, championName: 'Master Fritz' });
+  });
+
+  it('activity: a Fritz Cup posts only its championship, as "Fritz Cup"', async () => {
+    const request = makeApp();
+    const lostCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+    vi.mocked(writeTournamentActivity).mockClear();
+    await playHumanMatch(lostCup, U1, 1, false);
+    expect(h.tournaments.get(lostCup)!.status).toBe('completed');
+    expect(writeTournamentActivity).not.toHaveBeenCalled();
+
+    const wonCup = (await request('POST', '/api/tournaments/fritz-cup', { as: U2 })).body.tournament.id;
+    for (const round of [1, 2, 3]) await playHumanMatch(wonCup, U2, round, true);
+    expect(writeTournamentActivity).toHaveBeenCalledTimes(1);
+    expect(writeTournamentActivity).toHaveBeenCalledWith({ userId: U2, placement: 'Champion', tournamentId: wonCup, tournamentName: 'Fritz Cup' });
   });
 });

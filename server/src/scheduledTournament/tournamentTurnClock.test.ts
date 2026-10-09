@@ -121,10 +121,13 @@ import { persistLiveRoomSessionNow, resetLiveRoomPersistenceForTests } from '../
 import { onActivePlayerSocketDisconnect } from '../multiplayer/disconnectGrace';
 import {
   getArmedTournamentTurn,
+  getTournamentClockState,
   getTournamentMissedTurns,
   resetTournamentTurnClockForTests,
+  setTournamentAutomaticActionForTests,
   syncTournamentTurnClock,
 } from '../multiplayer/tournamentTurnClock';
+import { SERVER_NOW_ISO } from './serverNow.testkit';
 import { restoreOrCreateTournamentRoom } from './tournamentRoomRestore';
 import * as mockedPersistence from './persistence';
 import { defaultEnginePersistence } from './persistenceInterface';
@@ -136,10 +139,12 @@ const U2 = '4e000000-0000-4000-8000-0000000000a2';
 const BOT = `bot:fritz:${T}:8`;
 const TIMEOUT = TOURNAMENT_TURN_TIMEOUT_MS_DEFAULT;
 
+/** Every room-scoped emit (io.to(room).emit), across the file. */
+const roomEmit = vi.fn();
 function makeIo() {
   return {
     sockets: { sockets: new Map(), adapter: { rooms: new Map() } },
-    to: () => ({ emit: vi.fn() }),
+    to: (room: string) => ({ emit: (event: string, payload: unknown) => roomEmit(room, event, payload) }),
     emit: vi.fn(),
   } as any;
 }
@@ -292,6 +297,7 @@ beforeEach(() => {
   db.matches.clear();
   db.tournaments.clear();
   db.regs = [];
+  roomEmit.mockClear();
   restart();
 });
 afterEach(() => {
@@ -478,5 +484,160 @@ describe('tournament turn clock', () => {
     const placementOf = (u: string) => db.regs.find((r) => r.user_id === u)?.placement;
     expect(placementOf(presentUser)).toBe(1);
     expect(placementOf(absentUser)).toBe(2);
+  });
+});
+
+/**
+ * The clock clients see (Phase 3B.2): every tournament `state:update` carries
+ * `tournamentClock` (the decision the server is timing and when its timer
+ * fires) and `serverNow`. Display only — the server timer is authoritative.
+ */
+describe('tournament clock contract', () => {
+  /** A socket in the room that records what it is sent (as a reconnecting client's would be). */
+  function observe(roomCode: string) {
+    const sock = { id: `obs-${roomCode}`, data: {}, rooms: new Set([roomCode]), emit: vi.fn(), join: vi.fn() };
+    io.sockets.sockets.set(sock.id, sock);
+    io.sockets.adapter.rooms.set(roomCode, new Set([sock.id]));
+    const updates = () => sock.emit.mock.calls.filter(([e]) => e === 'state:update').map(([, p]) => p as Row);
+    return { last: () => updates().at(-1)!, count: () => updates().length };
+  }
+
+  it('the first human turn: a deadline 45 s out, with serverNow, in state:update', async () => {
+    const { roomCode } = await seedGame();
+    const obs = observe(roomCode);
+    broadcastStateUpdate(roomCode);
+    const now = Date.now();
+    expect(obs.last().serverNow).toMatch(SERVER_NOW_ISO);
+    expect(obs.last().tournamentClock).toEqual({
+      kind: 'turn', seatId: currentSeat(roomCode), deadlineAt: new Date(now + TIMEOUT).toISOString(), missedTurns: 0, maxMissedTurns: 3,
+    });
+    expect(getTournamentClockState(roomCode)).toEqual(obs.last().tournamentClock);
+  });
+
+  it('a player action: the next decision gets its own fresh deadline in the same broadcast', async () => {
+    const { roomCode } = await seedGame();
+    const obs = observe(roomCode);
+    const first = currentSeat(roomCode);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await playerActs(roomCode, first);
+    const clock = obs.last().tournamentClock;
+    if (state(roomCode).handOver) {
+      expect(clock.kind).toBe('next_hand');
+    } else {
+      expect(clock).toMatchObject({ kind: 'turn', seatId: currentSeat(roomCode), deadlineAt: new Date(Date.now() + TIMEOUT).toISOString() });
+    }
+  });
+
+  it('a missed turn: counted on the clock the next time that seat is timed, with a fresh deadline', async () => {
+    const { roomCode } = await seedGame();
+    const obs = observe(roomCode);
+    const seat = currentSeat(roomCode);
+    const other = seat === seatOf(U1) ? seatOf(U2) : seatOf(U1);
+    await timeOut();
+    await untilTurnOf(roomCode, seat, other);
+    broadcastStateUpdate(roomCode);
+    expect(obs.last().tournamentClock).toMatchObject({
+      kind: 'turn', seatId: seat, missedTurns: 1, maxMissedTurns: 3, deadlineAt: getTournamentClockState(roomCode)!.deadlineAt,
+    });
+    expect(Date.parse(obs.last().tournamentClock.deadlineAt)).toBeGreaterThan(Date.now());
+  });
+
+  it('the third miss forfeits through the existing path and clears the clock', async () => {
+    const { roomCode, matchId } = await seedGame();
+    const seat = currentSeat(roomCode);
+    const other = seat === seatOf(U1) ? seatOf(U2) : seatOf(U1);
+    for (let missed = 1; missed <= 2; missed += 1) {
+      await timeOut();
+      await untilTurnOf(roomCode, seat, other);
+    }
+    expect(getTournamentClockState(roomCode)).toMatchObject({ seatId: seat, missedTurns: 2 });
+    await timeOut();
+    await vi.waitFor(() => expect(db.matches.get(matchId)!.status_reason).toBe('missed_turns'));
+    expect(getTournamentClockState(roomCode)).toBeNull();
+  });
+
+  it('between hands: kind next_hand (no seat, the humans still to ready); its expiry is not a missed turn', async () => {
+    const { roomCode } = await seedGame();
+    const obs = observe(roomCode);
+    for (let i = 0; i < 400 && !state(roomCode).handOver; i += 1) await playerActs(roomCode, currentSeat(roomCode));
+    expect(state(roomCode).handOver).toBe(true);
+    if (state(roomCode).gameOver) return; // a 30-point hand ends the game: nothing to wait for
+    broadcastStateUpdate(roomCode);
+    expect(obs.last().tournamentClock).toEqual({
+      kind: 'next_hand', seatId: null, waitingSeatIds: expect.arrayContaining([seatOf(U1), seatOf(U2)]), deadlineAt: new Date(Date.now() + TIMEOUT).toISOString(),
+    });
+    const handNumber = state(roomCode).handNumber;
+    await timeOut();
+    await vi.waitFor(() => expect(state(roomCode).handNumber).toBe(handNumber + 1));
+    expect(getTournamentMissedTurns(roomCode, seatOf(U1))).toBe(0);
+    expect(getTournamentMissedTurns(roomCode, seatOf(U2))).toBe(0);
+  });
+
+  it('an administrative close (the room latched) clears the clock', async () => {
+    const { roomCode } = await seedGame();
+    expect(getTournamentClockState(roomCode)).not.toBeNull();
+    // Loaded on use: a static import of the engine here cycles with this file's ./persistence mock.
+    const { closeTournamentRoom } = await import('./engine');
+    closeTournamentRoom(getRoom(roomCode), new Date());
+    expect(getTournamentClockState(roomCode)).toBeNull();
+  });
+
+  it('a restored room gets a fresh deadline from the restore, not the old remaining time', async () => {
+    const { roomCode, matchId } = await seedGame();
+    const before = getTournamentClockState(roomCode)!;
+    const roster = getRoomRoster(roomCode).map((p) => ({ seatId: p.id, userId: p.userId, username: p.username }));
+    expect(await persistLiveRoomSessionNow(getRoom(roomCode), roster)).toBe(true);
+    restart();
+    await vi.advanceTimersByTimeAsync(20_000);
+    await restoreOrCreateTournamentRoom(roomCode, matchId, { winningScore: 30 });
+    const after = getTournamentClockState(roomCode)!;
+    expect(after).toMatchObject({ kind: 'turn', seatId: before.seatId });
+    expect(after.deadlineAt).toBe(new Date(Date.now() + TIMEOUT).toISOString());
+    expect(Date.parse(after.deadlineAt)).toBeGreaterThan(Date.parse(before.deadlineAt));
+  });
+
+  it('a re-arm without a state broadcast (the automatic move failed) is announced to the room', async () => {
+    const { roomCode } = await seedGame();
+    const seat = currentSeat(roomCode);
+    // The room refuses every automatic action (as tournamentMissAccounting's rejectEverything).
+    setTournamentAutomaticActionForTests(async (code, _seatId, decide) => {
+      const room = peekRoom(code)!;
+      if (!(decide as (r: typeof room) => ActionPayload | null)(room)) return null;
+      throw new Error('rejected by the room');
+    });
+    try {
+      await timeOut();
+      await vi.waitFor(() => expect(roomEmit).toHaveBeenCalledWith(roomCode, 'tournament:clock', expect.objectContaining({
+        roomCode,
+        serverNow: expect.stringMatching(SERVER_NOW_ISO),
+        tournamentClock: expect.objectContaining({ kind: 'turn', seatId: seat }),
+      })));
+    } finally {
+      setTournamentAutomaticActionForTests(null);
+    }
+  });
+
+  it('disconnect: a tournament room announces the turn-clock policy, never a grace; a normal room keeps its grace', async () => {
+    const t = await seedGame();
+    const seat = currentSeat(t.roomCode);
+    onActivePlayerSocketDisconnect(t.roomCode, seat, io, (code) => broadcastStateUpdate(code));
+    expect(roomEmit).toHaveBeenCalledWith(t.roomCode, 'player:disconnected', { playerId: seat, graceMs: null, policy: 'turn_clock' });
+
+    const p = await seedGame({ tournament: false });
+    const pSeat = currentSeat(p.roomCode);
+    onActivePlayerSocketDisconnect(p.roomCode, pSeat, io, (code) => broadcastStateUpdate(code));
+    const normal = roomEmit.mock.calls.find(([room, event]) => room === p.roomCode && event === 'player:disconnected')![2] as Row;
+    expect(normal).toEqual({ playerId: pSeat, graceMs: expect.any(Number) });
+    expect(normal.graceMs).toBeGreaterThan(0);
+    expect(normal).not.toHaveProperty('policy');
+  });
+
+  it('a normal (non-tournament) room has no clock fields at all', async () => {
+    const { roomCode } = await seedGame({ tournament: false });
+    const obs = observe(roomCode);
+    broadcastStateUpdate(roomCode);
+    expect(obs.last()).not.toHaveProperty('tournamentClock');
+    expect(obs.last()).not.toHaveProperty('serverNow');
+    expect(getTournamentClockState(roomCode)).toBeNull();
   });
 });

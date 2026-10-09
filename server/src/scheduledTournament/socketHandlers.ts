@@ -7,7 +7,6 @@ import {
   REGISTRATION_RPC_ERRORS,
   withdrawFromTournament,
 } from './persistence';
-import { TOURNAMENT_CONFIG } from './engine';
 import {
   getSocketUserId,
   rejectMismatchedPayloadUserId,
@@ -128,6 +127,4 @@ export function registerTournamentSocketHandlers(io: Server, rawSocket: Socket):
     }
   });
 
-  // Keep the import alive so tree-shaking doesn't drop the TOURNAMENT_CONFIG export.
-  void TOURNAMENT_CONFIG;
 }

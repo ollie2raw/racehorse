@@ -89,7 +89,8 @@ export async function promoteScheduledMatchToInProgress(
   log.info({ matchId, roomCode: match.room_code, humanUserId: humanUserId ?? null }, 'promoted in_progress after human attach');
 }
 
-function botLabel(tier: MatchRow['bot_tier']): string {
+/** A Fritz seat's public name for its match tier (never its internal id). */
+export function botLabel(tier: MatchRow['bot_tier']): string {
   if (tier === 'master') return 'Master Fritz';
   if (tier === 'elite') return 'Elite Fritz';
   return 'Fritz';

@@ -335,6 +335,21 @@ describe('tournament match in progress across a server restart', () => {
     expectRestored(roomCode, matchSequence, ack);
   });
 
+  it('attach after a restart receives the clock already running (a fresh deadline) and serverNow', async () => {
+    const { roomCode, matchId } = await seedMatchInProgressThenRestart();
+    await recoverTournamentMatches(makeIo());
+    const { getTournamentClockState } = await import('../multiplayer/tournamentTurnClock');
+    const armed = getTournamentClockState(roomCode);
+    expect(armed).not.toBeNull();
+
+    const ack = await attachAs(U1, matchId);
+
+    expect(ack?.ok).toBe(true);
+    expect(ack?.tournamentClock).toEqual(armed);
+    expect(Date.parse(ack!.tournamentClock.deadlineAt)).toBeGreaterThan(Date.now());
+    expect(ack?.serverNow).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
   it('client room:join BEFORE boot recovery runs: the persisted game is restored', async () => {
     const { roomCode, matchSequence } = await seedMatchInProgressThenRestart();
 

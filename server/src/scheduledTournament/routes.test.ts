@@ -227,7 +227,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations,
+      tournaments: [],
+      activeAssignedMatch: null,
+      features: { tournaments: true, fritzCup: false },
+    });
     expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
     expect(mocks.fetchRegistrationsForUser).not.toHaveBeenCalledWith(otherUserId);
   });
@@ -243,7 +249,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations,
+      tournaments: [],
+      activeAssignedMatch: null,
+      features: { tournaments: true, fritzCup: false },
+    });
     expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
   });
 

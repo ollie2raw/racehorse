@@ -13,6 +13,7 @@ import {
   fetchActiveAssignedMatchForUser,
   fetchRegistrationsForUser,
   fetchRegistrations,
+  fetchMatches,
   fetchMatchesForTournaments,
   fetchTournamentsByIds,
   isValidUuid,
@@ -24,15 +25,17 @@ import {
 } from './persistence';
 import { startOrResumeFritzCup } from './fritzCup';
 import { withServerNow } from './serverNow';
-import type { ScheduledTournamentRow } from './types';
-import { humanJoinedAt, isBotUserId } from './matchDispatch';
+import type { MatchRow, ScheduledTournamentRow } from './types';
+import { botLabel, humanJoinedAt, isBotUserId } from './matchDispatch';
 import { buildTournamentMeState } from './meState';
 import {
   rejectMismatchedPayloadUserId,
   requireAuthUserId,
   sendAuthError,
 } from './tournamentAuth';
-import { isFritzCupEnabled, respondIfTournamentsDisabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
+import { isFritzCupEnabled, respondIfTournamentsDisabled, tournamentFeatures, TOURNAMENTS_DISABLED } from './tournamentsFeature';
+import { tournamentOutcomeKind, userLastMatchOutcome } from './outcomeKind';
+import { TOURNAMENT_ACTIVE_WINDOW_MS } from './activeWindow';
 
 const log = childLogger('tournament:routes');
 
@@ -189,6 +192,46 @@ function requireTournamentId(req: Request, res: Response): string | null {
   return id;
 }
 
+/** Terminal tournaments stay in /my this long after their start (the active window plus 2 h to show the result). */
+export const MY_RECENT_TERMINAL_MS = TOURNAMENT_ACTIVE_WINDOW_MS + 2 * 60 * 60 * 1000;
+
+/**
+ * Which of the user's tournaments /my reports: every one not yet finished
+ * (upcoming, open, in progress — whatever its age), and a finished
+ * (completed / cancelled) one until MY_RECENT_TERMINAL_MS after its start.
+ */
+export function isRelevantForMy(t: Pick<ScheduledTournamentRow, 'status' | 'scheduled_start' | 'winner_id'>, nowMs: number): boolean {
+  if (t.status === 'upcoming' || t.status === 'registration_open' || t.status === 'in_progress') return true;
+  const startMs = Date.parse(t.scheduled_start);
+  return Number.isFinite(startMs) && nowMs - startMs <= MY_RECENT_TERMINAL_MS;
+}
+
+/** Humans registered for a Live Event still in registration (as /upcoming counts them); null otherwise (and always for a Fritz Cup). */
+async function liveRegisteredCount(t: ScheduledTournamentRow): Promise<number | null> {
+  if ((t.kind ?? 'live') !== 'live') return null;
+  if (t.status !== 'upcoming' && t.status !== 'registration_open') return null;
+  const regs = await fetchRegistrations(t.id);
+  return regs.filter((r) => r.status === 'registered').length;
+}
+
+/**
+ * The champion as clients show it. A Fritz champion has no registration (and
+ * so no username): it is named by the final's tier ("Master Fritz"), never by
+ * its internal id.
+ */
+function championDisplay(
+  winnerId: string | null,
+  username: string | null,
+  matches: ReadonlyArray<Pick<MatchRow, 'round' | 'bot_tier'>>,
+): { championName: string | null; championIsFritz: boolean; championFritzTier: MatchRow['bot_tier'] } {
+  if (!winnerId) return { championName: null, championIsFritz: false, championFritzTier: null };
+  if (isBotUserId(winnerId)) {
+    const tier = matches.find((m) => m.round === 3)?.bot_tier ?? 'master';
+    return { championName: botLabel(tier), championIsFritz: true, championFritzTier: tier };
+  }
+  return { championName: username, championIsFritz: false, championFritzTier: null };
+}
+
 export function registerTournamentRoutes(expressApp: Express, io?: Server): void {
   // Every tournament route goes through the API contract (tournamentRoute).
   const app = {
@@ -209,7 +252,7 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
           return { ...t, registered_count: registeredCount };
         }),
       );
-      res.json({ ok: true, tournaments: enriched.map(publicTournament) });
+      res.json({ ok: true, tournaments: enriched.map(publicTournament), features: tournamentFeatures() });
     } catch (err) {
       if (isSupabaseTimeoutError(err)) {
         log.warn({ ms: Date.now() - startedAt, err }, 'upstream timeout');
@@ -260,7 +303,43 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
     if (!userId) return;
     try {
       const regs = await fetchRegistrationsForUser(userId);
-      res.json({ ok: true, registrations: regs });
+      const held = regs.filter((reg) => reg.status !== 'withdrawn');
+      const ids = [...new Set(held.map((reg) => reg.tournament_id))];
+      const [rows, active] = await Promise.all([
+        ids.length > 0 ? fetchTournamentsByIds(ids) : Promise.resolve([] as ScheduledTournamentRow[]),
+        fetchActiveAssignedMatchForUser(userId),
+      ]);
+      const nowMs = Date.now();
+      const relevant = rows
+        .filter((t) => isRelevantForMy(t, nowMs))
+        .sort((a, b) => Date.parse(a.scheduled_start) - Date.parse(b.scheduled_start));
+      const decided = relevant.filter((t) => t.status === 'completed' || t.status === 'in_progress');
+      const [matchesById, counts] = await Promise.all([
+        decided.length > 0 ? fetchMatchesForTournaments(decided.map((t) => t.id)) : Promise.resolve(new Map()),
+        Promise.all(relevant.map(async (t) => [t.id, await liveRegisteredCount(t)] as const)),
+      ]);
+      const countById = new Map(counts);
+      const tournaments = relevant.map((t) => {
+        const reg = held.find((r) => r.tournament_id === t.id)!;
+        return {
+          ...publicTournament(t),
+          registered_count: countById.get(t.id) ?? null,
+          myRegistration: {
+            status: reg.status,
+            placement: reg.placement,
+            placementLabel: reg.placement != null ? placementLabelForRank(reg.placement) : null,
+            seed: reg.seed,
+          },
+          myLastMatch: userLastMatchOutcome(matchesById.get(t.id) ?? [], userId),
+        };
+      });
+      res.json({
+        ok: true,
+        registrations: regs,
+        tournaments,
+        activeAssignedMatch: assignedMatchPayload(userId, active),
+        features: tournamentFeatures(),
+      });
     } catch (err) {
       sendInternal(res, err);
     }
@@ -358,9 +437,10 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
       const completedRegs = regs.filter((reg) => reg.placement !== null);
       const history = await Promise.all(
         completedRegs.map(async (reg) => {
-          const [tournament, withProfiles] = await Promise.all([
+          const [tournament, withProfiles, matches] = await Promise.all([
             fetchTournamentById(reg.tournament_id),
             fetchRegistrationsWithProfile(reg.tournament_id),
+            fetchMatches(reg.tournament_id),
           ]);
           if (!tournament) return null;
           const champion = withProfiles.find((entry) => entry.user_id === tournament.winner_id) ?? null;
@@ -373,7 +453,9 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
             placement: reg.placement,
             placementLabel: placementLabelForRank(reg.placement),
             championId: tournament.winner_id,
-            championName: champion?.username ?? null,
+            ...championDisplay(tournament.winner_id, champion?.username ?? null, matches),
+            // The user's own last match (their exit, or the final they won) — not the tournament's final.
+            myLastMatch: userLastMatchOutcome(matches, userId),
           };
         }),
       );
@@ -398,7 +480,14 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
     try {
       const view = await fetchBracketView(tournamentId);
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
-      res.json({ ok: true, view: { ...view, tournament: publicTournament(view.tournament) } });
+      res.json({
+        ok: true,
+        view: {
+          ...view,
+          tournament: publicTournament(view.tournament),
+          matches: view.matches.map((m) => ({ ...m, outcomeKind: tournamentOutcomeKind(m) })),
+        },
+      });
     } catch (err) {
       sendInternal(res, err);
     }
@@ -429,6 +518,7 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
         return;
       }
       const champion = view.registrations.find((reg) => reg.user_id === view.tournament.winner_id) ?? null;
+      const finalMatch = view.matches.find((m) => m.round === 3) ?? null;
       res.json({
         ok: true,
         result: {
@@ -438,7 +528,8 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
           format: view.tournament.format,
           winTarget: view.tournament.win_target,
           championId: view.tournament.winner_id,
-          championName: champion?.username ?? null,
+          ...championDisplay(view.tournament.winner_id, champion?.username ?? null, view.matches),
+          finalOutcomeKind: finalMatch ? tournamentOutcomeKind(finalMatch) : null,
           placements: view.registrations
             .filter((reg) => reg.placement !== null)
             .sort((a, b) => (a.placement ?? Number.POSITIVE_INFINITY) - (b.placement ?? Number.POSITIVE_INFINITY))

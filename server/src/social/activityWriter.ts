@@ -178,7 +178,7 @@ export async function writeTournamentActivity(params: {
   await writeActivity(params.userId, 'tournament', {
     placement: params.placement,
     tournament_id: params.tournamentId,
-    tournament_name: params.tournamentName ?? 'Scheduled Tournament',
+    tournament_name: params.tournamentName ?? 'Live Event',
   });
 }
 

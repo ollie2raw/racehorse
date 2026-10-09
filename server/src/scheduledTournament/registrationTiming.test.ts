@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  TOURNAMENT_CONFIG,
-  computeTournamentRegistrationTimestamps,
   isTournamentBracketLobbyPhase,
   isTournamentRegistrationWindowOpen,
 } from './engine';
@@ -11,19 +9,23 @@ import type { RegistrationRow, ScheduledTournamentRow } from './types';
 const userId = '11111111-1111-4111-8111-111111111111';
 const tournamentId = '22222222-2222-4222-8222-222222222222';
 
-describe('tournament registration timing', () => {
+/**
+ * The window a seeded Live Event row carries (M2 SQL is the source of truth:
+ * open 12 h, close 2 min before start). The server only reads these stored
+ * timestamps; this fixture mirrors one such row.
+ */
+function seededWindow(scheduledStartMs: number) {
+  return {
+    registration_open_at: new Date(scheduledStartMs - 12 * 60 * 60_000).toISOString(),
+    registration_close_at: new Date(scheduledStartMs - 2 * 60_000).toISOString(),
+  };
+}
+
+describe('tournament registration timing (from stored timestamps)', () => {
   const scheduledStartMs = Date.parse('2026-05-17T12:00:00.000Z');
 
-  it('generates registration_close_at at scheduled_start minus 2 minutes', () => {
-    const times = computeTournamentRegistrationTimestamps(scheduledStartMs);
-    expect(times.registration_open_at).toBe('2026-05-17T11:30:00.000Z');
-    expect(times.registration_close_at).toBe('2026-05-17T11:58:00.000Z');
-    expect(TOURNAMENT_CONFIG.REGISTRATION_CLOSE_LEAD_MIN).toBe(2);
-    expect(TOURNAMENT_CONFIG.REGISTRATION_OPEN_LEAD_MIN).toBe(30);
-  });
-
   it('keeps registration open at scheduled_start minus 3 minutes', () => {
-    const times = computeTournamentRegistrationTimestamps(scheduledStartMs);
+    const times = seededWindow(scheduledStartMs);
     const nowMs = scheduledStartMs - 3 * 60_000;
     expect(
       isTournamentRegistrationWindowOpen({
@@ -35,7 +37,7 @@ describe('tournament registration timing', () => {
   });
 
   it('closes registration at scheduled_start minus 2 minutes', () => {
-    const times = computeTournamentRegistrationTimestamps(scheduledStartMs);
+    const times = seededWindow(scheduledStartMs);
     const closeMs = Date.parse(times.registration_close_at);
     expect(closeMs).toBe(scheduledStartMs - 2 * 60_000);
     expect(
@@ -48,7 +50,7 @@ describe('tournament registration timing', () => {
   });
 
   it('bracket_lobby lasts 2 minutes between close and scheduled_start', () => {
-    const times = computeTournamentRegistrationTimestamps(scheduledStartMs);
+    const times = seededWindow(scheduledStartMs);
     const closeMs = Date.parse(times.registration_close_at);
     const startMs = scheduledStartMs;
 
@@ -77,7 +79,7 @@ describe('tournament registration timing', () => {
   });
 
   it('match_ready still begins at scheduled_start after dispatch', () => {
-    const times = computeTournamentRegistrationTimestamps(scheduledStartMs);
+    const times = seededWindow(scheduledStartMs);
     const tournament: ScheduledTournamentRow = {
       id: tournamentId,
       scheduled_start: new Date(scheduledStartMs).toISOString(),

@@ -301,13 +301,19 @@ async function resolveBotOnlyMatch(
 async function writeTournamentCompletionActivity(
   tournamentId: string,
   placements: Array<{ userId: string; placement: number }>,
+  kind: ScheduledTournamentRow['kind'] = 'live',
 ): Promise<void> {
+  // Live Event: every human's placement (unchanged). Fritz Cup: only a Cup win
+  // is public — no elimination, runner-up or bot results in the feed.
+  const isCup = kind === 'fritz_cup';
+  const posted = isCup ? placements.filter((p) => p.placement === 1) : placements;
   await Promise.all(
-    placements.map(({ userId, placement }) =>
+    posted.map(({ userId, placement }) =>
       writeTournamentActivity({
         userId,
         placement: placementLabelForRank(placement) ?? 'Tournament result',
         tournamentId,
+        tournamentName: isCup ? 'Fritz Cup' : 'Live Event',
       }),
     ),
   );
@@ -734,11 +740,13 @@ async function finalizeCompletedTournament(
   placements: Array<{ user_id: string; placement: number }>,
   persistence: EnginePersistence,
 ): Promise<void> {
+  const tournament = await persistence.fetchTournamentById(tournamentId).catch(() => null);
   await writeTournamentCompletionActivity(
     tournamentId,
     placements
       .filter((p) => !isBotUserId(p.user_id))
       .map((p) => ({ userId: p.user_id, placement: p.placement })),
+    tournament?.kind ?? 'live',
   );
   log.info({ tournamentId, winnerId: winnerUserId }, 'champion');
   await emitTournamentEvent(
@@ -1562,21 +1570,11 @@ export async function reconcileExpiredReadyMatches(
 export const TOURNAMENT_CONFIG = {
   MIN_HUMANS_TO_START,
   DEFAULT_RATING,
-  REGISTRATION_OPEN_LEAD_MIN: 30,
-  REGISTRATION_CLOSE_LEAD_MIN: 2,
 } as const;
 
-/** Registration window timestamps aligned with seed SQL and TOURNAMENT_CONFIG. */
-export function computeTournamentRegistrationTimestamps(scheduledStartMs: number): {
-  registration_open_at: string;
-  registration_close_at: string;
-} {
-  const { REGISTRATION_OPEN_LEAD_MIN, REGISTRATION_CLOSE_LEAD_MIN } = TOURNAMENT_CONFIG;
-  return {
-    registration_open_at: new Date(scheduledStartMs - REGISTRATION_OPEN_LEAD_MIN * 60_000).toISOString(),
-    registration_close_at: new Date(scheduledStartMs - REGISTRATION_CLOSE_LEAD_MIN * 60_000).toISOString(),
-  };
-}
+// Registration timing is not a server constant: each row's registration_open_at
+// / registration_close_at are written by the seed SQL (M2: 12 h / 2 min before
+// start) and the server acts on the stored timestamps.
 
 export function isTournamentRegistrationWindowOpen(input: {
   status: string;

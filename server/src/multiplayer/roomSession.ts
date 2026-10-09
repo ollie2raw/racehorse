@@ -22,7 +22,8 @@ import {
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
 import { configureDisconnectGraceSeatResolver, clearDisconnectGrace } from './disconnectGrace';
-import { disarmTournamentTurnClock, syncTournamentTurnClock } from './tournamentTurnClock';
+import { disarmTournamentTurnClock, getTournamentClockState, syncTournamentTurnClock } from './tournamentTurnClock';
+import { serverNow } from '../scheduledTournament/serverNow';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
@@ -30,7 +31,7 @@ import {
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
 import { maskPregameDrawForRecipient } from './preGameDraw';
-import { isLegacyLeagueRoom } from './roomKind';
+import { isLegacyLeagueRoom, roomKind } from './roomKind';
 import { publishMultiplayerSpectatorSnapshotIfEnabled } from '../spectator/spectatorIntegration';
 import type {
   LegacyMatchmakingRoomShellHydrationResult,
@@ -823,6 +824,15 @@ export function broadcastStateUpdate(roomCode: string): void {
 
   const sockets = io.sockets.adapter.rooms.get(roomCode) ?? new Set<string>();
 
+  // Scheduled-tournament rooms only: the server's turn clock for this state
+  // (synced first, so the payload carries the deadline of the decision this
+  // state is waiting on) and the server clock to count down against.
+  let tournamentFields: { tournamentClock: ReturnType<typeof getTournamentClockState>; serverNow: string } | null = null;
+  if (roomKind(room) === 'scheduled_tournament') {
+    syncTournamentTurnClock(room.code);
+    tournamentFields = { tournamentClock: getTournamentClockState(room.code), serverNow: serverNow() };
+  }
+
   const pendingForcedDraw = room.pendingForcedDrawBroadcast;
   const pendingAutoPasses =
     Array.isArray(room.pendingAutoPassNotice) && room.pendingAutoPassNotice.length > 0
@@ -875,6 +885,7 @@ export function broadcastStateUpdate(roomCode: string): void {
             }
           : {}),
         ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
+        ...(tournamentFields ?? {}),
       });
 
       if (

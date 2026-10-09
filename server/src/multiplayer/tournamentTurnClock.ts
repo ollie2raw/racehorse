@@ -13,6 +13,7 @@ import { roomKind } from './roomKind';
 import { withRoomGameplayLock } from './roomGameplayLock';
 import { tournamentMaxMissedTurns, tournamentTurnTimeoutMs } from '../scheduledTournament/tournamentTimeouts';
 import { alertTournamentAnomaly } from '../scheduledTournament/tournamentAlerts';
+import { withServerNow } from '../scheduledTournament/serverNow';
 
 const log = childLogger('tournament:turn-clock');
 
@@ -52,6 +53,8 @@ type Decision = { kind: DecisionKind; seatId: string; turnKey: string };
 type ClockEntry = Decision & {
   token: number;
   timer: ReturnType<typeof setTimeout>;
+  /** When this timer fires (server clock, ms): what clients count down to. */
+  deadlineAtMs: number;
   /** The timeout acted on this decision (so its end is not a player action). */
   fired: boolean;
 };
@@ -129,6 +132,51 @@ export function getArmedTournamentTurn(roomCode: string): { seatId: string; turn
   return entry ? { seatId: entry.seatId, turnKey: entry.turnKey, kind: entry.kind } : null;
 }
 
+/**
+ * The decision a tournament room's clock is timing, for clients (display
+ * only — the server timer is authoritative). `deadlineAt` is when the timer
+ * fires. A restored room gets a fresh deadline (the remaining time is not
+ * persisted). Null when nothing is being timed (a Fritz turn, the hand or game
+ * over, pre-game, an abandoned room, or not a tournament room).
+ */
+export type TournamentClockState =
+  | {
+      kind: 'turn';
+      /** The human seat whose turn it is. */
+      seatId: string;
+      deadlineAt: string;
+      /** That seat's consecutive missed turns so far. */
+      missedTurns: number;
+      /** The missed turn that forfeits the match. */
+      maxMissedTurns: number;
+    }
+  | {
+      /** Between hands: humans not yet readied are readied at the deadline (not a missed turn). */
+      kind: 'next_hand';
+      seatId: null;
+      waitingSeatIds: string[];
+      deadlineAt: string;
+    };
+
+export function getTournamentClockState(roomCode: string): TournamentClockState | null {
+  const code = roomCode.trim().toUpperCase();
+  const entry = entriesByRoom.get(code);
+  if (!entry) return null;
+  const deadlineAt = new Date(entry.deadlineAtMs).toISOString();
+  if (entry.kind === 'turn') {
+    return {
+      kind: 'turn',
+      seatId: entry.seatId,
+      deadlineAt,
+      missedTurns: getTournamentMissedTurns(code, entry.seatId),
+      maxMissedTurns: tournamentMaxMissedTurns(),
+    };
+  }
+  const room = peekRoom(code);
+  const waitingSeatIds = room ? room.players.filter((seatId) => !isBotSeat(seatId) && !room.nextHandReady.has(seatId)) : [];
+  return { kind: 'next_hand', seatId: null, waitingSeatIds, deadlineAt };
+}
+
 /** Consecutive missed turns for this seat (tests, diagnostics). */
 export function getTournamentMissedTurns(roomCode: string, seatId: string): number {
   return missedTurnsByRoom.get(roomCode.trim().toUpperCase())?.get(seatId) ?? 0;
@@ -162,10 +210,12 @@ export function syncTournamentTurnClock(roomCode: string): void {
     return;
   }
   const token = nextToken++;
+  const timeoutMs = tournamentTurnTimeoutMs();
   const entry: ClockEntry = {
     ...awaited,
     token,
     fired: false,
+    deadlineAtMs: Date.now() + timeoutMs,
     timer: setTimeout(() => {
       const run = onTimeout(code, token)
         .catch((err) => {
@@ -173,7 +223,7 @@ export function syncTournamentTurnClock(roomCode: string): void {
         })
         .finally(() => inFlightTimeouts.delete(run));
       inFlightTimeouts.add(run);
-    }, tournamentTurnTimeoutMs()),
+    }, timeoutMs),
   };
   entriesByRoom.set(code, entry);
 }
@@ -338,6 +388,11 @@ async function playTimedOutTurn(roomCode: string, room: Room, entry: ClockEntry)
     log.info({ roomCode, seatId, missed: getTournamentMissedTurns(roomCode, seatId) }, 'tournament turn timed out; played it automatically');
   }
   syncTournamentTurnClock(roomCode);
+  if (failed) {
+    // Re-armed without a state broadcast: tell the room the new deadline.
+    const { requireIo } = await import('./roomSession');
+    requireIo().to(roomCode).emit('tournament:clock', withServerNow({ roomCode, tournamentClock: getTournamentClockState(roomCode) }));
+  }
 }
 
 async function forfeitIfStillAwaiting(
