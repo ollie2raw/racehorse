@@ -226,7 +226,8 @@ import { initRoomSession, resetRoomSessionStoresForTests } from '../multiplayer/
 import { resetLiveRoomPersistenceForTests } from '../multiplayer/roomLivePersistence';
 import { resetTournamentTurnClockForTests } from '../multiplayer/tournamentTurnClock';
 import { registerTournamentRoutes } from './routes';
-import { closeRegistrationAndStart } from './engine';
+import { cancelTournament, closeRegistrationAndStart } from './engine';
+import { SERVER_NOW_ISO } from './serverNow.testkit';
 import { closeRegistrationWithEscalation, CLOSE_START_MAX_CONSECUTIVE_FAILURES, startTournamentScheduler, stopTournamentScheduler } from './scheduler';
 import { recoverTournamentMatches } from './recovery';
 import { recordMatchResultForTest } from './inMemoryMatchRpc.testkit';
@@ -249,11 +250,14 @@ afterAll(() => { vi.unstubAllEnvs(); });
 
 const ownerSocket = (userId: string) => ({ id: `sock-${userId.slice(-2)}`, data: { userId }, emit: vi.fn() });
 let sockets: Array<ReturnType<typeof ownerSocket>> = [];
+/** Every global (io.emit) broadcast, across all fake io instances. */
+const ioEmit = vi.fn();
+
 function makeIo() {
   return {
     sockets: { sockets: new Map(sockets.map((s) => [s.id, s])), adapter: { rooms: new Map() } },
     to: () => ({ emit: vi.fn(), except: () => ({ emit: vi.fn() }) }),
-    emit: vi.fn(),
+    emit: ioEmit,
   } as any;
 }
 
@@ -375,6 +379,7 @@ beforeEach(() => {
   h.bracketFailures = 0;
   h.upcomingRows = [];
   sockets = [];
+  ioEmit.mockClear();
   resetAlertThrottleForTests();
   restart();
 });
@@ -678,5 +683,87 @@ describe('kind filtering', () => {
     await playHumanMatch(cupId, U1, 1, false);
     const history = await request('GET', '/api/tournaments/history', { as: U1 });
     expect(history.body.history).toEqual([expect.objectContaining({ tournamentId: cupId, kind: 'fritz_cup', placement: 5 })]);
+  });
+});
+
+describe('socket events are scoped (Phase 3B.1)', () => {
+  const anonSocket = () => ({ id: 'sock-anon', data: {} as { userId?: string }, emit: vi.fn() });
+  const tournamentEvents = (sock: { emit: ReturnType<typeof vi.fn> }) =>
+    sock.emit.mock.calls.filter(([event]) => String(event).startsWith('tournament:'));
+  const globalTournamentEvents = () => ioEmit.mock.calls.filter(([event]) => String(event).startsWith('tournament:'));
+
+  it('a Fritz Cup played to its championship pushes every event to its owner only', async () => {
+    const owner = ownerSocket(U1);
+    const unrelated = ownerSocket(U2);
+    const rivalOwner = ownerSocket(U3);
+    const anon = anonSocket();
+    sockets = [owner, unrelated, rivalOwner, anon];
+    const request = makeApp();
+    const rivalCupId = (await request('POST', '/api/tournaments/fritz-cup', { as: U3 })).body.tournament.id;
+    const cupId = (await request('POST', '/api/tournaments/fritz-cup', { as: U1 })).body.tournament.id;
+    await playHumanMatch(cupId, U1, 1, true);
+    await playHumanMatch(cupId, U1, 2, true);
+    await playHumanMatch(cupId, U1, 3, true);
+    expect(h.tournaments.get(cupId)).toMatchObject({ status: 'completed', winner_id: U1 });
+
+    // Nothing tournament-related was broadcast to everyone.
+    expect(globalTournamentEvents()).toEqual([]);
+    // The owner saw the whole lifecycle of their cup, labelled fritz_cup, with serverNow.
+    const ownerCupEvents = tournamentEvents(owner).filter(([, p]) => (p as { tournamentId?: string }).tournamentId === cupId);
+    expect(new Set(ownerCupEvents.map(([e]) => e))).toEqual(new Set([
+      'tournament:bracket_generated', 'tournament:match_ready', 'tournament:match_updated',
+      'tournament:match_completed', 'tournament:round_completed', 'tournament:completed',
+    ]));
+    for (const [event, payload] of ownerCupEvents) {
+      if (['tournament:bracket_generated', 'tournament:match_updated', 'tournament:completed'].includes(String(event))) {
+        expect(payload).toMatchObject({ kind: 'fritz_cup', serverNow: expect.stringMatching(SERVER_NOW_ISO) });
+      }
+    }
+    // An unrelated signed-in user, an anonymous socket and another cup's owner saw nothing of it.
+    for (const sock of [unrelated, rivalOwner, anon]) expect(JSON.stringify(sock.emit.mock.calls)).not.toContain(cupId);
+    // …and the rival cup reached only its own owner.
+    for (const sock of [owner, unrelated, anon]) expect(JSON.stringify(sock.emit.mock.calls)).not.toContain(rivalCupId);
+    expect(tournamentEvents(rivalOwner).some(([e]) => e === 'tournament:bracket_generated')).toBe(true);
+    expect(tournamentEvents(unrelated)).toEqual([]);
+    expect(tournamentEvents(anon)).toEqual([]);
+  });
+
+  it('cancellation: a Fritz Cup to its owner only; a Live Event stays public', async () => {
+    const owner = ownerSocket(U1);
+    const unrelated = ownerSocket(U2);
+    sockets = [owner, unrelated, anonSocket()];
+    const { tournament } = await persistence.startFritzCup(U1);
+    await cancelTournament(io(), tournament.id, defaultEnginePersistence, 'test');
+    expect(owner.emit).toHaveBeenCalledWith('tournament:cancelled', {
+      tournamentId: tournament.id, kind: 'fritz_cup', status: 'cancelled', serverNow: expect.stringMatching(SERVER_NOW_ISO),
+    });
+    expect(unrelated.emit).not.toHaveBeenCalled();
+    expect(globalTournamentEvents()).toEqual([]);
+
+    seedLiveEvent(LIVE, 60 * 60_000);
+    await cancelTournament(io(), LIVE, defaultEnginePersistence, 'test');
+    expect(ioEmit).toHaveBeenCalledWith('tournament:cancelled', {
+      tournamentId: LIVE, kind: 'live', status: 'cancelled', serverNow: expect.stringMatching(SERVER_NOW_ISO),
+    });
+  });
+
+  it('a Live Event: lifecycle events stay public; match_ready reaches each assigned human only', async () => {
+    const s1 = ownerSocket(U1);
+    const s2 = ownerSocket(U2);
+    const s3 = ownerSocket(U3);
+    sockets = [s1, s2, s3, anonSocket()];
+    seedLiveEvent(LIVE, -1_000);   // registration closed and start passed: the tick starts and dispatches it
+    for (const userId of [U2, U3]) {
+      h.regs.push({ id: randomUUID(), tournament_id: LIVE, user_id: userId, registered_at: new Date().toISOString(), seed: null, placement: null, status: 'registered' });
+    }
+    const readyFor = (sock: { emit: ReturnType<typeof vi.fn> }) =>
+      sock.emit.mock.calls.filter(([e]) => e === 'tournament:match_ready').map(([, p]) => (p as { matchId: string }).matchId);
+    await schedulerTickUntil(() => readyFor(s2).length > 0 && readyFor(s3).length > 0);
+
+    expect(ioEmit).toHaveBeenCalledWith('tournament:bracket_generated', expect.objectContaining({ tournamentId: LIVE, kind: 'live' }));
+    expect(new Set(readyFor(s2))).toEqual(new Set([humanMatch(LIVE, U2, 1)!.id]));
+    expect(new Set(readyFor(s3))).toEqual(new Set([humanMatch(LIVE, U3, 1)!.id]));
+    expect(humanMatch(LIVE, U2, 1)!.id).not.toBe(humanMatch(LIVE, U3, 1)!.id);
+    expect(readyFor(s1)).toEqual([]);
   });
 });

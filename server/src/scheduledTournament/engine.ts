@@ -22,6 +22,7 @@ import { getRoomRoster } from '../multiplayer/roomSession';
 import { disarmTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
 import { markGameOverPersistSucceeded } from '../multiplayer/gameOverPersistPolicy';
 import type { ScheduledTournamentRow } from './types';
+import { emitToUserIds, emitTournamentEvent } from './tournamentEvents';
 import { bracketSnapshot, type BracketQfPair, type BracketSeed } from './persistence';
 import {
   TOURNAMENT_MATCH_READY_WINDOW_MS,
@@ -170,16 +171,6 @@ export function placementLabelForRank(placement: number | null): string | null {
   else if (mod10 === 2 && mod100 !== 12) suffix = 'nd';
   else if (mod10 === 3 && mod100 !== 13) suffix = 'rd';
   return `${placement}${suffix} Place`;
-}
-
-function emitToUserIds(io: Server, userIds: Array<string | null | undefined>, event: string, payload: unknown): void {
-  const targets = new Set(userIds.filter((userId): userId is string => Boolean(userId) && !isBotUserId(userId)));
-  if (targets.size === 0) return;
-  for (const sock of io.sockets.sockets.values()) {
-    const userId: string | undefined = (sock.data as { userId?: string }).userId;
-    if (!userId || !targets.has(userId)) continue;
-    sock.emit(event, payload);
-  }
 }
 
 async function selectHigherSeedWinner(
@@ -376,8 +367,8 @@ export async function generateBracket(
         log.warn({ tournamentId, created: result.created }, 'repaired a partial bracket');
       }
       if (result.created || result.repaired) {
-        // Broadcast — rooms dispatch at scheduled_start (humans) or immediately for bot-only pairs.
-        io.emit('tournament:bracket_generated', { tournamentId });
+        // Live Event: public; Fritz Cup: its owner only (tournamentEvents.ts).
+        await emitTournamentEvent(io, tournament, 'tournament:bracket_generated', { tournamentId });
       }
       return result.matches;
     } catch (err) {
@@ -663,6 +654,7 @@ export async function applyMatchResult(
       match.tournament_id,
       result.winner_id ?? params.winnerId,
       result.placements ?? [],
+      persistence,
     );
     return;
   }
@@ -707,10 +699,12 @@ export async function applyMatchResult(
       slot: result.advanced_to_slot,
       winnerId: result.winner_id,
     }, 'winner advanced');
-    io.emit('tournament:match_updated', {
-      tournamentId: match.tournament_id,
-      matchId: result.advanced_to_match_id,
-    });
+    await emitTournamentEvent(
+      io,
+      { id: match.tournament_id, read: (id) => persistence.fetchTournamentById(id) },
+      'tournament:match_updated',
+      { matchId: result.advanced_to_match_id },
+    );
     if (result.advanced_to_status === 'ready' && params.dispatchAdvanced !== false) {
       await dispatchTournamentMatch(
         io,
@@ -738,6 +732,7 @@ async function finalizeCompletedTournament(
   tournamentId: string,
   winnerUserId: string,
   placements: Array<{ user_id: string; placement: number }>,
+  persistence: EnginePersistence,
 ): Promise<void> {
   await writeTournamentCompletionActivity(
     tournamentId,
@@ -746,7 +741,17 @@ async function finalizeCompletedTournament(
       .map((p) => ({ userId: p.user_id, placement: p.placement })),
   );
   log.info({ tournamentId, winnerId: winnerUserId }, 'champion');
-  io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
+  await emitTournamentEvent(
+    io,
+    { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) },
+    'tournament:completed',
+    { winnerId: winnerUserId },
+  );
+}
+
+/** `tournament:cancelled` to the tournament's audience (Live Event: public; Fritz Cup: its owner). */
+async function emitTournamentCancelled(io: Server, tournamentId: string, persistence: EnginePersistence): Promise<void> {
+  await emitTournamentEvent(io, { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) }, 'tournament:cancelled', { status: 'cancelled' });
 }
 
 export async function cancelTournament(
@@ -757,7 +762,7 @@ export async function cancelTournament(
   reason: string | null = null,
 ): Promise<void> {
   await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
-  io.emit('tournament:cancelled', { tournamentId });
+  await emitTournamentCancelled(io, tournamentId, persistence);
 }
 
 /**
@@ -782,7 +787,7 @@ export async function cancelTournamentBeforeStart(
     cancelled = Boolean(current && (current.status === 'upcoming' || current.status === 'registration_open'));
     if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
   }
-  if (cancelled) io.emit('tournament:cancelled', { tournamentId });
+  if (cancelled) await emitTournamentCancelled(io, tournamentId, persistence);
   return cancelled;
 }
 
@@ -815,7 +820,7 @@ export async function cancelTournamentIfBracketUnchanged(
     cancelled = tournament?.status === 'in_progress' && key(bracketSnapshot(matches)) === key(expected);
     if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
   }
-  if (cancelled) io.emit('tournament:cancelled', { tournamentId });
+  if (cancelled) await emitTournamentCancelled(io, tournamentId, persistence);
   return cancelled;
 }
 
@@ -841,7 +846,7 @@ export async function openRegistration(
     opened = Boolean(current && current.status === 'upcoming' && Date.parse(current.registration_open_at) <= now.getTime());
     if (opened) await persistence.updateTournamentStatus(tournamentId, 'registration_open');
   }
-  if (opened) io.emit('tournament:registration_open', { tournamentId });
+  if (opened) await emitTournamentEvent(io, { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) }, 'tournament:registration_open', {});
   return opened;
 }
 
@@ -869,7 +874,7 @@ export async function closeRegistrationAndStart(
       ? await persistence.cancelTournamentIfNoEntrants(tournamentId, 'not_enough_players')
       : await cancelTournamentBeforeStart(io, tournamentId, persistence, 'not_enough_players');
     if (cancelled) {
-      if (persistence.cancelTournamentIfNoEntrants) io.emit('tournament:cancelled', { tournamentId });
+      if (persistence.cancelTournamentIfNoEntrants) await emitTournamentCancelled(io, tournamentId, persistence);
       return { started: false, reason: 'not_enough_players' };
     }
     const current = await persistence.fetchTournamentById(tournamentId);

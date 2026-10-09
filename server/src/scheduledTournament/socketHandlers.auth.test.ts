@@ -19,6 +19,8 @@ vi.mock('./persistence', async () => {
     registerForTournament: (...args: unknown[]) => mocks.registerForTournament(...args),
     withdrawFromTournament: (...args: unknown[]) => mocks.withdrawFromTournament(...args),
     fetchBracketView: vi.fn(),
+    // The registration_updated broadcast reads the tournament for its audience.
+    fetchTournamentById: vi.fn(async (id: string) => ({ id, kind: 'live', owner_user_id: null })),
   };
 });
 

@@ -46,7 +46,7 @@ vi.mock('../supabaseUtils', () => ({
       return due ? [row] : [];
     }
     if (path.startsWith('/rest/v1/scheduled_tournament_registrations')) return [];
-    if (path.startsWith('/rest/v1/scheduled_tournaments?id=eq.')) return [row];
+    if (path.startsWith('/rest/v1/scheduled_tournaments?') && param('id') === `eq.${row.id}`) return [row];
     return [];
   }),
 }));
@@ -102,7 +102,7 @@ describe('M2: a 12-hour registration window through the real lifecycle tick', ()
 
     await tickAt(OPEN + 1_000);                        // 05:00:01 PST — 11 h 59 m before start
     expect(db.row!.status).toBe('registration_open');
-    expect(io.emit).toHaveBeenCalledWith('tournament:registration_open', { tournamentId: db.row!.id });
+    expect(io.emit).toHaveBeenCalledWith('tournament:registration_open', { tournamentId: db.row!.id, kind: 'live', serverNow: expect.any(String) });
 
     for (const ms of [OPEN + 60 * 60_000, START - 30 * 60_000, START - 3 * 60_000]) {
       await tickAt(ms);                                // hours later, 30 min, 3 min before: still open

@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   fetchBracketView,
+  fetchTournamentById,
   registerForTournament,
   overlapConflictPayload,
   REGISTRATION_RPC_ERRORS,
@@ -13,6 +14,7 @@ import {
 } from './tournamentAuth';
 import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
 import { ackWithServerNow } from './serverNow';
+import { emitTournamentEvent } from './tournamentEvents';
 import { childLogger } from '../logger';
 
 const log = childLogger('tournament:socket');
@@ -65,8 +67,10 @@ export function registerTournamentSocketHandlers(io: Server, rawSocket: Socket):
         ack?.({ ok: true, alreadyRegistered: true });
         return;
       }
-      io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
+      // After the ack: a failed broadcast never turns a registration into an error.
+      void emitTournamentEvent(io, { id: tournamentId, read: (id) => fetchTournamentById(id) }, 'tournament:registration_updated', {})
+        .catch((err) => log.warn({ err, tournamentId }, 'registration_updated not sent'));
     } catch (err) {
       const error = registrationErrorCode(err);
       ack?.({ ok: false, error, ...(error === 'overlapping_tournament' ? { conflict: overlapConflictPayload(err) } : {}) });
@@ -95,8 +99,10 @@ export function registerTournamentSocketHandlers(io: Server, rawSocket: Socket):
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
       await withdrawFromTournament(tournamentId, authenticatedUserId);
-      io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
+      // After the ack: a failed broadcast never turns a registration into an error.
+      void emitTournamentEvent(io, { id: tournamentId, read: (id) => fetchTournamentById(id) }, 'tournament:registration_updated', {})
+        .catch((err) => log.warn({ err, tournamentId }, 'registration_updated not sent'));
     } catch (err) {
       const code = registrationErrorCode(err);
       // Keep this handler's historical code for the closed-window case.

@@ -119,7 +119,7 @@ describe('pre-start cancellation is conditional', () => {
     const { row, io, p } = engineDouble('registration_open');
     expect(await closeRegistrationAndStart(io, T, p)).toEqual({ started: false, reason: 'not_enough_players' });
     expect(row).toMatchObject({ status: 'cancelled', cancel_reason: 'not_enough_players' });
-    expect(io.emit).toHaveBeenCalledWith('tournament:cancelled', { tournamentId: T });
+    expect(io.emit).toHaveBeenCalledWith('tournament:cancelled', { tournamentId: T, kind: 'live', status: 'cancelled', serverNow: expect.any(String) });
     expect(p.updateTournamentStatus).not.toHaveBeenCalled(); // never the unconditional write
   });
 

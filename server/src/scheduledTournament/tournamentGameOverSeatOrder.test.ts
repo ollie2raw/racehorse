@@ -368,7 +368,7 @@ describe('tournament game over with production seat order', () => {
     expect(writeTournamentActivity).toHaveBeenCalledWith(
       expect.objectContaining({ userId: HUMAN, placement: 'Runner-up', tournamentId: T }),
     );
-    expect(emit).toHaveBeenCalledWith('tournament:completed', { tournamentId: T, winnerId: bot(2) });
+    expect(emit).toHaveBeenCalledWith('tournament:completed', { tournamentId: T, winnerId: bot(2), kind: 'live', serverNow: expect.any(String) });
     assertBracketConsistentForStore(store.current, {
       capturedLogs: capturedLogs as CapturedLog[],
       context: 'fritz wins final',
