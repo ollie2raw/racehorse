@@ -8,6 +8,7 @@ import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
 import { tournamentStarterUserId } from './tournamentStarter';
 import { updateMatchIfUnchanged } from './casWrites';
+import { withServerNow } from './serverNow';
 import { alertTournamentAnomaly } from './tournamentAlerts';
 
 const log = childLogger('tournament:dispatch');
@@ -267,7 +268,7 @@ export async function dispatchTournamentMatch(
             : usernames.get(opponentId) ?? null
           : null,
       };
-      sock.emit('tournament:match_ready', payload);
+      sock.emit('tournament:match_ready', withServerNow(payload));
     }
     if (recipientSockets.length === 0) {
       log.debug({ matchId: match.id, roomCode }, 'match_ready skipped — no connected sockets');

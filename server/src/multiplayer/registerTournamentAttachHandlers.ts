@@ -1,4 +1,5 @@
 import { childLogger } from '../logger';
+import { ackWithServerNow } from '../scheduledTournament/serverNow';
 import type { Server, Socket } from 'socket.io';
 import {
   getRoom,
@@ -41,7 +42,8 @@ export function registerTournamentAttachHandlers(
 ): void {
   const { handlerDeps, attachSocketToTrackedRoom } = params;
 
-  socket.on('tournament:attach_assigned_match', async (payload: unknown, cb?: AckFn) => {
+  socket.on('tournament:attach_assigned_match', async (payload: unknown, rawCb?: AckFn) => {
+    const cb = ackWithServerNow(rawCb);
     if (!isTournamentsEnabled()) {
       cb?.(TOURNAMENTS_DISABLED);
       return;

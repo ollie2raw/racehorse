@@ -16,7 +16,10 @@ const log = childLogger('tournament:recovery');
 export async function recoverTournamentMatches(
   io: Server,
   persistence: EnginePersistence = defaultEnginePersistence,
+  /** Checked before each tournament and match: false stops here (orchestrator lease lost). */
+  opts: { shouldContinue?: () => boolean } = {},
 ): Promise<{ readyRecovered: number; inProgressRecovered: number }> {
+  const shouldContinue = opts.shouldContinue ?? (() => true);
   const tournaments = persistence.fetchTournamentsByStatus
     ? await persistence.fetchTournamentsByStatus(['in_progress'])
     : [];
@@ -24,6 +27,7 @@ export async function recoverTournamentMatches(
   let inProgressRecovered = 0;
 
   for (const tournament of tournaments) {
+    if (!shouldContinue()) break;
     if (isTournamentPastActiveWindow(tournament)) {
       log.info({
         tournamentId: tournament.id,
@@ -37,6 +41,7 @@ export async function recoverTournamentMatches(
       const matches = await persistence.fetchMatches(tournament.id);
       const startMs = Date.parse(tournament.scheduled_start);
       for (const match of matches) {
+        if (!shouldContinue()) break;
         let matchFailed = false;
         try {
           if (

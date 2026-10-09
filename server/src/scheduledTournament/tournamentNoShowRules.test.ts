@@ -56,6 +56,7 @@ import { inMemoryMatchRpcForArrayStore } from './inMemoryMatchRpc.testkit';
 import type { EnginePersistence } from './persistenceInterface';
 import { startTournamentScheduler, stopTournamentScheduler } from './scheduler';
 import { resetAlertThrottleForTests } from './tournamentAlerts';
+import { ownedLease } from './orchestratorLease.testkit';
 
 const T = '2a000000-0000-4000-8000-000000000001';
 const U1 = '2a000000-0000-4000-8000-0000000000a1';
@@ -255,7 +256,7 @@ describe('event-expiry alert label', () => {
     }];
     h.failTournamentPatch = true;
 
-    startTournamentScheduler(makeIo());
+    startTournamentScheduler(makeIo(), { lease: ownedLease() });
 
     await vi.waitFor(() => expect(h.captureMessage).toHaveBeenCalled());
     const tags = h.captureMessage.mock.calls.map(([, ctx]) => ctx?.tags?.tournament_alert);

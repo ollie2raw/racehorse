@@ -3,8 +3,7 @@ import type { Server, Socket } from 'socket.io';
 import type { Express } from 'express';
 import { registerTournamentSocketHandlers } from './socketHandlers';
 import { registerTournamentRoutes } from './routes';
-import { startTournamentScheduler } from './scheduler';
-import { recoverTournamentMatches } from './recovery';
+import { drainTournamentOrchestrator, startTournamentScheduler } from './scheduler';
 import { isTournamentsEnabled } from './tournamentsFeature';
 
 export {
@@ -14,6 +13,7 @@ export {
   TOURNAMENT_CONFIG,
 } from './engine';
 export type { MatchRow, ScheduledTournamentRow, RegistrationRow, BracketView } from './types';
+export { drainTournamentOrchestrator };
 
 const log = childLogger('tournament');
 
@@ -35,12 +35,9 @@ export function bootstrapScheduledTournamentInfrastructure(io: Server, app: Expr
     return;
   }
   log.info('tournaments ENABLED (TOURNAMENTS_ENABLED=true)');
+  // Boot recovery runs inside the scheduler, once per orchestrator-lease epoch
+  // this process acquires (not on every boot of every instance).
   startTournamentScheduler(io);
-  setTimeout(() => {
-    void recoverTournamentMatches(io).catch((error) => {
-      log.warn({ err: error }, 'startup recovery failed');
-    });
-  }, 2_000);
 }
 
 /**

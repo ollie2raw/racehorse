@@ -29,41 +29,33 @@ export function isValidUuid(value: string | null | undefined): value is string {
 // ── Tournaments ──────────────────────────────────────────────────────────
 
 /**
- * Extra rows /upcoming reads beyond its limit. Fritz Cups are filtered out in
- * Node (the query cannot name `kind` while the server must also run before M1),
- * and a cup can briefly pass `scheduled_start >= now` — its start is the
- * database clock at creation, and this server's clock may lag that by a little
- * — so a few extra rows keep such cups from displacing Live Events. Once M1 is
- * guaranteed, a `kind=eq.live` predicate in the query can replace this.
+ * The communal feed: Live Events only, filtered in the query (`kind=eq.live`;
+ * this server requires M1), so a Fritz Cup can never take a slot in the limit.
  */
-const UPCOMING_KIND_FILTER_HEADROOM = 20;
-
 export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTournamentRow[]> {
   const nowIso = new Date().toISOString();
-  const readLimit = limit + UPCOMING_KIND_FILTER_HEADROOM;
   const [preStart, bracketLobby] = await Promise.all([
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
         `?select=*` +
+        `&kind=eq.live` +
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=in.(upcoming,registration_open)` +
         `&order=scheduled_start.asc` +
-        `&limit=${readLimit}`,
+        `&limit=${limit}`,
     ),
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
         `?select=*` +
+        `&kind=eq.live` +
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=eq.in_progress` +
         `&order=scheduled_start.asc` +
-        `&limit=${readLimit}`,
+        `&limit=${limit}`,
     ),
   ]);
   const byId = new Map<string, ScheduledTournamentRow>();
   for (const row of [...preStart, ...bracketLobby]) {
-    // The communal feed is Live Events only (filtered here, not in the query,
-    // so this read is valid before M1; see UPCOMING_KIND_FILTER_HEADROOM).
-    if ((row.kind ?? 'live') !== 'live') continue;
     byId.set(row.id, row);
   }
   return [...byId.values()]
@@ -610,6 +602,27 @@ export function overlapConflictPayload(err: unknown): { tournamentId: string | n
     kind: typeof details?.kind === 'string' ? details.kind : null,
     scheduledStart: Number.isFinite(scheduledStart) ? new Date(scheduledStart).toISOString() : null,
   };
+}
+
+/** The orchestrator lease RPCs (2026-10-08_tournament_orchestrator_lease.sql). */
+export type LeaseAcquireResult = { acquired: boolean; owner: string | null; lease_token?: string | null; leased_until: string | null };
+
+export async function acquireOrchestratorLease(key: string, owner: string, ttlSeconds: number): Promise<LeaseAcquireResult> {
+  return callTournamentRpc<LeaseAcquireResult>('acquire_tournament_orchestrator_lease', {
+    p_key: key, p_owner: owner, p_ttl_seconds: ttlSeconds,
+  });
+}
+
+export async function renewOrchestratorLease(
+  key: string, owner: string, token: string, ttlSeconds: number,
+): Promise<{ renewed: boolean; leased_until: string | null }> {
+  return callTournamentRpc('renew_tournament_orchestrator_lease', {
+    p_key: key, p_owner: owner, p_token: token, p_ttl_seconds: ttlSeconds,
+  });
+}
+
+export async function releaseOrchestratorLease(key: string, owner: string, token: string): Promise<{ released: boolean }> {
+  return callTournamentRpc('release_tournament_orchestrator_lease', { p_key: key, p_owner: owner, p_token: token });
 }
 
 export type StartFritzCupResult = {

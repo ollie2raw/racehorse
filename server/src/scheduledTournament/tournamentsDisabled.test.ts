@@ -16,6 +16,7 @@ vi.mock('./recovery', () => ({ recoverTournamentMatches: mocks.recoverTournament
 import { registerTournamentRoutes } from './routes';
 import { registerTournamentSocketHandlers } from './socketHandlers';
 import { isTournamentsEnabled } from './tournamentsFeature';
+import { takeServerNow } from './serverNow.testkit';
 
 type Handler = (req: unknown, res: unknown) => unknown;
 
@@ -32,7 +33,7 @@ function harness() {
     let body: unknown;
     const res = {
       status: (code: number) => { status = code; return res; },
-      json: (value: unknown) => { body = value; return res; },
+      json: (value: unknown) => { body = takeServerNow(value); return res; },
     };
     await routes.get(`${method} ${path}`)!({ headers: { authorization: 'Bearer t' }, params: { id: 'x' }, query: {}, body: {} }, res);
     return { status, body: body as Record<string, unknown> };

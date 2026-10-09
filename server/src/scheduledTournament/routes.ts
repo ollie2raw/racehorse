@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import type { Express, Request, Response } from 'express';
 import type { Server } from 'socket.io';
@@ -22,6 +23,7 @@ import {
   withdrawFromTournament,
 } from './persistence';
 import { startOrResumeFritzCup } from './fritzCup';
+import { withServerNow } from './serverNow';
 import type { ScheduledTournamentRow } from './types';
 import { humanJoinedAt, isBotUserId } from './matchDispatch';
 import { buildTournamentMeState } from './meState';
@@ -49,7 +51,7 @@ async function requireAuth(
 function sendRegistrationRpcError(res: Response, err: unknown): void {
   const code = err instanceof Error ? err.message : 'internal';
   if (!REGISTRATION_RPC_ERRORS.has(code)) {
-    res.status(500).json({ ok: false, error: code });
+    sendInternal(res, err);
     return;
   }
   const status = code === 'tournament_not_found' ? 404 : code === 'invalid_user' ? 400 : 409;
@@ -96,8 +98,43 @@ function sendFritzCupError(res: Response, err: unknown): void {
     res.status(400).json({ ok: false, error: code });
     return;
   }
-  log.error({ err }, 'fritz cup request failed');
+  sendInternal(res, err);
+}
+
+/** An unexpected failure: logged in full here, `internal` to the client (never raw error text). */
+function sendInternal(res: Response, err: unknown): void {
+  log.error({ err }, 'tournament request failed');
+  Sentry.captureException(err);
   res.status(500).json({ ok: false, error: 'internal' });
+}
+
+type TournamentRouteHandler = (req: Request, res: Response) => unknown | Promise<unknown>;
+
+/**
+ * The tournament API contract, applied to every tournament route: each JSON
+ * object body (success or error, including those sent by shared helpers —
+ * auth, the feature switch, the rate limiter) gains `serverNow`, an error body
+ * without `ok` gains `ok: false`, and anything thrown becomes a logged
+ * 500 `internal`.
+ */
+function tournamentRoute(handler: TournamentRouteHandler): TournamentRouteHandler {
+  return async (req, res) => {
+    const send = res.json.bind(res);
+    res.json = ((body: unknown) => {
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        const b = body as Record<string, unknown>;
+        const normalized = b.ok === undefined && typeof b.error === 'string' ? { ok: false, ...b } : b;
+        return send(withServerNow(normalized));
+      }
+      return send(body);
+    }) as Response['json'];
+    try {
+      await handler(req, res);
+    } catch (err) {
+      if (!res.headersSent) sendInternal(res, err);
+      else log.error({ err }, 'tournament request failed after responding');
+    }
+  };
 }
 
 /** The user's playable assigned match, as /me reports it (null if none is playable now). */
@@ -152,7 +189,13 @@ function requireTournamentId(req: Request, res: Response): string | null {
   return id;
 }
 
-export function registerTournamentRoutes(app: Express, io?: Server): void {
+export function registerTournamentRoutes(expressApp: Express, io?: Server): void {
+  // Every tournament route goes through the API contract (tournamentRoute).
+  const app = {
+    get: (path: string, handler: TournamentRouteHandler) => expressApp.get(path, tournamentRoute(handler)),
+    post: (path: string, handler: TournamentRouteHandler) => expressApp.post(path, tournamentRoute(handler)),
+    delete: (path: string, handler: TournamentRouteHandler) => expressApp.delete(path, tournamentRoute(handler)),
+  };
   // Static paths must be registered before /:id so "me", "upcoming", etc. are not captured.
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
     if (respondIfTournamentsDisabled(res, 'upcoming')) return;
@@ -173,7 +216,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
         res.status(503).json({ ok: false, error: 'upstream_timeout', tournaments: [] });
         return;
       }
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -219,7 +262,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
       const regs = await fetchRegistrationsForUser(userId);
       res.json({ ok: true, registrations: regs });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -302,7 +345,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
         countdown: meState.countdown,
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -344,7 +387,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
         ),
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -357,7 +400,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, view: { ...view, tournament: publicTournament(view.tournament) } });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -370,7 +413,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, tournament: publicTournament(t) });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 
@@ -411,7 +454,7 @@ export function registerTournamentRoutes(app: Express, io?: Server): void {
         },
       });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      sendInternal(res, err);
     }
   });
 

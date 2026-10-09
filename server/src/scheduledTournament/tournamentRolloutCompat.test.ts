@@ -1,17 +1,22 @@
 /**
- * Phase 2B.1: pre-start cancellation is conditional, and the new server is
- * safe to deploy before M1 (with FRITZ_CUP_ENABLED off).
+ * Phase 2B.1 → 2C: pre-start cancellation is conditional, and Fritz Cup stays
+ * out of the database while its flag is off.
+ *
+ * Rollout note: the 2B.1 server (commit 2c7b100d) was the one deployable
+ * before M1. This (2C) revision requires M1: /upcoming filters `kind` in the
+ * query. Everything else the Live Event paths ask of the database still names
+ * no M1-only object, and the flag-off cup route still makes no call at all.
  *
  *  - cancelTournamentBeforeStart is one conditional PATCH (status still
  *    upcoming / registration_open) and reports whether it cancelled; the
  *    engine never cancels a tournament another starter has already moved on.
  *    (The race itself is proven on PostgreSQL by tournament-db-verify.sh §9.)
  *  - Every database request the Live Event paths make — reads, registration,
- *    withdrawal, lifecycle, bracket, results, recovery reads — is recorded
- *    against pre-M1 rows (no kind / owner_user_id) and must not name an
- *    M1-only object.
+ *    withdrawal, lifecycle, bracket, results, recovery reads — is recorded;
+ *    only /upcoming's `kind=eq.live` names an M1 object.
  *  - With the flag off, POST /api/tournaments/fritz-cup makes no database call.
- *  - /upcoming's Node-side kind filter cannot let cups displace Live Events.
+ *  - /upcoming filters kind in the query with the normal limit, so cups can
+ *    never take a slot.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -136,7 +141,7 @@ describe('pre-start cancellation is conditional', () => {
 });
 
 describe('the new server before M1 (FRITZ_CUP_ENABLED off)', () => {
-  it('no Live Event database request names an M1-only object (reads, registration, lifecycle, bracket, results, recovery reads)', async () => {
+  it('Live Event database requests name no M1-only object except /upcoming\'s kind=eq.live (reads, registration, lifecycle, bracket, results, recovery reads)', async () => {
     h.respond = (path, method) => {
       if (path.startsWith('/rest/v1/scheduled_tournaments') && method === 'GET') return [preM1Row(T)];
       if (path.includes('/rpc/register_for_tournament')) return { registered: true, already_registered: false, seats_taken: 1 };
@@ -175,13 +180,16 @@ describe('the new server before M1 (FRITZ_CUP_ENABLED off)', () => {
       await call().catch(() => undefined);
       expect(h.requests.length, `${label} made no request`).toBeGreaterThan(before);
     }
-    const offending = h.requests.filter(mentionsM1);
+    const upcomingReads = h.requests.filter((r) => r.path.includes('&scheduled_start=gte.'));
+    expect(upcomingReads).toHaveLength(2);
+    expect(upcomingReads.every((r) => r.path.includes('&kind=eq.live'))).toBe(true);
+    const offending = h.requests.filter((r) => !upcomingReads.includes(r)).filter(mentionsM1);
     expect(offending).toEqual([]);
   });
 
-  it('/upcoming, /my and /me answer from pre-M1 rows; Live Events default to kind live', async () => {
+  it('/upcoming, /my and /me answer; a row without kind is reported as live', async () => {
     h.respond = (path, method) => {
-      if (path.startsWith('/rest/v1/scheduled_tournaments?select=*&scheduled_start=gte') && path.includes('status=in.')) return [preM1Row(T)];
+      if (path.startsWith('/rest/v1/scheduled_tournaments?select=*&kind=eq.live&scheduled_start=gte') && path.includes('status=in.')) return [preM1Row(T)];
       if (path.startsWith('/rest/v1/scheduled_tournament_registrations') && method === 'GET') {
         return [{ id: 'r1', tournament_id: T, user_id: U, status: 'registered', seed: null, placement: null, registered_at: new Date().toISOString() }];
       }
@@ -193,7 +201,7 @@ describe('the new server before M1 (FRITZ_CUP_ENABLED off)', () => {
     expect(upcoming.body.tournaments).toEqual([expect.objectContaining({ id: T, kind: 'live' })]);
     expect((await request('GET', '/api/tournaments/my', { as: U })).body).toMatchObject({ ok: true, registrations: [expect.objectContaining({ tournament_id: T })] });
     expect((await request('GET', '/api/tournaments/me', { as: U })).body).toMatchObject({ ok: true, activeTournamentId: T });
-    expect(h.requests.filter(mentionsM1)).toEqual([]);
+    expect(h.requests.filter((r) => !r.path.includes('&scheduled_start=gte.')).filter(mentionsM1)).toEqual([]);
   });
 
   it('flag off: POST /api/tournaments/fritz-cup returns before any database call (no start_fritz_cup, nothing at all)', async () => {
@@ -221,19 +229,22 @@ describe('the new server before M1 (FRITZ_CUP_ENABLED off)', () => {
 });
 
 describe('/upcoming kind filter', () => {
-  it('reads past its limit, so cups that briefly pass the time filter cannot displace Live Events', async () => {
+  it('filters kind in the query with the normal limit: cups can never take a slot', async () => {
     const soon = (ms: number) => new Date(Date.now() + ms).toISOString();
-    const cups = Array.from({ length: 5 }, (_, i) => ({ ...preM1Row(`cup-${i}`, { scheduled_start: soon(1 + i) }), kind: 'fritz_cup', owner_user_id: U }));
-    const lives = Array.from({ length: 6 }, (_, i) => ({ ...preM1Row(`live-${i}`, { scheduled_start: soon(60_000 * (i + 1)) }), kind: 'live' }));
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => ({ ...preM1Row(`cup-${i}`, { scheduled_start: soon(1 + i) }), kind: 'fritz_cup', owner_user_id: U })),
+      ...Array.from({ length: 6 }, (_, i) => ({ ...preM1Row(`live-${i}`, { scheduled_start: soon(60_000 * (i + 1)) }), kind: 'live' })),
+    ];
     h.respond = (path) => {
-      if (!path.startsWith('/rest/v1/scheduled_tournaments?select=*&scheduled_start=gte')) return undefined;
+      if (!path.startsWith('/rest/v1/scheduled_tournaments?select=*&kind=eq.live&scheduled_start=gte')) return undefined;
       const limit = Number(/limit=(\d+)/.exec(path)![1]);
-      return path.includes('status=in.') ? [...cups, ...lives].slice(0, limit) : [];
+      return path.includes('status=in.') ? rows.filter((r) => r.kind === 'live').slice(0, limit) : [];
     };
 
     const result = await persistence.fetchUpcomingTournaments(5);
 
     expect(result.map((t) => t.id)).toEqual(['live-0', 'live-1', 'live-2', 'live-3', 'live-4']);
-    expect(h.requests.every((r) => /limit=25/.test(r.path))).toBe(true);
+    expect(h.requests).toHaveLength(2);
+    expect(h.requests.every((r) => /&kind=eq\.live&/.test(r.path) && /limit=5$/.test(r.path))).toBe(true);
   });
 });

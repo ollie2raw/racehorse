@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { Socket } from 'socket.io';
 import { registerTournamentSocketHandlers } from './socketHandlers';
+import { ackTakingServerNow } from './serverNow.testkit';
 
 // These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
 beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
@@ -35,7 +36,7 @@ function makeSocket(userId?: string): Socket {
     _emit: (event: string, payload: unknown, ack?: (resp: unknown) => void) => {
       const handler = handlers.get(event);
       if (!handler) throw new Error(`no handler for ${event}`);
-      return handler(payload, ack);
+      return handler(payload, ack ? ackTakingServerNow(ack) : ack);
     },
   };
   return socket as unknown as Socket & { _emit: typeof socket._emit };

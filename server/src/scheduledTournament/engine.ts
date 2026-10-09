@@ -1337,17 +1337,22 @@ export async function reconcileExpiredReadyMatches(
    * players or no players. Omit it and the standalone read still happens.
    */
   inProgressTournaments?: ScheduledTournamentRow[],
+  /** Checked before each tournament and match: false stops here (orchestrator lease lost). */
+  opts: { shouldContinue?: () => boolean } = {},
 ): Promise<number> {
+  const shouldContinue = opts.shouldContinue ?? (() => true);
   const tournaments = inProgressTournaments
     ?? (persistence.fetchTournamentsByStatus
       ? await persistence.fetchTournamentsByStatus(['in_progress'])
       : []);
   let resolvedCount = 0;
   for (const tournament of tournaments) {
+    if (!shouldContinue()) break;
     let tournamentFailed = false;
     try {
       const matches = await persistence.fetchMatches(tournament.id);
       for (const match of matches) {
+        if (!shouldContinue()) break;
         let matchFailed = false;
         try {
           if (match.status === 'in_progress') {

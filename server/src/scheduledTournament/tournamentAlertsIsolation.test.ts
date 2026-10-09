@@ -98,6 +98,7 @@ import {
   clearTournamentMatchStepAlert,
   resetAlertThrottleForTests,
 } from './tournamentAlerts';
+import { ownedLease } from './orchestratorLease.testkit';
 
 const TA = '5d000000-0000-4000-8000-00000000000a';
 const TB = '5d000000-0000-4000-8000-00000000000b';
@@ -326,7 +327,7 @@ describe('failure isolation', () => {
     const reconciled = vi.fn(async () => 0);
     h.reconcileOverride = reconciled;
 
-    startTournamentScheduler(makeIo());
+    startTournamentScheduler(makeIo(), { lease: ownedLease() });
 
     await vi.waitFor(() => expect(reconciled).toHaveBeenCalledTimes(1));
     expect(dispatchedFor).toEqual([TB]);

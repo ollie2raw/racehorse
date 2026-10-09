@@ -17,6 +17,12 @@ export type GracefulShutdownDeps = {
   flushLiveSessions?: (options: { timeoutMs: number }) => Promise<FlushAllPendingLiveSessionsResult>;
   exitProcess?: (code: number) => void;
   shutdownFlushTimeoutMs?: number;
+  /**
+   * Stop new background orchestration and let the operation in flight finish
+   * (the tournament orchestrator: drain, then release its lease only if it
+   * finished in time). Runs first, alongside nothing else.
+   */
+  drainOrchestration?: (options: { timeoutMs: number }) => Promise<unknown>;
 };
 
 export function isGracefulShutdownInProgress(): boolean {
@@ -55,6 +61,15 @@ export async function runGracefulShutdown(
         deps.io.emit('server:shutdown', { reason: 'server_restart', signal });
       } catch {
         /* ignore */
+      }
+
+      if (deps.drainOrchestration) {
+        try {
+          const drained = await deps.drainOrchestration({ timeoutMs });
+          console.warn('[server] orchestration drained', drained);
+        } catch (error) {
+          console.error('[server] orchestration drain failed', error);
+        }
       }
 
       await new Promise<void>((resolve, reject) => {

@@ -127,4 +127,54 @@ describe('gracefulShutdown', () => {
     expect(io.close).toHaveBeenCalled();
     expect(exitProcess).toHaveBeenCalledWith(0);
   });
+
+  it('drains orchestration first and waits for it before closing HTTP, flushing and exiting', async () => {
+    const server = createMockHttpServer();
+    const io = createMockSocketServer();
+    const callOrder: string[] = [];
+    const exitProcess = vi.fn(() => { callOrder.push('exit'); });
+    let finishDrain!: () => void;
+    const drainOrchestration = vi.fn((options: { timeoutMs: number }) => {
+      callOrder.push(`drain_start:${options.timeoutMs}`);
+      return new Promise<{ drained: boolean; released: boolean }>((resolve) => {
+        finishDrain = () => { callOrder.push('drain_done'); resolve({ drained: true, released: true }); };
+      });
+    });
+    server.close.mockImplementation((callback?: (error?: Error) => void) => { callOrder.push('http_close'); callback?.(); });
+    io.close.mockImplementation((callback?: () => void) => { callOrder.push('socket_close'); callback?.(); });
+    const flushLiveSessions = vi.fn(async () => {
+      callOrder.push('flush');
+      return { flushedRoomCodes: [], awaitedInFlightRoomCodes: [], timedOut: false };
+    });
+
+    const done = runGracefulShutdown('SIGTERM', {
+      server: server as any, io: io as any, exitProcess, flushLiveSessions, drainOrchestration, shutdownFlushTimeoutMs: 4321,
+    });
+    await new Promise((r) => setImmediate(r));
+    // The in-flight orchestration is still running: nothing else has closed.
+    expect(callOrder).toEqual(['drain_start:4321']);
+    expect(io.emit).toHaveBeenCalledWith('server:shutdown', expect.anything());
+    finishDrain();
+    await done;
+    expect(callOrder).toEqual(['drain_start:4321', 'drain_done', 'http_close', 'flush', 'socket_close', 'exit']);
+    expect(exitProcess).toHaveBeenCalledWith(0);
+  });
+
+  it('a failing orchestration drain does not stop the rest of the shutdown', async () => {
+    const server = createMockHttpServer();
+    const io = createMockSocketServer();
+    const exitProcess = vi.fn();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await runGracefulShutdown('SIGTERM', {
+      server: server as any,
+      io: io as any,
+      exitProcess,
+      flushLiveSessions: async () => ({ flushedRoomCodes: [], awaitedInFlightRoomCodes: [], timedOut: false }),
+      drainOrchestration: async () => { throw new Error('lease rpc down'); },
+    });
+    expect(server.close).toHaveBeenCalled();
+    expect(io.close).toHaveBeenCalled();
+    expect(exitProcess).toHaveBeenCalledWith(0);
+    errorSpy.mockRestore();
+  });
 });

@@ -12,6 +12,10 @@ import {
   rejectMismatchedPayloadUserId,
 } from './tournamentAuth';
 import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
+import { ackWithServerNow } from './serverNow';
+import { childLogger } from '../logger';
+
+const log = childLogger('tournament:socket');
 
 type Ack = (resp: unknown) => void;
 
@@ -25,7 +29,15 @@ function authErrorAck(ack: Ack | undefined, error: string): void {
   ack?.({ ok: false, error });
 }
 
-export function registerTournamentSocketHandlers(io: Server, socket: Socket): void {
+export function registerTournamentSocketHandlers(io: Server, rawSocket: Socket): void {
+  // Every tournament ack carries `serverNow` (see serverNow.ts).
+  const socket = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    on: (event: string, handler: (payload: any, ack?: Ack) => unknown) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rawSocket.on(event, (payload: any, ack?: Ack) => { void handler(payload, ackWithServerNow(ack)); }),
+    get data() { return rawSocket.data; },
+  } as unknown as Socket;
   socket.on('tournament:register', async (
     payload: { tournamentId?: string; userId?: string },
     ack?: Ack,
@@ -105,7 +117,8 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       const view = await fetchBracketView(payload.tournamentId);
       ack?.({ ok: true, view });
     } catch (err) {
-      ack?.({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      log.error({ err }, 'tournament:get_bracket failed');
+      ack?.({ ok: false, error: 'internal' });
     }
   });
 

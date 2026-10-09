@@ -7,6 +7,7 @@ import {
 import { initRoomSession } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
 import { resetLiveRoomPersistenceForTests } from './roomLivePersistence';
+import { ackTakingServerNow } from '../scheduledTournament/serverNow.testkit';
 
 // These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
 beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
@@ -165,7 +166,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-rehydrate' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-rehydrate' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -227,7 +228,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -277,7 +278,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'tournament_not_assigned' });
   });
@@ -288,7 +289,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-1' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'not_authenticated' });
   });
@@ -342,7 +343,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-inprog' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-inprog' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledTimes(1);
     const body = ack.mock.calls[0]?.[0] as {
@@ -457,7 +458,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-done' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-done' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'match_completed' });
   });
@@ -469,7 +470,7 @@ describe('tournament:attach_assigned_match', () => {
     registerRoomSessionHandlers(io, socket);
 
     const ack = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-err' }, ack);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-err' }, ackTakingServerNow(ack));
 
     expect(ack).toHaveBeenCalledTimes(1);
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'db_down' });

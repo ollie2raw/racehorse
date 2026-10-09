@@ -143,6 +143,7 @@ import {
 } from './matchmaking/roomShellHydration';
 import { startMatchmakingReservationSweeper } from './matchmaking/reservedRoomCleanup';
 import {
+  drainTournamentOrchestrator,
   bootstrapScheduledTournamentInfrastructure,
   initScheduledTournaments,
 } from './scheduledTournament';
@@ -838,7 +839,7 @@ io.on('connection', (socket: Socket) => {
     log.info({ socketId: socket.id }, 'client disconnected');
   });
 });
-registerGracefulShutdownHandlers({ server, io });
+registerGracefulShutdownHandlers({ server, io, drainOrchestration: drainTournamentOrchestrator });
 process.on('unhandledRejection', (reason) => {
   Sentry.captureException(reason);
   console.error('[process] unhandledRejection', getProcessErrorLogPayload(reason));

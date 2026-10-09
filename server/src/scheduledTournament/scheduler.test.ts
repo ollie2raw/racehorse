@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ownedLease } from './orchestratorLease.testkit';
 
 const mocks = vi.hoisted(() => ({
   fetchTournamentsByStatus: vi.fn(),
@@ -73,7 +74,7 @@ describe('startTournamentScheduler stale cleanup', () => {
     const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
     const io = { emit: vi.fn() } as any;
 
-    startTournamentScheduler(io);
+    startTournamentScheduler(io, { lease: ownedLease() });
     await vi.waitFor(() => expect(resolveExpiredTournament).toHaveBeenCalledWith(io, 'tour-stale', undefined, expect.any(Date), expect.objectContaining({ id: 'tour-stale' })));
 
     expect(mocks.cancelTournament).not.toHaveBeenCalled();
@@ -88,7 +89,7 @@ describe('startTournamentScheduler stale cleanup', () => {
       const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
       const io = { emit: vi.fn() } as any;
 
-      startTournamentScheduler(io);
+      startTournamentScheduler(io, { lease: ownedLease() });
       await Promise.resolve();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(60_000);
@@ -199,7 +200,7 @@ describe('closeRegistrationWithEscalation', () => {
     });
     mocks.supabaseFetch.mockResolvedValue(undefined);
     const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
-    startTournamentScheduler({ emit: vi.fn() } as any);
+    startTournamentScheduler({ emit: vi.fn() } as any, { lease: ownedLease() });
     await vi.advanceTimersByTimeAsync(0);
     expect(mocks.closeRegistrationAndStart).toHaveBeenCalledWith(expect.anything(), 'tour-b');
     stopTournamentScheduler();

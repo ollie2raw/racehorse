@@ -55,9 +55,12 @@ vi.mock('../supabaseUtils', () => ({
       const row = h.liveSessions.get(code);
       return row ? [structuredClone(row)] : [];
     }
-    if (path.startsWith('/rest/v1/scheduled_tournaments?select=*&scheduled_start=gte')) {
+    if (path.startsWith('/rest/v1/scheduled_tournaments?select=*&kind=eq.live&scheduled_start=gte')) {
+      // The query filters kind in the database (Phase 2C): serve only what it asks for.
       const wantInProgress = path.includes('status=eq.in_progress');
-      return h.upcomingRows.filter((r) => (r.status === 'in_progress') === wantInProgress).map((r) => structuredClone(r));
+      return h.upcomingRows
+        .filter((r) => r.kind === 'live' && (r.status === 'in_progress') === wantInProgress)
+        .map((r) => structuredClone(r));
     }
     return [];
   }),
@@ -230,6 +233,7 @@ import { recordMatchResultForTest } from './inMemoryMatchRpc.testkit';
 import { defaultEnginePersistence } from './persistenceInterface';
 import * as persistence from './persistence';
 import { resetAlertThrottleForTests } from './tournamentAlerts';
+import { ownedLease } from './orchestratorLease.testkit';
 
 const U1 = '9f000000-0000-4000-8000-0000000000a1';
 const U2 = '9f000000-0000-4000-8000-0000000000a2';
@@ -352,7 +356,7 @@ function seedLiveEvent(id: string, startInMs: number) {
 
 /** One scheduler tick (the real one), run until `done` holds. */
 async function schedulerTickUntil(done: () => boolean) {
-  startTournamentScheduler(io());
+  startTournamentScheduler(io(), { lease: ownedLease() });
   try {
     await vi.waitFor(() => { if (!done()) throw new Error('not yet'); }, { timeout: 5_000, interval: 5 });
   } finally {
