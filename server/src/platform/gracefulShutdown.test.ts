@@ -164,7 +164,6 @@ describe('gracefulShutdown', () => {
     const server = createMockHttpServer();
     const io = createMockSocketServer();
     const exitProcess = vi.fn();
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await runGracefulShutdown('SIGTERM', {
       server: server as any,
       io: io as any,
@@ -175,6 +174,5 @@ describe('gracefulShutdown', () => {
     expect(server.close).toHaveBeenCalled();
     expect(io.close).toHaveBeenCalled();
     expect(exitProcess).toHaveBeenCalledWith(0);
-    errorSpy.mockRestore();
   });
 });

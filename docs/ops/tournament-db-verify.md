@@ -194,6 +194,25 @@ This script **cannot reach production**:
     barrier acquire concurrently, five rounds (absent key, then an expired
     lease taken over): exactly one owner every round.
 
+12. **Completion guard** (`2026-10-09_tournament_completion_guard.sql`,
+    Phase 2C.1): an unresolved match of a `cancelled` tournament is refused
+    with `tournament_cancelled` by every completion path (game over on a QF and
+    on the final, the no-show wrapper, forfeit), and the tournament, its
+    matches and registrations stay byte-identical (nothing promoted, no
+    placement, no champion). A result recorded before the cancellation replays
+    as an idempotent no-op (`conflict` for a different winner). A `completed`
+    tournament with an unresolved match, and `upcoming` / `registration_open`
+    tournaments, refuse with `tournament_not_in_progress`. Three rounds of each
+    race: result first (the backstop's stale snapshot cancel waits on the
+    tournament row, then `bracket_changed`; the result and its advancement
+    stand) and cancellation first (backstop cancel, and a plain conditional
+    cancel against a late final: the late result waits, then
+    `tournament_cancelled`, nothing written). Lock order, deterministically: a
+    third session holds the low-id target row while a cancel queues on it and
+    then a high-id feeder's completion arrives — with the new functions they
+    serialise on the tournament row (no deadlock; cancelled, then refused);
+    the same schedule against copies of the pre-2C.1 bodies deadlocks.
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

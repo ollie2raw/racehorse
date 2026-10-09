@@ -1,23 +1,24 @@
 # Tournament Phase 2 rollout checklist
 
-Order (approved in Phase 2C; supersedes the Phase 2B.1 order):
+Order (approved in Phase 2C.1; supersedes the Phase 2C order):
 
 | # | Step | Server | Database |
 |---|------|--------|----------|
-| 1 | Deploy the **2B.1 server** with `FRITZ_CUP_ENABLED=false` | 2B.1 | pre-M1 |
-| 2 | Verify ordinary Live Event behaviour | 2B.1 | pre-M1 |
-| 3 | Apply **M1** | 2B.1 | M1 |
-| 4 | Apply **CAS + M3** (inert) | 2B.1 | M1, CAS, M3 |
-| 5 | Deploy the **2C server** and verify | 2C | M1, CAS, M3 |
-| 6 | M2 (cadence) — later | 2C | + M2 |
-| 7 | Phase 3 client — later | 2C | |
-| 8 | Enable Fritz Cup (`FRITZ_CUP_ENABLED=true`) — last | 2C | |
+| 1 | Deploy the **2B.1 server** with `FRITZ_CUP_ENABLED=false`; verify Live Events | 2B.1 | pre-M1 |
+| 2 | Apply **M1** | 2B.1 | M1 |
+| 3 | Apply the **CAS migration** (inert) | 2B.1 | + CAS |
+| 4 | Apply **M3** (inert) | 2B.1 | + M3 |
+| 5 | Apply the **completion guard** | 2B.1 | + guard |
+| 6 | Deploy the **2C / 2C.1 server** and verify | 2C.1 | all of the above |
+| 7 | M2 (cadence) — later | 2C.1 | + M2 |
+| 8 | Phase 3 client — later | 2C.1 | |
+| 9 | Enable Fritz Cup (`FRITZ_CUP_ENABLED=true`) — last, after end-to-end verification | 2C.1 | |
 
 Migrations are applied by hand, each after a local run of
 `scripts/tournament-db-verify.sh` (`ALL CHECKS PASSED`). Nothing here is
 applied by CI or by a deploy.
 
-## 1. Deploy the 2B.1 server (flag off)
+## 1. Deploy the 2B.1 server (flag off) and verify Live Events
 
 Branch commit `2c7b100d`, against the pre-M1 production schema.
 
@@ -27,21 +28,17 @@ Branch commit `2c7b100d`, against the pre-M1 production schema.
   `start_fritz_cup`, `_tournament_user_conflict`) in a database request;
   `kind` is only read off returned rows, defaulting to `live`. Its `/upcoming`
   filters Fritz Cups in Node, not in the query.
+- Verify `/upcoming`, `/my`, `/me`, registration, withdrawal, start, results,
+  recovery.
 
-## 2. Verify Live Events on the 2B.1 server
-
-`/upcoming`, `/my`, `/me`, registration, withdrawal, start, results, recovery.
-
-## 3. Apply M1
+## 2. Apply M1
 
 `supabase/migrations/2026-10-07_tournament_kind_fritz_cup.sql`: additive
 columns (`kind` defaulting to `live`, `owner_user_id`), new functions, and a
 replaced `register_for_tournament` (same signature and success shape; see
 below).
 
-## 4. Apply the CAS migration and M3 (inert)
-
-In this order:
+## 3–4. Apply the CAS migration, then M3 (inert)
 
 1. `supabase/migrations/2026-10-08_tournament_orchestrator_cas.sql` — three new
    functions (`complete_tournament_match_if_unchanged`,
@@ -54,23 +51,50 @@ In this order:
 Both are inert under the 2B.1 server, which calls none of these objects.
 Afterwards `assert_security_posture()` must still return `hard_fail_count = 0`.
 
-## 5. Deploy the 2C server and verify
+## 5. Apply the completion guard
 
-The 2C server **requires** M1, CAS and M3:
+`supabase/migrations/2026-10-09_tournament_completion_guard.sql` replaces
+`complete_tournament_match` (same signature and success shape) and the two
+Phase 2C wrappers `complete_tournament_match_if_unchanged` and
+`cancel_tournament_if_bracket_unchanged`:
 
-| Missing | Effect on the 2C server |
-|---------|-------------------------|
+- An unresolved match completes only while its tournament is `in_progress`.
+  `cancelled` → `tournament_cancelled`; `completed`, `upcoming`,
+  `registration_open` → `tournament_not_in_progress`. Nothing is written. A
+  replay of an already-recorded result stays an idempotent no-op whatever the
+  tournament's status.
+- Every tournament RPC now locks the tournament row before its match rows (it
+  was matches first in the two wrappers, a lock cycle with a completion that
+  Postgres would abort as a deadlock; harness §12 reproduces it against the
+  old bodies).
+
+Under the still-running 2B.1 server this is safe: its completions behave as
+before, except that a result racing a cancellation is now refused instead of
+landing in a cancelled bracket. The 2B.1 server does not know the new codes,
+so such a game-over retries 4 times and gives up with one
+`game_over_persist_exhausted` alert — noisy, rare, and nothing is written.
+The 2C.1 server treats both codes as terminal (below).
+
+## 6. Deploy the 2C / 2C.1 server and verify
+
+The 2C.1 server **requires** M1, CAS and M3; the completion guard is
+recommended first but not required by it (without it the refusals simply
+never happen):
+
+| Missing | Effect on the 2C.1 server |
+|---------|---------------------------|
 | M1 | `/upcoming` queries `kind=eq.live`: 500 `internal` |
 | CAS | the no-show, empty-event cancel and backstop cancel RPCs fail: those steps alert (Sentry) and retry each tick; nothing is written |
 | M3 | the lease cannot be acquired, so **no process orchestrates** (no open, start, dispatch, reconcile, recovery); `orchestrator_lease_unavailable` alerts after 3 ticks (~90 s) |
+| guard | a result racing a cancellation can still complete a match of a cancelled tournament (the pre-2C.1 gap) |
 
 **Deploy when no tournament is near its start** (no registration about to
 close, nothing `in_progress`). During this one deploy the old 2B.1 instance
 (no lease, unconditional orchestrator writes) keeps ticking until Render sends
 it SIGTERM, alongside the new instance that holds the lease. Every later
-deploy is 2C → 2C: the new instance stands by until the old one drains and
-releases on SIGTERM — or, if it could not drain in time or crashed, until the
-lease expires (120 s by default).
+deploy is 2C.1 → 2C.1: the new instance stands by until the old one drains
+and releases on SIGTERM — or, if it could not drain in time or crashed, until
+the lease expires (120 s by default).
 
 Verify:
 
@@ -92,25 +116,42 @@ Verify:
   `{ ok: false, error: 'internal', serverNow }`, with no database text.
 
 `TOURNAMENT_ORCHESTRATOR_LEASE_TTL_MS` (default 120000, clamped to
-30000..600000) sets the lease TTL. The heartbeat renews every 30 s,
-independently of the tick, and a process stops treating itself as owner 10 s
-before its last confirmed expiry.
+30000..600000; the database is asked for whole seconds) sets the lease TTL.
+The heartbeat renews every 30 s, independently of the tick. A process stops
+treating itself as owner 10 s before the lease could expire: its deadline is
+measured on a monotonic clock from when the acquire / renew request was sent,
+plus the granted TTL — never from the host wall clock or the database's
+`leased_until`, so host clock drift or a clock step cannot extend it.
 
-## 6–8. Later
+### A result after a cancellation (2C.1 server)
 
-- **6. M2 (cadence)** — its own phase.
-- **7. Phase 3 client.**
-- **8. `FRITZ_CUP_ENABLED=true`** — only once server, database and client are
-  all ready.
+`tournament_cancelled` and `tournament_not_in_progress` are terminal for the
+result path: the game-over persist does not retry; one log line, and one
+Sentry event per match (a warning for a cancellation, an invariant-violation
+error for a completed / not-started parent); the room's game-over persist
+settles so the room is cleaned up normally. The result is not reinterpreted
+and the tournament is not revived.
+
+## 7–9. Later
+
+- **7. M2 (cadence)** — its own phase. M2 may rely on this: once a
+  tournament is `status = 'cancelled'`, no match of it can be completed by any
+  path (game over, forfeit, no-show, backstop, bye), whatever the reason for
+  the cancellation and whatever state its bracket is in. Cancelling legacy
+  future tournaments therefore cannot be undone by a late result.
+- **8. Phase 3 client.**
+- **9. `FRITZ_CUP_ENABLED=true`** — only once server, database and client are
+  all ready and verified end to end.
 
 ## Rollback
 
 | From | Rollback | Notes |
 |------|----------|-------|
-| 8 (cups on) | `FRITZ_CUP_ENABLED=false` | Stops new cups at once; existing cups play out (the scheduler, results and recovery treat them like any tournament). |
-| 5 (2C server) | Redeploy the 2B.1 server | The schema stays (all additive). The 2B.1 server ignores the lease row and the CAS functions and is back to the single-instance assumption with unconditional orchestrator writes: run one instance only. A later 2C deploy takes over the left-over lease once it has expired (≤ TTL). |
-| 4 (CAS, M3) | Normally none (inert) | Drop the three CAS functions and the lease RPCs and table **only** when no 2C server is running. |
-| 3 (M1) | Forward-fix preferred | The 2C server needs M1. Before any Fritz Cup exists, M1 can be reverted (restore the pre-M1 `register_for_tournament`, drop the new functions and columns) only after rolling back to the 2B.1 server. Once cups exist, do not revert. |
+| 9 (cups on) | `FRITZ_CUP_ENABLED=false` | Stops new cups at once; existing cups play out (the scheduler, results and recovery treat them like any tournament). |
+| 6 (2C.1 server) | Redeploy the 2B.1 server | The schema stays (all additive). The 2B.1 server ignores the lease row and the CAS functions and is back to the single-instance assumption with unconditional orchestrator writes: run one instance only. A later 2C deploy takes over the left-over lease once it has expired (≤ TTL). |
+| 5 (guard) | Forward-fix preferred | Reverting means restoring the 2026-08-31 `complete_tournament_match` and the 2026-10-08 wrapper bodies — which reopens the cancelled-result gap and the lock cycle. |
+| 3–4 (CAS, M3) | Normally none (inert) | Drop the three CAS functions and the lease RPCs and table **only** when no 2C server is running. |
+| 2 (M1) | Forward-fix preferred | The 2C.1 server needs M1. Before any Fritz Cup exists, M1 can be reverted (restore the pre-M1 `register_for_tournament`, drop the new functions and columns) only after rolling back to the 2B.1 server. Once cups exist, do not revert. |
 | any | `TOURNAMENTS_ENABLED=false` | Global switch: no scheduler (so no lease calls), no tournament database traffic; the read routes answer an empty state. |
 
 ## What the lease does and does not do

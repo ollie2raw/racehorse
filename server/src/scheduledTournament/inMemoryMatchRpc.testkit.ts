@@ -137,6 +137,11 @@ export function makeInMemoryMatchRpc(
         };
       }
 
+      // 2b ── the parent must be in_progress (2026-10-09_tournament_completion_guard.sql)
+      const tournamentStatus = store.getTournamentStatus(match.tournament_id);
+      if (tournamentStatus === 'cancelled') throw new Error('tournament_cancelled');
+      if (tournamentStatus !== 'in_progress') throw new Error('tournament_not_in_progress');
+
       // 3 ── playable state
       if (match.status === 'waiting') throw new Error('match_not_playable');
       if (match.status === 'bye' && !params.byeWalkover) throw new Error('match_not_playable');

@@ -36,7 +36,7 @@ vi.mock('./engine', () => ({
 }));
 vi.mock('./recovery', () => ({ recoverTournamentMatches: m.recoverTournamentMatches }));
 
-import { OrchestratorLease } from './orchestratorLease';
+import { OrchestratorLease, type LeaseBackend } from './orchestratorLease';
 import { inMemoryLeaseBackend, inMemoryLeaseStore, type InMemoryLeaseStore } from './orchestratorLease.testkit';
 import { drainTournamentOrchestrator, runOrchestrationTick, startTournamentScheduler, stopTournamentScheduler, whenOrchestrationIdle } from './scheduler';
 import { resetAlertThrottleForTests } from './tournamentAlerts';
@@ -45,8 +45,15 @@ const TTL = 120_000;
 const HEARTBEAT = 30_000;
 const io = { emit: vi.fn() } as any;
 
+/**
+ * These tests never step the wall clock, so the fake-timer Date is the
+ * monotonic clock here (vitest does not fake performance.now). The clock-skew
+ * tests below drive a separate monotonic clock instead.
+ */
+const fakeTimerMonotonic = () => Date.now();
+
 function leaseOn(store: InMemoryLeaseStore, ownerId: string) {
-  return new OrchestratorLease({ backend: inMemoryLeaseBackend(store), ownerId, ttlMs: TTL, heartbeatMs: HEARTBEAT });
+  return new OrchestratorLease({ backend: inMemoryLeaseBackend(store), ownerId, ttlMs: TTL, heartbeatMs: HEARTBEAT, monotonicNow: fakeTimerMonotonic });
 }
 
 /** A promise the test resolves. */
@@ -293,7 +300,7 @@ describe('lease unavailable (M3 missing, or the RPC erroring)', () => {
       renew: vi.fn(),
       release: vi.fn(),
     };
-    const lease = new OrchestratorLease({ backend: backend as any, ownerId: 'p1', ttlMs: TTL, heartbeatMs: HEARTBEAT });
+    const lease = new OrchestratorLease({ backend: backend as any, ownerId: 'p1', ttlMs: TTL, heartbeatMs: HEARTBEAT, monotonicNow: fakeTimerMonotonic });
     const unavailableAlerts = () => m.captureMessage.mock.calls.filter(([msg]) => msg === '[tournament] orchestrator_lease_unavailable').length;
     startTournamentScheduler(io, { lease });
     await whenOrchestrationIdle();
@@ -309,5 +316,150 @@ describe('lease unavailable (M3 missing, or the RPC erroring)', () => {
     backend.acquire.mockImplementation(async () => ({ acquired: true, leaseToken: 'tok-1' }) as any);
     expect(await runOrchestrationTick()).toBe('completed');
     expect(m.recoverTournamentMatches).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Lease clock (Phase 2C.1). Three independent clocks: the host WALL clock
+ * (Date — stepped ±5 min here), this process's MONOTONIC clock (`mono`), and
+ * the DATABASE clock (`db`), which grants `leased_until = db + TTL` when a
+ * request executes. Real elapsed time moves `mono` and `db` together; request
+ * latency moves them before the response arrives.
+ */
+describe('lease clock: monotonic, conservative, independent of the host wall clock', () => {
+  const SAFETY = 10_000;
+  function clocks() {
+    const c = { mono: 1_000_000, db: 5_000_000, until: 0, owner: '' as string, token: '' as string, latency: 0, dbExecAfter: 0 };
+    /** Advance real time: both the monotonic and the database clocks. */
+    const elapse = (ms: number) => { c.mono += ms; c.db += ms; };
+    const backend: LeaseBackend = {
+      async acquire(owner, ttlSeconds) {
+        elapse(c.dbExecAfter);                         // request in flight before it executes
+        if (c.until > c.db && c.owner !== owner) { elapse(c.latency - c.dbExecAfter); return { acquired: false, leaseToken: null }; }
+        c.owner = owner; c.token = `tok-${c.db}`; c.until = c.db + ttlSeconds * 1000;
+        elapse(c.latency - c.dbExecAfter);             // response in flight
+        return { acquired: true, leaseToken: c.token };
+      },
+      async renew(owner, token, ttlSeconds) {
+        elapse(c.dbExecAfter);
+        const ok = c.owner === owner && c.token === token && c.until > c.db;
+        if (ok) c.until = c.db + ttlSeconds * 1000;
+        elapse(c.latency - c.dbExecAfter);
+        return { renewed: ok };
+      },
+      async release() { return { released: false }; },
+    };
+    const lease = (ttlMs = TTL) => new OrchestratorLease({ backend, ownerId: 'p1', ttlMs, heartbeatMs: 1e9, safetyMs: SAFETY, monotonicNow: () => c.mono });
+    /** Set the monotonic clock to `sent + ms` (and the database clock with it). */
+    const at = (sent: number, ms: number) => elapse(sent + ms - c.mono);
+    return { c, backend, lease, elapse, at };
+  }
+
+  it('host wall clock 5 minutes AHEAD does not shorten or extend ownership', async () => {
+    const { c, lease, at } = clocks();
+    const l = lease();
+    const sent = c.mono;
+    expect((await l.ensure()).held).toBe(true);
+    vi.setSystemTime(Date.now() + 5 * 60_000);
+    at(sent, TTL - SAFETY - 1);
+    expect(l.holds()).toBe(true);
+    at(sent, TTL - SAFETY);
+    expect(l.holds()).toBe(false);
+    l.stopHeartbeat();
+  });
+
+  it('host wall clock 5 minutes BEHIND does not extend ownership', async () => {
+    const { c, lease, at } = clocks();
+    const l = lease();
+    const sent = c.mono;
+    await l.ensure();
+    vi.setSystemTime(Date.now() - 5 * 60_000);
+    at(sent, TTL - SAFETY);
+    // With a wall-clock deadline this would still "hold" for another 5 minutes.
+    expect(l.holds()).toBe(false);
+    expect(c.until - c.db).toBeGreaterThanOrEqual(SAFETY); // the database lease has not even expired yet
+    l.stopHeartbeat();
+  });
+
+  it('a slow acquire shortens the local interval: it runs from when the request was SENT', async () => {
+    const { c, lease, at } = clocks();
+    c.latency = 20_000; c.dbExecAfter = 1_000;    // executes 1 s after send, response 20 s after send
+    const l = lease();
+    const sent = c.mono;
+    await l.ensure();
+    expect(c.mono - sent).toBe(20_000);
+    at(sent, TTL - SAFETY - 1);
+    expect(l.holds()).toBe(true);
+    at(sent, TTL - SAFETY);
+    expect(l.holds()).toBe(false);                // only 90 s after the response
+    // …while the database lease (granted at send + 1 s) is still valid for 11 s.
+    expect(c.until - c.db).toBe(SAFETY + 1_000);
+    l.stopHeartbeat();
+  });
+
+  it('local ownership ends at least the safety margin before the database expiry: no other process can hold it yet', async () => {
+    const { c, backend, lease, at } = clocks();
+    const l = lease();
+    const sent = c.mono;
+    await l.ensure();
+    at(sent, TTL - SAFETY);
+    expect(l.holds()).toBe(false);
+    // The database still refuses a second owner at this moment: the local view lapsed first.
+    expect((await backend.acquire('p2', TTL / 1000)).acquired).toBe(false);
+    l.stopHeartbeat();
+  });
+
+  it('a successful heartbeat sets a fresh conservative interval from the renewal\'s send time', async () => {
+    const { c, lease, at } = clocks();
+    const l = lease();
+    await l.ensure();
+    at(c.mono, 30_000);
+    c.latency = 5_000;
+    const renewSent = c.mono;
+    await l.renewNow();
+    expect(c.mono - renewSent).toBe(5_000);
+    at(renewSent, TTL - SAFETY - 1);
+    expect(l.holds()).toBe(true);
+    at(renewSent, TTL - SAFETY);
+    expect(l.holds()).toBe(false);
+    l.stopHeartbeat();
+  });
+
+  it('a failed heartbeat keeps only the previous interval, then ownership is lost; a refused one loses it at once', async () => {
+    const { c, backend, lease, at } = clocks();
+    const l = lease();
+    const sent = c.mono;
+    await l.ensure();
+    const realRenew = backend.renew;
+    backend.renew = async () => { throw new Error('fetch failed'); };
+    at(sent, 30_000);
+    await l.renewNow();
+    expect(l.holds()).toBe(true);                 // within the previous interval
+    at(sent, TTL - SAFETY);
+    await l.renewNow();
+    expect(l.holds()).toBe(false);
+    expect(lostAlerts()).toBe(1);
+
+    resetAlertThrottleForTests(); // the lost alert is throttled per 10 min; this is a separate scenario
+    const l2 = lease();
+    c.until = 0;
+    await l2.ensure();
+    backend.renew = async () => ({ renewed: false });
+    await l2.renewNow();
+    expect(l2.holds()).toBe(false);
+    expect(lostAlerts()).toBe(2);
+    backend.renew = realRenew;
+  });
+
+  it('the local interval uses the TTL actually granted (whole seconds, never rounded up)', async () => {
+    const { c, backend, lease, at } = clocks();
+    const spy = vi.spyOn(backend, 'acquire');
+    const l = lease(30_900);
+    const sent = c.mono;
+    await l.ensure();
+    expect(spy).toHaveBeenCalledWith('p1', 30);
+    at(sent, 30_000 - SAFETY);
+    expect(l.holds()).toBe(false);
+    l.stopHeartbeat();
   });
 });

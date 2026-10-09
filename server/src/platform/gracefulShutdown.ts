@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from 'node:http';
 import type { Server as SocketServer } from 'socket.io';
+import { childLogger } from '../logger';
 import {
   flushAllPendingLiveSessions,
   setLiveRoomPersistenceShuttingDown,
@@ -7,6 +8,8 @@ import {
 } from '../multiplayer/roomLivePersistence';
 
 export const DEFAULT_SHUTDOWN_SIGNAL_FLUSH_TIMEOUT_MS = 10_000;
+
+const log = childLogger('platform:shutdown');
 
 let gracefulShutdownInProgress = false;
 let gracefulShutdownPromise: Promise<void> | null = null;
@@ -66,9 +69,9 @@ export async function runGracefulShutdown(
       if (deps.drainOrchestration) {
         try {
           const drained = await deps.drainOrchestration({ timeoutMs });
-          console.warn('[server] orchestration drained', drained);
-        } catch (error) {
-          console.error('[server] orchestration drain failed', error);
+          log.warn({ drained }, 'orchestration drained');
+        } catch (err) {
+          log.error({ err }, 'orchestration drain failed');
         }
       }
 

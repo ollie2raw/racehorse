@@ -10,6 +10,7 @@ import {
   alertTournamentStepFailed,
   clearTournamentMatchStepAlert,
   clearTournamentStepAlert,
+  shouldSendAlert,
 } from './tournamentAlerts';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import { updateMatchIfUnchanged } from './casWrites';
@@ -44,6 +45,20 @@ export const TOURNAMENT_INVARIANT_RPC_ERRORS = new Set([
   'winner_not_participant',
   'no_advance_target',
 ]);
+
+/**
+ * complete_tournament_match refusals for a match whose tournament is no longer
+ * in progress (2026-10-09_tournament_completion_guard.sql). Terminal: the
+ * database wrote nothing and a retry can never succeed, so applyMatchResult
+ * reports them once and returns instead of throwing (no retry loop, no
+ * alert per attempt). The result is not reinterpreted and the tournament is
+ * not revived.
+ *  - tournament_cancelled: a result that lost the race to a cancellation.
+ *  - tournament_not_in_progress: an unresolved match under a completed or
+ *    not-yet-started tournament — corrupt state, alerted as an invariant.
+ */
+export const TOURNAMENT_CANCELLED = 'tournament_cancelled';
+export const TOURNAMENT_NOT_IN_PROGRESS = 'tournament_not_in_progress';
 
 function alertTournamentInvariantViolation(
   kind: string,
@@ -529,6 +544,38 @@ export async function applyMatchResult(
     });
   } catch (err) {
     const code = err instanceof Error ? err.message : String(err);
+    if (code === TOURNAMENT_CANCELLED) {
+      log.warn({
+        event: 'tournament_result_after_cancellation',
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+      }, 'result refused: the tournament was cancelled first; nothing recorded');
+      if (shouldSendAlert(`result_after_cancellation:${match.id}`)) {
+        Sentry.captureMessage('[tournament] result arrived after the tournament was cancelled', {
+          level: 'warning',
+          fingerprint: ['tournament-result-after-cancellation', match.id],
+          tags: { tournament_alert: 'result_after_cancellation', tournament_id: match.tournament_id, match_id: match.id },
+          extra: { attemptedWinnerId: params.winnerId, attemptedSource: params.winnerSource ?? 'game_over' },
+        });
+      }
+      return;
+    }
+    if (code === TOURNAMENT_NOT_IN_PROGRESS) {
+      log.error({
+        event: 'tournament_invariant_violation',
+        kind: code,
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        attemptedWinnerId: params.winnerId,
+      }, `tournament invariant violation: ${code}`);
+      alertTournamentInvariantViolation(code, match, {
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+      });
+      return;
+    }
     if (TOURNAMENT_INVARIANT_RPC_ERRORS.has(code)) {
       log.error({
         event: 'tournament_invariant_violation',

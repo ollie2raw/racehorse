@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import { childLogger } from '../logger';
 import { acquireOrchestratorLease, releaseOrchestratorLease, renewOrchestratorLease } from './persistence';
 import { alertTournamentAnomaly } from './tournamentAlerts';
@@ -12,9 +13,15 @@ export const TOURNAMENT_ORCHESTRATOR_LEASE_TTL_MS_DEFAULT = 120_000;
 export const TOURNAMENT_ORCHESTRATOR_HEARTBEAT_MS_DEFAULT = 30_000;
 /**
  * This process stops considering itself the owner this long before the lease
- * could expire at the database (local deadline = request sent + TTL − margin;
- * the database expiry is at least request sent + TTL), so it never acts on a
- * lease another process may already hold.
+ * could expire at the database (local deadline = request sent + granted TTL −
+ * margin; the database expiry is at least request sent + TTL), so it never
+ * acts on a lease another process may already hold.
+ *
+ * The local deadline is on a MONOTONIC clock (performance.now), never the wall
+ * clock and never the database's absolute `leased_until`: correctness does not
+ * depend on the host clock agreeing with PostgreSQL, and a wall-clock step
+ * (NTP, manual) can neither extend nor shorten it. Request latency only
+ * shortens it (the send time is captured before the request).
  */
 export const TOURNAMENT_ORCHESTRATOR_LEASE_SAFETY_MS = 10_000;
 
@@ -90,27 +97,32 @@ export class OrchestratorLease {
     ttlMs?: number;
     heartbeatMs?: number;
     safetyMs?: number;
+    /** Monotonic milliseconds (default performance.now); tests inject a fake. */
+    monotonicNow?: () => number;
   }) {}
 
   get ownerId(): string { return this.opts.ownerId; }
   /** Ownership epochs acquired by this process so far. */
   get epochCount(): number { return this.epochs; }
   private get ttlMs(): number { return this.opts.ttlMs ?? TOURNAMENT_ORCHESTRATOR_LEASE_TTL_MS_DEFAULT; }
-  private get ttlSeconds(): number { return Math.round(this.ttlMs / 1000); }
+  /** The TTL the database is asked for, in whole seconds (what it grants). */
+  private get ttlSeconds(): number { return Math.floor(this.ttlMs / 1000); }
+  private now(): number { return (this.opts.monotonicNow ?? performance.now.bind(performance))(); }
+  /** From the monotonic time the request was SENT, and the TTL actually granted. */
   private deadlineFrom(sentAt: number): number {
-    return sentAt + this.ttlMs - (this.opts.safetyMs ?? TOURNAMENT_ORCHESTRATOR_LEASE_SAFETY_MS);
+    return sentAt + this.ttlSeconds * 1000 - (this.opts.safetyMs ?? TOURNAMENT_ORCHESTRATOR_LEASE_SAFETY_MS);
   }
 
   /** Still the owner of epoch `token` (or of any epoch, without one), by the conservative local view. */
   holds(token?: string | null): boolean {
-    if (this.token === null || Date.now() >= this.localDeadline) return false;
+    if (this.token === null || this.now() >= this.localDeadline) return false;
     return token === undefined || token === this.token;
   }
 
   async ensure(): Promise<LeaseOwnership> {
     if (this.holds()) return { held: true, newEpoch: false, token: this.token };
     if (this.token !== null) this.markLost('local_deadline_passed');
-    const sentAt = Date.now();
+    const sentAt = this.now();
     const r = await this.opts.backend.acquire(this.opts.ownerId, this.ttlSeconds);
     if (!r.acquired || !r.leaseToken) return { held: false, newEpoch: false, token: null };
     this.token = r.leaseToken;
@@ -126,7 +138,7 @@ export class OrchestratorLease {
     const token = this.token;
     if (token === null || this.renewing) return;
     this.renewing = true;
-    const sentAt = Date.now();
+    const sentAt = this.now();
     try {
       const r = await this.opts.backend.renew(this.opts.ownerId, token, this.ttlSeconds);
       if (this.token !== token) return;
@@ -134,7 +146,7 @@ export class OrchestratorLease {
       else this.markLost('renew_refused');
     } catch (err) {
       log.warn({ err, owner: this.opts.ownerId }, 'orchestrator lease renewal failed');
-      if (this.token === token && Date.now() >= this.localDeadline) this.markLost('renew_failed_past_deadline');
+      if (this.token === token && this.now() >= this.localDeadline) this.markLost('renew_failed_past_deadline');
     } finally {
       this.renewing = false;
     }
