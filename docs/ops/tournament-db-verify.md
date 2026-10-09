@@ -213,6 +213,43 @@ This script **cannot reach production**:
     serialise on the tournament row (no deadlock; cancelled, then refused);
     the same schedule against copies of the pre-2C.1 bodies deadlocks.
 
+13. **M2 Live Event cadence** (`2026-10-10_tournament_live_event_cadence.sql`,
+    Phase 2D). Applied last, by this section (not in `CHAIN`), so it runs over
+    a real pre-M2 state:
+    - A scratch database (`verify_m2`) with the same chain and a **fake
+      clock**: a session `search_path` of `harness_clock, pg_catalog, public`
+      resolves the seed functions' and the migration's unqualified `now()` to
+      `harness.now`. The old 48-a-day body seeds the legacy inventory from
+      2026-10-30 10:00 PT (across the 2026-11-01 fall-back), the cleanup
+      matrix is planted on it, and M2 is applied at that clock. Checked
+      against a predicate written independently of M2: exactly the eligible
+      rows are cancelled `cadence_replaced` (otherwise unchanged); every other
+      row is byte-identical except slot-time windows; the 35-minute boundary
+      (35 min kept, 36 min cancelled), past, `registration_open`,
+      `in_progress`, `completed`, cancelled, +registration, +match row and
+      three Fritz Cups are kept; slot rows keep id / start / status with a
+      12 h / 2 min window (today's 17:00 stays `upcoming` with its opening time
+      passed); a slot row with a match row is untouched; a cancelled slot is
+      not revived; no deletes; registrations and matches unchanged; every
+      desired slot exists; the migration applied again, `ensure` and `seed`
+      change nothing.
+    - Slot generation, twice: 30 local days × {17:00, 20:00} PT across
+      2026-11-01, 2027-03-14 and 2027-11-07, with the UTC instants written
+      out; 12 h / 2 min elapsed; day boundaries (16:57, 16:59, 18:00, 20:30,
+      23:59:59, 00:00:01); seeding at five clocks = exactly that set, then 0.
+    - The real database: M2 over the real legacy inventory and every fixture
+      of §2–§12; public signatures unchanged; helpers service_role only;
+      `assert_security_posture()` clean; three rounds of a pg_cron-style
+      (owner) and a Node-style (service_role) `ensure` released together
+      behind a barrier: no error, duplicate or hole, then 0 + 0; overlap stays
+      the 2-hour window at `scheduled_start` (registered 10 h ahead → a Fritz
+      Cup now is allowed; 17:00 and 20:00 can both be entered).
+    - `docs/ops/tournament-m2/preflight.sql` and `verify.sql` run before and
+      after M2 on the scratch database.
+
+The harness exits non-zero if it stops before its final banner for any
+reason (macOS bash 3.2 otherwise reports 0 after a `set -u` abort).
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

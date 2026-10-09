@@ -1,6 +1,6 @@
 # Tournament Phase 2 rollout checklist
 
-Order (approved in Phase 2C.1; supersedes the Phase 2C order):
+Order (approved in Phase 2D; supersedes the Phase 2C.1 order):
 
 | # | Step | Server | Database |
 |---|------|--------|----------|
@@ -10,9 +10,11 @@ Order (approved in Phase 2C.1; supersedes the Phase 2C order):
 | 4 | Apply **M3** (inert) | 2B.1 | + M3 |
 | 5 | Apply the **completion guard** | 2B.1 | + guard |
 | 6 | Deploy the **2C / 2C.1 server** and verify | 2C.1 | all of the above |
-| 7 | M2 (cadence) — later | 2C.1 | + M2 |
-| 8 | Phase 3 client — later | 2C.1 | |
-| 9 | Enable Fritz Cup (`FRITZ_CUP_ENABLED=true`) — last, after end-to-end verification | 2C.1 | |
+| 7 | Apply **M2** (Live Event cadence) — preflight first | 2C.1 | + M2 |
+| 8 | Verify the new Live cadence | 2C.1 | |
+| 9 | Phase 3 client | 2C.1 | |
+| 10 | Final end-to-end verification | 2C.1 | |
+| 11 | Enable Fritz Cup (`FRITZ_CUP_ENABLED=true`) — last | 2C.1 | |
 
 Migrations are applied by hand, each after a local run of
 `scripts/tournament-db-verify.sh` (`ALL CHECKS PASSED`). Nothing here is
@@ -132,22 +134,93 @@ error for a completed / not-started parent); the room's game-over persist
 settles so the room is cleaned up normally. The result is not reinterpreted
 and the tournament is not revived.
 
-## 7–9. Later
+## 7. Apply M2 — two Live Events a Pacific day
 
-- **7. M2 (cadence)** — its own phase. M2 may rely on this: once a
-  tournament is `status = 'cancelled'`, no match of it can be completed by any
-  path (game over, forfeit, no-show, backstop, bye), whatever the reason for
-  the cancellation and whatever state its bracket is in. Cancelling legacy
-  future tournaments therefore cannot be undone by a late result.
-- **8. Phase 3 client.**
-- **9. `FRITZ_CUP_ENABLED=true`** — only once server, database and client are
+`supabase/migrations/2026-10-10_tournament_live_event_cadence.sql`. One
+transaction:
+
+- **Schedule.** Every America/Los_Angeles day at 17:00 and 20:00 local time
+  (20:00 / 23:00 Eastern today; the UTC instant moves with DST). Registration
+  opens 12 h before (05:00 / 08:00 PT) and closes 2 min before. Each rule is
+  defined once, in an internal helper (`_live_event_timezone`,
+  `_live_event_slot_times`, `_live_event_registration_window`,
+  `_is_live_event_slot`, `_live_event_slots`); a future schedule change is
+  one `create or replace`.
+- **Seeding.** `seed_future_tournaments(days_ahead integer default 30)` and
+  `ensure_tournament_seed_window()` keep their signatures, so pg_cron (if a
+  job exists) and every deployed server produce the new cadence the moment M2
+  commits. `ensure` now inserts the desired slot set of the next 30 local days
+  (about 60 rows; `ON CONFLICT (scheduled_start) DO NOTHING`) instead of
+  topping up below a row count, so a hole is always refilled. A row already at
+  a slot time — including a cancelled one — is never changed or revived.
+- **Legacy inventory: cancelled, never deleted.** `status='cancelled'`,
+  `cancel_reason='cadence_replaced'`, only for Live rows that are `upcoming`,
+  start more than 35 minutes from now, are not at 17:00 / 20:00 PT, and have no
+  registration and no match row. Everything else is left exactly as it is.
+  (Do **not** run piece E2 of `docs/ops/tournament-v2-preflight.md`, which
+  deletes these rows; M2 supersedes it.)
+- **Existing rows at 17:00 / 20:00 PT** keep their id, start and status; if
+  `upcoming` / `registration_open` and without match rows, their window becomes
+  12 h / 2 min. One whose new opening time has already passed stays `upcoming`
+  and is opened by the orchestrator's next ordinary tick.
+- M2 locks `scheduled_tournaments` in SHARE ROW EXCLUSIVE mode for its
+  duration (reads continue; writes wait a few seconds), so no old-body seed
+  can slip old-cadence rows in between the cleanup and the commit.
+- **No server change is needed.** The lifecycle acts on the stored
+  timestamps (`fetchDueLifecycleTournaments`, `openRegistrationIfDue`), the
+  seed fallback calls the same RPC, `/upcoming` already filters `kind='live'`,
+  and the overlap rule uses the 2-hour window at `scheduled_start`, not the
+  registration period (a player registered 12 h ahead can still play a Fritz
+  Cup earlier that day). Fritz Cups are never touched.
+
+Before applying, run **`docs/ops/tournament-m2/preflight.sql`** (read-only) in
+the SQL editor and keep its output. "Expect 0" rows should be 0; if one is not,
+M2 still leaves those rows untouched, but look at them first.
+
+Production as last observed (2026-10-04, `tournament-v2-preflight.md` §3):
+~1,402 `upcoming` 30-minute rows through 2026-11-01 PT with no registrations
+or matches, one long-past `registration_open` row, and a seed body that still
+opens at T−30 / closes at T−5 (the 05-17 migration was never applied). M2
+replaces that body regardless.
+
+## 8. Verify the new Live cadence
+
+Run **`docs/ops/tournament-m2/verify.sql`** (read-only): both seed functions
+are the M2 bodies with unchanged signatures; every desired slot of the next 30
+local days has a Live row; slot-time rows have 12 h / 2 min windows; no
+eligible legacy row remains; `cadence_replaced` touched no Fritz Cup, no row
+with a registration or match, no slot-time row; and the next 10 Live Events in
+UTC, Pacific and Eastern. Then, on the 2C.1 server: `/upcoming` lists only
+17:00 / 20:00 PT events (plus any transition row), each opening 12 h before.
+
+**Transition.** Rows M2 deliberately keeps can still appear briefly: an
+`upcoming` old-cadence event starting within 35 minutes of the migration
+(plays out or is cancelled `not_enough_players` by the ordinary lifecycle),
+any `registration_open` event (production had one stale, long-past row: the
+lifecycle closes it and cancels it for lack of entrants once tournaments are
+enabled), and any anomaly the preflight listed. Nothing re-creates old-cadence
+rows after M2.
+
+## 9–11. Later
+
+- **9. Phase 3 client.** The current client still says "every 30 minutes" /
+  "registration opens 30 minutes before start" (`TournamentHubScreen.tsx`,
+  `hubState.ts`); Phase 3 replaces that copy.
+- **10. Final end-to-end verification.**
+- **11. `FRITZ_CUP_ENABLED=true`** — only once server, database and client are
   all ready and verified end to end.
+
+M2 relies on the completion guard: once a tournament is
+`status = 'cancelled'`, no match of it can be completed by any path (game over,
+forfeit, no-show, backstop, bye), whatever the reason for the cancellation and
+whatever state its bracket is in.
 
 ## Rollback
 
 | From | Rollback | Notes |
 |------|----------|-------|
-| 9 (cups on) | `FRITZ_CUP_ENABLED=false` | Stops new cups at once; existing cups play out (the scheduler, results and recovery treat them like any tournament). |
+| 11 (cups on) | `FRITZ_CUP_ENABLED=false` | Stops new cups at once; existing cups play out (the scheduler, results and recovery treat them like any tournament). |
+| 7 (M2) | Forward-fix preferred | Change the schedule with a new migration replacing the helpers. The legacy rows stay cancelled (`cadence_replaced` marks them); restoring the old 48-a-day body would re-seed that cadence and is not recommended. |
 | 6 (2C.1 server) | Redeploy the 2B.1 server | The schema stays (all additive). The 2B.1 server ignores the lease row and the CAS functions and is back to the single-instance assumption with unconditional orchestrator writes: run one instance only. A later 2C deploy takes over the left-over lease once it has expired (≤ TTL). |
 | 5 (guard) | Forward-fix preferred | Reverting means restoring the 2026-08-31 `complete_tournament_match` and the 2026-10-08 wrapper bodies — which reopens the cancelled-result gap and the lock cycle. |
 | 3–4 (CAS, M3) | Normally none (inert) | Drop the three CAS functions and the lease RPCs and table **only** when no 2C server is running. |
