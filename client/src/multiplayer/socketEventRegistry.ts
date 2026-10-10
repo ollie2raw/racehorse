@@ -476,6 +476,24 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Tournament completed — hub + live session result navigation delegates',
   },
   {
+    socketEvent: 'tournament:round_completed',
+    owner: 'tournament.hub',
+    registrar: 'tournament/registerTournamentSocketHandlers.ts',
+    boundedContext: 'tournament',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'A tournament round finished (participants only) — coalesced hub refetch',
+  },
+  {
+    socketEvent: 'tournament:cancelled',
+    owner: 'tournament.hub',
+    registrar: 'tournament/registerTournamentSocketHandlers.ts',
+    boundedContext: 'tournament',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Tournament cancelled (Live: public; Fritz Cup: owner only) — cancelled state + coalesced hub refetch',
+  },
+  {
     socketEvent: 'friend:invite:declined',
     owner: 'social.challenge',
     registrar: 'multiplayer/useSocialInviteState.ts',
@@ -611,6 +629,8 @@ export const TOURNAMENT_SOCKET_EVENTS = {
   MATCH_READY: 'tournament:match_ready',
   MATCH_COMPLETED: 'tournament:match_completed',
   COMPLETED: 'tournament:completed',
+  ROUND_COMPLETED: 'tournament:round_completed',
+  CANCELLED: 'tournament:cancelled',
 } as const;
 
 export const TOURNAMENT_SOCKET_EVENT_VALUES = Object.values(TOURNAMENT_SOCKET_EVENTS);

@@ -7,8 +7,16 @@ export type ScheduledTournamentStatus =
   | 'completed'
   | 'cancelled';
 
+/** 'live': a scheduled communal Live Event. 'fritz_cup': one player's on-demand cup against Fritz. */
+export type TournamentKind = 'live' | 'fritz_cup';
+
+/** What the server says the client may offer (on /upcoming and /my). */
+export type TournamentFeatures = { tournaments: boolean; fritzCup: boolean };
+
 export type ScheduledTournament = {
   id: string;
+  /** Absent only from a pre-M1 server; treat as 'live'. */
+  kind?: TournamentKind;
   scheduled_start: string;
   registration_open_at: string;
   registration_close_at: string;
@@ -18,7 +26,8 @@ export type ScheduledTournament = {
   max_players: number;
   winner_id: string | null;
   created_at: string;
-  registered_count?: number;
+  registered_count?: number | null;
+  cancel_reason?: string | null;
 };
 
 export type RegistrationStatus =
@@ -81,6 +90,8 @@ export type MatchReadyEvent = {
   readyDeadlineAt: string | null;
   opponentId: string | null;
   opponentUsername: string | null;
+  /** Server time when sent (Phase 2C). */
+  serverNow?: string;
 };
 
 export type TournamentUserPhase =
@@ -158,4 +169,59 @@ export type TournamentHistoryEntry = {
   placementLabel: string | null;
   championId: string | null;
   championName: string | null;
+};
+
+/** How a completed match was decided (server outcomeKind). */
+export type TournamentOutcomeKind =
+  | 'played'
+  | 'forfeit'
+  | 'missed_turns'
+  | 'no_show'
+  | 'administrative'
+  | 'bye'
+  | 'bot_simulated';
+
+/** The player's own last decided match in a tournament (/my, /history). */
+export type TournamentUserMatchOutcome = {
+  matchId: string;
+  round: 1 | 2 | 3;
+  won: boolean;
+  outcomeKind: TournamentOutcomeKind;
+  opponentId: string | null;
+  opponentBotTier: 'standard' | 'elite' | 'master' | null;
+};
+
+/** One of the player's tournaments as /my reports it. */
+export type MyTournament = ScheduledTournament & {
+  myRegistration: {
+    status: RegistrationStatus;
+    placement: number | null;
+    placementLabel: string | null;
+    seed: number | null;
+  };
+  myLastMatch: TournamentUserMatchOutcome | null;
+};
+
+/**
+ * The player's playable assigned match (/my and /me). `ready` until this
+ * player has joined it; `in_progress` once they have.
+ */
+export type TournamentAssignedPlayable = NonNullable<TournamentMeResponse['activeAssignedMatch']>;
+
+export type TournamentMyResponse = {
+  registrations: Registration[];
+  tournaments: MyTournament[];
+  activeAssignedMatch: TournamentAssignedPlayable | null;
+  features: TournamentFeatures;
+};
+
+export type TournamentUpcomingResponse = {
+  tournaments: ScheduledTournament[];
+  features: TournamentFeatures;
+};
+
+export type FritzCupStartResponse = {
+  existing: boolean;
+  tournament: ScheduledTournament;
+  activeAssignedMatch: TournamentAssignedPlayable | null;
 };
