@@ -96,21 +96,24 @@
 }
 
 .screen.game-screen .tmh .tmh-turn {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  position: relative;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
 }
 
+/* The countdown bar rides the pill's bottom edge: it adds no width or height. */
 .tmh-clock-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
   display: block;
-  width: 100%;
-  min-width: 72px;
-  height: 3px;
+  height: 2px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
+  pointer-events: none;
 }
 
 .tmh-clock-bar__fill {
@@ -121,21 +124,25 @@
   transition: transform 250ms linear;
 }
 
+/* Fixed under the HUD row, centred on the screen: never clipped by where the
+   HUD's centre slot sits, and clear of the hand at the bottom. */
 .tmh-warning {
-  position: absolute;
-  top: calc(100% + 6px);
+  position: fixed;
+  top: calc(var(--rh-safe-top, 0px) + 86px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 1150;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  max-width: calc(100vw - 32px);
+  padding: 5px 12px;
   border-radius: 999px;
   white-space: nowrap;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-primary, #f5efe2);
-  background: rgba(9, 15, 27, 0.96);
+  background: rgba(9, 15, 27, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.18);
   pointer-events: none;
 }
@@ -157,12 +164,9 @@
   background: var(--accent-amber, #f59e0b);
 }
 
-@media (--phone) {
+@media (max-width: 480px) {
   .tmh-warning {
-    font-size: 0.72rem;
     white-space: normal;
-    width: max-content;
-    max-width: min(92vw, 340px);
     text-align: center;
   }
 }

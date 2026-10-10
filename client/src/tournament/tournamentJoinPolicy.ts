@@ -14,7 +14,10 @@
  *  - Play Fritz Cup is an explicit request to play now: while that launch is
  *    still pending (FRITZ_LAUNCH_INTENT_MS) the first ready match OF THAT CUP
  *    may be joined, whether it comes in the create response or in its
- *    match_ready. Any other tournament's match ends the intent.
+ *    match_ready. Any other tournament's match ends the intent. Only the
+ *    first round: after a round ends, the next one (Semifinal, Final) is
+ *    always a tap — a finished match is a natural break before another
+ *    turn clock starts (Phase 3D).
  *
  * A socket match_ready never auto-joins on its own status: only /my knows
  * whether THIS player joined.
@@ -32,7 +35,7 @@ export type AutoAttachSource = 'my' | 'match_ready' | 'fritz_create';
 
 export type AutoAttachInput = {
   source: AutoAttachSource;
-  match: { matchId: string; tournamentId: string; matchStatus: 'ready' | 'in_progress' };
+  match: { matchId: string; tournamentId: string; matchStatus: 'ready' | 'in_progress'; round?: 1 | 2 | 3 };
   launchIntent: FritzLaunchIntent | null;
   nowMono: number;
   /** The player is in a different live game (another room) right now. */
@@ -56,7 +59,8 @@ export function decideTournamentAutoAttach(input: AutoAttachInput): AutoAttachDe
       // The cup's id is not known yet (create still in flight): wait for it.
       return { attach: false, reason: 'awaiting_cup_id' };
     }
-    if (launchIntent.tournamentId === match.tournamentId) return { attach: true, reason: 'fritz_launch' };
+    const firstRound = match.round === undefined || match.round === 1;
+    if (launchIntent.tournamentId === match.tournamentId && firstRound) return { attach: true, reason: 'fritz_launch' };
   }
 
   if (source === 'my' && match.matchStatus === 'in_progress') return { attach: true, reason: 'restore_in_progress' };

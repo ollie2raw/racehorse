@@ -80,9 +80,10 @@
   cursor: pointer;
 }
 
-/* Over another game: a slim strip at the top, clear of the hand and its controls. */
+/* Over another game: a slim strip below the HUD row and the missed-turn
+   warning, clear of the hand and its controls. */
 .trb--in-game {
-  top: calc(var(--rh-safe-top, 0px) + 72px);
+  top: calc(var(--rh-safe-top, 0px) + 124px);
   bottom: auto;
   padding: 6px 6px 6px 14px;
 }

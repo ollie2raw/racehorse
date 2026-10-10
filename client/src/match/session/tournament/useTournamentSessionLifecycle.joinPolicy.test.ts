@@ -17,12 +17,12 @@ vi.mock('../../../tournament/tournamentApi', () => ({ fetchResult: vi.fn(async (
 const mono = 1_000_000;
 const CUP = 'cup-1';
 const LIVE = 'live-1';
-const playable = (tournamentId: string, matchStatus: 'ready' | 'in_progress', roomCode = `T${tournamentId}R1M1`) => ({
-  matchId: `m-${tournamentId}`, tournamentId, round: 1 as const, matchNumber: 1, roomCode,
+const playable = (tournamentId: string, matchStatus: 'ready' | 'in_progress', roomCode = `T${tournamentId}R1M1`, round: 1 | 2 | 3 = 1) => ({
+  matchId: `m-${tournamentId}`, tournamentId, round, matchNumber: 1, roomCode,
   opponentId: 'bot:fritz:x:2', opponentUsername: 'Fritz', matchStatus, readyDeadlineAt: null,
 });
-const readyPush = (tournamentId: string) => ({
-  tournamentId, matchId: `m-${tournamentId}`, round: 1 as const, matchNumber: 1, roomCode: `T${tournamentId}R1M1`,
+const readyPush = (tournamentId: string, round: 1 | 2 | 3 = 1) => ({
+  tournamentId, matchId: `m-${tournamentId}`, round, matchNumber: 1, roomCode: `T${tournamentId}R1M1`,
   matchStatus: 'ready' as const, readyAt: null, readyDeadlineAt: null, opponentId: null, opponentUsername: 'Fritz',
 });
 
@@ -114,6 +114,19 @@ describe('tournament join policy in the session lifecycle', () => {
     });
     await vi.waitFor(() => expect(tournament.clearPendingMatch).toHaveBeenCalled());
     expect(attemptTournamentAttach).toHaveBeenCalledWith('m-cup-1', { tournamentId: CUP, matchStatus: 'ready' });
+  });
+
+  it('Phase 3D: the next round of a Fritz Cup always needs a tap, even while the launch intent is live', async () => {
+    const intent = { startedAtMono: mono - 1_000, tournamentId: CUP };
+    for (const round of [2, 3] as const) {
+      const fromMy = setup({ appMode: 'multiplayer', activeAssignedMatch: playable(CUP, 'ready', `TCUPR${round}`, round), fritzLaunchIntent: intent });
+      const fromPush = setup({ appMode: 'multiplayer', pendingMatch: readyPush(CUP, round), fritzLaunchIntent: intent });
+      const onResult = setup({ appMode: 'tournament', activeAssignedMatch: playable(CUP, 'ready', `TCUPR${round}`, round), fritzLaunchIntent: intent });
+      await Promise.resolve();
+      expect(fromMy.attemptTournamentAttach).not.toHaveBeenCalled();
+      expect(fromPush.attemptTournamentAttach).not.toHaveBeenCalled();
+      expect(onResult.attemptTournamentAttach).not.toHaveBeenCalled();
+    }
   });
 
   it('a stale launch intent cannot join a later match', async () => {

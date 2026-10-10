@@ -33,9 +33,9 @@ import GameOverModal from '../components/GameOverModal';
 import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
 import { RoomReactions } from '../components/RoomReactions';
 import TournamentMatchHud from '../tournament/TournamentMatchHud';
-import { tournamentPlayerDisplay, tournamentStageShortLabel } from '../tournament/displayNames';
+import TournamentGameOverOverlay from '../tournament/TournamentGameOverOverlay';
+import { tournamentPlayerDisplay } from '../tournament/displayNames';
 import { shouldShowTournamentGameOverOverlay } from '../tournament/tournamentPostgamePolicy';
-import type { TournamentMatchContext } from './session/useTournamentMatchSession';
 import { tileEquals } from '../game/tileUtils';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
@@ -241,85 +241,6 @@ function GameOverOverlay({
       )}
       {waitingText && <p className="rh-go-waiting">{waitingText}</p>}
     </GameOverModal>
-  );
-}
-
-function tournamentEliminationLabel(round: 1 | 2 | 3): string {
-  return tournamentStageShortLabel(round);
-}
-
-function TournamentGameOverOverlay({
-  state,
-  myId,
-  tournamentMatch,
-  myDisplayName,
-  opponentDisplayName,
-  onViewBracket,
-  onViewFinalResult,
-  onReturnToTournament,
-}: {
-  state: GameState;
-  myId: string;
-  tournamentMatch: TournamentMatchContext;
-  myDisplayName: string;
-  opponentDisplayName: string;
-  onViewBracket: () => void;
-  onViewFinalResult: () => void;
-  onReturnToTournament: () => void;
-}) {
-  const didWin = state.winnerId === myId;
-  const isFinal = tournamentMatch.round === 3;
-  const title = isFinal
-    ? didWin
-      ? 'Tournament Champion'
-      : 'Runner-up'
-    : didWin
-      ? tournamentMatch.round === 1
-        ? 'You advanced to the Semifinal'
-        : 'You advanced to the Final'
-      : `Eliminated in the ${tournamentEliminationLabel(tournamentMatch.round)}`;
-  const subtitle = isFinal
-    ? didWin
-      ? 'You won the tournament. View the bracket or final standings.'
-      : 'Strong run — view the bracket or return to the tournament hub.'
-    : didWin
-      ? `You beat ${opponentDisplayName}. View the bracket while the next round prepares.`
-      : `Eliminated by ${opponentDisplayName}. View the bracket or return to the tournament hub.`;
-  const myScore = state.players[myId]?.score ?? 0;
-  const opponentId = state.playerIds.find((pid) => pid !== myId) ?? null;
-  const opponentScore = opponentId ? (state.players[opponentId]?.score ?? 0) : 0;
-  const margin = Math.abs(myScore - opponentScore);
-  const roundLabel = tournamentEliminationLabel(tournamentMatch.round);
-
-  return (
-    <GameOverModal
-      open
-      ariaLabel="Tournament match complete"
-      matchKind="multiplayer"
-      primaryAccent={isFinal ? 'gold' : 'blue'}
-      kicker={isFinal ? 'Tournament Final' : `Tournament ${roundLabel}`}
-      title={title}
-      subtitle={subtitle}
-      tone={didWin ? 'gold' : 'red'}
-      stats={[
-        { label: 'Final Score', value: `${myScore}-${opponentScore}`, tone: didWin ? 'gold' : 'red' },
-        { label: 'Margin', value: `${didWin ? '+' : '-'}${margin}`, tone: didWin ? 'gold' : 'red' },
-        { label: isFinal ? 'Result' : 'Round', value: isFinal ? (didWin ? 'Champion' : 'Runner-Up') : roundLabel, tone: didWin ? 'gold' : 'red' },
-      ]}
-      scores={state.playerIds.map((pid) => ({
-        label: pid === myId ? myDisplayName : opponentDisplayName,
-        value: state.players[pid]?.score ?? 0,
-        winner: pid === state.winnerId,
-        showCrown: pid === state.winnerId,
-      }))}
-      primaryLabel={isFinal ? 'View Final Result' : 'View Bracket'}
-      onPrimary={isFinal ? onViewFinalResult : onViewBracket}
-      secondaryLabel={isFinal ? 'View Bracket' : 'Return to Tournament'}
-      onSecondary={isFinal ? onViewBracket : onReturnToTournament}
-      extraActionLabel={isFinal ? 'Return to Tournament' : undefined}
-      onExtraAction={isFinal ? onReturnToTournament : undefined}
-      onClose={onReturnToTournament}
-    />
   );
 }
 
@@ -712,7 +633,7 @@ export function LiveMatchScreen({
                   myId={you}
                   tournamentMatch={tournamentMatch}
                   myDisplayName={tournamentMyLabel}
-                  opponentDisplayName={tournamentOpponentLabel ?? 'Opponent'}
+                  opponent={tournamentOpponent ?? tournamentPlayerDisplay(null)}
                   onViewBracket={onTournamentViewBracket}
                   onViewFinalResult={onTournamentViewFinalResult}
                   onReturnToTournament={onTournamentReturnToHub}

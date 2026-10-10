@@ -177,3 +177,48 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Phase 3D */
+.tr-stat strong .tr-stat__sub {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(201, 212, 226, 0.85);
+}
+
+.tr-stat strong .tr-chip {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.6);
+  color: rgba(247, 226, 181, 0.96);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.tr-stat strong {
+  overflow-wrap: anywhere;
+}
+
+.tr-join {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: #2f6fdf;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.tr-back:disabled {
+  opacity: 0.7;
+  cursor: default;
+  transform: none;
+}

@@ -75,6 +75,7 @@ import { useFullscreen } from './utils/useFullscreen';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
 import { TournamentReadyBannerHost } from './tournament/TournamentReadyBannerHost';
+import { TournamentPostgameContext } from './tournament/TournamentPostgameContext';
 import { isTournamentsEnabled } from './config/tournamentsFeature';
 import { deleteAccount } from './auth/deleteAccount';
 
@@ -890,6 +891,16 @@ export default function App() {
     roomOperationEpochRef,
   });
 
+  const tournamentPostgame = useMemo(
+    () => ({
+      myTournaments: tournament.myTournaments,
+      activeAssignedMatch: tournament.activeAssignedMatch,
+      joining: tournamentAttachPhase === 'pending',
+      onJoin: attachAssignedTournamentMatch,
+    }),
+    [tournament.myTournaments, tournament.activeAssignedMatch, tournamentAttachPhase, attachAssignedTournamentMatch],
+  );
+
   const appRoutesHostSource = {
     host: {
       multiplayerConnectionHostParams,
@@ -1014,7 +1025,7 @@ export default function App() {
   return (
     // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
     <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
-    <>
+    <TournamentPostgameContext.Provider value={tournamentPostgame}>
       <OfflineBanner online={isOnline} />
       <TournamentReadyBannerHost
         enabled={isTournamentsEnabled() && Boolean(authUser)}
@@ -1083,7 +1094,7 @@ export default function App() {
         </ErrorBoundary>
       ) : null}
       <AppRoutesGamePropsHost source={appRoutesHostSource} />
-    </>
+    </TournamentPostgameContext.Provider>
     </MultiplayerRuntimeProvider>
   );
 }

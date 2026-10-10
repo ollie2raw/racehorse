@@ -3,6 +3,7 @@ import { ScreenLoader } from '../ui/ScreenLoader';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { tournamentErrorCopy } from '../tournament/tournamentErrorCopy';
 import { isTournamentsEnabled } from '../config/tournamentsFeature';
+import { deriveResultView } from '../tournament/tournamentResultView';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
@@ -138,19 +139,13 @@ export function TournamentRoute({
         ? tournamentResult?.placements.find((placement) => placement.userId === myUserId)?.placementLabel
         : null) ?? null;
 
-    const nextSlot = tournament.upcoming[0];
-    const nextCountdown = nextSlot
-      ? (() => {
-          // eslint-disable-next-line react-hooks/purity -- countdown ms derived from wall-clock each render; the row re-renders on a tick
-          const ms = Math.max(0, Date.parse(nextSlot.scheduled_start) - Date.now());
-          const total = Math.floor(ms / 1000);
-          const h = Math.floor(total / 3600);
-          const m = Math.floor((total % 3600) / 60);
-          const s = total % 60;
-          const pad = (n: number) => String(n).padStart(2, '0');
-          return `${pad(h)}:${pad(m)}:${pad(s)}`;
-        })()
-      : '—';
+    const resultView = deriveResultView({
+      tournamentId: activeTournamentId,
+      result: tournamentResult,
+      myTournaments: tournament.myTournaments,
+      upcoming: tournament.upcoming,
+      activeAssignedMatch: tournament.activeAssignedMatch,
+    });
 
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Tournament Result…" />}>
@@ -158,9 +153,13 @@ export function TournamentRoute({
         <TournamentResultScreen
           isLoading={tournamentResultLoading}
           error={tournamentResultError}
-          championName={tournamentResult?.championName ?? null}
+          champion={resultView.champion}
           yourPlacement={yourPlacement}
-          nextTournamentCountdown={nextCountdown}
+          myOutcome={resultView.myOutcome}
+          nextEventStart={resultView.nextEventStart}
+          nextMatch={resultView.nextMatch}
+          joining={tournamentAttachPhase === 'pending'}
+          onJoinNextMatch={attachAssignedTournamentMatch}
           onRetry={() => {
             if (activeTournamentId) {
               setTournamentResultLoading(true);

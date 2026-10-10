@@ -409,9 +409,12 @@ export function useTournamentAttachFlow({
 
   const attachAssignedTournamentMatch = useCallback(
     (matchId: string) => {
-      void attemptTournamentAttach(matchId, { manual: true });
+      // A tapped Join also ends a Fritz Cup launch: later rounds never join on their own.
+      void attemptTournamentAttach(matchId, { manual: true }).then((started) => {
+        if (started) tournament.endFritzLaunch();
+      });
     },
-    [attemptTournamentAttach],
+    [attemptTournamentAttach, tournament],
   );
 
   return {

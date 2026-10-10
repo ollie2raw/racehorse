@@ -44,6 +44,13 @@ describe('tournament join policy', () => {
     expect(decideTournamentAutoAttach(base({ source: 'fritz_create', match: ready(CUP), launchIntent }))).toEqual({ attach: true, reason: 'fritz_launch' });
     expect(decideTournamentAutoAttach(base({ source: 'match_ready', match: ready(CUP), launchIntent }))).toEqual({ attach: true, reason: 'fritz_launch' });
     expect(decideTournamentAutoAttach(base({ source: 'my', match: ready(CUP), launchIntent }))).toEqual({ attach: true, reason: 'fritz_launch' });
+    // Only the first round: the Semifinal and Final are always a tap.
+    for (const round of [2, 3] as const) {
+      for (const source of ['fritz_create', 'match_ready', 'my'] as const) {
+        expect(decideTournamentAutoAttach(base({ source, match: { ...ready(CUP), round }, launchIntent })).attach).toBe(false);
+      }
+    }
+    expect(decideTournamentAutoAttach(base({ source: 'my', match: { ...ready(CUP), round: 1 }, launchIntent })).attach).toBe(true);
   });
 
   it('while the cup id is still unknown (create in flight) a ready match waits', () => {

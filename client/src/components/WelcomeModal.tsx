@@ -54,7 +54,8 @@ export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps)
           <li>
             <span className="rh-welcome-mode-name">Tournament</span>
             <span className="rh-welcome-mode-desc">
-              Two Live Events every day, 8-player brackets. Registration opens 12 hours before; Fritz fills open seats.
+              Play a 3-round Cup against Fritz anytime, or join one of two Live Events each day; Fritz fills open seats.
+              Live Event registration opens 12 hours before start.
             </span>
           </li>
         ) : null}

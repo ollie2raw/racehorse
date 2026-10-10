@@ -71,6 +71,8 @@ export type TournamentMatch = {
   completed_at: string | null;
   player1_score: number | null;
   player2_score: number | null;
+  /** How a completed match was decided (server, Phase 3B); null while undecided. */
+  outcomeKind?: TournamentOutcomeKind | null;
 };
 
 export type BracketView = {
@@ -152,11 +154,16 @@ export type TournamentResultPlacement = {
 
 export type TournamentResultView = {
   tournamentId: string;
+  kind?: TournamentKind;
   scheduledStart: string;
   format: string;
   winTarget: number;
   championId: string | null;
+  /** The champion as clients show it ("Master Fritz" for a Fritz champion). */
   championName: string | null;
+  championIsFritz?: boolean;
+  championFritzTier?: 'standard' | 'elite' | 'master' | null;
+  finalOutcomeKind?: TournamentOutcomeKind | null;
   placements: TournamentResultPlacement[];
 };
 
