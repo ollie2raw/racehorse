@@ -167,15 +167,22 @@ export type TournamentResultView = {
   placements: TournamentResultPlacement[];
 };
 
+/** One finished tournament of the player's, as /history reports it (Phase 3E). */
 export type TournamentHistoryEntry = {
   tournamentId: string;
+  kind?: TournamentKind;
   scheduledStart: string;
   format: string;
   winTarget: number;
+  /** 1 champion, 2 runner-up, 3 semifinal exit, 5 quarterfinal exit. */
   placement: number | null;
   placementLabel: string | null;
   championId: string | null;
   championName: string | null;
+  championIsFritz?: boolean;
+  championFritzTier?: 'standard' | 'elite' | 'master' | null;
+  /** The player's own last match (their exit, or the final they won). */
+  myLastMatch?: TournamentUserMatchOutcome | null;
 };
 
 /** How a completed match was decided (server outcomeKind). */

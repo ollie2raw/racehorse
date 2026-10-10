@@ -1129,3 +1129,87 @@
   .th-event__action { flex-direction: column; }
   .th-event .th-cta { width: 100%; }
 }
+
+/* ── Phase 3E: history, Hub toolbar ───────────────────────────────────── */
+
+.th-toolbar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.th-history {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.th-history__title {
+  margin: 0;
+}
+
+/* History is the one long list here: it scrolls inside its panel. */
+.th-history__list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.th-history__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.th-history__when {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.th-history__finish {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.th-history__finish strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.th-history__finish .th-chip {
+  margin-right: 0;
+}
+
+.th-history__fritz {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.6);
+  color: rgba(247, 226, 181, 0.96);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+@media (--phone) {
+  .th-history__finish strong { font-size: 17px; }
+}

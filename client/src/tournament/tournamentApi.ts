@@ -15,6 +15,7 @@ import type {
   FritzCupStartResponse,
   ScheduledTournament,
   TournamentFeatures,
+  TournamentHistoryEntry,
   TournamentKind,
   TournamentMyResponse,
   TournamentResultView,
@@ -133,6 +134,12 @@ export async function fetchResult(tournamentId: string): Promise<TournamentResul
   const r = await tournamentRequest(() => apiGet<{ result?: TournamentResultView }>(`/api/tournaments/${encodeURIComponent(tournamentId)}/result`, { auth: false }));
   if (!r.result) throw new TournamentApiError({ code: 'internal' });
   return r.result;
+}
+
+/** The signed-in player's finished tournaments, newest first (Phase 3E). */
+export async function fetchHistory(): Promise<TournamentHistoryEntry[]> {
+  const r = await tournamentRequest(() => apiGet<{ history?: TournamentHistoryEntry[] }>('/api/tournaments/history'));
+  return Array.isArray(r.history) ? r.history : [];
 }
 
 /** Register the signed-in user (the server takes the user from the token). */

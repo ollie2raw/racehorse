@@ -54,7 +54,7 @@ export function readyBannerMode(input: {
   match: ReadyBannerMatch | null;
   dismissedMatchIds: ReadonlySet<string>;
   appMode: AppMode;
-  tournamentSubView: 'hub' | 'bracket' | 'result';
+  tournamentSubView: 'hub' | 'bracket' | 'result' | 'history';
   activeTournamentId: string | null;
   /** The room the player is seated in, if any. */
   joinedRoom: string | null;

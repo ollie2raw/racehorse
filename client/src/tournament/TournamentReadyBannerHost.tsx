@@ -17,7 +17,7 @@ export function TournamentReadyBannerHost(props: {
   myRequestedAtMono: number;
   cancelledTournamentIds: ReadonlySet<string>;
   appMode: AppMode;
-  tournamentSubView: 'hub' | 'bracket' | 'result';
+  tournamentSubView: 'hub' | 'bracket' | 'result' | 'history';
   activeTournamentId: string | null;
   joinedRoom: string | null;
   currentTournamentMatch: { tournamentId: string; matchId: string } | null;

@@ -1,4 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  observeMyTournamentsForAnalytics,
+  tournamentKindOf,
+  trackFritzCupCreated,
+  trackFritzCupCreateFailed,
+  trackFritzCupTapped,
+  trackLiveEventRegistered,
+  trackLiveEventRegistrationFailed,
+  trackLiveEventRegisterTapped,
+  trackTournamentMatchReady,
+} from './tournamentAnalytics';
 import * as api from './tournamentApi';
 import { TournamentApiError } from './tournamentApi';
 import { bindTournamentRecoverySignals } from './recoverySignals';
@@ -133,6 +144,10 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
       setMyTournaments(value?.tournaments ?? []);
       setRegistrations(value?.registrations ?? []);
       const playable = value?.activeAssignedMatch ?? null;
+      if (value) {
+        observeMyTournamentsForAnalytics(value.tournaments);
+        if (playable?.matchStatus === 'ready') trackTournamentMatchReady(playable, tournamentKindOf(value.tournaments, playable.tournamentId));
+      }
       if (playable && isTerminalTournamentMatch(playable.matchId)) {
         logger.operational('tournament:recovery', 'ignored completed match', { matchId: playable.matchId });
         setActiveAssignedMatch(null);
@@ -237,9 +252,11 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
   const startFritzCup = useCallback(async (): Promise<void> => {
     const current = fritzLaunchRef.current.phase;
     if (current === 'creating' || current === 'building') return; // double tap
+    trackFritzCupTapped();
     setLaunch({ phase: 'creating', tournamentId: null, startedAtMono: monotonicNow(), error: null });
     try {
       const started = await api.startFritzCup();
+      if (!started.existing) trackFritzCupCreated();
       const launch = fritzLaunchRef.current;
       if (launch.phase !== 'creating') return; // ended meanwhile
       setLaunch({ ...launch, phase: 'building', tournamentId: started.tournament.id });
@@ -247,6 +264,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
       scheduleRefresh(0);
     } catch (err) {
       const error = err instanceof TournamentApiError ? err : new TournamentApiError({ code: 'network' });
+      trackFritzCupCreateFailed(error.code);
       setLaunch({ ...fritzLaunchRef.current, phase: 'failed', error });
       // A disabled feature: re-read the flags so the card hides.
       if (error.code === 'tournaments_disabled') scheduleRefresh(0);
@@ -303,6 +321,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
         if (payload.serverNow) observeTournamentPush(payload.serverNow);
         setPendingMatch(payload);
         setPendingMatchAtMono(monotonicNow());
+        if (payload.matchStatus === 'ready') trackTournamentMatchReady(payload, tournamentKindOf(myTournaments, payload.tournamentId));
         // /my says whether this player has joined it; nothing joins from here.
         scheduleRefresh();
       },
@@ -337,7 +356,15 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
   /** Register; throws TournamentApiError. State comes from the refetch, not a local row. */
   const register = useCallback(async (tournamentId: string): Promise<{ alreadyRegistered: boolean }> => {
     if (!cleanUserId) throw new TournamentApiError({ code: 'not_authenticated' });
-    const result = await api.registerForTournament(tournamentId);
+    trackLiveEventRegisterTapped();
+    let result: { alreadyRegistered: boolean };
+    try {
+      result = await api.registerForTournament(tournamentId);
+    } catch (err) {
+      trackLiveEventRegistrationFailed(err instanceof TournamentApiError ? err.code : 'network');
+      throw err;
+    }
+    if (!result.alreadyRegistered) trackLiveEventRegistered();
     await refresh();
     return result;
   }, [cleanUserId, refresh]);

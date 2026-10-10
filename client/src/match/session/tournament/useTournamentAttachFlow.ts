@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { recordTournamentClock } from '../../../tournament/tournamentMatchClock';
+import { setTournamentGameContext, tournamentKindOf, trackTournamentMatchJoined } from '../../../tournament/tournamentAnalytics';
 import type { GameState } from '../../../types';
 import {
   evaluateTournamentAttachGuard,
@@ -259,6 +260,15 @@ export function useTournamentAttachFlow({
               handCount,
             });
             applyJoinedRoomResponseRef.current(resp);
+            {
+              const tid = typeof resp.tournamentId === 'string' ? resp.tournamentId : opts?.tournamentId ?? null;
+              const meta = resp.tournamentMatch as { round?: number; opponentUserId?: string | null } | undefined;
+              const assigned = tournament.activeAssignedMatch?.matchId === matchId ? tournament.activeAssignedMatch : null;
+              const round = (meta?.round ?? assigned?.round ?? 1) as 1 | 2 | 3;
+              const kind = tid ? tournamentKindOf(tournament.myTournaments, tid) : null;
+              trackTournamentMatchJoined({ matchId, round, opponentId: meta?.opponentUserId ?? assigned?.opponentId ?? null }, kind);
+              if (typeof resp.roomCode === 'string') setTournamentGameContext({ roomCode: resp.roomCode, kind, round });
+            }
             // The deadline already running for this state (reconnect resumes it, never restarts it).
             if (typeof resp.roomCode === 'string') {
               const ack = resp as { tournamentClock?: unknown; serverNow?: unknown };

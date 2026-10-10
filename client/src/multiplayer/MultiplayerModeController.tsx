@@ -141,10 +141,10 @@ export type MultiplayerTournamentPassthroughView = {
   consumedTournamentGameOverMatchIds: ReadonlySet<string>;
   tournamentMyLabel: string;
   tournamentOpponentLabel: string | null;
-  navigateAfterTournamentMatch: (nextView: 'hub' | 'bracket' | 'result') => void;
+  navigateAfterTournamentMatch: (nextView: 'hub' | 'bracket' | 'result' | 'history') => void;
   currentTournamentContext: TournamentMatchContext | null;
   setActiveTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentSubView: Dispatch<SetStateAction<'hub' | 'bracket' | 'result'>>;
+  setTournamentSubView: Dispatch<SetStateAction<'hub' | 'bracket' | 'result' | 'history'>>;
 };
 
 export type MultiplayerModeViewProps = {

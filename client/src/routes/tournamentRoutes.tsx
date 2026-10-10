@@ -14,6 +14,7 @@ import type {
 const TournamentHubScreen = React.lazy(() => import('../tournament/TournamentHubScreen'));
 const TournamentBracketScreen = React.lazy(() => import('../tournament/TournamentBracketScreen'));
 const TournamentResultScreen = React.lazy(() => import('../tournament/TournamentResultScreen'));
+const TournamentHistoryRoute = React.lazy(() => import('../tournament/TournamentHistoryRoute'));
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 const IDLE_FRITZ_LAUNCH = { phase: 'idle' as const, tournamentId: null, startedAtMono: 0, error: null };
@@ -132,6 +133,22 @@ export function TournamentRoute({
     );
   }
 
+  if (tournamentSubView === 'history') {
+    return withAuthModals(
+      <Suspense fallback={<ScreenLoader label="Loading Tournament History…" />}>
+        <ErrorBoundary context="tournament">
+          <TournamentHistoryRoute
+            fritzCupEnabled={Boolean(tournament.features?.fritzCup)}
+            onBack={() => setTournamentSubView('hub')}
+            onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onSignOut={handleSignOut}
+          />
+        </ErrorBoundary>
+      </Suspense>,
+    );
+  }
+
   if (tournamentSubView === 'result' && activeTournamentId) {
     const myUserId = authUser?.id ?? null;
     const yourPlacement =
@@ -207,6 +224,7 @@ export function TournamentRoute({
         onOpenAuth={handleOpenAuthModal}
         onSignOut={handleSignOut}
         onBackHome={() => setAppMode('home')}
+        onOpenHistory={() => setTournamentSubView('history')}
         onPlayFritzCup={() => { void tournament.startFritzCup(); }}
         onJoinMatch={attachAssignedTournamentMatch}
         onViewBracket={(id) => {

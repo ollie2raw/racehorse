@@ -40,7 +40,7 @@ export function isTournamentJoinMatchPayload(v: unknown): v is TournamentJoinMat
   );
 }
 
-export type TournamentSubView = 'hub' | 'bracket' | 'result';
+export type TournamentSubView = 'hub' | 'bracket' | 'result' | 'history';
 
 export type TournamentHookApi = ReturnType<typeof useTournament>;
 

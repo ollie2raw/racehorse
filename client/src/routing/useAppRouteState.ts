@@ -7,9 +7,9 @@ export type UseAppRouteStateParams = {
   appMode: AppMode;
   setAppMode: Dispatch<SetStateAction<AppMode>>;
   activeTournamentId: string | null;
-  tournamentSubView: 'hub' | 'bracket' | 'result';
+  tournamentSubView: 'hub' | 'bracket' | 'result' | 'history';
   setActiveTournamentId: (id: string | null) => void;
-  setTournamentSubView: (view: 'hub' | 'bracket' | 'result') => void;
+  setTournamentSubView: (view: 'hub' | 'bracket' | 'result' | 'history') => void;
   /** External refs/state hoisted to App.tsx to satisfy runtimeBootstrapRef dependencies. */
   appModeRef?: MutableRefObject<AppMode>;
   mpSubView?: 'quick' | 'private';
@@ -116,6 +116,10 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
     if (initialDynamicRouteAppliedRef.current) return;
     initialDynamicRouteAppliedRef.current = true;
     const initialRoute = initialRouteRef.current;
+    if (initialRoute.tournamentView === 'history') {
+      setTournamentSubView('history');
+      return;
+    }
     if (!initialRoute.tournamentId) return;
 
     setActiveTournamentId(initialRoute.tournamentId);

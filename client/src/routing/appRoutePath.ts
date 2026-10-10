@@ -6,7 +6,7 @@ export type AppRouteResolution = {
   profileUsername?: string;
   learnHowToPlay?: boolean;
   tournamentId?: string;
-  tournamentView?: 'bracket' | 'result';
+  tournamentView?: 'bracket' | 'result' | 'history';
 };
 
 export type AppPathState = {
@@ -15,7 +15,7 @@ export type AppPathState = {
   profileUsername: string | null;
   learnHowToPlay: boolean;
   tournamentId: string | null;
-  tournamentView: 'hub' | 'bracket' | 'result';
+  tournamentView: 'hub' | 'bracket' | 'result' | 'history';
 };
 
 const STATIC_PATHS: Record<string, AppRouteResolution> = {
@@ -31,6 +31,7 @@ const STATIC_PATHS: Record<string, AppRouteResolution> = {
   '/journey': { mode: 'journey' },
   '/puzzle-rush': { mode: 'puzzleRush' },
   '/tournament': { mode: 'tournament' },
+  '/tournament/history': { mode: 'tournament', tournamentView: 'history' },
   '/practice': { mode: 'noBrainer' },
   '/learn': { mode: 'learn' },
   '/learn/how-to-play': { mode: 'learn', learnHowToPlay: true },
@@ -87,6 +88,7 @@ export function buildAppPath(state: AppPathState): string {
   if (state.mode === 'profile' && state.profileUsername) {
     return `/players/${encodeURIComponent(state.profileUsername.replace(/^@/, ''))}`;
   }
+  if (state.mode === 'tournament' && state.tournamentView === 'history') return '/tournament/history';
   if (state.mode === 'tournament' && state.tournamentId) {
     const base = `/tournament/${encodeURIComponent(state.tournamentId)}`;
     if (state.tournamentView === 'result') return `${base}/result`;

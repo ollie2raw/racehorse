@@ -287,4 +287,14 @@ describe('Tournament Hub: countdown boundaries', () => {
     expect(props.onBoundary).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Starts in 0s')).toBeTruthy();
   });
+
+  it('Phase 3E: History is a compact action for signed-in players only', () => {
+    const onOpenHistory = vi.fn();
+    const { unmount } = renderHub({ onOpenHistory });
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    expect(onOpenHistory).toHaveBeenCalled();
+    unmount();
+    renderHub({ onOpenHistory, identity: null });
+    expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+  });
 });

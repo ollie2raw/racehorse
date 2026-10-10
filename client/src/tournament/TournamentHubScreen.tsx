@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
 import { tournamentStageShortLabel } from './displayNames';
+import { trackTournamentHubViewed } from './tournamentAnalytics';
 import {
   deriveFritzCupCardState,
   deriveLiveEventCardState,
@@ -44,6 +45,8 @@ export interface TournamentHubScreenProps {
   onOpenAuth?: () => void;
   onSignOut?: () => void;
   onBackHome: () => void;
+  /** Opens the History sub-view (signed in only). */
+  onOpenHistory?: () => void;
   onPlayFritzCup: () => void;
   onJoinMatch: (matchId: string) => void;
   onViewBracket: (tournamentId: string) => void;
@@ -385,6 +388,14 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
   );
   useBoundaryRefresh(boundaries, nowMs, props.onBoundary);
 
+  // Once per visit (a ref survives StrictMode's effect replay).
+  const viewedRef = useRef(false);
+  useEffect(() => {
+    if (viewedRef.current) return;
+    viewedRef.current = true;
+    trackTournamentHubViewed();
+  }, []);
+
   const loading = props.isLoading && !props.hasLoaded;
   const cardProps = {
     nowMs,
@@ -414,6 +425,11 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
           <button type="button" className="th-back" onClick={props.onBackHome}>
             <span aria-hidden>←</span> Back to Home
           </button>
+          {signedIn && !disabled && props.onOpenHistory ? (
+            <button type="button" className="th-back th-history-link" onClick={props.onOpenHistory}>
+              History
+            </button>
+          ) : null}
         </div>
 
         <div className="th-layout">
@@ -421,7 +437,11 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
             <div>
               <p className="th-kicker">Tournaments</p>
               <h1 className="th-title">Compete</h1>
-              <p className="th-desc">Play a Fritz Cup any time, or join a Live Event with other players.</p>
+              <p className="th-desc">
+                {props.features?.fritzCup
+                  ? 'Play a Fritz Cup any time, or join a Live Event with other players.'
+                  : 'Join a Live Event with other players.'}
+              </p>
             </div>
             <ul className="th-format" aria-label="Format">
               <li>8 players</li>
