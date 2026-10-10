@@ -93,7 +93,7 @@ describe('the banner', () => {
     const { props } = host();
     expect(screen.getByText('Your Semifinal is ready')).toBeTruthy();
     expect(props.onJoin).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join your Semifinal' }));
     expect(props.onJoin).toHaveBeenCalledWith('m2');
   });
   it('Quarterfinal / Final copy', () => {
@@ -131,7 +131,7 @@ describe('the banner', () => {
     const { props } = host({ appMode: 'multiplayer', joinedRoom: 'PRIVATE1' });
     expect(screen.getByText('Your Semifinal is ready')).toBeTruthy();
     expect(screen.getByText('Finish or leave this game to join.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Join/ })).toBeNull();
     expect(props.onJoin).not.toHaveBeenCalled();
   });
   it('off when tournaments are off', () => {
@@ -140,7 +140,8 @@ describe('the banner', () => {
   });
   it('Join is a 44px+ target and shows progress while joining', () => {
     host({ joining: true });
-    const join = screen.getByRole('button', { name: 'Joining…' }) as HTMLButtonElement;
+    const join = screen.getByRole('button', { name: 'Joining your Semifinal' }) as HTMLButtonElement;
+    expect(join.textContent).toBe('Joining…');
     expect(join.disabled).toBe(true);
   });
 });

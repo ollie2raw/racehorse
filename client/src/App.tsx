@@ -76,6 +76,8 @@ import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
 import { TournamentReadyBannerHost } from './tournament/TournamentReadyBannerHost';
 import { TournamentPostgameContext } from './tournament/TournamentPostgameContext';
+import { useNextRoundJoin } from './tournament/useNextRoundJoin';
+import { useTournamentLiveConnection } from './tournament/useTournamentLiveConnection';
 import { isTournamentsEnabled } from './config/tournamentsFeature';
 import { deleteAccount } from './auth/deleteAccount';
 
@@ -813,6 +815,7 @@ export default function App() {
     {WELCOME_MODAL_VISIBLE ? (
       <WelcomeModal
         open={welcomeOpen}
+        tournamentFeatures={tournament.features}
         onDismiss={dismissWelcome}
         onNavigate={(mode) => {
           dismissWelcome();
@@ -891,14 +894,32 @@ export default function App() {
     roomOperationEpochRef,
   });
 
+  useTournamentLiveConnection({
+    enabled: isTournamentsEnabled(),
+    signedIn: Boolean(authUser),
+    myTournaments: tournament.myTournaments,
+    activeAssignedMatch: tournament.activeAssignedMatch,
+    appMode,
+    socket,
+    isConnected,
+    connectRef,
+  });
+  const leaveFinishedTournamentMatch = useCallback(() => navigateAfterTournamentMatch('bracket'), [navigateAfterTournamentMatch]);
+  const joinNextRound = useNextRoundJoin({
+    appMode,
+    joinedRoom,
+    currentMatchId: tournamentMatch?.matchId ?? null,
+    leaveFinishedMatch: leaveFinishedTournamentMatch,
+    attach: attachAssignedTournamentMatch,
+  });
   const tournamentPostgame = useMemo(
     () => ({
       myTournaments: tournament.myTournaments,
       activeAssignedMatch: tournament.activeAssignedMatch,
       joining: tournamentAttachPhase === 'pending',
-      onJoin: attachAssignedTournamentMatch,
+      onJoin: joinNextRound,
     }),
-    [tournament.myTournaments, tournament.activeAssignedMatch, tournamentAttachPhase, attachAssignedTournamentMatch],
+    [tournament.myTournaments, tournament.activeAssignedMatch, tournamentAttachPhase, joinNextRound],
   );
 
   const appRoutesHostSource = {

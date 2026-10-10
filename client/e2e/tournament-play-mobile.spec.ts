@@ -109,7 +109,7 @@ for (const viewport of LANDSCAPE) {
       await open(page, 'view=hud&opp=human&turn=me&disconnect=1&banner=1');
       await expect(page.getByText('Opponent disconnected. The match continues on the turn clock.')).toBeVisible();
       await expect(page.getByText('Your Quarterfinal is ready')).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Join' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Join/ })).toHaveCount(0);
       expect(await overlaps(page, '.trb', '.hand-container')).toEqual([]);
       expect(await overlaps(page, '.trb', '.tmh-turn, .wl-player-pill')).toEqual([]);
       await expectNoHorizontalOverflow(page);

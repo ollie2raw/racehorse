@@ -37,6 +37,7 @@ export default function TournamentReadyBanner(props: {
           className="trb__join"
           disabled={props.joining}
           aria-busy={props.joining}
+          aria-label={props.joining ? `Joining your ${stage}` : `Join your ${stage}`}
           onClick={() => props.onJoin(props.match.matchId)}
         >
           {props.joining ? 'Joining…' : 'Join'}

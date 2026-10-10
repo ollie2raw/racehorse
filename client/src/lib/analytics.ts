@@ -58,8 +58,26 @@ let transportPromise: Promise<AnalyticsTransport | null> | null = null;
 /** Set by tests. Also the reason init is idempotent under StrictMode and HMR. */
 let injected: AnalyticsTransport | null = null;
 
+/**
+ * Dev-only capture for end-to-end specs (VITE_E2E_ANALYTICS_CAPTURE=1, set only
+ * by the Playwright tournament E2E dev server): events are kept on
+ * `window.__rhAnalyticsEvents` so a journey can count them. Never in builds.
+ */
+function e2eCaptureTransport(): AnalyticsTransport | null {
+  if (!import.meta.env.DEV || import.meta.env.VITE_E2E_ANALYTICS_CAPTURE !== '1' || typeof window === 'undefined') return null;
+  const target = window as unknown as { __rhAnalyticsEvents?: Array<{ event: string; props?: AnalyticsProps }> };
+  target.__rhAnalyticsEvents ??= [];
+  return {
+    capture: (event, props) => { target.__rhAnalyticsEvents!.push({ event, props }); },
+    identify: () => undefined,
+    reset: () => undefined,
+  };
+}
+
 async function loadTransport(): Promise<AnalyticsTransport | null> {
   if (injected) return injected;
+  const e2e = e2eCaptureTransport();
+  if (e2e) return e2e;
   if (!KEY) return null;
   try {
     const { default: posthog } = await import('posthog-js');

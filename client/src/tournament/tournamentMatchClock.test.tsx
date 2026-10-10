@@ -258,3 +258,20 @@ describe('normal rooms', () => {
     expect(result.current?.clock).toBeNull();
   });
 });
+
+describe('screen reader announcements', () => {
+  it('announce changes and one 10-second threshold, never each tick', () => {
+    recordTournamentClock('ROOM-A', turn('me', 15_000));
+    hud();
+    const sr = () => document.querySelector('.tmh-sr')?.textContent;
+    expect(sr()).toBe('Your turn');
+    advance(2_000);
+    expect(sr()).toBe('Your turn');
+    advance(4_000);
+    expect(sr()).toBe('Your turn, 10 seconds left');
+    advance(3_000);
+    expect(sr()).toBe('Your turn, 10 seconds left');
+    expect(sr()).not.toMatch(/\b[0-9]s\b|· \d+s/);
+  });
+});
+

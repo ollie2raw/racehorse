@@ -244,7 +244,7 @@ function LiveEventCard(props: {
       </div>
       {showCount && !props.compact ? (
         <p className="th-event__meta">
-          {count !== null && count > 0 ? `${count} registered · ` : ''}Fritz fills open seats
+          {liveMetaLine(state.kind === 'full', count)}
         </p>
       ) : null}
       <div className="th-event__row">
@@ -340,6 +340,16 @@ function FritzCupCard(props: {
       {joinFailed ? <p className="th-event__error" role="alert">{props.attachJoinError ?? "Couldn't join your match. Try again."}</p> : null}
     </article>
   );
+}
+
+/**
+ * "3 registered · Fritz fills open seats"; a full field (8 people) has no
+ * open seat for Fritz, so it reads "8 registered · Full" (Phase 3E).
+ */
+export function liveMetaLine(full: boolean, count: number | null): string {
+  const registered = count !== null && count > 0 ? `${count} registered` : null;
+  if (full) return registered ? `${registered} · Full` : 'Full';
+  return registered ? `${registered} · Fritz fills open seats` : 'Fritz fills open seats';
 }
 
 function SkeletonCard() {

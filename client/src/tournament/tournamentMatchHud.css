@@ -191,3 +191,80 @@
   line-height: 1.4;
   vertical-align: middle;
 }
+
+/* Phase 3E, real-app landscape phones (native compact HUD and mobile web). */
+.tmh-turn__stage {
+  display: none;
+}
+
+@media (--short-landscape) {
+  /* The round folds into the turn pill instead of a separate pill that ran
+     over the opponent's tile rack. Without a turn label the pill shows. */
+  .screen.game-screen .tmh[data-has-label='true'] .daily-fritz-progress-pill {
+    display: none !important;
+  }
+
+  .tmh-turn__stage {
+    display: inline;
+    margin-right: 0.45em;
+    opacity: 0.8;
+  }
+}
+
+/* A long opponent name never pushes the HUD row off screen. */
+.screen.game-screen .wl-top-rail:has(.tmh) .bot-hud-left-cluster .rh-hud-label,
+.screen.game-screen .wl-top-rail:has(.tmh) .bot-hud-right-cluster .rh-hud-label {
+  display: inline-block;
+  max-width: clamp(72px, 16vw, 220px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* The warning is portalled to <body>; keep it above the board and the hand. */
+body > .tmh-warning {
+  z-index: 1150;
+}
+
+@media (--short-landscape) {
+  /* Compact turn pill (web and native compact HUD): the timer must fit the
+     centre column between the two player clusters. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .tmh .tmh-turn.rh-hud-turn {
+    display: inline-flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    height: 30px !important;
+    padding: 0 12px !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    white-space: nowrap !important;
+  }
+
+  /* Size the side columns to their clusters so the centred timer never runs
+     over the opponent's tile rack. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) {
+    grid-template-columns: max-content minmax(0, 1fr) max-content !important;
+  }
+
+  /* Player pills and the opponent's rack at the native compact size on the web too. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-hud-pill {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-tile-rack {
+    height: 32px !important;
+    padding: 0 2px !important;
+    gap: 3px !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-tile-rack__tile {
+    width: 12px !important;
+    height: 18px !important;
+    border-radius: 3px !important;
+  }
+}

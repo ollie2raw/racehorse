@@ -11,7 +11,12 @@ const repoRoot = path.resolve(clientDir, '..');
 // the port + forcing a rebuild is the fix.
 const REACHABILITY = !!process.env.REACHABILITY || !!process.env.REACHABILITY_AUTHED;
 const MOBILE_VISUAL = !!process.env.MOBILE_VISUAL;
-const CLIENT_PORT = MOBILE_VISUAL ? 5244 : REACHABILITY ? 5233 : 5173;
+// Tournament journeys (Phase 3E): the real app against the e2e-only fake
+// tournament backend (e2e/tournament-backend) on its own ports — no game
+// server, no Supabase. `TOURNAMENT_E2E=1 npx playwright test`.
+const TOURNAMENT_E2E = !!process.env.TOURNAMENT_E2E;
+const TOURNAMENT_E2E_BACKEND_PORT = 3277;
+const CLIENT_PORT = TOURNAMENT_E2E ? 5277 : MOBILE_VISUAL ? 5244 : REACHABILITY ? 5233 : 5173;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${CLIENT_PORT}`;
 const PHONE = { width: 390, height: 844 } as const;
 
@@ -90,7 +95,14 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     storageState: WELCOME_DISMISSED,
   },
-  projects: [
+  projects: TOURNAMENT_E2E ? [
+    {
+      name: 'chromium-tournament-e2e',
+      testMatch: /tournament-e2e-.*\.spec\.ts/,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'], timezoneId: 'America/New_York' },
+    },
+  ] : [
     ...(MOBILE_VISUAL ? [{
       name: 'chromium-mobile-visual',
       testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts', 'home-visual-conformance.spec.ts', 'solo-visual-conformance.spec.ts', 'learn-visual-conformance.spec.ts'],
@@ -162,6 +174,7 @@ export default defineConfig({
     {
       name: 'chromium',
       testIgnore: [
+        /tournament-e2e-.*\.spec\.ts/,
         /mobile-landscape-visual\.spec\.ts/,
         /mobile-shell-contract\.spec\.ts/,
         /solo-visual-conformance\.spec\.ts/,
@@ -206,6 +219,34 @@ export default defineConfig({
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
+    : TOURNAMENT_E2E
+    ? [
+        {
+          command: 'npx tsx e2e/tournament-backend/fakeTournamentBackend.ts',
+          cwd: clientDir,
+          url: `http://127.0.0.1:${TOURNAMENT_E2E_BACKEND_PORT}/ping`,
+          reuseExistingServer: false,
+          timeout: 60_000,
+          env: { ...process.env, TOURNAMENT_E2E_BACKEND_PORT: String(TOURNAMENT_E2E_BACKEND_PORT) },
+        },
+        {
+          command: `npm run dev -- --port ${CLIENT_PORT} --strictPort`,
+          cwd: clientDir,
+          url: `http://localhost:${CLIENT_PORT}`,
+          reuseExistingServer: false,
+          timeout: 60_000,
+          env: {
+            ...process.env,
+            VITE_SERVER_URL: `http://localhost:${TOURNAMENT_E2E_BACKEND_PORT}`,
+            VITE_ENABLE_TOURNAMENTS: 'true',
+            // No Supabase and no PostHog: the e2e sign-in and the capture seam stand in.
+            VITE_SUPABASE_URL: '',
+            VITE_SUPABASE_ANON_KEY: '',
+            VITE_POSTHOG_KEY: '',
+            VITE_E2E_ANALYTICS_CAPTURE: '1',
+          },
+        },
+      ]
     : [
         {
           command: 'npm run dev',

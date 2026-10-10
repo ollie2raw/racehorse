@@ -1,5 +1,9 @@
+import { monotonicNow } from '../../../tournament/tournamentClock';
 import { useCallback } from 'react';
 import { recordTournamentClock } from '../../../tournament/tournamentMatchClock';
+
+/** How long a tapped Join waits for a connection before saying it failed. */
+export const MANUAL_ATTACH_CONNECT_WAIT_MS = 8_000;
 import { setTournamentGameContext, tournamentKindOf, trackTournamentMatchJoined } from '../../../tournament/tournamentAnalytics';
 import type { GameState } from '../../../types';
 import {
@@ -335,7 +339,7 @@ export function useTournamentAttachFlow({
           const errorMessage = resp?.error ?? 'Could not join tournament match.';
           failedTournamentAttachByMatchIdRef.current = {
             ...failedTournamentAttachByMatchIdRef.current,
-            [matchId]: Date.now(),
+            [matchId]: monotonicNow(),
           };
           setTournamentAttachPhase('failed');
           setTournamentAttachError(errorMessage);
@@ -376,7 +380,7 @@ export function useTournamentAttachFlow({
           const isTimeout = message.includes('timed out');
           failedTournamentAttachByMatchIdRef.current = {
             ...failedTournamentAttachByMatchIdRef.current,
-            [matchId]: Date.now(),
+            [matchId]: monotonicNow(),
           };
           setTournamentAttachPhase('failed');
           setTournamentAttachError(isTimeout ? 'Join timed out. Try again.' : message);
@@ -420,11 +424,39 @@ export function useTournamentAttachFlow({
   const attachAssignedTournamentMatch = useCallback(
     (matchId: string) => {
       // A tapped Join also ends a Fritz Cup launch: later rounds never join on their own.
-      void attemptTournamentAttach(matchId, { manual: true }).then((started) => {
-        if (started) tournament.endFritzLaunch();
-      });
+      const run = () => {
+        void attemptTournamentAttach(matchId, { manual: true }).then((started) => {
+          if (started) tournament.endFritzLaunch();
+        });
+      };
+      if (socketRef.current?.connected) {
+        run();
+        return;
+      }
+      // A tap with no live connection — leaving a finished match drops the
+      // socket, and tournament screens do not reconnect on their own (Phase
+      // 3E) — connects first and joins once connected, instead of silently
+      // skipping. A connection that never comes is a visible failure.
+      setTournamentAttachPhase('pending');
+      setTournamentAttachError(null);
+      connectRef.current();
+      const startedAt = monotonicNow();
+      const poll = () => {
+        if (socketRef.current?.connected) {
+          run();
+          return;
+        }
+        if (monotonicNow() - startedAt >= MANUAL_ATTACH_CONNECT_WAIT_MS) {
+          logger.operational('tournament:attach-client', 'manual/connect-timeout', { matchId });
+          setTournamentAttachPhase('failed');
+          setTournamentAttachError("Couldn't reach the game server. Try again.");
+          return;
+        }
+        setTimeout(poll, 100);
+      };
+      setTimeout(poll, 100);
     },
-    [attemptTournamentAttach, tournament],
+    [attemptTournamentAttach, connectRef, setTournamentAttachError, setTournamentAttachPhase, socketRef, tournament],
   );
 
   return {

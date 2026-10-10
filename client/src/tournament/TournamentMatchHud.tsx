@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { tournamentStageShortLabel, type TournamentPlayerDisplay } from './displayNames';
 import {
   deriveTournamentClockView,
@@ -30,6 +31,7 @@ export interface TournamentMatchHudProps {
  */
 export default function TournamentMatchHud(props: TournamentMatchHudProps) {
   const stage = tournamentStageShortLabel(props.round);
+  const stageShort = props.round === 3 ? 'Final' : props.round === 2 ? 'SF' : 'QF';
   const snapshot = useTournamentMatchClock(props.roomCode);
   const ticking = Boolean(snapshot?.clock) && !props.gameOver;
   const nowServerMs = useTournamentNow(250, ticking);
@@ -50,21 +52,25 @@ export default function TournamentMatchHud(props: TournamentMatchHudProps) {
   }
   const showBar = (view.kind === 'turn' || view.kind === 'next_hand') && !view.resolving;
   // Announced on change only (whose turn, resolving, warnings) — never every tick.
+  // One threshold is announced for the player's own turn: 10 seconds left.
+  const lowTime = view.kind === 'turn' && view.mine && !view.resolving && view.remainingMs <= 10_000;
   const spoken = [
     view.kind === 'turn'
-      ? view.resolving ? 'Resolving turn' : view.mine ? 'Your turn' : "Opponent's turn"
+      ? view.resolving ? 'Resolving turn' : view.mine ? (lowTime ? 'Your turn, 10 seconds left' : 'Your turn') : "Opponent's turn"
       : view.kind === 'next_hand' ? 'Next hand starting soon' : label,
     warning?.text,
   ].filter(Boolean).join('. ');
 
   return (
-    <div className="tmh" data-clock={view.kind}>
+    <div className="tmh" data-clock={view.kind} data-has-label={Boolean(label)}>
       <span className="tmh-sr" role="status" aria-live="polite">{spoken}</span>
       <div className="daily-fritz-progress-pill" data-has-turn-label={Boolean(label)}>
         <span className="hud-pill-label">{stage}</span>
       </div>
       {label ? (
         <span className={`tmh-turn wl-turn-label rh-hud-turn ${tone}`} aria-hidden>
+          {/* On short landscape phones the round folds into this pill (CSS). */}
+          <span className="tmh-turn__stage">{stageShort} ·</span>
           <span className="tmh-turn__text">{label}</span>
           {showBar ? (
             <span className="tmh-clock-bar" aria-hidden>
@@ -73,12 +79,17 @@ export default function TournamentMatchHud(props: TournamentMatchHudProps) {
           ) : null}
         </span>
       ) : null}
-      {warning ? (
-        <span className={`tmh-warning${warning.severe ? ' tmh-warning--severe' : ''}`} aria-hidden>
-          {warning.severe ? <span aria-hidden className="tmh-warning__mark">!</span> : null}
-          {warning.text}
-        </span>
-      ) : null}
+      {warning && typeof document !== 'undefined'
+        ? createPortal(
+            // Portalled: the HUD rail animates with a transform, which would
+            // trap a fixed element under the board.
+            <span className={`tmh-warning${warning.severe ? ' tmh-warning--severe' : ''}`} aria-hidden>
+              {warning.severe ? <span aria-hidden className="tmh-warning__mark">!</span> : null}
+              {warning.text}
+            </span>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

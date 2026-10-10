@@ -1817,3 +1817,13 @@
     margin: 0;
   }
 }
+
+/* Phase 3E accessibility: bracket navigation and withdraw are 44px targets. */
+.tb-back,
+.tb-waiting__withdraw {
+  min-height: 44px;
+}
+.tb-back {
+  padding: 0 16px;
+  font-size: 13px;
+}

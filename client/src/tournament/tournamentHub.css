@@ -1213,3 +1213,17 @@
 @media (--phone) {
   .th-history__finish strong { font-size: 17px; }
 }
+
+/* Phase 3E accessibility: every Hub / History control is a 44px target. */
+.th-back {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.th-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+}

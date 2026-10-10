@@ -297,4 +297,41 @@ describe('Tournament Hub: countdown boundaries', () => {
     renderHub({ onOpenHistory, identity: null });
     expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
   });
+
+  it('Phase 3E: a full field reads "8 registered · Full" with no Fritz-fill claim; counts read "1 registered"', () => {
+    renderHub({ upcoming: [event('e', 'registration_open', 5 * HOUR, { registered_count: 8 })] });
+    expect(screen.getByText('8 registered · Full')).toBeTruthy();
+    expect(screen.queryByText(/Fritz fills open seats/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Register' })).toBeNull();
+  });
+
+  it('Phase 3E: one registered player reads "1 registered"', () => {
+    renderHub({ upcoming: [event('e', 'registration_open', 5 * HOUR, { registered_count: 1 })] });
+    expect(screen.getByText('1 registered · Fritz fills open seats')).toBeTruthy();
+    expect(screen.queryByText(/players registered/)).toBeNull();
+  });
+
+  it('Phase 3E: a cancelled event keeps no Join / Register / countdown, even with a ready match', () => {
+    const started = event('s', 'in_progress', 30 * 60_000);
+    const match = { matchId: 'm-s', tournamentId: 's', round: 1 as const, matchNumber: 2, roomCode: 'T', opponentId: 'u2', opponentUsername: 'u2', matchStatus: 'ready' as const, readyDeadlineAt: null };
+    renderHub({ upcoming: [], myTournaments: [mine(started, 'active')], activeAssignedMatch: match, cancelledTournamentIds: new Set(['s']) });
+    expect(screen.getByText('This event was cancelled')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Join|Register|Resume/ })).toBeNull();
+    expect(screen.queryByText(/Starts in/)).toBeNull();
+  });
+
+  it('Phase 3E: both requests failed — a clear retry, no personal state invented', () => {
+    const { props } = renderHub({ upcoming: [], upcomingError: 'network', myError: 'network', myTournaments: [] });
+    expect(screen.getByText("Couldn't load Live Events")).toBeTruthy();
+    expect(screen.queryByText('Registered')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Retry' })[0]);
+    expect(props.onRetry).toHaveBeenCalled();
+  });
+
+  it('Phase 3E: Fritz Cup off — no Fritz copy anywhere on the Hub; Live Events work', () => {
+    renderHub({ features: { tournaments: true, fritzCup: false } });
+    expect(screen.queryByText(/Fritz Cup/)).toBeNull();
+    expect(screen.getByText('Join a Live Event with other players.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Register' })).toBeTruthy();
+  });
 });
