@@ -19,6 +19,7 @@ import {
   isBracketMatchCompletedForDisplay,
 } from './tournamentBracketDisplay';
 import { isTournamentBotId } from './displayNames';
+import { formatEventTime } from './tournamentTime';
 import { tournamentErrorCopy } from './tournamentErrorCopy';
 import type {
   BracketView,
@@ -69,13 +70,6 @@ function buildCountdownLabel(targetMs: number | null): string {
   return padCountdown(targetMs - Date.now());
 }
 
-function formatTimePst(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 function activeEntrants(regs: Registration[]): Registration[] {
   return regs.filter((reg) => reg.status === 'registered' || reg.status === 'active');
@@ -436,7 +430,8 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
     [bracket.tournament.registration_close_at, countdownAt, countdownKind],
   );
   const closeMs = useMemo(() => Date.parse(closeIso), [closeIso]);
-  const startLabel = formatTimePst(bracket.tournament.scheduled_start);
+  // The player's local time (the server's Pacific scheduling is not shown).
+  const startLabel = formatEventTime(bracket.tournament.scheduled_start);
   const fillPct = Math.max(0, Math.min(100, (entrants.length / maxPlayers) * 100));
   const fieldLocked = openSeats === 0;
   const fillSubtext = fieldLocked
@@ -480,7 +475,7 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
           <span className="tb-waiting__countdown-time">
             <CountdownText targetMs={Number.isFinite(closeMs) ? closeMs : null} />
           </span>
-          <span className="tb-waiting__countdown-meta">Starts {startLabel} PT</span>
+          <span className="tb-waiting__countdown-meta">Starts {startLabel}</span>
         </div>
 
         <div className="tb-waiting__hero-panel-fill">

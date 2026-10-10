@@ -913,3 +913,219 @@
     font-size: 10px;
   }
 }
+
+/* ─── Phase 3C hub cards: Fritz Cup (gold) + Live Events (amber) ───
+   Matte surfaces, thin borders, no gradients (AGENTS.md §3). Controls are at
+   least 44px tall; status never relies on colour alone (chips carry text). */
+.th-format {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.th-format li {
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: rgba(10, 13, 20, 0.94);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.th-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.th-event {
+  --th-event-accent: var(--th-accent);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 16px 18px;
+  background: rgba(10, 13, 20, 0.94);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--th-event-accent);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.th-event--fritz {
+  --th-event-accent: var(--tier-elite);
+  border-color: var(--rh-arena-border-brass);
+  border-left-color: var(--tier-elite);
+}
+
+.th-event--compact {
+  padding: 12px 16px;
+  gap: 6px;
+}
+
+.th-event--cancelled {
+  border-left-color: var(--border-light);
+  opacity: 0.85;
+}
+
+.th-event--skeleton {
+  min-height: 132px;
+  border-left-color: var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.th-event__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.th-event__kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--th-event-accent);
+}
+
+.th-event__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.th-event__when {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.th-event--compact .th-event__when { font-size: 16px; }
+
+.th-event__meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.th-event__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+}
+
+.th-event__status {
+  margin: 0;
+  flex: 1 1 14em;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.th-event__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.th-event .th-cta {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.th-event .th-cta--ghost {
+  padding: 10px 16px;
+  font-size: 13px;
+}
+
+.th-event .th-cta:disabled {
+  opacity: 0.7;
+  color: var(--text-on-elite);
+}
+
+.th-event .th-cta--ghost:disabled {
+  color: var(--text-secondary);
+}
+
+.th-event__error {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-danger);
+}
+
+.th-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.th-chip--ok { color: var(--accent-green); border-color: rgba(52, 211, 153, 0.4); }
+.th-chip--muted { color: var(--text-secondary); }
+.th-chip--warn { color: var(--accent-warning); border-color: rgba(245, 158, 11, 0.4); }
+
+.th-inline-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.th-spinner--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.th-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--th-accent);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.th-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (--phone) {
+  .th-event { padding: 14px; }
+  .th-event__title { font-size: 20px; }
+  .th-event__when { font-size: 18px; }
+  .th-event__row { flex-direction: column; align-items: stretch; }
+  .th-event__status { flex: 0 0 auto; }
+  .th-event__action { flex-direction: column; }
+  .th-event .th-cta { width: 100%; }
+}

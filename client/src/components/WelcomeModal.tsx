@@ -54,7 +54,7 @@ export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps)
           <li>
             <span className="rh-welcome-mode-name">Tournament</span>
             <span className="rh-welcome-mode-desc">
-              8-player bracket, first to 30 wins, a new champion every 30 minutes.
+              Two Live Events every day, 8-player brackets. Registration opens 12 hours before; Fritz fills open seats.
             </span>
           </li>
         ) : null}
