@@ -83,3 +83,107 @@
     letter-spacing: 0.12em;
   }
 }
+
+/* Phase 3D: server turn clock. The bar sits inside the turn pill; the
+   missed-turn warning hangs below the HUD row so it never shifts the board. */
+.tmh-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.screen.game-screen .tmh .tmh-turn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tmh-clock-bar {
+  display: block;
+  width: 100%;
+  min-width: 72px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.tmh-clock-bar__fill {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transform-origin: left center;
+  transition: transform 250ms linear;
+}
+
+.tmh-warning {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary, #f5efe2);
+  background: rgba(9, 15, 27, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+
+.tmh-warning--severe {
+  border-color: rgba(245, 158, 11, 0.75);
+  color: #fde7b0;
+}
+
+.tmh-warning__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: #0b0f19;
+  background: var(--accent-amber, #f59e0b);
+}
+
+@media (--phone) {
+  .tmh-warning {
+    font-size: 0.72rem;
+    white-space: normal;
+    width: max-content;
+    max-width: min(92vw, 340px);
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tmh-clock-bar__fill { transition: none; }
+}
+
+/* Fritz identity chip on the opponent's name plate (text, not colour alone). */
+.tmh-fritz-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.55);
+  color: rgba(247, 226, 181, 0.96);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  vertical-align: middle;
+}

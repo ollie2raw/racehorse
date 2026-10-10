@@ -74,6 +74,8 @@ import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
+import { TournamentReadyBannerHost } from './tournament/TournamentReadyBannerHost';
+import { isTournamentsEnabled } from './config/tournamentsFeature';
 import { deleteAccount } from './auth/deleteAccount';
 
 function normalizeRoomCode(value: unknown): string {
@@ -1014,6 +1016,22 @@ export default function App() {
     <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
     <>
       <OfflineBanner online={isOnline} />
+      <TournamentReadyBannerHost
+        enabled={isTournamentsEnabled() && Boolean(authUser)}
+        activeAssignedMatch={tournament.activeAssignedMatch}
+        pendingMatch={tournament.pendingMatch}
+        pendingMatchAtMono={tournament.pendingMatchAtMono}
+        myRequestedAtMono={tournament.myRequestedAtMono}
+        cancelledTournamentIds={tournament.cancelledTournamentIds}
+        appMode={appMode}
+        tournamentSubView={tournamentSubView}
+        activeTournamentId={activeTournamentId}
+        joinedRoom={joinedRoom}
+        currentTournamentMatch={tournamentMatch}
+        liveGameOver={Boolean(liveGameOver)}
+        joining={tournamentAttachPhase === 'pending'}
+        onJoin={attachAssignedTournamentMatch}
+      />
       {joinedRoom ? (
         <ErrorBoundary
           context="multiplayer-shell"

@@ -16,13 +16,13 @@ function assertEqual<T>(actual: T, expected: T, msg: string): void {
 assertEqual(tournamentBotDisplayIndex('bot:fritz:tour-1:3'), 3, 'bot index from id');
 assertEqual(
   resolveTournamentPlayerName('bot:fritz:tour-1:2', { round: 2 }),
-  'Elite Fritz 2',
-  'elite tier with stable index',
+  'Elite Fritz',
+  'elite tier, no number when shown alone',
 );
 assertEqual(
   registrationNameFor('bot:fritz:tour-1:4', 'Fritz', null),
-  'Fritz 4',
-  'registration ignores generic Fritz username',
+  'Fritz',
+  'registration names Fritz by tier, never by its id',
 );
 assertEqual(botDisplayNameFromTier('master', 1), 'Master Fritz 1', 'master tier label');
 

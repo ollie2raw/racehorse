@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { recordTournamentClock } from '../../../tournament/tournamentMatchClock';
 import type { GameState } from '../../../types';
 import {
   evaluateTournamentAttachGuard,
@@ -258,6 +259,11 @@ export function useTournamentAttachFlow({
               handCount,
             });
             applyJoinedRoomResponseRef.current(resp);
+            // The deadline already running for this state (reconnect resumes it, never restarts it).
+            if (typeof resp.roomCode === 'string') {
+              const ack = resp as { tournamentClock?: unknown; serverNow?: unknown };
+              recordTournamentClock(resp.roomCode, ack.tournamentClock ?? null, ack.serverNow);
+            }
             const joinedResp = joinedRoomResponseRef.current as {
               state?: GameState | null;
               you?: string;

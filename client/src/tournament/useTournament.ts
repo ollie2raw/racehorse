@@ -71,6 +71,10 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
   const [registrations, setRegistrations] = useStableState<Registration[]>([]);
   const [activeAssignedMatch, setActiveAssignedMatch] = useStableState<TournamentAssignedPlayable | null>(null);
   const [pendingMatch, setPendingMatch] = useStableState<MatchReadyEvent | null>(null);
+  // When the last match_ready arrived, and when the last answered /my was sent
+  // (monotonic): a /my sent after a push supersedes it.
+  const [pendingMatchAtMono, setPendingMatchAtMono] = useState(0);
+  const [myRequestedAtMono, setMyRequestedAtMono] = useState(0);
   const [activeBracket, setActiveBracket] = useStableState<BracketView | null>(null);
   // A failed bracket load, tagged with the id it belongs to so a stale error
   // never bleeds onto a different tournament's screen.
@@ -113,6 +117,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
       setHasLoaded(true);
       return true;
     }
+    const requestedAtMono = monotonicNow();
     const [up, my] = await Promise.allSettled([
       api.fetchUpcoming(),
       cleanUserId ? api.fetchMy() : Promise.resolve(null),
@@ -135,6 +140,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
         setActiveAssignedMatch(playable);
       }
       setMyError(null);
+      if (cleanUserId) setMyRequestedAtMono(requestedAtMono);
     } else {
       setMyError(errorCode(my.reason));
     }
@@ -296,6 +302,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
         });
         if (payload.serverNow) observeTournamentPush(payload.serverNow);
         setPendingMatch(payload);
+        setPendingMatchAtMono(monotonicNow());
         // /my says whether this player has joined it; nothing joins from here.
         scheduleRefresh();
       },
@@ -365,6 +372,8 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     cancelledTournamentIds,
     // socket
     pendingMatch,
+    pendingMatchAtMono,
+    myRequestedAtMono,
     // Fritz Cup launch
     fritzLaunch,
     fritzLaunchIntent,

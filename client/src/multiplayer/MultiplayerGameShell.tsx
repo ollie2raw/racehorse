@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { useTournamentClockRecovery } from '../tournament/tournamentMatchClock';
 import {
   isMultiplayerPostGameReviewLocallyEligible,
   isPositionalCoachingProseEnabled,
@@ -629,6 +630,12 @@ function MultiplayerGameShellComponent({
     }
     prevOppCountRef.current = opponentTileCount;
   }, [opponentTileCount]);
+
+  useTournamentClockRecovery({
+    roomCode: joinedRoom,
+    active: Boolean(tournamentMatch),
+    requestState: (reason) => { void fetchGameState(reason); },
+  });
 
   const opponent = players.find((pl) => pl.id !== you) ?? null;
   const opponentName = tournamentMatch

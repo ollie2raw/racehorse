@@ -359,6 +359,15 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Forced-draw animation presentation (timers, flying tiles)',
   },
   {
+    socketEvent: 'tournament:clock',
+    owner: 'connection.presence',
+    registrar: 'multiplayer/useRoomSocketSync.ts',
+    boundedContext: 'connection',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Tournament turn clock re-armed without a state broadcast (display only)',
+  },
+  {
     socketEvent: 'player:disconnected',
     owner: 'connection.presence',
     registrar: 'multiplayer/useRoomSocketSync.ts',
@@ -609,6 +618,7 @@ export const SOCKET_EVENTS = {
   PLAYER_DISCONNECT_STALL: 'player:disconnect_stall',
   MATCH_RESULT_PERSIST_FAILED: 'match:result_persist_failed',
   ROOM_MATCH_ABANDONED: 'room:match_abandoned',
+  TOURNAMENT_CLOCK: 'tournament:clock',
 } as const;
 
 /** Tournament wire-protocol constants — enforced via TOURNAMENT_SOCKET_EVENT_REGISTRY entries. */

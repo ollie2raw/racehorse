@@ -128,8 +128,10 @@ export function useTournamentSessionSockets({
         void tournament.refresh();
         onTournamentMatchAbandoned({
           context: 'tournament',
-          title: 'Opponent left the tournament match',
-          detail: `${payload.abandonedUsername ?? 'Your opponent'} left the game. You advance by forfeit.`,
+          // The server sends this once the forfeit is applied — after leaving
+          // or after too many missed turns — so name neither cause.
+          title: 'Your opponent forfeited',
+          detail: 'The match is over and you advance.',
           tournamentId: payload.tournamentId,
         });
         return;

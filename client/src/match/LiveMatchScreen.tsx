@@ -33,7 +33,7 @@ import GameOverModal from '../components/GameOverModal';
 import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
 import { RoomReactions } from '../components/RoomReactions';
 import TournamentMatchHud from '../tournament/TournamentMatchHud';
-import { tournamentStageShortLabel } from '../tournament/displayNames';
+import { tournamentPlayerDisplay, tournamentStageShortLabel } from '../tournament/displayNames';
 import { shouldShowTournamentGameOverOverlay } from '../tournament/tournamentPostgamePolicy';
 import type { TournamentMatchContext } from './session/useTournamentMatchSession';
 import { tileEquals } from '../game/tileUtils';
@@ -434,6 +434,12 @@ export function LiveMatchScreen({
     onTournamentViewFinalResult,
     onTournamentReturnToHub,
   } = tournament;
+  const tournamentOpponent = tournamentMatch
+    ? tournamentPlayerDisplay(tournamentMatch.opponentUserId ?? opponentId, {
+        username: tournamentOpponentLabel,
+        round: tournamentMatch.round,
+      })
+    : null;
   const {
     canUseRematch,
     rematchRequested,
@@ -790,6 +796,9 @@ export function LiveMatchScreen({
                   >
                     <div className="wl-pill-top">
                       <span className="wl-player-label rh-hud-label">{opponentName}</span>
+                      {tournamentOpponent?.badgeLabel ? (
+                        <span className="tmh-fritz-chip">{tournamentOpponent.badgeLabel}</span>
+                      ) : null}
                     </div>
                     <AnimatedScore value={opponentScore} className="wl-player-score rh-hud-score" />
                   </button>
@@ -845,14 +854,12 @@ export function LiveMatchScreen({
                   ) : tournamentMatch ? (
                     <TournamentMatchHud
                       round={tournamentMatch.round}
-                      turnLabel={
-                        isHandActive
-                          ? isMyTurn
-                            ? 'Your move'
-                            : 'Opponent thinking'
-                          : null
-                      }
-                      turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
+                      roomCode={tournamentMatch.roomCode}
+                      you={you}
+                      isHandActive={isHandActive}
+                      isMyTurn={isMyTurn}
+                      gameOver={Boolean(state.gameOver)}
+                      opponent={tournamentOpponent}
                     />
                   ) : isHandActive ? (
                     <span className={`wl-turn-label rh-hud-turn ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
