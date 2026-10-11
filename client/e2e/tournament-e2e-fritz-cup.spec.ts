@@ -83,8 +83,9 @@ test('Fritz Cup: Play → QF → SF → F (each later round by hand) → Champio
   expect(await countEvent(page, 'tournament_match_joined')).toBe(3);
   expect(await countEvent(page, 'tournament_champion')).toBe(1);
   expect(await countEvent(page, 'tournament_hub_viewed')).toBeGreaterThanOrEqual(1);
-  const ready = (await analyticsEvents(page)).filter((e) => e.event === 'tournament_match_ready');
-  expect(ready.map((e) => e.props?.round)).toEqual([1, 2, 3]);
+  const all = await analyticsEvents(page);
+  const ready = all.filter((e) => e.event === 'tournament_match_ready');
+  expect(ready.map((e) => e.props?.round), JSON.stringify(all.map((e) => [e.event, e.props?.round]))).toEqual([1, 2, 3]);
   expect(JSON.stringify(await analyticsEvents(page))).not.toMatch(/bot:fritz|e2e-player|cup-1/);
 });
 

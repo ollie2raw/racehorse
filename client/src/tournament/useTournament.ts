@@ -257,6 +257,8 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     try {
       const started = await api.startFritzCup();
       if (!started.existing) trackFritzCupCreated();
+      // The first match arrives in the create response (it may be joined before any /my sees it).
+      if (started.activeAssignedMatch?.matchStatus === 'ready') trackTournamentMatchReady(started.activeAssignedMatch, 'fritz_cup');
       const launch = fritzLaunchRef.current;
       if (launch.phase !== 'creating') return; // ended meanwhile
       setLaunch({ ...launch, phase: 'building', tournamentId: started.tournament.id });

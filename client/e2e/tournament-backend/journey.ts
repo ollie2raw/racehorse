@@ -51,9 +51,15 @@ export async function countEvent(page: Page, event: string): Promise<number> {
 export async function playOneTile(page: Page): Promise<void> {
   const tile = page.locator('.hand-area .domino-tile.highlight:not(.disabled):not(.board-tile)').first();
   await expect(tile).toBeVisible({ timeout: 15_000 });
-  const before = await page.locator('.hand-area .domino-tile:not(.board-tile)').count();
+  // Count tiles on the board, not in the hand: after a move the rules can
+  // force the player to draw (the hand may grow), but the board only grows.
+  const boardCount = () => page.locator('.domino-tile.board-tile').count();
+  const before = await boardCount();
   await tile.click();
+  // Either the tile plays at once, or a placement choice appears (possibly a
+  // moment later) — wait for whichever happens, never check just once.
   const zone = page.locator('.placement-zone.active').first();
-  if (await zone.isVisible().catch(() => false)) await zone.click();
-  await expect.poll(async () => page.locator('.hand-area .domino-tile:not(.board-tile)').count(), { timeout: 10_000 }).toBeLessThan(before);
+  await expect.poll(async () => (await boardCount()) > before || (await zone.isVisible().catch(() => false)), { timeout: 10_000 }).toBe(true);
+  if ((await boardCount()) <= before) await zone.click();
+  await expect.poll(boardCount, { timeout: 10_000 }).toBeGreaterThan(before);
 }

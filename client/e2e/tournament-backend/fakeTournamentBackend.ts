@@ -475,7 +475,12 @@ io.on('connection', (socket: Socket) => {
   socket.on('presence:identify', (_payload: unknown, ack?: (r: unknown) => void) => {
     for (const room of rooms.values()) {
       const m = matches.get(room.matchId);
-      if (m && m.status !== 'completed') { room.sockets.add(socket.id); void socket.join(room.code); }
+      if (m && m.status !== 'completed') {
+        room.sockets.add(socket.id);
+        void socket.join(room.code);
+        // A re-seated socket gets the room's current state (as a rejoin does).
+        setTimeout(() => broadcast(room), 0);
+      }
     }
     if (typeof ack === 'function') ack({ ok: true });
   });
@@ -498,7 +503,10 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('game:action', (roomCode: string, action: { type: string; move?: { tile: { high: number; low: number }; position?: string; end?: string } }, ack?: (r: unknown) => void) => {
     const room = rooms.get(String(roomCode).toUpperCase());
-    if (!room || room.game.playerIds[room.game.currentPlayerIndex] !== room.humanSeat || room.game.handOver) { ack?.({ ok: false, error: 'not_your_turn' }); return; }
+    if (!room || room.game.playerIds[room.game.currentPlayerIndex] !== room.humanSeat || room.game.handOver) {
+      socketLog.push(`action-refused ${roomCode} room=${Boolean(room)} current=${room?.game.playerIds[room.game.currentPlayerIndex]}`);
+      ack?.({ ok: false, error: 'not_your_turn' }); return;
+    }
     try {
       if (action.type === 'MOVE' && action.move) {
         const move: Move = { type: 'play', tile: action.move.tile, position: (action.move.position ?? action.move.end ?? 'right') as never };
@@ -509,9 +517,11 @@ io.on('connection', (socket: Socket) => {
         room.game = applyMove(room.game, room.humanSeat, { type: 'pass' }).state;
       }
     } catch (err) {
+      socketLog.push(`action-error ${roomCode} ${JSON.stringify(action)} ${err instanceof Error ? err.message : ''}`);
       ack?.({ ok: false, error: err instanceof Error ? err.message : 'invalid' });
       return;
     }
+    socketLog.push(`action-ok ${room.code} ${action.type} ${JSON.stringify(action.move ?? null)} seq=${room.game.sequence} sockets=${room.sockets.size} hand=${room.game.players[room.humanSeat].hand.length}`);
     ack?.({ ok: true });
     armClock(room);
     broadcast(room);

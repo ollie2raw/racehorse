@@ -56,8 +56,12 @@ for (const viewport of VIEWPORTS) {
       await page.goto('/tournament');
       await page.getByRole('article', { name: 'Fritz Cup' }).getByRole('button', { name: 'Play Fritz Cup' }).click();
       await expect(page.locator('.tmh-turn__text')).toHaveText(/Your turn · \d+s/, { timeout: 15_000 });
-      await admin('/__e2e/missed-turns', { count: 2 });
-      await expect(page.locator('.tmh-warning')).toContainText('2 missed turns · one more will forfeit the match');
+      // The server's count arrives with its next state; re-send until this
+      // client's (possibly just-replaced) socket has it.
+      await expect.poll(async () => {
+        await admin('/__e2e/missed-turns', { count: 2 });
+        return (await page.locator('.tmh-warning').textContent().catch(() => null)) ?? '';
+      }, { timeout: 15_000 }).toContain('2 missed turns · one more will forfeit the match');
       await page.waitForTimeout(500);
       const m = await measure(page, viewport);
       await page.screenshot({ path: info.outputPath(`real-hud-fritz-${shell.replace(' ', '-')}-${viewport.name}.png`) });
