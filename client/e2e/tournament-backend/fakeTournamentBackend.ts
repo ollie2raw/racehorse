@@ -72,7 +72,9 @@ const regs = new Map<string, Reg>(); // tournamentId → the player's registrati
 const matches = new Map<string, Match>();
 const rooms = new Map<string, Room>();
 let nextFailure: Record<string, { status: number; body: Record<string, unknown> }> = {};
-const counters = { attach: 0, myFetches: 0 };
+const counters = { attach: 0, reattach: 0, myFetches: 0 };
+/** Matches this client attached at least once (a later attach is a re-seat). */
+const attachedMatchIds = new Set<string>();
 const socketLog: string[] = [];
 let userId = 'e2e-player';
 let rivalName = 'rival';
@@ -83,7 +85,7 @@ function reset(body: { features?: typeof features; live?: Array<{ id: string; st
   features = body.features ?? { tournaments: true, fritzCup: true };
   tournaments.clear(); regs.clear(); matches.clear(); rooms.clear();
   nextFailure = {};
-  counters.attach = 0; counters.myFetches = 0;
+  counters.attach = 0; counters.reattach = 0; counters.myFetches = 0; attachedMatchIds.clear();
   rivalName = 'rival'; missedTurns = 0;
   for (const live of body.live ?? []) {
     const start = Date.now() + live.startsInMin * 60_000;
@@ -250,7 +252,9 @@ function decide(matchId: string, winner: 'player' | 'opponent', outcomeKind: Out
     broadcast(room);
   }
   const reg = regs.get(t.id)!;
-  emitAll('tournament:match_completed', { tournamentId: t.id, kind: t.kind, matchId: m.id, round: m.round, roomCode: m.room_code, winnerId });
+  // winnerSource as the real server sends it (engine.ts: the match row's winner_source).
+  const winnerSource = outcomeKind === 'no_show' ? 'no_show' : outcomeKind === 'forfeit' || outcomeKind === 'missed_turns' ? 'forfeit' : 'game_over';
+  emitAll('tournament:match_completed', { tournamentId: t.id, kind: t.kind, matchId: m.id, round: m.round, roomCode: m.room_code, winnerId, winnerSource });
   if (winner === 'player' && m.round < 3) {
     const next = (m.round + 1) as 2 | 3;
     const nextOpp = t.kind === 'fritz_cup' ? `bot:fritz:${t.id}:${next === 2 ? 4 : 8}` : `bot:fritz:${t.id}:${next * 3}`;
@@ -470,27 +474,24 @@ io = new Server(httpServer, { cors: { origin: true, credentials: true } });
 io.on('connection', (socket: Socket) => {
   socketLog.push(`connect ${socket.id} ${String(socket.handshake.query?.transport ?? '')}`);
   socket.onAny((event) => { if (socketLog.length < 200) socketLog.push(`event ${socket.id} ${event}`); });
-  // Identifying re-seats the player's sockets in their open match room (the
-  // client replaces its socket when it switches into the match screen).
+  // Identifying does not seat anything, as on the real server: when the client
+  // replaces its socket (entering the match screen, reconnecting) it attaches
+  // its match again (Phase 4A: this fake used to re-seat on identify, which
+  // the real server never did, and hid a match that never reached the screen).
   socket.on('presence:identify', (_payload: unknown, ack?: (r: unknown) => void) => {
-    for (const room of rooms.values()) {
-      const m = matches.get(room.matchId);
-      if (m && m.status !== 'completed') {
-        room.sockets.add(socket.id);
-        void socket.join(room.code);
-        // A re-seated socket gets the room's current state (as a rejoin does).
-        setTimeout(() => broadcast(room), 0);
-      }
-    }
     if (typeof ack === 'function') ack({ ok: true });
   });
 
   socket.on('tournament:attach_assigned_match', (payload: { matchId?: string }, ack?: (r: unknown) => void) => {
-    counters.attach += 1;
     const m = payload?.matchId ? matches.get(payload.matchId) : undefined;
+    // A join (counted in `attach`) vs. this client re-seating a new socket in a
+    // match it already joined (`reattach`; the real server's seat migration).
+    if (m && attachedMatchIds.has(m.id)) counters.reattach += 1;
+    else counters.attach += 1;
     if (!m || !myMatch(m) || m.status === 'completed' || !m.room_code) { ack?.({ ok: false, error: 'match_not_attachable' }); return; }
     const room = openRoom(m);
     m.joined = true; m.status = 'in_progress'; m.started_at ??= iso(Date.now());
+    attachedMatchIds.add(m.id);
     ack?.(seatSocket(socket, room));
   });
 

@@ -68,6 +68,7 @@ export function useTournamentAttachFlow({
   const {
     pendingTournamentAttachMatchIdRef,
     attachedTournamentMatchIdRef,
+    attachedSocketIdRef,
     failedTournamentAttachByMatchIdRef,
     attachInFlightRef,
   } = attachRefs;
@@ -251,6 +252,7 @@ export function useTournamentAttachFlow({
               handCount,
             });
             attachedTournamentMatchIdRef.current = matchId;
+            attachedSocketIdRef.current = activeSocket.id ?? null;
             const nextFailed = { ...failedTournamentAttachByMatchIdRef.current };
             delete nextFailed[matchId];
             failedTournamentAttachByMatchIdRef.current = nextFailed;
@@ -402,6 +404,7 @@ export function useTournamentAttachFlow({
       applyJoinedRoomResponseRef,
       attachInFlightRef,
       attachedTournamentMatchIdRef,
+      attachedSocketIdRef,
       clearRecoverableRoomStateRef,
       connectRef,
       failedTournamentAttachByMatchIdRef,

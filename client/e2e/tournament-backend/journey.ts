@@ -19,7 +19,7 @@ export async function admin(path: string, body: unknown = {}): Promise<Record<st
 }
 
 export async function backendState(): Promise<{
-  counters: { attach: number; myFetches: number };
+  counters: { attach: number; reattach: number; myFetches: number };
   matches: Array<{ id: string; round: number; status: string; joined: boolean; tournament_id: string }>;
 }> {
   return (await (await fetch(`${BACKEND}/__e2e/state`)).json()) as never;

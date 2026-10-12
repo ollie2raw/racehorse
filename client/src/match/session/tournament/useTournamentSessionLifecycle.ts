@@ -7,6 +7,7 @@ import { clearLastRoomCode } from '../../recovery/matchRecovery';
 import type { TournamentAttachRuntime } from '../../../multiplayer/runtime/tournamentRuntime';
 import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentAttachFlow } from './useTournamentAttachFlow';
+import type { TournamentAttachRefs } from './useTournamentAttachRefs';
 import type { TournamentHookApi } from './tournamentMatchSessionTypes';
 import type { Socket } from 'socket.io-client';
 import { logger } from '../../../utils/logger';
@@ -15,6 +16,7 @@ import { monotonicNow } from '../../../tournament/tournamentClock';
 
 type UseTournamentSessionLifecycleParams = {
   socket: Socket | null;
+  isConnected: boolean;
   appMode: AppMode;
   joinedRoom: string | null;
   liveGameOver: boolean | undefined;
@@ -22,10 +24,12 @@ type UseTournamentSessionLifecycleParams = {
   tournament: TournamentHookApi;
   sessionState: TournamentSessionState;
   attachFlow: TournamentAttachFlow;
+  attachRefs: TournamentAttachRefs;
 };
 
 export function useTournamentSessionLifecycle({
   socket,
+  isConnected,
   appMode,
   joinedRoom,
   liveGameOver,
@@ -33,6 +37,7 @@ export function useTournamentSessionLifecycle({
   tournament,
   sessionState,
   attachFlow,
+  attachRefs,
 }: UseTournamentSessionLifecycleParams) {
   const { preventAutoRejoinRef, reconnectShouldJoinRef, reconnectRoomCodeRef } =
     attachRuntime.reconnectRuntime;
@@ -69,6 +74,32 @@ export function useTournamentSessionLifecycle({
     reconnectShouldJoinRef,
     tournamentMatch,
   ]);
+
+  // The socket under a joined match was replaced: entering the match screen
+  // remounts the connection host (a new socket), and a server restart or a
+  // network drop reconnects with a new one. The server sends a seat's updates
+  // only to the socket it attached, so attach again — the server re-seats this
+  // socket, and restores the room from its live session if it lost it. Phase 4A
+  // dev finding: without this, a match that Fritz started never reached the
+  // player's screen ("Fritz is thinking" on their own turn) until missed turns
+  // forfeited it.
+  useEffect(() => {
+    const { attachedTournamentMatchIdRef, attachedSocketIdRef } = attachRefs;
+    const matchId = attachedTournamentMatchIdRef.current;
+    const socketId = socket?.connected ? socket.id ?? null : null;
+    if (!isConnected || !socketId || appMode !== 'multiplayer' || !matchId || liveGameOver) return;
+    if (!attachedSocketIdRef.current || attachedSocketIdRef.current === socketId) return;
+    if (isTerminalTournamentMatch(matchId)) return;
+    logger.operational('tournament:attach-client', 'reattach/socket-replaced', { matchId, socketId });
+    attachedSocketIdRef.current = socketId; // one attempt per socket
+    attachedTournamentMatchIdRef.current = null; // the match is no longer attached on this socket
+    void attemptTournamentAttach(matchId, {
+      manual: true,
+      tournamentId: tournamentMatch?.tournamentId ?? activeTournamentId ?? undefined,
+      matchStatus: 'in_progress',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the connection or screen changes, not when the match metadata does
+  }, [socket, isConnected, appMode, liveGameOver, attemptTournamentAttach]);
 
   // Join policy (tournament/tournamentJoinPolicy.ts): a `ready` match is never
   // joined without a tap; an `in_progress` match this player already joined is

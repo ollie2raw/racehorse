@@ -169,17 +169,26 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     return up.status === 'fulfilled' || (my.status === 'fulfilled' && Boolean(cleanUserId));
   }, [enabled, cleanUserId, setUpcoming, setMyTournaments, setRegistrations, setActiveAssignedMatch, setFeatures]);
 
+  // The follow-up must use the CURRENT fetch: when the signed-in user arrives
+  // (an async session restore) while the first, signed-out fetch is in flight,
+  // the follow-up is what loads /my (Phase 4A dev finding).
+  const fetchAllRef = useRef(fetchAll);
+  useEffect(() => {
+    fetchAllRef.current = fetchAll;
+  }, [fetchAll]);
+
   /** Refetch now; concurrent calls share one request and a single follow-up. */
   const refresh = useCallback(async (): Promise<boolean> => {
+    fetchAllRef.current = fetchAll;
     if (inFlightRef.current) {
       rerunRef.current = true;
       return inFlightRef.current;
     }
     const run = (async () => {
-      let ok = await fetchAll();
+      let ok = await fetchAllRef.current();
       while (rerunRef.current) {
         rerunRef.current = false;
-        ok = await fetchAll();
+        ok = await fetchAllRef.current();
       }
       return ok;
     })();

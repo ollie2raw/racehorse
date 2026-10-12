@@ -80,11 +80,14 @@ export function useTournamentSessionSockets({
     onMatchCompleted: (payload) => {
       if (!payload?.tournamentId || !payload?.matchId) return;
       if (isTerminalTournamentMatch(payload.matchId)) return;
+      const currentUserId = authUserId ?? multiplayerIdentityUserId;
       if (
         shouldDeferTournamentMatchFinalize({
           appMode: appModeRef.current,
           attachedMatchId: attachedTournamentMatchIdRef.current,
           payloadMatchId: payload.matchId,
+          winnerSource: payload.winnerSource ?? null,
+          lostByMe: Boolean(payload.winnerId && currentUserId && payload.winnerId !== currentUserId),
         })
       ) {
         logger.operational('tournament:complete', 'deferring finalize until postgame overlay', {

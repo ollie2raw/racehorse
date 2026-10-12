@@ -73,6 +73,11 @@ export function registerPresenceHandlers(
   socket.on(
     'presence:identify',
     async (payload: RoomJoinConfig, cb?: AckFn) => {
+      // Requests that need this socket's user (the tournament attach) wait for
+      // an identify still in flight: a client identifies first on connect, but
+      // its next request can arrive before the token has been verified.
+      let identified!: () => void;
+      socket.data.identifyPending = new Promise<void>((resolve) => { identified = resolve; });
       try {
         const { username, userId } = await deps.resolveSocketIdentity(payload ?? {});
         if (!userId) return cb?.({ ok: false });
@@ -91,6 +96,8 @@ export function registerPresenceHandlers(
         cb?.({ ok: true });
       } catch {
         cb?.({ ok: false });
+      } finally {
+        identified();
       }
     },
   );

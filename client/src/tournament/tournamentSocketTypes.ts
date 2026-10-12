@@ -34,6 +34,8 @@ export type TournamentSessionSocketDelegates = {
     matchId?: string;
     roomCode?: string | null;
     round?: number;
+    winnerId?: string | null;
+    winnerSource?: string | null;
   }) => void;
   onMatchAbandoned: (payload: {
     roomCode?: string;

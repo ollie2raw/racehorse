@@ -258,3 +258,23 @@ describe('useTournament: Fritz Cup launch', () => {
     expect(result.current.fritzLaunch.phase).toBe('idle');
   });
 });
+
+describe('Phase 4A: a signed-in user who arrives after mount (async session restore)', () => {
+  it('loads /my even when the first, signed-out fetch is still in flight', async () => {
+    let releaseUpcoming: (v: unknown) => void = () => undefined;
+    api.fetchUpcoming.mockReturnValueOnce(new Promise((resolve) => { releaseUpcoming = resolve; }));
+    serve({ tournaments: [mine(live, 'registered')] });
+    const hook = renderHook(({ userId }: { userId: string | null }) => useTournament({ userId, enabled: true }), { initialProps: { userId: null as string | null } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(api.fetchMy).not.toHaveBeenCalled();
+    // The session restores while the signed-out fetch is still pending.
+    hook.rerender({ userId: USER });
+    await act(async () => {
+      releaseUpcoming({ tournaments: [live], features: FEATURES });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(api.fetchMy).toHaveBeenCalled();
+    expect(hook.result.current.myTournaments.map((t) => t.myRegistration.status)).toEqual(['registered']);
+  });
+});
+

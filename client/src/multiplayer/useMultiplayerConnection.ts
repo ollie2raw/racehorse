@@ -490,6 +490,13 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         sock.io.removeAllListeners();
         sock.disconnect();
         scope.socket.socketRef.current = null;
+        // Tell the app, as disconnect() does: its listeners are gone, so no
+        // 'disconnect' event will. Otherwise a route hand-off (the Tournament
+        // hub → the match screen remounts this host) leaves the app reading
+        // "connected" on a dead socket, and the lazy connect waits for some
+        // unrelated re-render (Phase 4A dev: 0.4 s, 6 s, or never).
+        scope.ui.setSocket((current) => (current === sock ? null : current));
+        scope.ui.setIsConnected(false);
       }
     };
   }, []);

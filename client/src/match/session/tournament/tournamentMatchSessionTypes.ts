@@ -46,6 +46,8 @@ export type TournamentHookApi = ReturnType<typeof useTournament>;
 
 export type UseTournamentMatchSessionParams = {
   socket: Socket | null;
+  /** The app's connection state (the socket object alone does not re-render on connect). */
+  isConnected: boolean;
   attachRuntime: TournamentAttachRuntime;
   appMode: AppMode;
   authUserId: string | null;

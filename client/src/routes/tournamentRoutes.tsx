@@ -53,7 +53,7 @@ export function TournamentRoute({
   } = tournamentProps;
 
   // Switched off: every tournament route and deep link lands on the hub with
-  // nothing scheduled ("No upcoming tournaments"). No fetch, no socket.
+  // nothing scheduled ("Tournaments are unavailable right now"). No fetch, no socket.
   if (!isTournamentsEnabled()) {
     const noop = () => undefined;
     const noopAsync = async () => undefined;

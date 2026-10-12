@@ -23,6 +23,8 @@ const db = vi.hoisted(() => ({
   matches: new Map<string, Record<string, any>>(),
   tournaments: new Map<string, Record<string, any>>(),
   regs: [] as Array<Record<string, any>>,
+  /** Stands in for a real database round trip on a match-row read. */
+  beforeMatchRead: async (_id: string): Promise<void> => undefined,
 }));
 
 vi.mock('@sentry/node', () => ({ captureMessage: vi.fn(), captureException: vi.fn() }));
@@ -56,7 +58,10 @@ vi.mock('./persistence', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./persistence')>();
   return {
     ...actual,
-    fetchMatchById: async (id: string) => structuredClone(db.matches.get(id) ?? null),
+    fetchMatchById: async (id: string) => {
+      await db.beforeMatchRead(id);
+      return structuredClone(db.matches.get(id) ?? null);
+    },
     fetchMatchByRoomCode: async (code: string) =>
       structuredClone([...db.matches.values()].find((m) => m.room_code === code) ?? null),
     fetchMatches: async (tournamentId: string) =>
@@ -88,6 +93,8 @@ vi.mock('./persistence', async (importOriginal) => {
 import {
   createReservedRoom,
   getRoom,
+  getRoomCanDraw,
+  getRoomLegalMoves,
   joinRoom,
   peekRoom,
   resetLiveRoomPersistHookForTests,
@@ -241,7 +248,7 @@ beforeEach(() => {
   db.regs = [];
   restart();
 });
-afterEach(() => { restart(); });
+afterEach(() => { db.beforeMatchRead = async () => undefined; restart(); });
 
 describe('tournament starting player', () => {
   it('human vs Fritz, human in the player1 slot: the match-row slot the rule picks starts, with no pre-game draw', async () => {
@@ -403,5 +410,69 @@ describe('tournament starting player', () => {
       expect(room.state!.board).toBeNull();
       restart();
     }
+  });
+
+  it('Phase 4A: when Fritz starts and moves before the attach finishes, the ack carries the position after that move', async () => {
+    // Dev real-stack finding: after dealing, the attach reads the match row back (a
+    // real database round trip); Fritz's first move (0.8-1.5 s) landed meanwhile,
+    // and the ack then carried the pre-move deal. The client applied it last, showed
+    // "Fritz is thinking" on the player's own turn, and the player lost on missed turns.
+    seedMatch(P2_STARTS, U1, BOT_B);
+    const roomCode = db.matches.get(P2_STARTS)!.room_code;
+    // Only the read after the match is promoted: the one between the ack's snapshot and the ack.
+    db.beforeMatchRead = async (id) => {
+      if (db.matches.get(id)?.status !== 'in_progress' || !peekRoom(roomCode)?.state) return;
+      const until = Date.now() + 5_000;
+      while (Date.now() < until) {
+        const state = getRoom(roomCode).state!;
+        if (state.playerIds[state.currentPlayerIndex] !== BOT_B && state.board) return;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      throw new Error('Fritz never moved');
+    };
+
+    const ack = await attach(U1, P2_STARTS);
+
+    const room = getRoom(roomCode);
+    const humanSeat = getRoomRoster(roomCode).find((p) => p.userId === U1)!.id;
+    expect(started(roomCode).starter).toBe(BOT_B);
+    expect(room.state!.playerIds[room.state!.currentPlayerIndex]).toBe(humanSeat);
+    expect(ack).toMatchObject({ ok: true, matchStarted: true, you: humanSeat });
+    expect(ack.state.currentPlayerIndex).toBe(room.state!.currentPlayerIndex);
+    expect(ack.state.board).toEqual(room.state!.board);
+    expect(ack.state.players[humanSeat].hand).toEqual(room.state!.players[humanSeat].hand);
+    expect(ack.legalMoves).toEqual(getRoomLegalMoves(roomCode, humanSeat));
+    expect(ack.canDraw).toBe(getRoomCanDraw(roomCode, humanSeat));
+    expect(ack.legalMoves.length > 0 || ack.canDraw).toBe(true);
+  });
+
+  it('Phase 4A: an attach that arrives while the socket\'s identify is still in flight waits for it', async () => {
+    // A reconnected client sends presence:identify first, then re-attaches; the
+    // attach can reach the server before the token is verified. It used to be
+    // refused as not_authenticated, leaving the new socket unseated.
+    seedMatch(P1_STARTS, U1, BOT_B);
+    const { socket, handlers } = makeSocket(U1);
+    delete socket.data.userId;
+    socket.data.identifyPending = new Promise<void>((resolve) => {
+      setTimeout(() => { socket.data.userId = U1; resolve(); }, 30);
+    });
+    registerRoomSessionHandlers(makeIo([socket]), socket);
+    const ack = vi.fn();
+
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: P1_STARTS }, ack);
+
+    expect(ack.mock.calls[0]?.[0]).toMatchObject({ ok: true, matchStarted: true });
+  });
+
+  it('an attach with no identity and no identify in flight is still refused', async () => {
+    seedMatch(P1_STARTS, U1, BOT_B);
+    const { socket, handlers } = makeSocket(U1);
+    delete socket.data.userId;
+    registerRoomSessionHandlers(makeIo([socket]), socket);
+    const ack = vi.fn();
+
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: P1_STARTS }, ack);
+
+    expect(ack.mock.calls[0]?.[0]).toMatchObject({ ok: false, error: 'not_authenticated' });
   });
 });

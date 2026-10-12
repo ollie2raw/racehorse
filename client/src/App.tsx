@@ -411,6 +411,7 @@ export default function App() {
 
   const tournamentSession = useTournamentMatchSession({
     socket,
+    isConnected,
     attachRuntime: tournamentAttachRuntime,
     appMode,
     authUserId: authUser?.id ?? null,

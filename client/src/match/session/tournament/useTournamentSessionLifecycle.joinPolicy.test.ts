@@ -50,6 +50,7 @@ function setup(opts: {
   const ref = <T,>(current: T) => ({ current });
   renderHook(() => useTournamentSessionLifecycle({
     socket: { connected: true } as never,
+    isConnected: true,
     appMode: opts.appMode,
     joinedRoom: opts.joinedRoom ?? null,
     liveGameOver: false,
@@ -60,6 +61,7 @@ function setup(opts: {
       setTournamentSubView: vi.fn(), setTournamentResult: vi.fn(), setTournamentResultLoading: vi.fn(), setTournamentResultError: vi.fn(),
     } as never,
     attachFlow: { attemptTournamentAttach } as never,
+    attachRefs: { attachedTournamentMatchIdRef: ref(null), attachedSocketIdRef: ref(null) } as never,
   }));
   return { attemptTournamentAttach, tournament };
 }
@@ -156,3 +158,65 @@ describe('tournament join policy in the session lifecycle', () => {
     }
   });
 });
+
+describe('Phase 4A: a joined match follows its socket', () => {
+  type Props = { socket: { connected: boolean; id?: string } | null; isConnected: boolean; appMode: AppMode; liveGameOver: boolean };
+
+  function mount(initial: Props) {
+    const attemptTournamentAttach = vi.fn(async () => true);
+    const ref = <T,>(current: T) => ({ current });
+    const attachRefs = { attachedTournamentMatchIdRef: ref<string | null>('m-cup-1'), attachedSocketIdRef: ref<string | null>('sock-1') };
+    const tournament: TournamentFake = {
+      activeAssignedMatch: null, recoveryMatch: null, pendingMatch: null, fritzLaunchIntent: null, activeBracket: null,
+      clearRecoveryMatch: vi.fn(), clearPendingMatch: vi.fn(), endFritzLaunch: vi.fn(), openBracket: vi.fn(),
+    };
+    const sessionState = {
+      tournamentSubView: 'hub', activeTournamentId: CUP, setActiveTournamentId: vi.fn(),
+      tournamentMatch: { matchId: 'm-cup-1', tournamentId: CUP, roomCode: 'TCUPR1M1' },
+      setTournamentSubView: vi.fn(), setTournamentResult: vi.fn(), setTournamentResultLoading: vi.fn(), setTournamentResultError: vi.fn(),
+    };
+    const view = renderHook((props: Props) => useTournamentSessionLifecycle({
+      socket: props.socket as never,
+      isConnected: props.isConnected,
+      appMode: props.appMode,
+      joinedRoom: 'TCUPR1M1',
+      liveGameOver: props.liveGameOver,
+      attachRuntime: { reconnectRuntime: { preventAutoRejoinRef: ref(false), reconnectShouldJoinRef: ref(false), reconnectRoomCodeRef: ref(null) } } as never,
+      tournament: tournament as never,
+      sessionState: sessionState as never,
+      attachFlow: { attemptTournamentAttach } as never,
+      attachRefs: attachRefs as never,
+    }), { initialProps: initial });
+    return { ...view, attemptTournamentAttach, attachRefs };
+  }
+
+  const inMatch: Props = { socket: { connected: true, id: 'sock-1' }, isConnected: true, appMode: 'multiplayer', liveGameOver: false };
+
+  it('the socket it attached on: nothing to do', () => {
+    const { attemptTournamentAttach } = mount(inMatch);
+    expect(attemptTournamentAttach).not.toHaveBeenCalled();
+  });
+
+  it('entering the match screen replaced the socket: attaches again on the new one, once', () => {
+    const { rerender, attemptTournamentAttach, attachRefs } = mount(inMatch);
+    rerender({ ...inMatch, socket: { connected: false }, isConnected: false });
+    expect(attemptTournamentAttach).not.toHaveBeenCalled();
+    rerender({ ...inMatch, socket: { connected: true, id: 'sock-2' }, isConnected: true });
+    expect(attemptTournamentAttach).toHaveBeenCalledTimes(1);
+    expect(attemptTournamentAttach).toHaveBeenCalledWith('m-cup-1', { manual: true, tournamentId: CUP, matchStatus: 'in_progress' });
+    expect(attachRefs.attachedSocketIdRef.current).toBe('sock-2');
+    rerender({ ...inMatch, socket: { connected: true, id: 'sock-2' }, isConnected: true, appMode: 'multiplayer' });
+    expect(attemptTournamentAttach).toHaveBeenCalledTimes(1);
+  });
+
+  it('not after the match is over, and not on other screens', () => {
+    const over = mount(inMatch);
+    over.rerender({ ...inMatch, socket: { connected: true, id: 'sock-2' }, liveGameOver: true });
+    expect(over.attemptTournamentAttach).not.toHaveBeenCalled();
+
+    const elsewhere = mount(inMatch);
+    elsewhere.rerender({ ...inMatch, socket: { connected: true, id: 'sock-2' }, appMode: 'home' });
+    expect(elsewhere.attemptTournamentAttach).not.toHaveBeenCalled();
+  });
+});
+

@@ -31,6 +31,9 @@ import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from '../scheduledTourname
 
 const log = childLogger('multiplayer:tournament-attach');
 
+/** The longest an attach waits for the socket's identify still in flight. */
+const IDENTIFY_WAIT_MS = 5_000;
+
 export type RegisterTournamentAttachHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
   attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn;
@@ -74,6 +77,18 @@ export function registerTournamentAttachHandlers(
     }, 'request');
 
     try {
+      // A reconnected socket's identify may still be in flight (Phase 4A dev
+      // finding: the re-attach after a server restart was refused as
+      // not_authenticated a few milliseconds before the identify completed).
+      const identifyPending = socket.data?.identifyPending as Promise<void> | undefined;
+      if (!handlerDeps.normalizeUserId(socket.data?.userId) && identifyPending) {
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          identifyPending,
+          new Promise<void>((resolve) => { waitTimer = setTimeout(resolve, IDENTIFY_WAIT_MS); }),
+        ]);
+        if (waitTimer) clearTimeout(waitTimer);
+      }
       const authenticatedUserId = handlerDeps.normalizeUserId(socket.data?.userId);
       const matchId = matchIdFromPayload;
       if (!matchId) {
@@ -183,27 +198,22 @@ export function registerTournamentAttachHandlers(
           );
           handlerDeps.notifyRoomPlayersInGame(room.code);
           await handlerDeps.onAfterMatchStarted(room);
-          const recipientId = attached.joinedPlayerSeatId;
-          stateWithCounts = room.state
-            ? (() => {
-                const m = maskStateForRecipient(room.state!, recipientId);
-                return { ...m, handCounts: getHandCounts(room.state!) };
-              })()
-            : null;
-          rejoinLegalMoves = [];
-          rejoinCanDraw = false;
         }
-      } else if (room.state && attached.joinedPlayerSeatId) {
-        const recipientId = attached.joinedPlayerSeatId;
-        stateWithCounts = (() => {
-          const m = maskStateForRecipient(room.state!, recipientId);
-          return { ...m, handCounts: getHandCounts(room.state!) };
-        })();
-        rejoinLegalMoves = getRoomLegalMoves(room.code, attached.joinedPlayerSeatId);
-        rejoinCanDraw = getRoomCanDraw(room.code, attached.joinedPlayerSeatId);
       }
 
       const refreshed = await fetchMatchById(match.id);
+      // The position as it is now, not before the awaits above: when Fritz starts,
+      // its first move (0.8-1.5 s after the deal) can land while the match row is
+      // written and read back, and an older position in the ack would be applied
+      // after that move's update (Phase 4A dev finding: "Fritz is thinking" on the
+      // player's own turn until missed turns forfeited the match).
+      if (room.state && attached.joinedPlayerSeatId) {
+        const recipientId = attached.joinedPlayerSeatId;
+        const m = maskStateForRecipient(room.state, recipientId);
+        stateWithCounts = { ...m, handCounts: getHandCounts(room.state) };
+        rejoinLegalMoves = getRoomLegalMoves(room.code, recipientId);
+        rejoinCanDraw = getRoomCanDraw(room.code, recipientId);
+      }
       const humanAttached = Boolean(humanJoinedAt(refreshed ?? match, participantUserId));
       const matchStatus =
         refreshed?.status === 'in_progress' && humanAttached

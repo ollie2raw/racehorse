@@ -75,11 +75,14 @@ export async function runGracefulShutdown(
         }
       }
 
-      await new Promise<void>((resolve, reject) => {
-        deps.server.close((error) => {
-          if (error) reject(error);
-          else resolve();
-        });
+      // Stop accepting connections now, but don't wait for close()'s callback
+      // here: it fires only once every connection has ended, and socket.io's
+      // websockets stay open until io.close() below. Waiting first hung the
+      // shutdown with clients still attached (Phase 4A dev finding: the old
+      // process kept serving tournament rooms, turn clocks included, after it
+      // had released the orchestrator lease to the new one).
+      const httpClosed = new Promise<void>((resolve) => {
+        deps.server.close(() => resolve());
       });
       console.warn('[server] HTTP listener closed — no longer accepting new connections');
 
@@ -93,6 +96,13 @@ export async function runGracefulShutdown(
         deps.io.close(() => resolve());
       });
       console.warn('[server] socket server closed');
+
+      let closeTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        httpClosed,
+        new Promise<void>((resolve) => { closeTimer = setTimeout(resolve, timeoutMs); }),
+      ]);
+      if (closeTimer) clearTimeout(closeTimer);
 
       exitProcess(0);
     } catch (error) {

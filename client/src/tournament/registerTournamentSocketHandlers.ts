@@ -87,6 +87,8 @@ export function registerTournamentSocketHandlers(
         matchId: string;
         roomCode?: string | null;
         round?: number;
+        winnerId?: string | null;
+        winnerSource?: string | null;
       }) => {
         getScope().hub?.onMatchCompleted(payload);
         getScope().session?.onMatchCompleted(payload);

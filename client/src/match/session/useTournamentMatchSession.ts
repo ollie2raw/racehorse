@@ -68,6 +68,7 @@ export function useTournamentMatchSession(
 
   useTournamentSessionLifecycle({
     socket: params.socket,
+    isConnected: params.isConnected,
     appMode: params.appMode,
     joinedRoom: params.joinedRoom,
     liveGameOver: params.liveGameOver,
@@ -75,6 +76,7 @@ export function useTournamentMatchSession(
     tournament: params.tournament,
     sessionState,
     attachFlow,
+    attachRefs,
   });
 
   const {
