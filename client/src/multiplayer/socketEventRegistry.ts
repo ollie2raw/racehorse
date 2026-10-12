@@ -251,15 +251,6 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Tournament match room assignment during live connection',
   },
   {
-    socketEvent: 'room:chat',
-    owner: 'social.reactions',
-    registrar: 'multiplayer/registerMultiplayerConnectionSocketHandlers.ts',
-    boundedContext: 'social',
-    registrationKind: 'raw',
-    enforced: true,
-    description: 'In-room chat reactions feed',
-  },
-  {
     socketEvent: 'room:emote',
     owner: 'social.reactions',
     registrar: 'multiplayer/registerMultiplayerConnectionSocketHandlers.ts',
@@ -597,7 +588,6 @@ export const SOCKET_EVENTS = {
   RECONNECT_FAILED: 'reconnect_failed',
   SERVER_SHUTDOWN: 'server:shutdown',
   TOURNAMENT_MATCH_ASSIGNED: 'tournament:match:assigned',
-  ROOM_CHAT: 'room:chat',
   ROOM_EMOTE: 'room:emote',
   ROOM_SESSION_SUPERSEDED: 'room:session:superseded',
   HAND_ENDED: 'hand:ended',

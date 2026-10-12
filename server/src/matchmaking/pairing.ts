@@ -22,10 +22,16 @@ export function ratingWindowMsAt(waitedMs: number): number {
   return 150;
 }
 
+/** True when either player has blocked the other. */
+export function isBlockedPairing(a: QueuedPlayer, b: QueuedPlayer): boolean {
+  return Boolean(a.blockedUserIds?.has(b.userId) || b.blockedUserIds?.has(a.userId));
+}
+
 /**
  * Greedy matching: the longest-waiting player picks the closest-rated peer
  * whose rating delta is inside the tighter of the two players' windows.
- * Repeats until no further pairs are formable.
+ * Repeats until no further pairs are formable. Players who have blocked each
+ * other are never paired.
  *
  * Pure function — does not mutate `players`.
  */
@@ -45,6 +51,7 @@ export function findPairs(players: QueuedPlayer[], nowMs: number): MatchedPair[]
       if (b.socketId === a.socketId) continue;
       if (used.has(b.socketId)) continue;
       if (a.userId === b.userId) continue;
+      if (isBlockedPairing(a, b)) continue;
       const bWindow = ratingWindowMsAt(nowMs - b.joinedAtMs);
       const allowed = Math.min(aWindow, bWindow);
       const delta = Math.abs(a.rating - b.rating);

@@ -1,7 +1,7 @@
 import type { AppMode } from '../types';
 import type { PrivateRoomCreateSettings } from './roomTransport';
 import type { Socket } from 'socket.io-client';
-import type { RoomChatEvent, RoomEmoteEvent } from './protocol';
+import type { RoomEmoteEvent } from './protocol';
 import type { RoomPlayer, RoomRecoveryState } from './protocol';
 import type {
   FriendChallengeTarget,
@@ -46,8 +46,7 @@ export interface PrivateMatchLobbyScreenProps {
   myRating?: number | null;
   myUsername?: string | null;
   hostWinStreak?: number | null;
-  roomChatFeed?: Array<RoomChatEvent | RoomEmoteEvent>;
-  onSendRoomChat?: (text: string) => void;
+  roomChatFeed?: Array<RoomEmoteEvent>;
   winTarget?: number;
   isRatedEligible?: boolean;
   onOpenQuickMatch?: () => void;

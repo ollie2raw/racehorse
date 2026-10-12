@@ -32,6 +32,7 @@ import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
 import { accountRouter } from './account/routes';
+import { moderationRouter } from './moderation/routes';
 import { socketsByUserId as presenceSocketsByUserId, setActivity } from './social/presenceRegistry';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import {
@@ -202,7 +203,7 @@ import {
   handleRoomPlayerDisconnect,
   registerRoomSessionHandlers,
 } from './multiplayer/registerRoomSessionHandlers';
-import { registerRoomChatEmoteHandlers } from './multiplayer/registerRoomChatEmoteHandlers';
+import { registerRoomEmoteHandlers } from './multiplayer/registerRoomEmoteHandlers';
 import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchStartReady';
 import type { BranchArm, GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
@@ -424,6 +425,13 @@ const accountDeleteLimit = createRateLimitMiddleware(
   { windowMs: 10 * 60_000, max: 10 },
   'rest:account-delete',
 );
+// Reporting / blocking. The route also caps reports per account per day; this
+// bounds raw request volume per IP. (Keyed on `req.ip` — AU-4.)
+const moderationLimit = createRateLimitMiddleware(
+  restRateLimiter,
+  { windowMs: 10 * 60_000, max: 60 },
+  'rest:moderation',
+);
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 // Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
 // so a single poller can't exhaust the global restApiLimit for all other /api/* callers.
@@ -462,6 +470,8 @@ app.use('/api', restApiLimit);
 app.use('/bot-matches', restApiLimit);
 app.use('/api/account', accountDeleteLimit);
 app.use('/api/account', accountRouter);
+app.use('/api/moderation', moderationLimit);
+app.use('/api/moderation', moderationRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/profile', socialRouter);
 
@@ -614,7 +624,6 @@ const SOCKET_EVENT_LIMITS: Record<string, RateLimitRule> = {
   'queue:join': { windowMs: 60_000, max: config.limitQueueJoinMax },
   'friend:invite': { windowMs: 60_000, max: config.limitFriendInviteMax },
   'friend:invite:decline': { windowMs: 60_000, max: config.limitFriendDeclineMax },
-  'room:chat:send': { windowMs: 60_000, max: config.limitRoomChatMax },
   'room:emote:send': { windowMs: 60_000, max: config.limitRoomEmoteMax },
   'game:action': { windowMs: 60_000, max: config.limitGameActionMax },
   'hand:ready': { windowMs: 60_000, max: config.limitHandReadyMax },
@@ -740,7 +749,6 @@ io.on('connection', (socket: Socket) => {
   /* Scheduled tournament handlers + scheduler bootstrap (idempotent). */
   initScheduledTournaments(io, app, socket);
 
-  /* ROOM_REACTIONS_CHAT_EMOTE */
   registerRoomSessionHandlers(io, socket);
   const { handlePresenceDisconnect } = registerPresenceHandlers(socket, {
     io,
@@ -776,7 +784,8 @@ io.on('connection', (socket: Socket) => {
     },
   );
 
-  registerRoomChatEmoteHandlers(socket);
+  // Preset reactions only; there is no free-text match chat (App Store 1.2).
+  registerRoomEmoteHandlers(socket);
 
   // WEEKLY_STATS
   socket.on("stats:weekly", async (cb?: AckFn) => {

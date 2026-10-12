@@ -85,11 +85,6 @@
   font-weight: 600;
 }
 
-.rr-text {
-  opacity: 0.9;
-  word-break: break-word;
-}
-
 .rr-emote {
   font-size: 16px;
 }
@@ -113,43 +108,58 @@
   background: rgba(255, 255, 255, 0.10);
 }
 
-.rr-form {
+.rr-report-row {
+  padding: 0 12px 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rr-report {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px 12px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-.rr-input {
-  flex: 1;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(255, 255, 255, 0.92);
-  padding: 8px 10px;
-  outline: none;
-}
-.rr-input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+.rr-report-note {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  opacity: 0.9;
 }
 
-.rr-send {
+.rr-report-choice {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.92);
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 13px;
 }
-.rr-send:hover {
-  background: rgba(255, 255, 255, 0.14);
+.rr-report-choice:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+.rr-report-choice:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.rr-report-link {
+  align-self: flex-start;
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 0;
+  text-decoration: underline;
 }
 
 @media (--phone) {
   .room-reactions,
   .rr-list,
-  .rr-emotes,
-  .rr-form {
+  .rr-emotes {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -157,16 +167,15 @@
   }
 
   .rr-line,
-  .rr-text,
   .rr-name,
   .rr-empty,
-  .rr-input,
-  .rr-send,
+  .rr-report-choice,
   .rr-emo {
     font-size: 13px;
   }
 
-  .rr-send,
+  .rr-report-choice,
+  .rr-report-link,
   .rr-emo {
     min-height: 44px;
   }

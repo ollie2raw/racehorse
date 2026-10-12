@@ -1,4 +1,5 @@
 import { identifyUser, resetAnalytics } from '../lib/analytics';
+import { isUsernamePolicyDbError, usernamePolicyMessage, usernamePolicyViolation } from './usernamePolicy';
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -550,6 +551,8 @@ function useAuthInternal() {
       if (!normalizedUsername) {
         return { error: 'Username must be at least 3 characters and use lowercase letters, numbers, and underscores only.' };
       }
+      const signupViolation = usernamePolicyViolation(normalizedUsername);
+      if (signupViolation) return { error: usernamePolicyMessage(signupViolation) };
       const runSignUp = async () =>
         withTimeout(
           client.auth.signUp({
@@ -748,6 +751,8 @@ function useAuthInternal() {
       if (isTemporaryUsername(normalized)) {
         return { error: 'Pick a permanent handle — auto-generated names cannot be saved.' };
       }
+      const renameViolation = usernamePolicyViolation(normalized);
+      if (renameViolation) return { error: usernamePolicyMessage(renameViolation) };
 
       try {
         const request = supabase
@@ -763,6 +768,9 @@ function useAuthInternal() {
         );
 
         if (error) {
+          if (isUsernamePolicyDbError(error.message)) {
+            return { error: usernamePolicyMessage('prohibited') };
+          }
           const message = error.message.toLowerCase();
           if (message.includes('duplicate key') || message.includes('unique')) {
             return { error: 'Username already taken. Try another one.' };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { sendFriendRequest } from '../friends/friendsApi';
 import { usePlayerIdentityModel } from '../identity/usePlayerIdentityModel';
@@ -10,6 +10,7 @@ import { selectNonDuplicateMilestones } from '../identity/components/PlayerMiles
 import { PlayerModeSummary } from '../identity/components/PlayerModeSummary';
 import { PlayerRecentForm } from '../identity/components/PlayerRecentForm';
 import { PlayerRelationshipCard } from '../identity/components/PlayerRelationshipCard';
+import { PlayerSafetyActions } from '../moderation/PlayerSafetyActions';
 import './publicProfile.css';
 
 interface PublicProfileScreenProps {
@@ -26,6 +27,8 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
   const identityState = usePlayerIdentityModel({ subjectUserId: null, subjectUsername: username, currentUserId: user?.id ?? null });
   const model = identityState.model;
   const [addingFriend, setAddingFriend] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const handleBlockedChange = useCallback((next: boolean) => setBlocked(next), []);
 
   const handleAddFriend = async () => {
     if (!user || !model?.subject.username) return;
@@ -84,12 +87,20 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
           <PlayerIdentityHeader
             subject={model.subject}
             competitive={model.competitive}
-            canInteract={Boolean(user)}
+            canInteract={Boolean(user) && !blocked}
             addingFriend={addingFriend}
             onAddFriend={handleAddFriend}
             onChallenge={onChallenge}
             onSpectate={onSpectate}
           />
+          {user && !model.subject.isCurrentUser && model.subject.userId && model.subject.username ? (
+            <PlayerSafetyActions
+              subjectUserId={model.subject.userId}
+              subjectUsername={model.subject.username}
+              onToast={showToast}
+              onBlockedChange={handleBlockedChange}
+            />
+          ) : null}
           <PlayerIdentityHighlights signals={model.identitySignals.featured} isCurrentUser={model.subject.isCurrentUser} />
         </div>
         <div className="rh-pp-col rh-pp-col--stats">

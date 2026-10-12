@@ -32,6 +32,8 @@ import TileRack from '../components/TileRack';
 import GameOverModal from '../components/GameOverModal';
 import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
 import { RoomReactions } from '../components/RoomReactions';
+import { reportUser } from '../moderation/moderationApi';
+import { selectReportableOpponent } from '../moderation/reportableOpponent';
 import TournamentMatchHud from '../tournament/TournamentMatchHud';
 import TournamentGameOverOverlay from '../tournament/TournamentGameOverOverlay';
 import { tournamentPlayerDisplay } from '../tournament/displayNames';
@@ -332,7 +334,6 @@ export function LiveMatchScreen({
     scoreTrackOpen,
     onScoreTrackOpenChange,
     roomReactions,
-    onSendRoomChat,
     onSendRoomEmote,
     isMuted,
     onToggleMute,
@@ -373,6 +374,10 @@ export function LiveMatchScreen({
     handRevealAutoProgress,
   } = postGame;
   const { user: authUser } = useAuth();
+  const reportTarget = useMemo(
+    () => selectReportableOpponent(players, you, authUser?.id),
+    [players, you, authUser?.id],
+  );
   const serverCohortEnabled = usePostGameReviewAccess(
     isPostGameReviewAudience(authUser?.email) ? authUser?.id : null,
   );
@@ -889,7 +894,14 @@ export function LiveMatchScreen({
                     >
                       <ZoomInIcon />
                     </button>
-                    <RoomReactions feed={roomReactions} onSendChat={onSendRoomChat} onSendEmote={onSendRoomEmote} />
+                    <RoomReactions
+                      feed={roomReactions}
+                      onSendEmote={onSendRoomEmote}
+                      reportTarget={reportTarget}
+                      onReport={(target, category) =>
+                        reportUser({ reportedUserId: target.userId, category, source: 'live_match' })
+                      }
+                    />
                     <button
                       type="button"
                       className="wl-control-btn rh-board-control-btn"

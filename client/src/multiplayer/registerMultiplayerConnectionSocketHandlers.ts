@@ -1,6 +1,6 @@
 import type { Socket } from 'socket.io-client';
 import { logger } from '../utils/logger';
-import type { RoomChatEvent, RoomEmoteEvent } from './protocol';
+import type { RoomEmoteEvent } from './protocol';
 import { wrapSocketHandler } from './socketGuards';
 import type { MultiplayerConnectionScope } from './multiplayerConnectionScope';
 import type { TournamentMatchAssignedPayload } from './legacyTournamentTypes';
@@ -168,13 +168,6 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
         scope.ui.setRoomCode(code);
         scope.navigation.setAppMode('multiplayer');
       }
-    }),
-  );
-
-  register(
-    SOCKET_EVENTS.ROOM_CHAT,
-    wrapSocketHandler(SOCKET_EVENTS.ROOM_CHAT, (msg: RoomChatEvent) => {
-      getScope().social.appendRoomReactionRef.current(msg);
     }),
   );
 

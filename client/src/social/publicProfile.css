@@ -137,6 +137,20 @@
 .identity-btn--primary { background: var(--tier-standard); color: white; }
 .identity-btn--secondary { border-color: rgba(231, 182, 74, 0.34); background: rgba(231, 182, 74, 0.12); color: var(--tier-elite); }
 .identity-btn:disabled { cursor: default; opacity: 0.55; }
+
+/* Report / Block: deliberately quiet — secondary to the profile, never a CTA. */
+.rh-pp-safety { margin-top: 10px; }
+.rh-pp-safety__row { display: flex; justify-content: flex-end; gap: 16px; }
+.rh-pp-safety__link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--text-secondary, rgba(237, 232, 220, 0.62)); cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.rh-pp-safety__link:hover { color: var(--text-primary, rgba(237, 232, 220, 0.92)); }
+.rh-pp-safety__link:disabled { cursor: default; opacity: 0.55; }
+.rh-pp-safety__panel { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid rgba(255, 255, 255, 0.10); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.03); }
+.rh-pp-safety__note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-primary, rgba(237, 232, 220, 0.92)); }
+.rh-pp-safety__choices { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rh-pp-safety__choice { min-height: 36px; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.05); color: var(--text-primary, rgba(237, 232, 220, 0.92)); cursor: pointer; font-size: 12px; font-weight: 700; }
+.rh-pp-safety__choice:hover { background: rgba(255, 255, 255, 0.09); }
+.rh-pp-safety__choice:disabled { cursor: default; opacity: 0.55; }
+.rh-pp-safety__link:focus-visible, .rh-pp-safety__choice:focus-visible { outline: 2px solid var(--tier-standard); outline-offset: 3px; }
 .identity-status-pill { padding: 9px 12px; border: 1px solid rgba(74, 222, 128, 0.3); border-radius: var(--radius-pill); color: var(--tier-rookie); font-size: 12px; font-weight: 700; }
 
 .identity-section, .identity-relationship { padding: 22px; }
@@ -205,6 +219,7 @@
   .identity-match-row { grid-template-columns: 54px minmax(0, 1fr) auto; gap: 7px; }
   .identity-match-score { text-align: right; }
   .identity-match-mode, .identity-match-row time { grid-column: 2 / -1; text-align: left; }
+  .rh-pp-safety__link, .rh-pp-safety__choice { min-height: 44px; }
 }
 
 @media (max-width: 380px) {

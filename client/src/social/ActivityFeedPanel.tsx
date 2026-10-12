@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { fetchActivityFeed, fetchGlobalActivityFeed, type FeedItem } from './socialApi';
+import { fetchBlockedUserIds } from '../moderation/moderationApi';
+import { withoutBlockedPlayers } from '../moderation/blockedFeed';
 import {
   buildFeedRowViewModel,
   type FeedRowViewModel,
@@ -203,7 +205,17 @@ export default function ActivityFeedPanel({
   const error = isFriendsFilter ? friendsError : globalError;
   const refetch = isFriendsFilter ? refetchFriends : refetchGlobal;
 
-  const feed = useMemo(() => data ?? [], [data]);
+  // Players the viewer has blocked are left out of either feed. The global feed
+  // is a shared public cache, so this is applied here rather than on the server.
+  const { data: blockedUserIds } = useAsyncData<string[]>(
+    () => fetchBlockedUserIds(),
+    [user?.id],
+    { enabled: Boolean(user) },
+  );
+  const feed = useMemo(
+    () => withoutBlockedPlayers(data ?? [], user ? blockedUserIds : null),
+    [data, user, blockedUserIds],
+  );
 
   // `onFeedChange` is a plain prop callback — keep it out of the bridge effect's
   // deps so a parent passing an inline function doesn't re-fire it every render.

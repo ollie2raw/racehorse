@@ -179,7 +179,6 @@ export default function MultiplayerModeController({
     copyRoomCodeToClipboard,
     roomActionsUi,
     roomReactions,
-    sendRoomChat,
     sendRoomEmote,
     sendFriendChallenge,
   } = useMultiplayerLobbyActionsContext();
@@ -392,7 +391,6 @@ export default function MultiplayerModeController({
               }
               myUsername={authProfile?.username ?? null}
               roomChatFeed={roomReactions}
-              onSendRoomChat={sendRoomChat}
               winTarget={60}
               isRatedEligible={Boolean(authUser?.id)}
               roomRecoveryState={roomRecoveryState}
@@ -476,7 +474,6 @@ export default function MultiplayerModeController({
               scoreTrackOpen,
               onScoreTrackOpenChange: setScoreTrackOpen,
               roomReactions,
-              onSendRoomChat: sendRoomChat,
               onSendRoomEmote: sendRoomEmote,
               isMuted,
               onToggleMute: () => setIsMuted((prev) => !prev),

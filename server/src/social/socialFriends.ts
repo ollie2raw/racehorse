@@ -2,6 +2,13 @@ import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { friendIdsFromRows, getFriendRows, requireAuth } from './socialAuth';
 import { getPresenceBatch } from './presenceRegistry';
+import { isBlockedPair } from '../moderation/blockStore';
+
+/**
+ * A block in either direction stops new friend requests. The message is the
+ * same whichever side blocked, so it doesn't reveal that someone blocked you.
+ */
+const BLOCKED_REQUEST_MESSAGE = 'You can’t send a friend request to this player.';
 
 /**
  * SA-7 (HARDENING_PLAN.md §11.3): the friends-request routes read for an
@@ -103,6 +110,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       );
       if (existing?.[0]?.status === 'accepted') { res.status(409).json({ error: 'Already friends.' }); return; }
       if (existing?.[0]?.status === 'pending') { res.status(409).json({ error: 'Request already pending.' }); return; }
+      if (await isBlockedPair(requestorId, targetId)) { res.status(403).json({ error: BLOCKED_REQUEST_MESSAGE }); return; }
       await supabaseFetch('/rest/v1/friends', {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },
@@ -139,6 +147,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       );
       if (existing?.[0]?.status === 'accepted') { res.status(409).json({ error: 'Already friends.' }); return; }
       if (existing?.[0]?.status === 'pending') { res.status(409).json({ error: 'Request already pending.' }); return; }
+      if (await isBlockedPair(userId, targetId)) { res.status(403).json({ error: BLOCKED_REQUEST_MESSAGE }); return; }
       await supabaseFetch('/rest/v1/friends', {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },

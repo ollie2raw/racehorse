@@ -41,13 +41,6 @@ export type RoomIdentity = {
 
 export type RoomPlayer = { id: string; username: string; userId: string | null };
 
-export type RoomChatEvent = {
-  id: string;
-  t: number;
-  from: { userId: string | null; username: string };
-  text: string;
-};
-
 export type RoomEmoteEvent = {
   id: string;
   t: number;

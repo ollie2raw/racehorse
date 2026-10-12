@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import * as rooms from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+import { listBlockCounterpartiesOrEmpty } from '../moderation/blockStore';
 import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
@@ -139,8 +140,14 @@ export function registerMatchmakingHandlers(
       }
       pendingJoins.add(identity.userId);
       let rating: number;
+      let blockedUserIds: ReadonlySet<string> | undefined;
       try {
-        rating = identity.authenticated ? await fetchPlayerRating(identity.userId) : DEFAULT_RATING;
+        [rating, blockedUserIds] = identity.authenticated
+          ? await Promise.all([
+              fetchPlayerRating(identity.userId),
+              listBlockCounterpartiesOrEmpty(identity.userId, 'queue:join'),
+            ])
+          : [DEFAULT_RATING, undefined];
       } finally {
         pendingJoins.delete(identity.userId);
       }
@@ -150,6 +157,7 @@ export function registerMatchmakingHandlers(
         username: identity.username,
         rating,
         isSim: false,
+        ...(blockedUserIds && blockedUserIds.size > 0 ? { blockedUserIds } : {}),
       });
       if (!result.ok) {
         if (matchmakingDebugEnabled()) {
@@ -274,6 +282,7 @@ function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
     username: p.username,
     rating: p.rating,
     isSim: false,
+    ...(p.blockedUserIds ? { blockedUserIds: p.blockedUserIds } : {}),
   });
   if (!result.ok && matchmakingDebugEnabled()) {
     log.info({
