@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import * as rooms from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
+import { listBlockCounterpartiesOrNull } from '../moderation/blockStore';
 import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
@@ -139,10 +140,23 @@ export function registerMatchmakingHandlers(
       }
       pendingJoins.add(identity.userId);
       let rating: number;
+      let blockedUserIds: ReadonlySet<string> | null | undefined;
       try {
-        rating = identity.authenticated ? await fetchPlayerRating(identity.userId) : DEFAULT_RATING;
+        [rating, blockedUserIds] = identity.authenticated
+          ? await Promise.all([
+              fetchPlayerRating(identity.userId),
+              listBlockCounterpartiesOrNull(identity.userId, 'queue:join'),
+            ])
+          : [DEFAULT_RATING, undefined];
       } finally {
         pendingJoins.delete(identity.userId);
+      }
+      // Fail closed: a signed-in player whose blocks can't be read is not
+      // queued at all (nothing to deadlock or retry in a loop); the client
+      // shows a generic try-again and the player can search again.
+      if (blockedUserIds === null) {
+        ack?.({ ok: false, error: 'queue_unavailable', online: getOnlineCount(io), queued: service.size() });
+        return;
       }
       const result = service.join({
         socketId: socket.id,
@@ -150,6 +164,7 @@ export function registerMatchmakingHandlers(
         username: identity.username,
         rating,
         isSim: false,
+        ...(blockedUserIds && blockedUserIds.size > 0 ? { blockedUserIds } : {}),
       });
       if (!result.ok) {
         if (matchmakingDebugEnabled()) {
@@ -274,6 +289,7 @@ function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
     username: p.username,
     rating: p.rating,
     isSim: false,
+    ...(p.blockedUserIds ? { blockedUserIds: p.blockedUserIds } : {}),
   });
   if (!result.ok && matchmakingDebugEnabled()) {
     log.info({

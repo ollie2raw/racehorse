@@ -36,7 +36,6 @@ export interface Config {
   limitQueueJoinMax: number;
   limitFriendInviteMax: number;
   limitFriendDeclineMax: number;
-  limitRoomChatMax: number;
   limitRoomEmoteMax: number;
   limitGameActionMax: number;
   limitHandReadyMax: number;
@@ -122,7 +121,6 @@ export function validateAndLoadConfig(): Config {
     limitQueueJoinMax: getEnvInt('LIMIT_QUEUE_JOIN_MAX', 10),
     limitFriendInviteMax: getEnvInt('LIMIT_FRIEND_INVITE_MAX', 20),
     limitFriendDeclineMax: getEnvInt('LIMIT_FRIEND_DECLINE_MAX', 60),
-    limitRoomChatMax: getEnvInt('LIMIT_ROOM_CHAT_MAX', 30),
     limitRoomEmoteMax: getEnvInt('LIMIT_ROOM_EMOTE_MAX', 60),
     limitGameActionMax: getEnvInt('LIMIT_GAME_ACTION_MAX', 240),
     limitHandReadyMax: getEnvInt('LIMIT_HAND_READY_MAX', 120),

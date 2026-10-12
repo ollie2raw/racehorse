@@ -49,7 +49,6 @@ export default function PrivateMatchLobbyScreen({
   myUsername = null,
   hostWinStreak,
   roomChatFeed: _roomChatFeed,
-  onSendRoomChat: _onSendRoomChat,
   winTarget = 60,
   isRatedEligible = false,
   onOpenQuickMatch,

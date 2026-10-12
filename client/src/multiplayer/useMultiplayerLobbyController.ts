@@ -1,7 +1,8 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { RoomChatEvent, RoomEmoteEvent } from './protocol';
+import type { RoomEmoteEvent } from './protocol';
+import { ROOM_REACTION_EMOTES, type RoomReactionEmote } from './roomReactionEmotes';
 import { clearLastRoomCode, LAST_ROOM_STORAGE_KEY } from '../match/recovery/matchRecovery';
 import { emitRoomLeave, emitWithAck, type RoomAckResponse } from './roomTransport';
 import { useMultiplayerRoomActions } from './useMultiplayerRoomActions';
@@ -33,16 +34,15 @@ export type MultiplayerLobbyActionsContextValue = Omit<MultiplayerControllerLobb
   sendFriendChallenge: ReturnType<typeof useMultiplayerRoomActions>['sendFriendChallenge'];
   spectateRoom: (roomCode: string) => Promise<{ ok: boolean; error?: string }>;
   roomActionsUi: MultiplayerRoomActionsUi;
-  roomReactions: Array<RoomChatEvent | RoomEmoteEvent>;
-  sendRoomChat: (text: string) => void;
-  sendRoomEmote: (emote: string) => void;
+  roomReactions: Array<RoomEmoteEvent>;
+  sendRoomEmote: (emote: RoomReactionEmote) => void;
 };
 
 const MultiplayerLobbyActionsContext = createContext<MultiplayerLobbyActionsContextValue | null>(null);
 
 /** Stable ref bridge created in App before useMultiplayerConnection; populated by the lobby host. */
 export function useMultiplayerRoomSocialRuntimeBridge(): MultiplayerRoomSocialRuntime {
-  const appendRoomReactionRef = useRef<(item: RoomChatEvent | RoomEmoteEvent) => void>(() => {});
+  const appendRoomReactionRef = useRef<(item: RoomEmoteEvent) => void>(() => {});
   const clearRoomReactionsRef = useRef<() => void>(() => {});
   return useMemo(
     (): MultiplayerRoomSocialRuntime => ({
@@ -110,7 +110,7 @@ export type MultiplayerLobbyActionsHostProps = {
 };
 
 function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) {
-  const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
+  const [roomReactions, setRoomReactions] = useState<Array<RoomEmoteEvent>>([]);
 
   const authUsernameRef = useRef(props.authProfile?.username ?? 'Guest');
   const authUserIdRef = useRef<string | null>(props.multiplayerIdentityUserId);
@@ -197,7 +197,7 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
     roomOperationEpochRef: props.roomOperationEpochRef,
   });
 
-  const appendRoomReaction = useCallback((item: RoomChatEvent | RoomEmoteEvent) => {
+  const appendRoomReaction = useCallback((item: RoomEmoteEvent) => {
     setRoomReactions((prev) => {
       const next = prev.concat(item);
       return next.length > 50 ? next.slice(next.length - 50) : next;
@@ -261,28 +261,11 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
     }
   }, [props]);
 
-  const sendRoomChat = useCallback(
-    (text: string) => {
-      const t = String(text ?? '').trim();
-      if (!t) return;
-
-      appendRoomReaction({
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        t: Date.now(),
-        from: { userId: null, username: 'you' },
-        text: t,
-      });
-
-      if (!props.socket) return;
-      props.socket.emit('room:chat:send', { text: t });
-    },
-    [appendRoomReaction, props.socket],
-  );
-
   const sendRoomEmote = useCallback(
-    (emote: string) => {
-      const e = String(emote ?? '').trim();
-      if (!e) return;
+    (emote: RoomReactionEmote) => {
+      // Preset reactions only; the server drops anything else.
+      if (!(ROOM_REACTION_EMOTES as readonly string[]).includes(emote)) return;
+      const e = emote;
 
       appendRoomReaction({
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -303,7 +286,6 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
     copyRoomCodeToClipboard,
     roomActionsUi,
     roomReactions,
-    sendRoomChat,
     sendRoomEmote,
   };
 }
@@ -328,7 +310,6 @@ export function MultiplayerLobbyActionsHost({
       spectateRoom: lobby.spectateRoom,
       roomActionsUi: lobby.roomActionsUi,
       roomReactions: lobby.roomReactions,
-      sendRoomChat: lobby.sendRoomChat,
       sendRoomEmote: lobby.sendRoomEmote,
     }),
     [lobby],

@@ -49,4 +49,20 @@ describe('SinglePlayerHubScreen', () => {
     render(<SinglePlayerHubScreen {...props} />);
     expect(screen.queryByText(/more modes coming soon/i)).toBeNull();
   });
+
+  it('iOS app: leaves the locked Journey card out entirely for non-admins', () => {
+    const { container } = render(<SinglePlayerHubScreen {...props} hideComingSoon />);
+
+    expect(screen.queryByRole('heading', { name: 'Journey' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Coming Soon' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Play vs Fritz' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Ghost Mode' })).toBeTruthy();
+    expect(container.querySelector('.sp-solo-grid--pair')).not.toBeNull();
+  });
+
+  it('iOS app: the admin account still sees Journey', () => {
+    render(<SinglePlayerHubScreen {...props} isAdmin hideComingSoon />);
+    expect(screen.getByRole('heading', { name: 'Journey' })).toBeTruthy();
+  });
 });
+

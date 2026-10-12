@@ -1,6 +1,7 @@
 import type { AppMode } from '../../types';
 import type { PrimaryArea } from '../../presentation/surfacePresentation';
 import { isTournamentsEnabled } from '../../config/tournamentsFeature';
+import { hidesComingSoonSurfaces } from '../../config/nativeAppSurface';
 
 export type AppPrimaryTab = {
   label: string;
@@ -57,11 +58,17 @@ const ALL_PRIMARY_TABS: AppPrimaryTab[] = [
   },
 ];
 
-/** The Tournament tab stays; while live tournaments are off it is marked coming soon. */
-export function getAppPrimaryTabs(tournamentsEnabled = isTournamentsEnabled()): AppPrimaryTab[] {
-  return tournamentsEnabled
-    ? ALL_PRIMARY_TABS
-    : ALL_PRIMARY_TABS.map((tab) => (tab.mode === 'tournament' ? { ...tab, comingSoon: true } : tab));
+/**
+ * While live tournaments are off, the website keeps the Tournament tab marked
+ * coming soon; the iOS app leaves it out entirely (see nativeAppSurface.ts).
+ */
+export function getAppPrimaryTabs(
+  tournamentsEnabled = isTournamentsEnabled(),
+  hideComingSoon = hidesComingSoonSurfaces(),
+): AppPrimaryTab[] {
+  if (tournamentsEnabled) return ALL_PRIMARY_TABS;
+  if (hideComingSoon) return ALL_PRIMARY_TABS.filter((tab) => tab.mode !== 'tournament');
+  return ALL_PRIMARY_TABS.map((tab) => (tab.mode === 'tournament' ? { ...tab, comingSoon: true } : tab));
 }
 
 export const APP_PRIMARY_TABS: AppPrimaryTab[] = getAppPrimaryTabs();

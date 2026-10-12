@@ -8,7 +8,6 @@ export type {
   RoomRecoveryState,
   RoomIdentity,
   RoomPlayer,
-  RoomChatEvent,
   RoomEmoteEvent,
 } from './roomProtocol';
 

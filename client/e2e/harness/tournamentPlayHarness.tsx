@@ -107,7 +107,7 @@ function Hud() {
       myHand: state.players[ME].hand, handSelectedTile: null, onHandTileSelect: noop, legalMoves: youAreCurrent ? [...getLegalMoves(state as never, ME)] : [],
       handTileSize: 56, handCompactStacked: false, drawPulseIndex: null,
     },
-    chrome: { scoreTrackOpen: false, onScoreTrackOpenChange: noop, roomReactions: [], onSendRoomChat: noop, onSendRoomEmote: noop, isMuted: true, onToggleMute: noop, isFullscreen: false, onToggleFullscreen: noop },
+    chrome: { scoreTrackOpen: false, onScoreTrackOpenChange: noop, roomReactions: [], onSendRoomEmote: noop, isMuted: true, onToggleMute: noop, isFullscreen: false, onToggleFullscreen: noop },
     connection: {
       opponentDisconnected: q.get('disconnect') === '1',
       opponentDisconnectMessage: q.get('disconnect') === '1' ? 'Opponent disconnected. The match continues on the turn clock.' : null,

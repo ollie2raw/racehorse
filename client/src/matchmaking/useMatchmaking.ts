@@ -167,7 +167,7 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       clearJoinAckTimer();
       applyOnlineAck(resp);
       if (!resp?.ok) {
-        setError(resp?.error ?? 'Failed to join queue.');
+        setError(queueJoinErrorMessage(resp?.error));
         setState('idle');
         setSearchStartedAtMs(null);
       }
@@ -217,4 +217,14 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
     reset,
     refreshOnlineCounts,
   };
+}
+
+/**
+ * `queue_unavailable` is the fail-closed answer when the server can't confirm
+ * who a player has blocked; it is shown as a plain try-again, never as a
+ * moderation detail. Other codes are shown as before.
+ */
+export function queueJoinErrorMessage(code: string | undefined): string {
+  if (code === 'queue_unavailable') return 'Quick Match is unavailable right now. Try again in a moment.';
+  return code ?? 'Failed to join queue.';
 }

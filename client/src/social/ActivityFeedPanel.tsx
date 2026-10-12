@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { fetchActivityFeed, fetchGlobalActivityFeed, type FeedItem } from './socialApi';
+import { fetchBlockedUserIds } from '../moderation/moderationApi';
+import { withoutBlockedPlayers } from '../moderation/blockedFeed';
 import {
   buildFeedRowViewModel,
   type FeedRowViewModel,
@@ -198,12 +200,41 @@ export default function ActivityFeedPanel({
     [user?.id],
     { enabled: isFriendsFilter },
   );
-  const data = isFriendsFilter ? friendsData : globalData;
-  const loading = isFriendsFilter ? friendsLoading : globalLoading;
-  const error = isFriendsFilter ? friendsError : globalError;
-  const refetch = isFriendsFilter ? refetchFriends : refetchGlobal;
+  // Players the viewer has blocked are left out of the feed. The global feed is
+  // a shared public cache, so this is applied here rather than on the server.
+  // Fail closed: for a signed-in viewer the global feed waits for the block
+  // list, and shows the normal error/retry state if it can't be loaded, rather
+  // than showing unfiltered activity. The friends feed needs no wait: blocking
+  // removes the friendship, so a blocked player is never in it.
+  const {
+    data: blockedUserIds,
+    loading: blocksLoading,
+    error: blocksError,
+    refetch: refetchBlocks,
+  } = useAsyncData<string[]>(
+    async () => {
+      const ids = await fetchBlockedUserIds();
+      if (ids === null) throw new Error('Activity is unavailable right now.');
+      return ids;
+    },
+    [user?.id],
+    { enabled: Boolean(user) },
+  );
+  const needsBlockList = Boolean(user) && !isFriendsFilter;
+  const data = isFriendsFilter ? friendsData : needsBlockList && !blockedUserIds ? undefined : globalData;
+  const loading = isFriendsFilter ? friendsLoading : globalLoading || (needsBlockList && blocksLoading);
+  const error = isFriendsFilter ? friendsError : globalError ?? (needsBlockList ? blocksError : null);
+  const refetch = isFriendsFilter
+    ? refetchFriends
+    : () => {
+        refetchGlobal();
+        if (needsBlockList) refetchBlocks();
+      };
 
-  const feed = useMemo(() => data ?? [], [data]);
+  const feed = useMemo(
+    () => withoutBlockedPlayers(data ?? [], blockedUserIds),
+    [data, blockedUserIds],
+  );
 
   // `onFeedChange` is a plain prop callback — keep it out of the bridge effect's
   // deps so a parent passing an inline function doesn't re-fire it every render.

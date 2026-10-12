@@ -12,6 +12,7 @@
  * every call is a no-op when no key is configured — which is the case in tests
  * and in any local build without the env var.
  */
+import { Capacitor } from '@capacitor/core';
 
 export type AnalyticsMode =
   | 'daily_fritz'
@@ -49,6 +50,13 @@ export interface AnalyticsTransport {
   capture(event: AnalyticsEvent, props?: AnalyticsProps): void;
   identify(distinctId: string, props?: AnalyticsProps): void;
   reset(): void;
+}
+
+export type AnalyticsPlatform = 'web' | 'ios' | 'android';
+
+/** 'web' in a browser, 'ios' / 'android' inside the Capacitor shell. */
+export function analyticsPlatform(capacitorPlatform: string = Capacitor.getPlatform()): AnalyticsPlatform {
+  return capacitorPlatform === 'ios' || capacitorPlatform === 'android' ? capacitorPlatform : 'web';
 }
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
@@ -91,6 +99,9 @@ async function loadTransport(): Promise<AnalyticsTransport | null> {
       capture_pageleave: true,
       autocapture: false,
     });
+    // A super property: sent with every event, so web and App Store players
+    // can be told apart without touching any event or call site.
+    posthog.register({ platform: analyticsPlatform() });
     return {
       capture: (event, props) => posthog.capture(event, props),
       identify: (distinctId, props) => posthog.identify(distinctId, props),

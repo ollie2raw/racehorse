@@ -500,6 +500,11 @@
   color: var(--dfl-dim);
 }
 
+/* Signed-out: the leaderboard needs an account. */
+.dfl-state__action {
+  margin-top: 14px;
+}
+
 /* -------------------------------------------------------------------- rail */
 
 .dfl-rail {

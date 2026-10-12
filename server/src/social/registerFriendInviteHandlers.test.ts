@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+const { blockStatusMock } = vi.hoisted(() => ({ blockStatusMock: vi.fn() }));
+vi.mock('../moderation/blockStore', () => ({ blockStatus: blockStatusMock }));
+
 import { createRoom, resetRoomRuntimeForTests } from '../rooms';
 import { resetRoomSessionStoresForTests, setRoomRoster } from '../multiplayer/roomSession';
-import { registerFriendInviteHandlers } from './registerFriendInviteHandlers';
+import { FRIEND_INVITE_MATCH_SUMMARY, registerFriendInviteHandlers } from './registerFriendInviteHandlers';
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -56,11 +61,12 @@ const deps = {
 describe('registerFriendInviteHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blockStatusMock.mockResolvedValue('clear');
     resetRoomRuntimeForTests();
     resetRoomSessionStoresForTests();
   });
 
-  it('rejects an unauthenticated inviter', () => {
+  it('rejects an unauthenticated inviter', async () => {
     const room = createRoom('seat-host');
     setRoomRoster(room.code, [{ id: 'seat-host', socketId: 'sock-host', username: 'Host', userId: USER_A }]);
     const { socket, handlers } = makeSocket(null);
@@ -70,7 +76,7 @@ describe('registerFriendInviteHandlers', () => {
     registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
 
     const ack = vi.fn();
-    handlers.get('friend:invite')?.(
+    await handlers.get('friend:invite')?.(
       {
         toUserId: USER_B,
         roomCode: room.code,
@@ -83,7 +89,7 @@ describe('registerFriendInviteHandlers', () => {
     expect(delivered.size).toBe(0);
   });
 
-  it('rejects an authenticated non-room member', () => {
+  it('rejects an authenticated non-room member', async () => {
     const room = createRoom('seat-host');
     setRoomRoster(room.code, [{ id: 'seat-host', socketId: 'sock-host', username: 'Host', userId: USER_A }]);
     const { socket, handlers } = makeSocket(USER_C, 'Mallory');
@@ -93,7 +99,7 @@ describe('registerFriendInviteHandlers', () => {
     registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
 
     const ack = vi.fn();
-    handlers.get('friend:invite')?.(
+    await handlers.get('friend:invite')?.(
       {
         toUserId: USER_B,
         roomCode: room.code,
@@ -106,7 +112,7 @@ describe('registerFriendInviteHandlers', () => {
     expect(delivered.size).toBe(0);
   });
 
-  it('rejects nonexistent rooms', () => {
+  it('rejects nonexistent rooms', async () => {
     const { socket, handlers } = makeSocket(USER_A, 'Alice');
     const { io } = makeIo();
     const socketsByUserId = new Map([[USER_B, new Set(['sock-target'])]]);
@@ -114,7 +120,7 @@ describe('registerFriendInviteHandlers', () => {
     registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
 
     const ack = vi.fn();
-    handlers.get('friend:invite')?.(
+    await handlers.get('friend:invite')?.(
       {
         toUserId: USER_B,
         roomCode: 'NOPE1',
@@ -127,7 +133,7 @@ describe('registerFriendInviteHandlers', () => {
     expect(ack).toHaveBeenCalledWith({ ok: false, error: 'room_not_found' });
   });
 
-  it('ignores spoofed sender fields and derives inviter identity from the authenticated room member', () => {
+  it('ignores spoofed sender fields and free text, deriving identity from the room member and summary from the server', async () => {
     const room = createRoom('seat-host');
     const { socket, handlers } = makeSocket(USER_A, 'Alice');
     setRoomRoster(room.code, [{ id: 'seat-host', socketId: socket.id, username: 'Alice', userId: USER_A }]);
@@ -137,7 +143,7 @@ describe('registerFriendInviteHandlers', () => {
     registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
 
     const ack = vi.fn();
-    handlers.get('friend:invite')?.(
+    await handlers.get('friend:invite')?.(
       {
         toUserId: USER_B,
         fromUserId: USER_C,
@@ -159,10 +165,53 @@ describe('registerFriendInviteHandlers', () => {
           fromUsername: 'Alice',
           fromUserId: USER_A,
           roomCode: room.code,
-          inviteUrl: 'https://example.com/invite',
-          matchSummary: 'Custom summary',
+          inviteUrl: '',
+          matchSummary: FRIEND_INVITE_MATCH_SUMMARY,
         },
       },
     ]);
+  });
+
+  it('keeps the fixed invite summary equal to the client constant', async () => {
+    const clientSource = readFileSync(
+      fileURLToPath(new URL('../../../client/src/multiplayer/friendChallenge.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(clientSource).toContain(`FRIEND_CHALLENGE_MATCH_SUMMARY = '${FRIEND_INVITE_MATCH_SUMMARY}'`);
+  });
+
+  it('does not deliver an invite across a block, answering like an unreachable friend', async () => {
+    const room = createRoom('seat-host');
+    const { socket, handlers } = makeSocket(USER_A, 'Alice');
+    setRoomRoster(room.code, [{ id: 'seat-host', socketId: socket.id, username: 'Alice', userId: USER_A }]);
+    const { io, delivered } = makeIo();
+    const socketsByUserId = new Map([[USER_B, new Set(['sock-target'])]]);
+    blockStatusMock.mockResolvedValue('blocked');
+
+    registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
+
+    const ack = vi.fn();
+    await handlers.get('friend:invite')?.({ toUserId: USER_B, roomCode: room.code, inviteId: 'invite-x' }, ack);
+
+    expect(blockStatusMock).toHaveBeenCalledWith(USER_A, USER_B, 'friend:invite');
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'recipient_unreachable' });
+    expect(delivered.size).toBe(0);
+  });
+
+  it('fails closed: unreadable block state delivers nothing and answers with a generic retry code', async () => {
+    const room = createRoom('seat-host');
+    const { socket, handlers } = makeSocket(USER_A, 'Alice');
+    setRoomRoster(room.code, [{ id: 'seat-host', socketId: socket.id, username: 'Alice', userId: USER_A }]);
+    const { io, delivered } = makeIo();
+    const socketsByUserId = new Map([[USER_B, new Set(['sock-target'])]]);
+    blockStatusMock.mockResolvedValue('unknown');
+
+    registerFriendInviteHandlers(io, socket, socketsByUserId, deps);
+
+    const ack = vi.fn();
+    await handlers.get('friend:invite')?.({ toUserId: USER_B, roomCode: room.code, inviteId: 'invite-y' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'invite_unavailable' });
+    expect(delivered.size).toBe(0);
   });
 });

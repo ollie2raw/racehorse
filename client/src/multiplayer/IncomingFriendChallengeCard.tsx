@@ -14,7 +14,8 @@ export default function IncomingFriendChallengeCard({
   onAccept,
   onDecline,
 }: IncomingFriendChallengeCardProps) {
-  const summary = invite.matchSummary || FRIEND_CHALLENGE_MATCH_SUMMARY;
+  // Always the app's own text, never what arrived on the wire.
+  const summary = FRIEND_CHALLENGE_MATCH_SUMMARY;
   const initials = invite.fromUsername.slice(0, 2).toUpperCase();
 
   return (

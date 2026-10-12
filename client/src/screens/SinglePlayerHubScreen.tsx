@@ -7,12 +7,15 @@ import { GlobalNav } from "../components";
 import { Button } from "../components/primitives";
 import { useSinglePlayerHubStats, type HubStatRow } from "./useSinglePlayerHubStats";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
+import { hidesComingSoonSurfaces } from "../config/nativeAppSurface";
 
 interface SinglePlayerHubScreenProps {
   userId?: string | null;
   /** Journey is gated to the admin account while it's reworked — everyone
       else sees the card grayed out with "Coming Soon" and can't open it. */
   isAdmin?: boolean;
+  /** Leave out the locked Journey card (iOS app). Defaults to the platform policy. */
+  hideComingSoon?: boolean;
   onBack: () => void;
   onNavigate: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -142,12 +145,16 @@ function statsForMode(
 export default function SinglePlayerHubScreen({
   userId = null,
   isAdmin = false,
+  hideComingSoon = hidesComingSoonSurfaces(),
   onBack,
   onNavigate,
   onOpenAuth,
   onSignOut,
 }: SinglePlayerHubScreenProps) {
   const hubStats = useSinglePlayerHubStats(userId);
+  // Journey is still coming soon for everyone but admins. The website shows it
+  // locked; the iOS app leaves the card out (nativeAppSurface.ts).
+  const visibleModes = MODES.filter((mode) => !(mode.key === "journey" && !isAdmin && hideComingSoon));
   const loadFritzArt = useCallback(
     () => import("../assets/singlePlayerHub/fritzwave1.webp"),
     [],
@@ -224,8 +231,8 @@ export default function SinglePlayerHubScreen({
           </div>
 
           <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-5 px-14 sp-solo-content">
-            <div className="sp-solo-grid sp-solo-grid--trio items-stretch gap-5">
-            {MODES.map((mode) => {
+            <div className={`sp-solo-grid sp-solo-grid--trio items-stretch gap-5${visibleModes.length === 2 ? " sp-solo-grid--pair" : ""}`}>
+            {visibleModes.map((mode) => {
               const isLocked = mode.key === "journey" && !isAdmin;
               return (
               <section

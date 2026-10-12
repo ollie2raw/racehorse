@@ -98,3 +98,33 @@ describe('findPairs', () => {
     expect(allIds).toEqual(['a', 'b', 'c', 'd']);
   });
 });
+
+describe('findPairs — blocks', () => {
+  it('never pairs players who blocked each other, in either direction', () => {
+    const now = Date.now();
+    const a = p('a', 1500, 70, { blockedUserIds: new Set(['user-b']) });
+    const b = p('b', 1500, 70);
+    expect(findPairs([a, b], now)).toEqual([]);
+
+    const c = p('c', 1500, 70);
+    const d = p('d', 1500, 70, { blockedUserIds: new Set(['user-c']) });
+    expect(findPairs([c, d], now)).toEqual([]);
+  });
+
+  it('pairs a blocked player with someone else instead', () => {
+    const now = Date.now();
+    const a = p('a', 1500, 70, { blockedUserIds: new Set(['user-b']) });
+    const b = p('b', 1500, 60);
+    const c = p('c', 1700, 50);
+    const pairs = findPairs([a, b, c], now);
+    expect(pairs).toHaveLength(1);
+    expect(new Set([pairs[0].a.socketId, pairs[0].b.socketId])).toEqual(new Set(['a', 'c']));
+  });
+
+  it('unrelated players still pair normally', () => {
+    const now = Date.now();
+    const a = p('a', 1500, 10, { blockedUserIds: new Set(['user-zzz']) });
+    const b = p('b', 1510, 10);
+    expect(findPairs([a, b], now)).toHaveLength(1);
+  });
+});

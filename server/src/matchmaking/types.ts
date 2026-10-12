@@ -8,6 +8,12 @@ export type QueuedPlayer = {
   rating: number;        // glicko_rating snapshot at join time
   joinedAtMs: number;
   isSim: boolean;
+  /**
+   * Accounts on the other side of a block with this player (either direction),
+   * snapshotted at queue:join. `findPairs` never pairs across it. Blocks made
+   * while already queued apply from the next search.
+   */
+  blockedUserIds?: ReadonlySet<string>;
 };
 
 export type MatchedPair = {

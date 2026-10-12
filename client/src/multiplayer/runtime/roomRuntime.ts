@@ -1,7 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState } from '../../types';
-import type { RoomChatEvent, RoomEmoteEvent, RoomIdentity, RoomPlayer, RoomRecoveryState } from '../protocol';
+import type { RoomEmoteEvent, RoomIdentity, RoomPlayer, RoomRecoveryState } from '../protocol';
 import type { PrivateRoomCreateSettings, RoomAckResponse } from '../roomTransport';
 import type { FriendInviteState } from './friendInviteRuntime';
 
@@ -28,7 +28,7 @@ export type MultiplayerJoinFlightRuntime = {
 
 /** Ref bridge so App-level connection handlers can append/clear lobby-owned room reactions. */
 export type MultiplayerRoomSocialRuntime = {
-  appendRoomReactionRef: MutableRefObject<(item: RoomChatEvent | RoomEmoteEvent) => void>;
+  appendRoomReactionRef: MutableRefObject<(item: RoomEmoteEvent) => void>;
   clearRoomReactionsRef: MutableRefObject<() => void>;
 };
 

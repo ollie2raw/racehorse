@@ -81,6 +81,18 @@ server, and either server can run on either schema, while the flag is off.
    Phase 4A report): never enable tournaments on a `main` build from before
    this branch.
 4. **`prod-preflight.sql` P6 `stale_backlog_rows`** is drained (see stage 3).
+5. **Decide how player blocks apply to tournaments, then implement and test
+   it.** Blocks (`user_blocks`, `server/src/moderation/`) are enforced for
+   friend requests, invites, Quick Match and new private-room seats, but **not**
+   for tournament bracket assignments or tournament-room reactions. Before
+   `TOURNAMENTS_ENABLED` is turned on publicly, pick one and ship it:
+   - **A.** Blocked humans are never bracket-paired (seeding/re-pairing
+     changes in the bracket engine), or
+   - **B.** Assigned opponents still play, but every social interaction
+     between the blocked pair is suppressed in tournament rooms (reactions,
+     friend/rematch prompts, profile links).
+
+   Do not enable tournaments with the semantics left implicit.
 
 ## Stage 0 — read-only preflight (owner)
 

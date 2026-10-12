@@ -1,7 +1,8 @@
 import type { RefObject } from 'react';
 import type { BoardHandle } from '../components';
 import type { MoveEntry } from '../game/moveLogger';
-import type { RoomChatEvent, RoomEmoteEvent } from '../multiplayer/protocol';
+import type { RoomEmoteEvent } from '../multiplayer/protocol';
+import type { RoomReactionEmote } from '../multiplayer/roomReactionEmotes';
 import type { PreGameDrawState } from './preGameDraw/preGameDrawLogic';
 import type { TournamentMatchContext } from './session/useTournamentMatchSession';
 import type { GameState, Move, PlacementPosition, Tile } from '../types';
@@ -93,9 +94,8 @@ export type LiveMatchScreenHandProps = {
 export type LiveMatchScreenChromeProps = {
   scoreTrackOpen: boolean;
   onScoreTrackOpenChange: (open: boolean) => void;
-  roomReactions: Array<RoomChatEvent | RoomEmoteEvent>;
-  onSendRoomChat: (message: string) => void;
-  onSendRoomEmote: (emote: RoomEmoteEvent['emote']) => void;
+  roomReactions: Array<RoomEmoteEvent>;
+  onSendRoomEmote: (emote: RoomReactionEmote) => void;
   isMuted: boolean;
   onToggleMute: () => void;
   isFullscreen: boolean;
