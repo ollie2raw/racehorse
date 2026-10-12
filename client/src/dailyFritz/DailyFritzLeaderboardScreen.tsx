@@ -8,6 +8,8 @@ import { fetchFriends } from '../friends/friendsApi';
 import FilterPills from '../social/hub/FilterPills';
 import { avatarHue, getInitials } from '../components/hub/playerInitialsAvatarUtils';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { useAuth } from '../auth/useAuth';
+import { Button } from '../components/primitives';
 import {
   fetchDailyFritzLeaderboard,
   getTodayDailyFritz,
@@ -226,10 +228,17 @@ export default function DailyFritzLeaderboardScreen({
   glickoRating = null,
   onBack,
   onNavigate,
+  onOpenAuth,
 }: DailyFritzLeaderboardScreenProps) {
+  // The leaderboard API requires a signed-in player. Signed out, ask the player
+  // to sign in instead of calling it and showing its 401 as a load failure.
+  // While the session is still restoring, show loading rather than a prompt.
+  const { loading: authLoading } = useAuth();
+  const signedIn = Boolean(user);
+  const signInRequired = !signedIn && !authLoading;
   // The hand-rolled version deliberately swallowed the real error and always
   // showed this one string — keep that by rethrowing a fixed-message Error.
-  const { data: rowsData, loading, error } = useAsyncData<DailyFritzLeaderboardRow[]>(
+  const { data: rowsData, loading: rowsLoading, error } = useAsyncData<DailyFritzLeaderboardRow[]>(
     async () => {
       try {
         return await fetchDailyFritzLeaderboard(runDate);
@@ -237,8 +246,10 @@ export default function DailyFritzLeaderboardScreen({
         throw new Error('Couldn’t load the leaderboard. Please try again.');
       }
     },
-    [runDate],
+    [runDate, user?.id],
+    { enabled: signedIn },
   );
+  const loading = rowsLoading || (!signedIn && authLoading);
   const rows = useMemo(() => rowsData ?? [], [rowsData]);
   const [filter, setFilter] = useState<LeaderboardFilter>('global');
   const [friendUsernames, setFriendUsernames] = useState<Set<string>>(new Set());
@@ -487,12 +498,22 @@ export default function DailyFritzLeaderboardScreen({
 
                   <div className="dfl-tbody">
                     {loading ? <p className="dfl-state">Loading leaderboard…</p> : null}
-                    {!loading && error ? (
+                    {signInRequired ? (
+                      <div className="dfl-state">
+                        <p style={{ margin: 0 }}>Sign in to view the Daily Fritz leaderboard.</p>
+                        {onOpenAuth ? (
+                          <Button variant="tier-elite" className="dfl-state__action" onClick={onOpenAuth}>
+                            Sign in
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {!loading && !signInRequired && error ? (
                       <p className="dfl-state dfl-state--error" role="alert">
                         Couldn&apos;t load the leaderboard. Please try again.
                       </p>
                     ) : null}
-                    {!loading && !error && filteredRows.length === 0 ? (
+                    {!loading && !signInRequired && !error && filteredRows.length === 0 ? (
                       <div className="dfl-state">
                         <p style={{ margin: 0 }}>No runs match this filter yet.</p>
                         <p className="dfl-state__hint">
@@ -500,7 +521,7 @@ export default function DailyFritzLeaderboardScreen({
                         </p>
                       </div>
                     ) : null}
-                    {!loading && !error
+                    {!loading && !signInRequired && !error
                       ? filteredRows.map((row) => (
                           <LeaderboardRow
                             key={`${row.rank}-${row.username}-${row.completedAt}`}

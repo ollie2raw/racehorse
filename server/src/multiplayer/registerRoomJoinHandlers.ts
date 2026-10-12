@@ -1,13 +1,10 @@
 import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
-import { getRoom, getRoomMatchEventMeta } from '../rooms';
-import { isBlockedPairOrFalse } from '../moderation/blockStore';
-import { roomKind } from './roomKind';
+import { getRoomMatchEventMeta } from '../rooms';
 import {
   type AckFn,
   type RoomJoinConfig,
   type RoomSessionHandlerDeps,
-  getRoomRoster,
 } from './roomSession';
 import type { AttachSocketToTrackedRoomFn } from './roomSocketAttach';
 import { MatchTerminalJoinError } from './matchTerminalJoin';
@@ -20,40 +17,6 @@ export type RegisterRoomJoinHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
   attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn;
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/**
- * Blocks apply to private rooms: someone who knows a room code can't take the
- * empty seat opposite a player who blocked them (or whom they blocked).
- *
- * Scoped narrowly so room flows stay as they are:
- *  - private rooms only (Quick Match pairs never cross a block; tournament
- *    seats are assigned by the bracket and aren't refused here);
- *  - only a new joiner. A player who already holds a seat (reconnect, resync)
- *    is never refused, even if a block was made mid-match;
- *  - signed-in joiners only (guests have no account to block);
- *  - in-memory rooms only. A room not loaded in this process (e.g. just after a
- *    restart, before rehydration) is not checked;
- *  - fail-open: a failed block lookup lets the join through.
- */
-async function isJoinBlockedByRoomMember(roomCode: string, userId: string | null | undefined): Promise<boolean> {
-  if (!userId || !UUID_RE.test(userId)) return false;
-  let room: ReturnType<typeof getRoom>;
-  try {
-    room = getRoom(roomCode);
-  } catch {
-    return false;
-  }
-  if (roomKind(room) !== 'private') return false;
-  const roster = getRoomRoster(roomCode);
-  if (roster.some((player) => player.userId === userId)) return false;
-  for (const player of roster) {
-    if (!player.userId || player.userId === userId || !UUID_RE.test(player.userId)) continue;
-    if (await isBlockedPairOrFalse(userId, player.userId, 'room:join')) return true;
-  }
-  return false;
-}
 
 export function registerRoomJoinHandlers(
   _io: Server,
@@ -89,12 +52,6 @@ export function registerRoomJoinHandlers(
     try {
       const { username, userId } = await handlerDeps.resolveSocketIdentity(config);
       log.info(`[room:join] identity user=${username} (${userId})`);
-      if (await isJoinBlockedByRoomMember(roomCode, userId)) {
-        log.info({ roomCode }, '[room:join] refused: block between joiner and a seated player');
-        // Same answer as a wrong code, so the joiner can't tell they were blocked.
-        cb?.({ ok: false, error: 'Room not found.' });
-        return;
-      }
       const attached = await attachSocketToTrackedRoom({
         roomCode,
         username,

@@ -9,9 +9,11 @@ const USER_B = '22222222-2222-4222-8222-222222222222';
 const USER_C = '33333333-3333-4333-8333-333333333333';
 
 let blockRows: Array<{ blocker_user_id: string; blocked_user_id: string }> = [];
+let blockLookupFails = false;
 const supabaseFetchMock = vi.fn(async (path: string) => {
   if (path.startsWith('/rest/v1/profiles')) return [{ glicko_rating: 1500 }];
   if (path.startsWith('/rest/v1/user_blocks')) {
+    if (blockLookupFails) throw new Error('Supabase request failed: 503');
     const id = decodeURIComponent(path).match(/blocker_user_id\.eq\.([0-9a-f-]{36})/)?.[1];
     return blockRows.filter((r) => r.blocker_user_id === id || r.blocked_user_id === id);
   }
@@ -54,6 +56,7 @@ describe('queue:join — blocks', () => {
   afterEach(() => {
     resetMatchmakingRuntimeForTests();
     blockRows = [];
+    blockLookupFails = false;
   });
 
   it('two players who blocked each other both queue and stay unpaired', async () => {
@@ -79,5 +82,20 @@ describe('queue:join — blocks', () => {
     const remaining = getMatchmakingQueueServiceForTests()!.list().map((p) => p.userId);
     expect(remaining).toHaveLength(1);
     expect([USER_A, USER_B]).toContain(remaining[0]);
+  });
+
+  it('fails closed: a player whose blocks cannot be read is not queued (no pairing, no retry loop)', async () => {
+    await join(makeSocket('sc', USER_C));
+    blockLookupFails = true;
+
+    const ack = await join(makeSocket('sa', USER_A));
+
+    expect(ack).toMatchObject({ ok: false, error: 'queue_unavailable' });
+    expect(getMatchmakingQueueServiceForTests()!.list().map((p) => p.userId)).toEqual([USER_C]);
+
+    // Once lookups work again the same player can search and is paired.
+    blockLookupFails = false;
+    expect((await join(makeSocket('sa2', USER_A))).ok).toBe(true);
+    expect(getMatchmakingQueueServiceForTests()!.list()).toHaveLength(0);
   });
 });

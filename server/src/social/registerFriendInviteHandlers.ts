@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { getRoom } from '../rooms';
 import { getRoomRoster } from '../multiplayer/roomSession';
-import { isBlockedPairOrFalse } from '../moderation/blockStore';
+import { blockStatus } from '../moderation/blockStore';
 
 type AckFn = (payload: unknown) => void;
 
@@ -65,10 +65,17 @@ export function registerFriendInviteHandlers(
       return;
     }
 
-    // A block in either direction: answered exactly like an offline friend, so
-    // the inviter can't tell they were blocked.
-    if (await isBlockedPairOrFalse(inviterUserId!, toUserId, 'friend:invite')) {
+    // A block in either direction is answered exactly like an offline friend,
+    // so the inviter can't tell they were blocked. If block state can't be
+    // read the invite is not delivered either (fail closed), with a generic
+    // retry code that doesn't mention moderation.
+    const status = await blockStatus(inviterUserId!, toUserId, 'friend:invite');
+    if (status === 'blocked') {
       cb?.({ ok: false, error: 'recipient_unreachable' });
+      return;
+    }
+    if (status === 'unknown') {
+      cb?.({ ok: false, error: 'invite_unavailable' });
       return;
     }
 

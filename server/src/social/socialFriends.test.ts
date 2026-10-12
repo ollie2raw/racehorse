@@ -138,4 +138,20 @@ describe('blocking — friend requests', () => {
     expect(res.statusCode).toBe(200);
     expect(mockFetch.mock.calls.at(-1)?.[0]).toBe('/rest/v1/friends');
   });
+
+  it('fails closed: when block state cannot be read, nothing is inserted and the reply is generic', async () => {
+    const handler = routes.get('POST /friends/request/:userId')!;
+    mockFetch.mockResolvedValueOnce([]); // existing-pair check
+    mockFetch.mockRejectedValueOnce(new Error('Supabase request failed: 503 upstream down')); // block check
+
+    const res = makeRes();
+    await handler({ params: { userId: 'user-b' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(503);
+    const message = (res.body as { error: string }).error;
+    expect(message).toMatch(/unavailable/i);
+    expect(message).not.toMatch(/block|supabase|503/i);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as { method?: string } | undefined)?.method ?? 'GET');
+    expect(methods).not.toContain('POST');
+  });
 });

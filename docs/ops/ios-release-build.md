@@ -94,9 +94,20 @@ Then in Xcode: bump **Build** (Target → General), select **Any iOS Device
   "discard client IP data" is on in the PostHog project), crash data,
   performance data and other diagnostic data (app functionality; Sentry).
 
-The App Store Connect "App Privacy" answers must match this list. If the
-PostHog IP setting is confirmed off-collection, remove Coarse Location from
-both.
+The App Store Connect "App Privacy" answers must match this list.
+
+**Owner decision before the final App Store archive: coarse location.**
+
+1. Open the PostHog project settings and check whether client IP data is
+   discarded (and so no GeoIP location is derived).
+2. If IP/GeoIP processing is still on, **keep** Coarse Location in the
+   manifest and declare it in App Privacy (Analytics, linked, not tracking).
+3. Only if IP discard is on **and** no other processor derives location from
+   the app's traffic (check Sentry's IP setting too), re-evaluate: remove Coarse
+   Location from both the manifest and the App Privacy answers together.
+
+Never under-declare to make the privacy label smaller; the manifest and the
+App Privacy answers must always say the same thing.
 
 ## Native-only presentation
 

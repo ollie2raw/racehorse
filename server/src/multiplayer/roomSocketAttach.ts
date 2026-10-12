@@ -1,3 +1,4 @@
+import { shouldRefuseNewPrivateSeat } from '../moderation/privateRoomSeatBlocks';
 import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
@@ -545,6 +546,12 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         assertRoomDurabilityOperationAllowed(existingRoom, 'join_new_player', {
           attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
         });
+        // A new seat only: refused across a block (or if block state can't be
+        // read), with the same answer as a wrong code. See privateRoomSeatBlocks.ts.
+        if (await shouldRefuseNewPrivateSeat(existingRoom, roster, userId)) {
+          log.info({ roomCode, via }, 'new seat refused: block between joiner and a seated player');
+          throw new Error('Room not found.');
+        }
         joinedPlayerSeatId = allocatePlayerSeatId();
         room = joinRoom(roomCode, joinedPlayerSeatId);
       }

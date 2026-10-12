@@ -10,6 +10,7 @@ import {
 // `?raw` rather than node:fs: the app project has no node types (see
 // puzzleRush/dailyPuzzleIsRush.test.ts).
 import migration from '../../../supabase/migrations/2026-10-12_username_policy.sql?raw';
+import preflight from '../../../docs/ops/moderation-rollout/preflight.sql?raw';
 
 /** The quoted strings of the n-th `array[ ... ]` literal inside username_policy_violation. */
 function sqlArray(index: number): string[] {
@@ -27,6 +28,18 @@ describe('username policy — client mirrors the database exactly', () => {
     expect(sqlArray(1)).toEqual([...RESERVED_USERNAME_PREFIXES]);
     expect(sqlArray(2)).toEqual([...PROHIBITED_SLUR_TERMS]);
     expect(sqlArray(3)).toEqual([...PROHIBITED_PROFANITY_TERMS]);
+  });
+});
+
+describe('production preflight', () => {
+  it('checks existing names with an exact copy of the migration policy (pg_temp)', () => {
+    const body = (sql: string, schema: string) => {
+      const start = sql.indexOf(`create or replace function ${schema}.username_policy_violation(candidate text)`);
+      const end = sql.indexOf('$$;', start);
+      expect(start).toBeGreaterThan(-1);
+      return sql.slice(sql.indexOf('returns text', start), end);
+    };
+    expect(body(preflight, 'pg_temp')).toBe(body(migration, 'public'));
   });
 });
 

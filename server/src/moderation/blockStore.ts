@@ -41,27 +41,35 @@ export async function isBlockedPair(a: string, b: string): Promise<boolean> {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+/** Result of a block check that may fail: `unknown` means the lookup failed. */
+export type BlockStatus = 'blocked' | 'clear' | 'unknown';
+
 /**
- * Enforcement-path variant: a failed lookup lets the action through rather than
- * breaking invites, joins or matchmaking for everyone during a database blip.
- * Blocking is a courtesy barrier here, not an authorization boundary.
+ * Enforcement-path check. NEW user-to-user interactions (friend requests,
+ * invites, Quick Match pairing, new private-room seats) fail CLOSED: callers
+ * treat `unknown` exactly like `blocked` and refuse, with a generic outward
+ * response that reveals neither a block nor an internal failure.
+ *
+ * Restoring an existing, already-authorised game state (a player reclaiming
+ * the seat they hold) never consults blocks, so a moderation outage can't
+ * strand anyone mid-match.
  */
-export async function isBlockedPairOrFalse(a: string, b: string, context: string): Promise<boolean> {
+export async function blockStatus(a: string, b: string, context: string): Promise<BlockStatus> {
   try {
-    return await isBlockedPair(a, b);
+    return (await isBlockedPair(a, b)) ? 'blocked' : 'clear';
   } catch (err) {
-    log.warn({ err: err instanceof Error ? err.message : err, context }, 'block lookup failed; allowing');
-    return false;
+    log.warn({ err: err instanceof Error ? err.message : err, context }, 'block lookup failed; refusing');
+    return 'unknown';
   }
 }
 
-/** Same fail-open rule as `isBlockedPairOrFalse`, for the matchmaking join. */
-export async function listBlockCounterpartiesOrEmpty(userId: string, context: string): Promise<Set<string>> {
+/** Fail-closed list for the matchmaking join: null when the lookup failed. */
+export async function listBlockCounterpartiesOrNull(userId: string, context: string): Promise<Set<string> | null> {
   try {
     return await listBlockCounterparties(userId);
   } catch (err) {
-    log.warn({ err: err instanceof Error ? err.message : err, context }, 'block list lookup failed; allowing');
-    return new Set();
+    log.warn({ err: err instanceof Error ? err.message : err, context }, 'block list lookup failed; refusing');
+    return null;
   }
 }
 

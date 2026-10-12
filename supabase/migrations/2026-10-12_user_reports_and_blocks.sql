@@ -13,6 +13,11 @@
 -- Reports hold no free text and no email: a fixed category and the app
 -- surface it came from.
 --
+-- Friend requests are created by the client directly in public.friends (RLS
+-- friends_insert_own), not only through the server, so the block rule for
+-- them lives here: a trigger refuses a request or acceptance between a
+-- blocked pair, whichever path wrote it.
+--
 -- NOT YET APPLIED TO PRODUCTION. Apply to dev first; production is an owner
 -- step after review.
 
@@ -59,3 +64,35 @@ comment on table public.user_reports is
   'Player reports (fixed categories, no free text). Service role only; reviewed by the owner.';
 comment on table public.user_blocks is
   'Player blocks. Service role only; enforced by the game server for friends, invites, Quick Match and private rooms.';
+
+-- Friend requests / acceptances never cross a block, in either direction.
+-- SECURITY DEFINER so it can read user_blocks (which clients cannot); it only
+-- runs as a trigger. The error code is deliberately neutral.
+create or replace function public.friends_refuse_blocked_pair()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if tg_op = 'UPDATE' and not (new.status = 'accepted' and old.status is distinct from 'accepted') then
+    return new;
+  end if;
+  if exists (
+    select 1 from public.user_blocks b
+     where (b.blocker_user_id = new.user_id and b.blocked_user_id = new.friend_user_id)
+        or (b.blocker_user_id = new.friend_user_id and b.blocked_user_id = new.user_id)
+  ) then
+    raise exception 'friend_request_unavailable' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.friends_refuse_blocked_pair() from public, anon, authenticated;
+
+drop trigger if exists friends_refuse_blocked_pair on public.friends;
+create trigger friends_refuse_blocked_pair
+  before insert or update of status on public.friends
+  for each row execute procedure public.friends_refuse_blocked_pair();
+

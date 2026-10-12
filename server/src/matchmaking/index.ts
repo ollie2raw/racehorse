@@ -2,7 +2,7 @@ import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import * as rooms from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
-import { listBlockCounterpartiesOrEmpty } from '../moderation/blockStore';
+import { listBlockCounterpartiesOrNull } from '../moderation/blockStore';
 import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
@@ -140,16 +140,23 @@ export function registerMatchmakingHandlers(
       }
       pendingJoins.add(identity.userId);
       let rating: number;
-      let blockedUserIds: ReadonlySet<string> | undefined;
+      let blockedUserIds: ReadonlySet<string> | null | undefined;
       try {
         [rating, blockedUserIds] = identity.authenticated
           ? await Promise.all([
               fetchPlayerRating(identity.userId),
-              listBlockCounterpartiesOrEmpty(identity.userId, 'queue:join'),
+              listBlockCounterpartiesOrNull(identity.userId, 'queue:join'),
             ])
           : [DEFAULT_RATING, undefined];
       } finally {
         pendingJoins.delete(identity.userId);
+      }
+      // Fail closed: a signed-in player whose blocks can't be read is not
+      // queued at all (nothing to deadlock or retry in a loop); the client
+      // shows a generic try-again and the player can search again.
+      if (blockedUserIds === null) {
+        ack?.({ ok: false, error: 'queue_unavailable', online: getOnlineCount(io), queued: service.size() });
+        return;
       }
       const result = service.join({
         socketId: socket.id,

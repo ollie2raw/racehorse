@@ -32,6 +32,11 @@ const FRIENDS_CACHE_TTL_MS = 15_000;
 
 function normalizeDbError(message: string): string {
   const normalized = message.toLowerCase();
+  // The database refuses requests between a blocked pair (either direction).
+  // Same wording whichever side blocked, so nobody learns they were blocked.
+  if (normalized.includes('friend_request_unavailable')) {
+    return 'You can’t send a friend request to this player.';
+  }
   if (
     normalized.includes('relation') ||
     normalized.includes('does not exist') ||

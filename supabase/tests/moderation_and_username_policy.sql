@@ -49,6 +49,28 @@ end $$;
 -- Rename: an ordinary new handle is accepted.
 update public.profiles set username = 'mt_renamed_ok' where id = 'a1a1a1a1-0000-4000-8000-000000000001';
 
+-- The deployed (pre-5A) client renames by PATCHing its own profile under RLS
+-- as the signed-in user. Allowed names still work; denied names are refused
+-- by the trigger, not silently stored.
+do $$
+begin
+  perform set_config('request.jwt.claims', '{"sub":"a4a4a4a4-0000-4000-8000-000000000004","role":"authenticated"}', true);
+  set local role authenticated;
+  update public.profiles set username = 'mt_client_rename' where id = 'a4a4a4a4-0000-4000-8000-000000000004';
+  if not found then raise exception 'client rename under RLS updated no row'; end if;
+  begin
+    update public.profiles set username = 'racehorse_help' where id = 'a4a4a4a4-0000-4000-8000-000000000004';
+    raise exception 'client rename to a reserved name was allowed';
+  exception when check_violation then
+    if sqlerrm <> 'username_not_allowed' then raise; end if;
+  end;
+end $$;
+reset role;
+
+-- Stats writes from the existing glicko RPC never touch the username trigger.
+update public.profiles set glicko_rating = coalesce(glicko_rating, 1500)
+ where id = 'a1a1a1a1-0000-4000-8000-000000000001';
+
 -- Existing rows are unaffected: a legacy name the policy would reject can still
 -- receive writes to other columns.
 alter table public.profiles disable trigger profiles_username_policy;
@@ -107,6 +129,37 @@ begin
   exception when unique_violation then null;
   end;
 end $$;
+
+-- Friend requests never cross a block, whichever path writes them: directly
+-- as the signed-in client under RLS (how the app sends them), or as the
+-- server's service role. An unrelated pair still works.
+do $$
+begin
+  begin
+    perform set_config('request.jwt.claims', '{"sub":"a1a1a1a1-0000-4000-8000-000000000001","role":"authenticated"}', true);
+    set local role authenticated;
+    insert into public.friends (user_id, friend_user_id, status)
+    values ('a1a1a1a1-0000-4000-8000-000000000001', 'a2a2a2a2-0000-4000-8000-000000000002', 'pending');
+    raise exception 'client friend request across a block was allowed';
+  exception when insufficient_privilege then
+    if sqlerrm <> 'friend_request_unavailable' then raise; end if;
+  end;
+end $$;
+reset role;
+
+do $$
+begin
+  begin
+    insert into public.friends (user_id, friend_user_id, status)
+    values ('a2a2a2a2-0000-4000-8000-000000000002', 'a1a1a1a1-0000-4000-8000-000000000001', 'pending');
+    raise exception 'reverse-direction friend request across a block was allowed';
+  exception when insufficient_privilege then
+    if sqlerrm <> 'friend_request_unavailable' then raise; end if;
+  end;
+end $$;
+
+insert into public.friends (user_id, friend_user_id, status)
+values ('a1a1a1a1-0000-4000-8000-000000000001', 'a4a4a4a4-0000-4000-8000-000000000004', 'pending');
 
 -- Privacy: server-only tables. RLS on, no client privileges, no policies.
 do $$

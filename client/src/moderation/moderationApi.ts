@@ -14,10 +14,13 @@ export async function reportUser(input: {
   return { error: error ?? null };
 }
 
-/** Ids of players you have blocked. Empty when signed out or on failure. */
-export async function fetchBlockedUserIds(): Promise<string[]> {
+/**
+ * Ids of players you have blocked, or null if they couldn't be loaded.
+ * Callers must treat null as "unknown" and fail closed (never as "none").
+ */
+export async function fetchBlockedUserIds(): Promise<string[] | null> {
   const { data, error } = await apiGet<{ ok?: boolean; blockedUserIds?: string[] }>('/api/moderation/blocks');
-  if (error || !Array.isArray(data?.blockedUserIds)) return [];
+  if (error || !Array.isArray(data?.blockedUserIds)) return null;
   return data.blockedUserIds.filter((id): id is string => typeof id === 'string');
 }
 

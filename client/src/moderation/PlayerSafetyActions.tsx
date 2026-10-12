@@ -27,7 +27,8 @@ export function PlayerSafetyActions({ subjectUserId, subjectUsername, onToast, o
   useEffect(() => {
     let cancelled = false;
     void fetchBlockedUserIds().then((ids) => {
-      if (cancelled) return;
+      // Unknown block state: keep Block/Unblock hidden rather than guess.
+      if (cancelled || ids === null) return;
       const isBlocked = ids.includes(subjectUserId);
       setBlocked(isBlocked);
       onBlockedChange?.(isBlocked);

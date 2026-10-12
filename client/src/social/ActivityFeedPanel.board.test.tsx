@@ -11,6 +11,10 @@ vi.mock('./socialApi', async (importActual) => ({
   fetchGlobalActivityFeed: () => fetchGlobalActivityFeed(),
 }));
 
+// No blocks: this file is about the board table, not blocking
+// (ActivityFeedPanel.blocks.test.tsx covers that).
+vi.mock('../moderation/moderationApi', () => ({ fetchBlockedUserIds: async () => [] }));
+
 const { default: ActivityFeedPanel } = await import('./ActivityFeedPanel');
 
 function item(overrides: Partial<FeedItem> = {}): FeedItem {
