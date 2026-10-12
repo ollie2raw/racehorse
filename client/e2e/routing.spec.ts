@@ -154,11 +154,18 @@ test.describe('browser routing', () => {
 
   test('Social opens the global rating leaderboard', async ({ page }) => {
     // The leaderboard needs an account (its API requires auth); since #347
-    // signed-out visitors are offered Sign In there instead (next test).
+    // signed-out visitors are offered Sign In there instead (next test). The
+    // dev e2e principal signs in on the client only, so the API is stubbed:
+    // a real server rejects that bearer with 401, which opens the session-
+    // expired sign-in dialog over the page. This test is about navigation.
     await page.addInitScript(() => {
       window.localStorage.setItem('racehorse_e2e_user_id', '00000000-0000-4000-8000-00000000e2e5');
       window.localStorage.setItem('racehorse_e2e_bearer', 'e2e-daily-fritz');
     });
+    await page.route((url) => url.pathname.startsWith('/api/'), (route) =>
+      new URL(route.request().url()).pathname.startsWith('/api/social/')
+        ? route.fulfill({ json: { ok: true, feed: [], friends: [], leaderboard: [], self: null, rivals: [] } })
+        : route.fulfill({ status: 404, json: { ok: false, error: 'not_found' } }));
     await page.goto('/social');
     await page.getByRole('button', { name: 'View Leaderboard' }).click();
 
