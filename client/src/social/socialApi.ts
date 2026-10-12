@@ -24,6 +24,7 @@ type CacheEntry<T> = {
 
 const friendsWithPresenceCache = new Map<string, CacheEntry<{ friends: FriendWithPresence[]; error: string | null }>>();
 const activityFeedCache = new Map<string, CacheEntry<{ feed: FeedItem[]; error: string | null }>>();
+const globalActivityFeedCache = new Map<string, CacheEntry<{ feed: FeedItem[]; error: string | null }>>();
 const userActivityCache = new Map<string, CacheEntry<{ feed: FeedItem[]; error: string | null }>>();
 const globalLeaderboardCache = new Map<
   string,
@@ -34,6 +35,7 @@ const rivalsCache = new Map<string, CacheEntry<{ rivals: RivalEntry[]; error: st
 
 const friendsWithPresenceInFlight = new Map<string, Promise<{ friends: FriendWithPresence[]; error: string | null }>>();
 const activityFeedInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
+const globalActivityFeedInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
 const userActivityInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
 const globalLeaderboardInFlight = new Map<
   string,
@@ -259,6 +261,23 @@ export async function fetchActivityFeed(): Promise<{ feed: FeedItem[]; error: st
     load: async () => {
       try {
         const data = await apiGetOrThrow<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed');
+        return { feed: data.feed, error: null };
+      } catch (err) {
+        return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };
+      }
+    },
+  });
+}
+
+export async function fetchGlobalActivityFeed(): Promise<{ feed: FeedItem[]; error: string | null }> {
+  return withCachedRequest({
+    cache: globalActivityFeedCache,
+    inFlight: globalActivityFeedInFlight,
+    cacheKey: 'global-activity-feed',
+    ttlMs: ACTIVITY_FEED_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiGetOrThrow<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed/global');
         return { feed: data.feed, error: null };
       } catch (err) {
         return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };

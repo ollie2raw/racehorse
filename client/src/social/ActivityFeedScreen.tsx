@@ -7,7 +7,6 @@ import {
   SideRailCard,
 } from '../components/hub';
 import SocialPageHero, { type SocialHeroStat } from './SocialPageHero';
-import { secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import type { OutboundChallenge, SendFriendChallengeResult } from '../multiplayer/friendChallenge';
 import { useFriendChallenge } from '../multiplayer/useFriendChallenge';
 import { useFriendSocketReachability } from '../multiplayer/useFriendSocketReachability';
@@ -68,12 +67,6 @@ function tournamentTitle(item: FeedItem): string {
 
 function tournamentPlacement(item: FeedItem): string {
   return String(item.metadata.placement ?? 'Placement posted');
-}
-
-function formatWeeklyReset(totalSeconds: number): string {
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  return `Resets in ${days}d ${hours}h`;
 }
 
 function friendsEqual(a: FriendWithPresence[], b: FriendWithPresence[]): boolean {
@@ -149,6 +142,7 @@ export default function ActivityFeedScreen({
   const [trendingPlayers, setTrendingPlayers] = useState<
     { rank: number; username: string; rating: number; delta: string }[]
   >([]);
+  const visibleFeedFilter = user ? feedFilter : 'all';
 
   // Keyed on the id, not the user object: Supabase hands back a fresh User on
   // every token refresh, and depending on the object refetched each time.
@@ -181,11 +175,6 @@ export default function ActivityFeedScreen({
         .filter((friend) => friend.presence_status === 'online' || friend.presence_status === 'in_game')
         .slice(0, 5),
     [friends],
-  );
-
-  const weeklyResetLabel = useMemo(
-    () => formatWeeklyReset(secondsUntilNextPacificMidnight(new Date())),
-    [],
   );
 
   useEffect(() => {
@@ -239,6 +228,7 @@ export default function ActivityFeedScreen({
   }, [connect, socket?.connected, user]);
 
   useEffect(() => {
+    if (!feedUserId) return;
     let cancelled = false;
 
     void fetchGlobalLeaderboard().then((result) => {
@@ -258,7 +248,7 @@ export default function ActivityFeedScreen({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [feedUserId]);
 
   const weeklyHighlights = useMemo(() => {
     const winCounts = new Map<string, number>();
@@ -310,7 +300,7 @@ export default function ActivityFeedScreen({
       {
         label: 'Activity',
         value: String(feedItems.length),
-        qualifier: 'this week',
+        qualifier: 'recent posts',
       },
       {
         label: 'Top streak',
@@ -389,13 +379,17 @@ export default function ActivityFeedScreen({
             <SocialPageHero
               eyebrow="Community"
               title="Social"
-              tagline="Every result your circle posts, in the order it happened."
+              tagline="Recent results from players across Racehorse, in the order they happened."
               actions={(
                 <>
                   <button type="button" className="rh-sb-btn" onClick={onClose}>
                     <span aria-hidden="true">←</span> Home
                   </button>
-                  {onNavigateToFriends ? (
+                  {!user && onOpenAuth ? (
+                    <button type="button" className="rh-sb-btn rh-sb-btn--accent" onClick={onOpenAuth}>
+                      Join Racehorse
+                    </button>
+                  ) : onNavigateToFriends ? (
                     <button type="button" className="rh-sb-btn rh-sb-btn--accent" onClick={onNavigateToFriends}>
                       Find Players
                     </button>
@@ -403,35 +397,31 @@ export default function ActivityFeedScreen({
                 </>
               )}
               stats={user ? socialHeroStats : undefined}
-              filters={user ? (
-                <ActivityFeedFilterTabs filter={feedFilter} onFilterChange={setFeedFilter} />
-              ) : undefined}
+              filters={(
+                <ActivityFeedFilterTabs
+                  filter={visibleFeedFilter}
+                  onFilterChange={setFeedFilter}
+                  signedIn={Boolean(user)}
+                />
+              )}
             />
 
-                {!user ? (
-                  <section className="rh-sb-table">
-                    <div className="rh-sb-feed-state">
-                      <span className="rh-sb-feed-state__kicker">Signed out</span>
-                      <strong>Sign in to see activity from your friends and rivals.</strong>
-                    </div>
-                  </section>
-                ) : (
                 <ActivityFeedPanel
                   user={user}
-                  filter={feedFilter}
+                  filter={visibleFeedFilter}
                   friendUsernames={friendUsernames}
-                  selfUserId={user.id}
+                  selfUserId={user?.id}
                   onViewProfile={onViewProfile}
+                  onOpenAuth={onOpenAuth}
                   onFeedChange={setFeedItems}
                   emptyAction={
-                    onNavigateToFriends ? (
+                    user && onNavigateToFriends ? (
                       <button className="rh-sb-btn" type="button" onClick={onNavigateToFriends}>
                         Add Friends
                       </button>
                     ) : undefined
                   }
                   />
-                )}
               </main>
 
               <aside className="rh-hub-rail rh-sf-sidebar rh-sf-right-rail social-right-rail" aria-label="Social sidebar">
@@ -472,7 +462,7 @@ export default function ActivityFeedScreen({
                     <p className="rh-sf-widget-empty">{user ? 'No friends online right now.' : 'Sign in to see who is online.'}</p>
                   )}
                 </div>
-                {onNavigateToFriends ? (
+                {user && onNavigateToFriends ? (
                   <button className="rh-sf-widget-link" type="button" onClick={onNavigateToFriends}>
                     View All Friends
                     <span aria-hidden="true">›</span>
@@ -483,13 +473,19 @@ export default function ActivityFeedScreen({
               <SideRailCard
                 title="Trending Players"
                 action={(
-                  <button type="button" className="rh-hub-rail-link" onClick={() => onNavigate?.('leaderboard')}>
-                    View Leaderboard
+                  <button
+                    type="button"
+                    className="rh-hub-rail-link"
+                    onClick={() => user ? onNavigate?.('leaderboard') : onOpenAuth?.()}
+                  >
+                    {user ? 'View Leaderboard' : 'Sign In'}
                   </button>
                 )}
               >
                 <div className="rh-sf-ranked-list">
-                  {trendingPlayers.map((player) => (
+                  {!user ? (
+                    <p className="rh-sf-widget-empty">Sign in to explore the leaderboard.</p>
+                  ) : trendingPlayers.map((player) => (
                     <button
                       key={player.username}
                       type="button"
@@ -510,8 +506,7 @@ export default function ActivityFeedScreen({
               </SideRailCard>
 
               <SideRailCard
-                title="Weekly Highlights"
-                action={<span className="rh-sf-weekly-reset">{weeklyResetLabel}</span>}
+                title="Recent Highlights"
               >
                 <div className="rh-sf-highlights-grid">
                   <article>
@@ -587,7 +582,9 @@ export default function ActivityFeedScreen({
                       })}
                     </div>
                   )) : (
-                    <p className="rh-sf-widget-empty">Add friends to get rival suggestions.</p>
+                    <p className="rh-sf-widget-empty">
+                      {user ? 'Add friends to get rival suggestions.' : 'Sign in to find rivals.'}
+                    </p>
                   )}
                 </div>
               </section>

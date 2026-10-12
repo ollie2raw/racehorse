@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeedItem } from './socialApi';
 
 const fetchActivityFeed = vi.fn();
+const fetchGlobalActivityFeed = vi.fn();
 vi.mock('./socialApi', async (importActual) => ({
   ...(await importActual<typeof import('./socialApi')>()),
   fetchActivityFeed: () => fetchActivityFeed(),
+  fetchGlobalActivityFeed: () => fetchGlobalActivityFeed(),
 }));
 
 const { default: ActivityFeedPanel } = await import('./ActivityFeedPanel');
@@ -26,10 +28,14 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
 const user = { id: 'me', email: 'oliver@example.com' } as never;
 
 describe('ActivityFeedPanel — board table', () => {
-  beforeEach(() => fetchActivityFeed.mockReset());
+  beforeEach(() => {
+    fetchActivityFeed.mockReset();
+    fetchGlobalActivityFeed.mockReset();
+    fetchGlobalActivityFeed.mockResolvedValue({ feed: [], error: null });
+  });
 
   it('renders the five-column board table with a signed score margin', async () => {
-    fetchActivityFeed.mockResolvedValue({ feed: [item()], error: null });
+    fetchGlobalActivityFeed.mockResolvedValue({ feed: [item()], error: null });
     render(
       <ActivityFeedPanel user={user} filter="all" onViewProfile={vi.fn()} />,
     );
@@ -42,7 +48,7 @@ describe('ActivityFeedPanel — board table', () => {
   });
 
   it('marks the signed-in player’s own row', async () => {
-    fetchActivityFeed.mockResolvedValue({
+    fetchGlobalActivityFeed.mockResolvedValue({
       feed: [
         item({ username: 'oliver', user_id: 'me' }),
         item({ id: 'f2', username: 'tessa_ng', user_id: 'other' }),
@@ -66,8 +72,35 @@ describe('ActivityFeedPanel — board table', () => {
   });
 
   it('shows the empty state inside the board frame when the feed is empty', async () => {
-    fetchActivityFeed.mockResolvedValue({ feed: [], error: null });
+    fetchGlobalActivityFeed.mockResolvedValue({ feed: [], error: null });
     render(<ActivityFeedPanel user={user} filter="all" onViewProfile={vi.fn()} />);
-    expect(await screen.findByText(/Play a match or follow rivals/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Community results will appear here/i)).toBeInTheDocument();
+  });
+
+  it('shows global activity while signed out and uses the personal endpoint for Friends', async () => {
+    fetchGlobalActivityFeed.mockResolvedValue({ feed: [item()], error: null });
+    fetchActivityFeed.mockResolvedValue({
+      feed: [item({ id: 'friend-post', username: 'tessa_ng', user_id: 'friend' })],
+      error: null,
+    });
+    const onOpenAuth = vi.fn();
+    const { rerender } = render(
+      <ActivityFeedPanel user={null} filter="all" onViewProfile={vi.fn()} onOpenAuth={onOpenAuth} />,
+    );
+    expect(await screen.findByText('marcus_r')).toBeInTheDocument();
+    expect(fetchActivityFeed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTitle('Sign in to view profiles'));
+    expect(onOpenAuth).toHaveBeenCalledOnce();
+
+    rerender(
+      <ActivityFeedPanel
+        user={user}
+        filter="friends"
+        friendUsernames={new Set(['tessa_ng'])}
+        onViewProfile={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText('tessa_ng')).toBeInTheDocument();
+    expect(fetchActivityFeed).toHaveBeenCalled();
   });
 });

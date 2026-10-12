@@ -497,15 +497,33 @@
   .rh-sb-meta__cell:nth-child(-n+2) { border-bottom: 1px solid var(--rh-sb-line-soft); }
 }
 
-/* The five-column grid needs a horizontal scroll on a phone — same
-   constraint the leaderboard board has. */
+/* On a phone, present each result as a compact card so the score and
+   action stay readable without horizontal scrolling. */
 @media (--phone) {
   .rh-sb-table {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: auto;
   }
-  .rh-sb-thead,
-  .rh-sb-row { min-width: 560px; }
+
+  .rh-sb-thead { display: none; }
+
+  .rh-sb-row.rh-sb-row-grid {
+    min-width: 0;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "who when"
+      "what what"
+      "score mode";
+    gap: 8px 10px;
+    padding: 14px;
+  }
+
+  .rh-sb-row > .rh-sb-who { grid-area: who; }
+  .rh-sb-row > .rh-sb-what { grid-area: what; }
+  .rh-sb-row > .rh-sb-score { grid-area: score; }
+  .rh-sb-row > span:nth-child(4) { grid-area: mode; justify-self: end; }
+  .rh-sb-row > .rh-sb-when { grid-area: when; }
 }
 
 @media (prefers-reduced-motion: reduce) {
