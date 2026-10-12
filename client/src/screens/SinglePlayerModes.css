@@ -263,6 +263,12 @@
   margin-inline: auto;
 }
 
+/* Fritz + Ghost only (the iOS app hides the locked Journey card). Two classes,
+   so it outranks every single-class trio column rule below. */
+.sp-solo-grid--trio.sp-solo-grid--pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 /* ─── /solo hub only: two-layer editorial zone (not Learn, not Home) ─── */
 
 .home-main.sp-solo-main:not(.learn-hub-main) .home-card-scrim {

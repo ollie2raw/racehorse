@@ -1,15 +1,19 @@
 import { apiGetOrThrow, apiPostOrThrow } from '../api/client';
 import type { PlacementPosition, Tile } from '../types';
 
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
-
 function throwGhostError(error: string): never {
   if (
     error === 'Network error' ||
     error.toLowerCase().includes('failed to fetch') ||
     error === 'Invalid response format'
   ) {
-    throw new Error(`Ghost backend is unavailable. Start the server on ${DEFAULT_SERVER_ORIGIN}.`);
+    // The "start the server" hint is for local development only; players
+    // (and the production bundle) never see a localhost address.
+    throw new Error(
+      import.meta.env.DEV
+        ? 'Ghost backend is unavailable. Start the server on http://localhost:3001.'
+        : 'Ghost Mode is unavailable right now. Check your connection and try again.',
+    );
   }
   throw new Error(error);
 }

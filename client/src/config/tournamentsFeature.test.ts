@@ -11,11 +11,17 @@ describe('tournaments feature flag', () => {
 
   it('keeps the Tournament tab in place, marked coming soon only while off', () => {
     const labels = ['Multiplayer', 'Single Player', 'Tournament', 'Social', 'Learn'];
-    const off = getAppPrimaryTabs(false);
-    const on = getAppPrimaryTabs(true);
+    const off = getAppPrimaryTabs(false, false);
+    const on = getAppPrimaryTabs(true, false);
     expect(off.map((t) => t.label)).toEqual(labels);
     expect(on.map((t) => t.label)).toEqual(labels);
     expect(off.filter((t) => t.comingSoon).map((t) => t.label)).toEqual(['Tournament']);
     expect(on.some((t) => t.comingSoon)).toBe(false);
+  });
+
+  it('iOS app: no Tournament tab at all while off, the full set when on', () => {
+    expect(getAppPrimaryTabs(false, true).map((t) => t.label)).toEqual(['Multiplayer', 'Single Player', 'Social', 'Learn']);
+    expect(getAppPrimaryTabs(false, true).some((t) => t.comingSoon)).toBe(false);
+    expect(getAppPrimaryTabs(true, true).map((t) => t.label)).toEqual(['Multiplayer', 'Single Player', 'Tournament', 'Social', 'Learn']);
   });
 });

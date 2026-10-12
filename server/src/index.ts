@@ -33,6 +33,7 @@ import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
 import { accountRouter } from './account/routes';
 import { moderationRouter } from './moderation/routes';
+import { explicitAllowedOrigins, isAllowedOrigin as isAllowedCorsOrigin } from './http/corsOrigins';
 import { socketsByUserId as presenceSocketsByUserId, setActivity } from './social/presenceRegistry';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import {
@@ -297,22 +298,7 @@ import {
   listCompletedPuzzleRushDatesForUser,
 } from './http/stores/homeCompletionDates';
 
-/** Production custom domain — always allowed even when CLIENT_URL still points at Vercel. */
 const log = childLogger('server');
-
-const canonicalProductionClientOrigins = [
-  'https://playracehorse.com',
-  'https://www.playracehorse.com',
-];
-
-const allowedOriginPatterns = [
-  /^http:\/\/localhost(?::\d+)?$/i,
-  /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
-  /^https:\/\/racehorsedoms\.vercel\.app$/i,
-  /^https:\/\/playracehorse\.com$/i,
-  /^https:\/\/www\.playracehorse\.com$/i,
-  /^https:\/\/.*\.vercel\.app$/i,
-];
 
 const configuredCorsOrigins = config.corsAllowedOrigins
   .split(',')
@@ -322,23 +308,13 @@ const configuredCorsOrigins = config.corsAllowedOrigins
 /** Public web app URL (e.g. Vercel). Set on Render so CORS matches your deployed client. */
 const CLIENT_DEPLOY_URL = config.clientUrl || undefined;
 
-const isAllowedOrigin = (origin: string | undefined): boolean => {
-  if (!origin) return true;
-  if (canonicalProductionClientOrigins.includes(origin)) return true;
-  if (CLIENT_DEPLOY_URL && origin === CLIENT_DEPLOY_URL) return true;
-  if (configuredCorsOrigins.includes(origin)) return true;
-  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
-};
+// Origin policy lives in http/corsOrigins.ts (production site, the iOS app,
+// this team's Vercel deployments, local dev, env additions — and nothing else).
+const corsOriginConfig = { clientDeployUrl: CLIENT_DEPLOY_URL, configuredOrigins: configuredCorsOrigins };
+const isAllowedOrigin = (origin: string | undefined): boolean => isAllowedCorsOrigin(origin, corsOriginConfig);
 
 /** Exact origins always tried before pattern-based `isAllowedOrigin` (Socket.IO + docs clarity). */
-const socketIoExplicitOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  ...canonicalProductionClientOrigins,
-  ...(CLIENT_DEPLOY_URL ? [CLIENT_DEPLOY_URL] : []),
-  ...configuredCorsOrigins,
-];
-const uniqueSocketIoExplicitOrigins = [...new Set(socketIoExplicitOrigins)];
+const uniqueSocketIoExplicitOrigins = explicitAllowedOrigins(corsOriginConfig);
 
 const reflectCorsOrigin = (
   origin: string | undefined,

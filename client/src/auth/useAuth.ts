@@ -842,7 +842,7 @@ function useAuthInternal() {
 
     try {
       const { error } = await withTimeout(
-        supabase.auth.updateUser({ email: resolved.email }),
+        supabase.auth.updateUser({ email: resolved.email }, { emailRedirectTo: getAuthEmailRedirectTo() }),
         AUTH_REQUEST_TIMEOUT_MS,
       );
       if (error) return { error: formatAuthErrorMessage(error) };
