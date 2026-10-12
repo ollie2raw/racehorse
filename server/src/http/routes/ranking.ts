@@ -22,6 +22,17 @@ export type RankingRouteDeps = {
   DEFAULT_RD: number;
 };
 
+// Ranked profiles exist only for registered accounts, whose ids are Supabase
+// auth uuids. Guest seats carry a client-minted `guest_<…>` id and Fritz/bot
+// seats their own ids; none of those have a profile row, and passing them to a
+// uuid column makes PostgREST error (which used to surface as a 500).
+const PROFILE_USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isProfileUserId(value: string): boolean {
+  return PROFILE_USER_ID_PATTERN.test(value);
+}
+
 export function registerRankingRoutes(app: Application, deps: RankingRouteDeps): void {
   const {
     supabaseFetch,
@@ -39,6 +50,10 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
     if (!userId) {
       res.status(400).json({ error: 'userId is required.' });
+      return;
+    }
+    if (!isProfileUserId(userId)) {
+      res.status(400).json({ error: 'userId must be a registered player id.' });
       return;
     }
 
@@ -94,6 +109,10 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
     if (!userId) {
       res.status(400).json({ error: 'userId is required.' });
+      return;
+    }
+    if (!isProfileUserId(userId)) {
+      res.status(400).json({ error: 'userId must be a registered player id.' });
       return;
     }
 

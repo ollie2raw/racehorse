@@ -3,6 +3,7 @@ import { apiGet, apiPost } from '../api/client';
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { fetchRatingHistory } from '../ranking/api';
+import { hasRankedProfile } from './rankedProfileId';
 import {
   buildStatsSummary,
   deriveFritzSummary,
@@ -50,6 +51,8 @@ export async function recordMatchResult(
 export async function fetchRankingProfile(
   userId: string,
 ): Promise<{ data: RankingProfile | null; error: string | null }> {
+  // Guests and bots have no ranked profile; asking the server is a wasted 400.
+  if (!hasRankedProfile(userId)) return { data: null, error: null };
   const result = await apiGet<Record<string, unknown>>(
     `/api/ranking/profile/${encodeURIComponent(userId)}`,
     { auth: false },
